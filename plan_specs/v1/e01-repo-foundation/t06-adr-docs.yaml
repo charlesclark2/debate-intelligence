@@ -47,7 +47,7 @@ spec:
         Every ADR links to at least one section anchor in docs/architecture/architecture_proposal.md,
         and a markdown link check passes offline.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

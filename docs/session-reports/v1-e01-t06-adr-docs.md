@@ -136,12 +136,36 @@ None. All commands run in this session completed in well under two minutes.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** CHANGES_REQUESTED
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:** PM (Claude), 2026-09-18
+**Reviewed by / date:** PM (Claude), 2026-09-18 (second review)
 
 **Notes:**
+
+Second review, 2026-09-18: ACCEPTED. Both required changes are in `9c2285e`:
+
+- `docs/adr/0013-two-environments-and-dev-main-promotion.md` follows the template, links to
+  the process doc instead of restating it, and records the supersession of `stage` against
+  §4 and §5. Its claim that environment-related specs cite this ADR was checked: ten specs
+  under `plan_specs/v1/e01` and `plan_specs/v2` reference 0013. The README lists 0013 in
+  the Index, keeps 0010–0012 reserved, and names 0014 as the next free number.
+- The §18 change in the architecture proposal is link-only. The diff touches the nine rows
+  plus column padding, and the substance is unchanged.
+- Independent link check over `docs/` on the task branch: every relative link and anchor
+  that this task authored resolves.
+- The report's Summary, Decisions and Follow-up sections were updated to match the fixes.
+
+Follow-ups, handled by the PM and outside this PR:
+
+- `docs/process/branching-and-environments.md` still points ADR-0013 at the ADR README;
+  retarget it to the new file in the next `docs/` change.
+- Fold "standardize a repo-wide link checker" into `v1-e01-t05-spec-tooling`.
+
+Owner check (the spec's custom criterion "Coach/owner review of ADR wording"): Charlie
+confirms the ADR wording in the PR before merging.
+
+First review, 2026-09-18: CHANGES_REQUESTED
 
 What was checked: every Goal and node criterion against the branch; all nine ADRs against §18
 and the sections they cite (content is faithful; no decisions changed or invented); all 101

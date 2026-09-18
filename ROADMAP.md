@@ -58,7 +58,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 22 | 1 | 139 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 2 | 147 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | URL → verified card | 3 | 20 | 0 | 171 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 62 |
@@ -96,6 +96,7 @@ Repo, tooling, CI, domain core, and deterministic evidence verification exist; `
 | [dev→main promotion workflow and guards](plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml) `v1-e01-t08-branch-promotion-workflow` | Pending | 2 | 7.5 |
 | [Dev pre-release channel and environment profiles for the CLI](plan_specs/v1/e01-repo-foundation/t09-dev-prerelease-channel.yaml) `v1-e01-t09-dev-prerelease-channel` | Pending | 3 | 9.0 |
 | [validate-dev smoke gate for promotions](plan_specs/v1/e01-repo-foundation/t10-validate-dev-gate.yaml) `v1-e01-t10-validate-dev-gate` | Pending | 2 | 9.0 |
+| [Task lifecycle CLI and session workflow](plan_specs/v1/e01-repo-foundation/t11-task-workflow-cli.yaml) `v1-e01-t11-task-workflow-cli` | Succeeded | 1 | 8.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 

@@ -43,7 +43,7 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        `uv run python -m evals.card_spans --split all --router replay` produces
+        `uv run python -m evals.card_spans --split all --model-mode replay` produces
         evals/reports/<prompt-versions>__<model>.json and .md with per-case and aggregate metrics.
     - id: ac2
       description: >-
@@ -103,7 +103,7 @@ spec:
           - type: command_succeeds
             name: Eval runs offline on replay cassettes
             command: uv
-            args: [run, python, -m, evals.card_spans, --split, all, --router, replay]
+            args: [run, python, -m, evals.card_spans, --split, all, --model-mode, replay]
       - id: reports
         kind: Task
         name: JSON and Markdown reports with breakdowns
@@ -127,6 +127,13 @@ spec:
         outputs: [evals/reports/baseline.json, tests/fixtures/model_cassettes/card/]
         estimatedEffort: 2h
         acceptanceCriteria:
+          - type: custom
+            name: Operator records baseline cassettes against Bedrock
+            description: >-
+              Operator-run (expected > 2 min): `uv run python -m evals.card_spans --split all --model-mode
+              record` on the operator's machine with dev Bedrock credentials; success = redacted cassettes
+              under tests/fixtures/model_cassettes/card/ and evals/reports/baseline.json with
+              unsupported_text_rate 0, and a follow-up `--model-mode replay` run reproduces the same metrics.
           - type: artifact_exists
             name: Baseline report committed
             path: evals/reports/baseline.json

@@ -129,7 +129,8 @@ spec:
         name: Design-vs-deployed schema check
         description: >-
           Script comparing describe-table output (key schema, GSIs, projections, TTL, PITR) with a
-          machine-readable section of the design doc; runs in CI against dev after apply.
+          machine-readable section of the design doc; runs in the post-merge dev pipeline after apply
+          (never on PRs into dev, which have no AWS credentials).
         dependsOn: [env-wiring]
         outputs: [scripts/check_dynamodb_schema.py]
         estimatedEffort: 2h

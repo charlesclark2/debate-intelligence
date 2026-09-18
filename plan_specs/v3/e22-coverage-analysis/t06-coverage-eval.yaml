@@ -21,8 +21,9 @@ spec:
     known missing answer reported as covered). Seeds pair fixture affs (the three NHI affs, an LD space
     colonization AC, a PF moratorium case) with the team's real answer files, then remove specific answer
     blocks to create known-missing answers while keeping others as known-present controls. Coach-supplied
-    expected positions also measure prediction recall. Runs offline on replay fixtures and plugs into the
-    E09 promotion gate. Boundaries: this task changes no classification logic; threshold changes go through
+    expected positions also measure prediction recall. Runs offline on replay fixtures (pytest markers
+    `eval` and `slow`) in the validate-dev slow tier and the E09 promotion gate, never in the PR `ci` check
+    into dev. Boundaries: this task changes no classification logic; threshold changes go through
     t04.
   priority: 2
   constraints:
@@ -127,7 +128,8 @@ spec:
         kind: Task
         name: Baseline and promotion gate
         description: >-
-          Commit baseline, register with the E09 gate, coach sign-off on the first report.
+          Commit baseline, mark the suite `eval` and `slow`, register with the E09 gate, coach sign-off on
+          the first report.
         dependsOn: [harness]
         estimatedEffort: 2h
         acceptanceCriteria:

@@ -22,7 +22,17 @@ spec:
     checks and PlanSpec validation as separately named jobs, plus a final aggregate job named `ci` that
     needs all of them and is the single required status check on both the protect-dev and protect-main
     rulesets (so adding jobs later never requires ruleset edits). CI is hermetic — no live network or
-    model calls, no cloud credentials. The import-linter contracts themselves are authored in
+    model calls, no cloud credentials — and light (docs/process/working-agreements.md §1): a `changes`
+    job (dorny/paths-filter) computes path filters (python: packages/, tests/, pyproject.toml, uv.lock;
+    web: web/ or clients/; infrastructure: infrastructure/; api: packages/debate_api/, openapi/,
+    clients/) so each job runs only when its area changed. Every PR check lives as a job in this one
+    ci.yml, including the ones later tasks add (web in v2-e14-t01, terraform-checks in v2-e10-t02,
+    api-contract in v2-e12-t06), and each new job is appended to the aggregate `ci` job's needs, so
+    path-filtered checks still gate merges; separate workflows are only for non-PR work. The test job
+    runs the default pytest selection that excludes `slow` and `live` markers, and heavy suites (LLM
+    evals, browser end-to-end, live canaries, terraform plan/apply, load tests, long security scans) are
+    never part of the PR path into dev; they run in validate-dev, on a nightly schedule or by
+    workflow_dispatch. The import-linter contracts themselves are authored in
     E02-t06; this task runs `lint-imports` as a job that passes trivially until those contracts land.
     Container build/ECR push and deploy workflows belong to V2 and are out of scope.
   priority: 1
@@ -32,6 +42,10 @@ spec:
       - Live network, search-provider or Bedrock calls from CI jobs
       - Long-lived AWS credentials or provider API keys in repository secrets for the test workflow
       - Renaming job ids once they are required checks without updating branch protection
+      - Heavy suites (LLM evals, browser end-to-end, live canaries, terraform plan/apply against real
+        accounts, load tests, multi-minute security scans) in the PR path into dev
+      - Any change that pushes the required `ci` check on a PR into dev past its 5-minute budget without
+        moving work out of the PR path in the same PR
   context:
     - kind: TaskRef
       name: v1-e01-t02-github-remote
@@ -47,11 +61,11 @@ spec:
       description: >-
         .github/workflows/ci.yml runs on pull_request and push for branches dev and main with jobs lint,
         typecheck, test, import-boundaries and spec-validate, and an aggregate `ci` job that fails if any
-        of them fails or is skipped.
+        of them fails, or is skipped for any reason other than its path filter.
     - id: ac2
       description: >-
-        Jobs use astral-sh/setup-uv with dependency caching keyed on uv.lock; a warm-cache run of the
-        whole workflow finishes in under 5 minutes.
+        Jobs use astral-sh/setup-uv with dependency caching keyed on uv.lock so warm-cache runs stay
+        within the ac5 budget.
     - id: ac3
       description: >-
         A PR into dev that introduces a ruff error, a failing test or an invalid PlanSpec is blocked by a
@@ -59,6 +73,12 @@ spec:
     - id: ac4
       description: >-
         Workflow permissions default to contents read, and the workflow references no secrets.
+    - id: ac5
+      description: >-
+        The required `ci` check on a PR into dev completes in under 5 minutes wall-clock (10 minutes hard
+        ceiling): jobs are path-filtered (python, web/clients, infrastructure), the test job's pytest run
+        excludes the `slow` and `live` markers, and no heavy suite (LLM evals, browser end-to-end, live
+        canaries, terraform plan/apply, load tests, long security scans) runs on PRs into dev.
 status:
   phase: Pending
 ---
@@ -84,11 +104,15 @@ spec:
         kind: Task
         name: CI workflow with stable job names
         description: >-
-          ci.yml triggered on pull_request and push for [dev, main] with jobs lint (ruff check +
-          format --check), typecheck (pyright), test (pytest -n auto --cov), import-boundaries
-          (lint-imports), spec-validate (validate_specs.py) and an aggregate `ci` job (needs: all,
-          if: always(), fails unless every need succeeded); top-level `permissions: contents: read`;
-          concurrency group cancels superseded runs.
+          ci.yml triggered on pull_request and push for [dev, main] with a `changes` job (dorny/paths-filter)
+          exposing path filter outputs (python, web, infrastructure, api), jobs lint (ruff check + format
+          --check), typecheck (pyright), test (pytest -n auto --cov -m "not slow and not live"),
+          import-boundaries (lint-imports), spec-validate (validate_specs.py) gated on those outputs, and an
+          aggregate `ci` job (needs: all, if: always(), fails unless every need succeeded or was skipped by
+          its path filter, i.e. result success, or skipped with its filter output false); jobs later tasks add
+          to the PR path (web, terraform-checks, api-contract) go in this file, gated on
+          `needs.changes.outputs.<filter>`, and are added to `ci`'s needs; `timeout-minutes: 10` on every job;
+          top-level `permissions: contents: read`; concurrency group cancels superseded runs.
         outputs: [.github/workflows/ci.yml]
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -100,6 +124,14 @@ spec:
             name: Workflow runs for dev and main
             path: .github/workflows/ci.yml
             contentMatch: "branches: [dev, main]"
+          - type: artifact_exists
+            name: Path filters use dorny/paths-filter
+            path: .github/workflows/ci.yml
+            contentMatch: "dorny/paths-filter"
+          - type: artifact_exists
+            name: Test job excludes slow and live markers
+            path: .github/workflows/ci.yml
+            contentMatch: "not slow and not live"
           - type: command_succeeds
             name: Workflow passes actionlint
             command: actionlint
@@ -122,15 +154,22 @@ spec:
         name: Green run on dev
         description: >-
           Push the workflow through a task PR into dev and confirm every job, including `ci`, succeeds on
-          the dev push (main gets its first green run at the next promotion).
+          the dev push (main gets its first green run at the next promotion), and that the PR run of the
+          workflow finished within the 5-minute budget.
         dependsOn: [caching]
         estimatedEffort: 0.5h
         acceptanceCriteria:
           - type: command_succeeds
             name: Latest CI run on dev succeeded
-            command: gh
-            args: [run, list, --workflow, ci.yml, --branch, dev, --limit, "1", --json, conclusion,
-                   --jq, '.[0] | select(.conclusion == "success")']
+            command: bash
+            args: [-c, "gh run list --workflow ci.yml --branch dev --limit 1 --json conclusion
+                   | jq -e '.[0].conclusion == \"success\"'"]
+          - type: command_succeeds
+            name: Latest PR run of CI finished in under 5 minutes
+            command: bash
+            args: [-c, "gh run list --workflow ci.yml --event pull_request --limit 1
+                   --json conclusion,startedAt,updatedAt | jq -e '.[0] | .conclusion == \"success\"
+                   and (.updatedAt | fromdate) - (.startedAt | fromdate) < 300'"]
       - id: gate-proof
         kind: Task
         name: Prove required checks block bad PRs

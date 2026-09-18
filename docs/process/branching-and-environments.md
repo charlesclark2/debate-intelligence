@@ -52,8 +52,8 @@ A promotion PR (`dev` → `main`) can merge only when **all** of these hold:
    that changes a user-facing surface adds or updates its smoke checks (`tests/smoke/`, and
    `tests/smoke/cloud/` from V2), and says so in its spec.
 4. **Evaluation gates** (from v1.3): prompt/model changes pass their promotion evals.
-5. **Your approval**: the promotion PR is approved by Charlie, and (V2+) the `production`
-   GitHub Environment deployment is approved.
+5. **Your approval**: Charlie signs off the promotion checklist on the PR, and (V2+) approves the
+   `production` GitHub Environment deployment.
 
 The promotion PR uses the promotion template: the release/tasks included, the dev build or
 deploy id, the `validate-dev` run link, and a manual check note for anything automation cannot
@@ -64,11 +64,15 @@ cover yet.
 Set now:
 
 * Default branch → `dev`.
-* Ruleset **protect-main** (target `main`): require a pull request with 1 approval, dismiss stale
-  approvals, require conversation resolution, block force pushes and deletion, restrict pushes
-  (no bypass for anyone but the repo admin in an emergency).
-* Ruleset **protect-dev** (target `dev`): require a pull request, block force pushes and deletion.
-  (As a solo developer you may allow 0 approvals on `dev`; CI is the gate.)
+* Ruleset **protect-main** (target: pattern `main`, empty bypass list): restrict deletions, block
+  force pushes, require a pull request with **0** required approvals (GitHub does not let you
+  approve your own PR; the manual approval is the promotion checklist and, from V2, the
+  `production` environment approval), dismiss stale approvals, require conversation resolution,
+  allowed merge method **Merge** only. No linear-history rule (promotions are merge commits).
+* Ruleset **protect-dev** (target: pattern `dev`, empty bypass list): restrict deletions, block
+  force pushes, require a pull request with 0 approvals and conversation resolution, allowed merge
+  methods **Squash** (task PRs) and **Merge** (hotfix back-merges). No linear-history rule.
+* Settings → General → Pull Requests: enable **Automatically delete head branches**.
 
 Added as the tasks land:
 

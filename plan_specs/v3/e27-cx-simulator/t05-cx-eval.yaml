@@ -24,8 +24,9 @@ spec:
     questioner should target, which answers would be strategically inconsistent with the persona's
     strategy (e.g. granting the link after a "no link" 1NC position), and which exchanges contain real
     concessions. Metrics: target hit rate, strategic-consistency violation rate, concession precision/recall
-    and evidence-quote integrity (must be 100%). Recorded model responses let CI replay the gate
-    deterministically; a live re-record run is a manual, budgeted step. Candidate prompt/model versions
+    and evidence-quote integrity (must be 100%). Recorded model responses let the gate replay
+    deterministically in the validate-dev slow tier and the E09 promotion gate (not the PR `ci` check into
+    dev); a live re-record run is a manual, budgeted operator step. Candidate prompt/model versions
     are promoted only when they match or beat the baseline. Full-round simulation evals are E28 t06.
   priority: 1
   constraints:
@@ -50,7 +51,8 @@ spec:
         precision/recall and quote integrity per format and overall, as JSON and a Markdown summary.
     - id: ac3
       description: >-
-        CI fails if quote integrity is below 100%, if the consistency violation rate exceeds the configured
+        The gate (markers `eval` and `slow`, run in validate-dev and the E09 promotion gate, not on PRs into
+        dev) fails if quote integrity is below 100%, if the consistency violation rate exceeds the configured
         ceiling, or if any metric regresses beyond tolerance versus the stored baseline.
     - id: ac4
       description: >-
@@ -75,7 +77,7 @@ metadata:
 spec:
   description: >-
     Curate scenarios with the coach, build the metric runner on replayed responses, wire the regression
-    gate into CI, then complete coach review.
+    gate into validate-dev and the promotion gate, then complete coach review.
   goalRef:
     name: v3-e27-t05-cx-eval
   graph:
@@ -109,20 +111,26 @@ spec:
             args: [run, pytest, tests/evals/cx/test_runner_metrics.py]
       - id: regression-gate
         kind: Task
-        name: Baseline and CI regression gate
+        name: Baseline and post-merge regression gate
         description: >-
-          Record baseline responses and metrics; gate test comparing current prompt versions to baseline
-          with ceilings and tolerances from config.
+          Record baseline responses and metrics (operator step); gate test marked `eval` and `slow`
+          comparing current prompt versions to baseline with ceilings and tolerances from config.
         dependsOn: [metric-runner]
         outputs:
           - tests/fixtures/evals/cx/baseline_metrics.json
           - tests/evals/cx/test_cx_gate.py
         estimatedEffort: 2h
         acceptanceCriteria:
+          - type: custom
+            name: Operator records CX baseline responses
+            description: >-
+              Operator-run (expected > 2 min): `DEBATE_MODEL_MODE=record uv run pytest -m slow
+              tests/evals/cx/test_cx_gate.py` with dev Bedrock credentials,
+              within budget; success = recordings for all scenarios and baseline_metrics.json written.
           - type: test_passes
             name: CX promotion gate passes on replay
             command: uv
-            args: [run, pytest, tests/evals/cx/test_cx_gate.py]
+            args: [run, pytest, -m, slow, tests/evals/cx/test_cx_gate.py]
       - id: coach-review
         kind: Task
         name: Coach review of replayed sessions

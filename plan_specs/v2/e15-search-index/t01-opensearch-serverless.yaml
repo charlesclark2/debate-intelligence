@@ -19,13 +19,13 @@ spec:
   description: >-
     Provision Amazon OpenSearch Serverless for the platform's derived search index as a Terraform module
     instantiated per environment: one SEARCH collection for BM25 over article chunks and cards and one
-    VECTORSEARCH collection for Titan embeddings, each with a KMS encryption policy (key from v2-e10-t04),
-    a network policy (VPC endpoint only in prod; dev may also allow SigV4-authenticated public API access
-    for CI smoke checks, but never public Dashboards) and data-access policies granting least-privilege
-    index permissions to the API task role, the indexing worker role and the rebuild role. Collections
-    hold derived data only; DynamoDB and S3 remain the systems of record (ADR-004). This task does NOT
-    define index mappings or chunking (t02), write embeddings (t03), or implement queries (t04); it
-    provisions infrastructure and a connectivity smoke check only.
+    VECTORSEARCH collection for Titan embeddings, each with a KMS encryption policy (key from v2-e10-t04), a
+    network policy (VPC endpoint only in prod; dev may also allow SigV4-authenticated public API access for
+    validate-dev smoke checks, but never public Dashboards) and data-access policies granting least-privilege
+    index permissions to the API task role, the indexing worker role and the rebuild role. Collections hold
+    derived data only; DynamoDB and S3 remain the systems of record (ADR-004). This task does NOT define index
+    mappings or chunking (t02), write embeddings (t03), or implement queries (t04); it provisions
+    infrastructure and a connectivity smoke check only.
   priority: 1
   constraints:
     packages: [infrastructure/modules/opensearch_serverless, infrastructure/envs, debate_core.integrations]
@@ -141,9 +141,9 @@ spec:
         kind: Task
         name: SigV4 connectivity and permission smoke check
         description: >-
-          Add a small OpenSearch client factory in debate_core.integrations (opensearch-py with AWS SigV4 auth,
-          endpoint from settings) and a smoke script that exercises create/write/query/delete on a throwaway
-          index and asserts a 403 for API-role writes. Unit-test the factory offline.
+          Add a small OpenSearch client factory in debate_core.integrations (opensearch-py with AWS SigV4
+          auth, endpoint from settings) and a smoke script that exercises create/write/query/delete on a
+          throwaway index and asserts a 403 for API-role writes. Unit-test the factory offline.
         dependsOn: [env-wiring]
         outputs:
           - packages/debate_core/src/debate_core/integrations/opensearch/client.py

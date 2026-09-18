@@ -98,14 +98,14 @@ spec:
             args: [remote, get-url, origin]
           - type: command_succeeds
             name: Repository is private
-            command: gh
-            args: [repo, view, charlesclark2/debate-intelligence, --json, visibility,
-                   --jq, 'select(.visibility == "PRIVATE")']
+            command: bash
+            args: [-c, "gh repo view charlesclark2/debate-intelligence --json visibility
+                   | jq -e '.visibility == \"PRIVATE\"'"]
           - type: command_succeeds
             name: Default branch is dev
-            command: gh
-            args: [repo, view, charlesclark2/debate-intelligence, --json, defaultBranchRef,
-                   --jq, 'select(.defaultBranchRef.name == "dev")']
+            command: bash
+            args: [-c, "gh repo view charlesclark2/debate-intelligence --json defaultBranchRef
+                   | jq -e '.defaultBranchRef.name == \"dev\"'"]
       - id: hygiene-files
         kind: Task
         name: CODEOWNERS, issue templates and CONTRIBUTING
@@ -144,9 +144,9 @@ spec:
         acceptanceCriteria:
           - type: command_succeeds
             name: Both rulesets are readable via the API
-            command: gh
-            args: [api, "repos/{owner}/{repo}/rulesets", --jq,
-                   '[.[].name] | select(index("protect-main") and index("protect-dev"))']
+            command: bash
+            args: [-c, "gh api 'repos/{owner}/{repo}/rulesets'
+                   | jq -e 'map(.name) | index(\"protect-main\") != null and index(\"protect-dev\") != null'"]
           - type: custom
             name: Protection verified by attempting direct pushes
             description: >-

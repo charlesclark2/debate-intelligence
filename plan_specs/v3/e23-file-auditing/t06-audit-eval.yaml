@@ -22,7 +22,8 @@ spec:
     and earlier seasons, with seeded defects (removed internal links, swapped uniqueness, stale uniqueness)
     and unmodified controls, all scrubbed fixtures from the team's files. Metrics favor precision (noisy
     audits get ignored), then seeded-defect recall, step-identification accuracy and a coach usefulness
-    rating of comparisons. Runs offline on replay fixtures and plugs into the E09 promotion gate.
+    rating of comparisons. Runs offline on replay fixtures (pytest markers `eval` and `slow`) in the
+    validate-dev slow tier and the E09 promotion gate, never in the PR `ci` check into dev.
     Boundaries: this task changes no audit logic.
   priority: 2
   constraints:
@@ -124,7 +125,7 @@ spec:
         kind: Task
         name: Baseline and promotion gate
         description: >-
-          Commit baseline, register with the E09 gate, coach sign-off.
+          Commit baseline, mark the suite `eval` and `slow`, register with the E09 gate, coach sign-off.
         dependsOn: [harness]
         estimatedEffort: 2h
         acceptanceCriteria:

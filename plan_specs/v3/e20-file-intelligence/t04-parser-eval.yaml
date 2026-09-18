@@ -17,12 +17,13 @@ metadata:
     debate/architecture-refs: §13, §16
 spec:
   description: >-
-    Measure the t03 parser against a labeled set of the team's own files from the 2024-25, 2025-26 and
-    2026-27 seasons across Policy, LD and PF. Files are curated copies from ~/Documents/debate on the
-    coach's Mac, scrubbed with the t03 script into tests/fixtures/debate_files/eval/, with paragraph-level
-    unit labels and card boundaries (plus underline/highlight labels on a sample) stored beside them. The
-    task produces per-unit precision/recall/F1, card-boundary and formatting-span metrics, a committed
-    baseline and a CI regression gate. Parser bugs found here are filed against t03's code, not fixed
+    Measure the t03 parser against a labeled set of the team's own files from the 2024-25, 2025-26 and 2026-27
+    seasons across Policy, LD and PF. Files are curated copies from ~/Documents/debate on the coach's Mac,
+    scrubbed with the t03 script into tests/fixtures/debate_files/eval/, with paragraph-level unit labels and
+    card boundaries (plus underline/highlight labels on a sample) stored beside them. The task produces
+    per-unit precision/recall/F1, card-boundary and formatting-span metrics, a committed baseline and a
+    post-merge regression gate (validate-dev slow tier and nightly, not the PR `ci` check into dev, per
+    docs/process/working-agreements.md §1). Parser bugs found here are filed against t03's code, not fixed
     silently inside the eval; LLM graph evaluation is E21-t05.
   priority: 2
   constraints:
@@ -54,8 +55,9 @@ spec:
         POCKET/HAT/BLOCK at least 0.95; ANALYTIC at least 0.85; formatting span F1 at least 0.99.
     - id: ac4
       description: >-
-        CI fails when any unit F1 drops more than 0.01 below the committed baseline for the current
-        parser_version.
+        The eval suite (pytest markers `eval` and `slow`) fails in the validate-dev slow tier and the nightly
+        run when any unit F1 drops more than 0.01 below the committed baseline for the current
+        parser_version; it is deselected from the default PR run.
     - id: ac5
       description: >-
         Label files are keyed by paragraph index plus text hash, and a validation step fails when a fixture
@@ -146,9 +148,11 @@ spec:
             args: [run, pytest, tests/evals/parser/test_metrics.py]
       - id: regression-gate
         kind: Task
-        name: Baseline and CI regression gate
+        name: Baseline and post-merge regression gate
         description: >-
-          Commit the baseline for the current parser_version and add the eval to CI as a required job.
+          Commit the baseline for the current parser_version and mark the suite `eval` and `slow` (both
+          registered by v1-e01-t03) so it runs in the validate-dev slow
+          tier (which gates promotion) and nightly, not in the PR `ci` check.
         dependsOn: [metrics-report]
         outputs: [tests/evals/baselines/parser.json]
         estimatedEffort: 1h

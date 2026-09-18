@@ -116,9 +116,9 @@ spec:
         acceptanceCriteria:
           - type: command_succeeds
             name: Both environments exist
-            command: gh
-            args: [api, "repos/{owner}/{repo}/environments", --jq,
-                   '[.environments[].name] | select(index("development") and index("production"))']
+            command: bash
+            args: [-c, "gh api 'repos/{owner}/{repo}/environments' | jq -e '[.environments[].name]
+                   | index(\"development\") != null and index(\"production\") != null'"]
           - type: custom
             name: Environment protection confirmed
             description: >-
@@ -131,7 +131,9 @@ spec:
           tests/smoke/cloud with pytest markers `dev` (health, 401 unauthenticated, synthetic user sign-in
           via Cognito USER_PASSWORD test client, create/read/delete on a synthetic org) and `prod`
           (read-only: health, 401, OpenAPI version matches the deployed commit); base URL and credentials
-          from env vars; unit-tested request builders run offline.
+          from env vars; every networked test also carries the `live` marker so the default PR `ci` run
+          deselects it (all of these markers are registered once by v1-e01-t03); unit-tested request
+          builders run offline.
         outputs:
           - tests/smoke/cloud/conftest.py
           - tests/smoke/cloud/test_api_smoke.py

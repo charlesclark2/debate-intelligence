@@ -33,3 +33,6 @@ crash.log
 .DS_Store
 .idea/
 .vscode/
+
+# Task workflow scratch (kickoff prompt, PR body)
+.task/

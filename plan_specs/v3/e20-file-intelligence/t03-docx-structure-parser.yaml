@@ -77,8 +77,8 @@ spec:
         commit.
     - id: ac6
       description: >-
-        A 300-page (~5 MB) file parses in under 20 s on the CI runner and every output records
-        parser_version.
+        A 300-page (~5 MB) file parses in under 20 s on the CI runner (a timed test marked `slow`, run in the
+        validate-dev slow tier rather than the PR `ci` check) and every output records parser_version.
 status:
   phase: Pending
 ---
@@ -172,7 +172,8 @@ spec:
         name: Structural fixture suite and quality gates
         description: >-
           Snapshot-style expectations per structural fixture plus synthetic edge-case documents generated in
-          tests; a timed large-file test; type check and import boundaries.
+          tests; a timed large-file test marked `slow` (validate-dev slow tier, not the PR `ci` check); type
+          check and import boundaries.
         dependsOn: [fixture-curation, section-assembly]
         estimatedEffort: 2h
         acceptanceCriteria:

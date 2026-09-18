@@ -25,7 +25,8 @@ spec:
     concessions (a recorded concession is leveraged in a later speech plan when relevant), flow/drop
     tracking accuracy against gold flows, RFD traceability (share of RFD claims whose citations are
     valid and admissible, target 100%), evidence integrity (zero non-card quoted text) and agreement of
-    decisions with coach ballots per judge profile. A CI gate replays the set on every prompt/model change;
+    decisions with coach ballots per judge profile. A gate replays the set in the validate-dev slow tier
+    and the E09 promotion gate whenever prompts or models change (never in the PR `ci` check into dev);
     promotion requires matching or beating baseline. Ends with coach review of sampled full rounds.
   priority: 1
   constraints:
@@ -59,8 +60,9 @@ spec:
         traceability, evidence integrity and coach-ballot agreement per format and per judge profile.
     - id: ac3
       description: >-
-        CI fails when evidence integrity or RFD traceability is below 100%, or when any other metric
-        regresses beyond configured tolerance versus the stored baseline.
+        The gate (markers `eval` and `slow`) fails in validate-dev and the promotion gate when evidence
+        integrity or RFD traceability is below 100%, or when any other metric regresses beyond configured
+        tolerance versus the stored baseline.
     - id: ac4
       description: >-
         The v3.7 eval report records prompt ids/versions, model ids and judge policy versions for baseline
@@ -84,8 +86,8 @@ metadata:
     debate/epic: v3-e28-round-simulation
 spec:
   description: >-
-    Curate annotated rounds with the coach, build the metric runner, record a baseline and CI gate, then
-    complete coach review and publish the release eval report.
+    Curate annotated rounds with the coach, build the metric runner, record a baseline and post-merge gate,
+    then complete coach review and publish the release eval report.
   goalRef:
     name: v3-e28-t06-simulation-eval
   graph:
@@ -119,20 +121,26 @@ spec:
             args: [run, pytest, tests/evals/rounds/test_runner_metrics.py]
       - id: baseline-gate
         kind: Task
-        name: Baseline recording and CI gate
+        name: Baseline recording and post-merge gate
         description: >-
-          Record baseline responses and metrics; gate test with hard floors for integrity and traceability
-          and tolerances for other metrics.
+          Record baseline responses and metrics (operator step); gate test marked `eval` and `slow` with
+          hard floors for integrity and traceability and tolerances for other metrics.
         dependsOn: [metric-runner]
         outputs:
           - tests/fixtures/evals/rounds/baseline_metrics.json
           - tests/evals/rounds/test_simulation_gate.py
         estimatedEffort: 2h
         acceptanceCriteria:
+          - type: custom
+            name: Operator records baseline round responses
+            description: >-
+              Operator-run (expected > 2 min): `DEBATE_MODEL_MODE=record uv run pytest -m slow
+              tests/evals/rounds/test_simulation_gate.py` with dev Bedrock credentials; success = recordings
+              for all >=12 rounds and baseline_metrics.json written.
           - type: test_passes
             name: Simulation gate passes on replay
             command: uv
-            args: [run, pytest, tests/evals/rounds/test_simulation_gate.py]
+            args: [run, pytest, -m, slow, tests/evals/rounds/test_simulation_gate.py]
       - id: coach-review-and-report
         kind: Task
         name: Coach review and v3.7 eval report

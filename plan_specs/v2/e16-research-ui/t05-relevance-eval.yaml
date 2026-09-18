@@ -30,6 +30,7 @@ spec:
     packages: [evals/search_relevance, debate_core.retrieval]
     forbidden:
       - Live provider, OpenSearch or Bedrock calls in the CI eval run (frozen pool + replay router only)
+      - Running the relevance eval on pull requests into dev (it belongs in validate-dev/nightly/dispatch)
       - Storing student labeler names in the dataset (use anonymous labeler ids)
       - Including copyrighted full article text in the repo beyond what recorded fixtures already hold
       - Labels that grade sources by ideology rather than relevance to the stated need
@@ -53,8 +54,9 @@ spec:
         NDCG@10 and precision@10 per variant and per event.
     - id: ac4
       description: >-
-        A CI job runs the eval on demand and on changes to retrieval/ranking code, failing if hybrid+rerank
-        NDCG@10 drops more than 0.02 below the committed baseline.
+        A CI job runs the eval on workflow_dispatch, nightly and in validate-dev when retrieval/ranking code
+        changed since the last promotion (never on PRs into dev), failing if hybrid+rerank NDCG@10 drops more
+        than 0.02 below the committed baseline.
     - id: ac5
       description: >-
         The v2.2 baseline report is committed and summarized for the release review.
@@ -74,7 +76,7 @@ metadata:
 spec:
   description: >-
     Write the rubric and query set, freeze a candidate pool, run a labeling session with the team, then build
-    the metrics harness and the CI regression job with a committed baseline.
+    the metrics harness and the post-merge regression job with a committed baseline.
   goalRef:
     name: v2-e16-t05-relevance-eval
   graph:
@@ -99,11 +101,18 @@ spec:
         name: Frozen candidate pool
         description: >-
           Record provider and pipeline outputs for each query once (top 30 per variant, pooled) into fixtures
-          with the replay router so the eval is reproducible offline.
+          with `uv run python -m evals.search_relevance.record_pool` (live, operator machine) so the replay
+          router makes the eval reproducible offline.
         dependsOn: [rubric-queries]
         outputs: [evals/search_relevance/pool/]
         estimatedEffort: 2h
         acceptanceCriteria:
+          - type: custom
+            name: Operator records the frozen candidate pool
+            description: >-
+              Operator-run (expected > 2 min): `uv run python -m evals.search_relevance.record_pool` with dev
+              provider and Bedrock credentials; success = pool/manifest.json lists every query with pooled
+              candidates for all three variants and no recording errors.
           - type: artifact_exists
             name: Candidate pool manifest exists
             path: evals/search_relevance/pool/manifest.json
@@ -139,10 +148,11 @@ spec:
             args: [run, pytest, evals/search_relevance/tests]
       - id: ci-baseline
         kind: Task
-        name: CI regression job and committed baseline
+        name: Post-merge regression job and committed baseline
         description: >-
-          Run all variants, commit baseline.json and the report, and add a path-filtered CI job with a
-          0.02 NDCG@10 regression tolerance.
+          Run all variants, commit baseline.json and the report, and add search-relevance-eval.yml
+          (workflow_dispatch, nightly schedule and a validate-dev suite that runs when retrieval/ranking
+          code changed; no pull_request trigger) with a 0.02 NDCG@10 regression tolerance.
         dependsOn: [labeling, harness]
         outputs:
           - evals/search_relevance/baseline.json

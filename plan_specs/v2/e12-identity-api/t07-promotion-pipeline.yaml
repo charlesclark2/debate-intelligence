@@ -1,0 +1,240 @@
+# TASK v2-e12-t07-promotion-pipeline — Cloud dev→prod promotion pipeline
+# Epic: E12 Identity & API Service | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §4 (GitHub Actions + ECR, Terraform), §5, §12, §14, §15; branching-and-environments.md
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e12-t07-promotion-pipeline
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+  annotations:
+    debate/title: Cloud dev→prod promotion pipeline
+    debate/architecture-refs: §4, §5, §12, §14, §15
+spec:
+  description: >-
+    Extend the two-environment model (ADR-0013) to AWS: build once, deploy twice. GitHub Environments
+    `development` (deployment branches dev and hotfix/*) and `production` (deployment branch main only,
+    Charlie as required reviewer) hold the per-environment OIDC role ARNs and smoke-test variables. On a
+    dev merge with green `ci`, cloud-dev.yml builds the debate-api image exactly once, pushes it to the
+    dev ECR by immutable SHA tag, records the digest in a deploy manifest (release asset + GitHub
+    deployment payload), runs `terraform apply` for infrastructure/envs/dev with the dev apply role,
+    deploys that digest through the E12-t04 reusable deploy workflow, then runs the cloud smoke suite
+    (tests/smoke/cloud: health, 401 without a token, synthetic dev Cognito test user sign-in, a read/write
+    round trip on a synthetic organization) as an extra suite of the V1 validate-dev gate, so the single
+    `validate-dev` status on the commit is green only if the CLI and cloud suites both pass. Hotfixes get
+    no exception: a hotfix/* head is deployed to dev by manual workflow_dispatch of cloud-dev.yml (same
+    single image build, dev deploy and validate-dev; image-only unless the hotfix touches infrastructure/,
+    and dev is restored by the same-day back-merge). On a merge to main, cloud-prod.yml resolves the
+    merge's validated head parent (dev or hotfix/*), refuses to continue unless that SHA has a green
+    validate-dev and a recorded digest, waits for `production` approval, copies the image by digest into
+    the prod ECR (digest asserted unchanged; no rebuild), runs terraform plan/apply for
+    infrastructure/envs/prod, deploys the digest, runs the prod smoke subset (read-only, no data writes)
+    and on failure automatically rolls back to the previous task definition and opens an incident issue.
+    Boundaries: ECS/API Gateway resources and the reusable deploy mechanics are E12-t04; OIDC roles are
+    E10-t03; web hosting deploys are E14-t03 (they reuse this pipeline's environments); CLI pre-releases
+    and the V1 gate are v1-e01-t09/t10, which this task extends rather than replaces.
+  priority: 1
+  constraints:
+    packages: [.github/workflows, scripts, tests/smoke/cloud, infrastructure/envs, repo settings]
+    forbidden:
+      - Building a new image for prod or deploying to prod by tag instead of the dev-validated digest
+      - Any prod apply/deploy job without the production GitHub Environment or from a ref other than main
+      - Terraform apply for prod from pull requests or from the dev branch
+      - Prod smoke tests that create, modify or read real student records
+      - Real student data in dev; dev smoke uses synthetic Cognito users and a synthetic organization
+      - Posting validate-dev from the cloud suite separately from the V1 gate (one writer per commit)
+  context:
+    - kind: TaskRef
+      name: v2-e12-t04-api-deploy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e10-t03-github-oidc-deploy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t10-validate-dev-gate
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A merge to dev results, without manual steps, in a dev terraform apply, a dev ECS deployment of
+        the new digest and a `validate-dev` status on that commit covering both CLI and cloud suites.
+    - id: ac2
+      description: >-
+        After a promotion PR merges to main, the prod deployment waits for production approval, and the
+        prod task definition references the byte-identical image digest that ran in dev (verified by
+        comparing the deploy manifests).
+    - id: ac3
+      description: >-
+        cloud-prod.yml fails before approval is requested when the merged head SHA (dev or hotfix/*) lacks
+        a green validate-dev or a recorded digest, and a workflow run from any ref other than main cannot
+        enter the production environment.
+    - id: ac4
+      description: >-
+        A deliberately broken release that passes deploy health checks but fails the prod smoke subset is
+        rolled back automatically to the previous task definition, and an incident issue is opened.
+    - id: ac5
+      description: >-
+        docs/runbooks/promotion.md documents the dev and prod flows, approvals, rollback and the hotfix path
+        (workflow_dispatch dev deploy of the hotfix head, green validate-dev, approval, merge, back-merge),
+        and a hotfix merged to main deploys the same digest that was validated in dev.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e12-t07-promotion-pipeline-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+spec:
+  description: >-
+    Configure GitHub Environments, build the dev pipeline with the cloud smoke suite folded into
+    validate-dev, then the digest-promoting prod pipeline with rollback, and finish with a full drill.
+  goalRef:
+    name: v2-e12-t07-promotion-pipeline
+  graph:
+    nodes:
+      - id: gh-environments
+        kind: Task
+        name: development and production GitHub Environments
+        description: >-
+          In the GitHub UI create `development` (deployment branches: dev, hotfix/*) and `production`
+          (deployment branches: main, required reviewer Charlie, prevent self-review off for a solo
+          owner); store role ARNs, API base URLs and smoke-user secret names as environment
+          variables/secrets.
+        outputs: [docs/runbooks/promotion.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Both environments exist
+            command: gh
+            args: [api, "repos/{owner}/{repo}/environments", --jq,
+                   '[.environments[].name] | select(index("development") and index("production"))']
+          - type: custom
+            name: Environment protection confirmed
+            description: >-
+              Charlie confirms production allows only main and requires his review, and development
+              allows only dev and hotfix/*.
+      - id: cloud-smoke
+        kind: Task
+        name: Cloud smoke suite
+        description: >-
+          tests/smoke/cloud with pytest markers `dev` (health, 401 unauthenticated, synthetic user sign-in
+          via Cognito USER_PASSWORD test client, create/read/delete on a synthetic org) and `prod`
+          (read-only: health, 401, OpenAPI version matches the deployed commit); base URL and credentials
+          from env vars; unit-tested request builders run offline.
+        outputs:
+          - tests/smoke/cloud/conftest.py
+          - tests/smoke/cloud/test_api_smoke.py
+          - tests/smoke/cloud/README.md
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Offline self-tests for the cloud suite pass
+            command: uv
+            args: [run, pytest, tests/smoke/cloud, -m, "not dev and not prod"]
+          - type: test_passes
+            name: Dev cloud smoke passes against the dev API
+            command: uv
+            args: [run, pytest, tests/smoke/cloud, -m, dev]
+      - id: dev-pipeline
+        kind: Task
+        name: Dev build, apply, deploy and validate-dev
+        description: >-
+          cloud-dev.yml on workflow_run of `ci` for dev (replacing E12-t04's interim push-to-dev trigger
+          in deploy-api.yml) plus workflow_dispatch restricted to hotfix/* refs: build and push
+          debate-api once (tag = SHA),
+          write deploy-manifest.json (sha, image digest, task definition arn), terraform apply
+          infrastructure/envs/dev, call deploy-api.yml with the digest, then call validate-dev.yml via
+          workflow_call with suites cli,cloud; scripts/validate_dev.py gains --suite cloud and keeps
+          validate-dev pending until every configured suite for the SHA has reported.
+        dependsOn: [gh-environments, cloud-smoke]
+        outputs: [.github/workflows/cloud-dev.yml, scripts/validate_dev.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Dev pipeline is bound to the development environment
+            path: .github/workflows/cloud-dev.yml
+            contentMatch: "environment: development"
+          - type: test_passes
+            name: validate_dev suite aggregation tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_validate_dev.py, -k, suite]
+          - type: command_succeeds
+            name: dev Terraform plan is clean after the pipeline applied
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -detailed-exitcode, -lock-timeout=60s]
+      - id: prod-pipeline
+        kind: Task
+        name: Prod promotion by digest with approval
+        description: >-
+          scripts/resolve_promoted_digest.py takes the main merge SHA, finds its merged head parent (dev
+          or hotfix/*), checks its validate-dev status and manifest, and asserts the merge tree equals
+          that parent's tree.
+          cloud-prod.yml on push to main: resolve, then `environment: production` job copies the image
+          by digest to prod ECR (crane copy, digest compared), terraform plan/apply envs/prod and
+          deploy-api.yml with that digest.
+        dependsOn: [dev-pipeline]
+        outputs:
+          - scripts/resolve_promoted_digest.py
+          - tests/scripts/test_resolve_promoted_digest.py
+          - .github/workflows/cloud-prod.yml
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Digest resolution tests pass offline
+            command: uv
+            args: [run, pytest, tests/scripts/test_resolve_promoted_digest.py]
+          - type: artifact_exists
+            name: Prod pipeline is bound to the production environment
+            path: .github/workflows/cloud-prod.yml
+            contentMatch: "environment: production"
+          - type: command_succeeds
+            name: prod environment validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/prod, validate]
+      - id: prod-smoke-rollback
+        kind: Task
+        name: Prod smoke checks and automatic rollback
+        description: >-
+          After the prod deploy, run the `prod` smoke marker; on failure re-point the service to the
+          previous task definition recorded in the prior manifest, wait for stability, rerun smoke, and
+          open an incident issue with the run link.
+        dependsOn: [prod-pipeline]
+        outputs: [scripts/rollback_ecs_service.py, .github/workflows/cloud-prod.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Prod workflow rolls back on smoke failure
+            path: .github/workflows/cloud-prod.yml
+            contentMatch: "rollback_ecs_service.py"
+          - type: endpoint_responds
+            name: prod API health after promotion
+            url: https://api.debate-intelligence.example/v1/healthz
+            method: GET
+            expectedStatus: 200
+      - id: promotion-drill
+        kind: Task
+        name: End-to-end promotion and rollback drill
+        description: >-
+          Promote a harmless change dev → main and compare manifests; then promote a change whose prod
+          smoke fails (feature-flagged 500 on a read-only route) and watch the automatic rollback.
+        dependsOn: [prod-smoke-rollback]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: custom
+            name: Same digest in dev and prod, rollback observed
+            description: >-
+              Charlie approves the production deployment, confirms dev and prod manifests show the same
+              digest, and observes the drill release roll back with an incident issue opened.
+status:
+  phase: Pending

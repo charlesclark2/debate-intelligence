@@ -121,6 +121,14 @@ spec:
       inputs:
         goalRef: v2-e12-t06-openapi-client
         specRef: plan_specs/v2/e12-identity-api/t06-openapi-client.yaml
+    - id: ext-v2-e12-t07-promotion-pipeline
+      kind: External
+      name: 'Prerequisite from E12: Cloud dev→prod promotion pipeline'
+      description: >-
+        Cross-epic prerequisite owned by v2-e12-identity-api (release v2.0).
+      inputs:
+        goalRef: v2-e12-t07-promotion-pipeline
+        specRef: plan_specs/v2/e12-identity-api/t07-promotion-pipeline.yaml
     - id: ext-v2-e13-t03-card-job-workflow
       kind: External
       name: 'Prerequisite from E13: CardJob Step Functions workflow'
@@ -192,6 +200,7 @@ spec:
       - ext-v2-e10-t02-terraform-bootstrap
       - ext-v2-e12-t01-cognito-user-pool
       - ext-v2-e12-t04-api-deploy
+      - ext-v2-e12-t07-promotion-pipeline
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e14-t03-app-hosting reports phase Succeeded

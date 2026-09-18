@@ -17,9 +17,11 @@ metadata:
     debate/architecture-refs: §4, §16, §17
 spec:
   description: >-
-    Add the GitHub Actions workflow that gates every PR and push to main: ruff lint/format, pyright,
-    pytest, import-boundary checks and PlanSpec validation, each as a separately named job whose
-    name matches the required status checks reserved in t02. CI is hermetic — no live network or
+    Add the GitHub Actions workflow that gates every PR into dev or main and every push to dev or main
+    (docs/process/branching-and-environments.md): ruff lint/format, pyright, pytest, import-boundary
+    checks and PlanSpec validation as separately named jobs, plus a final aggregate job named `ci` that
+    needs all of them and is the single required status check on both the protect-dev and protect-main
+    rulesets (so adding jobs later never requires ruleset edits). CI is hermetic — no live network or
     model calls, no cloud credentials. The import-linter contracts themselves are authored in
     E02-t06; this task runs `lint-imports` as a job that passes trivially until those contracts land.
     Container build/ECR push and deploy workflows belong to V2 and are out of scope.
@@ -43,16 +45,17 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        .github/workflows/ci.yml runs on pull_request and push to main with jobs lint, typecheck, test,
-        import-boundaries and spec-validate.
+        .github/workflows/ci.yml runs on pull_request and push for branches dev and main with jobs lint,
+        typecheck, test, import-boundaries and spec-validate, and an aggregate `ci` job that fails if any
+        of them fails or is skipped.
     - id: ac2
       description: >-
         Jobs use astral-sh/setup-uv with dependency caching keyed on uv.lock; a warm-cache run of the
         whole workflow finishes in under 5 minutes.
     - id: ac3
       description: >-
-        A PR that introduces a ruff error, a failing test or an invalid PlanSpec is blocked by a red
-        required check.
+        A PR into dev that introduces a ruff error, a failing test or an invalid PlanSpec is blocked by a
+        red required `ci` check; `ci` is required on both dev and main.
     - id: ac4
       description: >-
         Workflow permissions default to contents read, and the workflow references no secrets.
@@ -81,9 +84,11 @@ spec:
         kind: Task
         name: CI workflow with stable job names
         description: >-
-          ci.yml with jobs lint (ruff check + format --check), typecheck (pyright), test (pytest -n
-          auto --cov), import-boundaries (lint-imports) and spec-validate (validate_specs.py);
-          top-level `permissions: contents: read`; concurrency group cancels superseded runs.
+          ci.yml triggered on pull_request and push for [dev, main] with jobs lint (ruff check +
+          format --check), typecheck (pyright), test (pytest -n auto --cov), import-boundaries
+          (lint-imports), spec-validate (validate_specs.py) and an aggregate `ci` job (needs: all,
+          if: always(), fails unless every need succeeded); top-level `permissions: contents: read`;
+          concurrency group cancels superseded runs.
         outputs: [.github/workflows/ci.yml]
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -91,6 +96,10 @@ spec:
             name: Workflow defines the spec-validate job
             path: .github/workflows/ci.yml
             contentMatch: "spec-validate"
+          - type: artifact_exists
+            name: Workflow runs for dev and main
+            path: .github/workflows/ci.yml
+            contentMatch: "branches: [dev, main]"
           - type: command_succeeds
             name: Workflow passes actionlint
             command: actionlint
@@ -110,30 +119,32 @@ spec:
             contentMatch: "enable-cache: true"
       - id: green-run
         kind: Task
-        name: Green run on main
+        name: Green run on dev
         description: >-
-          Push the workflow through a PR and confirm every job succeeds on main.
+          Push the workflow through a task PR into dev and confirm every job, including `ci`, succeeds on
+          the dev push (main gets its first green run at the next promotion).
         dependsOn: [caching]
         estimatedEffort: 0.5h
         acceptanceCriteria:
           - type: command_succeeds
-            name: Latest CI run on main succeeded
+            name: Latest CI run on dev succeeded
             command: gh
-            args: [run, list, --workflow, ci.yml, --branch, main, --limit, "1", --json, conclusion,
+            args: [run, list, --workflow, ci.yml, --branch, dev, --limit, "1", --json, conclusion,
                    --jq, '.[0] | select(.conclusion == "success")']
       - id: gate-proof
         kind: Task
         name: Prove required checks block bad PRs
         description: >-
-          Open a throwaway PR with a ruff violation and an invalid spec, confirm the required checks
-          fail and merge is blocked, then close it; mark the job names required in branch protection.
+          Open a throwaway PR into dev with a ruff violation and an invalid spec, confirm `ci` fails and
+          merge is blocked, then close it; add `ci` as a required status check to the protect-dev and
+          protect-main rulesets in the GitHub UI.
         dependsOn: [green-run]
         estimatedEffort: 0.5h
         acceptanceCriteria:
           - type: custom
             name: Failing PR is blocked from merge
             description: >-
-              Owner confirms the throwaway PR showed red lint and spec-validate checks and GitHub
-              reported "Merging is blocked".
+              Owner confirms the throwaway PR showed red lint, spec-validate and `ci` checks, GitHub
+              reported "Merging is blocked", and both rulesets list `ci` as required.
 status:
   phase: Pending

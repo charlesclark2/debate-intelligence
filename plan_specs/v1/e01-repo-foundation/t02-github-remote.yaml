@@ -17,19 +17,26 @@ metadata:
     debate/architecture-refs: §4, §17, §18
 spec:
   description: >-
-    Publish the local repository to a private GitHub repo and put the collaboration guardrails in
-    place: branch protection on main (PR required, required status checks, no force-push, no
-    deletion), CODEOWNERS, PR and issue templates that reference the task spec path, and a
-    CONTRIBUTING.md documenting the trunk-based `task/<task-name>` branch convention from
-    plan_specs/README.md. Required status-check names are reserved here but the workflow that
-    produces them is t04; this task does not create CI, tooling (t03) or ADR docs (t06).
+    The private remote already exists: Charlie created https://github.com/charlesclark2/debate-intelligence
+    and pushed main and dev over HTTPS on 2026-09-17. This task puts the repository-level guardrails from
+    docs/process/branching-and-environments.md (ADR-0013: main = prod, dev = development environment)
+    in place: dev as the GitHub default branch so task PRs target it, the protect-main ruleset (PR with
+    1 approval, dismiss stale approvals, conversation resolution, no force-push or deletion, pushes
+    restricted, admin-only emergency bypass) and the protect-dev ruleset (PR required, no force-push or
+    deletion, 0 approvals allowed for the solo owner), CODEOWNERS, bug and task issue templates that
+    reference the task spec path, secret scanning with push protection, and a CONTRIBUTING.md aligned
+    with the process doc. Boundaries: required status checks are added by the tasks that produce them
+    (`ci` in t04, `promotion-source`/`back-merge` and all PR/promotion templates in t08, `validate-dev`
+    in t10); GitHub Environments are v2-e12-t07; this task creates no workflows, tooling (t03) or ADR
+    docs (t06).
   priority: 2
   constraints:
     packages: [.github, CONTRIBUTING.md, repo settings]
     forbidden:
       - Public repository visibility while student or scouting data could land in fixtures
       - Committing secrets, tokens or .env files (enable GitHub secret scanning/push protection)
-      - Allowing force-push or direct pushes to main
+      - Allowing force-push, deletion or direct pushes to main or dev
+      - Leaving main as the default branch (task PRs must target dev by default)
   context:
     - kind: TaskRef
       name: v1-e01-t01-init-local-repo
@@ -37,20 +44,21 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        A private GitHub repository exists with the full local history pushed and `origin` configured.
+        The private repository charlesclark2/debate-intelligence has main and dev with the full local
+        history, `origin` is configured locally, and the default branch is dev.
     - id: ac2
       description: >-
-        main requires a pull request with at least one approval (owner may self-merge via CODEOWNERS
-        bypass only if documented), blocks force-push and deletion, and lists the CI check names
-        reserved for t04.
+        Ruleset protect-main (target main) requires a PR with 1 approval, dismisses stale approvals,
+        requires conversation resolution, blocks force-push and deletion, and restricts pushes with bypass
+        only for the repo admin.
     - id: ac3
       description: >-
-        .github/CODEOWNERS, .github/pull_request_template.md (with a "Spec:" field for the PlanSpec path)
-        and issue templates for bug and task exist on main.
+        Ruleset protect-dev (target dev) requires a PR and blocks force-push and deletion; a direct push to
+        dev or main is rejected.
     - id: ac4
       description: >-
-        CONTRIBUTING.md documents the branch naming, PR flow and spec-status update rule from
-        plan_specs/README.md.
+        .github/CODEOWNERS and issue templates for bug and task (with a spec path field) exist on dev, and
+        CONTRIBUTING.md links docs/process/branching-and-environments.md and the task/<task-name> flow.
     - id: ac5
       description: >-
         Secret scanning and push protection are enabled on the repository.
@@ -69,17 +77,19 @@ metadata:
     debate/epic: v1-e01-repo-foundation
 spec:
   description: >-
-    Create the remote and push, add repository hygiene files, then apply protection rules and verify
-    them with the gh CLI.
+    Confirm the existing remote and branches, make dev the default, add repository hygiene files,
+    then apply the two rulesets and security settings and verify them with the gh CLI.
   goalRef:
     name: v1-e01-t02-github-remote
   graph:
     nodes:
-      - id: create-remote
+      - id: confirm-remote
         kind: Task
-        name: Create private repo and push history
+        name: Confirm remote, branches and default branch
         description: >-
-          `gh repo create --private`, add origin, push main, and confirm visibility is private.
+          The remote was created and pushed on 2026-09-17; add `origin` locally if missing, confirm
+          visibility is private and both main and dev exist, and set dev as the default branch
+          (Settings → General, UI only).
         estimatedEffort: 0.5h
         acceptanceCriteria:
           - type: command_succeeds
@@ -89,51 +99,58 @@ spec:
           - type: command_succeeds
             name: Repository is private
             command: gh
-            args: [repo, view, --json, visibility, --jq, 'select(.visibility == "PRIVATE")']
+            args: [repo, view, charlesclark2/debate-intelligence, --json, visibility,
+                   --jq, 'select(.visibility == "PRIVATE")']
+          - type: command_succeeds
+            name: Default branch is dev
+            command: gh
+            args: [repo, view, charlesclark2/debate-intelligence, --json, defaultBranchRef,
+                   --jq, 'select(.defaultBranchRef.name == "dev")']
       - id: hygiene-files
         kind: Task
-        name: CODEOWNERS, templates and CONTRIBUTING
+        name: CODEOWNERS, issue templates and CONTRIBUTING
         description: >-
-          Add CODEOWNERS, a PR template with Spec/Criteria/Status checkboxes, bug and task issue
-          templates, and CONTRIBUTING.md describing task branches and spec status updates.
-        dependsOn: [create-remote]
+          Add CODEOWNERS (Charlie owns everything; plan_specs/ and .github/ explicitly), bug and task
+          issue templates with a spec-path field, and align CONTRIBUTING.md with the process doc
+          (task branches from dev, PRs into dev, promotion PRs to main). PR templates are t08.
+        dependsOn: [confirm-remote]
         outputs:
           - .github/CODEOWNERS
-          - .github/pull_request_template.md
           - .github/ISSUE_TEMPLATE/task.yml
           - .github/ISSUE_TEMPLATE/bug.yml
           - CONTRIBUTING.md
-        estimatedEffort: 1.5h
+        estimatedEffort: 1h
         acceptanceCriteria:
-          - type: artifact_exists
-            name: PR template asks for the spec path
-            path: .github/pull_request_template.md
-            contentMatch: "Spec:"
           - type: artifact_exists
             name: CODEOWNERS exists
             path: .github/CODEOWNERS
           - type: artifact_exists
-            name: CONTRIBUTING documents task branches
+            name: Task issue template asks for the spec path
+            path: .github/ISSUE_TEMPLATE/task.yml
+            contentMatch: "plan_specs/"
+          - type: artifact_exists
+            name: CONTRIBUTING links the process doc
             path: CONTRIBUTING.md
-            contentMatch: "task/<task-name>"
-      - id: branch-protection
+            contentMatch: "branching-and-environments.md"
+      - id: rulesets
         kind: Task
-        name: Protect main and enable secret scanning
+        name: protect-main and protect-dev rulesets, secret scanning
         description: >-
-          Apply a ruleset (or classic protection) on main: PR required, required checks named
-          `lint`, `typecheck`, `test`, `import-boundaries`, `spec-validate`, no force-push/deletion;
-          enable secret scanning and push protection.
-        dependsOn: [create-remote]
+          In the GitHub UI create rulesets protect-main and protect-dev exactly as the process doc's
+          "Set now" list describes (no required status checks yet; later tasks add them), and enable
+          secret scanning and push protection.
+        dependsOn: [confirm-remote]
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: command_succeeds
-            name: Branch protection is readable for main
+            name: Both rulesets are readable via the API
             command: gh
-            args: [api, "repos/{owner}/{repo}/branches/main/protection"]
+            args: [api, "repos/{owner}/{repo}/rulesets", --jq,
+                   '[.[].name] | select(index("protect-main") and index("protect-dev"))']
           - type: custom
-            name: Protection verified by attempting a direct push
+            name: Protection verified by attempting direct pushes
             description: >-
-              Owner confirms a direct `git push origin main` from a scratch commit is rejected and a
-              force-push is refused.
+              Charlie confirms a direct `git push origin main` and `git push origin dev` from a scratch
+              commit are rejected, a force-push is refused, and secret scanning push protection is on.
 status:
   phase: Pending

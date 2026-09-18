@@ -139,7 +139,8 @@ spec:
           - type: custom
             name: Real Cognito sign-in in dev
             description: >-
-              Charlie and one student tester sign in to the dev deployment with Google and email/password and
-              confirm sign-out and session expiry behave as specified.
+              Charlie signs in to the dev deployment with Google and with a synthetic student test account
+              (email/password; dev never holds real student accounts) and confirms sign-out and session
+              expiry behave as specified.
 status:
   phase: Pending

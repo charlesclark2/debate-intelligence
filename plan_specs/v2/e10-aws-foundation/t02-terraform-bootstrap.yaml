@@ -19,7 +19,8 @@ spec:
   description: >-
     Create the Terraform foundation every later V2 infrastructure task builds on: an S3 remote-state
     bucket per environment with native S3 state locking (or DynamoDB lock table if the pinned Terraform
-    version requires it), the module/env layout under infrastructure/, dev/stage/prod root modules with
+    version requires it), the module/env layout under infrastructure/, dev and prod root modules (no
+    stage environment, per ADR-0013) with
     pinned provider versions, a default_tags tagging standard, and CI checks for fmt, validate and tflint.
     This task owns layout and conventions only; it does NOT create OIDC roles (t03), KMS keys (t04),
     networking/ECS (t05) or any application resources (E11+). Until t03 lands, CI runs only
@@ -43,7 +44,7 @@ spec:
         access and state locking; two concurrent plans against the same env cannot both acquire the lock.
     - id: ac2
       description: >-
-        infrastructure/ contains bootstrap/, modules/ and envs/{dev,stage,prod}/ with a README describing
+        infrastructure/ contains bootstrap/, modules/ and envs/{dev,prod}/ with a README describing
         how to add a module and how environments differ (only via tfvars, not copied code).
     - id: ac3
       description: >-
@@ -51,7 +52,7 @@ spec:
         and a tflint rule or check fails when a module overrides them away.
     - id: ac4
       description: >-
-        A CI job runs terraform fmt -check, terraform validate for all three envs and tflint on every PR
+        A CI job runs terraform fmt -check, terraform validate for both envs and tflint on every PR
         touching infrastructure/, and fails the build on any error.
 status:
   phase: Pending
@@ -92,12 +93,11 @@ spec:
         kind: Task
         name: Module and environment layout
         description: >-
-          Create envs/dev, envs/stage and envs/prod roots with backend.tf, versions.tf (pinned
+          Create envs/dev and envs/prod roots with backend.tf, versions.tf (pinned
           hashicorp/aws), providers.tf and terraform.tfvars; add infrastructure/README.md.
         dependsOn: [state-bootstrap]
         outputs:
           - infrastructure/envs/dev/backend.tf
-          - infrastructure/envs/stage/backend.tf
           - infrastructure/envs/prod/backend.tf
           - infrastructure/README.md
         estimatedEffort: 2h

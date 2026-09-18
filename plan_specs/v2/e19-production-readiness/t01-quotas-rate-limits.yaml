@@ -20,11 +20,11 @@ spec:
     Bound cost and abuse before school-wide use. Adds per-user and per-organization daily quotas for job
     types (searches, card cuts, extension generations, exports) and for estimated model spend (from
     v1-e05-t07 token/cost telemetry), enforced in the application layer before a job is enqueued, with
-    atomic DynamoDB counters keyed by user/org and UTC day. Tunes API Gateway stage and per-route
-    throttles (burst/rate) in Terraform, and returns consistent 429 responses with a quota body the web
-    app turns into a friendly message ("You've used 40 of 40 card cuts today; resets at midnight UTC").
-    Coaches/admins can view usage and raise an org's limits via config. This task does NOT build the cost
-    dashboard (t06), audit logging (t02) or load testing (t07).
+    atomic DynamoDB counters keyed by user/org and UTC day. Tunes the API Gateway stage ($default) and
+    per-route throttles (burst/rate) in Terraform, and returns consistent 429 responses with a quota body
+    the web app turns into a friendly message ("You've used 40 of 40 card cuts today; resets at midnight
+    UTC"). Coaches/admins can view usage and raise an org's limits via config. This task does NOT build
+    the cost dashboard (t06), audit logging (t02) or load testing (t07).
   priority: 1
   constraints:
     packages: [debate_core.application, debate_api, infrastructure/modules/api_gateway, web/src/lib]
@@ -55,8 +55,8 @@ spec:
         reconciled with actual telemetry when the job completes.
     - id: ac4
       description: >-
-        API Gateway stage and route throttles are defined in Terraform per environment, and `terraform plan`
-        for dev shows the configured burst/rate values.
+        API Gateway stage ($default) and route throttles are defined in Terraform for dev and prod, and
+        `terraform plan` for dev shows the configured burst/rate values.
     - id: ac5
       description: >-
         The web app renders quota 429s as a clear message with reset time, and a GET /v1/usage endpoint shows
@@ -125,7 +125,8 @@ spec:
         kind: Task
         name: 429 error model, usage endpoint and gateway throttles
         description: >-
-          QuotaExceeded -> 429 mapping with Retry-After, GET /v1/usage, and Terraform stage/route throttles.
+          QuotaExceeded -> 429 mapping with Retry-After, GET /v1/usage, and Terraform API Gateway stage
+          ($default) and route throttles.
         dependsOn: [quota-service]
         outputs:
           - packages/debate_api/src/debate_api/routes/usage.py

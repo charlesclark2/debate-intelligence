@@ -17,13 +17,18 @@ metadata:
     debate/architecture-refs: §6, §10, §11, §14, §20 step 1
 spec:
   description: >-
-    Centralize configuration in a pydantic-settings Settings model: data_dir, environment profile
-    (local/dev/test), enabled search providers, HTTP politeness settings (user-agent with contact URL,
-    timeouts, per-host interval) consumed later by E04, provider API keys as SecretStr from env/.env,
-    and a path to a model-routing YAML (task class → model id) consumed by E05. Adds the
-    `debate-research config show` command that prints the effective settings with every secret
-    redacted and the source of each value. The ModelRouter itself (E05) and provider adapters (E07)
-    are out of scope; this task only defines and validates their configuration.
+    Centralize configuration in a pydantic-settings Settings model: data_dir, an environment profile keyed
+    by DEBATE_ENV in {dev, prod, test} (docs/process/branching-and-environments.md; test = CI and unit
+    tests with fakes only; a local source checkout defaults to dev), enabled search providers, HTTP
+    politeness settings (user-agent with contact URL, timeouts, per-host interval) consumed later by E04,
+    provider API keys as SecretStr from env/.env, and a path to a model-routing YAML (task class → model
+    id) consumed by E05. This task owns the profile mechanism: loading config/profiles/<env>.toml defaults
+    (per-profile data_dir, model-routing file and model_budget_usd_daily fields), precedence and
+    validation, the test profile's values, and starter dev/prod profile files. The dev/prod channel values
+    (dev routing to cheaper models, the low dev daily budget) and the build-channel default for installed
+    builds belong to v1-e01-t09. Adds the `debate-research config show` command that prints the effective
+    settings with every secret redacted and the source of each value. The ModelRouter itself (E05) and
+    provider adapters (E07) are out of scope; this task only defines and validates their configuration.
   priority: 2
   constraints:
     packages: [debate_core.application.settings, debate_cli.commands.config]
@@ -53,7 +58,10 @@ spec:
         "***" and a per-field source annotation.
     - id: ac4
       description: >-
-        The test profile disables all network providers and points data_dir at a temp directory.
+        DEBATE_ENV accepts only dev, prod and test (anything else fails fast naming the allowed values);
+        a local checkout with DEBATE_ENV unset resolves to dev; dev and prod resolve to different data
+        dirs; the test profile disables all network providers, uses only fakes and points data_dir at a
+        temp directory.
 status:
   phase: Pending
 ---
@@ -79,8 +87,14 @@ spec:
         name: Settings model and profiles
         description: >-
           Nested pydantic-settings groups (storage, http, providers, models) with DEBATE_ env prefix,
-          .env support and local/dev/test profiles.
-        outputs: [packages/debate_core/src/debate_core/application/settings.py, .env.example]
+          .env support and DEBATE_ENV dev/prod/test profiles loaded from config/profiles/<env>.toml
+          (test values final here; dev/prod starter files whose channel values v1-e01-t09 sets).
+        outputs:
+          - packages/debate_core/src/debate_core/application/settings.py
+          - config/profiles/dev.toml
+          - config/profiles/prod.toml
+          - config/profiles/test.toml
+          - .env.example
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes

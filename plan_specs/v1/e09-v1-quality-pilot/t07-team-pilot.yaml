@@ -20,14 +20,19 @@ spec:
     Put V1 in students' hands on live topics and capture what V2 must fix. Deliverables: a student
     quickstart (install, config, first cut, reading verification statuses, why UNVERIFIED cards are not
     finished evidence and must not be read in round as-is), a command guide (search, cut, verify, daily,
-    --auto-cut, --max-cost) with worked examples on the current Policy (national health insurance), LD (space
-    colonization) and PF (data-center moratorium) topics, and a coach guide (budgets, reviewing
+    --auto-cut, --max-cost) with worked examples on the current Policy (national health insurance), LD
+    (space colonization) and PF (data-center moratorium) topics, and a coach guide (budgets, reviewing
     auto-cut bundles, the edit policy). A two-to-three-week pilot with volunteer debaters produces a
-    structured feedback log (docs/pilot/feedback.csv: date, event, command, outcome, issue type, severity,
-    notes) keyed by anonymous participant codes only, plus a pilot summary that ranks V2 candidate
-    improvements. Because participants may be minors, the pilot collects no names, emails or grades,
-    participation is voluntary, and the coach confirms any school/parent notice requirements before start.
-    Boundaries: no new product features; bugs found become issues or V1 patch tasks.
+    structured feedback log (docs/pilot/feedback.csv: date, build, event, command, outcome, issue type,
+    severity, notes) keyed by anonymous participant codes only, plus a pilot summary that ranks V2
+    candidate improvements. Because participants may be minors, the pilot collects no names, emails or
+    grades, participation is voluntary, and the coach confirms any school/parent notice requirements
+    before start. Channels (docs/process/branching-and-environments.md): pilot volunteers first run the
+    dev pre-release channel (vX.Y.Z-dev.N, DEBATE_ENV=dev) so fixes can reach them before promotion.
+    The V1 dev channel runs on the tester's own machine against public topic sources and nothing leaves
+    that machine (unlike cloud dev in V2, which holds synthetic data only); the wider team uses only the
+    stable channel (vX.Y.Z from main, DEBATE_ENV=prod), and a pilot fix reaches the team only through a
+    validated promotion. Boundaries: no new product features; bugs found become issues or V1 patch tasks.
   priority: 2
   constraints:
     packages: [docs/guides, docs/pilot]
@@ -35,6 +40,8 @@ spec:
       - Recording student names, emails, school IDs or grades in the feedback log or repo
       - Presenting UNVERIFIED output as usable evidence in guides or examples
       - Starting the pilot before coach confirmation of school/parent notice requirements
+      - Giving non-pilot team members dev pre-release builds
+      - Pilot workflows that send dev-channel data off the tester's machine or use non-public sources
   context:
     - kind: TaskRef
       name: v1-e09-t06-packaging-release
@@ -50,7 +57,8 @@ spec:
     - id: ac2
       description: >-
         At least 5 pilot participants across at least two events each complete at least one search and one
-        cut on a current topic.
+        cut on a current topic using a dev pre-release build, and each feedback row records the build
+        version (e.g. v1.3.0-dev.4) it was observed on.
     - id: ac3
       description: >-
         docs/pilot/feedback.csv contains at least 20 entries using anonymous participant codes only, and a
@@ -114,7 +122,9 @@ spec:
         kind: Task
         name: Run the pilot
         description: >-
-          Onboard volunteers, hold a kickoff and a mid-pilot check-in, and log feedback weekly.
+          Onboard volunteers onto the dev pre-release channel (scripts/install_channel.sh), hold a kickoff
+          and a mid-pilot check-in, log feedback weekly with the build version, and move the team to the
+          stable release once it is promoted and tagged from main.
         dependsOn: [pilot-prep]
         estimatedEffort: 6h
         acceptanceCriteria:

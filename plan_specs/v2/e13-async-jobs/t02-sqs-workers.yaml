@@ -41,6 +41,9 @@ spec:
     - kind: TaskRef
       name: v2-e10-t05-container-platform
       relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t07-promotion-pipeline
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -133,7 +136,8 @@ spec:
         name: Fargate worker service and autoscaling
         description: >-
           Worker Dockerfile, ECS service/task role (queue, table, bucket, Bedrock permissions), step scaling
-          on ApproximateNumberOfMessagesVisible, deploy workflow reusing the OIDC deploy role.
+          on ApproximateNumberOfMessagesVisible, deploy workflow reusing the OIDC deploy role (dev deploys
+          from dev; prod only via the v2-e12-t07 promotion pipeline from main, same image digest).
         dependsOn: [consumer-loop]
         outputs: [packages/debate_workers/Dockerfile, infrastructure/modules/workers/service.tf]
         estimatedEffort: 3h

@@ -18,14 +18,14 @@ metadata:
 spec:
   description: >-
     Establish the AWS account structure that every later V2 resource lands in: an AWS Organization with
-    separate dev/stage/prod member accounts (or, if cost forces it, one account with strict environment
-    tagging recorded in an ADR), IAM Identity Center users for the coach and any adult maintainers,
-    root-account lockdown, an organization CloudTrail, and budgets with billing alarms. It also records
-    the primary-region decision based on Bedrock availability of the models the ModelRouter routes to
-    (Claude Sonnet 5, Claude Haiku 4.5, Titan Text Embeddings V2, Cohere Rerank 3.5). This task is a
-    small, largely manual bootstrap captured as a runbook plus minimal Terraform; it does NOT create
-    remote state or environment modules (t02), CI roles (t03), KMS/Secrets (t04) or networking (t05).
-    Students never receive AWS console or IAM access.
+    separate dev and prod member accounts (two environments only, per ADR-0013; or, if cost forces it, one
+    account with strict environment tagging recorded in an ADR), IAM Identity Center users for the coach
+    and any adult maintainers, root-account lockdown, an organization CloudTrail, and budgets with billing
+    alarms. It also records the primary-region decision based on Bedrock availability of the models the
+    ModelRouter routes to (Claude Sonnet 5, Claude Haiku 4.5, Titan Text Embeddings V2, Cohere Rerank
+    3.5). This task is a small, largely manual bootstrap captured as a runbook plus minimal Terraform; it
+    does NOT create remote state or environment modules (t02), CI roles (t03), KMS/Secrets (t04) or
+    networking (t05). Students never receive AWS console or IAM access.
   priority: 1
   constraints:
     packages: [infrastructure/bootstrap, docs/runbooks, docs/adr]
@@ -41,7 +41,7 @@ spec:
         on-demand or inference-profile availability for every model id in the ModelRouter routing config.
     - id: ac2
       description: >-
-        dev, stage and prod accounts (or the ADR-approved single-account alternative) exist under an
+        dev and prod accounts (or the ADR-approved single-account alternative) exist under an
         Organization; root users have MFA and no access keys; humans sign in only via IAM Identity Center.
     - id: ac3
       description: >-

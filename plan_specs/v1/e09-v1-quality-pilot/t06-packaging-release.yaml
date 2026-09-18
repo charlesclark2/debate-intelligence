@@ -20,12 +20,16 @@ spec:
     Make the CLI installable by students with one command and releases reproducible. Versions follow semver
     tied to the plan's release labels (v1.3.0 for release v1.3, patch bumps for fixes), sourced from a single
     version file shared by debate_core and debate_cli. CHANGELOG.md follows Keep a Changelog with a section
-    per release linking the release spec. A release GitHub Action triggers on v* tags: verifies the tag
-    matches the package version and the release spec's epics are Succeeded (validate_specs.py
-    --require-succeeded), runs the full test suite, builds wheels/sdists with `uv build`, and publishes a
-    GitHub Release with artifacts and changelog notes. Install path: `uv tool install
-    git+https://github.com/<org>/debate-intelligence@v1.3.0#subdirectory=packages/debate_cli` (or the
-    wheel), with the bedrock extra optional. Boundaries: no PyPI publishing, no Docker images (V2).
+    per release linking the release spec. Stable releases are tagged only from main, and only after a
+    validated promotion (docs/process/branching-and-environments.md): a release GitHub Action triggers on
+    stable vX.Y.Z tags (never the vX.Y.Z-dev.N pre-release tags, which v1-e01-t09 owns), verifies the
+    tagged commit is on main and is a dev → main promotion merge whose dev parent has a green
+    `validate-dev` status, verifies the tag matches the package version and the release spec's epics are
+    Succeeded (validate_specs.py --require-succeeded), runs the full test suite, builds wheels/sdists with
+    `uv build` (reusing t09's build-info stamping with channel "stable"), and publishes a GitHub Release
+    (not a pre-release) with artifacts and changelog notes. Install path: scripts/install_channel.sh
+    v1.3.0 (from t09) or `uv tool install` from the stable tag's wheels, with the bedrock extra optional.
+    Boundaries: no PyPI publishing, no Docker images (V2), dev pre-releases are v1-e01-t09.
   priority: 2
   constraints:
     packages: [.github/workflows, packages/debate_cli, packages/debate_core, CHANGELOG.md]
@@ -33,9 +37,13 @@ spec:
       - Publishing to public PyPI
       - Secrets, .env files, local data dirs or team evidence fixtures inside built wheels
       - Tag/version mismatches reaching a GitHub Release
+      - Stable tags on commits not on main or not reached through a validated dev → main promotion
   context:
     - kind: TaskRef
       name: v1-e01-t04-ci-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t09-dev-prerelease-channel
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -44,12 +52,13 @@ spec:
         source, and a test inspects the wheel file list to confirm no fixtures, .env or data files ship.
     - id: ac2
       description: >-
-        On a clean machine, `uv tool install` from the git tag installs `debate-research`, and
-        `debate-research --version` prints the tagged version.
+        On a clean machine, installing from the stable tag installs `debate-research`, and
+        `debate-research --version` prints the tagged version with channel stable and env prod.
     - id: ac3
       description: >-
-        The release workflow fails if the tag and package version differ or the release's epics are not
-        Succeeded, and otherwise publishes a GitHub Release with changelog notes and built artifacts.
+        The release workflow fails if the tagged commit is not a validated promotion on main, the tag and
+        package version differ, or the release's epics are not Succeeded, and otherwise publishes a
+        stable GitHub Release with changelog notes and built artifacts; -dev.N tags never trigger it.
     - id: ac4
       description: >-
         CHANGELOG.md has entries for v1.0 through v1.3 referencing their release specs.
@@ -105,7 +114,9 @@ spec:
         kind: Task
         name: Tag-triggered release workflow
         description: >-
-          Workflow on v* tags: version/tag check, spec status check, tests, uv build, GitHub Release upload.
+          Workflow on v* tags excluding *-dev.*: tag-on-main and validated-promotion check (merge commit
+          whose dev parent has green validate-dev), version/tag check, spec status check, tests, uv build,
+          GitHub Release upload.
         dependsOn: [version-source, changelog]
         outputs: [.github/workflows/release.yml]
         estimatedEffort: 2h
@@ -114,12 +125,16 @@ spec:
             name: Release workflow exists
             path: .github/workflows/release.yml
             contentMatch: "require-succeeded"
+          - type: artifact_exists
+            name: Release workflow ignores dev pre-release tags
+            path: .github/workflows/release.yml
+            contentMatch: "!v*-dev.*"
       - id: install-check
         kind: Task
         name: Clean-machine install verification
         description: >-
-          Tag a release candidate, install with uv tool install on a clean machine/container and document the
-          command in the README.
+          After a validated promotion to main, tag the stable release on main, install it on a clean
+          machine/container and document the stable vs dev channel install commands in the README.
         dependsOn: [release-workflow]
         estimatedEffort: 1h
         acceptanceCriteria:

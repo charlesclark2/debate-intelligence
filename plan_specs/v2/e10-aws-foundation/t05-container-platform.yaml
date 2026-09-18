@@ -19,7 +19,7 @@ spec:
   description: >-
     Provide the runtime substrate for the FastAPI service (E12-t04) and workers (E13-t02): a VPC with
     public and private subnets across two AZs, a cost-aware egress design (single NAT gateway in
-    dev/stage, gateway endpoints for S3/DynamoDB, interface endpoints only where they pay for
+    dev, gateway endpoints for S3/DynamoDB, interface endpoints only where they pay for
     themselves, e.g. ECR/Logs/Bedrock runtime in prod), ECR repositories with scan-on-push and lifecycle
     rules, an ECS cluster with Fargate/Fargate Spot capacity providers, shared task execution roles and
     per-service CloudWatch log groups. Workers must reach arbitrary publisher URLs over HTTPS for article
@@ -31,7 +31,7 @@ spec:
     forbidden:
       - Placing ECS tasks in public subnets with public IPs
       - Security groups allowing 0.0.0.0/0 ingress to anything other than a load balancer listener
-      - One NAT gateway per AZ in dev/stage without a documented cost justification
+      - One NAT gateway per AZ in dev without a documented cost justification
       - Mutable image tags for deploys (use immutable tags / digests)
   context:
     - kind: TaskRef

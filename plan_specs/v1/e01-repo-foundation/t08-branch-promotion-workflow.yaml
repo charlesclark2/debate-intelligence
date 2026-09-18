@@ -1,0 +1,199 @@
+# TASK v1-e01-t08-branch-promotion-workflow — dev→main promotion workflow and guards
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §4 (GitHub Actions), §6, §17 (guardrails), §18; docs/process/branching-and-environments.md
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t08-branch-promotion-workflow
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: dev→main promotion workflow and guards
+    debate/architecture-refs: §4, §6, §17, §18
+spec:
+  description: >-
+    Turn docs/process/branching-and-environments.md (ADR-0013: main = prod, dev = development environment)
+    into enforced GitHub mechanics. Adds scripts/check_promotion_source.py and a promotion-guard workflow
+    that posts two checks on every PR into main: `promotion-source` (fails unless the head branch is `dev`
+    or `hotfix/*`, and for promotion and hotfix PRs alike fails if required template fields such as the
+    dev build id and the validate-dev run link are left empty) and `back-merge` (fails when main holds
+    non-merge commits that dev lacks, i.e. a hotfix was never back-merged). Hotfixes get no exception to
+    "validated in dev": a hotfix/* head is deployed to dev by manual workflow_dispatch (t09 pre-release
+    in V1, v2-e12-t07 dev deploy in V2) and must carry a green `validate-dev` and Charlie's approval
+    before merging to main. After a hotfix lands on main, a workflow opens the main → dev back-merge PR
+    automatically. Also adds the PR templates: the default task template
+    (Spec: path, criteria, status update) and .github/PULL_REQUEST_TEMPLATE/promotion.md and hotfix.md.
+    Rulesets are tightened so main accepts merge commits only and requires `ci`, `promotion-source` and
+    `back-merge`; dev requires `ci` and allows squash (task PRs) plus merge commits (back-merges only).
+    Boundaries: creating rulesets, default branch, CODEOWNERS and issue templates is t02; the `ci`
+    workflow is t04; building the dev pre-release is t09; the `validate-dev` status and making it
+    required is t10; cloud deploys and GitHub Environments are v2-e12-t07.
+  priority: 1
+  constraints:
+    packages: [.github/workflows, .github/PULL_REQUEST_TEMPLATE, scripts, repo settings]
+    forbidden:
+      - Any path from a task/* or feature branch straight into main
+      - Squash or rebase merges for dev → main promotions (branches must share history)
+      - Force-pushing or rebasing dev or main, or granting bypass to anyone but the repo admin
+      - Guard workflows that run with write permissions or secrets on pull_request events
+  context:
+    - kind: TaskRef
+      name: v1-e01-t02-github-remote
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t04-ci-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A PR from task/<name> into main shows a red `promotion-source` check and GitHub reports merging is
+        blocked; PRs from dev or hotfix/<slug> into main pass that check.
+    - id: ac2
+      description: >-
+        A promotion PR opened with ?template=promotion.md contains sections for included release/tasks,
+        dev pre-release or deploy id, validate-dev run link, evals and manual checks, and
+        `promotion-source` fails while the dev build id or validate-dev link is still blank; hotfix PRs
+        (?template=hotfix.md) require the same two fields.
+    - id: ac3
+      description: >-
+        When main contains a non-merge commit not reachable from dev (an un-back-merged hotfix), the
+        `back-merge` check fails on the next promotion PR, and merging a hotfix into main opens a
+        main → dev back-merge PR within one workflow run.
+    - id: ac4
+      description: >-
+        The protect-main ruleset allows only merge commits and requires `ci`, `promotion-source` and
+        `back-merge`; protect-dev requires `ci` and allows squash and merge commits.
+    - id: ac5
+      description: >-
+        scripts/check_promotion_source.py is covered by offline unit tests for every allowed and rejected
+        head/base combination and the empty-template-field cases.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t08-branch-promotion-workflow-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Write and test the guard script, add the PR templates, wire the guard and back-merge workflows,
+    tighten the rulesets in the GitHub UI, then prove the negative paths with throwaway PRs.
+  goalRef:
+    name: v1-e01-t08-branch-promotion-workflow
+  graph:
+    nodes:
+      - id: guard-script
+        kind: Task
+        name: Promotion guard script
+        description: >-
+          scripts/check_promotion_source.py with subcommands `source` (base main accepts head dev or
+          hotfix/*; anything else exits 1 with a message pointing at the process doc), `template` (parses
+          the PR body and fails if the "Dev build:" or "validate-dev run:" lines of the promotion or
+          hotfix template are empty) and `back-merge` (for dev heads runs `git rev-list --no-merges
+          origin/dev..origin/main` and fails with the offending SHAs; reports success for hotfix/* heads
+          so a second urgent fix is never blocked). Pure functions over inputs so tests need no network.
+        outputs:
+          - scripts/check_promotion_source.py
+          - tests/scripts/test_check_promotion_source.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Guard script tests pass offline
+            command: uv
+            args: [run, pytest, tests/scripts/test_check_promotion_source.py]
+          - type: command_succeeds
+            name: A dev head into main is accepted
+            command: uv
+            args: [run, scripts/check_promotion_source.py, source, --base, main, --head, dev]
+      - id: pr-templates
+        kind: Task
+        name: Task, promotion and hotfix PR templates
+        description: >-
+          Default template for task PRs (Spec: path, acceptance criteria ticked, Goal status updated,
+          smoke checks added/updated if a user-facing surface changed); promotion.md (release and task
+          specs included, "Dev build:" pre-release tag or deploy id, "validate-dev run:" link, eval
+          results from v1.3, manual checks, rollback note); hotfix.md (incident link, "Dev build:" id of
+          the workflow_dispatch dev deploy of the hotfix head, "validate-dev run:" link, back-merge
+          reminder). Link them from docs/process/branching-and-environments.md.
+        outputs:
+          - .github/pull_request_template.md
+          - .github/PULL_REQUEST_TEMPLATE/promotion.md
+          - .github/PULL_REQUEST_TEMPLATE/hotfix.md
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Promotion template asks for the validate-dev run
+            path: .github/PULL_REQUEST_TEMPLATE/promotion.md
+            contentMatch: "validate-dev run:"
+          - type: artifact_exists
+            name: Task template asks for the spec path
+            path: .github/pull_request_template.md
+            contentMatch: "Spec:"
+      - id: guard-workflows
+        kind: Task
+        name: promotion-guard and back-merge workflows
+        description: >-
+          promotion-guard.yml on pull_request (opened, edited, synchronize, reopened) into main with jobs
+          named `promotion-source` and `back-merge` (full-depth checkout, contents: read only). back-merge.yml
+          on push to main: if main has commits dev lacks, open (or update) a "Back-merge main → dev" PR
+          with gh using the hotfix template label; contents/pull-requests write scoped to that job.
+        dependsOn: [guard-script, pr-templates]
+        outputs: [.github/workflows/promotion-guard.yml, .github/workflows/back-merge.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Guard workflow defines the promotion-source job
+            path: .github/workflows/promotion-guard.yml
+            contentMatch: "promotion-source"
+          - type: command_succeeds
+            name: Workflows pass actionlint
+            command: actionlint
+            args: [.github/workflows/promotion-guard.yml, .github/workflows/back-merge.yml]
+      - id: ruleset-wiring
+        kind: Task
+        name: Tighten protect-main and protect-dev rulesets
+        description: >-
+          In the GitHub UI: protect-main allowed merge methods = merge commit only, required status
+          checks `ci`, `promotion-source`, `back-merge` (strict: branch must be up to date); protect-dev
+          requires `ci` with squash and merge commits allowed. Export both rulesets as JSON for review.
+        dependsOn: [guard-workflows]
+        outputs: [docs/process/rulesets/protect-main.json, docs/process/rulesets/protect-dev.json]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Rulesets are readable via the API
+            command: gh
+            args: [api, "repos/{owner}/{repo}/rulesets"]
+          - type: custom
+            name: Ruleset settings confirmed in the UI
+            description: >-
+              Charlie confirms protect-main shows merge-commit-only and the three required checks, and
+              protect-dev shows `ci` required with squash and merge commits allowed.
+      - id: negative-proof
+        kind: Task
+        name: Prove the guards with throwaway PRs
+        description: >-
+          Open a PR task/* → main (expect red promotion-source), a promotion PR dev → main with a blank
+          validate-dev line (expect red), and simulate an un-back-merged hotfix on a scratch fork or
+          sandbox repo (expect red back-merge and an auto-opened back-merge PR); close them all.
+        dependsOn: [ruleset-wiring]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Blocked merges observed
+            description: >-
+              Charlie confirms each throwaway PR showed the expected red check and "Merging is blocked",
+              and the back-merge PR was opened automatically in the sandbox.
+status:
+  phase: Pending

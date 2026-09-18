@@ -104,6 +104,14 @@ spec:
       inputs:
         goalRef: v2-e12-t05-core-endpoints
         specRef: plan_specs/v2/e12-identity-api/t05-core-endpoints.yaml
+    - id: ext-v2-e12-t07-promotion-pipeline
+      kind: External
+      name: 'Prerequisite from E12: Cloud dev→prod promotion pipeline'
+      description: >-
+        Cross-epic prerequisite owned by v2-e12-identity-api (release v2.0).
+      inputs:
+        goalRef: v2-e12-t07-promotion-pipeline
+        specRef: plan_specs/v2/e12-identity-api/t07-promotion-pipeline.yaml
     - id: t01
       kind: Task
       name: Job entity and repository
@@ -136,6 +144,7 @@ spec:
       dependsOn:
       - t01
       - ext-v2-e10-t05-container-platform
+      - ext-v2-e12-t07-promotion-pipeline
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e13-t02-sqs-workers reports phase Succeeded

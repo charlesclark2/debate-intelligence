@@ -17,19 +17,24 @@ metadata:
     debate/architecture-refs: §4, §12
 spec:
   description: >-
-    Host the Next.js app in dev/stage/prod with per-environment configuration and preview deploys for
-    pull requests. Decide between Amplify Hosting (managed SSR, built-in previews, lowest effort) and
-    CloudFront + ECS Fargate (reuses E10 platform, more control) in an ADR weighing cost at team scale,
-    SSR/middleware support, preview environments and operational burden, then implement the choice in
-    Terraform with a custom domain, ACM certificate, HTTPS-only, security headers (CSP, HSTS,
-    frame-ancestors none) and environment variables sourced per environment. Cognito callback URLs and
-    API CORS origins are updated to match. This task owns hosting only; API deployment is E12-t04.
+    Host the Next.js app in two environments, dev and prod (ADR-0013,
+    docs/process/branching-and-environments.md), with per-environment configuration and preview deploys
+    for pull requests. The dev web environment deploys from the dev branch; prod hosting deploys only from
+    main, through the `production` GitHub Environment approval and the promotion pipeline of v2-e12-t07;
+    PR preview deploys always point at the DEV API and dev Cognito. Decide between Amplify Hosting
+    (managed SSR, built-in previews, lowest effort) and CloudFront + ECS Fargate (reuses E10 platform,
+    more control) in an ADR weighing cost at team scale, SSR/middleware support, preview environments and
+    operational burden, then implement the choice in Terraform with a custom domain, ACM certificate,
+    HTTPS-only, security headers (CSP, HSTS, frame-ancestors none) and environment variables sourced per
+    environment. Cognito callback URLs and API CORS origins are updated to match. This task owns hosting
+    only; API deployment is E12-t04 and promotion orchestration is v2-e12-t07.
   priority: 1
   constraints:
     packages: [infrastructure/modules/web_hosting, web, .github/workflows]
     forbidden:
       - Plain HTTP or missing HSTS on any environment
       - Preview deploys pointed at prod API or prod Cognito
+      - Deploying prod web hosting from any branch other than main or outside the production environment
       - Secrets baked into client bundles or build logs
       - Publicly indexable non-prod environments (require auth or noindex)
   context:
@@ -45,14 +50,18 @@ spec:
     - kind: TaskRef
       name: v2-e12-t04-api-deploy
       relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t07-promotion-pipeline
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
         An ADR records the hosting choice with a monthly cost estimate and trade-offs for both options.
     - id: ac2
       description: >-
-        dev, stage and prod web environments are defined in Terraform with custom domains, ACM
-        certificates and HTTPS redirects; https://app.dev.<domain>/ returns 200.
+        dev and prod web environments are defined in Terraform with custom domains, ACM certificates and
+        HTTPS redirects; dev deploys from the dev branch, prod only from main behind production approval;
+        https://app.dev.<domain>/ returns 200.
     - id: ac3
       description: >-
         Responses carry CSP, Strict-Transport-Security, X-Content-Type-Options and a frame-ancestors none
@@ -102,8 +111,9 @@ spec:
         kind: Task
         name: Hosting infrastructure and domains
         description: >-
-          Terraform module for the chosen option with per-env branches/services, Route 53 records, ACM
-          certificates and environment variables.
+          Terraform module for the chosen option with dev (tracks the dev branch) and prod (deployed only
+          from main via the production environment) services, Route 53 records, ACM certificates and
+          environment variables.
         dependsOn: [hosting-adr]
         outputs: [infrastructure/modules/web_hosting/main.tf, infrastructure/envs/dev/web.tf]
         estimatedEffort: 4h
@@ -135,8 +145,8 @@ spec:
         kind: Task
         name: PR previews and origin wiring
         description: >-
-          Preview deploy per PR against dev backends with noindex, teardown on close; update Cognito
-          callback URLs and API CORS origins from Terraform outputs.
+          Preview deploy per PR (task PRs into dev) against the DEV API and dev Cognito with noindex,
+          teardown on close; update Cognito callback URLs and API CORS origins from Terraform outputs.
         dependsOn: [security-headers]
         outputs: [.github/workflows/web-preview.yml]
         estimatedEffort: 2h

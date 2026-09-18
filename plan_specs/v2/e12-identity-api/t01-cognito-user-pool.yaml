@@ -24,14 +24,17 @@ spec:
     coach and administrator roles, and an immutable custom:organization_id attribute. Only the minimum
     attributes are requested (email, sub; no birthdate, phone or address) because users may be minors.
     Sign-up is invite/allow-list gated for the pilot via a pre-sign-up Lambda that checks an allowed
-    domain/email list. Token verification in the API is E12-t03; the sign-in UX is E14-t02.
+    domain/email list. There is one pool per environment (dev and prod, ADR-0013): the dev pool holds
+    only maintainers and synthetic smoke-test users, never real students. Token verification in the API
+    is E12-t03; the sign-in UX is E14-t02.
   priority: 1
   constraints:
     packages: [infrastructure/modules/cognito, infrastructure/envs]
     forbidden:
       - Collecting birthdate, phone, address, gender or other non-essential attributes
       - Implicit OAuth grant or client secrets in the browser app client
-      - Open self-sign-up in stage/prod without the allow-list trigger
+      - Open self-sign-up in dev or prod without the allow-list trigger
+      - Real student accounts in the dev user pool (synthetic test users only)
       - Google OAuth client secret in Terraform variables or state as plaintext (read from Secrets Manager)
   context:
     - kind: TaskRef

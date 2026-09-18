@@ -45,6 +45,12 @@ docs/                     architecture proposal, ADRs
 scripts/                  validate_specs.py, spec_index.py
 ```
 
+## Branches and environments
+
+`main` is production and `dev` is the development environment; every change is deployed to
+and validated in dev before a `dev` → `main` promotion. Details:
+[docs/process/branching-and-environments.md](docs/process/branching-and-environments.md).
+
 ## Working on a task
 
 ```bash
@@ -54,4 +60,4 @@ uv run scripts/spec_index.py                # refresh ROADMAP.md after changing 
 
 Pick a task whose prerequisites are `Succeeded`, branch `task/<task-name>`, implement its
 plan nodes in order until each node's acceptance criteria pass, set the task Goal's
-`status.phase` to `Succeeded`, and open a PR that references the spec path.
+`status.phase` to `Succeeded`, and open a PR into `dev` that references the spec path.

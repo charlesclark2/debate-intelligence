@@ -15,6 +15,16 @@ the tables below. Everything outside the GENERATED markers is hand-written.
 * **Epics** (E01–E28) each belong to exactly one minor release, so they never cross a major
   version. Tasks inside an epic may depend on work from the same or earlier releases only.
 
+## Branches and environments
+
+`main` is production and `dev` is the development environment. Task branches merge into `dev`;
+`dev` is deployed (V1: pre-release CLI build, V2+: dev AWS environment) and must pass
+`validate-dev` plus Charlie's approval before a `dev` → `main` promotion ships it to prod.
+Only two environments exist (ADR-0013). See
+[docs/process/branching-and-environments.md](docs/process/branching-and-environments.md).
+The mechanics are tasks v1-e01-t08 (promotion guards), t09 (dev pre-release channel),
+t10 (`validate-dev` gate) and v2-e12-t07 (cloud dev→prod pipeline).
+
 ## Suggested timeline
 
 Projected from the specs' own effort estimates (~1,630 engineering hours in total), starting
@@ -48,11 +58,11 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 19 | 1 | 114 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 22 | 1 | 139 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | URL → verified card | 3 | 20 | 0 | 171 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 62 |
-| [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 18 | 0 | 164 |
+| [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 19 | 0 | 180 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Async jobs & web Cut-a-Card | 2 | 12 | 0 | 124 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 11 | 0 | 109 |
 | [v2.3](plan_specs/releases/v2.3.yaml) | Card library & extensions | 2 | 11 | 0 | 116 |
@@ -77,12 +87,15 @@ Repo, tooling, CI, domain core, and deterministic evidence verification exist; `
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [Initialize local git repository and monorepo skeleton](plan_specs/v1/e01-repo-foundation/t01-init-local-repo.yaml) `v1-e01-t01-init-local-repo` | Succeeded | 0 | 6.0 |
-| [Create GitHub repository, push, and protect main](plan_specs/v1/e01-repo-foundation/t02-github-remote.yaml) `v1-e01-t02-github-remote` | Pending | 1 | 3.0 |
+| [Create GitHub repository, push, and protect main](plan_specs/v1/e01-repo-foundation/t02-github-remote.yaml) `v1-e01-t02-github-remote` | Pending | 1 | 2.5 |
 | [uv workspace, Python 3.12 and quality tooling](plan_specs/v1/e01-repo-foundation/t03-uv-workspace-tooling.yaml) `v1-e01-t03-uv-workspace-tooling` | Pending | 1 | 5.5 |
 | [GitHub Actions CI pipeline](plan_specs/v1/e01-repo-foundation/t04-ci-pipeline.yaml) `v1-e01-t04-ci-pipeline` | Pending | 3 | 4.0 |
 | [PlanSpec validation and index tooling](plan_specs/v1/e01-repo-foundation/t05-spec-tooling.yaml) `v1-e01-t05-spec-tooling` | Pending | 1 | 6.5 |
 | [Architecture proposal and ADR records](plan_specs/v1/e01-repo-foundation/t06-adr-docs.yaml) `v1-e01-t06-adr-docs` | Pending | 1 | 4.5 |
 | [debate_cli Typer + Rich skeleton](plan_specs/v1/e01-repo-foundation/t07-cli-skeleton.yaml) `v1-e01-t07-cli-skeleton` | Pending | 1 | 6.0 |
+| [dev→main promotion workflow and guards](plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml) `v1-e01-t08-branch-promotion-workflow` | Pending | 2 | 7.5 |
+| [Dev pre-release channel and environment profiles for the CLI](plan_specs/v1/e01-repo-foundation/t09-dev-prerelease-channel.yaml) `v1-e01-t09-dev-prerelease-channel` | Pending | 3 | 9.0 |
+| [validate-dev smoke gate for promotions](plan_specs/v1/e01-repo-foundation/t10-validate-dev-gate.yaml) `v1-e01-t10-validate-dev-gate` | Pending | 2 | 9.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -189,7 +202,7 @@ Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged a
 | [Card selection and underlining eval harness](plan_specs/v1/e09-v1-quality-pilot/t03-span-eval-harness.yaml) `v1-e09-t03-span-eval-harness` | Pending | 2 | 9.0 |
 | [Prompt/model promotion gate](plan_specs/v1/e09-v1-quality-pilot/t04-prompt-promotion-gate.yaml) `v1-e09-t04-prompt-promotion-gate` | Pending | 3 | 5.5 |
 | [End-to-end recorded suite](plan_specs/v1/e09-v1-quality-pilot/t05-e2e-fixture-suite.yaml) `v1-e09-t05-e2e-fixture-suite` | Pending | 1 | 9.0 |
-| [Packaging and release workflow](plan_specs/v1/e09-v1-quality-pilot/t06-packaging-release.yaml) `v1-e09-t06-packaging-release` | Pending | 1 | 6.0 |
+| [Packaging and release workflow](plan_specs/v1/e09-v1-quality-pilot/t06-packaging-release.yaml) `v1-e09-t06-packaging-release` | Pending | 2 | 6.0 |
 | [Student/coach guide and team pilot](plan_specs/v1/e09-v1-quality-pilot/t07-team-pilot.yaml) `v1-e09-t07-team-pilot` | Pending | 2 | 14.0 |
 
 
@@ -197,7 +210,7 @@ Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged a
 
 ### v2.0 — Cloud platform foundation
 
-AWS accounts/Terraform/CI deploy, DynamoDB + S3 repositories passing the same contract tests, Cognito auth and the FastAPI service are live in dev/stage.
+AWS accounts/Terraform/CI deploy, DynamoDB + S3 repositories passing the same contract tests, Cognito auth and the FastAPI service are live in dev and prod, with every prod deploy promoted from a validated dev deploy.
 
 #### [E10 — AWS & Infrastructure-as-Code Foundation](plan_specs/v2/e10-aws-foundation/epic.yaml)
 
@@ -231,6 +244,7 @@ AWS accounts/Terraform/CI deploy, DynamoDB + S3 repositories passing the same co
 | [API Gateway + ECS Fargate deployment](plan_specs/v2/e12-identity-api/t04-api-deploy.yaml) `v2-e12-t04-api-deploy` | Pending | 3 | 11.0 |
 | [Core resource endpoints](plan_specs/v2/e12-identity-api/t05-core-endpoints.yaml) `v2-e12-t05-core-endpoints` | Pending | 5 | 12.0 |
 | [OpenAPI TypeScript client generation](plan_specs/v2/e12-identity-api/t06-openapi-client.yaml) `v2-e12-t06-openapi-client` | Pending | 1 | 6.0 |
+| [Cloud dev→prod promotion pipeline](plan_specs/v2/e12-identity-api/t07-promotion-pipeline.yaml) `v2-e12-t07-promotion-pipeline` | Pending | 3 | 15.5 |
 
 
 ### v2.1 — Async jobs & web Cut-a-Card
@@ -242,7 +256,7 @@ Students log in to the web app, paste a URL, watch an async CardJob, edit the ve
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [Job entity and repository](plan_specs/v2/e13-async-jobs/t01-job-model.yaml) `v2-e13-t01-job-model` | Pending | 1 | 8.0 |
-| [SQS queues and worker framework](plan_specs/v2/e13-async-jobs/t02-sqs-workers.yaml) `v2-e13-t02-sqs-workers` | Pending | 2 | 12.0 |
+| [SQS queues and worker framework](plan_specs/v2/e13-async-jobs/t02-sqs-workers.yaml) `v2-e13-t02-sqs-workers` | Pending | 3 | 12.0 |
 | [CardJob Step Functions workflow](plan_specs/v2/e13-async-jobs/t03-card-job-workflow.yaml) `v2-e13-t03-card-job-workflow` | Pending | 2 | 13.0 |
 | [SearchJob workflow](plan_specs/v2/e13-async-jobs/t04-search-job-workflow.yaml) `v2-e13-t04-search-job-workflow` | Pending | 2 | 9.0 |
 | [Job status API (polling + SSE)](plan_specs/v2/e13-async-jobs/t05-job-status-api.yaml) `v2-e13-t05-job-status-api` | Pending | 2 | 10.0 |
@@ -254,7 +268,7 @@ Students log in to the web app, paste a URL, watch an async CardJob, edit the ve
 |---|---|---|---|
 | [Next.js application scaffold](plan_specs/v2/e14-web-cut-card/t01-nextjs-scaffold.yaml) `v2-e14-t01-nextjs-scaffold` | Pending | 2 | 8.0 |
 | [Authentication UX](plan_specs/v2/e14-web-cut-card/t02-auth-ui.yaml) `v2-e14-t02-auth-ui` | Pending | 2 | 10.0 |
-| [Web hosting and environments](plan_specs/v2/e14-web-cut-card/t03-app-hosting.yaml) `v2-e14-t03-app-hosting` | Pending | 4 | 9.0 |
+| [Web hosting and environments](plan_specs/v2/e14-web-cut-card/t03-app-hosting.yaml) `v2-e14-t03-app-hosting` | Pending | 5 | 9.0 |
 | [Cut-a-Card flow](plan_specs/v2/e14-web-cut-card/t04-cut-card-flow.yaml) `v2-e14-t04-cut-card-flow` | Pending | 4 | 12.0 |
 | [Provenance-constrained card editor](plan_specs/v2/e14-web-cut-card/t05-card-editor.yaml) `v2-e14-t05-card-editor` | Pending | 3 | 14.0 |
 | [DOCX export and copy-as-rich-text](plan_specs/v2/e14-web-cut-card/t06-export-copy.yaml) `v2-e14-t06-export-copy` | Pending | 2 | 9.0 |

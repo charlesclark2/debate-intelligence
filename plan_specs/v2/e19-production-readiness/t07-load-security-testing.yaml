@@ -17,15 +17,16 @@ metadata:
     debate/architecture-refs: §14, §15, §19
 spec:
   description: >-
-    Final pre-rollout verification. Load test the key workflows in stage at school scale (target: 60
-    concurrent students, e.g. a whole squad researching the night before a tournament) - search, cut card,
-    library browse, extend - with model and provider calls served by the replay router/stubs so tests
-    measure platform behaviour, not Bedrock. Run an OWASP ASVS level-1 ("lite") review focused on
-    authentication, access control (cross-tenant IDOR on every resource route), input handling (pasted HTML,
-    URLs submitted for fetching / SSRF), session management and secrets; add dependency scanning (pip-audit,
-    pnpm audit) and container image scanning (ECR/Trivy) to CI; and fix or formally accept every finding.
-    This task verifies t01 quotas and t02 audit logging under load; it does NOT add new product features or
-    perform a third-party penetration test.
+    Final pre-rollout verification. Load test the key workflows in dev (ADR-0013: no stage environment),
+    temporarily scaled to prod task sizing and seeded with synthetic accounts and data, at school scale
+    (target: 60 concurrent students, e.g. a whole squad researching the night before a tournament) -
+    search, cut card, library browse, extend - with model and provider calls served by the replay
+    router/stubs so tests measure platform behaviour, not Bedrock. Run an OWASP ASVS level-1 ("lite")
+    review focused on authentication, access control (cross-tenant IDOR on every resource route), input
+    handling (pasted HTML, URLs submitted for fetching / SSRF), session management and secrets; add
+    dependency scanning (pip-audit, pnpm audit) and container image scanning (ECR/Trivy) to CI; and fix or
+    formally accept every finding. This task verifies t01 quotas and t02 audit logging under load; it does
+    NOT add new product features or perform a third-party penetration test.
   priority: 1
   constraints:
     packages: [tests/load, docs/security, .github/workflows]
@@ -33,7 +34,7 @@ spec:
       - Load testing against prod or with live Bedrock/provider calls
       - Leaving high/critical scanner findings unremediated without a documented, dated risk acceptance
       - Using real student accounts or data in load or security tests
-      - Security testing of third-party sites (only our own stage environment)
+      - Security testing of third-party sites (only our own dev environment)
   context:
     - kind: TaskRef
       name: v2-e19-t01-quotas-rate-limits
@@ -44,8 +45,8 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        A k6 (or Locust) scenario at 60 concurrent users for 15 minutes in stage meets p95 < 800 ms for
-        synchronous API routes, zero 5xx, and CardJob completion p95 < 45 s with replay models.
+        A k6 (or Locust) scenario at 60 concurrent users for 15 minutes in dev (prod sizing) meets
+        p95 < 800 ms for synchronous API routes, zero 5xx, and CardJob completion p95 < 45 s with replay models.
     - id: ac2
       description: >-
         Under load, quota 429s and audit events behave correctly (no over-admission, one audit event per
@@ -77,7 +78,7 @@ metadata:
     debate/epic: v2-e19-production-readiness
 spec:
   description: >-
-    Wire scanners into CI first, then the automated cross-tenant and SSRF suites, then the load test in stage,
+    Wire scanners into CI first, then the automated cross-tenant and SSRF suites, then the load test in dev,
     and close with the ASVS-lite review and remediation register.
   goalRef:
     name: v2-e19-t07-load-security-testing
@@ -116,10 +117,11 @@ spec:
             args: [run, pytest, tests/security]
       - id: load-test
         kind: Task
-        name: Stage load test
+        name: Dev load test at prod sizing
         description: >-
-          k6 scenarios for search, cut, library and extend at 60 VUs using the replay model router in stage;
-          capture latency, errors, quota and audit behaviour.
+          Scale dev services to prod task sizing via a tfvars override, seed synthetic users and data, run
+          k6 scenarios for search, cut, library and extend at 60 VUs using the replay model router in dev;
+          capture latency, errors, quota and audit behaviour, then scale dev back down.
         dependsOn: [authz-ssrf-suite]
         outputs: [tests/load/school_night.js, docs/security/load-test-report.md]
         estimatedEffort: 4h

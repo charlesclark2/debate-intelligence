@@ -28,7 +28,8 @@ spec:
   acceptanceCriteria:
   - id: ac1
     description: >-
-      dev/stage/prod are reproducible from Terraform with remote state and budgets/alarms.
+      dev and prod are reproducible from Terraform with remote state and budgets/alarms (no stage environment;
+      ADR-0013).
   - id: ac2
     description: >-
       GitHub Actions deploys via OIDC roles; no long-lived AWS keys exist.
@@ -79,8 +80,8 @@ spec:
       kind: Task
       name: Terraform bootstrap and environments
       description: >-
-        Remote state (S3 + locking), module layout under infrastructure/, dev/stage/prod environments,
-        tagging standard, fmt/validate/tflint in CI.
+        Remote state (S3 + locking), module layout under infrastructure/, dev and prod environments (ADR-0013:
+        no stage), tagging standard, fmt/validate/tflint in CI.
       inputs:
         specRef: plan_specs/v2/e10-aws-foundation/t02-terraform-bootstrap.yaml
         goalRef: v2-e10-t02-terraform-bootstrap
@@ -99,8 +100,9 @@ spec:
       kind: Task
       name: GitHub OIDC deploy roles
       description: >-
-        IAM OIDC provider and least-privilege plan/apply/deploy roles per environment; CI workflows use
-        them.
+        IAM OIDC provider and least-privilege plan/apply/deploy roles per environment: dev roles trust
+        the dev branch, prod roles trust only main via the production GitHub Environment; CI workflows
+        use them.
       inputs:
         specRef: plan_specs/v2/e10-aws-foundation/t03-github-oidc-deploy.yaml
         goalRef: v2-e10-t03-github-oidc-deploy

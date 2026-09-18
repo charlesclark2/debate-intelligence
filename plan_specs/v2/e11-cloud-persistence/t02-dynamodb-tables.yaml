@@ -19,7 +19,7 @@ spec:
   description: >-
     Materialize the approved AppTable design (t01) as Terraform: on-demand capacity, the GSIs and
     projections exactly as documented, point-in-time recovery, encryption with the app-data CMK from
-    E10-t04, deletion protection in stage/prod, and a TTL attribute used only for transient items
+    E10-t04, deletion protection in prod, and a TTL attribute used only for transient items
     (e.g. expired job progress, idempotency markers). Also emit per-environment IAM policy documents
     granting least-privilege item access to the API and worker task roles. This task does NOT write
     repository code (t03), argument/opponent tables (V3), or backup/restore drills (E19-t05).
@@ -56,7 +56,8 @@ spec:
         UpdateItem, DeleteItem, Query, BatchGet/BatchWrite and TransactWrite on the table and its indexes.
     - id: ac5
       description: >-
-        Stage and prod enable deletion_protection; terraform plan for all three environments succeeds.
+        prod enables deletion_protection (dev leaves it off so synthetic tables can be rebuilt); terraform
+        plan succeeds for both dev and prod.
 status:
   phase: Pending
 ---
@@ -109,8 +110,8 @@ spec:
         kind: Task
         name: Environment wiring
         description: >-
-          Instantiate the module in dev/stage/prod with the E10-t04 key ARN and deletion protection on in
-          stage/prod.
+          Instantiate the module in dev and prod with the E10-t04 key ARN and deletion protection on in
+          prod.
         dependsOn: [access-policies]
         outputs: [infrastructure/envs/dev/data.tf, infrastructure/envs/prod/data.tf]
         estimatedEffort: 1h

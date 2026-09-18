@@ -47,7 +47,7 @@ spec:
         Every ADR links to at least one section anchor in docs/architecture/architecture_proposal.md,
         and a markdown link check passes offline.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -113,7 +113,7 @@ spec:
           - type: command_succeeds
             name: Offline link check passes
             command: uvx
-            args: [linkcheckmd, docs/, --local]
+            args: ["--from", "linkcheckmd", "linkcheckMarkdown", "docs/adr/", "-local"]
           - type: custom
             name: Coach/owner review of ADR wording
             description: >-

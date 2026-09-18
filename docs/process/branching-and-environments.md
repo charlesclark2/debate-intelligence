@@ -1,6 +1,6 @@
 # Branching, environments and promotion
 
-Decided 2026-09-17 ([ADR-0013](../adr/README.md)). This is the authoritative workflow; task
+Decided 2026-09-17 ([ADR-0013](../adr/0013-two-environments-and-dev-main-promotion.md)). This is the authoritative workflow; task
 specs and CI implement it.
 
 ## The rule

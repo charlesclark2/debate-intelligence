@@ -2,11 +2,13 @@
 # Task lifecycle CLI for the Debate Intelligence Platform.
 #
 #   scripts/task ready                      list tasks whose prerequisites are all Succeeded (on origin/dev)
-#   scripts/task start  <task> [--no-launch] [--force]
+#   scripts/task start  <task> [--launch vscode|terminal|none] [--no-launch] [--force]
 #                                           worktree + task/<task> branch off origin/dev, mark InProgress,
-#                                           create the session report, launch Claude with the kickoff prompt
-#   scripts/task resume <task>              reopen the task's Claude session (claude --continue)
-#   scripts/task prompt <task>              print the kickoff prompt again
+#                                           create the session report, open the Claude session with the
+#                                           kickoff prompt (VS Code window by default)
+#   scripts/task resume <task> [--launch vscode|terminal]
+#                                           reopen the task's worktree / Claude session
+#   scripts/task prompt <task>              print the kickoff prompt again (and copy it to the clipboard)
 #   scripts/task list                       active task worktrees with phase, PM verdict and PR state
 #   scripts/task report <task>              print the session report (and copy it to the clipboard)
 #   scripts/task review <task>              commits, diffstat and verdict vs origin/dev (for PM review)
@@ -18,6 +20,7 @@
 # Full workflow: docs/process/task-workflow.md
 # Environment: DEBATE_WORKTREES overrides the worktree parent directory
 #              (default: <repo parent>/debate-intelligence-worktrees).
+#              DEBATE_TASK_LAUNCHER sets the default launcher: vscode (default), terminal or none.
 # Portable to macOS bash 3.2: no associative arrays, mapfile or ${var,,}.
 
 set -euo pipefail
@@ -68,14 +71,62 @@ ensure_local_excludes() {
   grep -qx '.task/' "$ex" 2>/dev/null || printf '.task/\n' >> "$ex"
 }
 
-launch_claude() { # <worktree> [claude args...]
-  local wt="$1"; shift
-  if has claude; then
-    cd "$wt" && exec claude "$@"
+LAUNCHER_DEFAULT="${DEBATE_TASK_LAUNCHER:-vscode}"
+
+check_launcher() {
+  case "$1" in vscode|terminal|none) ;; *) die "unknown launcher '$1' (use vscode, terminal or none)" ;; esac
+}
+
+copy_prompt() { # <worktree> -> 0 if the prompt is now on the clipboard
+  if has pbcopy; then pbcopy < "$1/.task/prompt.md"; return 0; fi
+  return 1
+}
+
+open_vscode() { # <worktree>
+  if has code; then
+    code -n "$1"
+  elif has open && [ -d "/Applications/Visual Studio Code.app" ]; then
+    open -na "Visual Studio Code" --args "$1"
   else
-    warn "the 'claude' CLI was not found on PATH"
-    printf '\nOpen the worktree in Claude Code and paste the prompt from:\n  %s/.task/prompt.md\n' "$wt"
+    warn "could not find VS Code (Command Palette > \"Shell Command: Install 'code' command in PATH\")"
+    printf 'Open this folder in VS Code yourself: %s\n' "$1"
   fi
+}
+
+launch_session() { # <launcher> <worktree> <start|resume>
+  local launcher="$1" wt="$2" mode="$3" task
+  task="$(basename "$wt")"
+  case "$launcher" in
+    vscode)
+      info "Opening $wt in a new VS Code window"
+      open_vscode "$wt"
+      if [ "$mode" = "start" ]; then
+        if copy_prompt "$wt"; then
+          printf '\nThe kickoff prompt is on your clipboard.\n'
+        else
+          printf '\nCopy the kickoff prompt from: %s/.task/prompt.md\n' "$wt"
+        fi
+        printf 'In the new VS Code window (title: %s):\n' "$task"
+        printf '  1. Open Claude Code (Cmd+Esc, or the Claude icon in the editor toolbar).\n'
+        printf '  2. Paste the prompt (Cmd+V) and press Enter.\n'
+      else
+        printf '\nIn that window, open Claude Code and continue this task'"'"'s conversation from the\n'
+        printf 'past-conversations list, or start a new one with: scripts/task prompt %s\n' "$task"
+      fi ;;
+    terminal)
+      if has claude; then
+        if [ "$mode" = "start" ]; then
+          cd "$wt" && exec claude "$(cat "$wt/.task/prompt.md")"
+        else
+          cd "$wt" && exec claude --continue
+        fi
+      else
+        warn "the 'claude' CLI was not found on PATH; using VS Code instead"
+        launch_session vscode "$wt" "$mode"
+      fi ;;
+    none)
+      printf '\nNot launching. Prompt: %s/.task/prompt.md (scripts/task prompt %s)\n' "$wt" "$task" ;;
+  esac
 }
 
 spec_phase_on_dev() { # <spec path> -> phase recorded on origin/dev (empty if absent)
@@ -104,16 +155,19 @@ cmd_ready() {
 }
 
 cmd_start() {
-  local task="" launch=1 force=0
+  local task="" launcher="$LAUNCHER_DEFAULT" force=0
   while [ $# -gt 0 ]; do
     case "$1" in
-      --no-launch) launch=0 ;;
+      --no-launch) launcher=none ;;
+      --launch) [ $# -gt 1 ] || die "--launch needs vscode, terminal or none"; launcher="$2"; shift ;;
+      --launch=*) launcher="${1#--launch=}" ;;
       --force) force=1 ;;
       -*) die "unknown option $1" ;;
       *) task="$1" ;;
     esac; shift
   done
   validate_name "$task"
+  check_launcher "$launcher"
   local wt br; wt="$(wt_path "$task")"; br="$(branch "$task")"
 
   [ -e "$wt" ] && die "worktree already exists: $wt (use: scripts/task resume $task)"
@@ -165,20 +219,27 @@ Next: the Claude session implements the task and fills in the report.
 Then hand the report to the PM:   scripts/task report $task
 After the PM verdict is ACCEPTED: scripts/task pr $task
 EOF
-  if [ "$launch" -eq 1 ]; then
-    info "Launching Claude in the worktree"
-    launch_claude "$wt" "$(cat "$wt/.task/prompt.md")"
-  fi
+  launch_session "$launcher" "$wt" start
 }
 
 cmd_resume() {
-  validate_name "${1:-}"; need_wt "$1"
-  launch_claude "$(wt_path "$1")" --continue
+  local task="" launcher="$LAUNCHER_DEFAULT"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --launch) [ $# -gt 1 ] || die "--launch needs vscode or terminal"; launcher="$2"; shift ;;
+      --launch=*) launcher="${1#--launch=}" ;;
+      -*) die "unknown option $1" ;;
+      *) task="$1" ;;
+    esac; shift
+  done
+  validate_name "$task"; need_wt "$task"; check_launcher "$launcher"
+  launch_session "$launcher" "$(wt_path "$task")" resume
 }
 
 cmd_prompt() {
   validate_name "${1:-}"; need_wt "$1"
   cat "$(wt_path "$1")/.task/prompt.md"
+  if copy_prompt "$(wt_path "$1")"; then printf '\n(copied to clipboard)\n' >&2; fi
 }
 
 cmd_list() {
@@ -248,9 +309,17 @@ cmd_pr() {
   local wt br verdict phase
   wt="$(wt_path "$task")"; br="$(branch "$task")"
 
-  is_clean "$wt" || die "uncommitted changes in $wt; commit them (or have the session commit) first"
-
   verdict="$(helper "$wt" verdict "$task")"
+  local report_path="docs/session-reports/$task.md"
+  if ! is_clean "$wt"; then
+    if [ "$verdict" = "ACCEPTED" ] && [ "$(git -C "$wt" status --porcelain)" = " M $report_path" ]; then
+      info "Committing the PM review recorded in $report_path"
+      git -C "$wt" commit --quiet -m "PM review: ACCEPTED" -- "$report_path"
+    else
+      die "uncommitted changes in $wt; commit them (or have the session commit) first"
+    fi
+  fi
+
   if [ "$verdict" != "ACCEPTED" ]; then
     [ "$force" -eq 1 ] || die "PM verdict is $verdict; the report's PM review must say ACCEPTED (override with --force)"
     warn "opening PR with PM verdict $verdict (--force)"
@@ -351,7 +420,7 @@ Refusing to delete them; commit/discard or pass --force."
   info "Done: $task closed out"
 }
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-help}"; [ $# -gt 0 ] && shift
 case "$cmd" in

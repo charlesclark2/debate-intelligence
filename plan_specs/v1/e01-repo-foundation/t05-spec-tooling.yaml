@@ -21,11 +21,13 @@ spec:
     rule it enforces (schema shape, unique names, label/folder agreement, graph acyclicity, typed
     criteria fields, TaskRef resolution, no later-release prerequisites, epic-in-one-release), a
     `--status` roll-up per release/epic, and a new scripts/spec_index.py that regenerates the
-    ROADMAP.md tables from the specs. Wire both into pre-commit; the CI job that runs them is t04.
-    This task does not author or change any epic/task spec content.
+    ROADMAP.md tables from the specs. Also add scripts/check_links.py, an offline Markdown link
+    and anchor checker for the whole repo; it replaces the ad-hoc linkcheckmd usage found
+    insufficient in v1-e01-t06 (no recursion, no anchor checks). Wire all three into pre-commit;
+    the CI job that runs them is t04. This task does not author or change any epic/task spec content.
   priority: 2
   constraints:
-    packages: [scripts, tests/specs, ROADMAP.md, .pre-commit-config.yaml]
+    packages: [scripts, tests/specs, tests/docs, ROADMAP.md, .pre-commit-config.yaml]
     forbidden:
       - Editing epic or task spec content to make the validator pass
       - Network access from the validator or index generator
@@ -49,7 +51,15 @@ spec:
         run) and `--check` exits non-zero when ROADMAP.md is stale.
     - id: ac4
       description: >-
-        pre-commit runs the validator and the ROADMAP staleness check whenever plan_specs/ changes.
+        pre-commit runs the validator whenever plan_specs/ changes. The ROADMAP staleness check is
+        deliberately not a hook or CI gate: ROADMAP.md is refreshed by the PM in separate PRs so
+        parallel task PRs don't conflict on it.
+    - id: ac5
+      description: >-
+        `uv run scripts/check_links.py` walks every tracked Markdown file, verifies that each relative
+        link target exists and each `#anchor` matches a GitHub-style heading slug in its target, skips
+        links inside code spans and template placeholders, needs no network, and exits non-zero
+        listing every broken link. It passes on the current repository.
 status:
   phase: Pending
 ---
@@ -114,13 +124,31 @@ spec:
             name: ROADMAP.md is up to date
             command: uv
             args: [run, scripts/spec_index.py, --check]
+      - id: link-checker
+        kind: Task
+        name: Offline Markdown link and anchor checker
+        description: >-
+          scripts/check_links.py (PEP 723, standard library only) with fixture tests for a missing file,
+          a missing anchor, links in code spans, `{{PLACEHOLDER}}` links and external URLs (ignored).
+        dependsOn: [validator-tests]
+        outputs: [scripts/check_links.py, tests/docs/test_check_links.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Link checker tests pass
+            command: uv
+            args: [run, pytest, tests/docs/test_check_links.py]
+          - type: command_succeeds
+            name: Repository links resolve
+            command: uv
+            args: [run, scripts/check_links.py]
       - id: pre-commit-hooks
         kind: Task
         name: pre-commit wiring
         description: >-
-          Add local pre-commit hooks running the validator and `spec_index.py --check` on changes under
-          plan_specs/.
-        dependsOn: [status-report, spec-index]
+          Add local pre-commit hooks running the validator on changes under plan_specs/ and
+          `check_links.py` on changes to any Markdown file. Do not hook `spec_index.py --check`.
+        dependsOn: [status-report, spec-index, link-checker]
         outputs: [.pre-commit-config.yaml]
         estimatedEffort: 0.5h
         acceptanceCriteria:

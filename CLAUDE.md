@@ -22,6 +22,6 @@ Rules:
   never quoted evidence text; unverifiable cards are UNVERIFIED.
 * Tests never hit the live network or real models: recorded fixtures and the fake/replay
   ModelRouter only.
-* Finish by setting the task Goal to `Succeeded`, running `uv run scripts/validate_specs.py` and
-  `uv run scripts/spec_index.py`, and completing `docs/session-reports/<task-name>.md`
-  (leave its PM review section alone).
+* Finish by setting the task Goal to `Succeeded`, running `uv run scripts/validate_specs.py`, and
+  completing `docs/session-reports/<task-name>.md` (leave its PM review section alone).
+  Don't regenerate `ROADMAP.md` in a task; the PM refreshes it separately to avoid merge conflicts.

@@ -1,8 +1,10 @@
 # Roadmap — Debate Research & Argument Intelligence Platform
 
-This roadmap is generated from the PlanSpecs in [`plan_specs/`](plan_specs/README.md). The
-specs are the source of truth; edit them, then run `uv run scripts/spec_index.py` to refresh
-the tables below. Everything outside the GENERATED markers is hand-written.
+This roadmap is generated from the PlanSpecs in [`plan_specs/`](plan_specs/README.md), which are
+the source of truth. The tables below are refreshed by the PM with `uv run scripts/spec_index.py`
+in a `specs/roadmap-refresh` PR, not by individual tasks (so parallel task PRs don't conflict),
+so the Status column can lag a few merges behind. For live status run
+`uv run scripts/validate_specs.py --status`. Everything outside the GENERATED markers is hand-written.
 
 ## How releases work
 

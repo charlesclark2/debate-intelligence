@@ -207,8 +207,9 @@ How to work:
 
 When the work is complete:
 - Set the task Goal status.phase to Succeeded
-  (`uv run scripts/task_helper.py set-phase {task} Succeeded`), run
-  `uv run scripts/validate_specs.py` and `uv run scripts/spec_index.py`.
+  (`uv run scripts/task_helper.py set-phase {task} Succeeded`) and run
+  `uv run scripts/validate_specs.py`. Do NOT regenerate ROADMAP.md (no scripts/spec_index.py): the
+  PM refreshes it separately, because every task touching it makes parallel PRs conflict.
 - Fill in the session report at docs/session-reports/{task}.md (already created from the template).
   Every acceptance criterion gets PASS/FAIL/NOT RUN with the evidence (command + result). Leave the
   "PM review" section exactly as it is; the PM fills it in.

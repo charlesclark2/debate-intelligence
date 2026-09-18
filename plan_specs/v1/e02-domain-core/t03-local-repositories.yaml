@@ -1,0 +1,137 @@
+# TASK v1-e02-t03-local-repositories — Local filesystem and SQLite repository implementations
+# Epic: E02 Domain Core: Entities, Ports & Local Persistence | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §6, §7 (systems of record), §11 (V1 local persistence), §20 step 1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e02-t03-local-repositories
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+  annotations:
+    debate/title: Local filesystem and SQLite repository implementations
+    debate/architecture-refs: §6, §7, §11, §20 step 1
+spec:
+  description: >-
+    Provide the V1 local adapters for the persistence ports so the CLI runs with no cloud account: a
+    filesystem content-addressed SnapshotStore (blobs at <data_dir>/blobs/sha256/ab/cd/<hash>, written
+    atomically, immutable once written — the local analogue of S3) and SQLite-backed ArticleRepository,
+    CardRepository and SearchRepository storing each entity as validated JSON plus indexed key columns
+    (the local analogue of DynamoDB's AppTable). The data directory is a constructor argument; wiring it
+    from settings is t05. The shared contract suite is t04 — this task ships only adapter-specific
+    tests (atomic writes, migrations, corruption detection).
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations.local]
+    forbidden:
+      - Web framework or AWS SDK dependencies
+      - Mutating or overwriting an existing blob (snapshots are immutable)
+      - Schemas that diverge from the domain models (no local-only fields that V2 cannot store)
+  context:
+    - kind: TaskRef
+      name: v1-e02-t02-ports
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t05-settings-config
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        FsSnapshotStore stores bytes under their SHA-256 key, returns the same key for identical
+        content (dedupe), writes via temp-file + rename, and detects a corrupted blob on read.
+    - id: ac2
+      description: >-
+        SQLite repositories implement their ports, persist entities as JSON validated on read, and
+        enforce CardRepository expected_revision with a conditional UPDATE.
+    - id: ac3
+      description: >-
+        A versioned migration table creates/upgrades the schema idempotently on first open.
+    - id: ac4
+      description: >-
+        All adapters live under debate_core.integrations.local and are exercised by tests using
+        pytest tmp_path only.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e02-t03-local-repositories-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+spec:
+  description: >-
+    Blob store first (snapshots are the evidence system of record), then the SQLite base with
+    migrations, then entity repositories and optimistic concurrency.
+  goalRef:
+    name: v1-e02-t03-local-repositories
+  graph:
+    nodes:
+      - id: fs-blob-store
+        kind: Task
+        name: Content-addressed filesystem SnapshotStore
+        description: >-
+          Sharded sha256 paths, atomic temp+rename writes, read-time hash check raising
+          CorruptBlobError, exists/get/put.
+        outputs: [packages/debate_core/src/debate_core/integrations/local/fs_blob_store.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Blob store tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/local/test_fs_blob_store.py]
+      - id: sqlite-base
+        kind: Task
+        name: SQLite connection and migrations
+        description: >-
+          Connection factory (WAL mode, foreign keys), schema_version table and ordered migration
+          scripts applied idempotently.
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/local/sqlite_db.py
+          - packages/debate_core/src/debate_core/integrations/local/migrations/
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Migration tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/local/test_sqlite_db.py]
+      - id: sqlite-repos
+        kind: Task
+        name: Article, Card and Search repositories
+        description: >-
+          JSON-column repositories with indexed canonical_url, owner_id, snapshot_id, created_at;
+          conditional UPDATE on revision for cards.
+        dependsOn: [sqlite-base]
+        outputs: [packages/debate_core/src/debate_core/integrations/local/sqlite_repos.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Repository tests pass including revision conflict
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/local/test_sqlite_repos.py]
+      - id: quality-gates
+        kind: Task
+        name: Type check and boundary check
+        description: >-
+          pyright strict over debate_core and ruff; confirm no forbidden dependencies were added.
+        dependsOn: [fs-blob-store, sqlite-repos]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: pyright passes
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: ruff passes
+            command: uv
+            args: [run, ruff, check, packages/debate_core]
+status:
+  phase: Pending

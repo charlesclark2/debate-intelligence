@@ -1,0 +1,177 @@
+# TASK v2-e15-t01-opensearch-serverless — OpenSearch Serverless collections
+# Epic: E15 Search Index & Hybrid Retrieval | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §5 OpenSearch, §7, §14, §15, ADR-004
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e15-t01-opensearch-serverless
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+  annotations:
+    debate/title: OpenSearch Serverless collections
+    debate/architecture-refs: §5, §7, §14, §15, ADR-004
+spec:
+  description: >-
+    Provision Amazon OpenSearch Serverless for the platform's derived search index as a Terraform module
+    instantiated per environment: one SEARCH collection for BM25 over article chunks and cards and one
+    VECTORSEARCH collection for Titan embeddings, each with a KMS encryption policy (key from
+    v2-e10-t04), a network policy (VPC endpoint for Fargate workers/API, no public dashboard access in
+    stage/prod) and data-access policies granting least-privilege index permissions to the API task
+    role, the indexing worker role and the rebuild role. Collections hold derived data only; DynamoDB
+    and S3 remain the systems of record (ADR-004). This task does NOT define index mappings or chunking
+    (t02), write embeddings (t03), or implement queries (t04); it provisions infrastructure and a
+    connectivity smoke check only.
+  priority: 1
+  constraints:
+    packages: [infrastructure/modules/opensearch_serverless, infrastructure/envs, debate_core.integrations]
+    forbidden:
+      - Public network access to collections or OpenSearch Dashboards in stage/prod
+      - Wildcard (aoss:*) data-access permissions on any principal
+      - Storing authoritative data (cards, snapshots, users) only in OpenSearch
+      - Long-lived access keys; roles are assumed via ECS task roles or GitHub OIDC
+      - Importing boto3/opensearch-py in debate_core domain/application layers
+  context:
+    - kind: TaskRef
+      name: v2-e10-t04-kms-secrets
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `terraform -chdir=infrastructure/envs/dev validate` and `plan` succeed and the plan creates exactly
+        two collections (search and vectorsearch types) named with the environment prefix and tagged with
+        the standard cost-allocation tags (app, env, feature=search).
+    - id: ac2
+      description: >-
+        Encryption policies reference the customer-managed search KMS key from v2-e10-t04, not the AWS-owned
+        default key, and network policies allow only the VPC endpoint in stage/prod.
+    - id: ac3
+      description: >-
+        Data-access policies grant the API role read-only index permissions (aoss:ReadDocument,
+        aoss:DescribeIndex) and grant write/create-index only to the indexing-worker and rebuild roles.
+    - id: ac4
+      description: >-
+        A smoke script signed with SigV4 (service aoss) from the dev worker role can create, write to, query
+        and delete a throwaway index, and fails with 403 when run as the API role against a write.
+    - id: ac5
+      description: >-
+        The collection endpoints are exported as Terraform outputs and surfaced to services through settings
+        (not hard-coded), and a runbook section documents OCU cost floors and how to scale down dev.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e15-t01-opensearch-serverless-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+spec:
+  description: >-
+    Write the reusable module first, wire policies to existing KMS keys and IAM roles, instantiate it in
+    dev, then prove access boundaries with a SigV4 smoke check and document cost behaviour.
+  goalRef:
+    name: v2-e15-t01-opensearch-serverless
+  graph:
+    nodes:
+      - id: module-skeleton
+        kind: Task
+        name: OpenSearch Serverless Terraform module
+        description: >-
+          Create the module with aws_opensearchserverless_collection resources for search and vectorsearch
+          types, variables for env prefix, KMS key ARN, VPC endpoint subnets and principal ARNs, and
+          outputs for collection endpoints and ARNs.
+        outputs:
+          - infrastructure/modules/opensearch_serverless/main.tf
+          - infrastructure/modules/opensearch_serverless/variables.tf
+          - infrastructure/modules/opensearch_serverless/outputs.tf
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Module declares a vectorsearch collection
+            path: infrastructure/modules/opensearch_serverless/main.tf
+            contentMatch: "VECTORSEARCH"
+      - id: security-policies
+        kind: Task
+        name: Encryption, network and data-access policies
+        description: >-
+          Add aws_opensearchserverless_security_policy (encryption with the customer-managed key, network via
+          aws_opensearchserverless_vpc_endpoint) and aws_opensearchserverless_access_policy documents that
+          split read-only API access from indexing/rebuild write access.
+        dependsOn: [module-skeleton]
+        outputs: [infrastructure/modules/opensearch_serverless/policies.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Data-access policy separates read and write principals
+            path: infrastructure/modules/opensearch_serverless/policies.tf
+            contentMatch: "aoss:ReadDocument"
+          - type: command_succeeds
+            name: Terraform formatting is clean
+            command: terraform
+            args: [fmt, -check, -recursive, infrastructure/modules/opensearch_serverless]
+      - id: env-wiring
+        kind: Task
+        name: Instantiate in dev and expose endpoints to settings
+        description: >-
+          Instantiate the module in infrastructure/envs/dev (and stage/prod stubs), pass KMS/IAM references
+          from existing modules, and publish endpoints to SSM parameters read by debate_api/debate_workers
+          settings (SEARCH_COLLECTION_ENDPOINT, VECTOR_COLLECTION_ENDPOINT).
+        dependsOn: [security-policies]
+        outputs: [infrastructure/envs/dev/search.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Dev environment validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: command_succeeds
+            name: Dev plan succeeds
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock=false, -input=false]
+      - id: smoke-check
+        kind: Task
+        name: SigV4 connectivity and permission smoke check
+        description: >-
+          Add a small OpenSearch client factory in debate_core.integrations (opensearch-py with AWS SigV4 auth,
+          endpoint from settings) and a smoke script that exercises create/write/query/delete on a throwaway
+          index and asserts a 403 for API-role writes. Unit-test the factory offline.
+        dependsOn: [env-wiring]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/opensearch/client.py
+          - scripts/smoke_opensearch.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Client factory unit tests pass offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_opensearch_client.py]
+          - type: custom
+            name: Smoke script run against dev by the owner
+            description: >-
+              Charlie runs scripts/smoke_opensearch.py against dev with the worker role and the API role and
+              records the pass/403 output in the PR description.
+      - id: runbook
+        kind: Task
+        name: Cost and operations runbook
+        description: >-
+          Document OCU minimums, standby replicas setting per environment, how to tear down dev collections
+          overnight, and why the index is disposable (rebuild via t06).
+        dependsOn: [smoke-check]
+        outputs: [docs/runbooks/opensearch.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Runbook documents OCU cost floor
+            path: docs/runbooks/opensearch.md
+            contentMatch: "OCU"
+status:
+  phase: Pending

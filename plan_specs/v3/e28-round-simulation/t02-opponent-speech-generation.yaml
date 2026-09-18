@@ -1,0 +1,148 @@
+# TASK v3-e28-t02-opponent-speech-generation — Opponent speech generation
+# Epic: E28 Full Round Simulation | Release: v3.7 (Full round simulation) | Major: V3
+# Architecture refs: §3 V3 simulation story, §8 Evidence integrity, §10, §13 Round simulator, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e28-t02-opponent-speech-generation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+  annotations:
+    debate/title: Opponent speech generation
+    debate/architecture-refs: §3, §8, §10, §13, §16
+spec:
+  description: >-
+    Turn a t01 SpeechPlan into the simulated opponent's speech. The model writes only analytics,
+    signposting ("on the DA, group the 2AC"), tags for analytic arguments and weighing; every card is
+    inserted as a CardInsertion that renders the stored tag, cite and the highlighted (read) portion of
+    the evidence straight from the Card/CardSpan records. Only VERIFIED cards from the side's library or
+    argument graph may be read; UNVERIFIED cards are never read as evidence. Length is fitted to the
+    segment time at the configured delivery speed (words-per-minute presets from conversational to
+    circuit), counting analytic words plus highlighted card words, and trimmed by dropping lowest-priority
+    PlanItems rather than truncating mid-card. The speech is submitted through the state machine as a
+    SPEECH event with argument_refs, so flow tracking needs no segmentation. Planning is t01, judging t03,
+    opponent configuration from scouting t04.
+  priority: 1
+  constraints:
+    packages: [debate_core.rounds, debate_core.evidence, debate_core.application]
+    forbidden:
+      - Model-authored or paraphrased evidence text; card text comes only from stored Card/CardSpan records
+      - Reading UNVERIFIED cards as evidence or presenting them as finished cards
+      - Cards outside the simulated side's library/graph
+      - Exceeding the segment's time at the configured speed
+      - Live network or real model calls in CI; use the fake/replay ModelRouter
+  context:
+    - kind: TaskRef
+      name: v3-e28-t01-speech-planning
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e17-t02-library-api
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every CardInsertion in a generated speech renders text byte-identical to the highlighted spans of
+        a VERIFIED card, and an attempt to insert an UNVERIFIED card id is rejected.
+    - id: ac2
+      description: >-
+        Estimated delivery time (analytic words plus highlighted card words at the configured wpm) is at
+        most the segment length for every fixture across Policy, LD and PF and all speed presets.
+    - id: ac3
+      description: >-
+        When over budget, the generator drops the lowest-priority PlanItems and records them as
+        OMITTED_FOR_TIME rather than cutting a card mid-text.
+    - id: ac4
+      description: >-
+        The speech is appended as a SPEECH event with argument_refs for every PlanItem delivered and
+        generation metadata (prompt_id, version, model_id, plan event sequence).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e28-t02-opponent-speech-generation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+spec:
+  description: >-
+    Define the speech document model with card insertions, build the speed/time fitter, add the analytics
+    prompt, then submit speeches through the round service.
+  goalRef:
+    name: v3-e28-t02-opponent-speech-generation
+  graph:
+    nodes:
+      - id: speech-model
+        kind: Task
+        name: GeneratedSpeech with AnalyticBlock and CardInsertion
+        description: >-
+          Models for speech blocks; CardInsertion renderer that pulls tag, cite and highlighted text from
+          the card repository and refuses non-VERIFIED cards.
+        outputs:
+          - packages/debate_core/src/debate_core/domain/generated_speech.py
+          - packages/debate_core/src/debate_core/evidence/card_insertion.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card insertion integrity tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_card_insertion.py]
+      - id: time-fitter
+        kind: Task
+        name: Delivery speed presets and time fitter
+        description: >-
+          WPM presets (conversational, moderate, fast, circuit), duration estimator and priority-based
+          PlanItem omission.
+        dependsOn: [speech-model]
+        outputs: [packages/debate_core/src/debate_core/rounds/speech/time_fit.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Time fitting tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_time_fit.py]
+      - id: analytics-prompt
+        kind: Task
+        name: Analytics and signposting generation
+        description: >-
+          Prompt rounds.speech_generation v1.0.0 producing AnalyticBlocks per PlanItem with card slots;
+          validator rejects any quoted text not in a card slot; judge-profile-aware register (lay vs. flow).
+        dependsOn: [speech-model]
+        outputs:
+          - packages/debate_core/src/debate_core/prompts/rounds_speech_generation.v1.yaml
+          - packages/debate_core/src/debate_core/rounds/speech/generator.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Generator contract tests pass with replay router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_speech_generator.py]
+      - id: submit-speech
+        kind: Task
+        name: Generate-and-submit use case
+        description: >-
+          Use case combining plan, generation and fitting, then SubmitSpeech through the state machine;
+          fixture rounds for all formats and speeds.
+        dependsOn: [time-fitter, analytics-prompt]
+        outputs: [packages/debate_core/src/debate_core/application/rounds/generate_speech.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Speech submission tests pass across formats and speeds
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_generate_speech.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

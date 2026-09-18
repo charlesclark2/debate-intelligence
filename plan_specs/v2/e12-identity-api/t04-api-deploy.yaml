@@ -1,0 +1,153 @@
+# TASK v2-e12-t04-api-deploy — API Gateway + ECS Fargate deployment
+# Epic: E12 Identity & API Service | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §5 API Gateway / ECS Fargate, §4 GitHub Actions + ECR, §14, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e12-t04-api-deploy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+  annotations:
+    debate/title: API Gateway + ECS Fargate deployment
+    debate/architecture-refs: §5, §12, §4
+spec:
+  description: >-
+    Run the FastAPI image in AWS behind a managed public boundary. Define an ECS service and task
+    definition for debate-api in private subnets, an internal ALB (or Cloud Map) reached from an API
+    Gateway HTTP API via VPC link, a Cognito JWT authorizer on all /v1 routes except health, stage-level
+    throttling, CORS limited to the web origins, access logs, and a least-privilege task role (DynamoDB
+    and S3 policies from E11, Bedrock invoke via ModelRouter, Secrets read). A GitHub Actions workflow
+    builds the image, pushes an immutable tag to ECR using the OIDC deploy role, and performs an ECS
+    rolling deploy with the deployment circuit breaker and automatic rollback. Per-user quotas are
+    E19-t01; custom domain for the web app is E14-t03.
+  priority: 1
+  constraints:
+    packages: [infrastructure/modules/api_service, .github/workflows]
+    forbidden:
+      - Exposing the ALB or tasks directly to the internet (only API Gateway is public)
+      - Wildcard CORS origins or credentials with "*"
+      - Deploying images by mutable tag (latest)
+      - Task roles with dynamodb:*, s3:* or bedrock:* on "*"
+  context:
+    - kind: TaskRef
+      name: v2-e12-t02-fastapi-service
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e10-t03-github-oidc-deploy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e10-t05-container-platform
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        GET https://<dev-api>/v1/healthz returns 200 through API Gateway, and a protected route returns
+        401 without a token.
+    - id: ac2
+      description: >-
+        The ALB security group accepts traffic only from the VPC link; tasks have no public IPs.
+    - id: ac3
+      description: >-
+        HTTP API default route throttling (burst/rate) and access logging to CloudWatch are configured and
+        documented per environment.
+    - id: ac4
+      description: >-
+        A merge to main deploys dev automatically via OIDC; a failing health check triggers the ECS
+        deployment circuit breaker and rolls back to the previous task definition.
+    - id: ac5
+      description: >-
+        The task role grants only the actions/resources enumerated in the module, verified by an IAM
+        Access Analyzer policy validation step in CI.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e12-t04-api-deploy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+spec:
+  description: >-
+    ECS service first, then the API Gateway edge, then the CI deploy pipeline, and a rollback drill.
+  goalRef:
+    name: v2-e12-t04-api-deploy
+  graph:
+    nodes:
+      - id: ecs-service
+        kind: Task
+        name: debate-api ECS service and task role
+        description: >-
+          Task definition (CPU/memory, env from SSM/Secrets, ADOT sidecar), service with circuit breaker,
+          internal ALB target group on /healthz, least-privilege task role.
+        outputs: [infrastructure/modules/api_service/ecs.tf, infrastructure/modules/api_service/iam.tf]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates with API service
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: api-gateway
+        kind: Task
+        name: HTTP API, VPC link and JWT authorizer
+        description: >-
+          HTTP API with VPC link to the internal ALB, Cognito JWT authorizer on /v1/{proxy+}, unauthenticated
+          health route, throttling, CORS from web origins and access logs.
+        dependsOn: [ecs-service]
+        outputs: [infrastructure/modules/api_service/apigw.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev plan succeeds
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock-timeout=60s]
+      - id: deploy-workflow
+        kind: Task
+        name: Build, push and deploy workflow
+        description: >-
+          GitHub Actions workflow on main - build image, tag with git SHA, push to ECR via OIDC deploy
+          role, render task definition and update the service; manual promotion to stage/prod.
+        dependsOn: [api-gateway]
+        outputs: [.github/workflows/deploy-api.yml]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Deploy workflow uses OIDC
+            path: .github/workflows/deploy-api.yml
+            contentMatch: "role-to-assume"
+          - type: endpoint_responds
+            name: dev API health through API Gateway
+            url: https://api.dev.debate-intelligence.example/v1/healthz
+            method: GET
+            expectedStatus: 200
+          - type: endpoint_responds
+            name: JWT authorizer rejects anonymous /v1 requests before routing
+            url: https://api.dev.debate-intelligence.example/v1/cards
+            method: GET
+            expectedStatus: 401
+      - id: rollback-drill
+        kind: Task
+        name: Rollback drill
+        description: >-
+          Deploy a deliberately failing image to dev and confirm the circuit breaker rolls back; record the
+          procedure.
+        dependsOn: [deploy-workflow]
+        outputs: [docs/runbooks/api-deploy.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Rollback observed in dev
+            description: >-
+              Charlie observes the ECS deployment roll back to the previous task definition and confirms the
+              health endpoint stayed available.
+status:
+  phase: Pending

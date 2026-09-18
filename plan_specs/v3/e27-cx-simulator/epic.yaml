@@ -1,0 +1,193 @@
+# EPIC E27 — Cross-Examination Simulator
+# Major version: V3 | Release: v3.6 (Cross-examination simulator)
+# Architecture refs: §3 V3 CX story, §10 CXQuestion, §13
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e27-cx-simulator
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+  annotations:
+    debate/title: E27 — Cross-Examination Simulator
+    debate/architecture-refs: §3 V3 CX story, §10 CXQuestion, §13
+spec:
+  description: >-
+    Let students practice cross-examination against a simulated opponent grounded in the argument graph,
+    recording concessions to the flow.
+  priority: 16
+  constraints:
+    majorVersion: v3
+    release: v3.6
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      CX questions and answers are generated from graph nodes with difficulty/strategy settings.
+  - id: ac2
+    description: >-
+      Concessions are detected and written to the round flow.
+  - id: ac3
+    description: >-
+      Students can run timed CX sessions in the web app; a coach-reviewed eval set gates prompts.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e27-cx-simulator-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+spec:
+  description: >-
+    Task graph for epic E27 (Cross-Examination Simulator). Each Task node points at its own task-level
+    PlanSpec.
+  goalRef:
+    name: v3-e27-cx-simulator
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v2-e14-t02-auth-ui
+      kind: External
+      name: 'Prerequisite from E14: Authentication UX'
+      description: >-
+        Cross-epic prerequisite owned by v2-e14-web-cut-card (release v2.1).
+      inputs:
+        goalRef: v2-e14-t02-auth-ui
+        specRef: plan_specs/v2/e14-web-cut-card/t02-auth-ui.yaml
+    - id: ext-v3-e21-t04-graph-queries
+      kind: External
+      name: 'Prerequisite from E21: Coverage and coherence query primitives'
+      description: >-
+        Cross-epic prerequisite owned by v3-e21-argument-graph (release v3.0).
+      inputs:
+        goalRef: v3-e21-t04-graph-queries
+        specRef: plan_specs/v3/e21-argument-graph/t04-graph-queries.yaml
+    - id: ext-v3-e26-t03-state-machine
+      kind: External
+      name: 'Prerequisite from E26: Round state machine'
+      description: >-
+        Cross-epic prerequisite owned by v3-e26-round-engine (release v3.5).
+      inputs:
+        goalRef: v3-e26-t03-state-machine
+        specRef: plan_specs/v3/e26-round-engine/t03-state-machine.yaml
+    - id: ext-v3-e26-t05-flow-tracking
+      kind: External
+      name: 'Prerequisite from E26: Flow tracking'
+      description: >-
+        Cross-epic prerequisite owned by v3-e26-round-engine (release v3.5).
+      inputs:
+        goalRef: v3-e26-t05-flow-tracking
+        specRef: plan_specs/v3/e26-round-engine/t05-flow-tracking.yaml
+    - id: t01
+      kind: Task
+      name: CX question generation
+      description: >-
+        CXQuestion schema and generation targeting weak links/warrants in the opponent case graph.
+      inputs:
+        specRef: plan_specs/v3/e27-cx-simulator/t01-cx-question-generation.yaml
+        goalRef: v3-e27-t01-cx-question-generation
+      dependsOn:
+      - ext-v3-e26-t03-state-machine
+      - ext-v3-e21-t04-graph-queries
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e27-t01-cx-question-generation reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e27-t01-cx-question-generation
+    - id: t02
+      kind: Task
+      name: Simulated CX answers
+      description: >-
+        Opponent answers conditioned on strategy, experience level and evidence; student-as-questioner
+        and student-as-answerer modes.
+      inputs:
+        specRef: plan_specs/v3/e27-cx-simulator/t02-cx-answer-simulation.yaml
+        goalRef: v3-e27-t02-cx-answer-simulation
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e27-t02-cx-answer-simulation reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e27-t02-cx-answer-simulation
+    - id: t03
+      kind: Task
+      name: Concession detection
+      description: >-
+        Detect and record concessions/admissions as RoundEvents linked to nodes.
+      inputs:
+        specRef: plan_specs/v3/e27-cx-simulator/t03-concession-detection.yaml
+        goalRef: v3-e27-t03-concession-detection
+      dependsOn:
+      - t02
+      - ext-v3-e26-t05-flow-tracking
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e27-t03-concession-detection reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e27-t03-concession-detection
+    - id: t04
+      kind: Task
+      name: CX session UI
+      description: >-
+        Timed chat-style CX interface with voice-optional input, transcript and flow sidebar.
+      inputs:
+        specRef: plan_specs/v3/e27-cx-simulator/t04-cx-session-ui.yaml
+        goalRef: v3-e27-t04-cx-session-ui
+      dependsOn:
+      - t02
+      - ext-v2-e14-t02-auth-ui
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e27-t04-cx-session-ui reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e27-t04-cx-session-ui
+    - id: t05
+      kind: Task
+      name: CX evaluation
+      description: >-
+        Coach-curated CX scenarios evaluating strategic consistency and concession accuracy.
+      inputs:
+        specRef: plan_specs/v3/e27-cx-simulator/t05-cx-eval.yaml
+        goalRef: v3-e27-t05-cx-eval
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e27-t05-cx-eval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e27-t05-cx-eval
+status:
+  phase: Pending

@@ -1,0 +1,146 @@
+# TASK v3-e28-t03-judge-decision — Judge decision and RFD
+# Epic: E28 Full Round Simulation | Release: v3.7 (Full round simulation) | Major: V3
+# Architecture refs: §3 V3 simulation story, §10 RoundDecision, §13 judge settings, §16, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e28-t03-judge-decision
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+  annotations:
+    debate/title: Judge decision and RFD
+    debate/architecture-refs: §3, §10, §13, §16, §19
+spec:
+  description: >-
+    When a round reaches COMPLETE, produce a RoundDecision: winner side, speaker points within the
+    format's conventional range, and a reason for decision whose every claim cites specific RoundEvent
+    sequences and flow node ids (e.g. "the 2AR never answered the case turn from the 2NC [evt 14, node
+    n-37]"). The decision is made under the configured E26 JudgePolicy: the admissible flow facts for that
+    profile are computed deterministically, a key-issues summary is built from them, and the model
+    (reasoning tier, versioned prompt with the policy rubric) weighs those issues and writes the ballot.
+    Post-validation rejects RFD claims citing events or nodes that do not exist or that the policy deemed
+    inadmissible. The decision is appended as a DECISION event and exposed via API, recording
+    policy_version, prompt and model ids. Speech generation is t02, UI t05, evaluation t06.
+  priority: 1
+  constraints:
+    packages: [debate_core.rounds, debate_core.application, debate_api]
+    forbidden:
+      - RFD claims without event/node citations or citing inadmissible facts for the judge profile
+      - Decisions influenced by debater identity, school or anything outside the recorded flow
+      - Stereotyping a judge type instead of applying the JudgePolicy parameters
+      - Business logic in debate_api routes
+      - Live network or real model calls in CI; use the fake/replay ModelRouter
+  context:
+    - kind: TaskRef
+      name: v3-e28-t02-opponent-speech-generation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e26-t04-judge-profiles
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        decide_round(round_id) returns a RoundDecision with winner, speaker points, key issues and RFD
+        claims, and every RFD claim cites at least one existing event sequence or flow node id.
+    - id: ac2
+      description: >-
+        An RFD citing an unknown event/node or a fact the policy marks inadmissible fails validation,
+        triggers one repair retry, and otherwise the decision is saved as DECISION_FAILED, not shown.
+    - id: ac3
+      description: >-
+        On contrast fixtures from E26 t04, a round won only on an unexplained dropped argument is decided
+        for that side by EXPERIENCED_FLOW and CIRCUIT_TECHNICAL policies and not required to be by LAY.
+    - id: ac4
+      description: >-
+        GET /v1/rounds/{id}/decision returns 200 with the decision for the owner once the DECISION event
+        exists, and 409 while the round is not COMPLETE.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e28-t03-judge-decision-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+spec:
+  description: >-
+    Define RoundDecision, build deterministic key issues from admissible facts, add the ballot prompt with
+    citation validation, then persist and expose the decision.
+  goalRef:
+    name: v3-e28-t03-judge-decision
+  graph:
+    nodes:
+      - id: decision-schema
+        kind: Task
+        name: RoundDecision and RfdClaim schemas
+        description: >-
+          RoundDecision (winner, speaker points, key issues, rfd claims, policy_version, metadata) and
+          RfdClaim (text, event_seqs, node_ids) with format-specific speaker-point ranges.
+        outputs: [packages/debate_core/src/debate_core/domain/round_decision.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: RoundDecision schema exists
+            path: packages/debate_core/src/debate_core/domain/round_decision.py
+            contentMatch: "class RoundDecision"
+      - id: key-issues
+        kind: Task
+        name: Deterministic key-issue extraction
+        description: >-
+          From the final flow snapshot and JudgePolicy.admissible_flow_facts, build key issues (extended
+          offense, conceded framework, dropped turns, weighing claims) with citations.
+        dependsOn: [decision-schema]
+        outputs: [packages/debate_core/src/debate_core/rounds/judging/key_issues.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Key-issue tests pass per profile
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_key_issues.py]
+      - id: ballot-prompt
+        kind: Task
+        name: Ballot and RFD generation with citation validation
+        description: >-
+          Prompt rounds.judge_decision v1.0.0 including the policy rubric and key issues; validator for
+          citations and admissibility; repair retry then DECISION_FAILED.
+        dependsOn: [key-issues]
+        outputs:
+          - packages/debate_core/src/debate_core/prompts/rounds_judge_decision.v1.yaml
+          - packages/debate_core/src/debate_core/rounds/judging/decider.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Decision contract and contrast fixture tests pass with replay router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_judge_decider.py]
+      - id: persist-and-api
+        kind: Task
+        name: DECISION event and decision API
+        description: >-
+          Trigger decision on round completion, append DECISION event, add owner-scoped GET route.
+        dependsOn: [ballot-prompt]
+        outputs:
+          - packages/debate_core/src/debate_core/application/rounds/decide_round.py
+          - packages/debate_api/src/debate_api/routes/rounds.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Decision route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_rounds.py, -k, decision]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

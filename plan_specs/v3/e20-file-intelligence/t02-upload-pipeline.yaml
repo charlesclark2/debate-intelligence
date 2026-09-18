@@ -1,0 +1,185 @@
+# TASK v3-e20-t02-upload-pipeline — Upload pipeline
+# Epic: E20 Debate File Intelligence | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §6 FileIntelligenceService, §13 Argument graph (file parsing)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e20-t02-upload-pipeline
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+  annotations:
+    debate/title: Upload pipeline
+    debate/architecture-refs: §6, §13, §14, §15
+spec:
+  description: >-
+    Deliver the path from a browser upload to a queued parse: presigned S3 POST into a quarantine prefix,
+    server-side DOCX package validation, malware scanning, server-computed sha256 with per-owner dedupe,
+    promotion to the private files prefix and exactly one ParseFileJob per clean file. The ParseFileJob
+    worker handler calls FileIntelligenceService.parse_file through a DebateFileParser port; the DOCX
+    implementation of that port is t03. This task owns the upload/complete/status endpoints and
+    infrastructure; the file list, outline view and card import endpoints and UI belong to t05.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_api, debate_workers, infrastructure]
+    forbidden:
+      - Public buckets, public object ACLs or presigned URLs valid longer than 15 minutes
+      - Trusting client-supplied content type, size or hash
+      - Parsing or offering download of any object before a clean malware-scan result
+      - Accepting macro-enabled (.docm), encrypted or legacy binary (.doc) files
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e20-t01-debate-file-model
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t02-sqs-workers
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e11-t04-s3-snapshot-store
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        POST /files creates a DebateFile in UPLOADED and returns a presigned POST (15-minute expiry,
+        content-length-range up to 25 MB, fixed key quarantine/<org>/<file_id>, SSE-KMS); only .docx is
+        accepted.
+    - id: ac2
+      description: >-
+        Server-side validation opens the OOXML package and requires a wordprocessingml main document,
+        rejecting vbaProject.bin, encrypted packages and zip bombs (uncompressed total over 200 MB or ratio
+        over 100:1) with typed rejection reasons stored on the DebateFile.
+    - id: ac3
+      description: >-
+        Only a GuardDuty Malware Protection result of NO_THREATS_FOUND promotes the object to files/<org>/;
+        threats set QUARANTINED, the object is never parsed or downloadable, and quarantine objects expire
+        after 1 day.
+    - id: ac4
+      description: >-
+        sha256 is computed server-side from the stored bytes; an owner re-uploading identical bytes gets the
+        existing file_id back and no second parse is queued.
+    - id: ac5
+      description: >-
+        Each clean file enqueues exactly one ParseFileJob (idempotency key file_id:sha256:parser_version)
+        and GET /files/{id} reports status transitions through PARSED or PARSE_FAILED; other users receive
+        404.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e20-t02-upload-pipeline-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+spec:
+  description: >-
+    Infrastructure first, then the API half (create/complete), package validation, the scan-result handler
+    that hashes and promotes, and finally the ParseFileJob handler wired to the parser port.
+  goalRef:
+    name: v3-e20-t02-upload-pipeline
+  graph:
+    nodes:
+      - id: upload-infra
+        kind: Task
+        name: Upload bucket prefixes, scanning and routing
+        description: >-
+          Terraform module: quarantine/ and files/ prefixes on the private KMS-encrypted bucket, lifecycle
+          expiry on quarantine, GuardDuty Malware Protection plan for the quarantine prefix, EventBridge
+          rule forwarding scan results to an SQS queue with DLQ, least-privilege worker IAM.
+        outputs: [infrastructure/modules/debate_files/main.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Terraform configuration validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: artifact_exists
+            name: Upload module exists
+            path: infrastructure/modules/debate_files/main.tf
+            contentMatch: "aws_guardduty_malware_protection_plan"
+      - id: upload-api
+        kind: Task
+        name: Create/complete/status endpoints
+        description: >-
+          FileIntelligenceService.create_upload and get_file use cases plus thin FastAPI routes; presigned
+          POST via the S3 store adapter; ownership checks through the E12 auth helpers.
+        outputs:
+          - packages/debate_api/src/debate_api/routes/files.py
+          - packages/debate_core/src/debate_core/application/file_intelligence.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Upload API tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_files_upload.py]
+      - id: package-validation
+        kind: Task
+        name: OOXML package inspector
+        description: >-
+          Stream-inspect the zip central directory: content types, main part, macro parts, encryption, entry
+          count and compression ratios, without extracting to disk; crafted fixtures for each rejection.
+        outputs: [packages/debate_core/src/debate_core/integrations/docx_package_inspector.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Package inspector tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_docx_package_inspector.py]
+      - id: scan-result-handler
+        kind: Task
+        name: Scan result, hashing, dedupe and promotion
+        description: >-
+          Worker handler for scan-result events: verify the object version, stream sha256, run package
+          validation, dedupe by owner+sha256, copy to files/, delete from quarantine, update status, enqueue
+          the ParseFileJob via the E13 job model.
+        dependsOn: [upload-infra, upload-api, package-validation]
+        outputs: [packages/debate_workers/src/debate_workers/handlers/scan_result.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Scan-result handler tests pass (moto)
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_scan_result.py]
+      - id: parse-job-handler
+        kind: Task
+        name: ParseFileJob handler and parser port
+        description: >-
+          DebateFileParser port, parse_file use case (PARSING → PARSED/PARSE_FAILED with reasons, revision-
+          guarded writes via FileRepository) and the idempotent worker handler; a stub parser is used in
+          tests.
+        dependsOn: [scan-result-handler]
+        outputs:
+          - packages/debate_workers/src/debate_workers/handlers/parse_file.py
+          - packages/debate_core/src/debate_core/application/debate_file_parser.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: ParseFileJob handler tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_parse_file.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Type check passes for debate_workers
+            command: uv
+            args: [run, pyright, packages/debate_workers]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

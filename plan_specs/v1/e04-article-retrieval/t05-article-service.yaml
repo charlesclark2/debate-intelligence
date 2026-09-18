@@ -1,0 +1,159 @@
+# TASK v1-e04-t05-article-service — ArticleService orchestration
+# Epic: E04 Article Retrieval & Extraction | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6 ArticleService, §7, §8 steps 1–2, §14, §19 (manual pasted text), §20 step 3
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e04-t05-article-service
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+  annotations:
+    debate/title: ArticleService orchestration
+    debate/architecture-refs: §6, §7, §8, §14, §19, §20 step 3
+spec:
+  description: >-
+    Implement ArticleService.retrieve(url) in debate_core.application, composing ports only:
+    canonicalize (t01) → fetch (ArticleFetcher, t02) → extract (t04, for fetched content) → classify
+    access (t03, from the fetch outcome and t04 quality signals) → snapshot via SnapshotService (E03-t02)
+    → upsert Article. Non-ACCESSIBLE outcomes return a RetrievalOutcome
+    with the explicit AccessStatus and no snapshot — never partial text. Dedupe by canonical URL and
+    by normalized-text hash so re-fetching unchanged content reuses the existing snapshot; a re-fetch
+    policy (max age from settings, --refresh override) controls when to refetch. A separate
+    ingest_user_text() path accepts text the user lawfully has (e.g. from a subscription), stores it
+    with provenance_mode=USER_SUPPLIED and access_status recorded as reported, so downstream cards show
+    that provenance. The CLI command and recorded fixtures are t06.
+  priority: 1
+  constraints:
+    packages: [debate_core.application]
+    forbidden:
+      - Importing httpx, trafilatura or filesystem code in the service (ports only)
+      - Creating a snapshot for PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND or ERROR outcomes
+      - Marking USER_SUPPLIED text as publisher-retrieved (provenance_mode must survive onto cards)
+  context:
+    - kind: TaskRef
+      name: v1-e04-t03-access-status
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e04-t04-content-extraction
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e03-t02-hashing-provenance
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        For an accessible fixture URL, retrieve returns an Article (canonical URL, identifiers,
+        access_status ACCESSIBLE) and a SourceSnapshot with both hashes and extractor/normalizer
+        versions.
+    - id: ac2
+      description: >-
+        For paywalled, blocked, robots-disallowed and 404 fixtures, retrieve returns the matching
+        AccessStatus with a reason and persists no snapshot.
+    - id: ac3
+      description: >-
+        Retrieving two tracking-parameter variants of the same URL yields one Article; re-fetching
+        unchanged content within max age makes no fetch call, and after max age reuses the snapshot when
+        the normalized-text hash is unchanged.
+    - id: ac4
+      description: >-
+        ingest_user_text stores a snapshot with provenance_mode=USER_SUPPLIED and requires the caller
+        to supply the source URL and an attestation flag.
+    - id: ac5
+      description: >-
+        Every outcome emits a structured log event with a correlation id, canonical URL, access status
+        and elapsed time, and no page content.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e04-t05-article-service-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+spec:
+  description: >-
+    Outcome types, the happy-path pipeline, failure paths, dedupe/re-fetch policy, then the
+    user-supplied text path — all tested with in-memory fakes.
+  goalRef:
+    name: v1-e04-t05-article-service
+  graph:
+    nodes:
+      - id: outcome-types
+        kind: Task
+        name: RetrievalOutcome and service skeleton
+        description: >-
+          RetrievalOutcome (article, snapshot | None, access decision, fetched: bool) and ArticleService
+          constructor taking ports and settings.
+        outputs: [packages/debate_core/src/debate_core/application/article_service.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Service module exists
+            path: packages/debate_core/src/debate_core/application/article_service.py
+            contentMatch: "class ArticleService"
+      - id: pipeline
+        kind: Task
+        name: Accessible-path pipeline
+        description: >-
+          canonicalize → fetch → extract → classify → apply rel=canonical → snapshot → upsert Article.
+        dependsOn: [outcome-types]
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Happy-path tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_article_service.py, -k, accessible]
+      - id: failure-paths
+        kind: Task
+        name: Explicit failure outcomes
+        description: >-
+          Map every non-ACCESSIBLE decision to an outcome with no snapshot; structured logging.
+        dependsOn: [pipeline]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Failure-path tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_article_service.py, -k, failure]
+      - id: dedupe-refetch
+        kind: Task
+        name: Dedupe and re-fetch policy
+        description: >-
+          Lookup by canonical URL, max-age policy, refresh override, and snapshot reuse on unchanged
+          normalized-text hash.
+        dependsOn: [pipeline]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Dedupe tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_article_service.py, -k, dedupe]
+      - id: user-supplied
+        kind: Task
+        name: USER_SUPPLIED text ingestion
+        description: >-
+          ingest_user_text(source_url, text, attested) creating a snapshot with
+          provenance_mode=USER_SUPPLIED; quality gates.
+        dependsOn: [failure-paths, dedupe-refetch]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full service suite passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_article_service.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

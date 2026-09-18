@@ -1,0 +1,166 @@
+# TASK v3-e28-t05-full-round-ui — Full round UI
+# Epic: E28 Full Round Simulation | Release: v3.7 (Full round simulation) | Major: V3
+# Architecture refs: §3 V3 simulation story, §12 web workflows, §13 Round simulator, §14, §15 async jobs
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e28-t05-full-round-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+  annotations:
+    debate/title: Full round UI
+    debate/architecture-refs: §3, §12, §13, §14, §15
+spec:
+  description: >-
+    Build the web experience for a full simulated round. Setup: format (Policy, LD, PF), the student's
+    side (and PF speaking order), judge profile (lay, somewhat experienced, experienced flow,
+    circuit/technical), delivery speed, opponent persona and optionally a scouted opponent profile. Then a
+    speech-by-speech progression view driven by server round state: a segment timeline, prep-time
+    controls, the student's speech input (paste or type text, or opt-in in-browser dictation reused from
+    E27), rendered opponent speeches with card insertions showing tag and cite, CX/crossfire segments
+    embedding the E27 session components, a live multi-column flow view, and finally the ballot with an RFD
+    whose citations link to the events and flow cells they reference. Opponent turns run as async jobs
+    with progress; the UI contains no simulation logic.
+  priority: 2
+  constraints:
+    packages: [web, debate_api]
+    forbidden:
+      - Simulation, flow or judging logic in web/
+      - Uploading or storing student audio
+      - Showing an RFD claim without clickable links to its cited events/flow cells
+      - Rendering UNVERIFIED card text as evidence in opponent speeches
+      - Live API calls in unit/Playwright tests; use mocked API fixtures
+  context:
+    - kind: TaskRef
+      name: v3-e28-t03-judge-decision
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e27-t04-cx-session-ui
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A student can configure and start a round for each format with any judge profile and speed, and
+        the timeline shows every FormatRules segment in order with the current one highlighted.
+    - id: ac2
+      description: >-
+        Student speeches are submitted as text; opponent speeches show job progress then render analytic
+        blocks and card insertions with tag and cite; prep time decrements from server state.
+    - id: ac3
+      description: >-
+        The flow view renders one column per speech with statuses (extended, answered, dropped, conceded)
+        and updates after each FLOW_UPDATE event.
+    - id: ac4
+      description: >-
+        The ballot view shows winner, speaker points and RFD; clicking an RFD citation scrolls to and
+        highlights the referenced event or flow cell.
+    - id: ac5
+      description: >-
+        Playwright covers a mocked full LD round and a mocked PF round including grand crossfire and the
+        ballot view.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e28-t05-full-round-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+spec:
+  description: >-
+    Build setup, then the progression view with speech input and opponent rendering, then the flow and
+    ballot views, and finish with Playwright coverage.
+  goalRef:
+    name: v3-e28-t05-full-round-ui
+  graph:
+    nodes:
+      - id: round-setup
+        kind: Task
+        name: Round setup page
+        description: >-
+          Setup form for format, side/speaking order, judge profile, speed, persona and optional scouted
+          opponent; creates the round via the API.
+        outputs: [web/app/(workspace)/practice/rounds/new/page.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Round setup tests pass
+            command: pnpm
+            args: [--dir, web, test, --, practice/rounds/new]
+      - id: progression-view
+        kind: Task
+        name: Segment timeline, speech input and opponent speech rendering
+        description: >-
+          Round page with timeline, prep controls, student text input, opponent job progress and speech
+          rendering with CardInsertion components; CX segments embed E27 components.
+        dependsOn: [round-setup]
+        outputs:
+          - web/app/(workspace)/practice/rounds/[roundId]/page.tsx
+          - web/components/rounds/SegmentTimeline.tsx
+          - web/components/rounds/SpeechView.tsx
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Progression component tests pass
+            command: pnpm
+            args: [--dir, web, test, --, components/rounds]
+      - id: flow-view
+        kind: Task
+        name: Multi-column flow view
+        description: >-
+          FlowGrid with one column per speech, row per argument node, status styling and event anchors.
+        dependsOn: [progression-view]
+        outputs: [web/components/rounds/FlowGrid.tsx]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Flow grid tests pass
+            command: pnpm
+            args: [--dir, web, test, --, FlowGrid]
+      - id: ballot-view
+        kind: Task
+        name: Ballot and traceable RFD view
+        description: >-
+          Ballot component showing decision, speaker points and RFD claims with citation links into the
+          flow grid and speech views.
+        dependsOn: [flow-view]
+        outputs: [web/components/rounds/BallotView.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Ballot view tests pass
+            command: pnpm
+            args: [--dir, web, test, --, BallotView]
+      - id: e2e
+        kind: Task
+        name: Playwright full-round flows
+        description: >-
+          Mocked LD and PF full rounds through ballot, including citation navigation; lint and build.
+        dependsOn: [ballot-view]
+        outputs: [web/e2e/full-round.spec.ts]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full-round Playwright specs pass
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/full-round.spec.ts]
+          - type: command_succeeds
+            name: Web lint passes
+            command: pnpm
+            args: [--dir, web, lint]
+          - type: command_succeeds
+            name: Web build succeeds
+            command: pnpm
+            args: [--dir, web, build]
+status:
+  phase: Pending

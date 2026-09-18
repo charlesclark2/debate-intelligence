@@ -1,0 +1,147 @@
+# TASK v2-e19-t02-audit-logging — Audit logging
+# Epic: E19 Production Readiness, Privacy & Safety | Release: v2.4 (Production readiness & school rollout) | Major: V2
+# Architecture refs: §14 (audit logs, minimization), §15 (correlation ids), §12 AuthZ
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e19-t02-audit-logging
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+  annotations:
+    debate/title: Audit logging
+    debate/architecture-refs: §12, §14, §15
+spec:
+  description: >-
+    Add an application-level, append-only audit trail for security- and trust-relevant actions: sign-in
+    and first-login provisioning, role/organization changes, card edits and restores (ids and revision
+    numbers, not evidence text), share grants/revokes (forwarding the E17 t06 share audit records),
+    exports and downloads, account export/deletion requests, and admin actions. Events are written through
+    an AuditLog port as structured records (event_type, actor_id, organization_id, target, outcome,
+    correlation_id, timestamp) to a dedicated DynamoDB audit table with no update/delete permissions for
+    application roles, and a TTL-based retention policy (default 400 days, configurable). Coaches/admins
+    can query their organization's audit events. This task does NOT implement account deletion (t03) or
+    CloudTrail (already in v2-e10-t01).
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_api, infrastructure/modules/dynamodb]
+    forbidden:
+      - Logging evidence text, passwords, tokens, emails or IP addresses beyond a truncated/hashed form
+      - IAM permissions allowing application roles to UpdateItem or DeleteItem on the audit table
+      - Audit writes that can silently fail (failures raise alarms and metrics)
+      - Importing boto3 in domain/application layers
+  context:
+    - kind: TaskRef
+      name: v2-e12-t03-authn-authz
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e19-t04-privacy-legal-review
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An AuditEvent schema with a closed event_type enum covers auth, role change, card edit/restore,
+        share grant/revoke, export/download, account export/delete and admin actions.
+    - id: ac2
+      description: >-
+        Every covered route/use case emits exactly one audit event per action, verified by a test that maps
+        each endpoint in the OpenAPI spec to an expected event type or an explicit exemption.
+    - id: ac3
+      description: >-
+        The audit table's IAM policy grants PutItem/Query only; a moto/IAM policy test confirms UpdateItem and
+        DeleteItem are denied for API and worker roles.
+    - id: ac4
+      description: >-
+        Records expire via TTL after the configured retention; retention value is documented in the privacy
+        data inventory.
+    - id: ac5
+      description: >-
+        GET /v1/admin/audit returns the caller organization's events filtered by actor/type/date for coach and
+        admin roles only, and a failed audit write increments a CloudWatch metric with an alarm.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e19-t02-audit-logging-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+spec:
+  description: >-
+    Define the event schema and port, provision the append-only table, instrument use cases with a coverage
+    test, then add the admin query endpoint and alarms.
+  goalRef:
+    name: v2-e19-t02-audit-logging
+  graph:
+    nodes:
+      - id: schema-port
+        kind: Task
+        name: AuditEvent schema and AuditLog port
+        description: >-
+          Closed enum of event types, minimized fields, and the AuditLog port with an in-memory adapter.
+        outputs: [packages/debate_core/src/debate_core/application/audit.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Audit schema tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_audit.py]
+      - id: audit-table
+        kind: Task
+        name: Append-only audit table and adapter
+        description: >-
+          Terraform audit table (PK=ORG#id, SK=TS#...#event_id, GSI by actor), TTL, PITR, KMS; IAM allowing
+          PutItem/Query only; DynamoDB adapter.
+        dependsOn: [schema-port]
+        outputs:
+          - infrastructure/modules/dynamodb/audit_table.tf
+          - packages/debate_core/src/debate_core/integrations/aws/dynamodb_audit_log.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Dev Terraform validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: test_passes
+            name: Audit adapter and IAM deny tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_dynamodb_audit_log.py]
+      - id: instrumentation
+        kind: Task
+        name: Instrument use cases and coverage test
+        description: >-
+          Emit events from auth provisioning, card save/restore, shares, exports and admin use cases;
+          OpenAPI-driven coverage test with explicit exemptions list.
+        dependsOn: [audit-table]
+        outputs: [packages/debate_api/tests/test_audit_coverage.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Audit coverage test passes
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_audit_coverage.py]
+      - id: admin-query-alarms
+        kind: Task
+        name: Admin audit query and failure alarms
+        description: GET /v1/admin/audit with role checks; CloudWatch metric + alarm for audit write failures.
+        dependsOn: [instrumentation]
+        outputs:
+          - packages/debate_api/src/debate_api/routes/admin_audit.py
+          - infrastructure/modules/observability/audit_alarms.tf
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Admin audit route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_admin_audit.py]
+status:
+  phase: Pending

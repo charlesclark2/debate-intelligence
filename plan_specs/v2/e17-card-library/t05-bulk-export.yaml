@@ -1,0 +1,151 @@
+# TASK v2-e17-t05-bulk-export — Bulk DOCX export
+# Epic: E17 Card Library | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §3 V2 save/edit/export, §6 ExportService, §8, §12, §14, ADR-009
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e17-t05-bulk-export
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+  annotations:
+    debate/title: Bulk DOCX export
+    debate/architecture-refs: §3, §6, §8, §12, §14, ADR-009
+spec:
+  description: >-
+    Export a folder (recursively) or a selection of cards into a single Verbatim-compatible DOCX using the
+    v1 DOCX renderer and the user's chosen format profile: folder names become pocket/hat/block headings
+    in order, each card renders tag, cite and evidence with underline/highlight from CardSpans, and the
+    embedded manifest covers every card so `debate-research verify` can re-check the file. Runs as an
+    ExportJob on the SQS worker framework, writes to the private export bucket and returns a short-lived
+    presigned URL. UNVERIFIED cards are excluded by default; if included they carry the unverified banner.
+    This task does NOT change the single-card renderer (v1-e06-t04) or add PDF export.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_workers, debate_api, web/src/components/library]
+    forbidden:
+      - Rendering evidence from anything other than stored card text + CardSpans
+      - Including UNVERIFIED cards without the unverified banner
+      - Public S3 objects or presigned URLs valid longer than 15 minutes
+      - Generating large DOCX files synchronously inside an API request
+  context:
+    - kind: TaskRef
+      name: v2-e17-t02-library-api
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t04-docx-renderer
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t02-sqs-workers
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e17-t03-library-ui
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        POST /v1/exports with a folder_id or card_ids and a format profile returns 202 with a job_id; the job
+        completes with a presigned download URL expiring in <= 15 minutes.
+    - id: ac2
+      description: >-
+        Folder hierarchy maps to Verbatim heading levels (Pocket/Hat/Block) and card order follows the
+        folder's order, verified by structural DOCX assertions.
+    - id: ac3
+      description: >-
+        By default UNVERIFIED cards are omitted and listed in an export summary; with include_unverified=true
+        each carries the unverified banner.
+    - id: ac4
+      description: >-
+        `debate-research verify` on a 100-card exported DOCX passes for every verified card using the embedded
+        manifest.
+    - id: ac5
+      description: >-
+        A 500-card export completes in under 2 minutes in dev and retries are idempotent (same S3 key per
+        job_id).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e17-t05-bulk-export-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+spec:
+  description: >-
+    Extend ExportService to multi-card documents with heading structure, run it as an ExportJob worker,
+    expose the endpoint, wire the UI buttons, and verify output round-trips.
+  goalRef:
+    name: v2-e17-t05-bulk-export
+  graph:
+    nodes:
+      - id: multi-card-render
+        kind: Task
+        name: Multi-card document rendering
+        description: >-
+          ExportService.render_collection composing the v1 card renderer with pocket/hat/block headings,
+          a combined manifest part and unverified handling.
+        outputs: [packages/debate_core/src/debate_core/application/export_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Multi-card DOCX structure tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_export_collection.py]
+      - id: export-worker
+        kind: Task
+        name: ExportJob worker
+        description: >-
+          debate_workers handler that loads cards in order, renders, uploads to the export bucket with a
+          deterministic key per job_id and records result refs on the Job.
+        dependsOn: [multi-card-render]
+        outputs: [packages/debate_workers/src/debate_workers/handlers/export_collection.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Export worker tests pass on moto S3
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_export_collection.py]
+      - id: export-endpoint
+        kind: Task
+        name: Export endpoint and presigned download
+        description: POST /v1/exports and GET /v1/exports/{job_id}/download returning a 15-minute presigned URL.
+        dependsOn: [export-worker]
+        outputs: [packages/debate_api/src/debate_api/routes/exports.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Export route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_exports.py]
+      - id: ui-and-roundtrip
+        kind: Task
+        name: UI wiring and verify round-trip
+        description: >-
+          Wire Export folder / Export selection in the library UI with job progress, and add an integration
+          test that exports fixtures and runs verify over the DOCX.
+        dependsOn: [export-endpoint]
+        outputs:
+          - web/src/components/library/ExportDialog.tsx
+          - tests/integration/test_bulk_export_verify.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bulk export verify round-trip passes
+            command: uv
+            args: [run, pytest, tests/integration/test_bulk_export_verify.py]
+          - type: custom
+            name: Coach opens export in Word with Verbatim
+            description: >-
+              Charlie opens a 50-card exported folder in Word with the Verbatim template and confirms heading
+              levels, underlining and highlighting look like a normal team file.
+status:
+  phase: Pending

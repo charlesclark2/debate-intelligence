@@ -1,0 +1,194 @@
+# TASK v3-e20-t01-debate-file-model — DebateFile and FileSection model
+# Epic: E20 Debate File Intelligence | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §6 FileIntelligenceService, §7 DebateFile + DynamoDB strategy, §13 file parsing
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e20-t01-debate-file-model
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+  annotations:
+    debate/title: DebateFile and FileSection model
+    debate/architecture-refs: §6, §7, §13
+spec:
+  description: >-
+    Define the DebateFile, FileSection and ParsedCard domain entities, the FileRepository port, and the
+    AppTable access patterns that let FileIntelligenceService store an uploaded debate file and its parsed
+    structure. A FileSection is one structural unit (pocket, hat, block, tag, cite, evidence, analytic) with
+    its section path and character-offset formatting spans; a ParsedCard groups a tag, cite and evidence
+    into a card that may later be linked to a library Card. Every parse output carries parser_version and a
+    parse revision so a re-parse can never silently overwrite ParsedCard-to-Card links or student edits.
+    This task owns entities, the port, the access-pattern document and the local + DynamoDB repository
+    implementations only; presigned upload, scanning and ParseFileJob belong to t02, DOCX parsing logic to
+    t03, and ArgumentNode/ArgumentEdge to E21.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, docs/data]
+    forbidden:
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+      - Persisting document author/lastModifiedBy metadata or comments from uploaded files
+      - Unconditional overwrites of parse output (all writes use revision conditions)
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v2-e11-t01-access-pattern-design
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e11-t03-dynamodb-repositories
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t04-repo-contract-tests
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        DebateFile (file_id ULID, owner_id, organization_id, filename, content_type, s3_key, sha256,
+        size_bytes, debate_format POLICY|LD|PF|UNKNOWN, parser_version, parse_revision, parsed_status
+        UPLOADED|SCANNING|QUARANTINED|QUEUED|PARSING|PARSED|PARSE_FAILED, rejection/failure reasons,
+        timestamps) validates with Pydantic and exports a JSON schema.
+    - id: ac2
+      description: >-
+        FileSection carries file_id, parse_revision, ordinal, level
+        POCKET|HAT|BLOCK|TAG|CITE|EVIDENCE|ANALYTIC|OTHER, section_path (ancestor heading titles), exact
+        text, source paragraph indices and formatting spans (start/end offsets, underline, highlight color,
+        bold, emphasis, font size); ParsedCard references its tag, cite and evidence sections plus a
+        nullable card_id and import_status.
+    - id: ac3
+      description: >-
+        docs/data/debate-files.md documents key patterns (FILE#<id> with META, SECTION#<rev>#<ordinal>,
+        PCARD#<rev>#<id>; owner GSI newest-first; owner+sha256 dedupe lookup; status GSI for operations) and
+        each access pattern maps to a single Query or GetItem.
+    - id: ac4
+      description: >-
+        Writing a new parse revision is guarded by a conditional write on DebateFile.revision; a stale
+        writer gets a typed ConflictError and ParsedCard.card_id links from the previous revision are
+        carried over by tag+cite+evidence hash rather than dropped.
+    - id: ac5
+      description: >-
+        The SQLite local implementation and the DynamoDB implementation (moto) both pass the shared
+        repository contract suite, including ordering of sections, dedupe by sha256 and revision conflicts.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e20-t01-debate-file-model-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+spec:
+  description: >-
+    Model first, then the port and access-pattern document, then two implementations that must both pass the
+    same contract suite before quality gates run.
+  goalRef:
+    name: v3-e20-t01-debate-file-model
+  graph:
+    nodes:
+      - id: domain-entities
+        kind: Task
+        name: DebateFile, FileSection and ParsedCard entities
+        description: >-
+          Pydantic entities and enums in debate_core.domain with FormattingSpan offsets relative to section
+          text, validators (offsets in range, ordinals contiguous) and JSON-schema export.
+        outputs: [packages/debate_core/src/debate_core/domain/debate_file.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Debate file domain module exists
+            path: packages/debate_core/src/debate_core/domain/debate_file.py
+            contentMatch: "class ParsedCard"
+          - type: test_passes
+            name: Entity validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_debate_file.py]
+      - id: repository-port
+        kind: Task
+        name: FileRepository port
+        description: >-
+          Protocol with
+          create/get/list_by_owner/find_by_sha256/update_status/put_parse_revision/list_sections/
+          list_parsed_cards/link_card, typed NotFound and ConflictError, no storage types in signatures.
+        dependsOn: [domain-entities]
+        outputs: [packages/debate_core/src/debate_core/application/file_repository.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: FileRepository port exists
+            path: packages/debate_core/src/debate_core/application/file_repository.py
+            contentMatch: "class FileRepository"
+      - id: access-patterns
+        kind: Task
+        name: AppTable access-pattern document
+        description: >-
+          Enumerate access patterns, key/GSI design, item-size budget (sections over 350 KB spill to a
+          SnapshotStore blob pointer) and the revision/carry-over rules, extending the V2 access-pattern
+          doc.
+        dependsOn: [domain-entities]
+        outputs: [docs/data/debate-files.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Access-pattern doc covers sections
+            path: docs/data/debate-files.md
+            contentMatch: "SECTION#"
+      - id: local-repository
+        kind: Task
+        name: SQLite FileRepository and contract suite
+        description: >-
+          Local implementation for CLI/dev plus a parametrized contract suite reusing the E02 contract
+          helpers (CRUD, ordering, dedupe, revision conflicts, card-link carry-over).
+        dependsOn: [repository-port]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/local/file_repository.py
+          - packages/debate_core/tests/contracts/test_file_repository_contract.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contract suite passes for the local implementation
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/contracts/test_file_repository_contract.py
+              - "-k"
+              - local
+      - id: dynamodb-repository
+        kind: Task
+        name: DynamoDB FileRepository
+        description: >-
+          AppTable implementation with conditional writes on revision, batched section writes, pagination
+          and blob spill-over; tested against moto.
+        dependsOn: [local-repository, access-patterns]
+        outputs: [packages/debate_core/src/debate_core/integrations/aws/dynamodb_file_repository.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contract suite passes for DynamoDB
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/contracts/test_file_repository_contract.py
+              - "-k"
+              - dynamodb
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

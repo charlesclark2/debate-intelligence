@@ -1,0 +1,240 @@
+# EPIC E21 — Argument Graph
+# Major version: V3 | Release: v3.0 (Debate file intelligence & argument graph)
+# Architecture refs: §7 ArgumentTable, §13 Argument graph, ADR-007, ADR-008
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e21-argument-graph
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+  annotations:
+    debate/title: E21 — Argument Graph
+    debate/architecture-refs: §7 ArgumentTable, §13 Argument graph, ADR-007, ADR-008
+spec:
+  description: >-
+    Persist typed argument nodes and edges with source references and confidence behind a GraphRepository,
+    extract them from parsed files, and provide coverage/coherence queries.
+  priority: 10
+  constraints:
+    majorVersion: v3
+    release: v3.0
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      ArgumentNode/ArgumentEdge records (SUPPORTS, ANSWERS, TURNS, MITIGATES, CONTRADICTS, PREREQUISITE,
+      LINKS_TO, SOLVES, IMPACTS, PERMUTES) persist with source refs and confidence.
+  - id: ac2
+    description: >-
+      GraphRepository abstracts DynamoDB adjacency so Neptune can be added later without application changes.
+  - id: ac3
+    description: >-
+      Node/edge extraction accuracy is measured on a labeled set; a graph viewer shows provenance.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e21-argument-graph-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+spec:
+  description: >-
+    Task graph for epic E21 (Argument Graph). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v3-e21-argument-graph
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e02-t04-repo-contract-tests
+      kind: External
+      name: 'Prerequisite from E02: Reusable repository contract test suite'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t04-repo-contract-tests
+        specRef: plan_specs/v1/e02-domain-core/t04-repo-contract-tests.yaml
+    - id: ext-v2-e11-t03-dynamodb-repositories
+      kind: External
+      name: 'Prerequisite from E11: DynamoDB repository implementations'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t03-dynamodb-repositories
+        specRef: plan_specs/v2/e11-cloud-persistence/t03-dynamodb-repositories.yaml
+    - id: ext-v2-e13-t02-sqs-workers
+      kind: External
+      name: 'Prerequisite from E13: SQS queues and worker framework'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t02-sqs-workers
+        specRef: plan_specs/v2/e13-async-jobs/t02-sqs-workers.yaml
+    - id: ext-v2-e14-t01-nextjs-scaffold
+      kind: External
+      name: 'Prerequisite from E14: Next.js application scaffold'
+      description: >-
+        Cross-epic prerequisite owned by v2-e14-web-cut-card (release v2.1).
+      inputs:
+        goalRef: v2-e14-t01-nextjs-scaffold
+        specRef: plan_specs/v2/e14-web-cut-card/t01-nextjs-scaffold.yaml
+    - id: ext-v2-e15-t03-embeddings-pipeline
+      kind: External
+      name: 'Prerequisite from E15: Titan embeddings pipeline'
+      description: >-
+        Cross-epic prerequisite owned by v2-e15-search-index (release v2.2).
+      inputs:
+        goalRef: v2-e15-t03-embeddings-pipeline
+        specRef: plan_specs/v2/e15-search-index/t03-embeddings-pipeline.yaml
+    - id: ext-v3-e20-t02-upload-pipeline
+      kind: External
+      name: 'Prerequisite from E20: Upload pipeline'
+      description: >-
+        Cross-epic prerequisite owned by v3-e20-file-intelligence (release v3.0).
+      inputs:
+        goalRef: v3-e20-t02-upload-pipeline
+        specRef: plan_specs/v3/e20-file-intelligence/t02-upload-pipeline.yaml
+    - id: ext-v3-e20-t03-docx-structure-parser
+      kind: External
+      name: 'Prerequisite from E20: DOCX structure parser'
+      description: >-
+        Cross-epic prerequisite owned by v3-e20-file-intelligence (release v3.0).
+      inputs:
+        goalRef: v3-e20-t03-docx-structure-parser
+        specRef: plan_specs/v3/e20-file-intelligence/t03-docx-structure-parser.yaml
+    - id: t01
+      kind: Task
+      name: ArgumentTable and GraphRepository
+      description: >-
+        GraphRepository port, DynamoDB ArgumentTable (GRAPH#/NODE#/EDGE#) implementation, contract tests.
+      inputs:
+        specRef: plan_specs/v3/e21-argument-graph/t01-graph-repository.yaml
+        goalRef: v3-e21-t01-graph-repository
+      dependsOn:
+      - ext-v2-e11-t03-dynamodb-repositories
+      - ext-v1-e02-t04-repo-contract-tests
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e21-t01-graph-repository reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e21-t01-graph-repository
+    - id: t02
+      kind: Task
+      name: Argument node extraction
+      description: >-
+        ArgumentNodeExtraction from FileSections/cards with argument_type, claim, warrant summary, card
+        ids, section path, confidence.
+      inputs:
+        specRef: plan_specs/v3/e21-argument-graph/t02-node-extraction.yaml
+        goalRef: v3-e21-t02-node-extraction
+      dependsOn:
+      - t01
+      - ext-v3-e20-t03-docx-structure-parser
+      - ext-v3-e20-t02-upload-pipeline
+      - ext-v2-e13-t02-sqs-workers
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e21-t02-node-extraction reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e21-t02-node-extraction
+    - id: t03
+      kind: Task
+      name: Argument edge extraction
+      description: >-
+        ArgumentEdgeExtraction with relationship type, rationale, confidence and supporting node/card
+        refs; embeddings aid candidate pairing.
+      inputs:
+        specRef: plan_specs/v3/e21-argument-graph/t03-edge-extraction.yaml
+        goalRef: v3-e21-t03-edge-extraction
+      dependsOn:
+      - t02
+      - ext-v2-e15-t03-embeddings-pipeline
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e21-t03-edge-extraction reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e21-t03-edge-extraction
+    - id: t04
+      kind: Task
+      name: Coverage and coherence query primitives
+      description: >-
+        Traversals: answers-to(node), unanswered predicted nodes, chain completeness (uniq→link→IL→impact),
+        contradiction detection.
+      inputs:
+        specRef: plan_specs/v3/e21-argument-graph/t04-graph-queries.yaml
+        goalRef: v3-e21-t04-graph-queries
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e21-t04-graph-queries reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e21-t04-graph-queries
+    - id: t05
+      kind: Task
+      name: Graph extraction evaluation
+      description: >-
+        Coach-labeled nodes/edges; node-type, edge and support-citation accuracy with promotion gate.
+      inputs:
+        specRef: plan_specs/v3/e21-argument-graph/t05-graph-eval.yaml
+        goalRef: v3-e21-t05-graph-eval
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e21-t05-graph-eval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e21-t05-graph-eval
+    - id: t06
+      kind: Task
+      name: Argument graph viewer
+      description: >-
+        Web view of a file's graph with node/edge provenance and confidence.
+      inputs:
+        specRef: plan_specs/v3/e21-argument-graph/t06-graph-viewer.yaml
+        goalRef: v3-e21-t06-graph-viewer
+      dependsOn:
+      - t04
+      - ext-v2-e14-t01-nextjs-scaffold
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e21-t06-graph-viewer reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e21-t06-graph-viewer
+status:
+  phase: Pending

@@ -1,0 +1,148 @@
+# TASK v3-e23-t02-coherence-checks — Shell coherence checks
+# Epic: E23 File Auditing | Release: v3.2 (File auditing) | Major: V3
+# Architecture refs: §3 V3 DA audit story, §10 FileAuditFinding contract, §13 File auditing
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e23-t02-coherence-checks
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+  annotations:
+    debate/title: Shell coherence checks
+    debate/architecture-refs: §3, §10, §13
+spec:
+  description: >-
+    Check whether a 1NC shell's steps connect. Deterministic checks use chain_completeness from E21 to find
+    missing steps, analytic-only steps and ordering problems. A model assessment (prompt audit.step_fit)
+    looks at adjacent steps' tags and underlined/highlighted text for mismatches, such as uniqueness about
+    one bill paired with a link about political capital for another, an internal link that does not reach
+    the impact, or a "will not pass now" uniqueness card that makes the DA non-unique. Results are
+    FileAuditFindings with severity, affected steps, references, explanation, basis (DETERMINISTIC or
+    MODEL_ASSESSED) and confidence. Boundaries: comparing cards against alternatives, including recency and
+    stale uniqueness, is t03.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, prompts]
+    forbidden:
+      - Speculative findings below the confidence floor
+      - Persisting nodes, edges or findings whose card/node references do not resolve
+      - Model calls without a registered prompt_id/semver and persisted GeneratedArtifactMetadata
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e23-t01-shell-identification
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e21-t04-graph-queries
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        FileAuditFinding (finding_type
+        MISSING_STEP|MISMATCHED_STEP|BROKEN_CHAIN|ANALYTIC_ONLY_STEP|ORDER_ISSUE| NON_UNIQUE_DIRECTION,
+        severity, step roles, node/card refs, explanation, basis, confidence) validates.
+    - id: ac2
+      description: >-
+        Deterministic checks flag missing uniqueness, link, internal link or impact, analytic-only steps and
+        out-of-order steps without any model call.
+    - id: ac3
+      description: >-
+        Model-assessed fit sees only tags and underlined/highlighted text, and explanations reference span
+        ids; findings below 0.6 confidence are suppressed.
+    - id: ac4
+      description: >-
+        Seeded-defect fixtures (internal link card removed, uniqueness card swapped from another DA) produce
+        the expected findings, and the unmodified shells produce none of those types.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e23-t02-coherence-checks-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+spec:
+  description: >-
+    Schema, deterministic checks, model-assessed fit, then seeded-defect tests.
+  goalRef:
+    name: v3-e23-t02-coherence-checks
+  graph:
+    nodes:
+      - id: schema
+        kind: Task
+        name: FileAuditFinding schema
+        description: >-
+          Pydantic model and enums.
+        outputs: [packages/debate_core/src/debate_core/arguments/audit/findings.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Finding schema tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/audit/test_coherence.py, -k, schema]
+      - id: deterministic
+        kind: Task
+        name: Deterministic coherence checks
+        description: >-
+          Map chain_completeness results and step metadata to findings.
+        dependsOn: [schema]
+        outputs: [packages/debate_core/src/debate_core/arguments/audit/coherence.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Deterministic check tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/audit/test_coherence.py
+              - "-k"
+              - deterministic
+      - id: step-fit
+        kind: Task
+        name: Model-assessed step fit
+        description: >-
+          Prompt audit.step_fit over adjacent step pairs with span-referenced explanations and a confidence
+          floor.
+        dependsOn: [schema]
+        outputs: [prompts/audit/step_fit.yaml]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Step-fit prompt registered
+            path: prompts/audit/step_fit.yaml
+            contentMatch: "prompt_id: audit.step_fit"
+          - type: test_passes
+            name: Step fit tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/audit/test_coherence.py, -k, fit]
+      - id: seeded-tests
+        kind: Task
+        name: Seeded-defect tests
+        description: >-
+          Build seeded variants of fixture DAs in tests and assert findings; type check.
+        dependsOn: [deterministic, step-fit]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Seeded-defect tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/audit/test_coherence_fixtures.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

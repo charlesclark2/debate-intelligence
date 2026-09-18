@@ -1,0 +1,139 @@
+# TASK v3-e25-t02-results-analytics — Results analytics
+# Epic: E25 Scouting Reports | Release: v3.4 (Scouting reports) | Major: V3
+# Architecture refs: §3 V3 scouting story, §7 TournamentResult, §13 Opponent intelligence, §14
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e25-t02-results-analytics
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+  annotations:
+    debate/title: Results analytics
+    debate/architecture-refs: §3, §7, §13, §14
+spec:
+  description: >-
+    Compute deterministic results analytics for a resolved team and season from ingested public Tabroom
+    TournamentResult records: prelim win-loss record, elimination depth reached per tournament (e.g.
+    octas, quarters), side splits (Aff/Neg in Policy and LD; Pro/Con and first/second speaking in PF where
+    public), and opponent trends (record vs. common opponents, results by judge panel size when public).
+    Every statistic carries the list of TournamentResult ids it aggregates so any number can be traced
+    back to source_url and retrieved_at. Pure Python aggregation, no LLM. This task does not summarize
+    disclosures (t01), assemble or cache reports (t03), or ingest results (E24); it never infers a side
+    that the source did not publish (side_if_public is null means excluded from side splits, not guessed).
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application]
+    forbidden:
+      - LLM calls anywhere in results analytics
+      - Guessing unpublished sides, ballots or speaker points
+      - Statistics without backing TournamentResult ids
+      - Reading Tabroom directly; read only through the OpponentRepository port
+      - Importing boto3/typer/fastapi in debate_core
+  context:
+    - kind: TaskRef
+      name: v3-e24-t04-identity-resolution
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        compute_results_analytics(team_id, season) returns ResultsAnalytics with prelim record, elim
+        depth per tournament, side splits and opponent trends, each value carrying source result ids.
+    - id: ac2
+      description: >-
+        Results with side_if_public null are excluded from side splits and reported as an
+        "unknown side" count rather than assigned a side.
+    - id: ac3
+      description: >-
+        Elim depth normalizes Tabroom round labels (triples, doubles, octas, quarters, semis, finals and
+        bye/walkover entries) using a tested mapping, and byes are not counted as wins in prelim record.
+    - id: ac4
+      description: >-
+        On a hand-computed fixture (>=3 teams, >=6 tournaments, all three formats) every statistic
+        matches the expected values exactly.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e25-t02-results-analytics-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+spec:
+  description: >-
+    Model the analytics output, normalize round labels, implement aggregations, then verify against a
+    hand-computed fixture.
+  goalRef:
+    name: v3-e25-t02-results-analytics
+  graph:
+    nodes:
+      - id: analytics-schema
+        kind: Task
+        name: ResultsAnalytics models
+        description: >-
+          Pydantic models for ResultsAnalytics, RecordStat, ElimDepth, SideSplit and OpponentTrend, each
+          with a required non-empty source_result_ids field.
+        outputs: [packages/debate_core/src/debate_core/domain/results_analytics.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Analytics models exist
+            path: packages/debate_core/src/debate_core/domain/results_analytics.py
+            contentMatch: "class ResultsAnalytics"
+      - id: round-label-normalization
+        kind: Task
+        name: Tabroom round-label normalization
+        description: >-
+          Map public round labels (R1..R7, "Dbls", "Octos", "Qtrs", "Sems", "Finals", byes, walkovers)
+          to an ordered ElimRound enum per format, with unknown labels surfaced rather than dropped.
+        dependsOn: [analytics-schema]
+        outputs: [packages/debate_core/src/debate_core/application/opponent_intel/round_labels.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Round-label mapping tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_round_labels.py]
+      - id: aggregations
+        kind: Task
+        name: Record, elim, side and opponent aggregations
+        description: >-
+          Implement compute_results_analytics over TournamentResult records loaded via the repository
+          port, grouping by canonical team_id and season.
+        dependsOn: [round-label-normalization]
+        outputs: [packages/debate_core/src/debate_core/application/opponent_intel/results_analytics.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Aggregation unit tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_results_analytics.py, -k, aggregate]
+      - id: fixture-verification
+        kind: Task
+        name: Hand-computed fixture and quality gates
+        description: >-
+          Build an anonymized fixture of public results with expected statistics computed by hand and
+          assert exact equality; run pyright on debate_core.
+        dependsOn: [aggregations]
+        outputs: [tests/fixtures/scouting/results_expected.json]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fixture statistics match exactly
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_results_analytics.py, -k, fixture]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

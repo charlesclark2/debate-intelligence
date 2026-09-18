@@ -1,0 +1,146 @@
+# TASK v2-e17-t01-library-model — Library data model
+# Epic: E17 Card Library | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §3 V2 save/edit/export, §7 (Card, CardSpan, AppTable, revisions), §12 Card Library, ADR-002
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e17-t01-library-model
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+  annotations:
+    debate/title: Library data model
+    debate/architecture-refs: §3, §7, §12, ADR-002
+spec:
+  description: >-
+    Model the card library in the domain and AppTable: Folder (hierarchical, owner- or org-scoped), Tag
+    (user-defined, e.g. "NHI solvency", "politics DA - link"), CardRevision (immutable snapshot of tag,
+    cite, evidence spans, verification_status, revision number, editor and reason), CardPlacement (card in
+    folder) and ShareGrant (folder shared to an organization with a permission level). Document access
+    patterns and PK/SK/GSI shapes in docs/data/, extend the E11 repository ports and DynamoDB adapters, and
+    reuse E11 t05 optimistic concurrency so a card revision write never silently overwrites a student
+    edit. This task does NOT expose endpoints (t02), sharing policy/permissions logic (t06), revision diff
+    UI (t04) or exports (t05). Revisions preserve snapshot_id, offsets and hashes; evidence text is never
+    stored in a form that bypasses verification.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, docs/data]
+    forbidden:
+      - Table scans for any documented library access pattern
+      - Mutable revisions (a CardRevision is append-only once written)
+      - Dropping snapshot_id/offset/hash provenance from any revision
+      - Importing boto3 in domain/application layers
+      - Storing student display names or emails on library items beyond owner_id
+  context:
+    - kind: TaskRef
+      name: v2-e11-t05-optimistic-concurrency
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Pydantic entities Folder, Tag, CardRevision, CardPlacement and ShareGrant exist with organization_id
+        on every item and validators (e.g. folder depth <= 5, tag name normalization).
+    - id: ac2
+      description: >-
+        docs/data/library-access-patterns.md lists each access pattern (list folder contents, cards by tag,
+        revisions of card, folders shared to org, etc.) with the key/GSI that serves it.
+    - id: ac3
+      description: >-
+        Saving a card edit writes a new CardRevision and bumps Card.revision under a conditional write; a
+        concurrent edit with a stale revision raises RevisionConflict and writes nothing.
+    - id: ac4
+      description: >-
+        The shared repository contract suite passes for both in-memory and DynamoDB (moto/DynamoDB Local)
+        implementations of the new ports.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e17-t01-library-model-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+spec:
+  description: >-
+    Design access patterns before code, then entities and ports, then DynamoDB adapters with conditional
+    writes, and prove both implementations with the contract suite.
+  goalRef:
+    name: v2-e17-t01-library-model
+  graph:
+    nodes:
+      - id: access-patterns
+        kind: Task
+        name: Library access-pattern design
+        description: >-
+          Enumerate library access patterns and choose keys (e.g. PK=USER#id SK=FOLDER#id, PK=CARD#id
+          SK=REV#000012, GSI1 on ORG#id#TAG#slug); note any new GSI needed on AppTable.
+        outputs: [docs/data/library-access-patterns.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Access-pattern document exists
+            path: docs/data/library-access-patterns.md
+            contentMatch: "REV#"
+      - id: entities-ports
+        kind: Task
+        name: Library entities and repository ports
+        description: >-
+          Domain entities and FolderRepository, TagRepository, CardRevisionRepository and ShareGrantRepository
+          ports, plus in-memory implementations.
+        dependsOn: [access-patterns]
+        outputs:
+          - packages/debate_core/src/debate_core/domain/library.py
+          - packages/debate_core/src/debate_core/application/ports/library.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Entity validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_library.py]
+      - id: dynamodb-adapters
+        kind: Task
+        name: DynamoDB adapters with conditional revision writes
+        description: >-
+          Adapters using TransactWriteItems to append CardRevision and bump Card.revision atomically with a
+          ConditionExpression on the expected revision; Terraform GSI additions if required.
+        dependsOn: [entities-ports]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/aws/dynamodb_library.py
+          - infrastructure/modules/dynamodb/app_table.tf
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Conflict and transaction tests pass on moto
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_dynamodb_library.py]
+          - type: command_succeeds
+            name: Dev Terraform validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: contract-suite
+        kind: Task
+        name: Contract tests and quality gates
+        description: Extend the repository contract suite to library ports for both implementations.
+        dependsOn: [dynamodb-adapters]
+        outputs: [tests/contracts/test_library_repositories.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Library contract suite passes for all implementations
+            command: uv
+            args: [run, pytest, tests/contracts/test_library_repositories.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

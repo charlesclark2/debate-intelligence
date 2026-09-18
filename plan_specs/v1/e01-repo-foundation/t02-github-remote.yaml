@@ -1,0 +1,139 @@
+# TASK v1-e01-t02-github-remote — Create GitHub repository, push, and protect main
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §4 (GitHub Actions + ECR), §17, §18
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t02-github-remote
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: Create GitHub repository, push, and protect main
+    debate/architecture-refs: §4, §17, §18
+spec:
+  description: >-
+    Publish the local repository to a private GitHub repo and put the collaboration guardrails in
+    place: branch protection on main (PR required, required status checks, no force-push, no
+    deletion), CODEOWNERS, PR and issue templates that reference the task spec path, and a
+    CONTRIBUTING.md documenting the trunk-based `task/<task-name>` branch convention from
+    plan_specs/README.md. Required status-check names are reserved here but the workflow that
+    produces them is t04; this task does not create CI, tooling (t03) or ADR docs (t06).
+  priority: 2
+  constraints:
+    packages: [.github, CONTRIBUTING.md, repo settings]
+    forbidden:
+      - Public repository visibility while student or scouting data could land in fixtures
+      - Committing secrets, tokens or .env files (enable GitHub secret scanning/push protection)
+      - Allowing force-push or direct pushes to main
+  context:
+    - kind: TaskRef
+      name: v1-e01-t01-init-local-repo
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A private GitHub repository exists with the full local history pushed and `origin` configured.
+    - id: ac2
+      description: >-
+        main requires a pull request with at least one approval (owner may self-merge via CODEOWNERS
+        bypass only if documented), blocks force-push and deletion, and lists the CI check names
+        reserved for t04.
+    - id: ac3
+      description: >-
+        .github/CODEOWNERS, .github/pull_request_template.md (with a "Spec:" field for the PlanSpec path)
+        and issue templates for bug and task exist on main.
+    - id: ac4
+      description: >-
+        CONTRIBUTING.md documents the branch naming, PR flow and spec-status update rule from
+        plan_specs/README.md.
+    - id: ac5
+      description: >-
+        Secret scanning and push protection are enabled on the repository.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t02-github-remote-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Create the remote and push, add repository hygiene files, then apply protection rules and verify
+    them with the gh CLI.
+  goalRef:
+    name: v1-e01-t02-github-remote
+  graph:
+    nodes:
+      - id: create-remote
+        kind: Task
+        name: Create private repo and push history
+        description: >-
+          `gh repo create --private`, add origin, push main, and confirm visibility is private.
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Remote origin is configured
+            command: git
+            args: [remote, get-url, origin]
+          - type: command_succeeds
+            name: Repository is private
+            command: gh
+            args: [repo, view, --json, visibility, --jq, 'select(.visibility == "PRIVATE")']
+      - id: hygiene-files
+        kind: Task
+        name: CODEOWNERS, templates and CONTRIBUTING
+        description: >-
+          Add CODEOWNERS, a PR template with Spec/Criteria/Status checkboxes, bug and task issue
+          templates, and CONTRIBUTING.md describing task branches and spec status updates.
+        dependsOn: [create-remote]
+        outputs:
+          - .github/CODEOWNERS
+          - .github/pull_request_template.md
+          - .github/ISSUE_TEMPLATE/task.yml
+          - .github/ISSUE_TEMPLATE/bug.yml
+          - CONTRIBUTING.md
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: PR template asks for the spec path
+            path: .github/pull_request_template.md
+            contentMatch: "Spec:"
+          - type: artifact_exists
+            name: CODEOWNERS exists
+            path: .github/CODEOWNERS
+          - type: artifact_exists
+            name: CONTRIBUTING documents task branches
+            path: CONTRIBUTING.md
+            contentMatch: "task/<task-name>"
+      - id: branch-protection
+        kind: Task
+        name: Protect main and enable secret scanning
+        description: >-
+          Apply a ruleset (or classic protection) on main: PR required, required checks named
+          `lint`, `typecheck`, `test`, `import-boundaries`, `spec-validate`, no force-push/deletion;
+          enable secret scanning and push protection.
+        dependsOn: [create-remote]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Branch protection is readable for main
+            command: gh
+            args: [api, "repos/{owner}/{repo}/branches/main/protection"]
+          - type: custom
+            name: Protection verified by attempting a direct push
+            description: >-
+              Owner confirms a direct `git push origin main` from a scratch commit is rejected and a
+              force-push is refused.
+status:
+  phase: Pending

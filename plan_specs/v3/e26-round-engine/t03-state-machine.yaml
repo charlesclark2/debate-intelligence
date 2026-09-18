@@ -1,0 +1,153 @@
+# TASK v3-e26-t03-state-machine — Round state machine
+# Epic: E26 Round Engine Core | Release: v3.5 (Round engine core) | Major: V3
+# Architecture refs: §2, §7 Round/RoundEvent, §13 Round simulator, §15, §17 V3.5
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e26-t03-state-machine
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+  annotations:
+    debate/title: Round state machine
+    debate/architecture-refs: §2, §7, §13, §15, §17
+spec:
+  description: >-
+    Implement RoundSimulationService's core: a deterministic state machine that drives a Round through
+    its FormatRules segments. Commands (StartRound, BeginSegment, SubmitSpeech, SubmitCxExchange,
+    StartPrep, StopPrep, EndSegment, AbandonRound) are validated against the current state and format
+    (right speaker, right segment, clock limits) and, when accepted, append RoundEvents through the
+    RoundRepository; state is always the fold of the event log, so replay from events reproduces the
+    same state and a round can be resumed after a crash. Exposes thin API routes to create a round, get
+    its state, post a command and read events. This is not a chat thread: every speech or CX turn is an
+    event. Out of scope: generating opponent content (E27/E28), flow updates from content (t05), judge
+    evaluation (t04/E28), and UI (E27/E28).
+  priority: 1
+  constraints:
+    packages: [debate_core.rounds, debate_core.application, debate_api]
+    forbidden:
+      - Stateless chat-only round handling; all state derives from persisted RoundEvents
+      - Nondeterminism in the reducer (wall-clock reads, random) outside injected Clock/IdFactory ports
+      - Business logic in debate_api routes
+      - Importing boto3/fastapi in debate_core
+      - Live AWS calls in tests
+  context:
+    - kind: TaskRef
+      name: v3-e26-t01-round-model
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e26-t02-format-rules
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t03-authn-authz
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Scripted full rounds for Policy, LD and PF advance through every segment in FormatRules order
+        and finish in status COMPLETE with the expected event count.
+    - id: ac2
+      description: >-
+        Invalid commands (wrong speaker, speech during CX, exceeding prep pool, advancing a COMPLETE
+        round) are rejected with typed errors and append no event.
+    - id: ac3
+      description: >-
+        Replaying the persisted event log reproduces a state equal to the live state for every scripted
+        round, and a property-based test over random valid command sequences confirms replay equality.
+    - id: ac4
+      description: >-
+        Concurrent commands on the same round resolve via the repository sequence conflict, returning
+        409 to the losing API caller.
+    - id: ac5
+      description: >-
+        POST /v1/rounds returns 201, GET /v1/rounds/{id} returns derived state, POST
+        /v1/rounds/{id}/commands returns 200 or 422, and GET /v1/rounds/{id}/events pages events; all are
+        owner-scoped.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e26-t03-state-machine-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+spec:
+  description: >-
+    Define commands and derived state, implement the pure reducer and validators, wrap them in the
+    service with persistence and replay, then expose API routes.
+  goalRef:
+    name: v3-e26-t03-state-machine
+  graph:
+    nodes:
+      - id: commands-and-state
+        kind: Task
+        name: Round commands and derived RoundState
+        description: >-
+          Command models, RoundState (current segment, clocks, prep remaining, status) and typed
+          RoundRuleViolation errors.
+        outputs: [packages/debate_core/src/debate_core/rounds/commands.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Commands module exists
+            path: packages/debate_core/src/debate_core/rounds/commands.py
+            contentMatch: "class SubmitSpeech"
+      - id: reducer
+        kind: Task
+        name: Pure reducer and command validation
+        description: >-
+          decide(state, command, rules) -> events and evolve(state, event) -> state, with injected Clock;
+          scripted round fixtures for all three formats.
+        dependsOn: [commands-and-state]
+        outputs:
+          - packages/debate_core/src/debate_core/rounds/state_machine.py
+          - tests/fixtures/rounds/scripted_rounds.yaml
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Scripted rounds and rejection tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_state_machine.py]
+      - id: service-and-replay
+        kind: Task
+        name: RoundSimulationService with persistence and replay
+        description: >-
+          Load events, fold, decide, append with expected sequence; replay_round and resume; hypothesis
+          property test for replay equality.
+        dependsOn: [reducer]
+        outputs: [packages/debate_core/src/debate_core/application/rounds/round_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Service and replay property tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_round_service.py]
+      - id: api-routes
+        kind: Task
+        name: Round API routes
+        description: >-
+          FastAPI routes for create, get state, post command and list events, mapping violations to 422
+          and sequence conflicts to 409; regenerate OpenAPI.
+        dependsOn: [service-and-replay]
+        outputs: [packages/debate_api/src/debate_api/routes/rounds.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Round route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_rounds.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

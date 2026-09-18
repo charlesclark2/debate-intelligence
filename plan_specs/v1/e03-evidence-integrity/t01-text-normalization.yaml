@@ -1,0 +1,139 @@
+# TASK v1-e03-t01-text-normalization — Deterministic, versioned text normalization
+# Epic: E03 Evidence Integrity & Verification Engine | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §8 steps 2 and 5, ADR-006, §16 (unit tests for normalization), §20 step 2
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e03-t01-text-normalization
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+  annotations:
+    debate/title: Deterministic, versioned text normalization
+    debate/architecture-refs: §8, ADR-006, §16, §20 step 2
+spec:
+  description: >-
+    Implement the pure normalizer every evidence comparison depends on: NFC Unicode normalization,
+    whitespace and newline collapsing rules, an explicit policy for curly quotes, dashes, soft hyphens
+    and zero-width characters, and preserved paragraph boundaries with stable paragraph IDs (p0001...)
+    so the model can reference paragraphs rather than rewrite text. Output is a NormalizedText value
+    carrying normalizer_version and a bidirectional offset map between raw extracted text and
+    normalized text. The policy is frozen per version: any rule change bumps NORMALIZER_VERSION and
+    old versions stay available for re-verification. Hashing/snapshots are t02 and span extraction t03.
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence]
+    forbidden:
+      - Any I/O, randomness, locale- or platform-dependent behavior in the normalizer
+      - Changing a released normalization rule without bumping NORMALIZER_VERSION
+      - Rules that alter words or letters (normalization may change only whitespace and listed code points)
+  context:
+    - kind: TaskRef
+      name: v1-e02-t01-domain-entities
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t06-import-boundary-guard
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        normalize(text, version) is idempotent (normalize(normalize(x)) == normalize(x)) and
+        deterministic, proven by hypothesis property tests over arbitrary Unicode input.
+    - id: ac2
+      description: >-
+        Paragraph IDs are stable: inserting whitespace-only changes inside a paragraph does not change
+        any paragraph ID or paragraph count.
+    - id: ac3
+      description: >-
+        The offset map converts any normalized [start, end) range back to the raw-text range containing
+        the same characters, verified by property tests.
+    - id: ac4
+      description: >-
+        The written policy (docs/evidence/normalization.md) lists every transformed code point, and a
+        golden test pins the output of v1 on a corpus of news, PDF-extracted and think-tank paragraphs.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e03-t01-text-normalization-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+spec:
+  description: >-
+    Write the policy, implement character rules, then paragraphs and offset mapping, then property
+    and golden tests.
+  goalRef:
+    name: v1-e03-t01-text-normalization
+  graph:
+    nodes:
+      - id: policy-doc
+        kind: Task
+        name: Normalization policy v1
+        description: >-
+          Document each rule (NFC, whitespace classes, quote/dash folding decision, soft hyphen and
+          zero-width removal, paragraph break detection) with rationale.
+        outputs: [docs/evidence/normalization.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy document exists
+            path: docs/evidence/normalization.md
+            contentMatch: "NORMALIZER_VERSION"
+      - id: char-rules
+        kind: Task
+        name: Character-level normalizer
+        description: >-
+          Versioned rule table and normalize_chars() implemented with a raw→normalized index map built
+          as rules apply.
+        dependsOn: [policy-doc]
+        outputs: [packages/debate_core/src/debate_core/evidence/normalization.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Character rule tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_normalization.py, -k, chars]
+      - id: paragraphs-offsets
+        kind: Task
+        name: Paragraph segmentation and offset map
+        description: >-
+          Split normalized text into paragraphs with stable IDs and expose NormalizedText with
+          to_raw_range()/to_normalized_range().
+        dependsOn: [char-rules]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Paragraph and offset tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_normalization.py, -k,
+                   "paragraph or offset"]
+      - id: property-golden
+        kind: Task
+        name: Property-based and golden tests
+        description: >-
+          hypothesis idempotence/determinism/offset round-trip tests and a golden corpus under
+          tests/fixtures/normalization/.
+        dependsOn: [paragraphs-offsets]
+        outputs: [tests/fixtures/normalization/, packages/debate_core/tests/evidence/test_normalization_props.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Property and golden tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence]
+          - type: command_succeeds
+            name: pyright strict passes
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

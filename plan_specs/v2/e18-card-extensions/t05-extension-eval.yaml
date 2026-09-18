@@ -1,0 +1,136 @@
+# TASK v2-e18-t05-extension-eval — Extension evaluation
+# Epic: E18 Card Extensions | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §10 (prompt/version governance), §16 LLM evaluations, §19 (bad debate habits)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e18-t05-extension-eval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+  annotations:
+    debate/title: Extension evaluation
+    debate/architecture-refs: §10, §16, §19
+spec:
+  description: >-
+    Build the evaluation that gates the card_components, card_extensions and card_cx prompts. A coach
+    rubric scores each output on accuracy (does it say what the card says), grounding (TEXT_SUPPORTED items
+    truly supported; inference labeled), and usefulness (would a debater say this in a rebuttal or CX), on a
+    1-4 scale, over an eval set of ~30 cards spanning Policy (NHI aff/neg), LD (space colonization) and PF
+    (data-center moratorium). Automatic metrics run offline on recorded outputs: grounding violation rate
+    (must be 0), label accuracy for support type, word-limit compliance. Results plug into the v1-e09-t04
+    promotion gate so a new prompt or model version is promoted only on non-regression. This task does NOT
+    change prompts itself (fixes go through t02/t03) and is not a general V2 eval framework.
+  priority: 2
+  constraints:
+    packages: [evals/card_extensions, debate_core.arguments]
+    forbidden:
+      - Live model calls in the CI gate (recorded candidate outputs + replay router only)
+      - Promoting a prompt/model with any grounding violation on the eval set
+      - Storing student rater names in the dataset (anonymous rater ids)
+      - Using "newer model" as sufficient reason for promotion
+  context:
+    - kind: TaskRef
+      name: v2-e18-t03-extension-generator
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e09-t04-prompt-promotion-gate
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        evals/card_extensions contains ~30 eval cards with components labeled by Charlie and a RUBRIC.md
+        defining accuracy/grounding/usefulness levels with examples.
+    - id: ac2
+      description: >-
+        Automatic metrics (grounding violation rate, support-type accuracy, word-limit compliance) are computed
+        offline from recorded outputs by `uv run python -m evals.card_extensions.run`.
+    - id: ac3
+      description: >-
+        Coach rubric scores for the baseline prompt versions are recorded, with mean >= 3.0 on accuracy and
+        grounding before v2.3 ships.
+    - id: ac4
+      description: >-
+        The promotion gate is configured for the three prompts: a candidate fails if grounding violations > 0
+        or any mean rubric/automatic metric regresses beyond tolerance vs baseline.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e18-t05-extension-eval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+spec:
+  description: >-
+    Assemble the eval set and rubric, implement automatic metrics, run the coach scoring session for the
+    baseline, then register the prompts with the promotion gate.
+  goalRef:
+    name: v2-e18-t05-extension-eval
+  graph:
+    nodes:
+      - id: eval-set
+        kind: Task
+        name: Eval set and rubric
+        description: Select ~30 cards across events, label components, write the rubric with anchored examples.
+        outputs:
+          - evals/card_extensions/cards.jsonl
+          - evals/card_extensions/RUBRIC.md
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Rubric exists
+            path: evals/card_extensions/RUBRIC.md
+            contentMatch: "Grounding"
+      - id: auto-metrics
+        kind: Task
+        name: Automatic metrics harness
+        description: >-
+          Record baseline outputs via the replay router, compute grounding violations, support-type accuracy
+          and word-limit compliance, and write a report.
+        dependsOn: [eval-set]
+        outputs: [evals/card_extensions/run.py, evals/card_extensions/recorded/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Metric unit tests pass
+            command: uv
+            args: [run, pytest, evals/card_extensions/tests]
+      - id: coach-scoring
+        kind: Task
+        name: Coach rubric scoring session
+        description: Charlie (plus an assistant coach if available) scores baseline outputs in a scoring sheet.
+        dependsOn: [auto-metrics]
+        outputs: [evals/card_extensions/scores/baseline.jsonl]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: custom
+            name: Coach rubric scores recorded and reviewed
+            description: >-
+              Charlie scores all baseline outputs, confirms accuracy and grounding means >= 3.0, and signs off
+              in the PR.
+      - id: gate-config
+        kind: Task
+        name: Promotion gate registration
+        description: >-
+          Register card_components, card_extensions and card_cx with the v1 promotion gate thresholds and
+          commit the baseline.
+        dependsOn: [coach-scoring]
+        outputs: [evals/card_extensions/gate.yaml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Promotion gate passes for baseline prompts
+            command: uv
+            args: [run, python, -m, evals.promotion_gate, --suite, card_extensions]
+status:
+  phase: Pending

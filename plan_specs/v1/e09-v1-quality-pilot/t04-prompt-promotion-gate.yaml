@@ -1,0 +1,143 @@
+# TASK v1-e09-t04-prompt-promotion-gate — Prompt/model promotion gate
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Architecture refs: §10 Prompt/version governance, §16 (model upgrades require eval comparison)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e09-t04-prompt-promotion-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+  annotations:
+    debate/title: Prompt/model promotion gate
+    debate/architecture-refs: §10, §16
+spec:
+  description: >-
+    Make "newer model" or "edited prompt" insufficient on its own. A promotion manifest
+    (config/promoted.yaml) pins the prompt versions and routed model per task class that production uses.
+    A GitHub Actions job triggers on PRs that change prompts/, config/model_routing.yaml or
+    config/promoted.yaml: it runs the t03 harness for the candidate (from committed replay cassettes the
+    author recorded) and the baseline, compares metrics with configured non-regression thresholds
+    (unsupported_text_rate must stay 0; underline recall and selection F1 may not drop more than 2 points;
+    per-event floors), and posts a comparison table to the job summary. The job is a required check.
+    Boundaries: does not record cassettes in CI and does not choose models; harness logic stays in t03.
+  priority: 2
+  constraints:
+    packages: [.github/workflows, evals, config/promoted.yaml, scripts]
+    forbidden:
+      - Live model calls or AWS credentials in the CI promotion job
+      - Promoting a candidate with unsupported_text_rate > 0
+      - Changing thresholds and prompts in the same PR without coach approval
+  context:
+    - kind: TaskRef
+      name: v1-e09-t03-span-eval-harness
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t04-ci-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t02-github-remote
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        config/promoted.yaml pins prompt_id versions and model per task class, and the PromptRegistry
+        "latest promoted" resolution reads it.
+    - id: ac2
+      description: >-
+        scripts/compare_evals.py exits non-zero when any threshold regresses and prints a Markdown comparison
+        table (baseline vs candidate per metric and event).
+    - id: ac3
+      description: >-
+        The prompt-promotion workflow runs only on changes to prompts/ or model/promotion config, uses replay
+        cassettes, and is marked a required status check on main.
+    - id: ac4
+      description: >-
+        A PR changing a prompt without new cassettes fails with MissingFixtureError guidance rather than
+        silently passing.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e09-t04-prompt-promotion-gate-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+spec:
+  description: >-
+    Promotion manifest, comparison script and thresholds, then the workflow and branch protection.
+  goalRef:
+    name: v1-e09-t04-prompt-promotion-gate
+  graph:
+    nodes:
+      - id: promotion-manifest
+        kind: Task
+        name: Promotion manifest and registry resolution
+        description: >-
+          Add config/promoted.yaml and make PromptRegistry "latest promoted" resolve from it.
+        outputs: [config/promoted.yaml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Promoted resolution tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/models/test_prompt_registry.py
+              - -k
+              - promoted
+      - id: compare-script
+        kind: Task
+        name: Eval comparison script and thresholds
+        description: >-
+          Compare candidate vs baseline reports against config/eval_thresholds.yaml and emit a Markdown table.
+        dependsOn: [promotion-manifest]
+        outputs: [scripts/compare_evals.py, config/eval_thresholds.yaml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Comparison script tests pass
+            command: uv
+            args: [run, pytest, evals/tests/test_compare_evals.py]
+      - id: workflow
+        kind: Task
+        name: Prompt-promotion GitHub Actions workflow
+        description: >-
+          Path-filtered workflow running baseline and candidate evals on replay cassettes and writing the
+          comparison to the job summary.
+        dependsOn: [compare-script]
+        outputs: [.github/workflows/prompt-promotion.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Promotion workflow exists
+            path: .github/workflows/prompt-promotion.yml
+            contentMatch: "compare_evals"
+      - id: required-check
+        kind: Task
+        name: Required status check on main
+        description: >-
+          Add the job as a required check in main's branch protection and demonstrate a failing and a passing PR.
+        dependsOn: [workflow]
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Branch protection lists the promotion check
+            command: gh
+            args: [api, "repos/{owner}/{repo}/branches/main/protection/required_status_checks"]
+          - type: custom
+            name: Demonstration PRs
+            description: >-
+              A regressing test PR is blocked and a non-regressing one passes; links recorded in the task PR.
+status:
+  phase: Pending

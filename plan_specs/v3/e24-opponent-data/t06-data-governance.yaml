@@ -1,0 +1,147 @@
+# TASK v3-e24-t06-data-governance — Opponent data governance review
+# Epic: E24 Opponent Data Integrations | Release: v3.3 (Opponent data integrations) | Major: V3
+# Architecture refs: §13 Opponent intelligence, §14 student safety and minimization, §19 privacy/ethics
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e24-t06-data-governance
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+  annotations:
+    debate/title: Opponent data governance review
+    debate/architecture-refs: §13, §14, §19
+spec:
+  description: >-
+    Write and approve the policy that governs opponent data before any ingestion runs. It names permitted
+    sources and interfaces (OpenCaselist documented API with the team's authorized account; Tabroom public
+    results pages), prohibited ones (authenticated Tabroom, private caselists, social media, bulk crawling),
+    a field-level minimization table (debater names only as published and only when needed for
+    disambiguation; no contact details, ages, grades, speaker points or judge names by default), retention,
+    and a removal process with a response time. Each source gets a dated terms-of-service/API-terms review.
+    The policy is enforced in code: ingestion is disabled unless settings name the approved policy version
+    and the source is enabled. Approval comes from the coach and a school administrator, informed by the V2
+    privacy/legal review. Boundaries: removal tooling itself is t05.
+  priority: 1
+  constraints:
+    packages: [docs/governance, debate_core.application]
+    forbidden:
+      - Ingesting opponent data before the policy is approved
+      - >-
+        Accessing private or authenticated opponent data without authorization, or circumventing access
+        controls, terms of service or rate limits
+      - Collecting fields not listed in the minimization table
+  context:
+    - kind: TaskRef
+      name: v2-e19-t04-privacy-legal-review
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/governance/opponent-data-policy.md states permitted and prohibited sources/interfaces,
+        purposes, org scoping and a semver policy version.
+    - id: ac2
+      description: >-
+        A minimization table lists every field allowed per entity with justification, and retention is
+        defined (current and previous season, then purge).
+    - id: ac3
+      description: >-
+        A dated terms review for OpenCaselist and for Tabroom records reviewer, terms/API documentation
+        consulted, rate limits and conclusions.
+    - id: ac4
+      description: >-
+        The removal process defines who may request removal (students, parents, coaches, other schools), a
+        response time of at most 5 school days, and propagation to derived stores and reports.
+    - id: ac5
+      description: >-
+        OpponentDataPolicyGate blocks ingestion unless the approved version in settings matches the policy
+        document and the source is enabled, with unit tests.
+    - id: ac6
+      description: >-
+        The coach and a school administrator have signed off, referencing the V2 privacy/legal review.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e24-t06-data-governance-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+spec:
+  description: >-
+    Draft policy and minimization table, review each source's terms, implement the enforcement gate, then
+    obtain sign-off.
+  goalRef:
+    name: v3-e24-t06-data-governance
+  graph:
+    nodes:
+      - id: policy
+        kind: Task
+        name: Policy and minimization table
+        description: >-
+          Write the policy, minimization table, retention and removal process.
+        outputs: [docs/governance/opponent-data-policy.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Opponent data policy exists
+            path: docs/governance/opponent-data-policy.md
+            contentMatch: "Minimization"
+      - id: source-reviews
+        kind: Task
+        name: Source terms reviews
+        description: >-
+          Review OpenCaselist and Tabroom terms and API documentation; record findings and rate limits.
+        outputs: [docs/governance/source-reviews/]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: OpenCaselist review exists
+            path: docs/governance/source-reviews/opencaselist.md
+            contentMatch: "Reviewed"
+          - type: artifact_exists
+            name: Tabroom review exists
+            path: docs/governance/source-reviews/tabroom.md
+            contentMatch: "Reviewed"
+      - id: enforcement-gate
+        kind: Task
+        name: Policy enforcement gate
+        description: >-
+          OpponentDataPolicyGate reading the policy version and per-source enablement from settings, used by
+          all adapters.
+        dependsOn: [policy]
+        outputs: [packages/debate_core/src/debate_core/application/opponent_policy.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Policy gate tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_opponent_policy_gate.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+      - id: sign-off
+        kind: Task
+        name: Approval
+        description: >-
+          Present the policy and reviews to the coach and a school administrator and record approval.
+        dependsOn: [policy, source-reviews, enforcement-gate]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Coach and school administrator approve the policy
+            description: >-
+              Coach and a school administrator sign the policy version, noting any conditions from the V2
+              privacy/legal review, and the approval is recorded in the policy document.
+status:
+  phase: Pending

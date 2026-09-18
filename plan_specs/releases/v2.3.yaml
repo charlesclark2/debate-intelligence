@@ -1,0 +1,107 @@
+# RELEASE v2.3 — Card library & extensions
+# Major version: V2. Epics: E17, E18
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v2-3
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.3
+  annotations:
+    debate/title: v2.3 — Card library & extensions
+spec:
+  description: >-
+    Saved card library with revisions, folders, sharing and bulk export; pasted cards produce labeled
+    extension bullets and CX questions.
+  priority: 8
+  acceptanceCriteria:
+  - id: epic-e17
+    description: >-
+      Epic E17 (Card Library) goal is Succeeded.
+  - id: epic-e18
+    description: >-
+      Epic E18 (Card Extensions) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v2.3.0 is pushed and CHANGELOG.md has a v2.3 section.
+  - id: gate
+    description: >-
+      Gate release-v2-3-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v2-3-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.3
+spec:
+  gateType: review
+  description: >-
+    Release review for v2.3 (Card library & extensions): demo the release goal end to end, confirm CI
+    green on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v2-3-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.3
+spec:
+  description: >-
+    Release plan for v2.3: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v2-3
+  series: v2
+  version: v2.3
+  graph:
+    nodes:
+    - id: e17
+      kind: External
+      name: Epic E17 — Card Library
+      inputs:
+        goalRef: v2-e17-card-library
+        specRef: plan_specs/v2/e17-card-library/epic.yaml
+    - id: e18
+      kind: External
+      name: Epic E18 — Card Extensions
+      inputs:
+        goalRef: v2-e18-card-extensions
+        specRef: plan_specs/v2/e18-card-extensions/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v2.3.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e17
+      - e18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v2.3.0
+    - id: release-review
+      kind: Gate
+      name: v2.3 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v2-3-gate
+status:
+  phase: Pending

@@ -1,0 +1,225 @@
+# EPIC E15 — Search Index & Hybrid Retrieval
+# Major version: V2 | Release: v2.2 (Research workspace)
+# Architecture refs: §5 OpenSearch, §9 Ranking pipeline, §10 embeddings/rerank, ADR-004
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e15-search-index
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+  annotations:
+    debate/title: E15 — Search Index & Hybrid Retrieval
+    debate/architecture-refs: §5 OpenSearch, §9 Ranking pipeline, §10 embeddings/rerank, ADR-004
+spec:
+  description: >-
+    Provision OpenSearch Serverless as a derived index, embed snapshots/cards with Titan, run hybrid BM25
+    + vector retrieval, rerank with Cohere, and rebuild indexes from the source of truth.
+  priority: 7
+  constraints:
+    majorVersion: v2
+    release: v2.2
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Hybrid retrieval with reranking produces a top-10 with per-result rationales.
+  - id: ac2
+    description: >-
+      Embeddings are cached by snapshot hash and never recomputed for identical content.
+  - id: ac3
+    description: >-
+      Indexes can be dropped and fully rebuilt from DynamoDB/S3.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e15-search-index-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+spec:
+  description: >-
+    Task graph for epic E15 (Search Index & Hybrid Retrieval). Each Task node points at its own task-level
+    PlanSpec.
+  goalRef:
+    name: v2-e15-search-index
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e03-t01-text-normalization
+      kind: External
+      name: 'Prerequisite from E03: Deterministic, versioned text normalization'
+      description: >-
+        Cross-epic prerequisite owned by v1-e03-evidence-integrity (release v1.0).
+      inputs:
+        goalRef: v1-e03-t01-text-normalization
+        specRef: plan_specs/v1/e03-evidence-integrity/t01-text-normalization.yaml
+    - id: ext-v1-e05-t01-model-router-port
+      kind: External
+      name: 'Prerequisite from E05: ModelRouter interface and routing config'
+      description: >-
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.1).
+      inputs:
+        goalRef: v1-e05-t01-model-router-port
+        specRef: plan_specs/v1/e05-model-router/t01-model-router-port.yaml
+    - id: ext-v1-e08-t03-feature-ranking
+      kind: External
+      name: 'Prerequisite from E08: Explainable feature ranking'
+      description: >-
+        Cross-epic prerequisite owned by v1-e08-research-workflows (release v1.2).
+      inputs:
+        goalRef: v1-e08-t03-feature-ranking
+        specRef: plan_specs/v1/e08-research-workflows/t03-feature-ranking.yaml
+    - id: ext-v2-e10-t04-kms-secrets
+      kind: External
+      name: 'Prerequisite from E10: KMS keys and Secrets Manager'
+      description: >-
+        Cross-epic prerequisite owned by v2-e10-aws-foundation (release v2.0).
+      inputs:
+        goalRef: v2-e10-t04-kms-secrets
+        specRef: plan_specs/v2/e10-aws-foundation/t04-kms-secrets.yaml
+    - id: ext-v2-e13-t02-sqs-workers
+      kind: External
+      name: 'Prerequisite from E13: SQS queues and worker framework'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t02-sqs-workers
+        specRef: plan_specs/v2/e13-async-jobs/t02-sqs-workers.yaml
+    - id: t01
+      kind: Task
+      name: OpenSearch Serverless collections
+      description: >-
+        Search + vector collections, encryption/network/data-access policies in Terraform.
+      inputs:
+        specRef: plan_specs/v2/e15-search-index/t01-opensearch-serverless.yaml
+        goalRef: v2-e15-t01-opensearch-serverless
+      dependsOn:
+      - ext-v2-e10-t04-kms-secrets
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e15-t01-opensearch-serverless reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e15-t01-opensearch-serverless
+    - id: t02
+      kind: Task
+      name: Index mappings and chunking
+      description: >-
+        Mappings for article chunks, cards and search candidates; paragraph-aligned chunking tied to snapshot
+        paragraph ids.
+      inputs:
+        specRef: plan_specs/v2/e15-search-index/t02-index-mappings-chunking.yaml
+        goalRef: v2-e15-t02-index-mappings-chunking
+      dependsOn:
+      - t01
+      - ext-v1-e03-t01-text-normalization
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e15-t02-index-mappings-chunking reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e15-t02-index-mappings-chunking
+    - id: t03
+      kind: Task
+      name: Titan embeddings pipeline
+      description: >-
+        Batch embedding worker via ModelRouter, cache keyed by normalized_text_hash + model version, backfill
+        job.
+      inputs:
+        specRef: plan_specs/v2/e15-search-index/t03-embeddings-pipeline.yaml
+        goalRef: v2-e15-t03-embeddings-pipeline
+      dependsOn:
+      - t02
+      - ext-v1-e05-t01-model-router-port
+      - ext-v2-e13-t02-sqs-workers
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e15-t03-embeddings-pipeline reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e15-t03-embeddings-pipeline
+    - id: t04
+      kind: Task
+      name: Hybrid BM25 + kNN retrieval
+      description: >-
+        Query builder combining lexical and vector search with score normalization/fusion and filters
+        (date, source type, access).
+      inputs:
+        specRef: plan_specs/v2/e15-search-index/t04-hybrid-retrieval.yaml
+        goalRef: v2-e15-t04-hybrid-retrieval
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e15-t04-hybrid-retrieval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e15-t04-hybrid-retrieval
+    - id: t05
+      kind: Task
+      name: Rerank and result rationale
+      description: >-
+        Cohere Rerank 3.5 on top-N candidates via Bedrock; optional SearchResultRationale from Claude
+        Haiku; features exposed to the client.
+      inputs:
+        specRef: plan_specs/v2/e15-search-index/t05-rerank-rationale.yaml
+        goalRef: v2-e15-t05-rerank-rationale
+      dependsOn:
+      - t04
+      - ext-v1-e08-t03-feature-ranking
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e15-t05-rerank-rationale reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e15-t05-rerank-rationale
+    - id: t06
+      kind: Task
+      name: Index rebuild from source of truth
+      description: >-
+        Idempotent rebuild job from DynamoDB/S3 with alias swap; runbook.
+      inputs:
+        specRef: plan_specs/v2/e15-search-index/t06-index-rebuild.yaml
+        goalRef: v2-e15-t06-index-rebuild
+      dependsOn:
+      - t02
+      - ext-v2-e13-t02-sqs-workers
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e15-t06-index-rebuild reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e15-t06-index-rebuild
+status:
+  phase: Pending

@@ -1,0 +1,107 @@
+# RELEASE v2.2 — Research workspace
+# Major version: V2. Epics: E15, E16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v2-2
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.2
+  annotations:
+    debate/title: v2.2 — Research workspace
+spec:
+  description: >-
+    Hybrid BM25/vector search with reranking returns ten strong, explained results in the web UI with
+    open/cut actions.
+  priority: 7
+  acceptanceCriteria:
+  - id: epic-e15
+    description: >-
+      Epic E15 (Search Index & Hybrid Retrieval) goal is Succeeded.
+  - id: epic-e16
+    description: >-
+      Epic E16 (Research Workspace UI) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v2.2.0 is pushed and CHANGELOG.md has a v2.2 section.
+  - id: gate
+    description: >-
+      Gate release-v2-2-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v2-2-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.2
+spec:
+  gateType: review
+  description: >-
+    Release review for v2.2 (Research workspace): demo the release goal end to end, confirm CI green on
+    the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v2-2-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.2
+spec:
+  description: >-
+    Release plan for v2.2: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v2-2
+  series: v2
+  version: v2.2
+  graph:
+    nodes:
+    - id: e15
+      kind: External
+      name: Epic E15 — Search Index & Hybrid Retrieval
+      inputs:
+        goalRef: v2-e15-search-index
+        specRef: plan_specs/v2/e15-search-index/epic.yaml
+    - id: e16
+      kind: External
+      name: Epic E16 — Research Workspace UI
+      inputs:
+        goalRef: v2-e16-research-ui
+        specRef: plan_specs/v2/e16-research-ui/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v2.2.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e15
+      - e16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v2.2.0
+    - id: release-review
+      kind: Gate
+      name: v2.2 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v2-2-gate
+status:
+  phase: Pending

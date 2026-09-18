@@ -1,0 +1,153 @@
+# TASK v1-e09-t01-golden-card-fixtures — Golden card fixtures from team files
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Architecture refs: §16 (golden DOCX fixtures), §11 V1 acceptance criteria, §14 (minors' data), §6 layout
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e09-t01-golden-card-fixtures
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+  annotations:
+    debate/title: Golden card fixtures from team files
+    debate/architecture-refs: §16, §11, §14, §6
+spec:
+  description: >-
+    Build the golden corpus that E09 tests and evals depend on. Charlie picks 24-30 representative cards
+    from the team's Verbatim evidence files on the coach's Mac (~/Documents/debate/2024-2025, 2025-2026,
+    2026-2027) — roughly a third each Policy, LD and PF, covering news, think-tank, government and
+    journal sources, short and long (multi-paragraph, ellipsis-cut) cards. For each card whose source is
+    still publicly accessible, the task records the source page as an E04 fixture and builds a golden case
+    under tests/fixtures/golden_cards/<case_id>/: snapshot (raw + normalized text), expected.json (tag,
+    cite fields, evidence offsets, underline/highlight spans with purposes, research need), the original team
+    card as a scrubbed DOCX excerpt and the expected rendered DOCX. Copies only: no test reads live paths.
+    Files are scrubbed of debater names, school codes and docProps authors. Boundaries: comparison logic is
+    t02; span metrics are t03; format profile derivation was v1-e06-t03 (its samples can be reused).
+  priority: 1
+  constraints:
+    packages: [tests/fixtures/golden_cards, scripts]
+    forbidden:
+      - Test code reading from ~/Documents/debate or any path outside the repo
+      - Committing student names, emails, school codes or docProps author metadata
+      - Cards whose source cannot be lawfully retrieved (paywalled/private) as golden snapshot cases
+      - Hand-typed evidence text in expected.json (offsets into the recorded snapshot only)
+  context:
+    - kind: TaskRef
+      name: v1-e06-t04-docx-renderer
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        tests/fixtures/golden_cards contains at least 24 cases with a balanced split across Policy, LD and PF
+        and an INDEX.md listing case id, event, season, source type and research need.
+    - id: ac2
+      description: >-
+        Each case's expected evidence offsets reproduce the team card's evidence text exactly from the
+        recorded snapshot under the current normalizer (validated by a fixture-integrity test).
+    - id: ac3
+      description: >-
+        Each case has a coach-authored span label set (underline and highlight ranges with purpose) derived
+        from the team's original card markup.
+    - id: ac4
+      description: >-
+        A scrub test confirms no fixture DOCX carries author/lastModifiedBy metadata and no roster name from
+        a local, uncommitted denylist file appears in fixtures.
+    - id: ac5
+      description: >-
+        Charlie signs off that the corpus is representative of how the team actually cuts cards.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e09-t01-golden-card-fixtures-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+spec:
+  description: >-
+    Select and copy cards, record sources, convert original markup into labeled offsets, generate expected
+    renders, then integrity/scrub tests and coach sign-off.
+  goalRef:
+    name: v1-e09-t01-golden-card-fixtures
+  graph:
+    nodes:
+      - id: select-and-copy
+        kind: Task
+        name: Select and copy candidate cards
+        description: >-
+          Charlie selects cards from the three season folders; an import script copies each card excerpt into
+          the repo and scrubs metadata and identifiers.
+        outputs: [scripts/import_golden_card.py, tests/fixtures/golden_cards/INDEX.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Golden index exists
+            path: tests/fixtures/golden_cards/INDEX.md
+      - id: record-sources
+        kind: Task
+        name: Record source snapshots
+        description: >-
+          Fetch each accessible source once with the E04 fixture recorder (developer machine, not CI) and
+          store the recorded response and normalized snapshot per case; drop cases that are no longer
+          accessible.
+        dependsOn: [select-and-copy]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Snapshot recorded for cases
+            path: tests/fixtures/golden_cards/policy-001/snapshot.normalized.txt
+      - id: label-offsets
+        kind: Task
+        name: Convert original markup to offset labels
+        description: >-
+          Align each team card's evidence text to the snapshot, derive evidence offsets and underline/highlight
+          spans from the original runs, and write expected.json.
+        dependsOn: [record-sources]
+        outputs: [scripts/label_golden_card.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fixture integrity tests pass
+            command: uv
+            args: [run, pytest, tests/golden/test_fixture_integrity.py]
+      - id: expected-renders
+        kind: Task
+        name: Generate expected DOCX renders
+        description: >-
+          Render each case's expected card with the team-default profile to expected.docx for t02 to compare
+          against.
+        dependsOn: [label-offsets]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Expected renders regenerate cleanly
+            command: uv
+            args: [run, scripts/label_golden_card.py, --render-expected, --check]
+      - id: scrub-and-signoff
+        kind: Task
+        name: Scrub test and coach sign-off
+        description: >-
+          Add the metadata/denylist scrub test and obtain Charlie's approval of the corpus.
+        dependsOn: [expected-renders]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Scrub test passes
+            command: uv
+            args: [run, pytest, tests/golden/test_fixture_scrubbed.py]
+          - type: custom
+            name: Coach approves golden corpus
+            description: >-
+              Charlie confirms the corpus represents team cutting practice across Policy, LD and PF and that
+              span labels match the original cards.
+status:
+  phase: Pending

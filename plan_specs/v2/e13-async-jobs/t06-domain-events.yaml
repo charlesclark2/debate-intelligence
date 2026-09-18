@@ -1,0 +1,140 @@
+# TASK v2-e13-t06-domain-events — EventBridge domain events and schedules
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §5 EventBridge (domain events, scheduled research), ADR-009, §11 daily command, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e13-t06-domain-events
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+  annotations:
+    debate/title: EventBridge domain events and schedules
+    debate/architecture-refs: §5, ADR-009, §15
+spec:
+  description: >-
+    Introduce a custom EventBridge bus and versioned domain events so later features (search indexing in
+    E15, search history in E16, notifications) can react without coupling to workflows. Define an
+    EventPublisher port with an EventBridge adapter and emit JobCompleted, JobFailed and CardVerified
+    (ids and metadata only, never evidence text or user PII). Add an EventBridge Scheduler schedule that
+    runs the V1 `daily` research presets (e.g. politics uniqueness updates) as SEARCH jobs for users who
+    have opted in, with a per-user cap. Preset management UI is out of scope (presets are configured by
+    the coach in settings for now); quotas beyond a simple cap are E19-t01.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_workers, infrastructure/modules/events]
+    forbidden:
+      - Event payloads containing evidence text, emails, names or tokens
+      - Unversioned event schemas
+      - Scheduled jobs for users who have not opted in, or without a per-user daily cap
+      - boto3 imports outside debate_core.integrations
+  context:
+    - kind: TaskRef
+      name: v2-e13-t02-sqs-workers
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t04-search-job-workflow
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t07-daily-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Event models JobCompleted.v1, JobFailed.v1 and CardVerified.v1 are Pydantic schemas with
+        event_id, occurred_at, correlation_id and resource ids; JSON Schemas are exported to docs/events/.
+    - id: ac2
+      description: >-
+        Job terminal transitions and card verification publish exactly one event each via the
+        EventPublisher port, using an outbox or publish-after-commit so no event is emitted for a rolled
+        back write.
+    - id: ac3
+      description: >-
+        A custom event bus with an archive and a DLQ-backed rule to a sample SQS target exists in Terraform.
+    - id: ac4
+      description: >-
+        An EventBridge Scheduler schedule triggers a daily-research handler that creates SEARCH jobs from
+        each opted-in user's presets, skipping users over the cap, with tests using a fixed clock.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e13-t06-domain-events-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+spec:
+  description: >-
+    Event schemas and port, then publishing from transitions, then infrastructure, then the daily
+    schedule handler.
+  goalRef:
+    name: v2-e13-t06-domain-events
+  graph:
+    nodes:
+      - id: event-schemas
+        kind: Task
+        name: Versioned event schemas and publisher port
+        description: >-
+          Pydantic event models, an EventPublisher port, in-memory fake, and JSON Schema export.
+        outputs:
+          - packages/debate_core/src/debate_core/domain/events.py
+          - docs/events/README.md
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Event schema tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_events.py]
+      - id: publish-on-transition
+        kind: Task
+        name: Publish-after-commit from job and card use cases
+        description: >-
+          Emit events after successful repository writes (outbox item or post-commit hook) and an
+          EventBridge adapter with batching and retry.
+        dependsOn: [event-schemas]
+        outputs: [packages/debate_core/src/debate_core/integrations/eventbridge_publisher.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Publishing tests pass with fake publisher and moto
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, "event_publish"]
+      - id: bus-infra
+        kind: Task
+        name: Event bus, archive, rules and scheduler
+        description: >-
+          Custom bus with archive, sample rule to SQS with DLQ, and an EventBridge Scheduler schedule
+          targeting the daily-research queue.
+        dependsOn: [event-schemas]
+        outputs: [infrastructure/modules/events/main.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates with events
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: daily-research-handler
+        kind: Task
+        name: Daily-research schedule handler
+        description: >-
+          Worker handler reading opted-in users' presets and submitting SEARCH jobs through SubmitJob-style
+          use case with per-user cap and deterministic idempotency keys per date.
+        dependsOn: [publish-on-transition, bus-infra]
+        outputs: [packages/debate_workers/src/debate_workers/handlers/daily_research.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Daily research handler tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_daily_research.py]
+status:
+  phase: Pending

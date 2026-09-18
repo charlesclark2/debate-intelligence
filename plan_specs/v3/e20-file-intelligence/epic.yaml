@@ -1,0 +1,230 @@
+# EPIC E20 — Debate File Intelligence
+# Major version: V3 | Release: v3.0 (Debate file intelligence & argument graph)
+# Architecture refs: §6 FileIntelligenceService, §13 Argument graph (file parsing)
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e20-file-intelligence
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+  annotations:
+    debate/title: E20 — Debate File Intelligence
+    debate/architecture-refs: §6 FileIntelligenceService, §13 Argument graph (file parsing)
+spec:
+  description: >-
+    Upload debate files and parse them into structural units — pockets/hats/blocks/tags, citations, evidence
+    and analytics — preserving formatting metadata.
+  priority: 10
+  constraints:
+    majorVersion: v3
+    release: v3.0
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Uploaded DOCX files are stored privately with hashes and parsed asynchronously.
+  - id: ac2
+    description: >-
+      The parser identifies headings, tags, cites, evidence and analytics with measured accuracy on the
+      team's own files.
+  - id: ac3
+    description: >-
+      Parsed sections keep underline/highlight metadata and link to Card records.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e20-file-intelligence-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+spec:
+  description: >-
+    Task graph for epic E20 (Debate File Intelligence). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v3-e20-file-intelligence
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e02-t04-repo-contract-tests
+      kind: External
+      name: 'Prerequisite from E02: Reusable repository contract test suite'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t04-repo-contract-tests
+        specRef: plan_specs/v1/e02-domain-core/t04-repo-contract-tests.yaml
+    - id: ext-v1-e06-t03-format-profiles
+      kind: External
+      name: 'Prerequisite from E06: Card format profiles from team conventions'
+      description: >-
+        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+      inputs:
+        goalRef: v1-e06-t03-format-profiles
+        specRef: plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml
+    - id: ext-v2-e11-t01-access-pattern-design
+      kind: External
+      name: 'Prerequisite from E11: AppTable access-pattern design'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t01-access-pattern-design
+        specRef: plan_specs/v2/e11-cloud-persistence/t01-access-pattern-design.yaml
+    - id: ext-v2-e11-t03-dynamodb-repositories
+      kind: External
+      name: 'Prerequisite from E11: DynamoDB repository implementations'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t03-dynamodb-repositories
+        specRef: plan_specs/v2/e11-cloud-persistence/t03-dynamodb-repositories.yaml
+    - id: ext-v2-e11-t04-s3-snapshot-store
+      kind: External
+      name: 'Prerequisite from E11: S3 snapshot and export store'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t04-s3-snapshot-store
+        specRef: plan_specs/v2/e11-cloud-persistence/t04-s3-snapshot-store.yaml
+    - id: ext-v2-e13-t02-sqs-workers
+      kind: External
+      name: 'Prerequisite from E13: SQS queues and worker framework'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t02-sqs-workers
+        specRef: plan_specs/v2/e13-async-jobs/t02-sqs-workers.yaml
+    - id: ext-v2-e17-t03-library-ui
+      kind: External
+      name: 'Prerequisite from E17: Library UI'
+      description: >-
+        Cross-epic prerequisite owned by v2-e17-card-library (release v2.3).
+      inputs:
+        goalRef: v2-e17-t03-library-ui
+        specRef: plan_specs/v2/e17-card-library/t03-library-ui.yaml
+    - id: ext-v2-e18-t01-card-parser
+      kind: External
+      name: 'Prerequisite from E18: Pasted-card parser'
+      description: >-
+        Cross-epic prerequisite owned by v2-e18-card-extensions (release v2.3).
+      inputs:
+        goalRef: v2-e18-t01-card-parser
+        specRef: plan_specs/v2/e18-card-extensions/t01-card-parser.yaml
+    - id: t01
+      kind: Task
+      name: DebateFile and FileSection model
+      description: >-
+        DebateFile, FileSection, ParsedCard entities with parser_version and revision; AppTable access
+        patterns.
+      inputs:
+        specRef: plan_specs/v3/e20-file-intelligence/t01-debate-file-model.yaml
+        goalRef: v3-e20-t01-debate-file-model
+      dependsOn:
+      - ext-v2-e11-t01-access-pattern-design
+      - ext-v2-e11-t03-dynamodb-repositories
+      - ext-v1-e02-t04-repo-contract-tests
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e20-t01-debate-file-model reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e20-t01-debate-file-model
+    - id: t02
+      kind: Task
+      name: Upload pipeline
+      description: >-
+        Presigned uploads, size/type validation, malware scanning, sha256, ParseFileJob.
+      inputs:
+        specRef: plan_specs/v3/e20-file-intelligence/t02-upload-pipeline.yaml
+        goalRef: v3-e20-t02-upload-pipeline
+      dependsOn:
+      - t01
+      - ext-v2-e13-t02-sqs-workers
+      - ext-v2-e11-t04-s3-snapshot-store
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e20-t02-upload-pipeline reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e20-t02-upload-pipeline
+    - id: t03
+      kind: Task
+      name: DOCX structure parser
+      description: >-
+        Detect Verbatim-style heading levels (pocket/hat/block/tag), cites, evidence, analytics, underline/highlight/bold
+        runs into FileSections and ParsedCards.
+      inputs:
+        specRef: plan_specs/v3/e20-file-intelligence/t03-docx-structure-parser.yaml
+        goalRef: v3-e20-t03-docx-structure-parser
+      dependsOn:
+      - t01
+      - ext-v1-e06-t03-format-profiles
+      - ext-v2-e18-t01-card-parser
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e20-t03-docx-structure-parser reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e20-t03-docx-structure-parser
+    - id: t04
+      kind: Task
+      name: Parser accuracy evaluation
+      description: >-
+        Labeled set from 2024–2026 team files; per-unit precision/recall report and regression gate.
+      inputs:
+        specRef: plan_specs/v3/e20-file-intelligence/t04-parser-eval.yaml
+        goalRef: v3-e20-t04-parser-eval
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e20-t04-parser-eval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e20-t04-parser-eval
+    - id: t05
+      kind: Task
+      name: File library UI
+      description: >-
+        Upload, parse status, outline view of a parsed file, open cards in library.
+      inputs:
+        specRef: plan_specs/v3/e20-file-intelligence/t05-file-library-ui.yaml
+        goalRef: v3-e20-t05-file-library-ui
+      dependsOn:
+      - t02
+      - t03
+      - ext-v2-e17-t03-library-ui
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e20-t05-file-library-ui reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e20-t05-file-library-ui
+status:
+  phase: Pending

@@ -1,0 +1,141 @@
+# TASK v1-e02-t05-settings-config — Settings and configuration
+# Epic: E02 Domain Core: Entities, Ports & Local Persistence | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §6, §10 (model IDs and routing are configuration), §11, §14 (secrets), §20 step 1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e02-t05-settings-config
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+  annotations:
+    debate/title: Settings and configuration
+    debate/architecture-refs: §6, §10, §11, §14, §20 step 1
+spec:
+  description: >-
+    Centralize configuration in a pydantic-settings Settings model: data_dir, environment profile
+    (local/dev/test), enabled search providers, HTTP politeness settings (user-agent with contact URL,
+    timeouts, per-host interval) consumed later by E04, provider API keys as SecretStr from env/.env,
+    and a path to a model-routing YAML (task class → model id) consumed by E05. Adds the
+    `debate-research config show` command that prints the effective settings with every secret
+    redacted and the source of each value. The ModelRouter itself (E05) and provider adapters (E07)
+    are out of scope; this task only defines and validates their configuration.
+  priority: 2
+  constraints:
+    packages: [debate_core.application.settings, debate_cli.commands.config]
+    forbidden:
+      - Hard-coded model ids or API keys in code
+      - Printing or logging secret values, including in --json output
+      - Reading os.environ outside the settings module
+  context:
+    - kind: TaskRef
+      name: v1-e02-t01-domain-entities
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t07-cli-skeleton
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Settings loads with precedence CLI override > environment (DEBATE_ prefix) > .env > profile
+        defaults, and invalid values fail fast with a message naming the field.
+    - id: ac2
+      description: >-
+        The model-routing file is validated against a schema (task class, model_id, max_tokens,
+        temperature) and an unknown task class is rejected.
+    - id: ac3
+      description: >-
+        `uv run debate-research config show --json` emits all settings with SecretStr fields shown as
+        "***" and a per-field source annotation.
+    - id: ac4
+      description: >-
+        The test profile disables all network providers and points data_dir at a temp directory.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e02-t05-settings-config-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+spec:
+  description: >-
+    Settings model and profiles, routing-config schema, then the CLI command and redaction tests.
+  goalRef:
+    name: v1-e02-t05-settings-config
+  graph:
+    nodes:
+      - id: settings-model
+        kind: Task
+        name: Settings model and profiles
+        description: >-
+          Nested pydantic-settings groups (storage, http, providers, models) with DEBATE_ env prefix,
+          .env support and local/dev/test profiles.
+        outputs: [packages/debate_core/src/debate_core/application/settings.py, .env.example]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Settings precedence and validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_settings.py]
+      - id: routing-config
+        kind: Task
+        name: Model-routing config schema
+        description: >-
+          RoutingConfig Pydantic model and loader for config/model_routing.yaml with an example file
+          mapping task classes (card_selection, citation_cleanup, relevance_classification) to model ids.
+        dependsOn: [settings-model]
+        outputs:
+          - packages/debate_core/src/debate_core/application/routing_config.py
+          - config/model_routing.example.yaml
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Routing config validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_routing_config.py]
+      - id: config-command
+        kind: Task
+        name: config show command with redaction
+        description: >-
+          `debate-research config show` renders a Rich table or JSON, redacting SecretStr values and
+          annotating each field's source.
+        dependsOn: [settings-model]
+        outputs: [packages/debate_cli/src/debate_cli/commands/config.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Redaction tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_config_command.py]
+          - type: command_succeeds
+            name: config show runs
+            command: uv
+            args: [run, debate-research, --json, config, show]
+      - id: quality-gates
+        kind: Task
+        name: Type checks
+        description: >-
+          pyright over debate_core and debate_cli.
+        dependsOn: [routing-config, config-command]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: pyright passes on debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: pyright passes on debate_cli
+            command: uv
+            args: [run, pyright, packages/debate_cli]
+status:
+  phase: Pending

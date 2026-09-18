@@ -1,0 +1,149 @@
+# TASK v3-e27-t02-cx-answer-simulation — Simulated CX answers
+# Epic: E27 Cross-Examination Simulator | Release: v3.6 (Cross-examination simulator) | Major: V3
+# Architecture refs: §3 V3 CX story, §8, §10, §13 Round simulator, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e27-t02-cx-answer-simulation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+  annotations:
+    debate/title: Simulated CX answers
+    debate/architecture-refs: §3, §8, §10, §13, §19
+spec:
+  description: >-
+    Run an interactive CX session as round events in two modes. Student-as-questioner: the student asks
+    and the simulated opponent answers, conditioned on its strategy (e.g. concede nothing, give ground on
+    solvency to protect the advantage), experience level (novice answers may over-concede; varsity answers
+    redirect and cite evidence) and the evidence actually in its case graph. Student-as-answerer: the
+    simulator asks from the t01 question plan, adapting follow-ups to the student's answers. Each exchange
+    is a CX_EXCHANGE RoundEvent submitted through the state machine with the CX clock enforced. Simulated
+    answers are structured (CxAnswer: text, stance, referenced node/card ids, whether it grants ground)
+    and may quote evidence only by inserting text from referenced cards. Answers that assert facts absent
+    from the opponent graph are labeled as analytic claims. Detecting concessions and writing them to the
+    flow is t03; the UI is t04.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.rounds, debate_core.application, debate_api]
+    forbidden:
+      - Model-authored evidence quotations; quotes are inserted from referenced cards only
+      - CX exchanges that bypass the round state machine or CX clock
+      - Persisting anything about the student beyond the submitted text of their turns
+      - Business logic in debate_api routes
+      - Live network or real model calls in CI; use the fake/replay ModelRouter
+  context:
+    - kind: TaskRef
+      name: v3-e27-t01-cx-question-generation
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        In questioner mode, POST /v1/rounds/{id}/cx/turns with a student question returns a CxAnswer and
+        appends one CX_EXCHANGE event; the call is rejected with 422 once the CX clock has expired.
+    - id: ac2
+      description: >-
+        In answerer mode, the simulator asks the next planned question or a follow-up branch selected
+        from the student's previous answer, and each asked question references its CXQuestion id.
+    - id: ac3
+      description: >-
+        On replay fixtures, a "concede nothing" varsity opponent grants ground on none of the scripted
+        trap questions, while a novice opponent profile grants ground on at least one.
+    - id: ac4
+      description: >-
+        Every quoted string in a CxAnswer matches a referenced card exactly, and every CxAnswer records
+        prompt_id, prompt version and model_id.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e27-t02-cx-answer-simulation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+spec:
+  description: >-
+    Define opponent persona settings and the answer contract, implement the answering prompt with evidence
+    insertion, add the answerer-mode questioner, then expose CX turns through the round API.
+  goalRef:
+    name: v3-e27-t02-cx-answer-simulation
+  graph:
+    nodes:
+      - id: persona-and-answer-schema
+        kind: Task
+        name: OpponentPersona and CxAnswer schemas
+        description: >-
+          OpponentPersona (strategy, experience level, side, graph ids) and CxAnswer (text, stance,
+          node/card refs, grants_ground flag, analytic_claims) models.
+        outputs: [packages/debate_core/src/debate_core/domain/cx.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CxAnswer model exists
+            path: packages/debate_core/src/debate_core/domain/cx.py
+            contentMatch: "class CxAnswer"
+      - id: answer-prompt
+        kind: Task
+        name: Persona-conditioned answer generation
+        description: >-
+          Prompt cx.answer_simulation v1.0.0 with persona, examined nodes, retrieved cards and transcript
+          so far; quote placeholders filled from card text; validation and repair retry.
+        dependsOn: [persona-and-answer-schema]
+        outputs:
+          - packages/debate_core/src/debate_core/prompts/cx_answer_simulation.v1.yaml
+          - packages/debate_core/src/debate_core/rounds/cx/answering.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Answer contract and persona fixture tests pass with replay router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_cx_answering.py]
+      - id: simulated-questioner
+        kind: Task
+        name: Answerer-mode simulated questioner
+        description: >-
+          Walk the t01 question plan, choosing follow-up branches from the student's last answer via a
+          small structured classification call.
+        dependsOn: [persona-and-answer-schema]
+        outputs: [packages/debate_core/src/debate_core/rounds/cx/questioning.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Follow-up branching tests pass with replay router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_cx_questioning.py]
+      - id: cx-session-service
+        kind: Task
+        name: CX session use case and API
+        description: >-
+          CxSessionService submitting SubmitCxExchange commands through the state machine in both modes;
+          thin API route for turns; clock-expiry handling.
+        dependsOn: [answer-prompt, simulated-questioner]
+        outputs:
+          - packages/debate_core/src/debate_core/application/cx/session.py
+          - packages/debate_api/src/debate_api/routes/cx.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CX session service tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_cx_session.py]
+          - type: test_passes
+            name: CX route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_cx.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

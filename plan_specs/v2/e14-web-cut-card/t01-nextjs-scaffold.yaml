@@ -1,0 +1,141 @@
+# TASK v2-e14-t01-nextjs-scaffold — Next.js application scaffold
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §4 Next.js + TypeScript + React, Tailwind + shadcn/ui, §6 web/, §12
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e14-t01-nextjs-scaffold
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+  annotations:
+    debate/title: Next.js application scaffold
+    debate/architecture-refs: §4, §12
+spec:
+  description: >-
+    Create the web/ application that every V2 screen lives in: a pnpm workspace with a Next.js App Router
+    app in TypeScript strict mode, Tailwind CSS and shadcn/ui primitives, an app shell (header, nav for
+    Research / Cut a Card / Library, responsive layout, light/dark), typed runtime config for API base URL
+    and Cognito ids per environment, ESLint + Prettier, Vitest + Testing Library for components,
+    Playwright for end-to-end with an axe accessibility check, and a CI job. The workspace consumes the
+    existing generated API client package clients/ts-api-client (from v2-e12-t06) as a workspace/file
+    dependency rather than generating its own. The scaffold contains no
+    feature logic: auth is t02, hosting t03, Cut-a-Card t04. The web app never talks to AWS services
+    directly; it only calls the debate API.
+  priority: 1
+  constraints:
+    packages: [web]
+    forbidden:
+      - AWS SDK usage or credentials in the browser bundle
+      - Secrets in NEXT_PUBLIC_* variables
+      - Business logic duplicated from debate_core (validation of evidence lives server-side)
+      - Disabling TypeScript strict mode or ESLint rules globally
+      - Third-party analytics/trackers (users may be minors)
+  context:
+    - kind: TaskRef
+      name: v1-e01-t04-ci-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t06-openapi-client
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `pnpm --dir web build` succeeds with strict TypeScript and produces the app shell with Research,
+        Cut a Card and Library placeholder routes.
+    - id: ac2
+      description: >-
+        `pnpm --dir web lint` and `pnpm --dir web test` pass in CI on every PR touching web/.
+    - id: ac3
+      description: >-
+        A Playwright smoke test loads the shell, navigates all placeholder routes and reports zero serious
+        or critical axe violations.
+    - id: ac4
+      description: >-
+        Runtime config is validated with zod at startup, failing fast on missing values, and contains no
+        secrets.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e14-t01-nextjs-scaffold-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+spec:
+  description: >-
+    Workspace and app, then design system and shell, then the test stack, then CI.
+  goalRef:
+    name: v2-e14-t01-nextjs-scaffold
+  graph:
+    nodes:
+      - id: workspace-app
+        kind: Task
+        name: pnpm workspace and Next.js app
+        description: >-
+          web/pnpm-workspace.yaml (including ../clients/ts-api-client), web/apps/app (or web/ root app)
+          with App Router, strict tsconfig, ESLint/Prettier, typed zod runtime config, and the API client
+          added as a workspace/file dependency on clients/ts-api-client.
+        outputs: [web/package.json, web/pnpm-workspace.yaml, web/tsconfig.json, web/src/config.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Web app builds
+            command: pnpm
+            args: [--dir, web, build]
+      - id: design-shell
+        kind: Task
+        name: Tailwind, shadcn/ui and app shell
+        description: >-
+          Tailwind config, shadcn/ui init with Button/Input/Dialog/Toast, layout with nav and placeholder
+          pages, dark mode.
+        dependsOn: [workspace-app]
+        outputs: [web/src/app/layout.tsx, web/src/components/ui/button.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Lint passes
+            command: pnpm
+            args: [--dir, web, lint]
+      - id: test-stack
+        kind: Task
+        name: Vitest and Playwright with axe
+        description: >-
+          Vitest + Testing Library config with a shell component test; Playwright config with a smoke spec
+          using @axe-core/playwright.
+        dependsOn: [design-shell]
+        outputs: [web/vitest.config.ts, web/playwright.config.ts, web/e2e/shell.spec.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Unit tests pass
+            command: pnpm
+            args: [--dir, web, test]
+          - type: test_passes
+            name: Shell smoke and accessibility test passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/shell.spec.ts]
+      - id: web-ci
+        kind: Task
+        name: Web CI job
+        description: >-
+          GitHub Actions job with pnpm cache running lint, test, build and Playwright on web/** changes.
+        dependsOn: [test-stack]
+        outputs: [.github/workflows/web.yml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Web CI workflow exists
+            path: .github/workflows/web.yml
+            contentMatch: "playwright"
+status:
+  phase: Pending

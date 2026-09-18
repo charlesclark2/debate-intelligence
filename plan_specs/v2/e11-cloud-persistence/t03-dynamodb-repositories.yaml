@@ -1,0 +1,164 @@
+# TASK v2-e11-t03-dynamodb-repositories — DynamoDB repository implementations
+# Epic: E11 Cloud Persistence Adapters | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §6 ports/adapters, §7, ADR-002, §15, §16 repository contract tests
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e11-t03-dynamodb-repositories
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+  annotations:
+    debate/title: DynamoDB repository implementations
+    debate/architecture-refs: §7, ADR-002, ADR-003, §15
+spec:
+  description: >-
+    Implement the E02 repository ports (UserRepository, ArticleRepository, SnapshotMetadataRepository,
+    CardRepository with CardSpans, SearchRepository/SearchResult) against AppTable so V1 use cases run
+    unchanged in the cloud (§17: migrate by swapping implementations, not rewriting use cases). The
+    adapters use the t01 key builders, map items to and from the existing Pydantic domain entities,
+    paginate with opaque cursors, and pass the same reusable contract suite as the local repositories.
+    Out of scope: conditional revision checks (t05 adds them on top), the Job repository (E13-t01),
+    snapshot blob storage (t04) and library folders/tags (E17-t01).
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations.dynamodb]
+    forbidden:
+      - Changing port signatures or domain entities to suit DynamoDB (propose a port change in E02 instead)
+      - Scan in repository code paths
+      - boto3 imports outside debate_core.integrations
+      - Contract tests that hit real AWS (use DynamoDB Local or moto)
+  context:
+    - kind: TaskRef
+      name: v2-e11-t02-dynamodb-tables
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t04-repo-contract-tests
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Dynamo* repository classes implement every E02 repository port except Job and snapshot blobs, and
+        pyright reports them as structurally compatible with the port Protocols.
+    - id: ac2
+      description: >-
+        The shared repository contract suite passes unmodified against the DynamoDB implementations using
+        DynamoDB Local (or moto) created from the same key/GSI definition as Terraform.
+    - id: ac3
+      description: >-
+        List operations return pages with an opaque, tamper-evident cursor, default page size 25 and max
+        100, ordered newest-first for owner card listings.
+    - id: ac4
+      description: >-
+        Saving a card and its CardSpans is atomic (TransactWriteItems); a failed write leaves neither
+        partial spans nor a card without spans.
+    - id: ac5
+      description: >-
+        Settings select local or DynamoDB repositories via a single persistence backend switch; the CLI
+        still defaults to local repositories.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e11-t03-dynamodb-repositories-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+spec:
+  description: >-
+    Build a thin table gateway and codecs, implement repositories one entity family at a time, then run
+    the shared contract suite against DynamoDB Local and wire the backend switch.
+  goalRef:
+    name: v2-e11-t03-dynamodb-repositories
+  graph:
+    nodes:
+      - id: table-gateway
+        kind: Task
+        name: Table gateway, codecs and pagination cursor
+        description: >-
+          A small wrapper over the boto3 table resource (async via aioboto3 or threadpool), entity codecs
+          using the t01 key builders, and an HMAC-signed base64 cursor.
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/dynamodb/gateway.py
+          - packages/debate_core/src/debate_core/integrations/dynamodb/codecs.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Codec round-trip and cursor tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/dynamodb/test_codecs.py]
+      - id: user-article-snapshot-repos
+        kind: Task
+        name: User, Article and SnapshotMetadata repositories
+        description: >-
+          Implement lookups by id, cognito_sub (GSI) and canonical URL hash; snapshot metadata stores s3_key
+          and sha256 only.
+        dependsOn: [table-gateway]
+        outputs: [packages/debate_core/src/debate_core/integrations/dynamodb/repositories.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: User/article/snapshot repository tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/dynamodb
+              - -k
+              - "user or article or snapshot"
+      - id: card-search-repos
+        kind: Task
+        name: Card (with spans) and Search repositories
+        description: >-
+          Card + CardSpan transactional save, owner listing newest-first, Search and SearchResult storage
+          with rank ordering.
+        dependsOn: [table-gateway]
+        outputs: [packages/debate_core/src/debate_core/integrations/dynamodb/card_repository.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card/search repository tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/dynamodb, -k, "card or search"]
+      - id: contract-suite
+        kind: Task
+        name: Shared contract suite against DynamoDB Local
+        description: >-
+          Parametrize the E02 contract suite with a DynamoDB Local fixture (table created from the same
+          schema JSON as Terraform); mark it to run in CI via a service container.
+        dependsOn: [user-article-snapshot-repos, card-search-repos]
+        outputs: [packages/debate_core/tests/contracts/test_dynamodb_contracts.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Repository contract suite passes on DynamoDB
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/contracts/test_dynamodb_contracts.py]
+      - id: backend-switch
+        kind: Task
+        name: Persistence backend selection and quality gates
+        description: >-
+          Add persistence.backend = local|dynamodb to settings and the composition root; run type and
+          import checks.
+        dependsOn: [contract-suite]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

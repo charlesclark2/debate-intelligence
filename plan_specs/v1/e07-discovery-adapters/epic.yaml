@@ -1,0 +1,214 @@
+# EPIC E07 — Discovery Provider Adapters
+# Major version: V1 | Release: v1.2 (Federated research from the CLI)
+# Architecture refs: §9 Discovery adapters, §15, §19, §20 step 4
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-discovery-adapters
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: E07 — Discovery Provider Adapters
+    debate/architecture-refs: §9 Discovery adapters, §15, §19, §20 step 4
+spec:
+  description: >-
+    Implement free/low-cost scholarly, news and government discovery providers behind one SearchProvider
+    contract with health checks and recorded-fixture tests.
+  priority: 3
+  constraints:
+    majorVersion: v1
+    release: v1.2
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      At least one scholarly and one news/RSS provider (target: OpenAlex, Crossref, Semantic Scholar,
+      RSS, GDELT, government sources) return normalized CandidateResults.
+  - id: ac2
+    description: >-
+      Each provider has timeouts, a circuit breaker, rate-limit compliance and recorded-fixture contract
+      tests.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-discovery-adapters-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Task graph for epic E07 (Discovery Provider Adapters). Each Task node points at its own task-level
+    PlanSpec.
+  goalRef:
+    name: v1-e07-discovery-adapters
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e02-t02-ports
+      kind: External
+      name: 'Prerequisite from E02: Repository and provider port interfaces'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t02-ports
+        specRef: plan_specs/v1/e02-domain-core/t02-ports.yaml
+    - id: ext-v1-e06-t01-citation-service
+      kind: External
+      name: 'Prerequisite from E06: CitationService with per-field provenance'
+      description: >-
+        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+      inputs:
+        goalRef: v1-e06-t01-citation-service
+        specRef: plan_specs/v1/e06-card-cutting/t01-citation-service.yaml
+    - id: t01
+      kind: Task
+      name: SearchProvider contract, health and circuit breaking
+      description: >-
+        Finalize SearchProvider port and CandidateResult model (identifiers, source_type, published_at,
+        authors, OA links), provider registry, timeouts, circuit breaker, provider health metrics, shared
+        contract tests.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t01-search-provider-contract.yaml
+        goalRef: v1-e07-t01-search-provider-contract
+      dependsOn:
+      - ext-v1-e02-t02-ports
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t01-search-provider-contract reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t01-search-provider-contract
+    - id: t02
+      kind: Task
+      name: OpenAlex adapter
+      description: >-
+        Works search with date filters, polite-pool email, OA location mapping.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t02-openalex-adapter.yaml
+        goalRef: v1-e07-t02-openalex-adapter
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t02-openalex-adapter reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t02-openalex-adapter
+    - id: t03
+      kind: Task
+      name: Crossref adapter
+      description: >-
+        Works query with date filters, DOI/metadata mapping, polite-pool etiquette.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml
+        goalRef: v1-e07-t03-crossref-adapter
+      dependsOn:
+      - t01
+      - ext-v1-e06-t01-citation-service
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t03-crossref-adapter reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t03-crossref-adapter
+    - id: t04
+      kind: Task
+      name: Semantic Scholar adapter
+      description: >-
+        Paper search with optional API key, citation counts, open-access PDF links.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t04-semantic-scholar-adapter.yaml
+        goalRef: v1-e07-t04-semantic-scholar-adapter
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t04-semantic-scholar-adapter reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t04-semantic-scholar-adapter
+    - id: t05
+      kind: Task
+      name: Publisher RSS/Atom and Google News RSS adapter
+      description: >-
+        Configurable feed list per topic plus Google News RSS query feeds where appropriate; discovery
+        only — article text always retrieved from the publisher URL.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t05-rss-news-adapter.yaml
+        goalRef: v1-e07-t05-rss-news-adapter
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t05-rss-news-adapter reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t05-rss-news-adapter
+    - id: t06
+      kind: Task
+      name: GDELT news adapter
+      description: >-
+        GDELT DOC API query adapter for current-events discovery with language/date filters.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t06-gdelt-adapter.yaml
+        goalRef: v1-e07-t06-gdelt-adapter
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t06-gdelt-adapter reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t06-gdelt-adapter
+    - id: t07
+      kind: Task
+      name: Government and policy source adapters
+      description: >-
+        Congress.gov API, Federal Register API and GovInfo adapters as high-value policy sources, configurable
+        by topic.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml
+        goalRef: v1-e07-t07-government-adapters
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t07-government-adapters reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t07-government-adapters
+status:
+  phase: Pending

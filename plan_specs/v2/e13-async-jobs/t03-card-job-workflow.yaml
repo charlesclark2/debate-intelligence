@@ -1,0 +1,165 @@
+# TASK v2-e13-t03-card-job-workflow — CardJob Step Functions workflow
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §5 Step Functions, ADR-009, §8 hard failure rule, §12 Cut a Card, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e13-t03-card-job-workflow
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+  annotations:
+    debate/title: CardJob Step Functions workflow
+    debate/architecture-refs: §5, ADR-009, §15
+spec:
+  description: >-
+    Run the V1 CardService pipeline as a durable, inspectable Step Functions Standard workflow for the
+    web Cut-a-Card flow: fetch → extract (snapshot persisted to S3) → cite → select (ModelRouter returns
+    paragraph ids/char spans, never text) → verify (deterministic reconstruction from the snapshot) →
+    persist. Each state is a worker handler invoked via SQS with a task token, calling one debate_core
+    step function so the CLI and cloud share code. Retry and Catch blocks map failures to the Job's error
+    code and to AccessStatus (PAYWALLED, BLOCKED, NOT_FOUND) or VerificationStatus (UNVERIFIED/FAILED);
+    per the hard failure rule a card that cannot be verified is persisted as UNVERIFIED with the reason
+    and the job ends FAILED with code VERIFICATION_FAILED, never presented as finished. Job progress is
+    updated at each stage for t05's SSE stream. The HTTP trigger is t05; the UI is E14-t04.
+  priority: 1
+  constraints:
+    packages: [debate_workers.handlers, debate_core.application, infrastructure/modules/workflows]
+    forbidden:
+      - LLM output used as quoted evidence text; the select step returns offsets/paragraph ids only
+      - Marking a card VERIFIED from any state other than the deterministic verify step
+      - Retrying non-idempotent persist steps without an idempotency guard
+      - Bypassing paywalls, robots.txt or logins when fetch reports an access failure
+      - Real Bedrock or network calls in CI (use the fake/replay ModelRouter and recorded fixtures)
+  context:
+    - kind: TaskRef
+      name: v2-e13-t02-sqs-workers
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t02-card-service
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        CardService is decomposed into step functions (fetch, extract, cite, select, verify, persist)
+        with serializable inputs/outputs referencing ids and S3 keys only, and the CLI `cut` command still
+        passes its tests using the same steps in-process.
+    - id: ac2
+      description: >-
+        The ASL definition has Retry on transient errors (throttling, timeouts) with bounded attempts and
+        Catch blocks routing PAYWALLED/BLOCKED, extraction, model-schema and verification failures to a
+        MarkFailed state that records the typed JobError.
+    - id: ac3
+      description: >-
+        A local workflow test (Step Functions Local or an ASL interpreter with stubbed tasks) covers the
+        happy path, a paywalled URL, a model returning an out-of-range span, and a verification mismatch.
+    - id: ac4
+      description: >-
+        On verification mismatch the card is saved with verification_status UNVERIFIED and the reason,
+        and the job result exposes it only as a failure, never as a finished card.
+    - id: ac5
+      description: >-
+        Every execution carries the job_id as execution name and correlation_id in logs/traces; Job
+        progress reflects the current stage within 2 seconds of a state transition.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e13-t03-card-job-workflow-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+spec:
+  description: >-
+    Split CardService into reusable steps, wrap them as worker handlers, author the state machine with
+    failure mapping, then test locally and in dev with recorded fixtures.
+  goalRef:
+    name: v2-e13-t03-card-job-workflow
+  graph:
+    nodes:
+      - id: step-decomposition
+        kind: Task
+        name: Decompose CardService into steps
+        description: >-
+          Extract step functions with typed StepInput/StepOutput models; CardService.cut composes them
+          in-process so V1 behavior is unchanged.
+        outputs: [packages/debate_core/src/debate_core/application/card_steps.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card step and existing CardService tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, "card_steps or card_service"]
+      - id: step-handlers
+        kind: Task
+        name: Worker handlers with task-token callbacks
+        description: >-
+          One handler per step calling card_steps, updating Job progress, and sending SendTaskSuccess or
+          SendTaskFailure with a typed error name.
+        dependsOn: [step-decomposition]
+        outputs: [packages/debate_workers/src/debate_workers/handlers/card_job.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card job handler tests pass with fake ModelRouter
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_card_job.py]
+      - id: state-machine
+        kind: Task
+        name: CardJob state machine and failure mapping
+        description: >-
+          ASL (templated by Terraform) with SQS waitForTaskToken tasks, Retry/Catch per error class,
+          MarkFailed/MarkSucceeded states, execution role scoped to the card queue and Job table.
+        dependsOn: [step-handlers]
+        outputs:
+          - infrastructure/modules/workflows/card_job.asl.json
+          - infrastructure/modules/workflows/card_job.tf
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates with the workflow
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: artifact_exists
+            name: ASL catches verification failures
+            path: infrastructure/modules/workflows/card_job.asl.json
+            contentMatch: "VerificationFailed"
+      - id: workflow-tests
+        kind: Task
+        name: Local workflow tests for success and failure paths
+        description: >-
+          Step Functions Local (or ASL interpreter) tests with stubbed task responses for happy path,
+          paywall, bad span and verification mismatch.
+        dependsOn: [state-machine]
+        outputs: [tests/integration/test_card_job_workflow.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Workflow path tests pass
+            command: uv
+            args: [run, pytest, tests/integration/test_card_job_workflow.py]
+      - id: dev-run
+        kind: Task
+        name: Dev execution against an accessible fixture URL
+        description: >-
+          Start an execution in dev for a known open-access article and a known paywalled article; inspect
+          the execution history and resulting Job/Card records.
+        dependsOn: [workflow-tests]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Coach inspects dev executions
+            description: >-
+              Charlie confirms the open-access run produced a VERIFIED card matching the CLI output for the
+              same URL, and the paywalled run ended with PAYWALLED and no card presented as finished.
+status:
+  phase: Pending

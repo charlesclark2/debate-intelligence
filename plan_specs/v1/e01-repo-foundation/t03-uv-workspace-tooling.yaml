@@ -1,0 +1,160 @@
+# TASK v1-e01-t03-uv-workspace-tooling — uv workspace, Python 3.12 and quality tooling
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §4 (Python 3.12+, uv), §6 (package boundaries), §16 (deterministic tests)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t03-uv-workspace-tooling
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: uv workspace, Python 3.12 and quality tooling
+    debate/architecture-refs: §4, §6, §16
+spec:
+  description: >-
+    Turn the skeleton into a working uv workspace: a root pyproject.toml whose workspace members are
+    debate_core, debate_cli, debate_api and debate_workers (each with a src/ layout and tests/), a
+    Python 3.12 pin, a committed uv.lock, and shared quality tooling (ruff lint+format, pyright strict
+    for debate_core, pytest with xdist/coverage/respx/hypothesis, pre-commit). Packages are empty
+    shells with a smoke test; the CLI entry point is t07, import-linter contracts are E02-t06 and the
+    CI workflow is t04.
+  priority: 1
+  constraints:
+    packages: [pyproject.toml, uv.lock, packages/*, .pre-commit-config.yaml]
+    forbidden:
+      - debate_core depending on boto3, typer, fastapi or any web framework
+      - Unpinned dependency ranges without a committed uv.lock
+      - Tests that require network access by default (pytest-socket or equivalent blocks sockets)
+  context:
+    - kind: TaskRef
+      name: v1-e01-t01-init-local-repo
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `uv sync --all-packages` succeeds from a clean clone on Python 3.12 and produces an importable
+        debate_core, debate_cli, debate_api and debate_workers.
+    - id: ac2
+      description: >-
+        `uv run ruff check`, `uv run ruff format --check` and `uv run pyright packages/debate_core`
+        (strict mode) pass on the empty packages.
+    - id: ac3
+      description: >-
+        `uv run pytest` runs each package's smoke test in parallel (-n auto) with a coverage report and
+        socket access disabled by default.
+    - id: ac4
+      description: >-
+        pre-commit runs ruff, ruff-format, end-of-file/trailing-whitespace and a large-file guard.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t03-uv-workspace-tooling-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Define the workspace and packages first, then layer lint/format, type checking, test tooling and
+    pre-commit, verifying each with its own command.
+  goalRef:
+    name: v1-e01-t03-uv-workspace-tooling
+  graph:
+    nodes:
+      - id: workspace
+        kind: Task
+        name: Root workspace and package shells
+        description: >-
+          Root pyproject.toml with [tool.uv.workspace] members, .python-version 3.12, and per-package
+          pyproject.toml + src/<pkg>/__init__.py + py.typed; commit uv.lock.
+        outputs:
+          - pyproject.toml
+          - .python-version
+          - uv.lock
+          - packages/debate_core/pyproject.toml
+          - packages/debate_cli/pyproject.toml
+          - packages/debate_api/pyproject.toml
+          - packages/debate_workers/pyproject.toml
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Workspace syncs from lockfile
+            command: uv
+            args: [sync, --all-packages, --locked]
+          - type: artifact_exists
+            name: Workspace members declared
+            path: pyproject.toml
+            contentMatch: "[tool.uv.workspace]"
+      - id: lint-format
+        kind: Task
+        name: ruff lint and format configuration
+        description: >-
+          Configure ruff (pyflakes, pycodestyle, isort, bugbear, pyupgrade, simplify) and formatter
+          at the root with line length 110.
+        dependsOn: [workspace]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: ruff lint passes
+            command: uv
+            args: [run, ruff, check]
+          - type: command_succeeds
+            name: ruff format check passes
+            command: uv
+            args: [run, ruff, format, --check]
+      - id: type-check
+        kind: Task
+        name: pyright strict for debate_core
+        description: >-
+          Add pyright config: strict for packages/debate_core, standard for the delivery packages.
+        dependsOn: [workspace]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: pyright strict passes on debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+      - id: test-tooling
+        kind: Task
+        name: pytest, xdist, coverage, respx, hypothesis
+        description: >-
+          Add dev dependency group, pytest config (testpaths, strict markers, -n auto, socket
+          disabled), and one smoke test per package importing it.
+        dependsOn: [workspace]
+        outputs:
+          - packages/debate_core/tests/test_smoke.py
+          - packages/debate_cli/tests/test_smoke.py
+          - packages/debate_api/tests/test_smoke.py
+          - packages/debate_workers/tests/test_smoke.py
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Smoke tests pass in parallel with coverage
+            command: uv
+            args: [run, pytest, -n, auto, --cov]
+      - id: pre-commit
+        kind: Task
+        name: pre-commit hooks
+        description: >-
+          .pre-commit-config.yaml with ruff, ruff-format, whitespace/EOF fixers and
+          check-added-large-files; document `uv run pre-commit install` in the README.
+        dependsOn: [lint-format]
+        outputs: [.pre-commit-config.yaml]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: pre-commit passes on all files
+            command: uv
+            args: [run, pre-commit, run, --all-files]
+status:
+  phase: Pending

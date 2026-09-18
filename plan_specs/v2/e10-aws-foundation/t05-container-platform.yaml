@@ -1,0 +1,156 @@
+# TASK v2-e10-t05-container-platform — Networking, ECR and ECS/Fargate cluster
+# Epic: E10 AWS & Infrastructure-as-Code Foundation | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §4 Docker + ECS/Fargate, §5, §14 least privilege, §15 cost controls
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e10-t05-container-platform
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+  annotations:
+    debate/title: Networking, ECR and ECS/Fargate cluster
+    debate/architecture-refs: §4, §5, §14, §15
+spec:
+  description: >-
+    Provide the runtime substrate for the FastAPI service (E12-t04) and workers (E13-t02): a VPC with
+    public and private subnets across two AZs, a cost-aware egress design (single NAT gateway in
+    dev/stage, gateway endpoints for S3/DynamoDB, interface endpoints only where they pay for
+    themselves, e.g. ECR/Logs/Bedrock runtime in prod), ECR repositories with scan-on-push and lifecycle
+    rules, an ECS cluster with Fargate/Fargate Spot capacity providers, shared task execution roles and
+    per-service CloudWatch log groups. Workers must reach arbitrary publisher URLs over HTTPS for article
+    retrieval, so egress is required. This task does NOT define services or task definitions for the
+    API or workers, nor dashboards/alarms (t06).
+  priority: 1
+  constraints:
+    packages: [infrastructure/modules/network, infrastructure/modules/ecr, infrastructure/modules/ecs_cluster]
+    forbidden:
+      - Placing ECS tasks in public subnets with public IPs
+      - Security groups allowing 0.0.0.0/0 ingress to anything other than a load balancer listener
+      - One NAT gateway per AZ in dev/stage without a documented cost justification
+      - Mutable image tags for deploys (use immutable tags / digests)
+  context:
+    - kind: TaskRef
+      name: v2-e10-t02-terraform-bootstrap
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A two-AZ VPC exists per environment with private subnets for tasks, S3 and DynamoDB gateway
+        endpoints, and VPC flow logs; the NAT/endpoint choice and its monthly cost estimate are in an ADR.
+    - id: ac2
+      description: >-
+        ECR repositories debate-api and debate-workers have immutable tags, scan-on-push and a lifecycle
+        policy keeping the last N images; images are encrypted with KMS.
+    - id: ac3
+      description: >-
+        An ECS cluster with FARGATE and FARGATE_SPOT capacity providers and Container Insights exists;
+        a shared task execution role can pull only from these ECR repos and write only to its log groups.
+    - id: ac4
+      description: >-
+        CloudWatch log groups per service have explicit retention (e.g. 30 days dev, 90 days prod) and
+        KMS encryption with the logs key when available.
+    - id: ac5
+      description: >-
+        A throwaway smoke task (public hello-world image) launched into a private subnet can reach an
+        external HTTPS URL and write logs, proving egress and logging work.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e10-t05-container-platform-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+spec:
+  description: >-
+    Network first with a documented cost decision, then image registry, then the cluster and roles,
+    finishing with a smoke task that proves egress and logging.
+  goalRef:
+    name: v2-e10-t05-container-platform
+  graph:
+    nodes:
+      - id: network-adr
+        kind: Task
+        name: Cost-aware network ADR
+        description: >-
+          Compare single NAT, NAT per AZ and endpoint-heavy designs on monthly cost and failure modes;
+          record the choice per environment.
+        outputs: [docs/adr/0011-vpc-egress-design.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: VPC egress ADR exists
+            path: docs/adr/0011-vpc-egress-design.md
+            contentMatch: "NAT"
+      - id: network-module
+        kind: Task
+        name: VPC module
+        description: >-
+          Two-AZ VPC, public/private subnets, NAT per the ADR, S3/DynamoDB gateway endpoints, optional
+          interface endpoints, flow logs to CloudWatch.
+        dependsOn: [network-adr]
+        outputs: [infrastructure/modules/network/main.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates with network
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: ecr-repos
+        kind: Task
+        name: ECR repositories
+        description: >-
+          debate-api and debate-workers repos with IMMUTABLE tags, scan_on_push, KMS encryption and a
+          lifecycle policy.
+        dependsOn: [network-adr]
+        outputs: [infrastructure/modules/ecr/main.tf]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ECR tags are immutable
+            path: infrastructure/modules/ecr/main.tf
+            contentMatch: "IMMUTABLE"
+      - id: ecs-cluster
+        kind: Task
+        name: ECS cluster, capacity providers, roles and log groups
+        description: >-
+          Cluster with Container Insights, FARGATE/FARGATE_SPOT providers, shared execution role and
+          per-service log groups with retention; outputs consumed by E12-t04 and E13-t02.
+        dependsOn: [network-module, ecr-repos]
+        outputs: [infrastructure/modules/ecs_cluster/main.tf, infrastructure/envs/dev/platform.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev plan succeeds
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock-timeout=60s]
+          - type: command_succeeds
+            name: tflint passes
+            command: tflint
+            args: [--chdir=infrastructure, --recursive]
+      - id: smoke-task
+        kind: Task
+        name: Egress and logging smoke task
+        description: >-
+          Script that runs a one-off Fargate task in a private subnet curling an external HTTPS URL, then
+          checks the log group for the expected output; documented in a runbook.
+        dependsOn: [ecs-cluster]
+        outputs: [scripts/smoke/ecs_egress_smoke.sh, docs/runbooks/container-platform.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Smoke task reaches the internet and logs
+            command: bash
+            args: [scripts/smoke/ecs_egress_smoke.sh, dev]
+status:
+  phase: Pending

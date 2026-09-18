@@ -1,0 +1,156 @@
+# TASK v2-e11-t06-v1-data-migration — V1 local-library migration tool
+# Epic: E11 Cloud Persistence Adapters | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §7, ADR-002, ADR-003, §8 provenance (hashes preserved), §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e11-t06-v1-data-migration
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+  annotations:
+    debate/title: V1 local-library migration tool
+    debate/architecture-refs: §7, ADR-002, ADR-003, §15
+spec:
+  description: >-
+    Let pilot users (from the V1 team pilot) carry their locally cut cards and source snapshots into
+    their V2 cloud account without losing provenance. Add `debate-research migrate upload` which reads a
+    V1 data directory, re-verifies every card against its local snapshot, uploads snapshots through the
+    S3SnapshotStore (sha256 unchanged) and cards/spans/articles through the DynamoDB repositories with
+    original ids, and writes a resumable migration manifest. Cards that fail re-verification are
+    migrated as UNVERIFIED and reported, never promoted. The target is a real Cognito user in their
+    organization (v2-e12-t03): the command authenticates with that user's own Cognito tokens and takes
+    owner_id and organization_id from the verified token claims, not an admin-only placeholder account;
+    account creation and the web UI are out of scope.
+  priority: 2
+  constraints:
+    packages: [debate_cli, debate_core.application]
+    forbidden:
+      - Re-hashing or re-normalizing snapshots in a way that changes sha256 or offsets
+      - Marking a card VERIFIED unless it re-verifies against the uploaded snapshot
+      - Migration logic in debate_cli (CLI only parses args and renders output)
+      - Writing to another user's partition
+  context:
+    - kind: TaskRef
+      name: v2-e11-t03-dynamodb-repositories
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e11-t04-s3-snapshot-store
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t03-authn-authz
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `debate-research migrate upload --data-dir <dir> --dry-run` prints counts of articles, snapshots
+        and cards and lists any card that fails local re-verification, without writing anything.
+    - id: ac2
+      description: >-
+        A real run preserves card_id, article_id, snapshot_id, sha256 and span offsets; a post-run check
+        re-verifies every migrated card against its S3 snapshot.
+    - id: ac3
+      description: >-
+        The run is idempotent and resumable from a manifest; re-running after interruption creates no
+        duplicates and skips already-migrated items.
+    - id: ac4
+      description: >-
+        Items are written with the target user's owner_id and organization_id only; a test proves an
+        attempt to target a different owner is rejected.
+    - id: ac5
+      description: >-
+        At least one pilot debater's real V1 library migrates successfully with a coach-reviewed report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e11-t06-v1-data-migration-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+spec:
+  description: >-
+    Build a migration use case over the ports (so it is testable with local-to-local repos), add the
+    manifest, wrap it in a thin CLI command, and pilot it on real data.
+  goalRef:
+    name: v2-e11-t06-v1-data-migration
+  graph:
+    nodes:
+      - id: migration-use-case
+        kind: Task
+        name: MigrateLibrary use case
+        description: >-
+          Application service reading from local repositories and writing to target repositories via
+          ports, re-verifying each card with the E03 verifier before write.
+        outputs: [packages/debate_core/src/debate_core/application/migrate_library.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Migration use-case tests pass (local to in-memory)
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_migrate_library.py]
+      - id: manifest-resume
+        kind: Task
+        name: Resumable migration manifest
+        description: >-
+          JSON manifest recording per-item status and hashes; resume skips completed items and retries
+          failed ones.
+        dependsOn: [migration-use-case]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Resume and idempotency tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_migrate_library.py, -k, resume]
+      - id: cli-command
+        kind: Task
+        name: migrate upload CLI command
+        description: >-
+          Typer command with --data-dir, --dry-run and --env, Rich summary table, non-zero exit on any
+          integrity failure.
+        dependsOn: [manifest-resume]
+        outputs: [packages/debate_cli/src/debate_cli/commands/migrate.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI migrate tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_migrate.py]
+      - id: cloud-integration-test
+        kind: Task
+        name: moto-backed end-to-end test
+        description: >-
+          Migrate a fixture V1 library into moto DynamoDB/S3 and re-verify every card from S3.
+        dependsOn: [cli-command]
+        outputs: [tests/integration/test_v1_migration.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: End-to-end migration test passes
+            command: uv
+            args: [run, pytest, tests/integration/test_v1_migration.py]
+      - id: pilot-migration
+        kind: Task
+        name: Pilot migration
+        description: >-
+          Migrate one consenting pilot debater's V1 library into their own Cognito account and
+          organization in dev/stage and review the report.
+        dependsOn: [cloud-integration-test]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Coach reviews pilot migration report
+            description: >-
+              Charlie confirms card counts match, spot-checks five cards' tags/cites/underlining in the
+              cloud, and confirms no UNVERIFIED card was promoted.
+status:
+  phase: Pending

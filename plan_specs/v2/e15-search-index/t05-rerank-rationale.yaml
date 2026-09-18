@@ -1,0 +1,155 @@
+# TASK v2-e15-t05-rerank-rationale — Rerank and result rationale
+# Epic: E15 Search Index & Hybrid Retrieval | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §9 Ranking pipeline + source-quality features, §10
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e15-t05-rerank-rationale
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+  annotations:
+    debate/title: Rerank and result rationale
+    debate/architecture-refs: §9, §10, ADR-005
+spec:
+  description: >-
+    Complete the §9 ranking pipeline after hybrid retrieval: rerank the top-N (default 50) fused candidates
+    with Cohere Rerank 3.5 on Bedrock through the ModelRouter `rerank` task class, combine rerank_score
+    with the v1-e08-t03 explainable features (recency, peer-reviewed, publication type, accessibility,
+    citation count) into the final top 10, and optionally generate a SearchResultRationale per result
+    with Claude Haiku that explains relevance to the requested argument/need citing feature values and
+    chunk paragraph ids. Every result exposes its feature vector and scores to the client; there is no
+    hidden "truth score" and no politically preferred source ranking. This task does NOT expose HTTP
+    endpoints (E16 t01), render UI (E16 t03) or build the labeled relevance set (E16 t05).
+  priority: 1
+  constraints:
+    packages: [debate_core.retrieval, debate_core.application, debate_core.integrations]
+    forbidden:
+      - Calling Bedrock rerank or Claude directly instead of via ModelRouter
+      - Rationales that quote article text not present in the cited chunk, or that invent credentials
+      - A single opaque quality/truth score, or ranking by source ideology
+      - Failing the search when rerank or rationale fails; degrade to fused order with a flag
+      - Real model calls in CI; use fake/replay ModelRouter fixtures
+  context:
+    - kind: TaskRef
+      name: v2-e15-t04-hybrid-retrieval
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t03-feature-ranking
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        RankingPipeline.rank returns exactly min(10, candidates) RankedResult items each carrying
+        lexical_score, semantic_score, rerank_score, final_score and the source_quality_features map.
+    - id: ac2
+      description: >-
+        When the rerank call errors or times out, results fall back to fused+feature order and every result
+        carries rerank_status=SKIPPED with a reason; the pipeline does not raise.
+    - id: ac3
+      description: >-
+        SearchResultRationale is a validated Pydantic output with prompt_id/version, model_id, a <=40-word
+        explanation, need_match (uniqueness/link/impact/etc. or none) and referenced paragraph ids that
+        exist in the candidate chunk; invalid outputs are dropped, not shown.
+    - id: ac4
+      description: >-
+        Rationale generation is off by default per request, runs only for the final top 10, and its token
+        cost is recorded through usage telemetry.
+    - id: ac5
+      description: >-
+        On the t04 fixture corpus, reranked top-10 NDCG is logged against fused-only, and the change is
+        recorded in the PR for the relevance eval baseline (E16 t05).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e15-t05-rerank-rationale-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+spec:
+  description: >-
+    Add the rerank route and adapter, compose the ranking pipeline with v1 features and graceful fallback,
+    then add the optional rationale contract and prompt and measure on fixtures.
+  goalRef:
+    name: v2-e15-t05-rerank-rationale
+  graph:
+    nodes:
+      - id: rerank-route
+        kind: Task
+        name: Rerank task class and Bedrock adapter method
+        description: >-
+          Add ModelRouter.rerank(query, documents, top_n) with the Cohere Rerank 3.5 model id in routing
+          config, implemented in the Bedrock adapter and the fake/replay router.
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/bedrock/rerank.py
+          - config/model_routing.yaml
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Rerank adapter tests pass on replay fixtures
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_bedrock_rerank.py]
+      - id: ranking-pipeline
+        kind: Task
+        name: RankingPipeline composition with fallback
+        description: >-
+          Application-level pipeline: hybrid candidates -> rerank top-N -> combine with v1 feature ranker
+          (configurable weights) -> top 10, with timeout budget and SKIPPED fallback.
+        dependsOn: [rerank-route]
+        outputs: [packages/debate_core/src/debate_core/application/ranking_pipeline.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Ranking pipeline and fallback tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_ranking_pipeline.py]
+      - id: rationale-contract
+        kind: Task
+        name: SearchResultRationale schema and prompt
+        description: >-
+          Pydantic SearchResultRationale, versioned prompt search_result_rationale@1.0.0 routed to the
+          high_volume (Haiku) class, and a validator that rejects unknown paragraph ids and quoted text not
+          found in the chunk.
+        dependsOn: [ranking-pipeline]
+        outputs:
+          - packages/debate_core/src/debate_core/retrieval/rationale.py
+          - packages/debate_core/src/debate_core/prompts/search_result_rationale.yaml
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Rationale validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_rationale.py]
+      - id: fixture-measure
+        kind: Task
+        name: Fixture NDCG comparison and gates
+        description: >-
+          Extend the t04 fixture test to log NDCG@10 for fused vs reranked order, then run type and import
+          checks.
+        dependsOn: [rationale-contract]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Rerank fixture comparison runs
+            command: uv
+            args: [run, pytest, tests/integration/test_hybrid_recall.py, -k, rerank]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

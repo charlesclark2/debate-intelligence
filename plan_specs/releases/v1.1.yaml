@@ -1,0 +1,116 @@
+# RELEASE v1.1 — URL → verified card
+# Major version: V1. Epics: E04, E05, E06
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v1-1
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.1
+  annotations:
+    debate/title: v1.1 — URL → verified card
+spec:
+  description: >-
+    A student can run `debate-research cut <URL>` and receive a verified, tagged, cited, underlined card
+    as DOCX + JSON.
+  priority: 2
+  acceptanceCriteria:
+  - id: epic-e04
+    description: >-
+      Epic E04 (Article Retrieval & Extraction) goal is Succeeded.
+  - id: epic-e05
+    description: >-
+      Epic E05 (Model Router & Structured LLM Contracts) goal is Succeeded.
+  - id: epic-e06
+    description: >-
+      Epic E06 (Card Cutting, Citation & Export) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v1.1.0 is pushed and CHANGELOG.md has a v1.1 section.
+  - id: gate
+    description: >-
+      Gate release-v1-1-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v1-1-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.1
+spec:
+  gateType: review
+  description: >-
+    Release review for v1.1 (URL → verified card): demo the release goal end to end, confirm CI green
+    on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v1-1-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.1
+spec:
+  description: >-
+    Release plan for v1.1: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v1-1
+  series: v1
+  version: v1.1
+  graph:
+    nodes:
+    - id: e04
+      kind: External
+      name: Epic E04 — Article Retrieval & Extraction
+      inputs:
+        goalRef: v1-e04-article-retrieval
+        specRef: plan_specs/v1/e04-article-retrieval/epic.yaml
+    - id: e05
+      kind: External
+      name: Epic E05 — Model Router & Structured LLM Contracts
+      inputs:
+        goalRef: v1-e05-model-router
+        specRef: plan_specs/v1/e05-model-router/epic.yaml
+    - id: e06
+      kind: External
+      name: Epic E06 — Card Cutting, Citation & Export
+      inputs:
+        goalRef: v1-e06-card-cutting
+        specRef: plan_specs/v1/e06-card-cutting/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v1.1.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e04
+      - e05
+      - e06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v1.1.0
+    - id: release-review
+      kind: Gate
+      name: v1.1 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v1-1-gate
+status:
+  phase: Pending

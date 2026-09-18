@@ -1,0 +1,210 @@
+# EPIC E16 — Research Workspace UI
+# Major version: V2 | Release: v2.2 (Research workspace)
+# Architecture refs: §3 V2 user stories, §12 Research
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e16-research-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+  annotations:
+    debate/title: E16 — Research Workspace UI
+    debate/architecture-refs: §3 V2 user stories, §12 Research
+spec:
+  description: >-
+    Expose federated + indexed search in the web app with filters, explained top-ten results, open/cut
+    actions, history, and a relevance evaluation set.
+  priority: 7
+  constraints:
+    majorVersion: v2
+    release: v2.2
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      A student enters a query and sees ten results with source type, date, access status and relevance
+      rationale.
+  - id: ac2
+    description: >-
+      One click opens the source or starts a CardJob.
+  - id: ac3
+    description: >-
+      A team-labeled relevance set measures search quality release over release.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e16-research-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+spec:
+  description: >-
+    Task graph for epic E16 (Research Workspace UI). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v2-e16-research-ui
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v2-e13-t04-search-job-workflow
+      kind: External
+      name: 'Prerequisite from E13: SearchJob workflow'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t04-search-job-workflow
+        specRef: plan_specs/v2/e13-async-jobs/t04-search-job-workflow.yaml
+    - id: ext-v2-e13-t05-job-status-api
+      kind: External
+      name: 'Prerequisite from E13: Job status API (polling + SSE)'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t05-job-status-api
+        specRef: plan_specs/v2/e13-async-jobs/t05-job-status-api.yaml
+    - id: ext-v2-e13-t06-domain-events
+      kind: External
+      name: 'Prerequisite from E13: EventBridge domain events and schedules'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t06-domain-events
+        specRef: plan_specs/v2/e13-async-jobs/t06-domain-events.yaml
+    - id: ext-v2-e14-t02-auth-ui
+      kind: External
+      name: 'Prerequisite from E14: Authentication UX'
+      description: >-
+        Cross-epic prerequisite owned by v2-e14-web-cut-card (release v2.1).
+      inputs:
+        goalRef: v2-e14-t02-auth-ui
+        specRef: plan_specs/v2/e14-web-cut-card/t02-auth-ui.yaml
+    - id: ext-v2-e14-t04-cut-card-flow
+      kind: External
+      name: 'Prerequisite from E14: Cut-a-Card flow'
+      description: >-
+        Cross-epic prerequisite owned by v2-e14-web-cut-card (release v2.1).
+      inputs:
+        goalRef: v2-e14-t04-cut-card-flow
+        specRef: plan_specs/v2/e14-web-cut-card/t04-cut-card-flow.yaml
+    - id: ext-v2-e15-t05-rerank-rationale
+      kind: External
+      name: 'Prerequisite from E15: Rerank and result rationale'
+      description: >-
+        Cross-epic prerequisite owned by v2-e15-search-index (release v2.2).
+      inputs:
+        goalRef: v2-e15-t05-rerank-rationale
+        specRef: plan_specs/v2/e15-search-index/t05-rerank-rationale.yaml
+    - id: t01
+      kind: Task
+      name: Search API endpoints
+      description: >-
+        Create SearchJob with filters (dates, argument, need, source types), fetch ranked results, pagination.
+      inputs:
+        specRef: plan_specs/v2/e16-research-ui/t01-search-api.yaml
+        goalRef: v2-e16-t01-search-api
+      dependsOn:
+      - ext-v2-e13-t04-search-job-workflow
+      - ext-v2-e15-t05-rerank-rationale
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e16-t01-search-api reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e16-t01-search-api
+    - id: t02
+      kind: Task
+      name: Research page
+      description: >-
+        Query + filter form, loading/partial-result states, results list.
+      inputs:
+        specRef: plan_specs/v2/e16-research-ui/t02-research-page.yaml
+        goalRef: v2-e16-t02-research-page
+      dependsOn:
+      - t01
+      - ext-v2-e14-t02-auth-ui
+      - ext-v2-e13-t05-job-status-api
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e16-t02-research-page reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e16-t02-research-page
+    - id: t03
+      kind: Task
+      name: Result cards with rationale and actions
+      description: >-
+        Result component showing metadata, access status, feature-based rationale, open and cut actions
+        linking into Cut-a-Card.
+      inputs:
+        specRef: plan_specs/v2/e16-research-ui/t03-result-cards.yaml
+        goalRef: v2-e16-t03-result-cards
+      dependsOn:
+      - t02
+      - ext-v2-e14-t04-cut-card-flow
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e16-t03-result-cards reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e16-t03-result-cards
+    - id: t04
+      kind: Task
+      name: Search history and saved searches
+      description: >-
+        List/re-run past searches; save a search as a scheduled daily preset.
+      inputs:
+        specRef: plan_specs/v2/e16-research-ui/t04-search-history.yaml
+        goalRef: v2-e16-t04-search-history
+      dependsOn:
+      - t01
+      - ext-v2-e13-t06-domain-events
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e16-t04-search-history reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e16-t04-search-history
+    - id: t05
+      kind: Task
+      name: Search relevance evaluation
+      description: >-
+        Team-labeled query set on current topics; NDCG@10/precision@10 reporting in CI or on demand.
+      inputs:
+        specRef: plan_specs/v2/e16-research-ui/t05-relevance-eval.yaml
+        goalRef: v2-e16-t05-relevance-eval
+      dependsOn:
+      - ext-v2-e15-t05-rerank-rationale
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e16-t05-relevance-eval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e16-t05-relevance-eval
+status:
+  phase: Pending

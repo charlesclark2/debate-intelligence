@@ -1,0 +1,151 @@
+# TASK v2-e19-t04-privacy-legal-review — Privacy and legal review
+# Epic: E19 Production Readiness, Privacy & Safety | Release: v2.4 (Production readiness & school rollout) | Major: V2
+# Architecture refs: §14 (minors, COPPA/FERPA applicability, minimization), §19 (privacy/ethics risks)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e19-t04-privacy-legal-review
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+  annotations:
+    debate/title: Privacy and legal review
+    debate/architecture-refs: §14, §19
+spec:
+  description: >-
+    Complete the privacy and legal work §14 requires before school-wide deployment, since high-school users
+    may be minors. Produce a data inventory (what personal data is collected, why, where stored, who can
+    see it, retention), a minimization review that removes or justifies each field (e.g. email stored
+    hashed per §7, no birthdates collected, no student names in eval datasets), and an applicability memo
+    prepared with qualified counsel on COPPA (users under 13), FERPA (whether school relationships create
+    education-record obligations) and relevant state student-privacy laws, without assuming a regulation
+    applies merely because the product is educational. Draft the privacy policy and terms of use, decide
+    the school/parent consent approach (e.g. school-authorized accounts, age gate, parent notice), and
+    obtain approval from counsel and the school's administration. This is a documentation and review task:
+    it does NOT implement deletion/export (t03) or audit logs (t02), but it sets retention windows those
+    tasks read from config. Documents are not legal advice until counsel signs off.
+  priority: 1
+  constraints:
+    packages: [docs/privacy, docs/legal, web/src/app/legal]
+    forbidden:
+      - Launching to additional students or schools before counsel and school sign-off are recorded
+      - Collecting date of birth or other data beyond what the inventory justifies
+      - Presenting draft policies to users as final before approval
+      - Treating the engineer's assessment as a substitute for counsel's review
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/privacy/data-inventory.md lists every personal-data field with purpose, store, access roles,
+        retention window and minimization decision, cross-referenced with the t03 user data map.
+    - id: ac2
+      description: >-
+        An applicability memo records counsel's conclusions on COPPA, FERPA and applicable state student-
+        privacy law for the team's deployment model, with date and reviewer.
+    - id: ac3
+      description: >-
+        A privacy policy and terms of use are published at /legal/privacy and /legal/terms and linked from
+        sign-up, with version and effective date.
+    - id: ac4
+      description: >-
+        The consent approach (age gate / school authorization / parent notice) is documented and, if an
+        age gate is required, a follow-up implementation task is filed before rollout.
+    - id: ac5
+      description: >-
+        Written approval from counsel and the school administration is referenced in the release review
+        before v2.4 school rollout.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e19-t04-privacy-legal-review-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+spec:
+  description: >-
+    Inventory and minimize first, then brief counsel, draft the policies and consent approach from counsel's
+    guidance, publish them, and record approvals.
+  goalRef:
+    name: v2-e19-t04-privacy-legal-review
+  graph:
+    nodes:
+      - id: data-inventory
+        kind: Task
+        name: Data inventory and minimization review
+        description: >-
+          Walk entities, logs, telemetry, eval datasets and third parties (AWS, Google federation) to build
+          the inventory; propose removals and retention windows.
+        outputs: [docs/privacy/data-inventory.md]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Data inventory exists with retention column
+            path: docs/privacy/data-inventory.md
+            contentMatch: "Retention"
+      - id: counsel-review
+        kind: Task
+        name: Counsel applicability review
+        description: >-
+          Prepare a briefing packet (inventory, architecture summary, user population, school relationship)
+          and obtain counsel's memo on COPPA/FERPA/state-law applicability.
+        dependsOn: [data-inventory]
+        outputs: [docs/legal/applicability-memo.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: custom
+            name: Counsel memo received
+            description: >-
+              Qualified counsel reviews the packet and provides a written applicability memo; Charlie files a
+              summary with reviewer and date in docs/legal/applicability-memo.md.
+      - id: policies-consent
+        kind: Task
+        name: Privacy policy, terms and consent approach
+        description: >-
+          Draft the policy and terms in plain language suitable for students and parents, and document the
+          consent approach per counsel's guidance.
+        dependsOn: [counsel-review]
+        outputs:
+          - docs/legal/privacy-policy.md
+          - docs/legal/terms-of-use.md
+          - docs/privacy/consent-approach.md
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Consent approach documented
+            path: docs/privacy/consent-approach.md
+      - id: publish
+        kind: Task
+        name: Publish legal pages
+        description: Render approved documents at /legal/privacy and /legal/terms and link them from sign-up.
+        dependsOn: [policies-consent]
+        outputs: [web/src/app/legal/privacy/page.tsx, web/src/app/legal/terms/page.tsx]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Web build passes with legal pages
+            command: pnpm
+            args: [--dir, web, build]
+      - id: approvals
+        kind: Task
+        name: Record approvals
+        description: Obtain counsel and school administration sign-off and record them for the release gate.
+        dependsOn: [publish]
+        outputs: [docs/legal/approvals.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Legal and school sign-off
+            description: >-
+              Counsel and the school's administration approve the final policy, terms and consent approach in
+              writing; approvals are referenced in docs/legal/approvals.md and the v2.4 release review.
+status:
+  phase: Pending

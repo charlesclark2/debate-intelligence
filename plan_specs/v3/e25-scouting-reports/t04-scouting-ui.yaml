@@ -1,0 +1,159 @@
+# TASK v3-e25-t04-scouting-ui — Scouting UI and export
+# Epic: E25 Scouting Reports | Release: v3.4 (Scouting reports) | Major: V3
+# Architecture refs: §3 V3 scouting story, §6 ExportService, §13 Opponent intelligence, §14
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e25-t04-scouting-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+  annotations:
+    debate/title: Scouting UI and export
+    debate/architecture-refs: §3, §6, §13, §14
+spec:
+  description: >-
+    Give authenticated students and coaches a scouting page in the web app: search canonical teams by
+    school or team code (e.g. "Northside KL"), request or open a cached report, and read it with every
+    sourced assertion showing a link to its OpenCaselist/Tabroom source and retrieval time, inference
+    assertions visibly badged, and a data-freshness banner with a refresh action. Adds DOCX and PDF export
+    of a report through ExportService (sources rendered as footnotes, inference labels preserved) via a
+    short-lived signed download URL. Team search API, report page, export job and Playwright coverage are
+    in scope; report content/caching is t03 and prediction integration is t05. The page does not display
+    individual debater names or any data the report did not already contain.
+  priority: 2
+  constraints:
+    packages: [web, debate_api, debate_core.application, debate_workers]
+    forbidden:
+      - Rendering an assertion without its source link or an inference without its badge
+      - Public S3 URLs; downloads use short-lived signed URLs only
+      - Business logic in web or debate_api; formatting logic lives in ExportService
+      - Showing debater full names or contact data on the page or in exports
+      - Live network calls in web unit or Playwright tests; use mocked API fixtures
+  context:
+    - kind: TaskRef
+      name: v3-e25-t03-report-generation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e14-t02-auth-ui
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e17-t05-bulk-export
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        GET /v1/scouting/teams?q= returns canonical teams matching school or team code with
+        last_refreshed_at, and the web search box lists them with no more than 20 results.
+    - id: ac2
+      description: >-
+        The report page renders every assertion with a source link and retrieved_at tooltip, labels
+        INFERENCE assertions with an "Inference" badge, and shows a stale-data banner when the newest
+        input is older than the configured threshold.
+    - id: ac3
+      description: >-
+        Exporting to DOCX or PDF produces a file whose assertions carry numbered source footnotes and whose
+        inference labels are preserved, verified by structural tests on generated fixtures.
+    - id: ac4
+      description: >-
+        Unauthenticated users are redirected to sign-in, and a user from another organization receives
+        the not-found state for a report id they do not own.
+    - id: ac5
+      description: >-
+        Playwright covers search, open report, refresh and export flows against mocked API responses.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e25-t04-scouting-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+spec:
+  description: >-
+    Add the team search endpoint, build search and report pages, add export through ExportService, then
+    cover the flows end to end.
+  goalRef:
+    name: v3-e25-t04-scouting-ui
+  graph:
+    nodes:
+      - id: team-search-api
+        kind: Task
+        name: Team search endpoint
+        description: >-
+          Route over OpponentIntelService.search_teams (prefix/fuzzy match on school and team code over the
+          OpponentTable identity index), paginated, org-authorized; regenerate the TypeScript client.
+        outputs:
+          - packages/debate_api/src/debate_api/routes/scouting.py
+          - web/lib/api/generated/
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Team search route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_scouting.py, -k, search]
+      - id: search-and-report-pages
+        kind: Task
+        name: Scouting search and report pages
+        description: >-
+          Next.js routes app/(workspace)/scouting and scouting/[reportId] with job polling, sourced
+          assertion component, inference badge, freshness banner and refresh button.
+        dependsOn: [team-search-api]
+        outputs:
+          - web/app/(workspace)/scouting/page.tsx
+          - web/app/(workspace)/scouting/[reportId]/page.tsx
+          - web/components/scouting/
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Component tests pass
+            command: pnpm
+            args: [--dir, web, test, --, components/scouting]
+      - id: report-export
+        kind: Task
+        name: DOCX/PDF export of scouting reports
+        description: >-
+          ExportService.render_scouting_report for DOCX (python-docx, footnoted sources) and PDF, run as an
+          ExportJob with a signed download URL; export route and button.
+        dependsOn: [team-search-api]
+        outputs:
+          - packages/debate_core/src/debate_core/application/export/scouting_report_export.py
+          - tests/fixtures/scouting/report_export_expected.json
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Export structural tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_scouting_report_export.py]
+      - id: e2e-and-gates
+        kind: Task
+        name: Playwright flows and web quality gates
+        description: >-
+          Playwright specs for search, open, refresh, export and cross-org not-found; lint and build.
+        dependsOn: [search-and-report-pages, report-export]
+        outputs: [web/e2e/scouting.spec.ts]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Scouting Playwright specs pass
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/scouting.spec.ts]
+          - type: command_succeeds
+            name: Web lint passes
+            command: pnpm
+            args: [--dir, web, lint]
+          - type: command_succeeds
+            name: Web build succeeds
+            command: pnpm
+            args: [--dir, web, build]
+status:
+  phase: Pending

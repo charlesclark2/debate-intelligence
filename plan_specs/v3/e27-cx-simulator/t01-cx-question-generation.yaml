@@ -1,0 +1,145 @@
+# TASK v3-e27-t01-cx-question-generation — CX question generation
+# Epic: E27 Cross-Examination Simulator | Release: v3.6 (Cross-examination simulator) | Major: V3
+# Architecture refs: §3 V3 CX story, §10 CXQuestion + prompt governance, §13 Argument graph/Round simulator
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e27-t01-cx-question-generation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+  annotations:
+    debate/title: CX question generation
+    debate/architecture-refs: §3, §10, §13
+spec:
+  description: >-
+    Define the CXQuestion contract and generate cross-examination questions that target weaknesses in the
+    opponent's case graph for the segment being examined. Targets are chosen deterministically first:
+    nodes with thin warrant support, missing chain steps (uniqueness to link to internal link to impact),
+    stale or low-qualification cards, solvency deficits, and framework/criterion tensions in LD. The model
+    (reasoning tier, versioned prompt) then writes a small sequence of questions per target with an
+    objective (clarify, pin down, set up an argument, expose a missing warrant), expected concession and
+    follow-up branches. Each CXQuestion references target node ids and any card ids it quotes; quoted card
+    text is pulled from the card, never written by the model. Difficulty and strategy settings (e.g.
+    novice vs. varsity, clarification-heavy vs. trap-setting) shape selection and phrasing. Answer
+    simulation is t02, concession detection t03, UI t04 and evaluation t05.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.arguments, debate_core.rounds, debate_core.application]
+    forbidden:
+      - Model-authored quotations of evidence; card text is inserted from CardSpan/Card records only
+      - Questions without target node ids from the round's argument graphs
+      - Free-form model output; CXQuestion must validate with prompt_id/version and model_id recorded
+      - Importing boto3/typer/fastapi in debate_core
+      - Live network or real model calls in CI; use the fake/replay ModelRouter
+  context:
+    - kind: TaskRef
+      name: v3-e26-t03-state-machine
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e21-t04-graph-queries
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        CXQuestion includes question text, objective, target node ids, quoted card ids (optional),
+        expected concession, follow-ups, difficulty, confidence and generation metadata.
+    - id: ac2
+      description: >-
+        Target selection ranks weaknesses deterministically from graph queries, and on fixtures with a
+        seeded missing internal link, that gap is the top-ranked target.
+    - id: ac3
+      description: >-
+        Any quoted text in a question matches the referenced card's evidence text exactly, and questions
+        whose targets are not in the round graphs are rejected by post-validation.
+    - id: ac4
+      description: >-
+        generate_cx_questions(round_id, segment, settings) returns an ordered question plan for Policy CX,
+        LD CX and PF crossfire, respecting the segment's time budget (estimated question count).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e27-t01-cx-question-generation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+spec:
+  description: >-
+    Define the contract, build deterministic weakness targeting, add model phrasing with evidence
+    insertion, then expose the use case for each format's CX segments.
+  goalRef:
+    name: v3-e27-t01-cx-question-generation
+  graph:
+    nodes:
+      - id: cxquestion-schema
+        kind: Task
+        name: CXQuestion and CxSettings schemas
+        description: >-
+          Pydantic CXQuestion, CxObjective, CxFollowUp and CxSettings (difficulty, strategy, speed) models.
+        outputs: [packages/debate_core/src/debate_core/domain/cx.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CX schema exists
+            path: packages/debate_core/src/debate_core/domain/cx.py
+            contentMatch: "class CXQuestion"
+      - id: weakness-targeting
+        kind: Task
+        name: Deterministic weakness targeting
+        description: >-
+          Rank target nodes using E21 chain-completeness and support queries plus card recency and
+          qualification metadata; format-specific heuristics for LD value/criterion and PF weighing.
+        dependsOn: [cxquestion-schema]
+        outputs: [packages/debate_core/src/debate_core/arguments/cx_targeting.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Targeting tests pass on seeded-gap graphs
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_cx_targeting.py]
+      - id: question-prompt
+        kind: Task
+        name: Question phrasing prompt with evidence insertion
+        description: >-
+          Prompt cx.question_generation v1.0.0 that returns question skeletons with card-quote placeholders;
+          placeholders are filled from card text; validation and single repair retry.
+        dependsOn: [weakness-targeting]
+        outputs:
+          - packages/debate_core/src/debate_core/prompts/cx_question_generation.v1.yaml
+          - packages/debate_core/src/debate_core/arguments/cx_questions.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Question contract and quote-integrity tests pass with replay router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_cx_questions.py]
+      - id: use-case
+        kind: Task
+        name: generate_cx_questions use case
+        description: >-
+          Application use case reading round state and graphs, selecting the examined speech's nodes,
+          and sizing the question plan to the segment's duration from FormatRules.
+        dependsOn: [question-prompt]
+        outputs: [packages/debate_core/src/debate_core/application/cx/generate_questions.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Use-case tests pass for Policy, LD and PF segments
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_generate_cx_questions.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

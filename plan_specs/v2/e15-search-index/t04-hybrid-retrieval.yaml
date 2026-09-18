@@ -1,0 +1,157 @@
+# TASK v2-e15-t04-hybrid-retrieval — Hybrid BM25 + kNN retrieval
+# Epic: E15 Search Index & Hybrid Retrieval | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §5 OpenSearch, §9 Ranking pipeline, §10 embeddings, §12 Research, ADR-004
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e15-t04-hybrid-retrieval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+  annotations:
+    debate/title: Hybrid BM25 + kNN retrieval
+    debate/architecture-refs: §5, §9, §10, §12, ADR-004
+spec:
+  description: >-
+    Implement HybridRetriever behind a Retriever port: embed the (argument/need-expanded) query via
+    EmbeddingService, run a BM25 multi_match and a kNN query against the article_chunks index with the
+    same filters (published_at window, source_type, access_status, organization/owner scope), normalize
+    scores (min-max per list) and fuse with configurable weighted-sum or reciprocal rank fusion, then
+    collapse chunks to articles keeping the best-scoring chunk and its paragraph range as the candidate
+    passage. Output per candidate keeps lexical_score, semantic_score and fused_score so the ranking
+    remains explainable (§9). This task does NOT call Cohere Rerank or generate rationales (t05), expose
+    HTTP endpoints (E16 t01) or run provider fan-out (E13 t04); it only queries the derived index.
+  priority: 1
+  constraints:
+    packages: [debate_core.retrieval, debate_core.application, debate_core.integrations]
+    forbidden:
+      - Returning candidates outside the caller's organization/owner access scope
+      - Opaque single "quality" scores that hide the lexical/semantic components
+      - Treating OpenSearch hits as authoritative; article metadata is hydrated from DynamoDB
+      - Live OpenSearch or Bedrock calls in the unit/CI test suite
+      - Importing opensearch-py in domain/application layers
+  context:
+    - kind: TaskRef
+      name: v2-e15-t03-embeddings-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        HybridRetriever.retrieve(query, filters, k) returns RetrievalCandidate objects with article_id,
+        snapshot_id, best chunk paragraph range, lexical_score, semantic_score, fused_score and filter echo.
+    - id: ac2
+      description: >-
+        Date, source_type and access_status filters are applied identically to both BM25 and kNN legs (kNN
+        uses efficient filtering), verified by query-builder snapshot tests.
+    - id: ac3
+      description: >-
+        Fusion strategy (rrf or weighted) and weights are settings; with rrf, a document ranked 1st lexically
+        and absent from kNN results still appears in the fused top-k.
+    - id: ac4
+      description: >-
+        Chunks from the same article collapse to one candidate, and article metadata (title, publication,
+        published_at) is hydrated from the Article repository, not from index fields.
+    - id: ac5
+      description: >-
+        On a recorded 50-document fixture corpus, hybrid retrieval returns the labeled relevant article in the
+        top 10 for at least 8 of 10 fixture queries, compared with BM25-only as a logged baseline.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e15-t04-hybrid-retrieval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+spec:
+  description: >-
+    Define the port and candidate model, build pure query builders and fusion, wire the OpenSearch adapter
+    with hydration, then measure against a small recorded fixture corpus.
+  goalRef:
+    name: v2-e15-t04-hybrid-retrieval
+  graph:
+    nodes:
+      - id: retriever-port
+        kind: Task
+        name: Retriever port and RetrievalCandidate model
+        description: >-
+          Retriever protocol, RetrievalFilters (date window, source types, access statuses, scope) and
+          RetrievalCandidate with per-leg scores and chunk provenance.
+        outputs: [packages/debate_core/src/debate_core/retrieval/retriever.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Retriever port exists
+            path: packages/debate_core/src/debate_core/retrieval/retriever.py
+            contentMatch: "class RetrievalCandidate"
+      - id: query-builders
+        kind: Task
+        name: BM25 and kNN query builders
+        description: >-
+          Pure functions that build the multi_match (title^2, text) and knn queries with shared filter
+          clauses and scope terms; snapshot tests of generated query JSON.
+        dependsOn: [retriever-port]
+        outputs: [packages/debate_core/src/debate_core/integrations/opensearch/queries.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Query builder snapshot tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_opensearch_queries.py]
+      - id: fusion
+        kind: Task
+        name: Score normalization and fusion
+        description: >-
+          Min-max normalization, weighted-sum and RRF (k=60 default) fusion, and chunk-to-article collapse
+          keeping the best chunk; pure and property-tested.
+        dependsOn: [retriever-port]
+        outputs: [packages/debate_core/src/debate_core/retrieval/fusion.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fusion tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_fusion.py]
+      - id: hybrid-adapter
+        kind: Task
+        name: HybridRetriever adapter with hydration
+        description: >-
+          OpenSearch-backed HybridRetriever that embeds the query via EmbeddingService, issues both legs
+          concurrently, fuses, collapses and hydrates Article metadata from the repository port.
+        dependsOn: [query-builders, fusion]
+        outputs: [packages/debate_core/src/debate_core/integrations/opensearch/hybrid_retriever.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: HybridRetriever tests pass on recorded responses and fake router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_hybrid_retriever.py]
+      - id: fixture-eval
+        kind: Task
+        name: Fixture-corpus recall check
+        description: >-
+          Recorded 50-document corpus (current topics) with 10 labeled queries; test asserts hybrid recall@10
+          >= 0.8 and logs the BM25-only baseline for comparison.
+        dependsOn: [hybrid-adapter]
+        outputs: [tests/fixtures/search/hybrid_corpus/]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Hybrid recall@10 fixture test passes
+            command: uv
+            args: [run, pytest, tests/integration/test_hybrid_recall.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

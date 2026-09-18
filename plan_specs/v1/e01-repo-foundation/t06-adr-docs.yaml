@@ -1,0 +1,122 @@
+# TASK v1-e01-t06-adr-docs — Architecture proposal and ADR records
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §18 (ADR-001..ADR-009), §17, §6
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t06-adr-docs
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: Architecture proposal and ADR records
+    debate/architecture-refs: §6, §17, §18
+spec:
+  description: >-
+    Make the architecture decisions individually reviewable: split the §18 table into
+    docs/adr/0001..0009 using a standard template (Status, Context, Decision, Consequences,
+    Alternatives), each linking back to the relevant section of the architecture proposal (e.g.
+    ADR-006 exact-source verification ↔ §8, ADR-004 OpenSearch is derived ↔ §7). Add an ADR index and
+    a short process note for proposing ADR-010+. The proposal markdown itself already exists from
+    t01; this task only fixes links/headings in it and does not change its substance.
+  priority: 3
+  constraints:
+    packages: [docs/adr, docs/architecture]
+    forbidden:
+      - Changing an architectural decision without a new superseding ADR
+      - Embedding secrets, account ids or student data in docs
+  context:
+    - kind: TaskRef
+      name: v1-e01-t01-init-local-repo
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/adr/0001-python-domain-core.md through docs/adr/0009-async-job-architecture.md exist, one
+        per §18 decision, each with Status Accepted and the five template sections.
+    - id: ac2
+      description: >-
+        docs/adr/README.md indexes all ADRs with status and links, and documents how to propose,
+        supersede and number a new ADR.
+    - id: ac3
+      description: >-
+        Every ADR links to at least one section anchor in docs/architecture/architecture_proposal.md,
+        and a markdown link check passes offline.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t06-adr-docs-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Template first, then the nine ADRs, then the index and link check.
+  goalRef:
+    name: v1-e01-t06-adr-docs
+  graph:
+    nodes:
+      - id: adr-template
+        kind: Task
+        name: ADR template
+        description: >-
+          Add docs/adr/0000-template.md (MADR-style: Status, Context, Decision, Consequences,
+          Alternatives considered, References).
+        outputs: [docs/adr/0000-template.md]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Template exists
+            path: docs/adr/0000-template.md
+            contentMatch: "## Consequences"
+      - id: write-adrs
+        kind: Task
+        name: ADR-001 through ADR-009
+        description: >-
+          Write one ADR per §18 row, expanding the rationale from the proposal (e.g. ADR-006: LLMs
+          select spans, never author quoted evidence; ADR-008: no Neptune until DynamoDB adjacency
+          proves insufficient).
+        dependsOn: [adr-template]
+        outputs: [docs/adr/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ADR-006 exists
+            path: docs/adr/0006-exact-source-evidence-verification.md
+            contentMatch: "Status: Accepted"
+          - type: artifact_exists
+            name: ADR-009 exists
+            path: docs/adr/0009-async-job-architecture.md
+      - id: adr-index
+        kind: Task
+        name: ADR index, process and link check
+        description: >-
+          docs/adr/README.md index table and process; run an offline markdown link checker over docs/.
+        dependsOn: [write-adrs]
+        outputs: [docs/adr/README.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ADR index lists ADR-009
+            path: docs/adr/README.md
+            contentMatch: "0009"
+          - type: command_succeeds
+            name: Offline link check passes
+            command: uvx
+            args: [linkcheckmd, docs/, --local]
+          - type: custom
+            name: Coach/owner review of ADR wording
+            description: >-
+              Charlie reviews the ADRs in the PR and confirms they match the intended decisions.
+status:
+  phase: Pending

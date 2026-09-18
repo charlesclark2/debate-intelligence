@@ -1,0 +1,106 @@
+# RELEASE v3.0 — Debate file intelligence & argument graph
+# Major version: V3. Epics: E20, E21
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v3-0
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.0
+  annotations:
+    debate/title: v3.0 — Debate file intelligence & argument graph
+spec:
+  description: >-
+    Uploaded debate files are parsed into sections/cards and an explicit, sourced argument graph.
+  priority: 10
+  acceptanceCriteria:
+  - id: epic-e20
+    description: >-
+      Epic E20 (Debate File Intelligence) goal is Succeeded.
+  - id: epic-e21
+    description: >-
+      Epic E21 (Argument Graph) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v3.0.0 is pushed and CHANGELOG.md has a v3.0 section.
+  - id: gate
+    description: >-
+      Gate release-v3-0-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v3-0-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.0
+spec:
+  gateType: review
+  description: >-
+    Release review for v3.0 (Debate file intelligence & argument graph): demo the release goal end to
+    end, confirm CI green on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v3-0-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.0
+spec:
+  description: >-
+    Release plan for v3.0: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v3-0
+  series: v3
+  version: v3.0
+  graph:
+    nodes:
+    - id: e20
+      kind: External
+      name: Epic E20 — Debate File Intelligence
+      inputs:
+        goalRef: v3-e20-file-intelligence
+        specRef: plan_specs/v3/e20-file-intelligence/epic.yaml
+    - id: e21
+      kind: External
+      name: Epic E21 — Argument Graph
+      inputs:
+        goalRef: v3-e21-argument-graph
+        specRef: plan_specs/v3/e21-argument-graph/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v3.0.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e20
+      - e21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v3.0.0
+    - id: release-review
+      kind: Gate
+      name: v3.0 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v3-0-gate
+status:
+  phase: Pending

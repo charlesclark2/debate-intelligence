@@ -1,0 +1,133 @@
+# TASK v2-e17-t04-revision-history — Revision history and restore
+# Epic: E17 Card Library | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §7 (revisions, optimistic concurrency), §8 (re-verification, edit policy), §12 Card Library
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e17-t04-revision-history
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+  annotations:
+    debate/title: Revision history and restore
+    debate/architecture-refs: §7, §8, §12
+spec:
+  description: >-
+    Let a debater see how a card changed and roll back safely. Adds a revision history panel to the library
+    and editor listing revisions (editor, reason, time, verification status), a side-by-side diff of any two
+    revisions covering tag, cite fields and span markup (underline/highlight added or removed) as well as
+    any bracketed insertions, and a restore action. Restore never copies old evidence blindly: it creates a
+    new revision from the selected one and re-runs the EvidenceVerifier against the stored SourceSnapshot, so
+    a restored card is VERIFIED only if its evidence still reconstructs from the snapshot. Restores use the
+    optimistic-concurrency path and surface conflicts. This task does NOT change how revisions are written
+    (t01) or the editor (E14 t05).
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_api, web/src/components/library]
+    forbidden:
+      - Restoring by mutating or deleting existing revisions (restore appends a new revision)
+      - Marking a restored card VERIFIED without re-running verification against the snapshot
+      - Showing diffs of evidence text as editable content
+      - Live backend calls in unit/component tests
+  context:
+    - kind: TaskRef
+      name: v2-e17-t03-library-ui
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A pure revision-diff function returns structured changes for tag, each cite field, span additions and
+        removals (by offsets and style) and bracketed insertions between any two revisions.
+    - id: ac2
+      description: >-
+        POST /v1/cards/{id}/revisions/{rev}/restore appends a new revision whose parent is the current one,
+        runs verification, and returns the new verification_status.
+    - id: ac3
+      description: >-
+        Restoring a revision whose evidence no longer reconstructs from the snapshot yields UNVERIFIED with
+        the verifier's reason, and the UI shows the unverified badge.
+    - id: ac4
+      description: >-
+        A restore issued with a stale expected revision returns 409 and the UI offers to reload.
+    - id: ac5
+      description: >-
+        The diff view marks underline/highlight changes visually (added/removed) and passes a Playwright test
+        for view-diff-then-restore.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e17-t04-revision-history-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+spec:
+  description: >-
+    Implement the pure diff first, then the restore use case with verification, the endpoint, and finally
+    the history and diff UI.
+  goalRef:
+    name: v2-e17-t04-revision-history
+  graph:
+    nodes:
+      - id: revision-diff
+        kind: Task
+        name: Structured revision diff
+        description: Pure diff over CardRevision fields and span sets with tests over golden revision pairs.
+        outputs: [packages/debate_core/src/debate_core/evidence/revision_diff.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Revision diff tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_revision_diff.py]
+      - id: restore-use-case
+        kind: Task
+        name: Restore use case with re-verification
+        description: >-
+          restore_revision appends a new revision via the conditional-write path and runs EvidenceVerifier
+          against the stored snapshot, recording the reason on failure.
+        dependsOn: [revision-diff]
+        outputs: [packages/debate_core/src/debate_core/application/restore_revision.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Restore and re-verification tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_restore_revision.py]
+      - id: endpoints
+        kind: Task
+        name: Diff and restore endpoints
+        description: GET /v1/cards/{id}/revisions/diff?from=&to= and POST .../restore with 409 on conflict.
+        dependsOn: [restore-use-case]
+        outputs: [packages/debate_api/src/debate_api/routes/card_revisions.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Diff/restore route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_card_revisions.py, -k, "diff or restore"]
+      - id: history-ui
+        kind: Task
+        name: History panel and diff view
+        description: Revision list, two-revision picker, diff view with span-change markers and restore dialog.
+        dependsOn: [endpoints]
+        outputs:
+          - web/src/components/library/RevisionHistory.tsx
+          - web/src/components/library/RevisionDiff.tsx
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Diff-and-restore e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/revision-history.spec.ts]
+status:
+  phase: Pending

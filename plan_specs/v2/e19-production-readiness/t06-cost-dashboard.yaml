@@ -1,0 +1,134 @@
+# TASK v2-e19-t06-cost-dashboard — Cost telemetry dashboard
+# Epic: E19 Production Readiness, Privacy & Safety | Release: v2.4 (Production readiness & school rollout) | Major: V2
+# Architecture refs: §5 CloudWatch, §15 (model/search cost, token telemetry), §19 (costs grow with usage)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e19-t06-cost-dashboard
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+  annotations:
+    debate/title: Cost telemetry dashboard
+    debate/architecture-refs: §5, §15, §19
+spec:
+  description: >-
+    Make cost visible per feature so the team can keep a volunteer-funded platform within budget. Publish
+    per-call token/cost telemetry (v1-e05-t07) as CloudWatch Embedded Metric Format metrics with
+    dimensions feature (search, cut, extend, export, embed, rerank), task_class and model_id (no user ids
+    as dimensions), add cost-allocation tags (app, env, feature) across Terraform resources, and build a
+    CloudWatch dashboard showing daily model spend by feature, OpenSearch OCU hours, Fargate and S3 costs
+    from billing data, cost per verified card and per search, and quota rejections. Alarms fire when daily
+    model spend exceeds a threshold or rises >50% week over week. This task does NOT enforce quotas (t01)
+    or replace the AWS Budgets alarms from v2-e10-t01; it adds feature-level attribution.
+  priority: 2
+  constraints:
+    packages: [debate_core.integrations, infrastructure/modules/observability, infrastructure/modules/tags]
+    forbidden:
+      - High-cardinality metric dimensions (user_id, card_id, search_id)
+      - Including prompts, evidence text or PII in metrics or logs
+      - A separate analytics warehouse for cost data (CloudWatch/Cost Explorer only)
+      - Live AWS calls in unit/CI tests
+  context:
+    - kind: TaskRef
+      name: v2-e10-t06-observability-baseline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t07-usage-telemetry
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every ModelRouter call emits an EMF record with tokens_in, tokens_out, est_cost_usd and latency under
+        dimensions feature, task_class and model_id, verified by a unit test on the emitter.
+    - id: ac2
+      description: >-
+        All Terraform-managed resources carry app/env/feature tags, enforced by a tag policy test over the
+        dev plan, and the tags are activated as cost-allocation tags.
+    - id: ac3
+      description: >-
+        The CloudWatch dashboard (Terraform-managed) shows spend by feature, cost per verified card, cost per
+        search, OpenSearch OCU usage and quota rejections for the selected environment.
+    - id: ac4
+      description: >-
+        Alarms for daily model spend threshold and >50% week-over-week increase exist and notify the ops SNS
+        topic; a test alarm state change is observed in dev.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e19-t06-cost-dashboard-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+spec:
+  description: >-
+    Emit feature-attributed cost metrics, enforce cost-allocation tags, then build the dashboard and alarms
+    in Terraform and verify in dev.
+  goalRef:
+    name: v2-e19-t06-cost-dashboard
+  graph:
+    nodes:
+      - id: emf-emitter
+        kind: Task
+        name: EMF cost metric emitter
+        description: >-
+          UsageTelemetry sink that writes EMF JSON to stdout with low-cardinality dimensions; feature context
+          propagated from use cases.
+        outputs: [packages/debate_core/src/debate_core/integrations/telemetry/emf_sink.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: EMF emitter tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_emf_sink.py]
+      - id: cost-tags
+        kind: Task
+        name: Cost-allocation tagging and policy test
+        description: Default tags in providers plus per-module feature tags; a plan-JSON test asserts coverage.
+        outputs: [infrastructure/modules/tags/main.tf, tests/infrastructure/test_tag_policy.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tag policy test passes
+            command: uv
+            args: [run, pytest, tests/infrastructure/test_tag_policy.py]
+      - id: dashboard-alarms
+        kind: Task
+        name: Cost dashboard and alarms
+        description: >-
+          Terraform aws_cloudwatch_dashboard with metric math for cost per card/search, and anomaly/threshold
+          alarms to the ops SNS topic.
+        dependsOn: [emf-emitter, cost-tags]
+        outputs: [infrastructure/modules/observability/cost_dashboard.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Dev Terraform plan succeeds
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock=false, -input=false]
+      - id: dev-verification
+        kind: Task
+        name: Dev verification
+        description: >-
+          Generate traffic with replay fixtures in dev, confirm dashboard widgets populate and trigger a test
+          alarm.
+        dependsOn: [dashboard-alarms]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Dashboard populated and alarm observed
+            description: >-
+              Charlie confirms in dev that all widgets show data and that a forced threshold breach produces an
+              SNS notification; screenshot attached to the PR.
+status:
+  phase: Pending

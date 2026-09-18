@@ -1,0 +1,148 @@
+# TASK v2-e12-t02-fastapi-service — FastAPI service skeleton
+# Epic: E12 Identity & API Service | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §4 FastAPI + Pydantic, §6 debate_api has no business logic, §12, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e12-t02-fastapi-service
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+  annotations:
+    debate/title: FastAPI service skeleton
+    debate/architecture-refs: §5, §12, §4
+spec:
+  description: >-
+    Create the debate_api package as a thin HTTP adapter over debate_core: an app factory, settings-driven
+    composition root that injects debate_core services and repositories via FastAPI dependencies,
+    /healthz (liveness) and /readyz (checks repository connectivity) endpoints, a uniform RFC 9457
+    problem+json error model that maps domain errors (not found, RevisionConflict, access/verification
+    failures) to status codes, request-id/correlation middleware, OpenAPI metadata with /v1 versioning,
+    and a production Dockerfile. Routes contain no business logic. Authentication is E12-t03, resource
+    endpoints E12-t05, deployment E12-t04 and client generation E12-t06.
+  priority: 1
+  constraints:
+    packages: [debate_api]
+    forbidden:
+      - Business logic, prompt construction or evidence manipulation in route handlers
+      - Importing fastapi/starlette inside debate_core
+      - Returning stack traces or internal exception messages to clients
+      - Running as root in the container image
+  context:
+    - kind: TaskRef
+      name: v1-e02-t02-ports
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        create_app(settings) builds the app; tests construct it with in-memory repositories and no AWS
+        access.
+    - id: ac2
+      description: >-
+        GET /healthz returns 200 without touching dependencies; GET /readyz returns 503 when a dependency
+        probe fails and 200 otherwise.
+    - id: ac3
+      description: >-
+        Domain errors map to problem+json responses with type, title, status, detail and request_id; an
+        unhandled exception yields a generic 500 with no stack trace in the body.
+    - id: ac4
+      description: >-
+        Every response carries X-Request-ID (propagated from the request or generated) and logs include
+        the same correlation_id.
+    - id: ac5
+      description: >-
+        docker build produces a non-root, multi-stage image under 300 MB that serves /healthz via uvicorn.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e12-t02-fastapi-service-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+spec:
+  description: >-
+    Package and factory, then DI composition root, then error model and middleware, then the container.
+  goalRef:
+    name: v2-e12-t02-fastapi-service
+  graph:
+    nodes:
+      - id: package-factory
+        kind: Task
+        name: debate_api package and app factory
+        description: >-
+          Add packages/debate_api to the uv workspace with create_app, /v1 router, OpenAPI title/version
+          and health endpoints.
+        outputs:
+          - packages/debate_api/pyproject.toml
+          - packages/debate_api/src/debate_api/app.py
+          - packages/debate_api/src/debate_api/routes/health.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Health endpoint tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_health.py]
+      - id: composition-root
+        kind: Task
+        name: Dependency injection of debate_core services
+        description: >-
+          A container module building repositories/services from settings once per process, exposed as
+          FastAPI Depends providers and overridable in tests.
+        dependsOn: [package-factory]
+        outputs: [packages/debate_api/src/debate_api/dependencies.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Dependency override tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_dependencies.py]
+      - id: errors-middleware
+        kind: Task
+        name: Problem+json error model and request-id middleware
+        description: >-
+          Exception handlers mapping domain/application errors to problem+json, plus middleware binding
+          X-Request-ID into the E10 logging context.
+        dependsOn: [package-factory]
+        outputs:
+          - packages/debate_api/src/debate_api/errors.py
+          - packages/debate_api/src/debate_api/middleware.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Error mapping tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_errors.py]
+      - id: dockerfile
+        kind: Task
+        name: Production Dockerfile and quality gates
+        description: >-
+          Multi-stage uv-based image, non-root user, uvicorn entrypoint with proxy headers; type and import
+          checks for debate_api.
+        dependsOn: [composition-root, errors-middleware]
+        outputs: [packages/debate_api/Dockerfile]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: API image builds
+            command: docker
+            args: [build, -f, packages/debate_api/Dockerfile, -t, debate-api:ci, .]
+          - type: command_succeeds
+            name: Type check passes for debate_api
+            command: uv
+            args: [run, pyright, packages/debate_api]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

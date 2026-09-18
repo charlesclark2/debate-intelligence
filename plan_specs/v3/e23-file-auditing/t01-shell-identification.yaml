@@ -1,0 +1,173 @@
+# TASK v3-e23-t01-shell-identification — 1NC shell identification
+# Epic: E23 File Auditing | Release: v3.2 (File auditing) | Major: V3
+# Architecture refs: §3 V3 DA audit story, §10 structured model contracts, §13 File auditing
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e23-t01-shell-identification
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+  annotations:
+    debate/title: 1NC shell identification
+    debate/architecture-refs: §3, §10, §13
+spec:
+  description: >-
+    Find the 1NC shell in a parsed disadvantage file and lay out its steps. Deterministic heuristics come
+    first: a block titled 1NC, "1NC Shell" or "1NC - <aff>", the first block under the DA hat, tag cues
+    (uniqueness, link, internal link, impact) and LINKS_TO/IMPACTS edges from E21. A model call (prompt
+    audit.shell_identification) is used only when several shells compete or step roles are ambiguous. The
+    output ShellStructure lists ordered steps pointing at existing cards or analytics, alternative link
+    modules and 2NC/1NR extension blocks mapped to step roles, so later tasks can find alternatives.
+    Boundaries: coherence findings are t02, card comparison is t03, and counterplan/kritik shells are out of
+    scope for this release.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, prompts]
+    forbidden:
+      - Fabricating shell steps that do not map to existing cards or analytics
+      - Persisting nodes, edges or findings whose card/node references do not resolve
+      - Model calls without a registered prompt_id/semver and persisted GeneratedArtifactMetadata
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e21-t03-edge-extraction
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        ShellStructure has shell kind DA, the shell block ref, ordered steps (UNIQUENESS, LINK,
+        INTERNAL_LINK, IMPACT, optional BRINK/IMPACT_FRAMING/TURNS_CASE) each pointing to a card or analytic
+        and node refs, alternate link modules, extension blocks mapped to roles, confidence and alternatives
+        considered.
+    - id: ac2
+      description: >-
+        Heuristics alone identify the shell in unambiguous files, with no model call.
+    - id: ac3
+      description: >-
+        With several candidate shells (short and long 1NC, aff-specific link modules) the result lists
+        ranked candidates so the user can choose.
+    - id: ac4
+      description: >-
+        A file with no recognizable DA shell returns a typed ShellNotFound with reasons.
+    - id: ac5
+      description: >-
+        Replay-fixture tests cover an NHI spending DA, a politics DA and one DA from 2024-26.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e23-t01-shell-identification-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+spec:
+  description: >-
+    Schema, heuristics, model disambiguation, extension mapping, then fixture tests.
+  goalRef:
+    name: v3-e23-t01-shell-identification
+  graph:
+    nodes:
+      - id: schema
+        kind: Task
+        name: ShellStructure schema
+        description: >-
+          Pydantic model with step roles and reference types.
+        outputs: [packages/debate_core/src/debate_core/arguments/audit/shell.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Shell schema tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/audit/test_shell_identification.py
+              - "-k"
+              - schema
+      - id: heuristics
+        kind: Task
+        name: Deterministic shell heuristics
+        description: >-
+          Block-title patterns, hat position, tag cues and edge order scoring.
+        dependsOn: [schema]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Heuristic tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/audit/test_shell_identification.py
+              - "-k"
+              - heuristic
+      - id: disambiguation
+        kind: Task
+        name: Model-assisted disambiguation
+        description: >-
+          Prompt audit.shell_identification invoked only on ambiguity; validated references.
+        dependsOn: [heuristics]
+        outputs: [prompts/audit/shell_identification.yaml]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Shell prompt registered
+            path: prompts/audit/shell_identification.yaml
+            contentMatch: "prompt_id: audit.shell_identification"
+          - type: test_passes
+            name: Disambiguation tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/audit/test_shell_identification.py
+              - "-k"
+              - ambiguous
+      - id: extension-mapping
+        kind: Task
+        name: Extension and alternate-module mapping
+        description: >-
+          Map 2NC/1NR blocks (uniqueness walls, link extensions, A2 blocks) and alternate link modules to
+          step roles.
+        dependsOn: [heuristics]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Extension mapping tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/audit/test_shell_identification.py
+              - "-k"
+              - extension
+      - id: fixtures
+        kind: Task
+        name: Fixture tests
+        description: >-
+          Expected shells for the three fixture DA files; type check.
+        dependsOn: [disambiguation, extension-mapping]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Shell fixture tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/audit/test_shell_fixtures.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

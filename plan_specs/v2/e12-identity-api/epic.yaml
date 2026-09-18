@@ -1,0 +1,252 @@
+# EPIC E12 — Identity & API Service
+# Major version: V2 | Release: v2.0 (Cloud platform foundation)
+# Architecture refs: §5, §12 Authentication and authorization, §4 API
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e12-identity-api
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+  annotations:
+    debate/title: E12 — Identity & API Service
+    debate/architecture-refs: §5, §12 Authentication and authorization, §4 API
+spec:
+  description: >-
+    Provide Cognito sign-in (password + Google), the FastAPI service over debate_core use cases, role/tenant
+    authorization, and API Gateway → Fargate deployment.
+  priority: 5
+  constraints:
+    majorVersion: v2
+    release: v2.0
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Users can register/sign in with email+password or Google via Cognito.
+  - id: ac2
+    description: >-
+      FastAPI validates JWTs, maps claims to student/coach/admin roles and organization ids, and contains
+      no business logic.
+  - id: ac3
+    description: >-
+      The API is deployed behind API Gateway with throttling and publishes an OpenAPI spec used to generate
+      the TypeScript client.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e12-identity-api-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+spec:
+  description: >-
+    Task graph for epic E12 (Identity & API Service). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v2-e12-identity-api
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e02-t02-ports
+      kind: External
+      name: 'Prerequisite from E02: Repository and provider port interfaces'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t02-ports
+        specRef: plan_specs/v1/e02-domain-core/t02-ports.yaml
+    - id: ext-v1-e03-t05-edit-constraints
+      kind: External
+      name: 'Prerequisite from E03: Evidence edit policy'
+      description: >-
+        Cross-epic prerequisite owned by v1-e03-evidence-integrity (release v1.0).
+      inputs:
+        goalRef: v1-e03-t05-edit-constraints
+        specRef: plan_specs/v1/e03-evidence-integrity/t05-edit-constraints.yaml
+    - id: ext-v2-e10-t02-terraform-bootstrap
+      kind: External
+      name: 'Prerequisite from E10: Terraform bootstrap and environments'
+      description: >-
+        Cross-epic prerequisite owned by v2-e10-aws-foundation (release v2.0).
+      inputs:
+        goalRef: v2-e10-t02-terraform-bootstrap
+        specRef: plan_specs/v2/e10-aws-foundation/t02-terraform-bootstrap.yaml
+    - id: ext-v2-e10-t03-github-oidc-deploy
+      kind: External
+      name: 'Prerequisite from E10: GitHub OIDC deploy roles'
+      description: >-
+        Cross-epic prerequisite owned by v2-e10-aws-foundation (release v2.0).
+      inputs:
+        goalRef: v2-e10-t03-github-oidc-deploy
+        specRef: plan_specs/v2/e10-aws-foundation/t03-github-oidc-deploy.yaml
+    - id: ext-v2-e10-t05-container-platform
+      kind: External
+      name: 'Prerequisite from E10: Networking, ECR and ECS/Fargate cluster'
+      description: >-
+        Cross-epic prerequisite owned by v2-e10-aws-foundation (release v2.0).
+      inputs:
+        goalRef: v2-e10-t05-container-platform
+        specRef: plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml
+    - id: ext-v2-e11-t03-dynamodb-repositories
+      kind: External
+      name: 'Prerequisite from E11: DynamoDB repository implementations'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t03-dynamodb-repositories
+        specRef: plan_specs/v2/e11-cloud-persistence/t03-dynamodb-repositories.yaml
+    - id: ext-v2-e11-t04-s3-snapshot-store
+      kind: External
+      name: 'Prerequisite from E11: S3 snapshot and export store'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t04-s3-snapshot-store
+        specRef: plan_specs/v2/e11-cloud-persistence/t04-s3-snapshot-store.yaml
+    - id: ext-v2-e11-t05-optimistic-concurrency
+      kind: External
+      name: 'Prerequisite from E11: Optimistic concurrency for cards and files'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t05-optimistic-concurrency
+        specRef: plan_specs/v2/e11-cloud-persistence/t05-optimistic-concurrency.yaml
+    - id: t01
+      kind: Task
+      name: Cognito user pool and Google federation
+      description: >-
+        User pool, app client, hosted UI/OAuth flows, Google IdP, groups for roles, custom organization
+        attribute; Terraform.
+      inputs:
+        specRef: plan_specs/v2/e12-identity-api/t01-cognito-user-pool.yaml
+        goalRef: v2-e12-t01-cognito-user-pool
+      dependsOn:
+      - ext-v2-e10-t02-terraform-bootstrap
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e12-t01-cognito-user-pool reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e12-t01-cognito-user-pool
+    - id: t02
+      kind: Task
+      name: FastAPI service skeleton
+      description: >-
+        debate_api app factory, health/readiness, error model, OpenAPI metadata, dependency injection
+        of debate_core services, Dockerfile.
+      inputs:
+        specRef: plan_specs/v2/e12-identity-api/t02-fastapi-service.yaml
+        goalRef: v2-e12-t02-fastapi-service
+      dependsOn:
+      - ext-v1-e02-t02-ports
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e12-t02-fastapi-service reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e12-t02-fastapi-service
+    - id: t03
+      kind: Task
+      name: Authentication, roles and tenancy
+      description: >-
+        JWT verification against Cognito JWKS, User provisioning on first login, role and organization_id
+        enforcement helpers, resource ownership checks.
+      inputs:
+        specRef: plan_specs/v2/e12-identity-api/t03-authn-authz.yaml
+        goalRef: v2-e12-t03-authn-authz
+      dependsOn:
+      - t01
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e12-t03-authn-authz reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e12-t03-authn-authz
+    - id: t04
+      kind: Task
+      name: API Gateway + ECS Fargate deployment
+      description: >-
+        HTTP API with JWT authorizer and throttling, VPC link/ALB to Fargate service, blue/green or rolling
+        deploy from CI.
+      inputs:
+        specRef: plan_specs/v2/e12-identity-api/t04-api-deploy.yaml
+        goalRef: v2-e12-t04-api-deploy
+      dependsOn:
+      - t02
+      - ext-v2-e10-t03-github-oidc-deploy
+      - ext-v2-e10-t05-container-platform
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e12-t04-api-deploy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e12-t04-api-deploy
+    - id: t05
+      kind: Task
+      name: Core resource endpoints
+      description: >-
+        Articles, snapshots (presigned), cards read/update endpoints over existing use cases, using DynamoDB/S3
+        repositories.
+      inputs:
+        specRef: plan_specs/v2/e12-identity-api/t05-core-endpoints.yaml
+        goalRef: v2-e12-t05-core-endpoints
+      dependsOn:
+      - t03
+      - ext-v2-e11-t03-dynamodb-repositories
+      - ext-v2-e11-t04-s3-snapshot-store
+      - ext-v1-e03-t05-edit-constraints
+      - ext-v2-e11-t05-optimistic-concurrency
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e12-t05-core-endpoints reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e12-t05-core-endpoints
+    - id: t06
+      kind: Task
+      name: OpenAPI TypeScript client generation
+      description: >-
+        Generate and version a typed TS client from OpenAPI in CI; drift check fails the build.
+      inputs:
+        specRef: plan_specs/v2/e12-identity-api/t06-openapi-client.yaml
+        goalRef: v2-e12-t06-openapi-client
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e12-t06-openapi-client reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e12-t06-openapi-client
+status:
+  phase: Pending

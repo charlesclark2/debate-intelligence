@@ -1,0 +1,65 @@
+# TASK <task-name> — <Title>
+# Epic: <EKEY> <Epic title> | Release: <vX.Y> (<release theme>) | Major: <VX>
+# Architecture refs: <§ sections of docs/architecture/architecture_proposal.md>
+# Worked example: plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: <task-name>                     # <major>-<eNN>-<tNN>-<slug>
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: <v1|v2|v3>
+    debate/release: <vX.Y>
+    debate/epic: <epic-name>
+  annotations:
+    debate/title: <Title>
+    debate/architecture-refs: <§N, §M>
+spec:
+  description: >-
+    What this task delivers and why; what it explicitly does NOT own (boundaries with sibling tasks).
+  priority: <1-3>                       # 1 = release-critical path
+  constraints:
+    packages: [<python packages / dirs touched>]
+    forbidden:
+      - <architecture guardrails that apply>
+  context:                              # cross-task prerequisites (omit when none)
+    - kind: TaskRef
+      name: <prerequisite-task-name>
+      relation: dependsOn
+  acceptanceCriteria:                   # 3-6 observable outcomes
+    - id: ac1
+      description: >-
+        ...
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: <task-name>-plan
+  namespace: debate-intelligence
+  labels: { ...identical to the Goal... }
+spec:
+  description: >-
+    How the work is sequenced.
+  goalRef:
+    name: <task-name>
+  graph:
+    nodes:                              # 3-6 steps
+      - id: <step-id>
+        kind: Task
+        name: <Step name>
+        description: >-
+          ...
+        dependsOn: [<step-id>]          # omit for the first step
+        outputs: [<paths created>]
+        estimatedEffort: <e.g. 2h>
+        acceptanceCriteria:
+          - type: test_passes | command_succeeds | artifact_exists | endpoint_responds | custom
+            name: <what is checked>
+            command: uv
+            args: [run, pytest, <path>]
+status:
+  phase: Pending

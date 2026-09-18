@@ -1,0 +1,139 @@
+# TASK v2-e11-t01-access-pattern-design — AppTable access-pattern design
+# Epic: E11 Cloud Persistence Adapters | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §7 Data Architecture (DynamoDB physical strategy), ADR-002, ADR-003, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e11-t01-access-pattern-design
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+  annotations:
+    debate/title: AppTable access-pattern design
+    debate/architecture-refs: §7, ADR-002, ADR-003, §15
+spec:
+  description: >-
+    Design the DynamoDB AppTable key schema from V2's real access patterns before any table or repository
+    code exists (§7 says keys must be validated against access patterns first). Enumerate every V2 read
+    and write (user by cognito_sub, cards by owner newest-first, card by id, snapshot metadata by article,
+    jobs by owner and status, searches and results by user, org membership), then map them to PK/SK
+    patterns (USER#, CARD#, ARTICLE#, SNAPSHOT#, JOB#, SEARCH#, ORG#) and a minimal set of GSIs. The
+    output is documentation plus key-builder functions and item-shape tests; it deliberately excludes
+    ArgumentTable and OpponentTable (V3), OpenSearch mappings (E15) and library folders/tags (E17-t01,
+    which must extend this design rather than fork it). Deviations from §7 get an ADR.
+  priority: 1
+  constraints:
+    packages: [docs/data, debate_core.integrations]
+    forbidden:
+      - One table per entity (§7 prefers a small number of single-table designs)
+      - Scan operations in any enumerated access pattern
+      - Storing raw email addresses or full names in key attributes (use opaque ids / email_hash)
+      - Blob content (snapshot bodies, DOCX) in DynamoDB items; S3 is the blob system of record
+  context:
+    - kind: TaskRef
+      name: v1-e02-t01-domain-entities
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/data/apptable-access-patterns.md lists every V2 access pattern with caller (API route or
+        worker), key condition, index used, expected cardinality and consistency requirement.
+    - id: ac2
+      description: >-
+        Every pattern is served by a Query or GetItem on the base table or a named GSI; none requires a
+        Scan or a client-side filter over an unbounded partition.
+    - id: ac3
+      description: >-
+        Pure key-builder functions (e.g. card_pk, owner_cards_gsi1) exist with unit tests asserting exact
+        key strings and ULID-based sort order for newest-first listing.
+    - id: ac4
+      description: >-
+        The design documents hot-partition risk, item-size limits (400 KB) and which entity fields are
+        projected into each GSI, and states that Card.revision is present for E11-t05.
+    - id: ac5
+      description: >-
+        Charlie reviews and approves the design; any deviation from §7's recommended split is captured
+        as an ADR.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e11-t01-access-pattern-design-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+spec:
+  description: >-
+    Inventory access patterns from the V2 epics, design keys and GSIs, encode them as tested key builders,
+    and close with a design review.
+  goalRef:
+    name: v2-e11-t01-access-pattern-design
+  graph:
+    nodes:
+      - id: pattern-inventory
+        kind: Task
+        name: Access-pattern inventory
+        description: >-
+          Walk E12, E13, E16 and E17 scopes and the V1 repository ports to list every read/write with
+          caller, filter, sort and volume estimates.
+        outputs: [docs/data/apptable-access-patterns.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Access-pattern inventory exists
+            path: docs/data/apptable-access-patterns.md
+            contentMatch: "Access pattern"
+      - id: key-design
+        kind: Task
+        name: PK/SK and GSI design
+        description: >-
+          Assign PK/SK patterns and GSIs (e.g. GSI1 owner+created, GSI2 status+updated for jobs, GSI3
+          external ids such as cognito_sub and canonical_url hash) with projection choices and item
+          examples per entity.
+        dependsOn: [pattern-inventory]
+        outputs: [docs/data/apptable-design.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Key design documents GSIs
+            path: docs/data/apptable-design.md
+            contentMatch: "GSI1"
+      - id: key-builders
+        kind: Task
+        name: Key builder module and tests
+        description: >-
+          Pure-Python key builders and item codecs (no boto3) in the DynamoDB adapter package, with tests
+          pinning exact key strings and sort order.
+        dependsOn: [key-design]
+        outputs: [packages/debate_core/src/debate_core/integrations/dynamodb/keys.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Key builder tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/dynamodb/test_keys.py]
+      - id: design-review
+        kind: Task
+        name: Design review and ADR if deviating
+        description: >-
+          Review against §7/ADR-002; record an ADR for any deviation (e.g. separate JobTable) and link it
+          from the design doc.
+        dependsOn: [key-builders]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Charlie approves the AppTable design
+            description: >-
+              Charlie reviews the access-pattern table and key design in the PR and approves, or an ADR
+              documents the agreed deviation.
+status:
+  phase: Pending

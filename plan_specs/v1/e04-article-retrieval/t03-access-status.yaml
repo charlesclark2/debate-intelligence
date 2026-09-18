@@ -1,0 +1,140 @@
+# TASK v1-e04-t03-access-status — Access-status and paywall detection
+# Epic: E04 Article Retrieval & Extraction | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6 ArticleService (detect paywall/retrieval failures), §8 hard failure rule, §14, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e04-t03-access-status
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+  annotations:
+    debate/title: Access-status and paywall detection
+    debate/architecture-refs: §6, §8, §14, §19
+spec:
+  description: >-
+    Implement AccessClassifier, which turns a FetchResult or FetchError (t02) plus, for fetched content,
+    the ExtractedContent QualitySignals from t04 (char count, paragraph count, boilerplate ratio,
+    fallback_used) into exactly one AccessStatus — ACCESSIBLE, PAYWALLED, BLOCKED, ROBOTS_DISALLOWED,
+    NOT_FOUND, UNSUPPORTED_TYPE or ERROR — with a human-readable reason and the evidence used (status
+    code, matched marker, text length). Signals: HTTP status (401/402/403/404/410/451/429), known
+    paywall markers (schema.org isAccessibleForFree=false, common metering scripts and "subscribe to
+    continue" overlays), CAPTCHA/challenge pages, and a truncated-text heuristic. It classifies only
+    and never retries with different headers, cookies, archive mirrors or any bypass. It does not
+    extract text (t04) or orchestrate (t05).
+  priority: 2
+  constraints:
+    packages: [debate_core.retrieval]
+    forbidden:
+      - Any attempt to bypass paywalls, logins, CAPTCHAs or bot challenges (spoofed headers, cookies, mirrors)
+      - Classifying a partially visible paywalled article as ACCESSIBLE
+      - Network calls from the classifier
+  context:
+    - kind: TaskRef
+      name: v1-e04-t02-http-fetcher
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e04-t04-content-extraction
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every FetchError subtype and HTTP status class maps to a documented AccessStatus (e.g.
+        RobotsDisallowed → ROBOTS_DISALLOWED, 404/410 → NOT_FOUND, 402 → PAYWALLED, challenge page →
+        BLOCKED, non-HTML/PDF content type → UNSUPPORTED_TYPE).
+    - id: ac2
+      description: >-
+        A 200 response carrying isAccessibleForFree=false or a known paywall overlay marker is PAYWALLED,
+        with the matched marker recorded in the reason.
+    - id: ac3
+      description: >-
+        When extracted text is below a configurable threshold relative to the page's declared article
+        length, the result is PAYWALLED or ERROR, never ACCESSIBLE.
+    - id: ac4
+      description: >-
+        Paywall marker rules live in a versioned data file and classifier results carry the rules version.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e04-t03-access-status-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+spec:
+  description: >-
+    Status-code/error mapping, then content markers, then the truncation heuristic, validated on
+    saved HTML samples.
+  goalRef:
+    name: v1-e04-t03-access-status
+  graph:
+    nodes:
+      - id: status-mapping
+        kind: Task
+        name: Error and status-code mapping
+        description: >-
+          AccessDecision model (status, reason, evidence, rules_version) and the mapping from FetchError
+          subtypes and HTTP status codes.
+        outputs: [packages/debate_core/src/debate_core/retrieval/access.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Mapping tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_access.py, -k, mapping]
+      - id: paywall-markers
+        kind: Task
+        name: Paywall and challenge markers
+        description: >-
+          Versioned marker rules (JSON-LD isAccessibleForFree, meta tags, overlay class names, challenge
+          page signatures) parsed with selectolax/lxml.
+        dependsOn: [status-mapping]
+        outputs: [packages/debate_core/src/debate_core/retrieval/paywall_rules.v1.json]
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Marker detection tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_access.py, -k, marker]
+      - id: truncation-heuristic
+        kind: Task
+        name: Truncated-text heuristic
+        description: >-
+          Compare t04 QualitySignals char count against declared wordCount/articleBody hints and a
+          minimum-length threshold from settings.
+        dependsOn: [status-mapping]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Truncation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_access.py, -k, truncat]
+      - id: sample-suite
+        kind: Task
+        name: Saved-sample suite and type check
+        description: >-
+          Anonymized saved HTML samples (open article, metered paywall, hard paywall, challenge page,
+          404 page) under tests/fixtures/access/ with expected statuses.
+        dependsOn: [paywall-markers, truncation-heuristic]
+        outputs: [tests/fixtures/access/]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sample suite passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_access.py]
+          - type: command_succeeds
+            name: pyright passes
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

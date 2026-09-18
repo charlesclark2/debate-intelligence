@@ -1,0 +1,97 @@
+# RELEASE v1.3 — V1 quality gate & team pilot
+# Major version: V1. Epics: E09
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v1-3
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.3
+  annotations:
+    debate/title: v1.3 — V1 quality gate & team pilot
+spec:
+  description: >-
+    Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged and piloted with the
+    team.
+  priority: 4
+  acceptanceCriteria:
+  - id: epic-e09
+    description: >-
+      Epic E09 (V1 Quality, Evaluation & Team Pilot) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v1.3.0 is pushed and CHANGELOG.md has a v1.3 section.
+  - id: gate
+    description: >-
+      Gate release-v1-3-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v1-3-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.3
+spec:
+  gateType: review
+  description: >-
+    Release review for v1.3 (V1 quality gate & team pilot): demo the release goal end to end, confirm
+    CI green on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v1-3-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.3
+spec:
+  description: >-
+    Release plan for v1.3: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v1-3
+  series: v1
+  version: v1.3
+  graph:
+    nodes:
+    - id: e09
+      kind: External
+      name: Epic E09 — V1 Quality, Evaluation & Team Pilot
+      inputs:
+        goalRef: v1-e09-v1-quality-pilot
+        specRef: plan_specs/v1/e09-v1-quality-pilot/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v1.3.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v1.3.0
+    - id: release-review
+      kind: Gate
+      name: v1.3 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v1-3-gate
+status:
+  phase: Pending

@@ -1,0 +1,107 @@
+# TASK v1-e07-t06-gdelt-adapter — GDELT news adapter
+# Epic: E07 Discovery Provider Adapters | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §9 Discovery adapters (news/current discovery), §15, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t06-gdelt-adapter
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: GDELT news adapter
+    debate/architecture-refs: §9, §15, §16
+spec:
+  description: >-
+    Implement GdeltProvider against the GDELT DOC 2.0 API (mode=ArtList, format=json) for broad
+    current-events discovery. Translates ProviderQuery into GDELT query syntax (quoted phrases,
+    sourcelang:, optional sourcecountry:) with startdatetime/enddatetime from since/until (clamped to the
+    API's rolling window with a warning) and maxrecords. Maps articles to CandidateResult with url, title,
+    domain as publisher, seendate as published_at (flagged approximate) and language. Discovery only:
+    article text is retrieved from the publisher URL by ArticleService. Boundaries: no tone/timeline modes,
+    no GKG; feeds are t05.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations]
+    forbidden:
+      - Live GDELT calls in CI (respx fixtures only)
+      - Treating GDELT seendate as the verified publication date for citations
+      - Silently widening a date window beyond the API's supported range
+  context:
+    - kind: TaskRef
+      name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A query with since/until and language filters produces the expected DOC API URL (query, mode,
+        format, startdatetime, enddatetime, maxrecords), verified by respx.
+    - id: ac2
+      description: >-
+        Windows older than the supported range are clamped and the ProviderResponse carries a warning.
+    - id: ac3
+      description: >-
+        Fixtures map to CandidateResults with published_at marked approximate, and the adapter passes the
+        contract kit including malformed/empty JSON handling.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t06-gdelt-adapter-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Record fixtures, translate queries and windows, map articles, run the contract kit.
+  goalRef:
+    name: v1-e07-t06-gdelt-adapter
+  graph:
+    nodes:
+      - id: record-fixtures
+        kind: Task
+        name: Record GDELT DOC API fixtures
+        description: >-
+          Capture ArtList JSON responses, an empty response and a malformed/HTML error body.
+        outputs: [tests/fixtures/providers/gdelt/]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: GDELT fixtures recorded
+            path: tests/fixtures/providers/gdelt/artlist.json
+      - id: query-translation
+        kind: Task
+        name: Query and window translation
+        description: >-
+          Translate ProviderQuery to GDELT syntax with language filter and clamped datetime window.
+        dependsOn: [record-fixtures]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/gdelt.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Query translation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_gdelt.py, -k, query]
+      - id: result-mapping
+        kind: Task
+        name: Article mapping and contract kit
+        description: >-
+          Map articles to CandidateResult with approximate dates; handle malformed bodies; run contract kit.
+        dependsOn: [query-translation]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full GDELT adapter tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_gdelt.py]
+status:
+  phase: Pending

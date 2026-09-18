@@ -1,0 +1,155 @@
+# TASK v3-e23-t05-audit-report-ui — Audit report UI
+# Epic: E23 File Auditing | Release: v3.2 (File auditing) | Major: V3
+# Architecture refs: §3 V3 DA audit story, §12 web workflows, §13 File auditing
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e23-t05-audit-report-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+  annotations:
+    debate/title: Audit report UI
+    debate/architecture-refs: §3, §12, §13
+spec:
+  description: >-
+    Run a file audit end to end and show the report. A FileAuditJob composes shell identification (t01),
+    coherence checks (t02) and card comparison (t03), and includes newer-evidence suggestions when that
+    feature is enabled. The report is grouped by shell step (uniqueness, link, internal link, impact): the
+    current card's tag and cite, findings with severity and basis, an alternatives table by feature with no
+    overall-score column, and actions (open card in outline or library, dismiss a finding with a reason,
+    copy a revised shell order, find newer evidence when available). Dismissals are stored for t06.
+    Boundaries: finding and comparison logic live in t01-t03.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_workers, debate_api, web]
+    forbidden:
+      - >-
+        Business logic in debate_api routes or web/ components (they call debate_core services or the typed
+        client)
+      - A single opaque overall quality score for a card, shell or file
+      - Showing model-assessed findings without their basis label
+  context:
+    - kind: TaskRef
+      name: v3-e23-t02-coherence-checks
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e23-t03-card-comparison
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        FileAuditJob runs shell identification, coherence and comparison, persists a FileAudit, and exposes
+        progress; POST /audits and GET /audits/{id} enforce owner/org access.
+    - id: ac2
+      description: >-
+        When several shells are found the user picks one and the audit continues with that shell.
+    - id: ac3
+      description: >-
+        The report groups by step, shows findings with severity and basis labels, and renders the
+        alternatives table by feature without any aggregate score.
+    - id: ac4
+      description: >-
+        Dismissing a finding records a reason; copy revised shell order puts the reordered tags and cites on
+        the clipboard; the newer-evidence action appears only when enabled.
+    - id: ac5
+      description: >-
+        Playwright tests with mocked API and axe checks pass.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e23-t05-audit-report-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+spec:
+  description: >-
+    Audit orchestration and API, then the report page, actions and end-to-end tests.
+  goalRef:
+    name: v3-e23-t05-audit-report-ui
+  graph:
+    nodes:
+      - id: orchestration
+        kind: Task
+        name: FileAuditJob orchestration
+        description: >-
+          AuditService.run_audit use case and worker handler with stages and shell selection pause.
+        outputs:
+          - packages/debate_core/src/debate_core/application/audit_service.py
+          - packages/debate_workers/src/debate_workers/handlers/file_audit.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Audit job tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_file_audit.py]
+      - id: api
+        kind: Task
+        name: Audit endpoints
+        description: >-
+          Create, get, select shell and dismiss finding routes; typed client regenerated.
+        dependsOn: [orchestration]
+        outputs: [packages/debate_api/src/debate_api/routes/audits.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Audit API tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_audits.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+      - id: report-page
+        kind: Task
+        name: Audit report page
+        description: >-
+          Step-grouped report with findings, alternatives table and shell picker.
+        dependsOn: [api]
+        outputs: ["web/app/(app)/audits/[auditId]/page.tsx", web/components/audit/AlternativesTable.tsx]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Audit report unit tests pass
+            command: pnpm
+            args: [--dir, web, test, --, audit]
+      - id: actions
+        kind: Task
+        name: Report actions
+        description: >-
+          Open card, dismiss with reason, copy revised shell order, feature-flagged newer-evidence action.
+        dependsOn: [report-page]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Audit action unit tests pass
+            command: pnpm
+            args: [--dir, web, test, --, audit-actions]
+      - id: e2e
+        kind: Task
+        name: End-to-end tests
+        description: >-
+          Playwright flows and axe; lint and build.
+        dependsOn: [actions]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Audit report e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, tests/e2e/audit-report.spec.ts]
+          - type: command_succeeds
+            name: Web build succeeds
+            command: pnpm
+            args: [--dir, web, build]
+status:
+  phase: Pending

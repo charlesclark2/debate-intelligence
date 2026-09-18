@@ -1,0 +1,166 @@
+# TASK v3-e27-t04-cx-session-ui — CX session UI
+# Epic: E27 Cross-Examination Simulator | Release: v3.6 (Cross-examination simulator) | Major: V3
+# Architecture refs: §3 V3 CX story, §12 web workflows, §13 Round simulator, §14 student safety
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e27-t04-cx-session-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+  annotations:
+    debate/title: CX session UI
+    debate/architecture-refs: §3, §12, §13, §14
+spec:
+  description: >-
+    Build the web CX practice experience: set up a session (format, which speech is being examined,
+    questioner or answerer mode, opponent strategy and experience level), then run a timed chat-style CX
+    with a visible clock driven by server round state, a transcript of exchanges, and a flow sidebar that
+    shows the examined speech's arguments and marks concessions (confirmed and possible) as they are
+    recorded. Voice input is optional and opt-in, using the browser's native speech recognition to fill
+    the text box; the student reviews and sends text, and no audio is uploaded or stored by the
+    platform. Quoted evidence in answers is rendered with its card citation. The UI calls the E26/E27 APIs
+    only; no simulation logic lives in web/. Full-round UI (E28 t05) reuses these components.
+  priority: 2
+  constraints:
+    packages: [web]
+    forbidden:
+      - Uploading or storing student audio; voice is transcribed in-browser only and off by default
+      - Client-side clocks as the source of truth; the server round state governs time
+      - Simulation or concession logic in web/
+      - Rendering quoted evidence without its card citation
+      - Live API calls in unit/Playwright tests; use mocked API fixtures
+  context:
+    - kind: TaskRef
+      name: v3-e27-t02-cx-answer-simulation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e14-t02-auth-ui
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e27-t03-concession-detection
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A signed-in student can configure and start a CX session in both modes for Policy CX, LD CX and PF
+        crossfire, and the clock reflects server state within one second of each poll/SSE update.
+    - id: ac2
+      description: >-
+        Sending is disabled when the server reports the CX clock expired, and the transcript shows each
+        exchange with speaker role and quoted evidence citations.
+    - id: ac3
+      description: >-
+        The flow sidebar lists the examined speech's argument nodes and marks CONCESSION (solid) and
+        POSSIBLE_CONCESSION (outlined, with confirm/reject actions) as events arrive.
+    - id: ac4
+      description: >-
+        Voice input is hidden when the browser lacks speech recognition, is off by default, and a test
+        asserts no audio payload is sent to the API.
+    - id: ac5
+      description: >-
+        Components meet WCAG 2.1 AA for keyboard use and contrast, and Playwright covers both modes.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e27-t04-cx-session-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+spec:
+  description: >-
+    Build setup and session pages on the generated API client, add transcript and clock, then the flow
+    sidebar and optional voice input, and finish with Playwright and accessibility checks.
+  goalRef:
+    name: v3-e27-t04-cx-session-ui
+  graph:
+    nodes:
+      - id: session-setup
+        kind: Task
+        name: CX session setup page
+        description: >-
+          Setup form (format, examined speech, mode, persona settings) creating a round via the rounds API
+          and navigating to the session.
+        outputs: [web/app/(workspace)/practice/cx/new/page.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Setup form tests pass
+            command: pnpm
+            args: [--dir, web, test, --, practice/cx/new]
+      - id: transcript-and-clock
+        kind: Task
+        name: Transcript and server-driven clock
+        description: >-
+          Session page with transcript, input box, send handling for both modes and a clock synced from
+          round state updates; expired-clock handling.
+        dependsOn: [session-setup]
+        outputs:
+          - web/app/(workspace)/practice/cx/[roundId]/page.tsx
+          - web/components/cx/Transcript.tsx
+          - web/components/rounds/SegmentClock.tsx
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Transcript and clock component tests pass
+            command: pnpm
+            args: [--dir, web, test, --, components/cx, components/rounds]
+      - id: flow-sidebar
+        kind: Task
+        name: Flow sidebar with concession markers
+        description: >-
+          Reusable FlowSidebar rendering argument nodes and statuses from flow snapshots with confirm/reject
+          actions for possible concessions that call the t03 concession confirmation route
+          (POST /v1/rounds/{id}/concessions/{finding_id}/confirm) through the generated API client.
+        dependsOn: [transcript-and-clock]
+        outputs: [web/components/rounds/FlowSidebar.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Flow sidebar tests pass
+            command: pnpm
+            args: [--dir, web, test, --, FlowSidebar]
+      - id: voice-input
+        kind: Task
+        name: Opt-in browser speech input
+        description: >-
+          Feature-detected, off-by-default dictation into the text box with a privacy notice; no audio
+          leaves the browser to the platform.
+        dependsOn: [transcript-and-clock]
+        outputs: [web/components/cx/VoiceInput.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Voice input tests pass (feature detection, default off)
+            command: pnpm
+            args: [--dir, web, test, --, VoiceInput]
+      - id: e2e-and-a11y
+        kind: Task
+        name: Playwright flows and accessibility checks
+        description: >-
+          Playwright specs for questioner and answerer modes, clock expiry and concession confirm, with
+          axe checks; lint and build.
+        dependsOn: [flow-sidebar, voice-input]
+        outputs: [web/e2e/cx-session.spec.ts]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CX session Playwright specs pass
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/cx-session.spec.ts]
+          - type: command_succeeds
+            name: Web build succeeds
+            command: pnpm
+            args: [--dir, web, build]
+status:
+  phase: Pending

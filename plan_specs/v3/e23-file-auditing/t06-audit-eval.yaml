@@ -1,0 +1,144 @@
+# TASK v3-e23-t06-audit-eval — File audit evaluation
+# Epic: E23 File Auditing | Release: v3.2 (File auditing) | Major: V3
+# Architecture refs: §13 File auditing, §16 LLM evaluations
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e23-t06-audit-eval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+  annotations:
+    debate/title: File audit evaluation
+    debate/architecture-refs: §13, §16
+spec:
+  description: >-
+    Build a coach-reviewed audit set and measure how precise and useful file-audit findings are. The set has
+    DA files from the national health insurance topic (spending, politics, provider/hospital, innovation)
+    and earlier seasons, with seeded defects (removed internal links, swapped uniqueness, stale uniqueness)
+    and unmodified controls, all scrubbed fixtures from the team's files. Metrics favor precision (noisy
+    audits get ignored), then seeded-defect recall, step-identification accuracy and a coach usefulness
+    rating of comparisons. Runs offline on replay fixtures and plugs into the E09 promotion gate.
+    Boundaries: this task changes no audit logic.
+  priority: 2
+  constraints:
+    packages: [tests/evals, tests/fixtures, docs/evals]
+    forbidden:
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+      - >-
+        Committing unscrubbed team files to tests/fixtures (student names, docProps author/lastModifiedBy,
+        comments, tracked-change authors)
+      - Counting dismissed-as-wrong findings as correct
+  context:
+    - kind: TaskRef
+      name: v3-e23-t02-coherence-checks
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e23-t03-card-comparison
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        At least 10 DA files with at least 20 seeded defects and at least 5 unmodified controls have
+        coach-labeled expected findings and step roles.
+    - id: ac2
+      description: >-
+        Reports give finding precision, seeded-defect recall, step-identification accuracy and mean coach
+        usefulness (1-5 rubric) on sampled comparisons, and confirm snippet-substring violations and
+        aggregate-score fields are both 0.
+    - id: ac3
+      description: >-
+        The gate requires precision at least 0.8, recall at least 0.7, step accuracy at least 0.9 and
+        usefulness at least 3.5, with no regression for promoted candidates.
+    - id: ac4
+      description: >-
+        The coach signs off on the rubric and the first report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e23-t06-audit-eval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+spec:
+  description: >-
+    Dataset and labels, usefulness rubric, harness, then the gate.
+  goalRef:
+    name: v3-e23-t06-audit-eval
+  graph:
+    nodes:
+      - id: dataset
+        kind: Task
+        name: Audit dataset with seeded defects
+        description: >-
+          Select DA fixtures, generate seeded variants and record expected findings.
+        outputs: [tests/fixtures/audit_eval/]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Audit eval manifest exists
+            path: tests/fixtures/audit_eval/MANIFEST.md
+            contentMatch: "seeded"
+          - type: custom
+            name: Coach labels expected findings
+            description: >-
+              Coach confirms expected step roles and findings for every file and seed.
+      - id: rubric
+        kind: Task
+        name: Usefulness rubric and review sheet
+        description: >-
+          1-5 rubric for comparison usefulness and a review sheet export for the coach.
+        outputs: [docs/evals/file-audit-rubric.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Rubric exists
+            path: docs/evals/file-audit-rubric.md
+            contentMatch: "usefulness"
+      - id: harness
+        kind: Task
+        name: Harness and metrics
+        description: >-
+          Run the audit pipeline on replay fixtures and compute metrics and reports.
+        dependsOn: [dataset, rubric]
+        outputs: [tests/evals/file_audit/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Audit metric tests pass
+            command: uv
+            args: [run, pytest, tests/evals/file_audit/test_metrics.py]
+      - id: gate
+        kind: Task
+        name: Baseline and promotion gate
+        description: >-
+          Commit baseline, register with the E09 gate, coach sign-off.
+        dependsOn: [harness]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Audit baseline committed
+            path: tests/evals/baselines/file_audit.json
+            contentMatch: "precision"
+          - type: test_passes
+            name: Audit eval passes offline
+            command: uv
+            args: [run, pytest, tests/evals/file_audit, -m, eval]
+          - type: custom
+            name: Coach signs off on first audit report
+            description: >-
+              Coach reviews the first report and usefulness ratings.
+status:
+  phase: Pending

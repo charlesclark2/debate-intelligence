@@ -1,0 +1,149 @@
+# TASK v2-e11-t04-s3-snapshot-store — S3 snapshot and export store
+# Epic: E11 Cloud Persistence Adapters | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §7 (S3 system of record for blobs), ADR-003, §8 provenance, §14 private buckets, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e11-t04-s3-snapshot-store
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+  annotations:
+    debate/title: S3 snapshot and export store
+    debate/architecture-refs: §7, ADR-002, ADR-003, §15
+spec:
+  description: >-
+    Make S3 the durable system of record for raw source snapshots (raw response + normalized text),
+    generated DOCX/JSON exports and manifests. Create private, versioned, KMS-encrypted buckets with
+    block public access, TLS-only bucket policies and lifecycle rules (exports expire; snapshots move to
+    infrequent-access but are never auto-deleted while a card references them), then implement the
+    S3SnapshotStore / S3ExportStore adapters behind the existing SnapshotStore port and a presigner that
+    issues short-lived GET URLs. Snapshot objects are content-addressed and write-once so the sha256 on a
+    card can always be re-verified. Out of scope: DynamoDB snapshot metadata (t03), uploaded debate files
+    (V3 file intelligence), bulk export (E17-t05) and backup drills (E19-t05).
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations.s3, infrastructure/modules/s3]
+    forbidden:
+      - Public buckets, public ACLs or website hosting
+      - Presigned URLs valid longer than 15 minutes
+      - Overwriting or mutating an existing snapshot object (write-once, content-addressed keys)
+      - Lifecycle rules that delete snapshots referenced by cards
+      - boto3 imports outside debate_core.integrations; live S3 in CI tests (use moto)
+  context:
+    - kind: TaskRef
+      name: v2-e10-t04-kms-secrets
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t04-repo-contract-tests
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        snapshots and exports buckets per environment have versioning, SSE-KMS with the snapshots key,
+        all four block-public-access flags, and a policy denying aws:SecureTransport=false.
+    - id: ac2
+      description: >-
+        S3SnapshotStore passes the shared SnapshotStore contract suite under moto, storing objects at
+        snapshots/<sha256-prefix>/<sha256> and verifying the sha256 on read.
+    - id: ac3
+      description: >-
+        A second put of the same snapshot is idempotent (no new version) and a put with mismatched bytes
+        for an existing key raises an IntegrityError.
+    - id: ac4
+      description: >-
+        The presigner returns GET URLs with a configurable expiry capped at 900 seconds and a
+        response-content-disposition filename; a test asserts the X-Amz-Expires value.
+    - id: ac5
+      description: >-
+        Lifecycle rules expire exports after a documented retention and transition snapshots to
+        STANDARD_IA after 30 days without expiring them.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e11-t04-s3-snapshot-store-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+spec:
+  description: >-
+    Infrastructure first, then the store adapter with integrity checks, the presigner, and the contract
+    suite run under moto.
+  goalRef:
+    name: v2-e11-t04-s3-snapshot-store
+  graph:
+    nodes:
+      - id: bucket-module
+        kind: Task
+        name: Private bucket module and lifecycle
+        description: >-
+          Reusable private bucket module (versioning, SSE-KMS, block public access, TLS-only policy,
+          ownership controls) instantiated for snapshots and exports with lifecycle rules.
+        outputs: [infrastructure/modules/s3/private_bucket.tf, infrastructure/envs/dev/storage.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev plan succeeds with buckets
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock-timeout=60s]
+          - type: artifact_exists
+            name: Buckets block public access
+            path: infrastructure/modules/s3/private_bucket.tf
+            contentMatch: "restrict_public_buckets = true"
+      - id: snapshot-store
+        kind: Task
+        name: S3SnapshotStore adapter
+        description: >-
+          Content-addressed put/get with If-None-Match or head-before-put semantics, sha256 verification on
+          read, and object metadata for extractor_version and retrieved_at.
+        dependsOn: [bucket-module]
+        outputs: [packages/debate_core/src/debate_core/integrations/s3/snapshot_store.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Snapshot store tests pass under moto
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/s3/test_snapshot_store.py]
+      - id: export-store-presigner
+        kind: Task
+        name: Export store and presigned URLs
+        description: >-
+          S3ExportStore for DOCX/JSON manifests keyed by owner and export id, plus a UrlPresigner port
+          implementation capped at 900 seconds.
+        dependsOn: [snapshot-store]
+        outputs: [packages/debate_core/src/debate_core/integrations/s3/export_store.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Export store and presigner tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/s3/test_export_store.py]
+      - id: contract-and-gates
+        kind: Task
+        name: Contract suite and quality gates
+        description: >-
+          Run the shared SnapshotStore contract suite against the S3 adapter and confirm type/import checks.
+        dependsOn: [export-store-presigner]
+        outputs: [packages/debate_core/tests/contracts/test_s3_contracts.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: SnapshotStore contract suite passes on S3
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/contracts/test_s3_contracts.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

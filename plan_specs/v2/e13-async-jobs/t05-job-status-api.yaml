@@ -1,0 +1,150 @@
+# TASK v2-e13-t05-job-status-api — Job status API (polling + SSE)
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §5, ADR-009, §15 (client polls or receives SSE status), §12 authorization
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e13-t05-job-status-api
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+  annotations:
+    debate/title: Job status API (polling + SSE)
+    debate/architecture-refs: §5, ADR-009, §15
+spec:
+  description: >-
+    Give clients a single way to start and watch async work. Add POST /v1/jobs (type CARD with a URL and
+    format profile; type SEARCH with query/filters) that validates input, creates the Job idempotently
+    (Idempotency-Key header), and starts the matching Step Functions execution; GET /v1/jobs/{id};
+    GET /v1/jobs (owner's jobs, cursor paginated); POST /v1/jobs/{id}/cancel; and
+    GET /v1/jobs/{id}/events as a Server-Sent Events stream of progress and terminal events with
+    heartbeat comments and Last-Event-ID resume, falling back to polling when SSE is unavailable. All
+    routes enforce owner/org authorization. Because API Gateway HTTP APIs cap integration time at 30 s,
+    the SSE stream closes before that limit and clients reconnect transparently. UI is E14-t04; domain
+    events are t06.
+  priority: 1
+  constraints:
+    packages: [debate_api.routes, debate_core.application]
+    forbidden:
+      - Holding a request open while the job runs (other than the bounded SSE stream)
+      - Exposing another user's jobs or job results, including via guessed ids
+      - Accepting URLs with non-http(s) schemes or private/link-local hosts (SSRF)
+      - Starting workflows directly from route code without the application use case
+  context:
+    - kind: TaskRef
+      name: v2-e13-t01-job-model
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t05-core-endpoints
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        POST /v1/jobs returns 202 with job id and Location; repeating it with the same Idempotency-Key
+        returns the same job and starts no second execution.
+    - id: ac2
+      description: >-
+        GET /v1/jobs/{id} returns state, stage, percent, result_refs and typed error, and returns 404 for
+        jobs owned by other users or organizations.
+    - id: ac3
+      description: >-
+        GET /v1/jobs/{id}/events emits text/event-stream progress events with ids, a heartbeat at least
+        every 15 s, a terminal event, closes before 29 s, and resumes from Last-Event-ID without
+        duplicating events.
+    - id: ac4
+      description: >-
+        CARD job URLs are validated (scheme, length, DNS resolves to public addresses) and rejected with
+        422 otherwise.
+    - id: ac5
+      description: >-
+        Cancel transitions RUNNING/QUEUED jobs to CANCELLED and stops the Step Functions execution;
+        cancelling a terminal job returns 409.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e13-t05-job-status-api-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+spec:
+  description: >-
+    Use cases for submit/cancel behind a WorkflowStarter port, then REST routes, then the SSE stream,
+    then an integration test against stubbed workflows.
+  goalRef:
+    name: v2-e13-t05-job-status-api
+  graph:
+    nodes:
+      - id: submit-use-cases
+        kind: Task
+        name: SubmitJob and CancelJob use cases
+        description: >-
+          Application services validating inputs (incl. SSRF-safe URL check), creating the Job
+          idempotently, and starting/stopping workflows via a WorkflowStarter port with a Step Functions
+          adapter.
+        outputs:
+          - packages/debate_core/src/debate_core/application/submit_job.py
+          - packages/debate_core/src/debate_core/integrations/stepfunctions_starter.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Submit/cancel use-case tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_submit_job.py]
+      - id: job-routes
+        kind: Task
+        name: Jobs REST routes
+        description: >-
+          POST/GET/list/cancel routes with Idempotency-Key handling, 202 + Location, and authorization
+          helpers from E12-t03.
+        dependsOn: [submit-use-cases]
+        outputs: [packages/debate_api/src/debate_api/routes/jobs.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Jobs route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_jobs.py]
+      - id: sse-stream
+        kind: Task
+        name: SSE events endpoint
+        description: >-
+          StreamingResponse polling Job progress with change detection, event ids, heartbeats, max stream
+          duration below the API Gateway limit, and Last-Event-ID resume.
+        dependsOn: [job-routes]
+        outputs: [packages/debate_api/src/debate_api/routes/job_events.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: SSE tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_job_events.py]
+      - id: jobs-integration
+        kind: Task
+        name: Integration test and OpenAPI refresh
+        description: >-
+          API test submitting a CARD job against a stubbed WorkflowStarter that advances progress; regenerate
+          the OpenAPI schema and TS client.
+        dependsOn: [sse-stream]
+        outputs: [tests/integration/test_jobs_api.py, openapi/openapi.json]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Jobs API integration test passes
+            command: uv
+            args: [run, pytest, tests/integration/test_jobs_api.py]
+          - type: command_succeeds
+            name: OpenAPI export is current
+            command: uv
+            args: [run, scripts/export_openapi.py, --check]
+status:
+  phase: Pending

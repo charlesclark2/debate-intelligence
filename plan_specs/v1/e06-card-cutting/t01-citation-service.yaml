@@ -1,0 +1,139 @@
+# TASK v1-e06-t01-citation-service — CitationService with per-field provenance
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6 CitationService, §8 (metadata hard-failure rule), §19 (hallucinated cites), §20 step 6
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t01-citation-service
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: CitationService with per-field provenance
+    debate/architecture-refs: §6, §8, §11, §19, §20 step 6
+spec:
+  description: >-
+    Implement CitationService, which resolves a card's cite from an Article and its SourceSnapshot:
+    author(s), author credentials, title, publication, publication date, canonical URL and accessed date.
+    Fields are harvested deterministically from the stored raw HTML (citation_* and article:* meta tags,
+    JSON-LD Article/ScholarlyArticle, OpenGraph, byline) and, when a DOI is present, from Crossref's
+    /works/{doi} endpoint via a small polite client with recorded fixtures. Every field is a
+    CitationField(value, source, verified) so the renderer can show what is unverified. Credentials are
+    included only when stated on the source page or in Crossref/ORCID-linked metadata — never inferred by a
+    model. Also owns cite formatting rules (short cite "Lastname YY" plus full cite line). Boundaries:
+    Crossref search/discovery is v1-e07-t03 (v1.2); this task only does DOI lookups for citation.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.evidence, debate_core.integrations]
+    forbidden:
+      - LLM-generated or LLM-guessed author, credential, publication or date values
+      - Marking a field verified when its only source is a heuristic (e.g. URL slug date)
+      - Live Crossref or publisher calls in the CI test suite (respx fixtures only)
+  context:
+    - kind: TaskRef
+      name: v1-e04-t05-article-service
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        For each recorded fixture page (news, think tank, government, journal), every citation field is
+        populated with value, source (meta_tag | json_ld | opengraph | crossref | byline | heuristic |
+        missing) and verified flag matching the fixture's expected JSON.
+    - id: ac2
+      description: >-
+        When a DOI is detected, Crossref metadata is fetched once, cached by DOI, and preferred for title,
+        container title, date and authors; Crossref failures degrade to page metadata without raising.
+    - id: ac3
+      description: >-
+        Credentials are populated only from explicit on-page author bios, JSON-LD author.jobTitle/affiliation
+        or Crossref affiliation; otherwise the field is missing and the cite shows no qualification.
+    - id: ac4
+      description: >-
+        format_cite produces the short cite (e.g. "Smith 26") and the full cite line with accessed date, and
+        any unverified field is flagged in the returned Citation so exports can mark it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t01-citation-service-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    Model the provenance-carrying citation, harvest page metadata, add the DOI lookup, merge with explicit
+    precedence rules, then format cites.
+  goalRef:
+    name: v1-e06-t01-citation-service
+  graph:
+    nodes:
+      - id: citation-model
+        kind: Task
+        name: Citation and CitationField models
+        description: >-
+          Define CitationField[T](value, source, verified, raw) and Citation in the domain, with an
+          is_fully_verified property used by CardService.
+        outputs: [packages/debate_core/src/debate_core/domain/citation.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Citation models exist
+            path: packages/debate_core/src/debate_core/domain/citation.py
+            contentMatch: "class CitationField"
+      - id: page-metadata
+        kind: Task
+        name: Page metadata harvester
+        description: >-
+          Parse citation_*, article:*, JSON-LD and OpenGraph tags plus byline patterns from the snapshot's raw
+          HTML (read via SnapshotStore) into candidate fields with source tags.
+        dependsOn: [citation-model]
+        outputs: [packages/debate_core/src/debate_core/evidence/citation_harvest.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Harvester fixture tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_citation_harvest.py]
+      - id: crossref-doi
+        kind: Task
+        name: Crossref DOI lookup client
+        description: >-
+          Minimal async client for api.crossref.org/works/{doi} with mailto polite-pool header, timeout, DOI
+          cache in the local data dir, and respx fixtures.
+        dependsOn: [citation-model]
+        outputs: [packages/debate_core/src/debate_core/integrations/crossref_doi.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: DOI lookup tests pass offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_crossref_doi.py]
+      - id: merge-and-format
+        kind: Task
+        name: CitationService merge and cite formatting
+        description: >-
+          Merge candidates with precedence crossref > json_ld > meta_tag > opengraph > byline > heuristic,
+          set verified flags, and implement short/full cite formatting with accessed date.
+        dependsOn: [page-metadata, crossref-doi]
+        outputs: [packages/debate_core/src/debate_core/application/citation_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CitationService tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_citation_service.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

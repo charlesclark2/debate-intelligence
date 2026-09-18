@@ -1,0 +1,148 @@
+# TASK v3-e21-t06-graph-viewer — Argument graph viewer
+# Epic: E21 Argument Graph | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §12 web workflows, §13 Argument graph, §14 authorization
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e21-t06-graph-viewer
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+  annotations:
+    debate/title: Argument graph viewer
+    debate/architecture-refs: §12, §13, §14
+spec:
+  description: >-
+    Add a web view of a file's argument graph so students and coaches can see what the system extracted and
+    why. Nodes are styled by argument type and edges by relationship, with filters for type, relationship,
+    origin and minimum confidence. Selecting a node or edge opens a provenance panel with section path,
+    linked cards, confidence, origin, prompt id/version and model id, and claims are labeled as model
+    summaries rather than quotes. A table view offers an accessible alternative. This task adds a read-only
+    graph endpoint; graph editing and coverage/audit reports are out of scope (E22-t05, E23-t05).
+  priority: 2
+  constraints:
+    packages: [debate_api, web]
+    forbidden:
+      - >-
+        Business logic in debate_api routes or web/ components (they call debate_core services or the typed
+        client)
+      - Rendering model claims or warrant summaries in card evidence formatting or quotation marks
+      - Exposing graphs across owners or organizations
+  context:
+    - kind: TaskRef
+      name: v3-e21-t04-graph-queries
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e14-t01-nextjs-scaffold
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        GET /graphs/{graph_id} returns nodes and edges with provenance and supports type, relationship and
+        min_confidence filters; access follows the underlying file's owner/organization rules.
+    - id: ac2
+      description: >-
+        The graph canvas lays out nodes hierarchically by section path, stays interactive at 500 nodes, and
+        colors/labels types and relationships with a legend.
+    - id: ac3
+      description: >-
+        The provenance panel shows section path, links that open the card in the file outline or library,
+        confidence, origin, prompt id/version and model id.
+    - id: ac4
+      description: >-
+        A table view presents the same data with keyboard navigation, and automated axe checks report no
+        violations.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e21-t06-graph-viewer-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+spec:
+  description: >-
+    Endpoint first, then canvas, provenance panel and table view, closing with Playwright tests.
+  goalRef:
+    name: v3-e21-t06-graph-viewer
+  graph:
+    nodes:
+      - id: graph-api
+        kind: Task
+        name: Read-only graph endpoint
+        description: >-
+          Route over ArgumentGraphService with filters and authorization; typed client regenerated.
+        outputs: [packages/debate_api/src/debate_api/routes/graphs.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Graph API tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_graphs.py]
+      - id: graph-canvas
+        kind: Task
+        name: Graph canvas
+        description: >-
+          React Flow canvas with ELK layered layout, type/relationship styling, filters and collapse by
+          block.
+        dependsOn: [graph-api]
+        outputs: ["web/app/(app)/files/[fileId]/graph/page.tsx", web/components/graph/ArgumentGraph.tsx]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Graph canvas unit tests pass
+            command: pnpm
+            args: [--dir, web, test, --, graph]
+      - id: provenance-panel
+        kind: Task
+        name: Provenance panel
+        description: >-
+          Side panel for node/edge details with model-summary labeling and links to cards.
+        dependsOn: [graph-canvas]
+        outputs: [web/components/graph/ProvenancePanel.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Provenance panel unit tests pass
+            command: pnpm
+            args: [--dir, web, test, --, provenance]
+      - id: table-view
+        kind: Task
+        name: Accessible table view
+        description: >-
+          Sortable node and edge tables sharing filters with the canvas.
+        dependsOn: [graph-api]
+        outputs: [web/components/graph/GraphTable.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Table view unit tests pass
+            command: pnpm
+            args: [--dir, web, test, --, graph-table]
+      - id: e2e
+        kind: Task
+        name: End-to-end tests
+        description: >-
+          Playwright with mocked API for filtering, selection, provenance links and axe; lint and build.
+        dependsOn: [provenance-panel, table-view]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Graph viewer e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, tests/e2e/graph-viewer.spec.ts]
+          - type: command_succeeds
+            name: Web build succeeds
+            command: pnpm
+            args: [--dir, web, build]
+status:
+  phase: Pending

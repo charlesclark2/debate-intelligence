@@ -1,0 +1,155 @@
+# TASK v3-e28-t06-simulation-eval — Simulation evaluation and coach review
+# Epic: E28 Full Round Simulation | Release: v3.7 (Full round simulation) | Major: V3
+# Architecture refs: §3 V3 simulation story, §10 prompt governance, §13, §16 LLM evaluations, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e28-t06-simulation-eval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+  annotations:
+    debate/title: Simulation evaluation and coach review
+    debate/architecture-refs: §3, §10, §13, §16, §19
+spec:
+  description: >-
+    Build the §16 round-simulation evaluation and use it as the v3.7 release gate. A coach-curated round
+    set (Policy, LD and PF on the current topics, each with a scripted student side, persona, judge
+    profile and gold annotations) is played through planning, speech generation and judging with
+    recorded model responses. Metrics: strategic consistency across speeches (e.g. the 2NR does not go for
+    a position the block abandoned; the aff does not contradict its 2AC on a perm), correct use of CX
+    concessions (a recorded concession is leveraged in a later speech plan when relevant), flow/drop
+    tracking accuracy against gold flows, RFD traceability (share of RFD claims whose citations are
+    valid and admissible, target 100%), evidence integrity (zero non-card quoted text) and agreement of
+    decisions with coach ballots per judge profile. A CI gate replays the set on every prompt/model change;
+    promotion requires matching or beating baseline. Ends with coach review of sampled full rounds.
+  priority: 1
+  constraints:
+    packages: [tests/evals/rounds, debate_core.application]
+    forbidden:
+      - Live model calls in CI; CI replays recorded responses via the replay ModelRouter
+      - Promoting a prompt/model version on recency alone without a baseline comparison
+      - Scenario content from private team files or non-public opponent material
+      - Real student speeches in the eval set without anonymization and coach approval
+  context:
+    - kind: TaskRef
+      name: v3-e28-t03-judge-decision
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e28-t04-opponent-informed-sim
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e27-t05-cx-eval
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e28-t05-full-round-ui
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The round set has >=12 coach-annotated rounds (>=4 per format) spanning all four judge profiles,
+        including at least 3 opponent-informed rounds and 3 rounds with recorded CX concessions.
+    - id: ac2
+      description: >-
+        The runner reports strategic-consistency violations, concession-use rate, flow accuracy, RFD
+        traceability, evidence integrity and coach-ballot agreement per format and per judge profile.
+    - id: ac3
+      description: >-
+        CI fails when evidence integrity or RFD traceability is below 100%, or when any other metric
+        regresses beyond configured tolerance versus the stored baseline.
+    - id: ac4
+      description: >-
+        The v3.7 eval report records prompt ids/versions, model ids and judge policy versions for baseline
+        and candidate and is committed with the release.
+    - id: ac5
+      description: >-
+        The coach reviews at least 6 sampled simulated rounds (2 per format) and signs off that decisions
+        and RFDs would be defensible to students and do not reward bad habits.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e28-t06-simulation-eval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+spec:
+  description: >-
+    Curate annotated rounds with the coach, build the metric runner, record a baseline and CI gate, then
+    complete coach review and publish the release eval report.
+  goalRef:
+    name: v3-e28-t06-simulation-eval
+  graph:
+    nodes:
+      - id: round-set
+        kind: Task
+        name: Coach-annotated round set
+        description: >-
+          Author scripted student sides, personas, judge profiles and gold flows/ballots for >=12 rounds;
+          schema-validate the dataset.
+        outputs: [tests/fixtures/evals/rounds/scenarios/]
+        estimatedEffort: 8h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Round set validates
+            command: uv
+            args: [run, pytest, tests/evals/rounds/test_scenario_schema.py]
+      - id: metric-runner
+        kind: Task
+        name: Simulation eval runner and metrics
+        description: >-
+          Runner driving rounds through the round service with replayed responses and computing the six
+          metrics; JSON and Markdown reports.
+        dependsOn: [round-set]
+        outputs: [tests/evals/rounds/runner.py]
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Metric unit tests pass
+            command: uv
+            args: [run, pytest, tests/evals/rounds/test_runner_metrics.py]
+      - id: baseline-gate
+        kind: Task
+        name: Baseline recording and CI gate
+        description: >-
+          Record baseline responses and metrics; gate test with hard floors for integrity and traceability
+          and tolerances for other metrics.
+        dependsOn: [metric-runner]
+        outputs:
+          - tests/fixtures/evals/rounds/baseline_metrics.json
+          - tests/evals/rounds/test_simulation_gate.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Simulation gate passes on replay
+            command: uv
+            args: [run, pytest, tests/evals/rounds/test_simulation_gate.py]
+      - id: coach-review-and-report
+        kind: Task
+        name: Coach review and v3.7 eval report
+        description: >-
+          Coach reviews sampled rounds; findings folded into prompts or policies if needed; final eval
+          report committed.
+        dependsOn: [baseline-gate]
+        outputs: [docs/evals/simulation_v3.7_report.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Release eval report committed
+            path: docs/evals/simulation_v3.7_report.md
+            contentMatch: "RFD traceability"
+          - type: custom
+            name: Coach sign-off on simulated rounds
+            description: >-
+              Charlie reviews at least 6 sampled rounds and approves the simulator for team use in v3.7.
+status:
+  phase: Pending

@@ -1,0 +1,157 @@
+# TASK v2-e19-t01-quotas-rate-limits — Quotas and rate limits
+# Epic: E19 Production Readiness, Privacy & Safety | Release: v2.4 (Production readiness & school rollout) | Major: V2
+# Architecture refs: §5 API Gateway, §14 (rate limits, abuse), §15 (daily/user quotas, model cost), §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e19-t01-quotas-rate-limits
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+  annotations:
+    debate/title: Quotas and rate limits
+    debate/architecture-refs: §5, §14, §15, §19
+spec:
+  description: >-
+    Bound cost and abuse before school-wide use. Adds per-user and per-organization daily quotas for job
+    types (searches, card cuts, extension generations, exports) and for estimated model spend (from
+    v1-e05-t07 token/cost telemetry), enforced in the application layer before a job is enqueued, with
+    atomic DynamoDB counters keyed by user/org and UTC day. Tunes API Gateway stage and per-route
+    throttles (burst/rate) in Terraform, and returns consistent 429 responses with a quota body the web
+    app turns into a friendly message ("You've used 40 of 40 card cuts today; resets at midnight UTC").
+    Coaches/admins can view usage and raise an org's limits via config. This task does NOT build the cost
+    dashboard (t06), audit logging (t02) or load testing (t07).
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_api, infrastructure/modules/api_gateway, web/src/lib]
+    forbidden:
+      - Enforcing quotas only in the browser
+      - Non-atomic read-then-write quota counters
+      - Blocking in-flight jobs mid-way; quotas are checked at job admission
+      - Hard-coded limits in business logic (limits come from config per role/org)
+  context:
+    - kind: TaskRef
+      name: v2-e12-t04-api-deploy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t07-usage-telemetry
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        QuotaService.admit(user, org, job_type, est_cost) uses a conditional DynamoDB UpdateItem so 50
+        concurrent admissions against a limit of 40 admit exactly 40 (moto/DynamoDB Local test).
+    - id: ac2
+      description: >-
+        When a quota is exceeded the API returns 429 with {quota, used, limit, resets_at} and a Retry-After
+        header, and no job is enqueued.
+    - id: ac3
+      description: >-
+        Daily model-spend budgets per user and per org are enforced using estimated cost at admission and
+        reconciled with actual telemetry when the job completes.
+    - id: ac4
+      description: >-
+        API Gateway stage and route throttles are defined in Terraform per environment, and `terraform plan`
+        for dev shows the configured burst/rate values.
+    - id: ac5
+      description: >-
+        The web app renders quota 429s as a clear message with reset time, and a GET /v1/usage endpoint shows
+        the caller's current usage.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e19-t01-quotas-rate-limits-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+spec:
+  description: >-
+    Define quota config and the atomic counter adapter, add QuotaService at job admission with spend
+    reconciliation, wire API errors and throttles, then the user-facing messaging.
+  goalRef:
+    name: v2-e19-t01-quotas-rate-limits
+  graph:
+    nodes:
+      - id: quota-config
+        kind: Task
+        name: Quota configuration model
+        description: Settings for per-role and per-org daily limits by job type and spend, with org overrides.
+        outputs: [packages/debate_core/src/debate_core/application/quota_config.py, config/quotas.yaml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Quota config exists
+            path: config/quotas.yaml
+            contentMatch: "card_cut"
+      - id: counter-adapter
+        kind: Task
+        name: Atomic quota counter adapter
+        description: >-
+          QuotaCounter port and DynamoDB adapter using ADD with ConditionExpression under
+          PK=QUOTA#<user|org>#<yyyy-mm-dd> with TTL.
+        dependsOn: [quota-config]
+        outputs: [packages/debate_core/src/debate_core/integrations/aws/dynamodb_quota_counter.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Concurrent admission test passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_dynamodb_quota_counter.py]
+      - id: quota-service
+        kind: Task
+        name: QuotaService admission and spend reconciliation
+        description: >-
+          Admission check used by all job-creating use cases; completion hook reconciles estimated vs actual
+          cost from telemetry.
+        dependsOn: [counter-adapter]
+        outputs: [packages/debate_core/src/debate_core/application/quota_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: QuotaService tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_quota_service.py]
+      - id: api-and-throttles
+        kind: Task
+        name: 429 error model, usage endpoint and gateway throttles
+        description: >-
+          QuotaExceeded -> 429 mapping with Retry-After, GET /v1/usage, and Terraform stage/route throttles.
+        dependsOn: [quota-service]
+        outputs:
+          - packages/debate_api/src/debate_api/routes/usage.py
+          - infrastructure/modules/api_gateway/throttling.tf
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: 429 and usage route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_usage_and_quotas.py]
+          - type: command_succeeds
+            name: Dev Terraform plan succeeds
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock=false, -input=false]
+      - id: web-messaging
+        kind: Task
+        name: Quota messaging in the web app
+        description: >-
+          Global API error handler rendering quota messages and a usage indicator in the account menu.
+        dependsOn: [api-and-throttles]
+        outputs: [web/src/lib/api/quotaErrors.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Quota message tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/lib/api/quotaErrors.test.ts]
+status:
+  phase: Pending

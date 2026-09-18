@@ -1,0 +1,146 @@
+# TASK v2-e18-t04-extension-ui — Extensions API and UI
+# Epic: E18 Card Extensions | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §3 V2 extension story, §12 Extend a Card + Card Library, §15 (async, quotas)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e18-t04-extension-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+  annotations:
+    debate/title: Extensions API and UI
+    debate/architecture-refs: §3, §12, §15
+spec:
+  description: >-
+    Deliver the "Extend a Card" workflow to students: POST /v1/cards/{id}/extensions for saved cards and
+    POST /v1/extensions/pasted for a pasted card (parsed with t01), both running the t03 generator
+    (synchronously within a 20 s budget, else as a job), an Extensions panel on the library card view and
+    in the editor, and an /extend paste box page. The panel shows 15s/30s extensions and CX
+    questions/answers with a clear visual distinction between "From the card" (TEXT_SUPPORTED, hover
+    highlights the referenced evidence span) and "Strategic inference" items. Students can save a generated
+    set with the card (stored as a CardExtension record linked to the card revision) and copy bullets. This
+    task does NOT change generation logic (t03) or evaluation (t05).
+  priority: 1
+  constraints:
+    packages: [debate_api, debate_core.application, web/src/components/extensions, web/src/app/extend]
+    forbidden:
+      - Rendering inference items without the "Strategic inference" label
+      - Letting students edit a saved extension into TEXT_SUPPORTED without span refs
+      - Saving extensions for pasted cards into the library as verified cards
+      - Business logic in route handlers; live model calls in tests
+  context:
+    - kind: TaskRef
+      name: v2-e18-t03-extension-generator
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e17-t03-library-ui
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t05-job-status-api
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Both endpoints return a CardExtensionSet (or 202 + job_id when over budget) and enforce card read
+        permission; pasted-card requests are limited to 10,000 characters.
+    - id: ac2
+      description: >-
+        In the panel, hovering a "From the card" bullet highlights the referenced span in the evidence, and
+        inference items render under a separate "Strategic inference" heading.
+    - id: ac3
+      description: >-
+        Saving an extension set stores a CardExtension linked to card_id and revision; it appears on reload
+        and is marked stale when the card gets a newer revision.
+    - id: ac4
+      description: >-
+        Results for pasted cards display a "Pasted - not source-verified" notice.
+    - id: ac5
+      description: >-
+        Playwright tests cover saved-card extension, paste-box extension, span hover highlight and save.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e18-t04-extension-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+spec:
+  description: >-
+    Add persistence and use cases for saved extensions, then the endpoints, then the panel and paste page,
+    finishing with end-to-end tests.
+  goalRef:
+    name: v2-e18-t04-extension-ui
+  graph:
+    nodes:
+      - id: persistence
+        kind: Task
+        name: CardExtension entity and repository
+        description: >-
+          CardExtension domain model linked to card_id + revision with generation metadata; DynamoDB adapter
+          and staleness rule.
+        outputs:
+          - packages/debate_core/src/debate_core/domain/card_extension.py
+          - packages/debate_core/src/debate_core/integrations/aws/dynamodb_card_extensions.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CardExtension repository tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_dynamodb_card_extensions.py]
+      - id: endpoints
+        kind: Task
+        name: Extension endpoints
+        description: >-
+          Use cases extend_saved_card, extend_pasted_card and save_extension; routes with budget-based
+          sync/async switch and permission checks; regenerate the TS client.
+        dependsOn: [persistence]
+        outputs:
+          - packages/debate_core/src/debate_core/application/extension_use_cases.py
+          - packages/debate_api/src/debate_api/routes/extensions.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Extension route tests pass with fake router
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_extensions.py]
+      - id: panel
+        kind: Task
+        name: Extensions panel with span highlighting
+        description: >-
+          Panel component rendering grouped items with support labels, span hover highlight in the card
+          preview, copy and save actions.
+        dependsOn: [endpoints]
+        outputs: [web/src/components/extensions/ExtensionsPanel.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Panel component tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/components/extensions/ExtensionsPanel.test.tsx]
+      - id: paste-page-e2e
+        kind: Task
+        name: Paste-box page and end-to-end tests
+        description: /extend page with paste box, parse preview and panel; Playwright specs for both flows.
+        dependsOn: [panel]
+        outputs:
+          - web/src/app/extend/page.tsx
+          - web/e2e/extensions.spec.ts
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Extensions e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/extensions.spec.ts]
+status:
+  phase: Pending

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node / web
+node_modules/
+.next/
+.turbo/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# Local data, secrets, OS
+.env
+.env.*
+!.env.example
+.data/
+*.sqlite
+*.sqlite3
+.DS_Store
+.idea/
+.vscode/

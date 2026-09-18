@@ -1,0 +1,164 @@
+# TASK v1-e05-t02-bedrock-adapter — Amazon Bedrock adapter
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §10, ADR-005 (Bedrock behind ModelRouter), §14 (secrets), §15 (retries), §20 step 5
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t02-bedrock-adapter
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: Amazon Bedrock adapter
+    debate/architecture-refs: §10, ADR-005, §14, §15, §20 step 5
+spec:
+  description: >-
+    Implement BedrockModelRouter, the production ModelRouter adapter, using the Bedrock Runtime Converse API
+    (InvokeModel for Titan embeddings and Cohere rerank). Structured output is requested through tool use
+    with the Pydantic schema's JSON Schema as the single forced tool, so the model returns arguments rather
+    than prose. Inference profile and region come from the routing config; credentials come only from the
+    standard AWS credential chain (profile/SSO/env), never from repo files. Throttling and transient
+    service errors are retried with bounded backoff. boto3 is an optional extra (debate-core[bedrock]) so
+    students without AWS access can run the CLI on the fake router. Out of scope: schema validation and
+    repair retries (t05), fixtures/replay (t03), cost accounting (t07).
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations]
+    forbidden:
+      - Importing boto3/botocore anywhere outside debate_core.integrations.bedrock
+      - Hard-coded AWS keys, account IDs or model IDs in code or tests
+      - Live Bedrock calls in the unit/CI test suite (botocore Stubber or recorded fixtures only)
+      - Retrying non-idempotent or validation (4xx other than throttling) errors
+  context:
+    - kind: TaskRef
+      name: v1-e05-t01-model-router-port
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        BedrockModelRouter passes the shared ModelRouter contract suite using botocore Stubber responses for
+        Converse (tool-use output), Titan embeddings and Cohere rerank.
+    - id: ac2
+      description: >-
+        generate_structured sends the schema as a forced toolConfig tool and parses the toolUse input into
+        the schema type; a response with no toolUse block raises a typed ModelOutputError.
+    - id: ac3
+      description: >-
+        ThrottlingException, ServiceUnavailable and ModelNotReady are retried up to the configured attempts
+        with jittered backoff; AccessDenied and ValidationException fail immediately with typed errors.
+    - id: ac4
+      description: >-
+        `uv sync` without the bedrock extra installs no boto3, and selecting provider bedrock without it
+        raises a clear configuration error recommending the extra.
+    - id: ac5
+      description: >-
+        The resolved model_id, inference profile ARN/region and request id are returned on every response.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t02-bedrock-adapter-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Package the optional extra, build the Converse client, add structured tool-use output, then embeddings
+    and rerank, then retries, verified entirely with botocore Stubber.
+  goalRef:
+    name: v1-e05-t02-bedrock-adapter
+  graph:
+    nodes:
+      - id: optional-extra
+        kind: Task
+        name: bedrock optional extra and lazy import
+        description: >-
+          Declare boto3 under [project.optional-dependencies] bedrock in debate_core, import it lazily inside
+          the adapter module, and raise BedrockNotInstalledError when absent.
+        outputs:
+          - packages/debate_core/pyproject.toml
+          - packages/debate_core/src/debate_core/integrations/bedrock/__init__.py
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: bedrock extra declared
+            path: packages/debate_core/pyproject.toml
+            contentMatch: "bedrock"
+      - id: converse-client
+        kind: Task
+        name: Converse client with credential chain and route config
+        description: >-
+          Build the bedrock-runtime client from the resolved route (region, inference profile) using the
+          default credential chain and a botocore Config with connect/read timeouts.
+        dependsOn: [optional-extra]
+        outputs: [packages/debate_core/src/debate_core/integrations/bedrock/router.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Client construction tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/bedrock/test_router.py, -k, client]
+      - id: structured-tool-use
+        kind: Task
+        name: Structured output via forced tool use
+        description: >-
+          Translate the Pydantic schema to a toolSpec, force toolChoice, parse the toolUse input, and map
+          stopReason/usage fields into ModelResponse.
+        dependsOn: [converse-client]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tool-use structured output tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/bedrock/test_router.py
+              - -k
+              - structured
+      - id: embed-rerank
+        kind: Task
+        name: Titan embeddings and Cohere rerank
+        description: >-
+          Implement embed via InvokeModel (Titan Text Embeddings V2, configurable dimensions) and rerank via
+          the Cohere Rerank model, both routed by task class.
+        dependsOn: [converse-client]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Embedding and rerank tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/bedrock/test_router.py
+              - -k
+              - "embed or rerank"
+      - id: retries-and-contract
+        kind: Task
+        name: Throttling retries and contract suite
+        description: >-
+          Add bounded jittered retries for throttling/unavailable errors, typed errors for the rest, run the
+          shared contract suite against the stubbed adapter, and re-check types and import boundaries.
+        dependsOn: [structured-tool-use, embed-rerank]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full Bedrock adapter tests pass offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/bedrock]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

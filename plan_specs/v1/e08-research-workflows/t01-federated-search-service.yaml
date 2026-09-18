@@ -1,0 +1,120 @@
+# TASK v1-e08-t01-federated-search-service — SearchService fan-out
+# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §6 SearchService, §9 Ranking pipeline, §15 (partial results), §7 (Search/SearchResult)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t01-federated-search-service
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: SearchService fan-out
+    debate/architecture-refs: §6, §7, §9, §11, §15
+spec:
+  description: >-
+    Implement the fan-out stage of SearchService.search: given a SearchRequest (query, since/until,
+    max_results, provider set) it queries every selected provider from the ProviderRegistry concurrently
+    under an overall deadline and per-provider timeouts, collects ProviderResponses, and reports partial
+    results explicitly (which providers succeeded, timed out, errored or were skipped by an open breaker).
+    It persists a Search record (search_id, query, filters, provider_set, status COMPLETE | PARTIAL |
+    FAILED, created_at) and raw per-provider result sets through SearchRepository so a search is
+    reproducible and auditable. The pipeline is structured as pluggable stages so t02 (normalize/dedupe),
+    t03 (ranking) and t04 (query expansion) slot in without changing this orchestration. Boundaries: no
+    dedupe, ranking, expansion or CLI here.
+  priority: 1
+  constraints:
+    packages: [debate_core.application]
+    forbidden:
+      - One provider's failure failing the whole search when others succeed
+      - Importing httpx or provider adapters directly in debate_core.application (use the registry port)
+      - Live provider calls in tests (FakeProvider / recorded fixtures)
+  context:
+    - kind: TaskRef
+      name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With three fake providers where one sleeps past its timeout and one raises, search returns results
+        from the healthy provider with status PARTIAL and a provider status list naming each outcome.
+    - id: ac2
+      description: >-
+        Total wall time is bounded by the overall deadline, not the sum of provider latencies (concurrency
+        asserted with an injected clock).
+    - id: ac3
+      description: >-
+        A Search record and its raw per-provider results are persisted via SearchRepository and can be
+        reloaded by search_id.
+    - id: ac4
+      description: >-
+        SearchService exposes an ordered stage pipeline (expand → fan_out → normalize → rank) with no-op
+        defaults for stages delivered by sibling tasks.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t01-federated-search-service-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    Request/result types and stage pipeline, concurrent fan-out with status reporting, then persistence.
+  goalRef:
+    name: v1-e08-t01-federated-search-service
+  graph:
+    nodes:
+      - id: search-types
+        kind: Task
+        name: SearchRequest, SearchOutcome and stage pipeline
+        description: >-
+          Define request/outcome types, ProviderStatus, and a SearchStage protocol with no-op defaults.
+        outputs: [packages/debate_core/src/debate_core/application/search_types.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Search types exist
+            path: packages/debate_core/src/debate_core/application/search_types.py
+            contentMatch: "class SearchStage"
+      - id: fan-out
+        kind: Task
+        name: Concurrent provider fan-out
+        description: >-
+          asyncio.TaskGroup-based fan-out with per-provider timeouts, overall deadline, and status
+          classification (ok, timeout, error, breaker_open, not_configured).
+        dependsOn: [search-types]
+        outputs: [packages/debate_core/src/debate_core/application/search_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fan-out and partial-result tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_search_service.py, -k, fan_out]
+      - id: persistence
+        kind: Task
+        name: Persist Search and raw results
+        description: >-
+          Save Search and per-provider raw results via SearchRepository (local implementation) and reload by id.
+        dependsOn: [fan-out]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full SearchService tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_search_service.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

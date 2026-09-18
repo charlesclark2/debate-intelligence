@@ -1,0 +1,160 @@
+# TASK v1-e06-t04-docx-renderer — DOCX renderer
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6 ExportService, §8 step 7 (render from CardSpan), §11, §16 golden DOCX, §20 step 7
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t04-docx-renderer
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: DOCX renderer
+    debate/architecture-refs: §6, §8, §11, §16, §20 step 7
+spec:
+  description: >-
+    Implement the DOCX side of ExportService: a python-docx renderer that turns one or more Cards into a
+    Verbatim-compatible document using a FormatProfile. Output includes optional pocket/hat/block headings,
+    the tag as a Tag-style heading, the cite block (bold short cite + full cite line, unverified fields
+    marked), and the evidence paragraph(s) where underline/emphasis/highlight runs are computed only from
+    CardSpan offsets over evidence_text and non-underlined text is condensed per profile. UNVERIFIED cards
+    get a visible red banner paragraph ("UNVERIFIED — not a finished card: <reasons>"). A custom XML part
+    (namespace urn:debate-intelligence:manifest:v1) embeds each card's manifest (ids, snapshot sha256,
+    span offsets, evidence hash) so `verify` (t07) can check it. Boundaries: the CardManifest model and
+    JSON serialization are owned by t05 (the renderer embeds that serialized CardManifest payload as-is);
+    the CLI is t06; golden regression tests are E09 t02.
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence, debate_core.application]
+    forbidden:
+      - Emitting evidence text other than Card.evidence_text (no re-extraction or model text)
+      - Rendering an UNVERIFIED card without the banner
+      - Styling values hard-coded outside FormatProfile
+  context:
+    - kind: TaskRef
+      name: v1-e06-t02-card-service
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t03-format-profiles
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t05-json-manifest-export
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A rendered card's evidence paragraph concatenates to exactly Card.evidence_text, and runs carry
+        underline/highlight exactly over the CardSpan ranges (checked by reading the DOCX back).
+    - id: ac2
+      description: >-
+        Tags, cites and pocket/hat/block headings use the style names and outline levels from the selected
+        FormatProfile so the file opens with navigable headings in Word with Verbatim.
+    - id: ac3
+      description: >-
+        UNVERIFIED cards render a banner paragraph listing reasons, and unverified cite fields are marked
+        (e.g. "[author unverified]").
+    - id: ac4
+      description: >-
+        The document contains a custom XML part in namespace urn:debate-intelligence:manifest:v1 with one
+        entry per card, readable back via a helper that t07 uses.
+    - id: ac5
+      description: >-
+        The document opens without repair prompts in Word and LibreOffice (checked via a LibreOffice
+        headless conversion in tests where available).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t04-docx-renderer-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    Build span-to-run segmentation first (pure function), then document structure, then banners and cite
+    marking, then the custom XML manifest part and a read-back test.
+  goalRef:
+    name: v1-e06-t04-docx-renderer
+  graph:
+    nodes:
+      - id: span-runs
+        kind: Task
+        name: CardSpan to run segmentation
+        description: >-
+          Pure function splitting evidence_text into runs with style flags from overlapping CardSpans
+          (underline, emphasis, highlight) plus condensed spans for unmarked text.
+        outputs: [packages/debate_core/src/debate_core/evidence/run_segmentation.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Segmentation property tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_run_segmentation.py]
+      - id: document-structure
+        kind: Task
+        name: Headings, tag, cite and evidence rendering
+        description: >-
+          Create/ensure Verbatim-compatible styles from the profile, render optional pocket/hat/block,
+          tag heading, cite block and evidence runs for a list of cards.
+        dependsOn: [span-runs]
+        outputs: [packages/debate_core/src/debate_core/evidence/docx_renderer.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Structure and run-style read-back tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_docx_renderer.py, -k, structure]
+      - id: banners-and-marks
+        kind: Task
+        name: UNVERIFIED banner and unverified cite fields
+        description: >-
+          Render the banner for non-VERIFIED cards and bracketed markers for unverified citation fields.
+        dependsOn: [document-structure]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Banner tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_docx_renderer.py, -k, unverified]
+      - id: manifest-part
+        kind: Task
+        name: Embedded custom XML manifest part
+        description: >-
+          Add a customXml part with the t05 CardManifest payload and a read_embedded_manifest(path) helper
+          that parses it back into CardManifest; verify the part survives a save/reopen cycle.
+        dependsOn: [document-structure]
+        outputs: [packages/debate_core/src/debate_core/evidence/docx_manifest_part.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Manifest part round-trip tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_docx_renderer.py, -k, manifest]
+      - id: renderer-suite
+        kind: Task
+        name: Full renderer suite and quality gates
+        description: >-
+          Run the full renderer module (including optional LibreOffice open check skipped when soffice is
+          absent), pyright and import-linter.
+        dependsOn: [banners-and-marks, manifest-part]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Renderer module passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_docx_renderer.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

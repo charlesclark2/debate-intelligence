@@ -1,0 +1,164 @@
+# TASK v1-e04-t02-http-fetcher — Polite HTTP fetcher
+# Epic: E04 Article Retrieval & Extraction | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6 ArticleService, §9, §14 (no bypassing access controls), §15 (timeouts/retries)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e04-t02-http-fetcher
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+  annotations:
+    debate/title: Polite HTTP fetcher
+    debate/architecture-refs: §6, §9, §14, §15
+spec:
+  description: >-
+    Implement the HttpArticleFetcher adapter behind the ArticleFetcher port so ArticleService can
+    retrieve sources reliably and politely. The fetcher owns transport concerns only: timeouts,
+    bounded retries on idempotent failures, per-host rate limiting, robots.txt compliance, redirect
+    and size limits, and content-type sniffing. It returns raw bytes plus response metadata; it never
+    classifies paywalls (t03) or extracts text (t04), and it never attempts to bypass access controls.
+  priority: 2
+  constraints:
+    packages: [debate_core.retrieval, debate_core.integrations]
+    forbidden:
+      - Importing boto3/typer/fastapi in debate_core
+      - Circumventing robots.txt, paywalls, logins or CAPTCHAs
+      - Live network calls in the unit/CI test suite
+  context:
+    - kind: TaskRef
+      name: v1-e04-t01-url-canonicalization
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t02-ports
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t05-settings-config
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t06-import-boundary-guard
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        HttpArticleFetcher implements the ArticleFetcher port and returns a FetchResult with final URL,
+        status code, headers, content type, raw bytes, byte length, elapsed time and fetched_at.
+    - id: ac2
+      description: >-
+        Connect/read timeouts, a max response size and a max redirect count are configurable via
+        settings, and exceeding any of them yields a typed FetchError rather than an exception leak.
+    - id: ac3
+      description: >-
+        Only idempotent failures (connect errors, 429, 502/503/504) are retried, with bounded
+        exponential backoff honoring Retry-After; 4xx responses other than 429 are never retried.
+    - id: ac4
+      description: >-
+        Requests to a disallowed path per robots.txt are refused with ROBOTS_DISALLOWED and no request
+        to the target URL is made; robots.txt responses are cached per host.
+    - id: ac5
+      description: >-
+        A per-host rate limiter enforces a configurable minimum interval, and every request sends an
+        identifying User-Agent with a contact URL.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e04-t02-http-fetcher-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+spec:
+  description: >-
+    Build the fetcher in small verifiable steps: result/error types, the core client with limits,
+    retry policy, robots.txt and rate limiting, then a respx-backed test suite.
+  goalRef:
+    name: v1-e04-t02-http-fetcher
+  graph:
+    nodes:
+      - id: fetch-types
+        kind: Task
+        name: FetchResult and FetchError types
+        description: >-
+          Define FetchResult and a FetchError hierarchy (Timeout, TooLarge, TooManyRedirects,
+          RobotsDisallowed, TransportError, HttpStatusError) in debate_core.retrieval with Pydantic
+          models and docstrings.
+        outputs: [packages/debate_core/src/debate_core/retrieval/fetch_types.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Fetch types module exists
+            path: packages/debate_core/src/debate_core/retrieval/fetch_types.py
+            contentMatch: "class FetchResult"
+      - id: http-client
+        kind: Task
+        name: httpx client with timeouts and limits
+        description: >-
+          Implement HttpArticleFetcher using an httpx.AsyncClient with configurable timeouts, a
+          streamed body read that aborts past max bytes, max redirects, and a descriptive
+          User-Agent sourced from settings.
+        dependsOn: [fetch-types]
+        outputs: [packages/debate_core/src/debate_core/integrations/http_fetcher.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Timeout, size and redirect limits are enforced
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_http_fetcher.py, -k, limits]
+      - id: retry-policy
+        kind: Task
+        name: Bounded retry policy
+        description: >-
+          Retry only idempotent failures with jittered exponential backoff (max attempts from
+          settings), honoring Retry-After on 429/503.
+        dependsOn: [http-client]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Retry policy tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_http_fetcher.py, -k, retry]
+      - id: robots-and-rate-limit
+        kind: Task
+        name: robots.txt compliance and per-host rate limiting
+        description: >-
+          Fetch and cache robots.txt per host (urllib.robotparser semantics), refuse disallowed
+          paths before contacting the target, and apply an async per-host minimum-interval limiter.
+        dependsOn: [http-client]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: robots.txt and rate-limit tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_http_fetcher.py, -k, "robots or rate"]
+      - id: test-suite
+        kind: Task
+        name: Offline test suite and quality gates
+        description: >-
+          Complete the respx-mocked test module (no live network), run the package's type check,
+          and confirm the import-boundary contract still passes.
+        dependsOn: [retry-policy, robots-and-rate-limit]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full fetcher test module passes offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_http_fetcher.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

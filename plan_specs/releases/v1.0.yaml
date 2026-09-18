@@ -1,0 +1,116 @@
+# RELEASE v1.0 — Foundation & verified evidence core
+# Major version: V1. Epics: E01, E02, E03
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v1-0
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.0
+  annotations:
+    debate/title: v1.0 — Foundation & verified evidence core
+spec:
+  description: >-
+    Repo, tooling, CI, domain core, and deterministic evidence verification exist; `debate-research verify`
+    works on JSON manifests. No LLM yet.
+  priority: 1
+  acceptanceCriteria:
+  - id: epic-e01
+    description: >-
+      Epic E01 (Repository & Delivery Foundation) goal is Succeeded.
+  - id: epic-e02
+    description: >-
+      Epic E02 (Domain Core: Entities, Ports & Local Persistence) goal is Succeeded.
+  - id: epic-e03
+    description: >-
+      Epic E03 (Evidence Integrity & Verification Engine) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v1.0.0 is pushed and CHANGELOG.md has a v1.0 section.
+  - id: gate
+    description: >-
+      Gate release-v1-0-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v1-0-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.0
+spec:
+  gateType: review
+  description: >-
+    Release review for v1.0 (Foundation & verified evidence core): demo the release goal end to end, confirm
+    CI green on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v1-0-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.0
+spec:
+  description: >-
+    Release plan for v1.0: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v1-0
+  series: v1
+  version: v1.0
+  graph:
+    nodes:
+    - id: e01
+      kind: External
+      name: Epic E01 — Repository & Delivery Foundation
+      inputs:
+        goalRef: v1-e01-repo-foundation
+        specRef: plan_specs/v1/e01-repo-foundation/epic.yaml
+    - id: e02
+      kind: External
+      name: 'Epic E02 — Domain Core: Entities, Ports & Local Persistence'
+      inputs:
+        goalRef: v1-e02-domain-core
+        specRef: plan_specs/v1/e02-domain-core/epic.yaml
+    - id: e03
+      kind: External
+      name: Epic E03 — Evidence Integrity & Verification Engine
+      inputs:
+        goalRef: v1-e03-evidence-integrity
+        specRef: plan_specs/v1/e03-evidence-integrity/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v1.0.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e01
+      - e02
+      - e03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v1.0.0
+    - id: release-review
+      kind: Gate
+      name: v1.0 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v1-0-gate
+status:
+  phase: Pending

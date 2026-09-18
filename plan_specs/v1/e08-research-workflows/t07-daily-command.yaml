@@ -1,0 +1,121 @@
+# TASK v1-e08-t07-daily-command — `debate-research daily` digests
+# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §11 (`daily politics --date 2026-09-17`), §6 SearchService, §9
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t07-daily-command
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "`debate-research daily` digests"
+    debate/architecture-refs: §6, §9, §11
+spec:
+  description: >-
+    Ship `debate-research daily <preset> --date YYYY-MM-DD [--window 1d] [--format md|json] [--auto-cut N]`.
+    Topic presets in config/daily_presets.yaml bundle queries, argument/need pairs, providers and feeds —
+    e.g. politics (elections, Senate votes, polling for politics-DA uniqueness), nhi (Policy national
+    health insurance topic), data-centers (PF moratorium topic), space (LD colonization topic). A
+    DigestService runs each preset query through SearchService for the date window, drops results already
+    seen in prior digests (persisted seen-set by canonical URL/DOI), and groups new results by
+    argument/need into a Markdown or JSON digest file with explanations and links. --auto-cut N delegates the
+    top N new results to the t06 BatchCutService. Boundaries: no scheduling/cron (V2 EventBridge), no emailing.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, config/daily_presets.yaml]
+    forbidden:
+      - Scheduling or network services beyond the CLI invocation
+      - Re-listing results already reported in a previous digest for the same preset
+      - Business logic in debate_cli; live network calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e08-t05-search-command
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t06-auto-cut
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `daily politics --date 2026-09-17` on fixtures writes digests/politics-2026-09-17.md grouping new
+        results by argument/need with title, publisher, date, explanation and URL.
+    - id: ac2
+      description: >-
+        Running the same preset for the next date omits results already listed on the previous day.
+    - id: ac3
+      description: >-
+        Presets for politics, nhi, data-centers and space validate on load, and an unknown preset exits 2
+        listing available presets.
+    - id: ac4
+      description: >-
+        `--format json` emits the digest as JSON, and the provider status footer reports partial results.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t07-daily-command-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    Presets, the digest use case with a seen-set, then the command and renderers.
+  goalRef:
+    name: v1-e08-t07-daily-command
+  graph:
+    nodes:
+      - id: presets
+        kind: Task
+        name: Daily preset config
+        description: >-
+          Define DailyPreset schema and seed presets for politics and the three current team topics.
+        outputs: [config/daily_presets.yaml, packages/debate_core/src/debate_core/domain/daily_preset.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Presets config exists
+            path: config/daily_presets.yaml
+            contentMatch: "politics"
+      - id: digest-service
+        kind: Task
+        name: DigestService with seen-set
+        description: >-
+          Run preset queries through SearchService for the window, filter by a persisted seen-set, and group
+          by argument/need.
+        dependsOn: [presets]
+        outputs: [packages/debate_core/src/debate_core/application/digest_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Digest service tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_digest_service.py]
+      - id: daily-command
+        kind: Task
+        name: daily command and Markdown/JSON renderers
+        description: >-
+          Typer command with --date, --window, --format, --auto-cut; write digest files; CLI fixture tests.
+        dependsOn: [digest-service]
+        outputs: [packages/debate_cli/src/debate_cli/commands/daily.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: daily command tests pass offline
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_daily_command.py]
+          - type: command_succeeds
+            name: daily help renders
+            command: uv
+            args: [run, debate-research, daily, --help]
+status:
+  phase: Pending

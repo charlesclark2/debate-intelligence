@@ -1,0 +1,137 @@
+# TASK v1-e08-t04-argument-need-expansion — Argument/need query expansion
+# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §6 SearchService (query expansion), §3 V1 user stories, §10, §11 CLI flags
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t04-argument-need-expansion
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: Argument/need query expansion
+    debate/architecture-refs: §3, §6, §10, §11
+spec:
+  description: >-
+    Implement the expand stage so `--argument` and `--need` produce better searches. A versioned taxonomy
+    (config/argument_taxonomy.yaml) defines argument types (politics-da, econ-da, heg, federalism-da,
+    ptx/elections, spending-da, advantage areas, and LD/PF framing such as util or structural violence) and
+    needs (uniqueness, link, internal-link, impact, answers/AT). Each (argument, need) maps to deterministic
+    query templates, e.g. politics-da + uniqueness → "{topic} midterms polling", "{bill} votes Senate",
+    with recency defaults (uniqueness prefers the last 7-14 days; impact tolerates older scholarship).
+    Optional LLM expansion (off by default, --expand-llm) routes a versioned search.expand prompt to the
+    high_volume task class and returns a validated QueryExpansion schema of extra query strings with
+    rationale, fail-open (falls back to templates on ModelOutputError since no evidence is produced).
+    Boundaries: no ranking changes (t03) and no CLI (t05).
+  priority: 2
+  constraints:
+    packages: [debate_core.application, config/argument_taxonomy.yaml, prompts/search]
+    forbidden:
+      - LLM expansion enabled by default or required for search to work
+      - Free-text model output used as queries without schema validation
+      - Live model calls in tests (fake router fixtures)
+  context:
+    - kind: TaskRef
+      name: v1-e08-t01-federated-search-service
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t05-structured-output-validation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t04-prompt-registry
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The taxonomy validates on load and every (argument, need) pair has at least one template; unknown
+        argument or need values raise a typed error listing valid choices.
+    - id: ac2
+      description: >-
+        politics-da + link on "health insurance" expands to deterministic queries and a default since window;
+        the expansion is recorded on the persisted Search.
+    - id: ac3
+      description: >-
+        With --expand-llm and fake-router fixtures, validated extra queries are appended with rationale and
+        prompt metadata; a malformed model output falls back to template queries with a warning.
+    - id: ac4
+      description: >-
+        Charlie reviews the taxonomy for Policy, LD and PF coverage and debate-term accuracy.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t04-argument-need-expansion-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    Taxonomy and templates first, deterministic expansion stage, optional LLM expansion, then coach review.
+  goalRef:
+    name: v1-e08-t04-argument-need-expansion
+  graph:
+    nodes:
+      - id: taxonomy
+        kind: Task
+        name: Argument/need taxonomy and templates
+        description: >-
+          Define the taxonomy schema and config with templates and recency defaults per need.
+        outputs:
+          - config/argument_taxonomy.yaml
+          - packages/debate_core/src/debate_core/domain/argument_taxonomy.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Taxonomy validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_query_expansion.py, -k, taxonomy]
+      - id: template-expansion
+        kind: Task
+        name: Deterministic expansion stage
+        description: >-
+          Render templates with topic/query variables, apply recency defaults, and record expansions on Search.
+        dependsOn: [taxonomy]
+        outputs: [packages/debate_core/src/debate_core/application/query_expansion.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Template expansion tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_query_expansion.py, -k, template]
+      - id: llm-expansion
+        kind: Task
+        name: Optional LLM expansion
+        description: >-
+          Add search.expand prompt (v1.0.0) and QueryExpansion schema; call via StructuredOutputGuard with
+          fail_closed=False and fall back to templates on error.
+        dependsOn: [template-expansion]
+        outputs: [prompts/search/expand.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full expansion module passes offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_query_expansion.py]
+      - id: coach-review
+        kind: Task
+        name: Coach taxonomy review
+        description: >-
+          Charlie reviews argument names, needs and templates for all three formats.
+        dependsOn: [taxonomy]
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: custom
+            name: Coach approves taxonomy
+            description: >-
+              Charlie approves in the PR that taxonomy terms and templates are accurate for Policy, LD and PF.
+status:
+  phase: Pending

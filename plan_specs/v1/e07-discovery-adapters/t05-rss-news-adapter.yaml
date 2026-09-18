@@ -1,0 +1,130 @@
+# TASK v1-e07-t05-rss-news-adapter — Publisher RSS/Atom and Google News RSS adapter
+# Epic: E07 Discovery Provider Adapters | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §9 Discovery adapters (news, discovery only), §11 V1 acceptance, §14, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t05-rss-news-adapter
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: Publisher RSS/Atom and Google News RSS adapter
+    debate/architecture-refs: §9, §11, §14, §15
+spec:
+  description: >-
+    Implement the current-news SearchProvider that satisfies the V1 "one current-news/RSS adapter"
+    criterion. FeedProvider reads a configurable per-topic feed list (config/feeds/<topic>.yaml, e.g.
+    politics, health-insurance for the Policy NHI topic, data-centers for the PF topic) of publisher
+    RSS/Atom feeds and filters entries by keyword match and published date. GoogleNewsRssProvider builds
+    Google News RSS search URLs (q with when:/after:/before: operators, hl/gl/ceid) where appropriate and
+    resolves entries to the publisher URL, never to Google-hosted content. Both are discovery only: they
+    emit CandidateResults with title, publisher, published_at, summary snippet and the publisher URL; article
+    text is always retrieved later by ArticleService from the publisher, subject to robots and paywall rules.
+    Uses conditional GET (ETag/Last-Modified) to be polite. Boundaries: no full-text scraping from feeds, no
+    GDELT (t06).
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations, config/feeds]
+    forbidden:
+      - Using feed-embedded full content (content:encoded) as evidence text
+      - Returning news.google.com redirect URLs as the candidate URL when the publisher URL is resolvable
+      - Live feed fetches in CI (recorded feed fixtures only)
+  context:
+    - kind: TaskRef
+      name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Given recorded RSS 2.0 and Atom fixtures, FeedProvider returns CandidateResults filtered to the query
+        terms and since/until window with timezone-aware published_at and source_type news.
+    - id: ac2
+      description: >-
+        GoogleNewsRssProvider builds a search URL with the query and date operators and maps entries to the
+        publisher URL and publisher name; it can be disabled per topic in config.
+    - id: ac3
+      description: >-
+        Conditional GET headers are sent on repeat fetches and a 304 response returns cached entries without
+        re-parsing.
+    - id: ac4
+      description: >-
+        No CandidateResult carries feed body content beyond a summary snippet of at most 500 characters,
+        and both providers pass the contract kit.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t05-rss-news-adapter-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Feed config and fixtures, the generic feed provider with conditional GET, then the Google News RSS
+    variant, then the contract kit.
+  goalRef:
+    name: v1-e07-t05-rss-news-adapter
+  graph:
+    nodes:
+      - id: feed-config
+        kind: Task
+        name: Topic feed config and fixtures
+        description: >-
+          Define FeedConfig and seed config/feeds for politics and the current Policy/PF/LD topics; record RSS
+          and Atom fixtures.
+        outputs: [config/feeds/politics.yaml, tests/fixtures/providers/feeds/]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Politics feed config exists
+            path: config/feeds/politics.yaml
+      - id: feed-provider
+        kind: Task
+        name: FeedProvider with filtering and conditional GET
+        description: >-
+          Parse feeds with feedparser, filter by terms and dates, cache ETag/Last-Modified in the data dir.
+        dependsOn: [feed-config]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/feeds.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Feed provider tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_feeds.py, -k, feed]
+      - id: google-news-rss
+        kind: Task
+        name: Google News RSS provider
+        description: >-
+          Build search feed URLs, map entries to publisher URL/name, and respect per-topic enablement.
+        dependsOn: [feed-provider]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/google_news_rss.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Google News RSS tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_feeds.py, -k, google]
+      - id: contract-run
+        kind: Task
+        name: Contract kit and snippet-limit checks
+        description: >-
+          Run both providers through the contract kit and assert snippet limits and discovery-only fields.
+        dependsOn: [google-news-rss]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full feed adapter tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_feeds.py]
+status:
+  phase: Pending

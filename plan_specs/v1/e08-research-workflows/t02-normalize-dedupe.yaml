@@ -1,0 +1,127 @@
+# TASK v1-e08-t02-normalize-dedupe — Normalization and deduplication
+# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §9 Ranking pipeline (normalize / dedupe), §6 SearchService, §16 (unit tests)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t02-normalize-dedupe
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: Normalization and deduplication
+    debate/architecture-refs: §6, §9, §16
+spec:
+  description: >-
+    Implement the normalize stage of SearchService: collapse CandidateResults from all providers into
+    MergedCandidates. Matching proceeds in order of confidence: DOI, then canonical URL (via the E04 URL
+    canonicalizer), then provider ids (OpenAlex/S2/arXiv/PMID cross-links), then fuzzy title similarity
+    (normalized token-set ratio above a threshold) gated by first-author surname and publication year. Merged
+    metadata keeps every contributing provider and applies a documented per-field precedence (e.g. Crossref
+    for DOI/venue/date, OpenAlex/S2 for citation counts and OA links, publisher feed for news dates), recording
+    which provider supplied each field. Boundaries: no scoring (t03); does not fetch articles.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.retrieval]
+    forbidden:
+      - Merging two results on fuzzy title alone without an author or year agreement
+      - Dropping provider provenance for merged fields
+      - Network calls during normalization
+  context:
+    - kind: TaskRef
+      name: v1-e08-t01-federated-search-service
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e04-t01-url-canonicalization
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The same paper from OpenAlex, Crossref and Semantic Scholar fixtures merges into one MergedCandidate
+        with three provider sources.
+    - id: ac2
+      description: >-
+        A news story syndicated with tracking parameters (utm_*, amp paths) merges by canonical URL; two
+        different articles with near-identical headlines but different authors do not merge.
+    - id: ac3
+      description: >-
+        Each merged field records its source provider, and precedence rules are table-driven and unit tested.
+    - id: ac4
+      description: >-
+        A labeled dedupe fixture set of at least 40 pairs yields zero false merges and at least 90% recall.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t02-normalize-dedupe-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    Build the labeled pair set first, then exact-key matching, fuzzy matching, and field merge precedence.
+  goalRef:
+    name: v1-e08-t02-normalize-dedupe
+  graph:
+    nodes:
+      - id: labeled-pairs
+        kind: Task
+        name: Labeled dedupe pair fixtures
+        description: >-
+          Assemble at least 40 same/different pairs from recorded provider fixtures (papers and news).
+        outputs: [tests/fixtures/dedupe/pairs.json]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Dedupe pairs exist
+            path: tests/fixtures/dedupe/pairs.json
+      - id: exact-keys
+        kind: Task
+        name: DOI, canonical URL and provider-id matching
+        description: >-
+          Union-find grouping on normalized DOI, canonical URL and cross-provider ids.
+        dependsOn: [labeled-pairs]
+        outputs: [packages/debate_core/src/debate_core/application/search_dedupe.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Exact-key dedupe tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_search_dedupe.py, -k, exact]
+      - id: fuzzy-match
+        kind: Task
+        name: Fuzzy title matching with author/year gate
+        description: >-
+          Normalized token-set similarity (rapidfuzz) with author-surname and year agreement; threshold
+          tuned on the labeled pairs.
+        dependsOn: [exact-keys]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Labeled pair precision/recall test passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_search_dedupe.py, -k, labeled]
+      - id: merge-precedence
+        kind: Task
+        name: Field merge precedence with provenance
+        description: >-
+          Table-driven per-field precedence producing MergedCandidate with field_sources; register as the
+          normalize stage.
+        dependsOn: [fuzzy-match]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full dedupe module passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_search_dedupe.py]
+status:
+  phase: Pending

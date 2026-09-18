@@ -1,0 +1,195 @@
+# TASK v3-e20-t03-docx-structure-parser — DOCX structure parser
+# Epic: E20 Debate File Intelligence | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §6 FileIntelligenceService, §13 Argument graph (file parsing)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e20-t03-docx-structure-parser
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+  annotations:
+    debate/title: DOCX structure parser
+    debate/architecture-refs: §6, §8, §13, §16
+spec:
+  description: >-
+    Implement the deterministic DOCX implementation of the DebateFileParser port. It reads document.xml
+    (python-docx + lxml) and maps Verbatim structure into FileSections and ParsedCards: Heading 1-4 /
+    Pocket, Hat, Block and Tag styles, Cite character style, StyleUnderline/Emphasis runs, w:highlight
+    colors, shrunk non-underlined text, and analytics (tags with no cite/evidence). Files that use direct
+    formatting instead of the Verbatim template fall back to outline levels and the team format profiles
+    from v1-e06-t03. Evidence text is kept exactly as it appears in the DOCX; no model is involved and
+    imported cards carry provenance_mode FILE_IMPORT, never a verified status. A small structural fixture
+    set is curated from the team's Verbatim files in ~/Documents/debate on the coach's Mac, scrubbed and
+    committed under tests/fixtures/debate_files/structural/. Boundaries: the labeled accuracy set and
+    regression gate are t04, argument typing is E21-t02, and pasted-card parsing stays in v2-e18-t01 (shared
+    formatting-span helpers are reused, not forked).
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations, debate_core.domain, scripts, tests/fixtures]
+    forbidden:
+      - >-
+        Committing unscrubbed team files to tests/fixtures (student names, docProps author/lastModifiedBy,
+        comments, tracked-change authors)
+      - Model calls anywhere in the parser
+      - Normalizing, correcting or re-flowing evidence text (offsets refer to the DOCX text as-is)
+      - Presenting imported or UNVERIFIED cards as platform-verified finished evidence
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+  context:
+    - kind: TaskRef
+      name: v3-e20-t01-debate-file-model
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t03-format-profiles
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e18-t01-card-parser
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Pocket/Hat/Block/Tag are detected from Verbatim style names and Heading 1-4 aliases, falling back to
+        outline level and format profiles; every FileSection has a section_path from its heading ancestors.
+    - id: ac2
+      description: >-
+        Tag + cite + evidence runs are grouped into ParsedCards; a tag with no following cite/evidence
+        becomes an ANALYTIC section; the cite's short form (bold author/year such as "Smith 26") is split
+        from the full cite.
+    - id: ac3
+      description: >-
+        Evidence text equals the concatenated w:t text of its source paragraphs (fidelity test re-reads the
+        XML), and underline, highlight color, bold, emphasis and font-size spans land on the correct
+        character offsets.
+    - id: ac4
+      description: >-
+        Tracked insertions are accepted and deletions dropped, comments and docProps are ignored and never
+        persisted, tables/text boxes become OTHER sections, and a malformed document yields PARSE_FAILED
+        with reasons instead of partial output.
+    - id: ac5
+      description: >-
+        tests/fixtures/debate_files/structural/ holds 6-8 scrubbed team files (current NHI aff and DA, LD
+        space colonization AC/NC, PF data-center moratorium blocks, one pre-2026 file with direct
+        formatting) with a MANIFEST.md of origin path, season and scrub date, reviewed by the coach before
+        commit.
+    - id: ac6
+      description: >-
+        A 300-page (~5 MB) file parses in under 20 s on the CI runner and every output records
+        parser_version.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e20-t03-docx-structure-parser-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+spec:
+  description: >-
+    Curate and scrub fixtures first, then build style resolution, run-level formatting, section/card
+    assembly and the fixture-driven test suite.
+  goalRef:
+    name: v3-e20-t03-docx-structure-parser
+  graph:
+    nodes:
+      - id: fixture-curation
+        kind: Task
+        name: Scrub script and structural fixtures
+        description: >-
+          scripts/scrub_docx_fixture.py removes docProps core/app author fields, comments, people.xml,
+          custom XML and tracked-change authors and replaces names from a coach-supplied list; copy 6-8
+          files from ~/Documents/debate (2026-2027 and one earlier season) and record provenance in
+          MANIFEST.md.
+        outputs: [scripts/scrub_docx_fixture.py, tests/fixtures/debate_files/structural/MANIFEST.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Fixture manifest exists
+            path: tests/fixtures/debate_files/structural/MANIFEST.md
+            contentMatch: "scrubbed"
+          - type: test_passes
+            name: Scrub script tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_scrub_docx_fixture.py]
+          - type: custom
+            name: Coach reviews scrubbed fixtures
+            description: >-
+              Coach opens each scrubbed fixture in Word and confirms no student names, comments or
+              authorship metadata remain and that the files are representative of how the team formats
+              files.
+      - id: style-resolver
+        kind: Task
+        name: Style and heading-level resolver
+        description: >-
+          Resolve paragraph level from style id/name (incl. inherited basedOn chains), Verbatim aliases,
+          outline level and format-profile rules; resolve run character styles to underline/emphasis/cite
+          flags.
+        outputs: [packages/debate_core/src/debate_core/integrations/docx_parser/styles.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Style resolver tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_parser/test_styles.py]
+      - id: run-formatting
+        kind: Task
+        name: Run text and formatting spans
+        description: >-
+          Walk w:r/w:t (incl. tabs, breaks, w:ins; skipping w:del), build section text and FormattingSpans
+          with highlight colors and font sizes, merging adjacent identical spans.
+        dependsOn: [style-resolver]
+        outputs: [packages/debate_core/src/debate_core/integrations/docx_parser/runs.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run formatting tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_parser/test_runs.py]
+      - id: section-assembly
+        kind: Task
+        name: Section and ParsedCard assembly
+        description: >-
+          Build FileSections with section paths, group tag/cite/evidence into ParsedCards, detect analytics,
+          emit OTHER for tables/text boxes and typed ParseErrors; implements the DebateFileParser port.
+        dependsOn: [run-formatting]
+        outputs: [packages/debate_core/src/debate_core/integrations/docx_parser/parser.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Assembly and fidelity tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_parser/test_parser.py]
+      - id: fixture-suite
+        kind: Task
+        name: Structural fixture suite and quality gates
+        description: >-
+          Snapshot-style expectations per structural fixture plus synthetic edge-case documents generated in
+          tests; a timed large-file test; type check and import boundaries.
+        dependsOn: [fixture-curation, section-assembly]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Structural fixture tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/docx_parser/test_structural_fixtures.py
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

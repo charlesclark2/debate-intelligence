@@ -1,0 +1,142 @@
+# TASK v1-e01-t07-cli-skeleton — debate_cli Typer + Rich skeleton
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §1 (CLI is a delivery surface), §4 (Typer + Rich), §6 (debate_cli: no business logic), §11
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t07-cli-skeleton
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: debate_cli Typer + Rich skeleton
+    debate/architecture-refs: §1, §4, §6, §11
+spec:
+  description: >-
+    Create the `debate-research` console entry point in debate_cli: a Typer root app with global
+    --verbose and --json options, `--version`, a shared Rich console/output module (tables, errors,
+    JSON mode that prints only machine-readable output to stdout), a documented exit-code table, and
+    a service-wiring pattern where each command only parses args, builds services from a composition
+    root and renders the result. Ships only `--version` and a placeholder `doctor` command; real
+    commands (verify, fetch, cut, search, config) arrive in their own tasks, and settings loading is
+    E02-t05.
+  priority: 1
+  constraints:
+    packages: [debate_cli]
+    forbidden:
+      - Business logic, HTTP calls or persistence code inside debate_cli
+      - Importing typer or rich from debate_core
+      - Printing non-JSON text to stdout when --json is set
+  context:
+    - kind: TaskRef
+      name: v1-e01-t03-uv-workspace-tooling
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `uv run debate-research --version` prints the package version and exits 0;
+        `uv run debate-research --help` lists global options --verbose and --json.
+    - id: ac2
+      description: >-
+        debate_cli.output renders success tables and typed error panels in Rich mode and emits a single
+        JSON object on stdout (diagnostics on stderr) in --json mode.
+    - id: ac3
+      description: >-
+        Exit codes (0 ok, 1 domain failure such as UNVERIFIED, 2 usage error, 3 retrieval/provider
+        failure, 70 internal error) are defined in one module and documented in the CLI README.
+    - id: ac4
+      description: >-
+        A composition-root module (debate_cli.container) is the only place commands obtain services,
+        and CliRunner tests cover --version, --help and --json output shape.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t07-cli-skeleton-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Entry point and root app, output helpers and exit codes, composition root, then CliRunner tests.
+  goalRef:
+    name: v1-e01-t07-cli-skeleton
+  graph:
+    nodes:
+      - id: entry-point
+        kind: Task
+        name: Typer root app and console script
+        description: >-
+          Register `debate-research = "debate_cli.app:main"` in packages/debate_cli/pyproject.toml; root
+          callback with --verbose/--json stored on a context object; --version eager option.
+        outputs:
+          - packages/debate_cli/src/debate_cli/app.py
+          - packages/debate_cli/pyproject.toml
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: --version runs from the installed entry point
+            command: uv
+            args: [run, debate-research, --version]
+      - id: output-helpers
+        kind: Task
+        name: Rich output and exit codes
+        description: >-
+          debate_cli.output (Rich console on stderr for diagnostics, tables/panels, JSON emitter) and
+          debate_cli.exit_codes enum; README section documenting codes.
+        dependsOn: [entry-point]
+        outputs:
+          - packages/debate_cli/src/debate_cli/output.py
+          - packages/debate_cli/src/debate_cli/exit_codes.py
+          - packages/debate_cli/README.md
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Output helper tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_output.py]
+      - id: composition-root
+        kind: Task
+        name: Composition root and placeholder doctor command
+        description: >-
+          debate_cli.container builds application services lazily (empty for now); `doctor` reports
+          Python/package versions through the output helpers to prove the command pattern.
+        dependsOn: [output-helpers]
+        outputs:
+          - packages/debate_cli/src/debate_cli/container.py
+          - packages/debate_cli/src/debate_cli/commands/doctor.py
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: doctor emits JSON
+            command: uv
+            args: [run, debate-research, --json, doctor]
+      - id: cli-tests
+        kind: Task
+        name: CliRunner tests and type check
+        description: >-
+          Typer CliRunner tests for --help, --version, --json shape (stdout parses as JSON) and exit
+          codes; pyright over debate_cli.
+        dependsOn: [composition-root]
+        outputs: [packages/debate_cli/tests/test_app.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests]
+          - type: command_succeeds
+            name: pyright passes on debate_cli
+            command: uv
+            args: [run, pyright, packages/debate_cli]
+status:
+  phase: Pending

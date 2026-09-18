@@ -1,0 +1,97 @@
+# RELEASE v3.7 — Full round simulation
+# Major version: V3. Epics: E28
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v3-7
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.7
+  annotations:
+    debate/title: v3.7 — Full round simulation
+spec:
+  description: >-
+    Full simulated rounds with opponent-informed strategy and a traceable judge decision/RFD, gated by
+    coach-curated evals.
+  priority: 17
+  acceptanceCriteria:
+  - id: epic-e28
+    description: >-
+      Epic E28 (Full Round Simulation) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v3.7.0 is pushed and CHANGELOG.md has a v3.7 section.
+  - id: gate
+    description: >-
+      Gate release-v3-7-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v3-7-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.7
+spec:
+  gateType: review
+  description: >-
+    Release review for v3.7 (Full round simulation): demo the release goal end to end, confirm CI green
+    on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v3-7-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.7
+spec:
+  description: >-
+    Release plan for v3.7: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v3-7
+  series: v3
+  version: v3.7
+  graph:
+    nodes:
+    - id: e28
+      kind: External
+      name: Epic E28 — Full Round Simulation
+      inputs:
+        goalRef: v3-e28-round-simulation
+        specRef: plan_specs/v3/e28-round-simulation/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v3.7.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e28
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v3.7.0
+    - id: release-review
+      kind: Gate
+      name: v3.7 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v3-7-gate
+status:
+  phase: Pending

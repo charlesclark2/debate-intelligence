@@ -1,0 +1,142 @@
+# TASK v2-e14-t06-export-copy — DOCX export and copy-as-rich-text
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §6 ExportService, §8 step 7 (render markup from CardSpans), §12, §14 signed URLs
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e14-t06-export-copy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+  annotations:
+    debate/title: DOCX export and copy-as-rich-text
+    debate/architecture-refs: §4, §12
+spec:
+  description: >-
+    Get a verified card out of the web app and into a debater's speech doc. Add POST
+    /v1/cards/{id}/exports that runs the V1 DOCX renderer (E06) through ExportService, stores the file in
+    the S3 export store and returns a short-lived presigned download URL; and a "Copy card" action that
+    places both text/html and text/plain on the clipboard, with the tag as a Verbatim-style heading
+    (Heading 4 / tag style), the cite line with bolded author-and-date, and evidence with underline and
+    highlight preserved so it pastes cleanly into Word with the Verbatim template and Google Docs. The
+    HTML is produced server-side from CardSpans by ExportService (single source of formatting truth)
+    and fetched by the web app. Both actions are available only for VERIFIED cards. Bulk export of many
+    cards is E17-t05.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_api.routes, web]
+    forbidden:
+      - Exporting or copying UNVERIFIED/FAILED cards
+      - A second, divergent formatting implementation in the browser
+      - Presigned URLs longer than 15 minutes or public export objects
+      - Dropping provenance (source URL, accessed date) from exported cites
+  context:
+    - kind: TaskRef
+      name: v2-e14-t05-card-editor
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t04-docx-renderer
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        POST /v1/cards/{id}/exports returns a presigned URL (at most 900 s) to a DOCX whose tag, cite and
+        underline/highlight runs match the DOCX golden fixture for the same card.
+    - id: ac2
+      description: >-
+        GET /v1/cards/{id}/rich-text returns sanitized HTML using only u, mark/highlight styles, strong and
+        heading elements derived from CardSpans, plus a plain-text fallback.
+    - id: ac3
+      description: >-
+        "Copy card" writes text/html and text/plain via the async Clipboard API; pasting into Word with
+        the Verbatim template preserves tag heading, bold cite, underline and highlight.
+    - id: ac4
+      description: >-
+        Both endpoints return 409 problem+json for non-VERIFIED cards and the UI disables both actions
+        with an explanatory tooltip.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e14-t06-export-copy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+spec:
+  description: >-
+    Server-side rich-text rendering and export endpoints first, then the web actions, then manual paste
+    checks in Word/Verbatim and Google Docs.
+  goalRef:
+    name: v2-e14-t06-export-copy
+  graph:
+    nodes:
+      - id: rich-html-renderer
+        kind: Task
+        name: Rich HTML renderer in ExportService
+        description: >-
+          Render tag/cite/evidence to clipboard-friendly HTML with inline styles Word understands, from
+          CardSpans and the format profile; golden tests alongside the DOCX goldens.
+        outputs: [packages/debate_core/src/debate_core/evidence/render_html.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Rich HTML golden tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_render_html.py]
+      - id: export-endpoints
+        kind: Task
+        name: Export and rich-text endpoints
+        description: >-
+          POST /v1/cards/{id}/exports (DOCX to S3 export store, presigned URL) and GET
+          /v1/cards/{id}/rich-text, both refusing non-VERIFIED cards; regenerate the OpenAPI client.
+        dependsOn: [rich-html-renderer]
+        outputs: [packages/debate_api/src/debate_api/routes/exports.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Export route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_exports.py]
+          - type: command_succeeds
+            name: OpenAPI export is current
+            command: uv
+            args: [run, scripts/export_openapi.py, --check]
+      - id: web-actions
+        kind: Task
+        name: Download and copy actions in the web app
+        description: >-
+          Download button following the presigned URL and a Copy card button using ClipboardItem with
+          html and plain text, with success/failure toasts and disabled states for non-VERIFIED cards.
+        dependsOn: [export-endpoints]
+        outputs: [web/src/features/cards/CardActions.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Export/copy e2e tests pass
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/export-copy.spec.ts]
+      - id: paste-fidelity
+        kind: Task
+        name: Paste fidelity check in Word/Verbatim and Google Docs
+        description: >-
+          Copy three golden cards and paste into Word with the Verbatim template and into Google Docs;
+          compare against the DOCX export.
+        dependsOn: [web-actions]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Coach confirms paste fidelity
+            description: >-
+              Charlie confirms pasted cards keep tag heading, bold author/date cite, underlining and
+              highlighting in Verbatim, and that downloaded DOCX opens cleanly in Word.
+status:
+  phase: Pending

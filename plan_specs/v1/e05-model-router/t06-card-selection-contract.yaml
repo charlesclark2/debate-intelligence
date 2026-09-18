@@ -1,0 +1,158 @@
+# TASK v1-e05-t06-card-selection-contract — CardSelection / MarkupSpan contract and prompts
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §8 steps 3-4, §10 Structured model contracts, ADR-006, §20 step 5
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t06-card-selection-contract
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: CardSelection / MarkupSpan contract and prompts
+    debate/architecture-refs: §8, §10, ADR-006, §20 step 5
+spec:
+  description: >-
+    Define the model contract that makes ADR-006 enforceable: the model selects, it never authors quoted
+    evidence. CardSelection returns paragraph IDs and/or character offsets into the paragraph-numbered
+    snapshot text, a TagSuggestion (tag text, argument/need alignment, confidence) and MarkupSpan entries
+    (offsets, style underline|highlight, purpose claim|warrant|internal_link|impact). Versioned prompts
+    (card.select, card.markup) take the numbered snapshot and a research need (e.g. "politics DA link")
+    and route to complex_reasoning. A post-validation guard rejects any output field that could carry
+    quoted evidence text (long verbatim substrings of the snapshot in tag/rationale) and any offset outside
+    the snapshot or selected range. Boundaries: turning offsets into evidence text is v1-e03-t03; the
+    pipeline that runs it is v1-e06-t02; quality evals are v1-e09-t03.
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence, debate_core.domain, prompts/card]
+    forbidden:
+      - Any schema field that accepts evidence/quote text from the model
+      - Accepting offsets that fall outside the snapshot or outside the selected paragraph range
+      - Calling the model without fail_closed=True for selection and markup
+      - Live model calls in tests (fake/replay router only)
+  context:
+    - kind: TaskRef
+      name: v1-e05-t04-prompt-registry
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t05-structured-output-validation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e03-t03-span-extraction
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        CardSelection, MarkupSpan and TagSuggestion are Pydantic models with extra=forbid containing only
+        ids, offsets, enums, tag text, rationale and confidence; none has an evidence or quote field.
+    - id: ac2
+      description: >-
+        card.select and card.markup prompts are registered with semver versions, render paragraph-numbered
+        snapshot text ([P1], [P2], ...) plus the research need, and route to complex_reasoning.
+    - id: ac3
+      description: >-
+        The guard rejects outputs whose offsets are out of bounds or overlap inconsistently, and outputs whose
+        tag or rationale contains a verbatim snapshot substring of 12 or more words, raising ModelOutputError.
+    - id: ac4
+      description: >-
+        Given a recorded fixture, selection offsets passed to v1-e03-t03 span extraction reproduce evidence
+        text byte-identical to the snapshot slice.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t06-card-selection-contract-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Schemas first, then the numbered-snapshot renderer and prompts, then the anti-authoring guard, then an
+    offline round trip through span extraction.
+  goalRef:
+    name: v1-e05-t06-card-selection-contract
+  graph:
+    nodes:
+      - id: selection-schemas
+        kind: Task
+        name: CardSelection, MarkupSpan and TagSuggestion schemas
+        description: >-
+          Define the schemas with extra=forbid, offset/paragraph-id fields, purpose/style enums shared with
+          CardSpan, and confidence bounds.
+        outputs: [packages/debate_core/src/debate_core/evidence/selection_contract.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Schema tests pass (no quote fields, enum alignment with CardSpan)
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_selection_contract.py, -k, schema]
+      - id: numbered-snapshot
+        kind: Task
+        name: Paragraph-numbered snapshot renderer
+        description: >-
+          Render normalized snapshot text as [P#]-prefixed paragraphs with an offset map so paragraph ids
+          and paragraph-relative offsets convert to absolute snapshot offsets.
+        dependsOn: [selection-schemas]
+        outputs: [packages/debate_core/src/debate_core/evidence/numbered_snapshot.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Offset map tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_numbered_snapshot.py]
+      - id: card-prompts
+        kind: Task
+        name: card.select and card.markup prompts
+        description: >-
+          Write the two prompts (v1.0.0) with instructions to return ids/offsets only, debate-need guidance
+          (uniqueness, link, internal link, impact) and a tag style of a concise claim sentence; lock them.
+        dependsOn: [numbered-snapshot]
+        outputs: [prompts/card/select.md, prompts/card/markup.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Selection prompt registered
+            path: prompts/card/select.md
+            contentMatch: "prompt_id: card.select"
+      - id: anti-authoring-guard
+        kind: Task
+        name: Offset bounds and quoted-text rejection guard
+        description: >-
+          Post-validate outputs: bounds, range containment, span overlap rules, and n-gram detection of
+          verbatim snapshot text in free-text fields; raise ModelOutputError under fail_closed.
+        dependsOn: [selection-schemas]
+        outputs: [packages/debate_core/src/debate_core/evidence/selection_guard.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Guard rejection tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_selection_contract.py, -k, guard]
+      - id: offline-round-trip
+        kind: Task
+        name: Offline selection-to-extraction round trip
+        description: >-
+          Using fake-router fixtures on a recorded snapshot, run select → markup → span extraction and assert
+          byte-identical evidence; run type checks and import boundaries.
+        dependsOn: [card-prompts, anti-authoring-guard]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Round-trip test passes offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_selection_contract.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

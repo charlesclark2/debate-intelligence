@@ -1,0 +1,165 @@
+# TASK v3-e23-t03-card-comparison — Card-vs-alternative comparison
+# Epic: E23 File Auditing | Release: v3.2 (File auditing) | Major: V3
+# Architecture refs: §3 V3 DA audit story, §8 evidence integrity, §13 File auditing
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e23-t03-card-comparison
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+  annotations:
+    debate/title: Card-vs-alternative comparison
+    debate/architecture-refs: §3, §8, §13
+spec:
+  description: >-
+    For each shell step, compare the card being read with alternatives already in the file (extension
+    blocks, alternate link modules, cards that SUPPORT the same claim) on explicit features: directness,
+    recency, qualifications, warrant density, specificity, logical fit and read length. Recency comes from a
+    deterministic cite-date parse, qualifications only from the cite text ("none stated" when absent, never
+    inferred), and read length from highlighted word count at a configured words-per-minute. Directness,
+    warrant density and specificity are model assessments that cite spans in the underlined text. The output
+    explains tradeoffs with no overall score, and any quoted snippet must be an exact substring of the
+    referenced card. Boundaries: coherence findings are t02 and newer external evidence is t04.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, prompts]
+    forbidden:
+      - A single opaque overall quality score for a card, shell or file
+      - Inferring author qualifications that are not in the cite
+      - Explanation snippets that are not exact substrings of the referenced card
+      - Model calls without a registered prompt_id/semver and persisted GeneratedArtifactMetadata
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e23-t01-shell-identification
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Up to 5 in-file alternatives per step are selected by role mapping and SUPPORTS edges.
+    - id: ac2
+      description: >-
+        Deterministic features (cite date and age at audit time, stated qualifications, highlighted word
+        count and estimated seconds) are computed for every compared card.
+    - id: ac3
+      description: >-
+        Model-assessed features (directness, warrant density, specificity, logical fit) cite span ids in the
+        card's underlined/highlighted text.
+    - id: ac4
+      description: >-
+        CardComparison has per-feature values with evidence refs and a tradeoff explanation, a schema test
+        asserts there is no aggregate score field, and a check rejects any snippet that is not a substring
+        of its card.
+    - id: ac5
+      description: >-
+        Uniqueness cards older than the configured window (default 45 days for politics-style uniqueness, 12
+        months otherwise) are flagged stale, with the window shown.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e23-t03-card-comparison-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+spec:
+  description: >-
+    Candidate selection, deterministic features, model features, explanation validation, then tests.
+  goalRef:
+    name: v3-e23-t03-card-comparison
+  graph:
+    nodes:
+      - id: candidates
+        kind: Task
+        name: Alternative selection
+        description: >-
+          Role mapping from ShellStructure plus SUPPORTS-edge siblings, capped and ordered.
+        outputs: [packages/debate_core/src/debate_core/arguments/audit/card_comparison.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Candidate selection tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/audit/test_card_comparison.py
+              - "-k"
+              - candidates
+      - id: deterministic-features
+        kind: Task
+        name: Deterministic features
+        description: >-
+          Cite date parser (short cites like "Smith 26", full dates, "accessed" dates), qualification
+          extraction from cite text, read-length estimate.
+        outputs: [packages/debate_core/src/debate_core/arguments/audit/cite_features.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cite feature tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/audit/test_cite_features.py]
+      - id: model-features
+        kind: Task
+        name: Model-assessed features
+        description: >-
+          Prompt audit.card_features returning span-referenced assessments for each card.
+        dependsOn: [candidates]
+        outputs: [prompts/audit/card_features.yaml]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Card feature prompt registered
+            path: prompts/audit/card_features.yaml
+            contentMatch: "prompt_id: audit.card_features"
+          - type: test_passes
+            name: Model feature tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/audit/test_card_comparison.py, -k, model]
+      - id: explanations
+        kind: Task
+        name: Tradeoff explanations and validation
+        description: >-
+          Compose tradeoff text per step, substring check for snippets, no-score schema test.
+        dependsOn: [deterministic-features, model-features]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Explanation validation tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/audit/test_card_comparison.py
+              - "-k"
+              - explanation
+      - id: fixtures
+        kind: Task
+        name: Fixture tests
+        description: >-
+          Comparisons on the fixture DA files with replay router; type check.
+        dependsOn: [explanations]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Comparison fixture tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/audit/test_card_comparison_fixtures.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

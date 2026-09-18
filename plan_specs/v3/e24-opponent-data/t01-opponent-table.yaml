@@ -1,0 +1,168 @@
+# TASK v3-e24-t01-opponent-table — OpponentTable design
+# Epic: E24 Opponent Data Integrations | Release: v3.3 (Opponent data integrations) | Major: V3
+# Architecture refs: §7 OpponentTable, §13 Opponent intelligence, §14 minimize student data
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e24-t01-opponent-table
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+  annotations:
+    debate/title: OpponentTable design
+    debate/architecture-refs: §7, §13, §14
+spec:
+  description: >-
+    Define the opponent-data entities and their store: OpponentTeam, Debater, Disclosure and
+    TournamentResult, each carrying a SourceProvenance (source, source_url, retrieved_at, source record id,
+    adapter_version, policy_version). Records are scoped to the ingesting organization, hold only the fields
+    the governance policy (t06) allows, and support a suppression tombstone so removed records are not
+    re-ingested. This task delivers the domain models, the OpponentRepository port, the OpponentTable
+    access-pattern document and Terraform, and local + DynamoDB implementations with contract tests.
+    Adapters, identity resolution and refresh/removal workflows are t02-t05.
+  priority: 1
+  constraints:
+    packages:
+      - debate_core.domain
+      - debate_core.application
+      - debate_core.integrations
+      - infrastructure
+      - docs/data
+    forbidden:
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+      - >-
+        Storing student contact details, ages, grades, speaker points or judge names in opponent records
+        (unless the governance policy explicitly allows it)
+      - Any opponent record without source_url and retrieved_at
+      - Sharing opponent records across organizations
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v2-e11-t01-access-pattern-design
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e11-t03-dynamodb-repositories
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t04-repo-contract-tests
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        OpponentTeam (team_id, school, normalized school, team_code, event/format, season, debater refs,
+        external ids by source, last_refreshed_at), Debater (display name as published, team memberships,
+        external ids), Disclosure (team, source, season/caselist, tournament, round, side, positions, cite
+        titles, source_url, retrieved_at) and TournamentResult (team, tournament, event, round, side if
+        public, result, opponent code, source_url, retrieved_at) validate with Pydantic.
+    - id: ac2
+      description: >-
+        Every record carries SourceProvenance and the model rejects records missing source_url or
+        retrieved_at.
+    - id: ac3
+      description: >-
+        docs/data/opponent-table.md documents keys (ORG#<org>#TEAM#<id> with META, DISC#, RESULT# items;
+        external id GSI EXT#<source>#<id>; normalized school GSI; suppression tombstones) and each access
+        pattern is a single Query or GetItem.
+    - id: ac4
+      description: >-
+        OpponentTable is provisioned by Terraform with on-demand capacity, PITR and KMS.
+    - id: ac5
+      description: >-
+        Local and DynamoDB (moto) implementations pass one contract suite, including org isolation,
+        idempotent upsert by source record id and refusal to upsert suppressed records.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e24-t01-opponent-table-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+spec:
+  description: >-
+    Domain models and port, access-pattern document and table, then two implementations under one contract
+    suite.
+  goalRef:
+    name: v3-e24-t01-opponent-table
+  graph:
+    nodes:
+      - id: domain
+        kind: Task
+        name: Opponent domain models
+        description: >-
+          Entities, SourceProvenance and field allowlists that mirror the governance policy.
+        outputs: [packages/debate_core/src/debate_core/domain/opponent.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Opponent domain tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_opponent.py]
+      - id: port
+        kind: Task
+        name: OpponentRepository port
+        description: >-
+          Upsert by source record id, get/list by team, lookup by external id and normalized school,
+          suppression and hard delete.
+        dependsOn: [domain]
+        outputs: [packages/debate_core/src/debate_core/application/opponent_repository.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: OpponentRepository port exists
+            path: packages/debate_core/src/debate_core/application/opponent_repository.py
+            contentMatch: "class OpponentRepository"
+      - id: access-patterns-table
+        kind: Task
+        name: Access patterns and Terraform
+        description: >-
+          Access-pattern document and the OpponentTable module.
+        dependsOn: [domain]
+        outputs: [docs/data/opponent-table.md, infrastructure/modules/opponent_table/main.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Opponent access-pattern doc exists
+            path: docs/data/opponent-table.md
+            contentMatch: "EXT#"
+          - type: command_succeeds
+            name: Terraform configuration validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: implementations
+        kind: Task
+        name: Local and DynamoDB repositories
+        description: >-
+          SQLite and DynamoDB implementations with a shared contract suite; type check and import
+          boundaries.
+        dependsOn: [port, access-patterns-table]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/local/opponent_repository.py
+          - packages/debate_core/src/debate_core/integrations/aws/dynamodb_opponent_repository.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Opponent repository contract suite passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/contracts/test_opponent_repository_contract.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

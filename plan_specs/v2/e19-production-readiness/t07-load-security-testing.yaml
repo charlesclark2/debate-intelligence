@@ -1,0 +1,150 @@
+# TASK v2-e19-t07-load-security-testing — Load and security testing
+# Epic: E19 Production Readiness, Privacy & Safety | Release: v2.4 (Production readiness & school rollout) | Major: V2
+# Architecture refs: §14 (least privilege, private files, rate limits), §15 (reliability), §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e19-t07-load-security-testing
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+  annotations:
+    debate/title: Load and security testing
+    debate/architecture-refs: §14, §15, §19
+spec:
+  description: >-
+    Final pre-rollout verification. Load test the key workflows in stage at school scale (target: 60
+    concurrent students, e.g. a whole squad researching the night before a tournament) - search, cut card,
+    library browse, extend - with model and provider calls served by the replay router/stubs so tests
+    measure platform behaviour, not Bedrock. Run an OWASP ASVS level-1 ("lite") review focused on
+    authentication, access control (cross-tenant IDOR on every resource route), input handling (pasted HTML,
+    URLs submitted for fetching / SSRF), session management and secrets; add dependency scanning (pip-audit,
+    pnpm audit) and container image scanning (ECR/Trivy) to CI; and fix or formally accept every finding.
+    This task verifies t01 quotas and t02 audit logging under load; it does NOT add new product features or
+    perform a third-party penetration test.
+  priority: 1
+  constraints:
+    packages: [tests/load, docs/security, .github/workflows]
+    forbidden:
+      - Load testing against prod or with live Bedrock/provider calls
+      - Leaving high/critical scanner findings unremediated without a documented, dated risk acceptance
+      - Using real student accounts or data in load or security tests
+      - Security testing of third-party sites (only our own stage environment)
+  context:
+    - kind: TaskRef
+      name: v2-e19-t01-quotas-rate-limits
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e19-t02-audit-logging
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A k6 (or Locust) scenario at 60 concurrent users for 15 minutes in stage meets p95 < 800 ms for
+        synchronous API routes, zero 5xx, and CardJob completion p95 < 45 s with replay models.
+    - id: ac2
+      description: >-
+        Under load, quota 429s and audit events behave correctly (no over-admission, one audit event per
+        action), verified from metrics and the audit table after the run.
+    - id: ac3
+      description: >-
+        An automated cross-tenant access test suite hits every resource route in the OpenAPI spec with a
+        second organization's token and receives 403/404 in all cases.
+    - id: ac4
+      description: >-
+        The URL fetcher and pasted-HTML paths are tested for SSRF (private IPs, metadata endpoint, redirects to
+        internal hosts) and script injection, with all attempts blocked.
+    - id: ac5
+      description: >-
+        pip-audit, pnpm audit and container scans run in CI and fail on high/critical findings; the ASVS-lite
+        checklist and findings register in docs/security/ show every item fixed or risk-accepted.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e19-t07-load-security-testing-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+spec:
+  description: >-
+    Wire scanners into CI first, then the automated cross-tenant and SSRF suites, then the load test in stage,
+    and close with the ASVS-lite review and remediation register.
+  goalRef:
+    name: v2-e19-t07-load-security-testing
+  graph:
+    nodes:
+      - id: ci-scanning
+        kind: Task
+        name: Dependency and container scanning in CI
+        description: pip-audit, pnpm audit and Trivy image scan jobs failing on high/critical.
+        outputs: [.github/workflows/security-scan.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Security scan workflow exists
+            path: .github/workflows/security-scan.yml
+            contentMatch: "pip-audit"
+          - type: command_succeeds
+            name: pip-audit passes
+            command: uv
+            args: [run, pip-audit]
+      - id: authz-ssrf-suite
+        kind: Task
+        name: Cross-tenant and SSRF test suites
+        description: >-
+          OpenAPI-driven IDOR suite with two seeded organizations, and SSRF/injection tests for the fetcher
+          and pasted-card paths.
+        dependsOn: [ci-scanning]
+        outputs:
+          - tests/security/test_cross_tenant.py
+          - tests/security/test_ssrf.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Security test suites pass
+            command: uv
+            args: [run, pytest, tests/security]
+      - id: load-test
+        kind: Task
+        name: Stage load test
+        description: >-
+          k6 scenarios for search, cut, library and extend at 60 VUs using the replay model router in stage;
+          capture latency, errors, quota and audit behaviour.
+        dependsOn: [authz-ssrf-suite]
+        outputs: [tests/load/school_night.js, docs/security/load-test-report.md]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Load test report recorded
+            path: docs/security/load-test-report.md
+            contentMatch: "p95"
+      - id: asvs-review
+        kind: Task
+        name: ASVS-lite review and remediation register
+        description: >-
+          Walk ASVS L1 sections relevant to the app, record findings with severity, fix or risk-accept each
+          with an owner and date.
+        dependsOn: [load-test]
+        outputs: [docs/security/asvs-lite-checklist.md, docs/security/findings-register.md]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Findings register exists
+            path: docs/security/findings-register.md
+          - type: custom
+            name: Findings closed or accepted
+            description: >-
+              Charlie reviews the register; no high/critical item remains open without a dated risk
+              acceptance before the v2.4 release gate.
+status:
+  phase: Pending

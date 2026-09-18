@@ -1,0 +1,231 @@
+# EPIC E22 — Case Coverage Analysis
+# Major version: V3 | Release: v3.1 (Case coverage analysis)
+# Architecture refs: §3 V3 stories, §13 Coverage analysis, §16 coverage eval
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e22-coverage-analysis
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+  annotations:
+    debate/title: E22 — Case Coverage Analysis
+    debate/architecture-refs: §3 V3 stories, §13 Coverage analysis, §16 coverage eval
+spec:
+  description: >-
+    Predict likely opposition positions against an uploaded affirmative from archetypes and similarity,
+    map the student's extensions, and report gaps as unsupported predicted nodes.
+  priority: 11
+  constraints:
+    majorVersion: v3
+    release: v3.1
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      An uploaded affirmative produces labeled predicted positions with rationale and confidence.
+  - id: ac2
+    description: >-
+      Coverage gaps are predicted nodes lacking supported ANSWERS/TURNS/MITIGATES edges — not keyword
+      misses.
+  - id: ac3
+    description: >-
+      False-negative rate on known missing answers is measured and gates releases.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e22-coverage-analysis-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+spec:
+  description: >-
+    Task graph for epic E22 (Case Coverage Analysis). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v3-e22-coverage-analysis
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v2-e15-t04-hybrid-retrieval
+      kind: External
+      name: 'Prerequisite from E15: Hybrid BM25 + kNN retrieval'
+      description: >-
+        Cross-epic prerequisite owned by v2-e15-search-index (release v2.2).
+      inputs:
+        goalRef: v2-e15-t04-hybrid-retrieval
+        specRef: plan_specs/v2/e15-search-index/t04-hybrid-retrieval.yaml
+    - id: ext-v3-e21-t01-graph-repository
+      kind: External
+      name: 'Prerequisite from E21: ArgumentTable and GraphRepository'
+      description: >-
+        Cross-epic prerequisite owned by v3-e21-argument-graph (release v3.0).
+      inputs:
+        goalRef: v3-e21-t01-graph-repository
+        specRef: plan_specs/v3/e21-argument-graph/t01-graph-repository.yaml
+    - id: ext-v3-e21-t02-node-extraction
+      kind: External
+      name: 'Prerequisite from E21: Argument node extraction'
+      description: >-
+        Cross-epic prerequisite owned by v3-e21-argument-graph (release v3.0).
+      inputs:
+        goalRef: v3-e21-t02-node-extraction
+        specRef: plan_specs/v3/e21-argument-graph/t02-node-extraction.yaml
+    - id: ext-v3-e21-t03-edge-extraction
+      kind: External
+      name: 'Prerequisite from E21: Argument edge extraction'
+      description: >-
+        Cross-epic prerequisite owned by v3-e21-argument-graph (release v3.0).
+      inputs:
+        goalRef: v3-e21-t03-edge-extraction
+        specRef: plan_specs/v3/e21-argument-graph/t03-edge-extraction.yaml
+    - id: ext-v3-e21-t04-graph-queries
+      kind: External
+      name: 'Prerequisite from E21: Coverage and coherence query primitives'
+      description: >-
+        Cross-epic prerequisite owned by v3-e21-argument-graph (release v3.0).
+      inputs:
+        goalRef: v3-e21-t04-graph-queries
+        specRef: plan_specs/v3/e21-argument-graph/t04-graph-queries.yaml
+    - id: ext-v3-e21-t06-graph-viewer
+      kind: External
+      name: 'Prerequisite from E21: Argument graph viewer'
+      description: >-
+        Cross-epic prerequisite owned by v3-e21-argument-graph (release v3.0).
+      inputs:
+        goalRef: v3-e21-t06-graph-viewer
+        specRef: plan_specs/v3/e21-argument-graph/t06-graph-viewer.yaml
+    - id: t01
+      kind: Task
+      name: Argument archetype library
+      description: >-
+        Archetypes per format and current topics (Policy NHI, LD space colonization, PF data-center moratorium)
+        as graph templates.
+      inputs:
+        specRef: plan_specs/v3/e22-coverage-analysis/t01-argument-archetypes.yaml
+        goalRef: v3-e22-t01-argument-archetypes
+      dependsOn:
+      - ext-v3-e21-t01-graph-repository
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e22-t01-argument-archetypes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e22-t01-argument-archetypes
+    - id: t02
+      kind: Task
+      name: Affirmative case structure
+      description: >-
+        Identify plan text, advantages, solvency and key cards from a parsed aff into graph nodes.
+      inputs:
+        specRef: plan_specs/v3/e22-coverage-analysis/t02-aff-case-parser.yaml
+        goalRef: v3-e22-t02-aff-case-parser
+      dependsOn:
+      - ext-v3-e21-t02-node-extraction
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e22-t02-aff-case-parser reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e22-t02-aff-case-parser
+    - id: t03
+      kind: Task
+      name: Likely-position prediction
+      description: >-
+        Combine archetypes and semantic similarity to known cases to rank likely on/off-case positions
+        with rationale and confidence.
+      inputs:
+        specRef: plan_specs/v3/e22-coverage-analysis/t03-position-prediction.yaml
+        goalRef: v3-e22-t03-position-prediction
+      dependsOn:
+      - t01
+      - t02
+      - ext-v2-e15-t04-hybrid-retrieval
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e22-t03-position-prediction reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e22-t03-position-prediction
+    - id: t04
+      kind: Task
+      name: Coverage gap detection
+      description: >-
+        Map extension/answer nodes to predicted positions via graph queries; classify covered/weak/uncovered
+        with explanations.
+      inputs:
+        specRef: plan_specs/v3/e22-coverage-analysis/t04-gap-detection.yaml
+        goalRef: v3-e22-t04-gap-detection
+      dependsOn:
+      - t03
+      - ext-v3-e21-t04-graph-queries
+      - ext-v3-e21-t03-edge-extraction
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e22-t04-gap-detection reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e22-t04-gap-detection
+    - id: t05
+      kind: Task
+      name: Coverage report UI and export
+      description: >-
+        Interactive report and DOCX/PDF export linking every finding to nodes/cards.
+      inputs:
+        specRef: plan_specs/v3/e22-coverage-analysis/t05-coverage-report-ui.yaml
+        goalRef: v3-e22-t05-coverage-report-ui
+      dependsOn:
+      - t04
+      - ext-v3-e21-t06-graph-viewer
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e22-t05-coverage-report-ui reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e22-t05-coverage-report-ui
+    - id: t06
+      kind: Task
+      name: Coverage evaluation
+      description: >-
+        Seeded cases with known missing answers; false-negative rate prioritized; promotion gate.
+      inputs:
+        specRef: plan_specs/v3/e22-coverage-analysis/t06-coverage-eval.yaml
+        goalRef: v3-e22-t06-coverage-eval
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e22-t06-coverage-eval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e22-t06-coverage-eval
+status:
+  phase: Pending

@@ -1,0 +1,219 @@
+# EPIC E25 — Scouting Reports
+# Major version: V3 | Release: v3.4 (Scouting reports)
+# Architecture refs: §3 V3 scouting story, §13 Opponent intelligence
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e25-scouting-reports
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+  annotations:
+    debate/title: E25 — Scouting Reports
+    debate/architecture-refs: §3 V3 scouting story, §13 Opponent intelligence
+spec:
+  description: >-
+    Summarize an opponent's disclosed positions and results into a sourced scouting report and feed disclosures
+    into coverage predictions.
+  priority: 14
+  constraints:
+    majorVersion: v3
+    release: v3.4
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      A scouting report lists disclosed positions, side tendencies and results with a source link and
+      retrieval time for every assertion.
+  - id: ac2
+    description: >-
+      Reports never contain unsourced claims; inferences are labeled.
+  - id: ac3
+    description: >-
+      Disclosures improve coverage-analysis predictions.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e25-scouting-reports-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+spec:
+  description: >-
+    Task graph for epic E25 (Scouting Reports). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v3-e25-scouting-reports
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v2-e12-t03-authn-authz
+      kind: External
+      name: 'Prerequisite from E12: Authentication, roles and tenancy'
+      description: >-
+        Cross-epic prerequisite owned by v2-e12-identity-api (release v2.0).
+      inputs:
+        goalRef: v2-e12-t03-authn-authz
+        specRef: plan_specs/v2/e12-identity-api/t03-authn-authz.yaml
+    - id: ext-v2-e13-t02-sqs-workers
+      kind: External
+      name: 'Prerequisite from E13: SQS queues and worker framework'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t02-sqs-workers
+        specRef: plan_specs/v2/e13-async-jobs/t02-sqs-workers.yaml
+    - id: ext-v2-e14-t02-auth-ui
+      kind: External
+      name: 'Prerequisite from E14: Authentication UX'
+      description: >-
+        Cross-epic prerequisite owned by v2-e14-web-cut-card (release v2.1).
+      inputs:
+        goalRef: v2-e14-t02-auth-ui
+        specRef: plan_specs/v2/e14-web-cut-card/t02-auth-ui.yaml
+    - id: ext-v2-e17-t05-bulk-export
+      kind: External
+      name: 'Prerequisite from E17: Bulk DOCX export'
+      description: >-
+        Cross-epic prerequisite owned by v2-e17-card-library (release v2.3).
+      inputs:
+        goalRef: v2-e17-t05-bulk-export
+        specRef: plan_specs/v2/e17-card-library/t05-bulk-export.yaml
+    - id: ext-v3-e22-t03-position-prediction
+      kind: External
+      name: 'Prerequisite from E22: Likely-position prediction'
+      description: >-
+        Cross-epic prerequisite owned by v3-e22-coverage-analysis (release v3.1).
+      inputs:
+        goalRef: v3-e22-t03-position-prediction
+        specRef: plan_specs/v3/e22-coverage-analysis/t03-position-prediction.yaml
+    - id: ext-v3-e22-t06-coverage-eval
+      kind: External
+      name: 'Prerequisite from E22: Coverage evaluation'
+      description: >-
+        Cross-epic prerequisite owned by v3-e22-coverage-analysis (release v3.1).
+      inputs:
+        goalRef: v3-e22-t06-coverage-eval
+        specRef: plan_specs/v3/e22-coverage-analysis/t06-coverage-eval.yaml
+    - id: ext-v3-e24-t04-identity-resolution
+      kind: External
+      name: 'Prerequisite from E24: Team and debater identity resolution'
+      description: >-
+        Cross-epic prerequisite owned by v3-e24-opponent-data (release v3.3).
+      inputs:
+        goalRef: v3-e24-t04-identity-resolution
+        specRef: plan_specs/v3/e24-opponent-data/t04-identity-resolution.yaml
+    - id: t01
+      kind: Task
+      name: Disclosure summarization
+      description: >-
+        Cluster and summarize disclosed positions per team/season with cites to disclosure records.
+      inputs:
+        specRef: plan_specs/v3/e25-scouting-reports/t01-disclosure-summarization.yaml
+        goalRef: v3-e25-t01-disclosure-summarization
+      dependsOn:
+      - ext-v3-e24-t04-identity-resolution
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e25-t01-disclosure-summarization reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e25-t01-disclosure-summarization
+    - id: t02
+      kind: Task
+      name: Results analytics
+      description: >-
+        Records, elim depth, side and opponent trends from public results.
+      inputs:
+        specRef: plan_specs/v3/e25-scouting-reports/t02-results-analytics.yaml
+        goalRef: v3-e25-t02-results-analytics
+      dependsOn:
+      - ext-v3-e24-t04-identity-resolution
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e25-t02-results-analytics reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e25-t02-results-analytics
+    - id: t03
+      kind: Task
+      name: Scouting report generation
+      description: >-
+        Report schema with every assertion sourced; inference labeled; cached with refresh timestamps.
+      inputs:
+        specRef: plan_specs/v3/e25-scouting-reports/t03-report-generation.yaml
+        goalRef: v3-e25-t03-report-generation
+      dependsOn:
+      - t01
+      - t02
+      - ext-v2-e12-t03-authn-authz
+      - ext-v2-e13-t02-sqs-workers
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e25-t03-report-generation reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e25-t03-report-generation
+    - id: t04
+      kind: Task
+      name: Scouting UI and export
+      description: >-
+        Team search, report view, DOCX/PDF export.
+      inputs:
+        specRef: plan_specs/v3/e25-scouting-reports/t04-scouting-ui.yaml
+        goalRef: v3-e25-t04-scouting-ui
+      dependsOn:
+      - t03
+      - ext-v2-e14-t02-auth-ui
+      - ext-v2-e17-t05-bulk-export
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e25-t04-scouting-ui reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e25-t04-scouting-ui
+    - id: t05
+      kind: Task
+      name: Disclosure-informed coverage predictions
+      description: >-
+        Feed opponent disclosures into E22 position prediction with source attribution.
+      inputs:
+        specRef: plan_specs/v3/e25-scouting-reports/t05-prediction-integration.yaml
+        goalRef: v3-e25-t05-prediction-integration
+      dependsOn:
+      - t01
+      - ext-v3-e22-t03-position-prediction
+      - ext-v3-e22-t06-coverage-eval
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e25-t05-prediction-integration reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e25-t05-prediction-integration
+status:
+  phase: Pending

@@ -1,0 +1,165 @@
+# TASK v3-e24-t05-refresh-provenance — Refresh scheduling and removal
+# Epic: E24 Opponent Data Integrations | Release: v3.3 (Opponent data integrations) | Major: V3
+# Architecture refs: §7 OpponentTable, §13 Opponent intelligence, §14, §15 observability, §19 removal
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e24-t05-refresh-provenance
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+  annotations:
+    debate/title: Refresh scheduling and removal
+    debate/architecture-refs: §7, §13, §14, §15, §19
+spec:
+  description: >-
+    Keep opponent data fresh and removable. An EventBridge schedule (from the E13 domain-event setup)
+    triggers RefreshOpponentDataJobs for each organization's watchlist teams, fetching incrementally within
+    source rate limits and the governance gate. Every record exposes last_refreshed_at, stale_after and
+    is_stale so reports can show staleness. Admins can remove a team, debater or single record with a
+    reason: records are hard-deleted from OpponentTable and derived index documents, a suppression tombstone
+    stops re-ingestion, an OpponentDataRemoved event lets downstream caches (E25 scouting reports) purge,
+    and an audit event is written. Records that disappear at the source are deleted on the next refresh.
+    Boundaries: ingestion logic is t02/t03.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_workers, debate_api, debate_cli, infrastructure]
+    forbidden:
+      - Running ingestion when the governance approval gate is not satisfied
+      - Soft-deleting removed records while keeping their content
+      - Refreshing teams outside an organization's watchlist
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e24-t04-identity-resolution
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t06-domain-events
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e19-t02-audit-logging
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A configurable in-season schedule (default nightly, hourly on configured tournament weekends)
+        enqueues one RefreshOpponentDataJob per watchlist team, and jobs respect rate limits and the
+        governance gate.
+    - id: ac2
+      description: >-
+        Records expose last_refreshed_at, stale_after and is_stale; thresholds are configuration (results 24
+        h during tournament weekends, disclosures 7 days).
+    - id: ac3
+      description: >-
+        Removal via admin API or `debate-research opponents remove` hard-deletes matching records and
+        derived index documents, writes a suppression tombstone, emits OpponentDataRemoved and records an
+        audit event.
+    - id: ac4
+      description: >-
+        A suppressed record reappearing at the source is not re-ingested, and a record deleted at the source
+        is deleted locally on the next refresh.
+    - id: ac5
+      description: >-
+        Schedule and removal flows are covered by worker, API and CLI tests with fakes; terraform validates.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e24-t05-refresh-provenance-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+spec:
+  description: >-
+    Schedule and job, staleness, removal workflow, then source-deletion handling and tests.
+  goalRef:
+    name: v3-e24-t05-refresh-provenance
+  graph:
+    nodes:
+      - id: schedule
+        kind: Task
+        name: Refresh schedule and job
+        description: >-
+          EventBridge Scheduler entries and the RefreshOpponentDataJob handler with incremental fetch.
+        outputs:
+          - infrastructure/modules/opponent_refresh/main.tf
+          - packages/debate_workers/src/debate_workers/handlers/refresh_opponent_data.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Terraform configuration validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: test_passes
+            name: Refresh job tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_refresh_opponent_data.py]
+      - id: staleness
+        kind: Task
+        name: Staleness indicators
+        description: >-
+          stale_after computation per record type and API exposure.
+        outputs: [packages/debate_core/src/debate_core/application/opponent_staleness.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Staleness tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_opponent_staleness.py]
+      - id: removal
+        kind: Task
+        name: Removal and takedown workflow
+        description: >-
+          Remove use case, tombstones, derived-index purge, domain event, audit event, admin route and CLI
+          command.
+        outputs: [packages/debate_core/src/debate_core/application/opponent_removal.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_opponent_removal.py]
+          - type: test_passes
+            name: Removal API tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_opponent_removal.py]
+      - id: source-deletions
+        kind: Task
+        name: Source-side deletion handling
+        description: >-
+          Detect records missing from the source during refresh and delete them; type check and import
+          boundaries.
+        dependsOn: [schedule, removal]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Source deletion tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_workers/tests/handlers/test_refresh_opponent_data.py
+              - "-k"
+              - deleted
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

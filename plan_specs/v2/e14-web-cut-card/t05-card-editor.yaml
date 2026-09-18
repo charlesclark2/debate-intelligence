@@ -1,0 +1,151 @@
+# TASK v2-e14-t05-card-editor — Provenance-constrained card editor
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §8 step 7 (edits limited to deletion/markup/bracketed interpolation), §12, §7 revisions
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e14-t05-card-editor
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+  annotations:
+    debate/title: Provenance-constrained card editor
+    debate/architecture-refs: §4, §12
+spec:
+  description: >-
+    Let debaters mark up a verified card the way they would in Verbatim without being able to change what
+    the author said. Build a TipTap/ProseMirror editor whose document model is derived from the card's
+    evidence text plus CardSpans: the tag and cite fields are freely editable, while the evidence region
+    permits only underline, highlight (and emphasis/bold-underline if the format profile supports it),
+    deletion of ranges (rendered as omitted with an ellipsis indicator per the edit policy), and
+    explicitly bracketed insertions. Any other keystroke in evidence is blocked by a ProseMirror
+    transaction filter mirroring the E03 edit policy. Save sends a PATCH with If-Match; the server
+    re-verifies (E12-t05) and the UI shows the resulting verification status. A 409 conflict (for
+    example a reprocessing job updated the card) opens a resolution dialog showing both versions; the
+    student's edits are never silently discarded. Revision history/restore is E17-t04.
+  priority: 1
+  constraints:
+    packages: [web]
+    forbidden:
+      - Free-text typing, paste or autocorrect inside the evidence region
+      - Client-side-only enforcement (the server re-verifies every save)
+      - Silently overwriting on 409 or dropping unsaved student edits
+      - Storing editor HTML as the source of truth (CardSpans + offsets are authoritative)
+  context:
+    - kind: TaskRef
+      name: v2-e14-t04-cut-card-flow
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e03-t05-edit-constraints
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e11-t05-optimistic-concurrency
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Typing, pasting or IME input inside evidence is rejected by the transaction filter, while
+        underline/highlight toggles and range deletions succeed; unit tests cover each input type.
+    - id: ac2
+      description: >-
+        Bracketed insertions are created only via an explicit "Insert bracket" action, render as
+        [text], and serialize to the edit-policy insertion format accepted by the API.
+    - id: ac3
+      description: >-
+        The editor round-trips: loading a card and saving without changes produces an empty or identical
+        patch, and markup edits serialize to CardSpans with exact offsets matching the server's.
+    - id: ac4
+      description: >-
+        A save that triggers 409 opens a conflict dialog showing server vs local versions, allowing the
+        student to reapply their markup on the latest revision; no edit is lost.
+    - id: ac5
+      description: >-
+        After each save the verification badge reflects the server result; if re-verification fails the
+        card is shown as UNVERIFIED with export/copy disabled.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e14-t05-card-editor-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+spec:
+  description: >-
+    Build the span <-> document mapping first, then the constrained schema and transaction filter, then
+    save/re-verify and conflict handling, and finish with e2e and debater usability review.
+  goalRef:
+    name: v2-e14-t05-card-editor
+  graph:
+    nodes:
+      - id: span-doc-mapping
+        kind: Task
+        name: CardSpans <-> ProseMirror document mapping
+        description: >-
+          Pure functions converting evidence text + spans to a ProseMirror doc and back to spans/patch,
+          with property tests against fixture cards from golden_cards.
+        outputs: [web/src/features/editor/spanMapping.ts]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Span mapping round-trip tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/editor/spanMapping]
+      - id: constrained-editor
+        kind: Task
+        name: Constrained TipTap editor
+        description: >-
+          Schema with editable tag/cite nodes and a locked evidence node; transaction filter permitting
+          only mark changes, deletions and bracket-insertion steps; toolbar for underline/highlight/bracket.
+        dependsOn: [span-doc-mapping]
+        outputs: [web/src/features/editor/CardEditor.tsx, web/src/features/editor/evidenceGuard.ts]
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Evidence guard tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/editor/evidenceGuard]
+      - id: save-conflicts
+        kind: Task
+        name: Save, re-verify and conflict resolution
+        description: >-
+          PATCH with If-Match via the generated client, verification badge refresh, 409 dialog with
+          reapply-on-latest, unsaved-changes guard on navigation.
+        dependsOn: [constrained-editor]
+        outputs: [web/src/features/editor/useSaveCard.ts, web/src/features/editor/ConflictDialog.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Save and conflict tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/editor/useSaveCard]
+      - id: editor-e2e
+        kind: Task
+        name: Editor e2e and usability review
+        description: >-
+          Playwright specs for blocked typing/paste, markup, bracket insertion, 409 conflict and
+          UNVERIFIED-after-save; hands-on review by debaters.
+        dependsOn: [save-conflicts]
+        outputs: [web/e2e/card-editor.spec.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Editor e2e tests pass
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/card-editor.spec.ts]
+          - type: custom
+            name: Debater usability check
+            description: >-
+              Two pilot debaters mark up three cards each and report the editor feels comparable to
+              underlining/highlighting in Verbatim; blocking issues are filed before sign-off.
+status:
+  phase: Pending

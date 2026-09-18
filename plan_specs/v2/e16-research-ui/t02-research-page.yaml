@@ -1,0 +1,147 @@
+# TASK v2-e16-t02-research-page — Research page
+# Epic: E16 Research Workspace UI | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §3 V2 user stories, §12 Research, §15 (partial results, SSE status)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e16-t02-research-page
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+  annotations:
+    debate/title: Research page
+    debate/architecture-refs: §3, §12, §15
+spec:
+  description: >-
+    Build the authenticated /research page in the Next.js app: a query box plus filter form (date window
+    with quick presets like "since last tournament", argument select e.g. politics DA / heg / econ DA, need
+    select uniqueness/link/internal link/impact/answers, source-type checkboxes), submission via the
+    generated client to POST /v1/searches, live progress over the job SSE stream, and explicit loading,
+    partial-result (some providers failed), empty and error states, followed by a simple ordered results
+    list. Filter state lives in the URL so a search is shareable and reloadable. This task does NOT build
+    the rich result card with rationale and open/cut actions (t03) or history/saved searches (t04).
+  priority: 1
+  constraints:
+    packages: [web/src/app/research, web/src/components/research]
+    forbidden:
+      - Calling providers or OpenSearch from the browser; only the typed API client
+      - Hiding partial-result or provider-failure status from the user
+      - Storing queries or tokens in localStorage (session handled by the E14 auth layer)
+      - Live backend calls in unit/component tests (use MSW mocks)
+  context:
+    - kind: TaskRef
+      name: v2-e16-t01-search-api
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e14-t02-auth-ui
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t05-job-status-api
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An unauthenticated visit to /research redirects to sign-in; an authenticated user can submit a query
+        with filters and the request body matches the CreateSearchRequest schema.
+    - id: ac2
+      description: >-
+        During the job the page shows per-provider progress from SSE, and when the job finishes with some
+        providers failed a visible "partial results" notice names the failed providers.
+    - id: ac3
+      description: >-
+        Filter state round-trips through URL search params: reloading /research?q=...&need=link restores the
+        form and the results for that search id.
+    - id: ac4
+      description: >-
+        The form is keyboard operable with labeled controls and passes axe checks with no serious or
+        critical violations.
+    - id: ac5
+      description: >-
+        A Playwright test against a mocked API covers submit -> progress -> results, partial results, and
+        empty results.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e16-t02-research-page-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+spec:
+  description: >-
+    Build the filter form and URL state first, then the job-progress hook, then the page states and a
+    minimal list, and finish with component, accessibility and end-to-end tests.
+  goalRef:
+    name: v2-e16-t02-research-page
+  graph:
+    nodes:
+      - id: filter-form
+        kind: Task
+        name: Query and filter form with URL state
+        description: >-
+          shadcn/ui form with zod validation mirroring CreateSearchRequest, argument/need options loaded from
+          the API taxonomy, and URL search-param synchronization.
+        outputs:
+          - web/src/components/research/SearchForm.tsx
+          - web/src/lib/research/searchParams.ts
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Form and URL-state unit tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/components/research/SearchForm.test.tsx]
+      - id: job-progress
+        kind: Task
+        name: Search job progress hook
+        description: >-
+          useSearchJob hook that creates the search, subscribes to the job SSE stream with reconnect, and
+          exposes provider statuses, partial flag and completion.
+        dependsOn: [filter-form]
+        outputs: [web/src/lib/research/useSearchJob.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Progress hook tests pass with MSW
+            command: pnpm
+            args: [--dir, web, test, --, src/lib/research/useSearchJob.test.ts]
+      - id: page-states
+        kind: Task
+        name: Research page with loading/partial/empty/error states
+        description: >-
+          /research route (protected) composing the form, progress panel, partial-results notice and a basic
+          ordered results list placeholder that t03 replaces with ResultCard.
+        dependsOn: [job-progress]
+        outputs: [web/src/app/research/page.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Web lint passes
+            command: pnpm
+            args: [--dir, web, lint]
+          - type: command_succeeds
+            name: Web build passes
+            command: pnpm
+            args: [--dir, web, build]
+      - id: e2e-a11y
+        kind: Task
+        name: Playwright and accessibility tests
+        description: Playwright specs with mocked API for the main flows plus an axe scan of the page.
+        dependsOn: [page-states]
+        outputs: [web/e2e/research.spec.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Research page e2e and axe checks pass
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/research.spec.ts]
+status:
+  phase: Pending

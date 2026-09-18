@@ -1,0 +1,139 @@
+# TASK v1-e05-t03-fake-replay-models — Deterministic fake and record/replay models
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §10, ADR-005, §16 (offline deterministic tests, LLM evals), §20 step 5
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t03-fake-replay-models
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: Deterministic fake and record/replay models
+    debate/architecture-refs: §10, ADR-005, §16, §20 step 5
+spec:
+  description: >-
+    Provide two offline ModelRouter implementations so CI, golden tests and evals never call a real model.
+    FakeModelRouter returns fixture outputs keyed by prompt_id + a stable hash of the rendered input and
+    schema; a missing key fails loudly instead of returning a default. RecordReplayModelRouter wraps any
+    real router: in record mode (developer opt-in, with credentials) it stores request/response pairs as
+    reviewable JSON cassettes; in replay mode it serves them and errors on any unrecorded call. Fixtures
+    must never contain secrets or student-identifying data. This task does not implement Bedrock (t02),
+    prompt files (t04) or validation/repair (t05); it only makes their tests reproducible.
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations, tests/fixtures/model_cassettes]
+    forbidden:
+      - Silent fallback to a real model when a fixture or cassette is missing
+      - Recording in CI (record mode requires an explicit env flag and is refused when CI=true)
+      - Credentials, request signatures or student names inside cassette files
+  context:
+    - kind: TaskRef
+      name: v1-e05-t01-model-router-port
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        FakeModelRouter and RecordReplayModelRouter both pass the shared ModelRouter contract suite.
+    - id: ac2
+      description: >-
+        The fixture key is sha256(prompt_id, prompt_version, canonical JSON of inputs, schema name) and is
+        identical across runs, platforms and dict ordering.
+    - id: ac3
+      description: >-
+        An unrecorded call in fake or replay mode raises MissingFixtureError naming the prompt_id and key.
+    - id: ac4
+      description: >-
+        Record mode writes one pretty-printed JSON cassette per call with authorization headers and account
+        identifiers redacted, and refuses to run when CI=true.
+    - id: ac5
+      description: >-
+        Setting models.provider=fake or replay in settings selects the implementation with no code change.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t03-fake-replay-models-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Define the stable key, build the fake router, add the record/replay wrapper with redaction, then wire
+    selection through settings and a shared pytest fixture.
+  goalRef:
+    name: v1-e05-t03-fake-replay-models
+  graph:
+    nodes:
+      - id: fixture-key
+        kind: Task
+        name: Stable fixture key
+        description: >-
+          Implement canonical-JSON hashing of prompt id/version, inputs and schema name with property tests
+          for ordering and unicode stability.
+        outputs: [packages/debate_core/src/debate_core/integrations/models/fixture_key.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fixture key stability tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models/test_fixture_key.py]
+      - id: fake-router
+        kind: Task
+        name: FakeModelRouter
+        description: >-
+          Serve schema-validated outputs from tests/fixtures/model_outputs/<prompt_id>/<key>.json, with
+          deterministic embeddings (hash-seeded vectors) and rerank (lexical overlap) for offline search tests.
+        dependsOn: [fixture-key]
+        outputs: [packages/debate_core/src/debate_core/integrations/models/fake_router.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fake router passes the contract suite
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models/test_fake_router.py]
+      - id: record-replay
+        kind: Task
+        name: RecordReplayModelRouter with redaction
+        description: >-
+          Wrap a delegate router; record mode writes redacted cassettes under tests/fixtures/model_cassettes,
+          replay mode serves them; CI=true forbids record mode.
+        dependsOn: [fixture-key]
+        outputs: [packages/debate_core/src/debate_core/integrations/models/record_replay.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Record/replay and redaction tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models/test_record_replay.py]
+      - id: settings-wiring
+        kind: Task
+        name: Provider selection and pytest fixture
+        description: >-
+          Add a router factory keyed by settings.models.provider (fake | replay | bedrock) and a shared
+          `model_router` pytest fixture defaulting to fake so every package's tests are offline.
+        dependsOn: [fake-router, record-replay]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/models/factory.py
+          - tests/conftest.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Factory selection tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models, -k, factory]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

@@ -1,0 +1,137 @@
+# TASK v1-e03-t02-hashing-provenance — SHA-256 provenance and snapshot creation
+# Epic: E03 Evidence Integrity & Verification Engine | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §2 (preserve original artifacts), §7 SourceSnapshot, §8 steps 1–2, ADR-003, ADR-006
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e03-t02-hashing-provenance
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+  annotations:
+    debate/title: SHA-256 provenance and snapshot creation
+    debate/architecture-refs: §2, §7, §8, ADR-003, ADR-006, §20 step 2
+spec:
+  description: >-
+    Implement SnapshotService in debate_core.application: given raw response bytes, extracted text and
+    provenance inputs (canonical URL, retrieved_at, extractor_version, provenance_mode), it
+    normalizes with the t01 normalizer, computes SHA-256 of the raw bytes and of the normalized text,
+    persists raw bytes and normalized text (with its paragraph map) through the SnapshotStore port,
+    and returns an immutable SourceSnapshot recording both hashes, normalizer_version, and blob keys.
+    Re-snapshotting identical content yields the same hashes and does not duplicate blobs. Fetching
+    and extraction are E04; span extraction and verification are t03/t04.
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence, debate_core.application]
+    forbidden:
+      - Mutating or overwriting a stored snapshot or blob
+      - Hashing anything other than exact stored bytes (no re-encoding before hashing raw bytes)
+      - Importing boto3 or filesystem code in the service (SnapshotStore port only)
+  context:
+    - kind: TaskRef
+      name: v1-e03-t01-text-normalization
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t03-local-repositories
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        SourceSnapshot records sha256 of raw bytes, normalized_text_hash, normalizer_version,
+        extractor_version, retrieved_at (UTC), provenance_mode and the blob keys for raw and normalized
+        content.
+    - id: ac2
+      description: >-
+        Loading a snapshot re-hashes both blobs and raises SnapshotIntegrityError on any mismatch.
+    - id: ac3
+      description: >-
+        Creating a snapshot twice from identical inputs yields identical hashes and one stored copy of
+        each blob.
+    - id: ac4
+      description: >-
+        Hash helpers match known SHA-256 test vectors and hash normalized text as UTF-8 without BOM.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e03-t02-hashing-provenance-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+spec:
+  description: >-
+    Hash helpers, then the snapshot creation service, then integrity-checked loading, tested against
+    fakes and the local filesystem store.
+  goalRef:
+    name: v1-e03-t02-hashing-provenance
+  graph:
+    nodes:
+      - id: hashing
+        kind: Task
+        name: SHA-256 helpers
+        description: >-
+          sha256_bytes and sha256_text (UTF-8, no BOM) returning lowercase hex; test vectors.
+        outputs: [packages/debate_core/src/debate_core/evidence/hashing.py]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Hash vector tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_hashing.py]
+      - id: snapshot-service
+        kind: Task
+        name: SnapshotService.create
+        description: >-
+          Normalize, hash, persist raw + normalized blobs (normalized stored as JSON with paragraph map)
+          and return the SourceSnapshot entity.
+        dependsOn: [hashing]
+        outputs: [packages/debate_core/src/debate_core/application/snapshot_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Snapshot creation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_snapshot_service.py, -k,
+                   create]
+      - id: integrity-load
+        kind: Task
+        name: Integrity-checked snapshot loading
+        description: >-
+          SnapshotService.load re-hashes blobs, validates normalizer_version is known, and raises
+          SnapshotIntegrityError on mismatch.
+        dependsOn: [snapshot-service]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tamper-detection tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_snapshot_service.py, -k,
+                   integrity]
+      - id: local-integration
+        kind: Task
+        name: Integration with local blob store
+        description: >-
+          Run the service against FsSnapshotStore in tmp_path to prove dedupe and tamper detection on
+          real files; type check.
+        dependsOn: [integrity-load]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Local integration tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integration/test_snapshot_local.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

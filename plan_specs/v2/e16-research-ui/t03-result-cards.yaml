@@ -1,0 +1,142 @@
+# TASK v2-e16-t03-result-cards — Result cards with rationale and actions
+# Epic: E16 Research Workspace UI | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §3 V2 user stories, §9 (features, not truth scores), §12 Research + Cut a Card
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e16-t03-result-cards
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+  annotations:
+    debate/title: Result cards with rationale and actions
+    debate/architecture-refs: §3, §9, §12
+spec:
+  description: >-
+    Replace the t02 placeholder list with a ResultCard component that shows title, publication, authors,
+    published date, source type (peer-reviewed, news reporting, opinion, government, think tank), access
+    status badge (accessible, paywalled, blocked, unknown), the feature-based "why this result" explanation
+    (feature chips such as recency, peer-reviewed, citation count, need match) and the optional model
+    rationale clearly labeled as AI-generated, plus two actions: Open source (new tab to the canonical URL)
+    and Cut card, which starts the E14 Cut-a-Card flow with the article URL and the search's argument/need
+    prefilled. Cut is disabled with an explanation for paywalled/blocked sources. This task does NOT change
+    ranking (E15), the page shell (t02) or the Cut-a-Card flow itself (E14 t04).
+  priority: 1
+  constraints:
+    packages: [web/src/components/research, web/src/app/research]
+    forbidden:
+      - Showing a single opaque quality or truth score, or ideological labels on sources
+      - Presenting the AI rationale as a quotation from the article or as verified evidence
+      - Offering a Cut action that tries to bypass a paywall or blocked access status
+      - Live backend calls in unit/component tests
+  context:
+    - kind: TaskRef
+      name: v2-e16-t02-research-page
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e14-t04-cut-card-flow
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each ResultCard renders title, publication, date, source type and access status, and an expandable
+        "Why this result" section listing the feature values and scores returned by the API.
+    - id: ac2
+      description: >-
+        A model rationale, when present, is rendered under an "AI explanation" label with its prompt version in
+        a tooltip; when absent the section is omitted without layout errors.
+    - id: ac3
+      description: >-
+        Clicking Cut card navigates to the Cut-a-Card flow with url, argument and need prefilled and creates a
+        CardJob; for PAYWALLED/BLOCKED results the button is disabled with an explanatory tooltip.
+    - id: ac4
+      description: >-
+        Open source opens the canonical URL in a new tab with rel="noopener noreferrer".
+    - id: ac5
+      description: >-
+        Vitest component tests cover all access statuses and a Playwright test covers search result ->
+        Cut card -> job progress against a mocked API.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e16-t03-result-cards-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+spec:
+  description: >-
+    Build the presentational card and rationale section, add the actions wired to the Cut-a-Card flow, then
+    integrate into the page and cover the flow end to end.
+  goalRef:
+    name: v2-e16-t03-result-cards
+  graph:
+    nodes:
+      - id: result-card
+        kind: Task
+        name: ResultCard metadata and access badges
+        description: >-
+          Presentational component for SearchResultView with source-type and access-status badges and
+          accessible date formatting.
+        outputs: [web/src/components/research/ResultCard.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: ResultCard renders all access statuses
+            command: pnpm
+            args: [--dir, web, test, --, src/components/research/ResultCard.test.tsx]
+      - id: rationale-section
+        kind: Task
+        name: Feature explanation and AI rationale section
+        description: >-
+          Expandable section mapping feature keys to human labels and values, and a separately labeled AI
+          explanation block with prompt version metadata.
+        dependsOn: [result-card]
+        outputs: [web/src/components/research/ResultRationale.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Rationale section tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/components/research/ResultRationale.test.tsx]
+      - id: actions
+        kind: Task
+        name: Open and Cut card actions
+        description: >-
+          Open-source link and Cut-card button that routes into the E14 cut flow with prefilled url, argument
+          and need; disabled state for PAYWALLED/BLOCKED with reason.
+        dependsOn: [result-card]
+        outputs: [web/src/components/research/ResultActions.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Action tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/components/research/ResultActions.test.tsx]
+      - id: integrate-e2e
+        kind: Task
+        name: Page integration and end-to-end test
+        description: Swap the t02 placeholder list for ResultCard and add a Playwright search-to-cut test.
+        dependsOn: [rationale-section, actions]
+        outputs: [web/e2e/research-to-cut.spec.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Search-to-cut e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/research-to-cut.spec.ts]
+          - type: command_succeeds
+            name: Web lint passes
+            command: pnpm
+            args: [--dir, web, lint]
+status:
+  phase: Pending

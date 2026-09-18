@@ -1,0 +1,171 @@
+# TASK v3-e25-t01-disclosure-summarization — Disclosure summarization
+# Epic: E25 Scouting Reports | Release: v3.4 (Scouting reports) | Major: V3
+# Architecture refs: §3 V3 scouting story, §7 Disclosure, §10, §13 Opponent intelligence, §14
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e25-t01-disclosure-summarization
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+  annotations:
+    debate/title: Disclosure summarization
+    debate/architecture-refs: §3, §7, §10, §13, §14
+spec:
+  description: >-
+    Turn a resolved team's ingested OpenCaselist Disclosure records for one season into a structured
+    DisclosureSummary: positions clustered by argument family (e.g. "Aff — Medicare for All plan, 2 advs",
+    "Neg — Politics DA", "Cap K", "Consult CP", "T — Substantial"), with side, first/last seen, frequency
+    by round, and representative cites. Clustering is deterministic first (normalized position titles and
+    wiki-cite headings), with an LLM (Haiku-routed, structured Pydantic output, versioned prompt) only
+    labeling clusters and writing one-line descriptions that must reference member disclosure ids. Every
+    cluster cites the disclosure records (source_url, retrieved_at) it was built from. This task owns
+    OpponentIntelService.summarize_disclosures and its schema only; results/records analytics are t02,
+    report assembly and caching are t03, UI is t04, and feeding predictions is t05. It never fetches from
+    OpenCaselist directly (E24 owns ingestion) and never reads round documents beyond disclosed cites.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.arguments]
+    forbidden:
+      - Importing boto3/typer/fastapi in debate_core domain or application layers
+      - Any assertion or cluster without at least one Disclosure record reference (source_url + retrieved_at)
+      - Calling OpenCaselist or Tabroom from this service; read only via the OpponentRepository port
+      - Storing debater names beyond what the resolved OpponentTeam already holds (data minimization)
+      - Free-text model output driving behavior; model output must validate against DisclosureClusterLabel
+      - Live network or real model calls in CI; use the fake/replay ModelRouter
+  context:
+    - kind: TaskRef
+      name: v3-e24-t04-identity-resolution
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        summarize_disclosures(team_id, season) returns a DisclosureSummary whose clusters each carry side,
+        position family, member disclosure ids, round count, first_seen/last_seen and at least one cite
+        with source_url and retrieved_at.
+    - id: ac2
+      description: >-
+        On the coach-labeled clustering fixture (>=5 teams, >=60 disclosure records across Policy, LD
+        and PF), deterministic clustering places >=90% of records in the labeled cluster.
+    - id: ac3
+      description: >-
+        LLM cluster labels validate against DisclosureClusterLabel, cite only member disclosure ids, and
+        persist prompt_id, prompt version and model_id; a label referencing a non-member id is rejected.
+    - id: ac4
+      description: >-
+        Records disclosed under a merged identity (from E24 identity resolution) are summarized under the
+        canonical team_id, and records below the identity-confidence threshold are excluded and counted.
+    - id: ac5
+      description: >-
+        Summaries are pure functions of the input records plus prompt version, so re-running with the same
+        records and replay router yields byte-identical JSON.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e25-t01-disclosure-summarization-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+spec:
+  description: >-
+    Define the summary schema, build deterministic clustering, add model labeling behind a versioned
+    prompt, wire the service method, then evaluate against coach-labeled fixtures offline.
+  goalRef:
+    name: v3-e25-t01-disclosure-summarization
+  graph:
+    nodes:
+      - id: summary-schema
+        kind: Task
+        name: DisclosureSummary and DisclosureCluster models
+        description: >-
+          Pydantic models for DisclosureSummary, DisclosureCluster (side, family, member_ids, counts,
+          first/last seen) and SourceCite (disclosure_id, source_url, retrieved_at), with a validator
+          that rejects clusters lacking cites.
+        outputs: [packages/debate_core/src/debate_core/domain/scouting.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Schema rejects uncited clusters
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_scouting_models.py]
+      - id: deterministic-clustering
+        kind: Task
+        name: Deterministic position clustering
+        description: >-
+          Normalize position titles and cite headings (strip tournament/round prefixes, casefold,
+          alias table for common abbreviations like "cap k", "politix", "T-subs"), group by side and
+          family, and compute frequency and first/last seen from Disclosure records.
+        dependsOn: [summary-schema]
+        outputs: [packages/debate_core/src/debate_core/arguments/disclosure_clustering.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Clustering unit tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_disclosure_clustering.py]
+      - id: cluster-labeling
+        kind: Task
+        name: Model-labeled cluster descriptions
+        description: >-
+          DisclosureClusterLabel schema and prompt scouting.disclosure_cluster_label v1.0.0 routed to the
+          extraction tier; post-validate that every referenced id is a cluster member; persist generation
+          metadata.
+        dependsOn: [deterministic-clustering]
+        outputs:
+          - packages/debate_core/src/debate_core/prompts/scouting_disclosure_cluster_label.v1.yaml
+          - packages/debate_core/src/debate_core/arguments/disclosure_labeling.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Labeling contract tests pass with replay router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_disclosure_labeling.py]
+      - id: service-method
+        kind: Task
+        name: OpponentIntelService.summarize_disclosures
+        description: >-
+          Application-layer use case that loads canonical-team disclosures via the OpponentRepository port,
+          applies the identity-confidence threshold, clusters, labels and returns the summary.
+        dependsOn: [cluster-labeling]
+        outputs: [packages/debate_core/src/debate_core/application/opponent_intel/summarize_disclosures.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Service tests with in-memory repository pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_summarize_disclosures.py]
+      - id: clustering-eval
+        kind: Task
+        name: Coach-labeled clustering fixture and gates
+        description: >-
+          Anonymized fixture of public disclosure records with coach-labeled clusters; assert >=90%
+          placement accuracy and determinism; run type and import-boundary checks.
+        dependsOn: [service-method]
+        outputs: [tests/fixtures/scouting/disclosure_clusters_labeled.json]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Clustering accuracy and determinism eval passes
+            command: uv
+            args: [run, pytest, tests/evals/scouting/test_disclosure_clustering_eval.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+          - type: custom
+            name: Coach spot-check of cluster labels
+            description: >-
+              Charlie reviews summaries for three familiar circuit teams and confirms families and labels
+              match how the team would describe those positions.
+status:
+  phase: Pending

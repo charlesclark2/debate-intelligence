@@ -1,0 +1,145 @@
+# TASK v2-e14-t02-auth-ui — Authentication UX
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §3 V2 user story (email/password or Google), §12 Authentication, §14
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e14-t02-auth-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+  annotations:
+    debate/title: Authentication UX
+    debate/architecture-refs: §4, §12
+spec:
+  description: >-
+    Let a student sign up and sign in with email/password or Google and stay signed in safely. Implement
+    the Cognito OAuth authorization-code + PKCE flow (via the managed login / Hosted UI) with a
+    server-side callback route that stores tokens in httpOnly, Secure, SameSite=Lax cookies (never
+    localStorage), silent refresh before expiry, sign-out that revokes the refresh token and clears the
+    Cognito session, middleware-protected routes that redirect to sign-in, and a typed API fetch wrapper
+    that attaches the access token server-side. Show the user's role and organization from the API, not
+    from client-decoded claims. Allow-list rejections from the pre-sign-up trigger show a friendly
+    message. Cognito infrastructure is E12-t01; account deletion/export is E19-t03.
+  priority: 1
+  constraints:
+    packages: [web]
+    forbidden:
+      - Tokens in localStorage/sessionStorage or readable by client JavaScript
+      - Implicit grant or custom password forms that bypass Cognito
+      - Authorization decisions made only in the browser
+      - Collecting profile data beyond what Cognito already holds (no age, school or phone fields)
+  context:
+    - kind: TaskRef
+      name: v2-e14-t01-nextjs-scaffold
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t01-cognito-user-pool
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Visiting a protected route while signed out redirects to sign-in and returns to the original route
+        after a successful email/password or Google login.
+    - id: ac2
+      description: >-
+        Tokens are set only as httpOnly Secure cookies; a Playwright test asserts document.cookie and
+        localStorage contain no token values.
+    - id: ac3
+      description: >-
+        Access tokens are refreshed before expiry without user interaction, and an expired/revoked refresh
+        token sends the user to sign-in with a clear message.
+    - id: ac4
+      description: >-
+        Sign-out revokes the refresh token, clears cookies and the Cognito session, and the back button
+        does not reveal protected content.
+    - id: ac5
+      description: >-
+        OAuth callback validates state and PKCE verifier; tampered state returns an error page, covered by
+        tests.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e14-t02-auth-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+spec:
+  description: >-
+    Server-side OAuth flow and cookie session first, then refresh and sign-out, then route protection and
+    UI, then end-to-end tests against a mocked authorization server.
+  goalRef:
+    name: v2-e14-t02-auth-ui
+  graph:
+    nodes:
+      - id: oauth-flow
+        kind: Task
+        name: Authorization-code + PKCE flow and cookie session
+        description: >-
+          Sign-in route generating state/verifier, callback route exchanging the code at the Cognito token
+          endpoint and setting encrypted httpOnly cookies.
+        outputs: [web/src/app/auth/callback/route.ts, web/src/lib/auth/session.ts]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: OAuth flow unit tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/lib/auth]
+      - id: refresh-signout
+        kind: Task
+        name: Token refresh and sign-out
+        description: >-
+          Server-side refresh when access token is near expiry, revoke on sign-out, Cognito logout redirect.
+        dependsOn: [oauth-flow]
+        outputs: [web/src/lib/auth/refresh.ts, web/src/app/auth/signout/route.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Refresh and sign-out tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/lib/auth/refresh]
+      - id: route-protection-ui
+        kind: Task
+        name: Middleware protection and auth screens
+        description: >-
+          Next.js middleware guarding app routes, sign-in page with Google and email options, error states
+          for allow-list rejection, and a user menu showing role/org from the API.
+        dependsOn: [refresh-signout]
+        outputs: [web/src/middleware.ts, web/src/app/(auth)/sign-in/page.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Lint and build pass
+            command: pnpm
+            args: [--dir, web, build]
+      - id: auth-e2e
+        kind: Task
+        name: Auth end-to-end tests
+        description: >-
+          Playwright specs against a mock OIDC server covering sign-in redirect, token storage assertions,
+          refresh, tampered state and sign-out.
+        dependsOn: [route-protection-ui]
+        outputs: [web/e2e/auth.spec.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Auth e2e tests pass
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/auth.spec.ts]
+          - type: custom
+            name: Real Cognito sign-in in dev
+            description: >-
+              Charlie and one student tester sign in to the dev deployment with Google and email/password and
+              confirm sign-out and session expiry behave as specified.
+status:
+  phase: Pending

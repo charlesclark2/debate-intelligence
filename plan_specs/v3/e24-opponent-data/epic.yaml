@@ -1,0 +1,233 @@
+# EPIC E24 — Opponent Data Integrations
+# Major version: V3 | Release: v3.3 (Opponent data integrations)
+# Architecture refs: §7 OpponentTable, §9 Opponent data, §13 Opponent intelligence, §14, §19
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e24-opponent-data
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+  annotations:
+    debate/title: E24 — Opponent Data Integrations
+    debate/architecture-refs: §7 OpponentTable, §9 Opponent data, §13 Opponent intelligence, §14, §19
+spec:
+  description: >-
+    Ingest public OpenCaselist disclosures and Tabroom results through documented interfaces with provenance,
+    resolve team identities, and govern data use.
+  priority: 13
+  constraints:
+    majorVersion: v3
+    release: v3.3
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      OpenCaselist and Tabroom public data are ingested via documented/public interfaces respecting terms
+      and rate limits.
+  - id: ac2
+    description: >-
+      Every stored assertion carries source_url and retrieved_at; admins can remove records.
+  - id: ac3
+    description: >-
+      Team/debater identities are normalized across sources.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e24-opponent-data-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+spec:
+  description: >-
+    Task graph for epic E24 (Opponent Data Integrations). Each Task node points at its own task-level
+    PlanSpec.
+  goalRef:
+    name: v3-e24-opponent-data
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e02-t04-repo-contract-tests
+      kind: External
+      name: 'Prerequisite from E02: Reusable repository contract test suite'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t04-repo-contract-tests
+        specRef: plan_specs/v1/e02-domain-core/t04-repo-contract-tests.yaml
+    - id: ext-v2-e11-t01-access-pattern-design
+      kind: External
+      name: 'Prerequisite from E11: AppTable access-pattern design'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t01-access-pattern-design
+        specRef: plan_specs/v2/e11-cloud-persistence/t01-access-pattern-design.yaml
+    - id: ext-v2-e11-t03-dynamodb-repositories
+      kind: External
+      name: 'Prerequisite from E11: DynamoDB repository implementations'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t03-dynamodb-repositories
+        specRef: plan_specs/v2/e11-cloud-persistence/t03-dynamodb-repositories.yaml
+    - id: ext-v2-e13-t06-domain-events
+      kind: External
+      name: 'Prerequisite from E13: EventBridge domain events and schedules'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t06-domain-events
+        specRef: plan_specs/v2/e13-async-jobs/t06-domain-events.yaml
+    - id: ext-v2-e19-t02-audit-logging
+      kind: External
+      name: 'Prerequisite from E19: Audit logging'
+      description: >-
+        Cross-epic prerequisite owned by v2-e19-production-readiness (release v2.4).
+      inputs:
+        goalRef: v2-e19-t02-audit-logging
+        specRef: plan_specs/v2/e19-production-readiness/t02-audit-logging.yaml
+    - id: ext-v2-e19-t04-privacy-legal-review
+      kind: External
+      name: 'Prerequisite from E19: Privacy and legal review'
+      description: >-
+        Cross-epic prerequisite owned by v2-e19-production-readiness (release v2.4).
+      inputs:
+        goalRef: v2-e19-t04-privacy-legal-review
+        specRef: plan_specs/v2/e19-production-readiness/t04-privacy-legal-review.yaml
+    - id: t01
+      kind: Task
+      name: OpponentTable design
+      description: >-
+        OpponentTeam, Debater, Disclosure, TournamentResult entities and table with provenance fields.
+      inputs:
+        specRef: plan_specs/v3/e24-opponent-data/t01-opponent-table.yaml
+        goalRef: v3-e24-t01-opponent-table
+      dependsOn:
+      - ext-v2-e11-t01-access-pattern-design
+      - ext-v2-e11-t03-dynamodb-repositories
+      - ext-v1-e02-t04-repo-contract-tests
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e24-t01-opponent-table reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e24-t01-opponent-table
+    - id: t02
+      kind: Task
+      name: OpenCaselist adapter
+      description: >-
+        Adapter over the documented OpenCaselist API (caselists, schools, teams, rounds, cites) honoring
+        auth/terms/rate limits; recorded fixtures.
+      inputs:
+        specRef: plan_specs/v3/e24-opponent-data/t02-opencaselist-adapter.yaml
+        goalRef: v3-e24-t02-opencaselist-adapter
+      dependsOn:
+      - t01
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e24-t02-opencaselist-adapter reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e24-t02-opencaselist-adapter
+    - id: t03
+      kind: Task
+      name: Tabroom public results adapter
+      description: >-
+        Public results ingestion (entries, rounds, results) via documented/public pages only.
+      inputs:
+        specRef: plan_specs/v3/e24-opponent-data/t03-tabroom-adapter.yaml
+        goalRef: v3-e24-t03-tabroom-adapter
+      dependsOn:
+      - t01
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e24-t03-tabroom-adapter reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e24-t03-tabroom-adapter
+    - id: t04
+      kind: Task
+      name: Team and debater identity resolution
+      description: >-
+        Normalize school/team codes/names across sources with confidence and manual merge tools.
+      inputs:
+        specRef: plan_specs/v3/e24-opponent-data/t04-identity-resolution.yaml
+        goalRef: v3-e24-t04-identity-resolution
+      dependsOn:
+      - t02
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e24-t04-identity-resolution reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e24-t04-identity-resolution
+    - id: t05
+      kind: Task
+      name: Refresh scheduling and removal
+      description: >-
+        Scheduled refresh via EventBridge, staleness indicators, admin removal/takedown workflow.
+      inputs:
+        specRef: plan_specs/v3/e24-opponent-data/t05-refresh-provenance.yaml
+        goalRef: v3-e24-t05-refresh-provenance
+      dependsOn:
+      - t04
+      - ext-v2-e13-t06-domain-events
+      - ext-v2-e19-t02-audit-logging
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e24-t05-refresh-provenance reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e24-t05-refresh-provenance
+    - id: t06
+      kind: Task
+      name: Opponent data governance review
+      description: >-
+        Written policy on permitted sources, minimization of student names, terms-of-service review of
+        each source, and removal process; approval gate before ingestion.
+      inputs:
+        specRef: plan_specs/v3/e24-opponent-data/t06-data-governance.yaml
+        goalRef: v3-e24-t06-data-governance
+      dependsOn:
+      - ext-v2-e19-t04-privacy-legal-review
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e24-t06-data-governance reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e24-t06-data-governance
+status:
+  phase: Pending

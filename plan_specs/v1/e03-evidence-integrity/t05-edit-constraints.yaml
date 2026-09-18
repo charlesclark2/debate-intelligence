@@ -1,0 +1,124 @@
+# TASK v1-e03-t05-edit-constraints — Evidence edit policy
+# Epic: E03 Evidence Integrity & Verification Engine | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §7 (revision fields), §8 step 7, ADR-006, §20 step 2
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e03-t05-edit-constraints
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+  annotations:
+    debate/title: Evidence edit policy
+    debate/architecture-refs: §7, §8, ADR-006, §20 step 2
+spec:
+  description: >-
+    Encode §8 step 7 as domain rules in CardEditService: student edits to quoted evidence may only
+    (a) delete ranges (shrink or split selections, adding omitted ranges), (b) change markup
+    (underline/highlight spans and their purposes), or (c) add explicitly bracketed interpolations
+    ("[the U.S.]") stored as separate Interpolation records that are never part of the verified
+    quote and are rendered in brackets. Tag and cite remain freely editable. Every accepted edit
+    re-runs EvidenceVerifier, increments the card revision with expected_revision checking, and
+    records an edit log entry. Insertions, substitutions or reordering of quoted text are rejected
+    with a typed error. The V2 rich-text editor enforces this same service; its UI is out of scope.
+  priority: 2
+  constraints:
+    packages: [debate_core.evidence, debate_core.application]
+    forbidden:
+      - Any code path that writes evidence text directly rather than via offsets
+      - Unbracketed interpolations or interpolations merged into verified evidence text
+      - Saving an edit without re-verification and revision increment
+  context:
+    - kind: TaskRef
+      name: v1-e03-t04-verifier
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Deletion and markup edits are accepted, re-verified as VERIFIED, and increment revision by one.
+    - id: ac2
+      description: >-
+        Attempts to insert, substitute or reorder quoted characters raise ForbiddenEvidenceEdit and leave
+        the stored card unchanged.
+    - id: ac3
+      description: >-
+        Bracketed interpolations are stored separately with an anchor offset, rendered as "[...]" text,
+        and excluded from evidence verification.
+    - id: ac4
+      description: >-
+        An edit submitted with a stale expected_revision raises RevisionMismatch.
+    - id: ac5
+      description: >-
+        Each accepted edit appends an audit entry (actor id, edit kind, before/after revision,
+        timestamp) without storing student-identifying data beyond the actor id.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e03-t05-edit-constraints-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+spec:
+  description: >-
+    Model edit operations, implement the policy, then the service that re-verifies and persists with
+    revision checks.
+  goalRef:
+    name: v1-e03-t05-edit-constraints
+  graph:
+    nodes:
+      - id: edit-ops
+        kind: Task
+        name: Edit operation and interpolation types
+        description: >-
+          Typed edit ops (DeleteRange, SetMarkup, AddInterpolation, EditTag, EditCite) and the
+          Interpolation entity.
+        outputs: [packages/debate_core/src/debate_core/evidence/edits.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Edit ops module exists
+            path: packages/debate_core/src/debate_core/evidence/edits.py
+            contentMatch: "class AddInterpolation"
+      - id: edit-policy
+        kind: Task
+        name: Edit policy rules
+        description: >-
+          Pure function applying an op to a card's selection/markup, rejecting anything that would change
+          quoted characters.
+        dependsOn: [edit-ops]
+        outputs: [packages/debate_core/src/debate_core/evidence/edit_policy.py]
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Policy tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_edit_policy.py]
+      - id: edit-service
+        kind: Task
+        name: CardEditService with re-verification
+        description: >-
+          Apply policy, re-verify, save with expected_revision through CardRepository, append audit entry.
+        dependsOn: [edit-policy]
+        outputs: [packages/debate_core/src/debate_core/application/card_edit_service.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Service tests pass against fakes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_card_edit_service.py]
+          - type: command_succeeds
+            name: pyright strict passes
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

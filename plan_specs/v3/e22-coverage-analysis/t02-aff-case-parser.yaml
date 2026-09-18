@@ -1,0 +1,176 @@
+# TASK v3-e22-t02-aff-case-parser — Affirmative case structure
+# Epic: E22 Case Coverage Analysis | Release: v3.1 (Case coverage analysis) | Major: V3
+# Architecture refs: §3 V3 stories, §8 evidence integrity, §13 Coverage analysis
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e22-t02-aff-case-parser
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+  annotations:
+    debate/title: Affirmative case structure
+    debate/architecture-refs: §3, §8, §13
+spec:
+  description: >-
+    From a parsed affirmative (FileSections plus E21 nodes) build an AffCaseStructure: plan text, advantages
+    with their harms/uniqueness, internal links and impacts, inherency, solvency, framing and the key cards
+    the case depends on (solvency advocate, pivotal internal links). Plan text is located deterministically
+    and copied from the parsed DOCX text, never written by a model; a case-structure call (prompt
+    case.aff_structure) assembles advantages and key-card reasons using only existing node and card
+    references. LD affirmatives (value, criterion, contentions) and PF cases (framework, contentions) map to
+    format-specific fields of the same structure. The structure is persisted with role annotations on the
+    aff's graph nodes. Boundaries: predicting opposition positions is t03.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, prompts]
+    forbidden:
+      - Model-written or paraphrased plan text
+      - Persisting nodes, edges or findings whose card/node references do not resolve
+      - Model calls without a registered prompt_id/semver and persisted GeneratedArtifactMetadata
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e21-t02-node-extraction
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        AffCaseStructure has plan_text with its section ref, advantages (title, section path,
+        harms/uniqueness, internal link and impact node refs), inherency, solvency and framing refs, and key
+        cards with role and reason.
+    - id: ac2
+      description: >-
+        Plan text is found from Plan/Plan Text headings or a resolution-style sentence and copied
+        byte-for-byte; if none exists the structure carries PLAN_NOT_FOUND rather than a generated plan.
+    - id: ac3
+      description: >-
+        The assembly output is validated so every node and card reference exists in the aff's graph; one
+        repair retry, then a typed failure.
+    - id: ac4
+      description: >-
+        LD (value, criterion, contentions) and PF (framework, contentions) cases populate their format
+        fields.
+    - id: ac5
+      description: >-
+        Replay-fixture tests cover the three current NHI affs (Medicare for All, ACA expansion, single payer
+        built new), one LD space colonization AC and one PF moratorium pro case.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e22-t02-aff-case-parser-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+spec:
+  description: >-
+    Schema, deterministic plan location, model-assisted assembly, LD/PF mapping, then fixture tests.
+  goalRef:
+    name: v3-e22-t02-aff-case-parser
+  graph:
+    nodes:
+      - id: schema
+        kind: Task
+        name: AffCaseStructure schema
+        description: >-
+          Pydantic model with format-specific sections and reference types.
+        outputs: [packages/debate_core/src/debate_core/arguments/coverage/case_structure.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Case schema tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/coverage/test_case_structure.py
+              - "-k"
+              - schema
+      - id: plan-locator
+        kind: Task
+        name: Deterministic plan-text locator
+        description: >-
+          Heading and sentence patterns ("The United States federal government should ...") over sections,
+          with exact text copy and PLAN_NOT_FOUND handling.
+        dependsOn: [schema]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Plan locator tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/coverage/test_case_structure.py
+              - "-k"
+              - plan
+      - id: assembly
+        kind: Task
+        name: Case-structure assembly
+        description: >-
+          Prompt case.aff_structure over hat/block hierarchy and nodes; reference validation and key-card
+          reasons.
+        dependsOn: [plan-locator]
+        outputs: [prompts/case/aff_structure.yaml]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Case structure prompt registered
+            path: prompts/case/aff_structure.yaml
+            contentMatch: "prompt_id: case.aff_structure"
+          - type: test_passes
+            name: Assembly validation tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/coverage/test_case_structure.py
+              - "-k"
+              - assembly
+      - id: ld-pf
+        kind: Task
+        name: LD and PF case mapping
+        description: >-
+          Value/criterion/contention and framework/contention extraction using structural hints.
+        dependsOn: [assembly]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: LD/PF mapping tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/coverage/test_case_structure.py
+              - "-k"
+              - ld or pf
+      - id: fixtures
+        kind: Task
+        name: Fixture tests and persistence
+        description: >-
+          Expected-structure JSON for the five fixture cases, persistence of role annotations, type check.
+        dependsOn: [ld-pf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Case structure fixture tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/coverage/test_case_structure_fixtures.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

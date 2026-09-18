@@ -1,0 +1,164 @@
+# TASK v2-e13-t02-sqs-workers — SQS queues and worker framework
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §5 SQS / ECS Fargate, ADR-009, §15 retries, back-pressure, correlation ids
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e13-t02-sqs-workers
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+  annotations:
+    debate/title: SQS queues and worker framework
+    debate/architecture-refs: §5, ADR-009, §15
+spec:
+  description: >-
+    Provide the generic worker runtime that CardJob, SearchJob, embeddings (E15) and exports reuse.
+    Terraform creates per-purpose SQS queues (e.g. card-steps, search-steps, exports) each with a DLQ,
+    redrive policy, KMS encryption and visibility timeouts sized to handler budgets, plus a DLQ-depth
+    alarm. The debate_workers package provides a typed handler registry, a long-polling consumer that
+    extends visibility for long handlers, bounded retries with classification (retryable vs poison),
+    idempotent processing keyed by message/job id, graceful shutdown on SIGTERM, correlation-id binding,
+    and a Step Functions task-token callback helper. It runs as an ECS Fargate service (Spot-eligible)
+    with queue-depth autoscaling. Business handlers are t03/t04; this task ships only a sample echo
+    handler.
+  priority: 1
+  constraints:
+    packages: [debate_workers, infrastructure/modules/workers]
+    forbidden:
+      - Business logic in debate_workers beyond calling debate_core application services
+      - Unbounded retries or queues without a DLQ
+      - Deleting a message before the handler's side effects are durably recorded
+      - Live SQS in CI tests (use moto or an in-memory queue adapter)
+  context:
+    - kind: TaskRef
+      name: v2-e13-t01-job-model
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e10-t05-container-platform
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each queue has a DLQ with maxReceiveCount configured, SSE-KMS, and a CloudWatch alarm on DLQ
+        ApproximateNumberOfMessagesVisible > 0.
+    - id: ac2
+      description: >-
+        A handler registered with @handler("echo") receives a validated Pydantic message; unknown message
+        types go straight to the DLQ without retries.
+    - id: ac3
+      description: >-
+        Retryable errors are retried with backoff up to the configured limit; a PoisonMessage error moves
+        the message to the DLQ and marks the related Job FAILED with an error code.
+    - id: ac4
+      description: >-
+        Redelivery of an already-processed message is a no-op (idempotency check), proven by a test that
+        delivers the same message twice.
+    - id: ac5
+      description: >-
+        On SIGTERM the worker stops polling, finishes or releases in-flight messages within the ECS stop
+        timeout, and the ECS service scales on queue depth between configured min/max tasks.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e13-t02-sqs-workers-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+spec:
+  description: >-
+    Queue infrastructure, then the worker runtime (registry, consumer, retries, idempotency), then the
+    Fargate service with autoscaling and a deployed echo smoke test.
+  goalRef:
+    name: v2-e13-t02-sqs-workers
+  graph:
+    nodes:
+      - id: queue-infra
+        kind: Task
+        name: SQS queues, DLQs and alarms
+        description: >-
+          Workers module creating queues with DLQs, redrive, KMS, visibility timeouts and DLQ alarms
+          routed to the E10 SNS topic.
+        outputs: [infrastructure/modules/workers/queues.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Queues define a redrive policy
+            path: infrastructure/modules/workers/queues.tf
+            contentMatch: "redrive_policy"
+          - type: command_succeeds
+            name: dev environment validates with queues
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: handler-registry
+        kind: Task
+        name: Handler registry and message envelope
+        description: >-
+          Typed envelope (message_type, job_id, correlation_id, attempt, payload) and a registry mapping
+          types to handlers that call debate_core services.
+        dependsOn: [queue-infra]
+        outputs: [packages/debate_workers/src/debate_workers/runtime/registry.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Registry tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/runtime/test_registry.py]
+      - id: consumer-loop
+        kind: Task
+        name: Consumer with visibility extension, retries and idempotency
+        description: >-
+          Async long-poll consumer behind a QueuePort, heartbeat visibility extension, retry/poison
+          classification, idempotency via Job state, graceful SIGTERM shutdown.
+        dependsOn: [handler-registry]
+        outputs: [packages/debate_workers/src/debate_workers/runtime/consumer.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Consumer tests pass under moto
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/runtime/test_consumer.py]
+      - id: worker-service
+        kind: Task
+        name: Fargate worker service and autoscaling
+        description: >-
+          Worker Dockerfile, ECS service/task role (queue, table, bucket, Bedrock permissions), step scaling
+          on ApproximateNumberOfMessagesVisible, deploy workflow reusing the OIDC deploy role.
+        dependsOn: [consumer-loop]
+        outputs: [packages/debate_workers/Dockerfile, infrastructure/modules/workers/service.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Worker image builds
+            command: docker
+            args: [build, -f, packages/debate_workers/Dockerfile, -t, debate-workers:ci, .]
+          - type: command_succeeds
+            name: dev plan succeeds
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock-timeout=60s]
+      - id: echo-smoke
+        kind: Task
+        name: Deployed echo smoke test
+        description: >-
+          Send an echo message in dev and confirm processing, then a poison message and confirm it lands in
+          the DLQ and triggers the alarm.
+        dependsOn: [worker-service]
+        outputs: [scripts/smoke/worker_echo_smoke.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Worker smoke test passes in dev
+            command: uv
+            args: [run, scripts/smoke/worker_echo_smoke.py, --env, dev]
+status:
+  phase: Pending

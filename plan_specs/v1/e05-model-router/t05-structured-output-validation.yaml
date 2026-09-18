@@ -1,0 +1,147 @@
+# TASK v1-e05-t05-structured-output-validation — Structured output validation and repair
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §10 Structured model contracts, ADR-005, §15 (repair retry, fail closed), §8
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t05-structured-output-validation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: Structured output validation and repair
+    debate/architecture-refs: §10, ADR-005, §15, §8
+spec:
+  description: >-
+    Add a StructuredOutputGuard that sits between application services and any ModelRouter adapter. It
+    validates raw model output against the requested Pydantic schema; on failure it issues exactly one
+    repair attempt (a versioned repair prompt containing the validation errors, never the original source
+    text re-authored) and re-validates. If the output is still invalid it raises a typed ModelOutputError
+    carrying prompt_id, version, attempt count and the pydantic error summary. A per-call policy flag
+    (fail_closed=True for evidence-integrity actions such as card selection and markup) forbids any
+    partial or best-effort result, so the caller must mark the card UNVERIFIED rather than proceed.
+    Boundaries: the card-selection schemas and their evidence-quote rejection live in t06; transport
+    retries live in t02.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations]
+    forbidden:
+      - More than one repair retry per call
+      - Returning partially valid objects when fail_closed is set
+      - Swallowing ModelOutputError into a generic exception or empty result
+      - Live model calls in tests (fake/replay router only)
+  context:
+    - kind: TaskRef
+      name: v1-e05-t02-bedrock-adapter
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t03-fake-replay-models
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Valid output passes through unchanged in one model call; invalid-then-valid output succeeds after
+        exactly two calls, and the result's metadata records repair_attempted=true.
+    - id: ac2
+      description: >-
+        Output that is invalid after the repair attempt raises ModelOutputError with prompt_id, prompt
+        version, attempts=2 and a truncated validation error list.
+    - id: ac3
+      description: >-
+        With fail_closed=True, no code path returns a default, partial or coerced object; a test enumerates
+        malformed fixtures (missing fields, wrong types, extra keys, empty tool output) and all raise.
+    - id: ac4
+      description: >-
+        The repair prompt is a registered prompt (prompt_id model.repair) with a semver version, and repair
+        calls reuse the original task class route.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t05-structured-output-validation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Build the error types, the validating guard, the single repair loop and the fail-closed policy, then
+    exercise them with malformed fake-router fixtures.
+  goalRef:
+    name: v1-e05-t05-structured-output-validation
+  graph:
+    nodes:
+      - id: error-types
+        kind: Task
+        name: ModelOutputError and policy flags
+        description: >-
+          Define ModelOutputError, ValidationPolicy(fail_closed, max_repairs=1) and the attempt record
+          attached to result metadata.
+        outputs: [packages/debate_core/src/debate_core/application/model_errors.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Error types exist
+            path: packages/debate_core/src/debate_core/application/model_errors.py
+            contentMatch: "class ModelOutputError"
+      - id: validating-guard
+        kind: Task
+        name: StructuredOutputGuard validation
+        description: >-
+          Wrap ModelRouter.generate_structured with strict Pydantic validation (extra=forbid) and uniform
+          error capture across Bedrock tool-use and fake outputs.
+        dependsOn: [error-types]
+        outputs: [packages/debate_core/src/debate_core/application/structured_output.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Validation tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_structured_output.py
+              - -k
+              - validate
+      - id: repair-loop
+        kind: Task
+        name: Single repair retry with registered prompt
+        description: >-
+          Add the model.repair prompt (v1.0.0) and a one-shot repair call passing schema and validation
+          errors; record attempts in metadata.
+        dependsOn: [validating-guard]
+        outputs: [prompts/model/repair.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Repair retry tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_structured_output.py, -k, repair]
+      - id: fail-closed-suite
+        kind: Task
+        name: Fail-closed malformed-output suite
+        description: >-
+          Add malformed-output fixtures for the fake router and assert every one raises under fail_closed;
+          run the full module, pyright and import-linter.
+        dependsOn: [repair-loop]
+        outputs: [tests/fixtures/model_outputs/malformed/]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full structured-output module passes offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_structured_output.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

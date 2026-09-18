@@ -1,0 +1,135 @@
+# TASK v1-e03-t06-verify-command — `debate-research verify` command
+# Epic: E03 Evidence Integrity & Verification Engine | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §8, ADR-006, §11 (CLI commands; explicit verification failures), §20 step 2
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e03-t06-verify-command
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+  annotations:
+    debate/title: "`debate-research verify` command"
+    debate/architecture-refs: §8, ADR-006, §11, §20 step 2
+spec:
+  description: >-
+    Add `debate-research verify <manifest.json>`: load a JSON card manifest (versioned schema listing
+    cards with snapshot ids, offsets, spans and evidence text), run a VerifyManifest use case in
+    debate_core.application that calls EvidenceVerifier per card, and render a Rich table (card id,
+    tag, status, reasons) or a single JSON document under --json. Exit 0 only if every card is VERIFIED,
+    1 if any is UNVERIFIED, 2 for usage/manifest schema errors. Snapshots are resolved from the local
+    data dir. The manifest writer (JSON export) and DOCX verification belong to E06.
+  priority: 1
+  constraints:
+    packages: [debate_cli.commands.verify, debate_core.application]
+    forbidden:
+      - Verification logic inside debate_cli (the command only parses args, calls the use case, renders)
+      - Reporting a card as VERIFIED when its snapshot is missing locally
+      - Network access during verification
+  context:
+    - kind: TaskRef
+      name: v1-e03-t04-verifier
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t07-cli-skeleton
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A manifest JSON Schema (manifest_version 1) is published under packages/debate_core/schemas/ and
+        invalid manifests exit 2 with the failing JSON path.
+    - id: ac2
+      description: >-
+        On a fixture manifest with two verified and one tampered card, the command prints all three rows
+        with reasons and exits 1.
+    - id: ac3
+      description: >-
+        --json output validates against a result schema and contains per-card status and reason codes.
+    - id: ac4
+      description: >-
+        Exit codes are documented in `debate-research verify --help` and the CLI README.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e03-t06-verify-command-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+spec:
+  description: >-
+    Manifest schema and use case in the core, then the thin CLI command, then end-to-end CLI tests on
+    fixtures.
+  goalRef:
+    name: v1-e03-t06-verify-command
+  graph:
+    nodes:
+      - id: manifest-schema
+        kind: Task
+        name: Card manifest model and schema
+        description: >-
+          CardManifest Pydantic model (manifest_version, generated_at, cards[]) and exported JSON Schema.
+        outputs:
+          - packages/debate_core/src/debate_core/evidence/manifest.py
+          - packages/debate_core/schemas/card_manifest.v1.json
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Manifest schema exported
+            path: packages/debate_core/schemas/card_manifest.v1.json
+      - id: verify-use-case
+        kind: Task
+        name: VerifyManifest use case
+        description: >-
+          Application service resolving snapshots via ports and returning a ManifestVerificationReport.
+        dependsOn: [manifest-schema]
+        outputs: [packages/debate_core/src/debate_core/application/verify_manifest.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Use case tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_verify_manifest.py]
+      - id: cli-command
+        kind: Task
+        name: verify command and rendering
+        description: >-
+          Typer command wiring the use case from the composition root; Rich table and --json renderers;
+          exit-code mapping.
+        dependsOn: [verify-use-case]
+        outputs: [packages/debate_cli/src/debate_cli/commands/verify.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_verify_command.py]
+      - id: e2e-fixture
+        kind: Task
+        name: End-to-end fixture run
+        description: >-
+          Fixture data dir + manifest under tests/fixtures/verify/ with verified and tampered cards; run
+          the installed command against it.
+        dependsOn: [cli-command]
+        outputs: [tests/fixtures/verify/]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Verified-only manifest exits 0
+            command: uv
+            args: [run, debate-research, --json, verify, tests/fixtures/verify/all_verified.json]
+          - type: test_passes
+            name: Mixed manifest exits 1 with reasons
+            command: uv
+            args: [run, pytest, tests/integration/test_verify_cli.py]
+status:
+  phase: Pending

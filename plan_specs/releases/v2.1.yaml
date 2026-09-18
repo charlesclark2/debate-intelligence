@@ -1,0 +1,107 @@
+# RELEASE v2.1 — Async jobs & web Cut-a-Card
+# Major version: V2. Epics: E13, E14
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v2-1
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.1
+  annotations:
+    debate/title: v2.1 — Async jobs & web Cut-a-Card
+spec:
+  description: >-
+    Students log in to the web app, paste a URL, watch an async CardJob, edit the verified card within
+    provenance rules, and export it.
+  priority: 6
+  acceptanceCriteria:
+  - id: epic-e13
+    description: >-
+      Epic E13 (Async Job Orchestration) goal is Succeeded.
+  - id: epic-e14
+    description: >-
+      Epic E14 (Web App Shell & Cut-a-Card) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v2.1.0 is pushed and CHANGELOG.md has a v2.1 section.
+  - id: gate
+    description: >-
+      Gate release-v2-1-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v2-1-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.1
+spec:
+  gateType: review
+  description: >-
+    Release review for v2.1 (Async jobs & web Cut-a-Card): demo the release goal end to end, confirm CI
+    green on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v2-1-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.1
+spec:
+  description: >-
+    Release plan for v2.1: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v2-1
+  series: v2
+  version: v2.1
+  graph:
+    nodes:
+    - id: e13
+      kind: External
+      name: Epic E13 — Async Job Orchestration
+      inputs:
+        goalRef: v2-e13-async-jobs
+        specRef: plan_specs/v2/e13-async-jobs/epic.yaml
+    - id: e14
+      kind: External
+      name: Epic E14 — Web App Shell & Cut-a-Card
+      inputs:
+        goalRef: v2-e14-web-cut-card
+        specRef: plan_specs/v2/e14-web-cut-card/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v2.1.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e13
+      - e14
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v2.1.0
+    - id: release-review
+      kind: Gate
+      name: v2.1 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v2-1-gate
+status:
+  phase: Pending

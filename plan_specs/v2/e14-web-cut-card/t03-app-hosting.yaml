@@ -1,0 +1,153 @@
+# TASK v2-e14-t03-app-hosting — Web hosting and environments
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §4 Next.js, §5, §14 TLS, §15 cost; hosting choice recorded as an ADR
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e14-t03-app-hosting
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+  annotations:
+    debate/title: Web hosting and environments
+    debate/architecture-refs: §4, §12
+spec:
+  description: >-
+    Host the Next.js app in dev/stage/prod with per-environment configuration and preview deploys for
+    pull requests. Decide between Amplify Hosting (managed SSR, built-in previews, lowest effort) and
+    CloudFront + ECS Fargate (reuses E10 platform, more control) in an ADR weighing cost at team scale,
+    SSR/middleware support, preview environments and operational burden, then implement the choice in
+    Terraform with a custom domain, ACM certificate, HTTPS-only, security headers (CSP, HSTS,
+    frame-ancestors none) and environment variables sourced per environment. Cognito callback URLs and
+    API CORS origins are updated to match. This task owns hosting only; API deployment is E12-t04.
+  priority: 1
+  constraints:
+    packages: [infrastructure/modules/web_hosting, web, .github/workflows]
+    forbidden:
+      - Plain HTTP or missing HSTS on any environment
+      - Preview deploys pointed at prod API or prod Cognito
+      - Secrets baked into client bundles or build logs
+      - Publicly indexable non-prod environments (require auth or noindex)
+  context:
+    - kind: TaskRef
+      name: v2-e14-t01-nextjs-scaffold
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e10-t02-terraform-bootstrap
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t01-cognito-user-pool
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t04-api-deploy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An ADR records the hosting choice with a monthly cost estimate and trade-offs for both options.
+    - id: ac2
+      description: >-
+        dev, stage and prod web environments are defined in Terraform with custom domains, ACM
+        certificates and HTTPS redirects; https://app.dev.<domain>/ returns 200.
+    - id: ac3
+      description: >-
+        Responses carry CSP, Strict-Transport-Security, X-Content-Type-Options and a frame-ancestors none
+        policy, verified by an automated header check.
+    - id: ac4
+      description: >-
+        Each pull request touching web/ gets a preview URL wired to the dev API and dev Cognito, torn down
+        on merge/close.
+    - id: ac5
+      description: >-
+        Cognito callback/logout URLs and API CORS origins list exactly the hosted origins per environment.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e14-t03-app-hosting-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+spec:
+  description: >-
+    Decide first, then provision hosting and domains, then security headers, then previews and origin
+    wiring.
+  goalRef:
+    name: v2-e14-t03-app-hosting
+  graph:
+    nodes:
+      - id: hosting-adr
+        kind: Task
+        name: Hosting ADR
+        description: >-
+          Compare Amplify Hosting vs CloudFront + ECS on cost, SSR/middleware support, previews and ops;
+          record the decision.
+        outputs: [docs/adr/0012-web-hosting.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Hosting ADR exists
+            path: docs/adr/0012-web-hosting.md
+            contentMatch: "Decision"
+      - id: hosting-infra
+        kind: Task
+        name: Hosting infrastructure and domains
+        description: >-
+          Terraform module for the chosen option with per-env branches/services, Route 53 records, ACM
+          certificates and environment variables.
+        dependsOn: [hosting-adr]
+        outputs: [infrastructure/modules/web_hosting/main.tf, infrastructure/envs/dev/web.tf]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev plan succeeds with web hosting
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock-timeout=60s]
+          - type: endpoint_responds
+            name: dev web app responds over HTTPS
+            url: https://app.dev.debate-intelligence.example/
+            method: GET
+            expectedStatus: 200
+      - id: security-headers
+        kind: Task
+        name: Security headers and header check
+        description: >-
+          Configure CSP (API origin, Cognito domain), HSTS, nosniff, referrer policy and frame-ancestors;
+          add a script asserting headers per environment.
+        dependsOn: [hosting-infra]
+        outputs: [web/next.config.ts, scripts/check_security_headers.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Security headers present in dev
+            command: uv
+            args: [run, scripts/check_security_headers.py, --env, dev]
+      - id: previews-origins
+        kind: Task
+        name: PR previews and origin wiring
+        description: >-
+          Preview deploy per PR against dev backends with noindex, teardown on close; update Cognito
+          callback URLs and API CORS origins from Terraform outputs.
+        dependsOn: [security-headers]
+        outputs: [.github/workflows/web-preview.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Preview workflow exists
+            path: .github/workflows/web-preview.yml
+          - type: custom
+            name: Preview deploy verified
+            description: >-
+              Charlie opens a PR preview URL, signs in via dev Cognito, and confirms the preview is torn down
+              after the PR closes.
+status:
+  phase: Pending

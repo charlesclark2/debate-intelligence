@@ -1,0 +1,163 @@
+# TASK v3-e26-t05-flow-tracking — Flow tracking
+# Epic: E26 Round Engine Core | Release: v3.5 (Round engine core) | Major: V3
+# Architecture refs: §7 RoundEvent/ArgumentNode/ArgumentEdge, §10, §13 Argument graph + Round simulator, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e26-t05-flow-tracking
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+  annotations:
+    debate/title: Flow tracking
+    debate/architecture-refs: §7, §10, §13, §16
+spec:
+  description: >-
+    Keep the round's flow accurate as events arrive. Each speech's content is segmented into FlowClaims
+    (structured model output, Haiku tier, versioned prompt) that point to argument graph node ids or are
+    marked as new analytics; generated speeches already carry argument_refs and skip this step. A
+    deterministic FlowTracker then applies format-aware rules using E21 graph queries (answers-to,
+    turns-of, chain completeness): an argument is ANSWERED when a later opposing FlowClaim links via an
+    ANSWERS/TURNS/MITIGATES edge, EXTENDED when its side carries it forward, DROPPED when the opposing
+    side's next eligible speech does not address it, CONCEDED when a CONCESSION event references it, and
+    NEW_IN_LATE_SPEECH when first raised in the 2NR/2AR, 2AR in LD, or final focus without prior
+    summary extension in PF. Results are written as FLOW_UPDATE events and flow snapshots. Detecting
+    concessions in CX is E27 t03 (this task consumes CONCESSION events); judging is E28.
+  priority: 1
+  constraints:
+    packages: [debate_core.rounds, debate_core.arguments, debate_core.application]
+    forbidden:
+      - Deciding drops/extensions by model judgment; the model only maps text to nodes, rules decide status
+      - FlowClaims mapped to node ids that are not in the round's argument graphs (post-validated)
+      - Bypassing the GraphRepository port to query ArgumentTable directly
+      - Importing boto3/typer/fastapi in debate_core
+      - Live network or real model calls in CI; use the fake/replay ModelRouter
+  context:
+    - kind: TaskRef
+      name: v3-e26-t03-state-machine
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e21-t04-graph-queries
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        After each SPEECH event, a FLOW_UPDATE event records per-node status transitions (ANSWERED,
+        EXTENDED, DROPPED, CONCEDED, TURNED, NEW_IN_LATE_SPEECH) with the triggering event sequence.
+    - id: ac2
+      description: >-
+        On coach-annotated scripted rounds (>=2 per format), deterministic flow status matches the
+        annotated flow for >=95% of node-speech cells when using gold FlowClaims.
+    - id: ac3
+      description: >-
+        Speech segmentation validates against the FlowClaim schema, references only nodes in the round's
+        graphs, and records prompt_id, prompt version and model_id on the event.
+    - id: ac4
+      description: >-
+        CONCESSION events referencing a node set its status to CONCEDED and are shown in the flow snapshot
+        with a link to the source CX event.
+    - id: ac5
+      description: >-
+        Rebuilding the flow from the event log yields the same snapshot as incremental tracking.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e26-t05-flow-tracking-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+spec:
+  description: >-
+    Define FlowClaim, build the deterministic tracker over graph queries, add speech segmentation, wire it
+    into the service event pipeline, then score against annotated rounds.
+  goalRef:
+    name: v3-e26-t05-flow-tracking
+  graph:
+    nodes:
+      - id: flow-claim-schema
+        kind: Task
+        name: FlowClaim and FlowUpdate schemas
+        description: >-
+          FlowClaim (node_id or analytic text, relation to prior node, span offsets in the speech content)
+          and FlowUpdate (node_id, from_status, to_status, cause_event_seq).
+        outputs: [packages/debate_core/src/debate_core/rounds/flow/models.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Flow models exist
+            path: packages/debate_core/src/debate_core/rounds/flow/models.py
+            contentMatch: "class FlowClaim"
+      - id: flow-tracker
+        kind: Task
+        name: Deterministic format-aware FlowTracker
+        description: >-
+          Pure tracker applying answered/extended/dropped/conceded/new-in-late-speech rules per FormatRules,
+          using GraphRepository queries for edge lookups (in-memory graph in tests).
+        dependsOn: [flow-claim-schema]
+        outputs: [packages/debate_core/src/debate_core/rounds/flow/tracker.py]
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tracker rule tests pass for all formats
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_flow_tracker.py]
+      - id: speech-segmentation
+        kind: Task
+        name: Speech-to-FlowClaim segmentation
+        description: >-
+          Prompt rounds.speech_segmentation v1.0.0 returning FlowClaims for student speeches; validator
+          rejects unknown node ids; one repair retry then mark claims UNMAPPED.
+        dependsOn: [flow-claim-schema]
+        outputs:
+          - packages/debate_core/src/debate_core/prompts/rounds_speech_segmentation.v1.yaml
+          - packages/debate_core/src/debate_core/rounds/flow/segmentation.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Segmentation contract tests pass with replay router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_speech_segmentation.py]
+      - id: service-integration
+        kind: Task
+        name: Emit FLOW_UPDATE events from the round service
+        description: >-
+          Subscribe the tracker to SPEECH and CONCESSION events in RoundSimulationService, append
+          FLOW_UPDATE events and snapshots; rebuild-from-log equivalence test.
+        dependsOn: [flow-tracker, speech-segmentation]
+        outputs: [packages/debate_core/src/debate_core/application/rounds/flow_updates.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Flow integration and rebuild tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_flow_updates.py]
+      - id: annotated-round-eval
+        kind: Task
+        name: Coach-annotated flow accuracy check
+        description: >-
+          Annotated scripted rounds (Policy, LD, PF) with gold FlowClaims and gold flow; assert >=95% cell
+          agreement; run quality gates.
+        dependsOn: [service-integration]
+        outputs: [tests/fixtures/rounds/annotated_flows/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Annotated flow agreement meets threshold
+            command: uv
+            args: [run, pytest, tests/evals/rounds/test_flow_accuracy.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

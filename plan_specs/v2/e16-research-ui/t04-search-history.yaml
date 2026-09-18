@@ -1,0 +1,146 @@
+# TASK v2-e16-t04-search-history — Search history and saved searches
+# Epic: E16 Research Workspace UI | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §3 V2 user stories, §5 EventBridge (scheduled research), §7 Search, §11 daily, §12 Research
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e16-t04-search-history
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+  annotations:
+    debate/title: Search history and saved searches
+    debate/architecture-refs: §3, §5, §7, §11, §12
+spec:
+  description: >-
+    Let students revisit and repeat research: a paginated history of their past searches (query, filters,
+    created_at, status, result count) with re-run (creates a new SearchJob with the same filters and an
+    updated date window), and "save as daily preset", which stores a SavedSearch (name, filters, relative
+    window like last 24h, enabled flag) that the E13 t06 scheduled daily-research rule runs per user and
+    whose new results appear in a "New since last run" digest view. Includes API endpoints and the UI
+    panel. This task does NOT build the EventBridge schedule or daily runner itself (E13 t06), notification
+    delivery (email/push is out of scope for v2.2), or relevance measurement (t05).
+  priority: 2
+  constraints:
+    packages: [debate_api, debate_core.application, debate_core.domain, web/src/app/research]
+    forbidden:
+      - Listing or running another user's history or saved searches
+      - Unbounded scheduled presets (enforce a per-user cap, default 5 enabled presets)
+      - Emailing or pushing notifications to students in this release
+      - Business logic in route handlers
+  context:
+    - kind: TaskRef
+      name: v2-e16-t01-search-api
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t06-domain-events
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        GET /v1/searches returns the caller's searches newest-first with cursor pagination, using an AppTable
+        access pattern that does not scan.
+    - id: ac2
+      description: >-
+        POST /v1/searches/{id}/rerun creates a new search with identical filters and a date window shifted to
+        end today, and the UI navigates to its results.
+    - id: ac3
+      description: >-
+        POST /v1/saved-searches stores a SavedSearch with a relative window; creating a sixth enabled preset
+        returns 409 with a quota message.
+    - id: ac4
+      description: >-
+        When the scheduled daily run (simulated via the E13 t06 handler in tests) completes, the preset's
+        digest lists only articles not seen in the previous run.
+    - id: ac5
+      description: >-
+        Users can rename, disable and delete presets from the UI; deletion removes the preset from the next
+        scheduled run.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e16-t04-search-history-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+spec:
+  description: >-
+    Add the SavedSearch entity and repository, history and preset use cases with the daily-run hook, then
+    the API routes and finally the history/presets UI.
+  goalRef:
+    name: v2-e16-t04-search-history
+  graph:
+    nodes:
+      - id: saved-search-model
+        kind: Task
+        name: SavedSearch entity and repository
+        description: >-
+          SavedSearch domain model (preset_id, owner_id, organization_id, name, filters, relative_window,
+          enabled, last_run_at, seen_article_ids digest), DynamoDB repository and contract tests.
+        outputs:
+          - packages/debate_core/src/debate_core/domain/saved_search.py
+          - packages/debate_core/src/debate_core/integrations/aws/dynamodb_saved_searches.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: SavedSearch repository contract tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_dynamodb_saved_searches.py]
+      - id: use-cases
+        kind: Task
+        name: History, rerun and preset use cases
+        description: >-
+          list_history, rerun_search, create/update/delete preset with per-user cap, and
+          run_preset_for_schedule consumed by the E13 t06 daily runner producing a new-since-last-run digest.
+        dependsOn: [saved-search-model]
+        outputs: [packages/debate_core/src/debate_core/application/saved_search_use_cases.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: History and preset use case tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_saved_search_use_cases.py]
+      - id: routes
+        kind: Task
+        name: History and saved-search routes
+        description: GET /v1/searches, POST /v1/searches/{id}/rerun and CRUD for /v1/saved-searches with auth.
+        dependsOn: [use-cases]
+        outputs: [packages/debate_api/src/debate_api/routes/saved_searches.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Route and authorization tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_saved_searches.py]
+      - id: ui
+        kind: Task
+        name: History panel and presets UI
+        description: >-
+          History sidebar with re-run, "Save as daily preset" dialog, presets management page and digest
+          view; regenerated client.
+        dependsOn: [routes]
+        outputs:
+          - web/src/components/research/SearchHistory.tsx
+          - web/src/app/research/presets/page.tsx
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: History and presets e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/search-history.spec.ts]
+          - type: command_succeeds
+            name: Web lint passes
+            command: pnpm
+            args: [--dir, web, lint]
+status:
+  phase: Pending

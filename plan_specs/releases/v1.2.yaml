@@ -1,0 +1,106 @@
+# RELEASE v1.2 — Federated research from the CLI
+# Major version: V1. Epics: E07, E08
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v1-2
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.2
+  annotations:
+    debate/title: v1.2 — Federated research from the CLI
+spec:
+  description: >-
+    `debate-research search` fans out to scholarly/news/government adapters, dedupes and ranks results,
+    supports --argument/--need and --auto-cut, and `daily` digests.
+  priority: 3
+  acceptanceCriteria:
+  - id: epic-e07
+    description: >-
+      Epic E07 (Discovery Provider Adapters) goal is Succeeded.
+  - id: epic-e08
+    description: >-
+      Epic E08 (Federated Research Workflows) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v1.2.0 is pushed and CHANGELOG.md has a v1.2 section.
+  - id: gate
+    description: >-
+      Gate release-v1-2-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v1-2-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.2
+spec:
+  gateType: review
+  description: >-
+    Release review for v1.2 (Federated research from the CLI): demo the release goal end to end, confirm
+    CI green on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v1-2-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.2
+spec:
+  description: >-
+    Release plan for v1.2: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v1-2
+  series: v1
+  version: v1.2
+  graph:
+    nodes:
+    - id: e07
+      kind: External
+      name: Epic E07 — Discovery Provider Adapters
+      inputs:
+        goalRef: v1-e07-discovery-adapters
+        specRef: plan_specs/v1/e07-discovery-adapters/epic.yaml
+    - id: e08
+      kind: External
+      name: Epic E08 — Federated Research Workflows
+      inputs:
+        goalRef: v1-e08-research-workflows
+        specRef: plan_specs/v1/e08-research-workflows/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v1.2.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e07
+      - e08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v1.2.0
+    - id: release-review
+      kind: Gate
+      name: v1.2 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v1-2-gate
+status:
+  phase: Pending

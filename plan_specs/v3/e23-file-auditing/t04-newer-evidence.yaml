@@ -1,0 +1,136 @@
+# TASK v3-e23-t04-newer-evidence — Newer external evidence suggestions
+# Epic: E23 File Auditing | Release: v3.2 (File auditing) | Major: V3
+# Architecture refs: §3 V3 DA audit story, §8 evidence integrity, §9 search, §12 Cut a Card
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e23-t04-newer-evidence
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+  annotations:
+    debate/title: Newer external evidence suggestions
+    debate/architecture-refs: §3, §8, §9, §12
+spec:
+  description: >-
+    Offer newer outside evidence for a shell step on request. For each step the user chooses, build a
+    research need (argument + need from the v1-e08-t04 taxonomy, e.g. need=uniqueness) and a query from the
+    step claim and topic, dated after the newest in-file card, and run a SearchJob through the existing
+    search service. Results come back as ExternalEvidenceSuggestions linked to the audit and step; "Cut a
+    card" opens Cut-a-Card prefilled with the URL and need, and the resulting card goes through normal
+    verification. Nothing is inserted into the file or shell automatically and no evidence text is
+    generated. Boundaries: FileAuditJob, the persisted FileAudit and the audit report UI (whose
+    feature-flagged newer-evidence action surfaces these suggestions) are owned by t05, which this task
+    builds on.
+  priority: 3
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_api]
+    forbidden:
+      - Model-authored or paraphrased text stored, rendered or exported as quoted evidence
+      - Presenting imported or UNVERIFIED cards as platform-verified finished evidence
+      - Running searches without explicit user opt-in or outside quota
+      - Modifying the uploaded file or shell automatically
+  context:
+    - kind: TaskRef
+      name: v3-e23-t03-card-comparison
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e16-t01-search-api
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e23-t05-audit-report-ui
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Newer-evidence search is opt-in per audit and per step, defaults to at most 4 steps with one search
+        each, and counts against the user's quota.
+    - id: ac2
+      description: >-
+        Queries include the step claim, topic and a since-date equal to the newest in-file card date for
+        that step.
+    - id: ac3
+      description: >-
+        ExternalEvidenceSuggestion records link audit, step, search id and result ids with the search's
+        rationale; partial failures are reported per step.
+    - id: ac4
+      description: >-
+        The Cut a card action deep-links to Cut-a-Card with URL and need prefilled, and the resulting card
+        has standard verification status.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e23-t04-newer-evidence-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+spec:
+  description: >-
+    Query builder, suggestion service, API action, then tests.
+  goalRef:
+    name: v3-e23-t04-newer-evidence
+  graph:
+    nodes:
+      - id: query-builder
+        kind: Task
+        name: Step-to-research-need query builder
+        description: >-
+          Map step role to need, compose query and since-date from shell metadata.
+        outputs: [packages/debate_core/src/debate_core/arguments/audit/newer_evidence.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Query builder tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/audit/test_newer_evidence.py, -k, query]
+      - id: suggestion-service
+        kind: Task
+        name: Suggestion service
+        description: >-
+          Create SearchJobs through the search service port, persist suggestions, enforce quota and step
+          caps.
+        dependsOn: [query-builder]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Suggestion service tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/audit/test_newer_evidence.py
+              - "-k"
+              - service
+      - id: api
+        kind: Task
+        name: Audit newer-evidence endpoint
+        description: >-
+          POST /audits/{id}/steps/{step}/newer-evidence and GET suggestions; typed client regenerated.
+        dependsOn: [suggestion-service]
+        outputs: [packages/debate_api/src/debate_api/routes/audit_evidence.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Newer-evidence API tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_audit_newer_evidence.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

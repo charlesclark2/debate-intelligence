@@ -1,0 +1,147 @@
+# TASK v3-e22-t06-coverage-eval — Coverage evaluation
+# Epic: E22 Case Coverage Analysis | Release: v3.1 (Case coverage analysis) | Major: V3
+# Architecture refs: §13 Coverage analysis, §16 coverage eval (false negatives first)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e22-t06-coverage-eval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+  annotations:
+    debate/title: Coverage evaluation
+    debate/architecture-refs: §13, §16
+spec:
+  description: >-
+    Build a seeded evaluation set and gate coverage analysis on it, prioritizing the false-negative rate (a
+    known missing answer reported as covered). Seeds pair fixture affs (the three NHI affs, an LD space
+    colonization AC, a PF moratorium case) with the team's real answer files, then remove specific answer
+    blocks to create known-missing answers while keeping others as known-present controls. Coach-supplied
+    expected positions also measure prediction recall. Runs offline on replay fixtures and plugs into the
+    E09 promotion gate. Boundaries: this task changes no classification logic; threshold changes go through
+    t04.
+  priority: 2
+  constraints:
+    packages: [tests/evals, tests/fixtures, scripts]
+    forbidden:
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+      - >-
+        Committing unscrubbed team files to tests/fixtures (student names, docProps author/lastModifiedBy,
+        comments, tracked-change authors)
+      - Tuning thresholds on the evaluation seeds without a held-out split
+  context:
+    - kind: TaskRef
+      name: v3-e22-t04-gap-detection
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        At least 30 known-missing and 30 known-present answer seeds exist across five cases, generated
+        reproducibly by scripts/seed_coverage_cases.py from scrubbed fixtures, with a held-out split.
+    - id: ac2
+      description: >-
+        Reports give the false-negative rate, false-positive gap rate, WEAK/UNCOVERED confusion and
+        prediction recall@12 against coach-expected positions, per case and overall.
+    - id: ac3
+      description: >-
+        The gate requires false-negative rate at most 0.05 with zero misses on coach-flagged critical seeds,
+        false-positive gap rate at most 0.25 and recall@12 at least 0.8, and candidates may not raise the
+        false-negative rate.
+    - id: ac4
+      description: >-
+        The coach reviews the first report and signs off on the seeds and expected positions.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e22-t06-coverage-eval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+spec:
+  description: >-
+    Seed generation, expected labels, harness and metrics, then the gate.
+  goalRef:
+    name: v3-e22-t06-coverage-eval
+  graph:
+    nodes:
+      - id: seed-builder
+        kind: Task
+        name: Seed generation script
+        description: >-
+          Remove named answer blocks from answer-file fixtures to create seeds; record seed manifest with
+          removed block paths.
+        outputs: [scripts/seed_coverage_cases.py, tests/fixtures/coverage_eval/seeds.yaml]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Seed builder tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_seed_coverage_cases.py]
+          - type: artifact_exists
+            name: Seed manifest exists
+            path: tests/fixtures/coverage_eval/seeds.yaml
+            contentMatch: "known_missing"
+      - id: expected-labels
+        kind: Task
+        name: Expected positions and critical seeds
+        description: >-
+          Coach lists expected positions per case and flags critical seeds.
+        dependsOn: [seed-builder]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Expected positions exist
+            path: tests/fixtures/coverage_eval/expected_positions.yaml
+            contentMatch: "critical"
+          - type: custom
+            name: Coach supplies expected positions
+            description: >-
+              Coach provides the positions they expect against each fixture case and marks which missing
+              answers would lose a round.
+      - id: harness
+        kind: Task
+        name: Harness and metrics
+        description: >-
+          Run CoverageAnalysis on each seed with the replay router and compute metrics and reports.
+        dependsOn: [expected-labels]
+        outputs: [tests/evals/coverage/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Coverage metric tests pass
+            command: uv
+            args: [run, pytest, tests/evals/coverage/test_metrics.py]
+      - id: gate
+        kind: Task
+        name: Baseline and promotion gate
+        description: >-
+          Commit baseline, register with the E09 gate, coach sign-off on the first report.
+        dependsOn: [harness]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Coverage baseline committed
+            path: tests/evals/baselines/coverage.json
+            contentMatch: "false_negative_rate"
+          - type: test_passes
+            name: Coverage eval passes offline
+            command: uv
+            args: [run, pytest, tests/evals/coverage, -m, eval]
+          - type: custom
+            name: Coach signs off on first coverage report
+            description: >-
+              Coach reviews the report and agrees the misses it shows are the ones that matter.
+status:
+  phase: Pending

@@ -1,0 +1,141 @@
+# TASK v2-e11-t02-dynamodb-tables — DynamoDB tables in Terraform
+# Epic: E11 Cloud Persistence Adapters | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §7 DynamoDB physical strategy, ADR-002, §14 encryption, §15 PITR/data loss
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e11-t02-dynamodb-tables
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+  annotations:
+    debate/title: DynamoDB tables in Terraform
+    debate/architecture-refs: §7, ADR-002, ADR-003, §15
+spec:
+  description: >-
+    Materialize the approved AppTable design (t01) as Terraform: on-demand capacity, the GSIs and
+    projections exactly as documented, point-in-time recovery, encryption with the app-data CMK from
+    E10-t04, deletion protection in stage/prod, and a TTL attribute used only for transient items
+    (e.g. expired job progress, idempotency markers). Also emit per-environment IAM policy documents
+    granting least-privilege item access to the API and worker task roles. This task does NOT write
+    repository code (t03), argument/opponent tables (V3), or backup/restore drills (E19-t05).
+  priority: 1
+  constraints:
+    packages: [infrastructure/modules/dynamodb, infrastructure/envs]
+    forbidden:
+      - Provisioned capacity without an ADR (on-demand is the default)
+      - GSIs or key attributes that differ from docs/data/apptable-design.md
+      - dynamodb:* or table-level Scan permission on application roles
+      - TTL on system-of-record entities (cards, snapshots metadata, users)
+  context:
+    - kind: TaskRef
+      name: v2-e11-t01-access-pattern-design
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e10-t04-kms-secrets
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        AppTable exists in dev with PAY_PER_REQUEST billing, the documented pk/sk and GSIs, and
+        point_in_time_recovery enabled.
+    - id: ac2
+      description: >-
+        Server-side encryption uses the app-data customer-managed KMS key output by E10-t04.
+    - id: ac3
+      description: >-
+        A ttl attribute is enabled and the design doc lists which item types set it; no system-of-record
+        item type sets it.
+    - id: ac4
+      description: >-
+        Least-privilege IAM policy documents for API and worker roles allow only GetItem, PutItem,
+        UpdateItem, DeleteItem, Query, BatchGet/BatchWrite and TransactWrite on the table and its indexes.
+    - id: ac5
+      description: >-
+        Stage and prod enable deletion_protection; terraform plan for all three environments succeeds.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e11-t02-dynamodb-tables-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+spec:
+  description: >-
+    Write the table module from the design doc, add access policies, wire environments, and cross-check
+    the deployed schema against the design.
+  goalRef:
+    name: v2-e11-t02-dynamodb-tables
+  graph:
+    nodes:
+      - id: table-module
+        kind: Task
+        name: AppTable Terraform module
+        description: >-
+          aws_dynamodb_table with on-demand billing, attributes and GSIs from the design, PITR, SSE with a
+          KMS key variable, TTL attribute and deletion_protection variable.
+        outputs: [infrastructure/modules/dynamodb/app_table.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Table module enables PITR
+            path: infrastructure/modules/dynamodb/app_table.tf
+            contentMatch: "point_in_time_recovery"
+      - id: access-policies
+        kind: Task
+        name: Least-privilege access policy documents
+        description: >-
+          aws_iam_policy_document outputs for API (read/write) and workers (read/write + TransactWrite),
+          scoped to the table and index ARNs, plus kms:Decrypt/GenerateDataKey on the app-data key.
+        dependsOn: [table-module]
+        outputs: [infrastructure/modules/dynamodb/policies.tf]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy documents exist
+            path: infrastructure/modules/dynamodb/policies.tf
+            contentMatch: "aws_iam_policy_document"
+      - id: env-wiring
+        kind: Task
+        name: Environment wiring
+        description: >-
+          Instantiate the module in dev/stage/prod with the E10-t04 key ARN and deletion protection on in
+          stage/prod.
+        dependsOn: [access-policies]
+        outputs: [infrastructure/envs/dev/data.tf, infrastructure/envs/prod/data.tf]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev plan succeeds
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock-timeout=60s]
+          - type: command_succeeds
+            name: prod validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/prod, validate]
+      - id: schema-drift-check
+        kind: Task
+        name: Design-vs-deployed schema check
+        description: >-
+          Script comparing describe-table output (key schema, GSIs, projections, TTL, PITR) with a
+          machine-readable section of the design doc; runs in CI against dev after apply.
+        dependsOn: [env-wiring]
+        outputs: [scripts/check_dynamodb_schema.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Deployed dev table matches the design
+            command: uv
+            args: [run, scripts/check_dynamodb_schema.py, --env, dev]
+status:
+  phase: Pending

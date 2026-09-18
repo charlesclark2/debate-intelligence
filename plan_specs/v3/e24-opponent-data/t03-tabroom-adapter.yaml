@@ -1,0 +1,155 @@
+# TASK v3-e24-t03-tabroom-adapter — Tabroom public results adapter
+# Epic: E24 Opponent Data Integrations | Release: v3.3 (Opponent data integrations) | Major: V3
+# Architecture refs: §9 Opponent data adapters, §13 Opponent intelligence, §14, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e24-t03-tabroom-adapter
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+  annotations:
+    debate/title: Tabroom public results adapter
+    debate/architecture-refs: §9, §13, §14, §19
+spec:
+  description: >-
+    Ingest public tournament results from Tabroom using only public, unauthenticated results pages of the
+    kind documented at docs.tabroom.com/public/public-results, limited to tournaments the organization lists
+    in its configuration. The adapter reuses the polite HTTP fetcher (robots.txt, identifying User-Agent,
+    per-host rate limit), parses entries, prelim round results and final places into TournamentResult
+    records with source_url and retrieved_at, and raises a typed layout-changed error instead of saving
+    partial data when page structure shifts. Speaker points and judge names are excluded per the governance
+    policy. Boundaries: identity resolution is t04; authenticated Tabroom data is out of scope.
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations, debate_core.application]
+    forbidden:
+      - >-
+        Accessing private or authenticated opponent data without authorization, or circumventing access
+        controls, terms of service or rate limits
+      - Running ingestion when the governance approval gate is not satisfied
+      - >-
+        Storing student contact details, ages, grades, speaker points or judge names in opponent records
+        (unless the governance policy explicitly allows it)
+      - Crawling tournaments not listed in organization configuration
+      - Logging in to Tabroom or using authenticated endpoints
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e24-t01-opponent-table
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e24-t06-data-governance
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Only configured tournament ids are fetched, through the polite fetcher, with no authentication;
+        robots.txt disallows are honored.
+    - id: ac2
+      description: >-
+        Entries, prelim results (round, side when published, opponent code, win/loss) and final places map
+        to TournamentResult with source_url and retrieved_at.
+    - id: ac3
+      description: >-
+        Excluded fields (speaker points, judge names) never reach persistence, and debater names are kept
+        only as published in entry names.
+    - id: ac4
+      description: >-
+        A fixture with altered page structure raises TabroomLayoutChanged and persists nothing.
+    - id: ac5
+      description: >-
+        Ingest is idempotent by tournament, event, round and entry, and refuses to run without governance
+        approval.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e24-t03-tabroom-adapter-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+spec:
+  description: >-
+    Allowlisted fetching, page parsers, mapping, then fixtures with drift detection and the ingest use case.
+  goalRef:
+    name: v3-e24-t03-tabroom-adapter
+  graph:
+    nodes:
+      - id: fetching
+        kind: Task
+        name: Allowlisted public fetching
+        description: >-
+          Tournament allowlist from org config, URL builders for public results pages, polite fetcher reuse
+          and the governance gate.
+        outputs: [packages/debate_core/src/debate_core/integrations/opponent/tabroom.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fetching tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/opponent/test_tabroom.py
+              - "-k"
+              - fetch or gate
+      - id: parsers
+        kind: Task
+        name: Results page parsers
+        description: >-
+          selectolax parsers for entries, prelim records and final places with structural assertions.
+        dependsOn: [fetching]
+        outputs: [packages/debate_core/src/debate_core/integrations/opponent/tabroom_pages.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parser tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/opponent/test_tabroom.py, -k, parse]
+      - id: mapping
+        kind: Task
+        name: TournamentResult mapping
+        description: >-
+          Map parsed rows to records with provenance and policy allowlist.
+        dependsOn: [parsers]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Mapping tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/opponent/test_tabroom.py, -k, mapping]
+      - id: fixtures-ingest
+        kind: Task
+        name: Fixtures, drift detection and ingest
+        description: >-
+          Sanitized saved public pages, altered-layout fixture, IngestResults use case; type check.
+        dependsOn: [mapping]
+        outputs: [tests/fixtures/tabroom/, packages/debate_core/src/debate_core/application/ingest_results.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Tabroom fixtures documented
+            path: tests/fixtures/tabroom/README.md
+            contentMatch: "public"
+          - type: test_passes
+            name: Ingest results tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_ingest_results.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

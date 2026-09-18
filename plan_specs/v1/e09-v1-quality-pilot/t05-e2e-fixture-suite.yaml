@@ -1,0 +1,127 @@
+# TASK v1-e09-t05-e2e-fixture-suite — End-to-end recorded suite
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Architecture refs: §16 (integration tests on recorded fixtures), §11 V1 acceptance criteria, §8
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e09-t05-e2e-fixture-suite
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+  annotations:
+    debate/title: End-to-end recorded suite
+    debate/architecture-refs: §16, §11, §8
+spec:
+  description: >-
+    Prove the V1 acceptance criteria end to end through the real CLI entry point with every external
+    boundary recorded: provider APIs and publisher pages via respx/vcr cassettes, models via replay
+    cassettes, and a temporary local data dir. Scenarios: (1) `search ... --auto-cut 3` → DOCX bundle →
+    `verify bundle.docx` exits 0; (2) `cut <URL>` on a news, a think-tank, a government PDF and an
+    open-access journal source; (3) a paywalled and a robots-disallowed URL fail explicitly with the right
+    exit codes; (4) a provider outage yields PARTIAL search results; (5) a hand-edited evidence word in the
+    exported DOCX makes verify fail with MANUAL_EDIT. Each V1 acceptance criterion from §11 maps to at least
+    one named test. Boundaries: does not re-test unit behaviour, golden formatting (t02) or span quality (t03).
+  priority: 1
+  constraints:
+    packages: [tests/integration, tests/fixtures]
+    forbidden:
+      - Any live network or model call (socket access disabled in the suite)
+      - Reading or writing outside a pytest tmp data dir
+      - Skipping scenarios silently when a cassette is missing (fail with MissingFixtureError)
+  context:
+    - kind: TaskRef
+      name: v1-e08-t06-auto-cut
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The search → auto-cut → verify scenario passes with three VERIFIED cards whose evidence equals
+        snapshot slices.
+    - id: ac2
+      description: >-
+        Paywalled, robots-disallowed and tampered-DOCX scenarios produce the documented exit codes and
+        reasons in CLI output.
+    - id: ac3
+      description: >-
+        The suite runs with network sockets disabled (pytest-socket) and completes in under 3 minutes in CI.
+    - id: ac4
+      description: >-
+        tests/integration/ACCEPTANCE.md maps each §11 V1 acceptance criterion to the test ids covering it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e09-t05-e2e-fixture-suite-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+spec:
+  description: >-
+    Harness with network disabled first, then the happy path, then failure scenarios, then the acceptance map.
+  goalRef:
+    name: v1-e09-t05-e2e-fixture-suite
+  graph:
+    nodes:
+      - id: e2e-harness
+        kind: Task
+        name: E2E harness with sockets disabled
+        description: >-
+          Fixtures for tmp data dir, replay model router, recorded HTTP cassettes and a CliRunner wrapper;
+          pytest-socket blocks network.
+        outputs: [tests/integration/conftest.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Integration conftest exists
+            path: tests/integration/conftest.py
+            contentMatch: "disable_socket"
+      - id: happy-path
+        kind: Task
+        name: search → auto-cut → verify scenario
+        description: >-
+          Record cassettes once and assert bundle contents, manifest and verify output.
+        dependsOn: [e2e-harness]
+        outputs: [tests/integration/test_e2e_research.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Happy-path e2e passes
+            command: uv
+            args: [run, pytest, tests/integration/test_e2e_research.py]
+      - id: failure-scenarios
+        kind: Task
+        name: Cut sources and failure scenarios
+        description: >-
+          Per-source cut scenarios, paywall/robots failures, provider outage and tampered DOCX verify.
+        dependsOn: [e2e-harness]
+        outputs: [tests/integration/test_e2e_failures.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Failure scenarios pass
+            command: uv
+            args: [run, pytest, tests/integration/test_e2e_failures.py]
+      - id: acceptance-map
+        kind: Task
+        name: Acceptance criteria map
+        description: >-
+          Write ACCEPTANCE.md mapping §11 criteria to tests and run the whole integration directory.
+        dependsOn: [happy-path, failure-scenarios]
+        outputs: [tests/integration/ACCEPTANCE.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full integration suite passes offline
+            command: uv
+            args: [run, pytest, tests/integration]
+status:
+  phase: Pending

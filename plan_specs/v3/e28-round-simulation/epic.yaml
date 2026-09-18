@@ -1,0 +1,242 @@
+# EPIC E28 — Full Round Simulation
+# Major version: V3 | Release: v3.7 (Full round simulation)
+# Architecture refs: §3 V3 simulation story, §10 SpeechPlan/RoundDecision, §13, §16
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e28-round-simulation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+  annotations:
+    debate/title: E28 — Full Round Simulation
+    debate/architecture-refs: §3 V3 simulation story, §10 SpeechPlan/RoundDecision, §13, §16
+spec:
+  description: >-
+    Run full simulated rounds with speech planning, opponent generation, opponent-informed strategy and
+    a judge decision/RFD traceable to the recorded flow.
+  priority: 17
+  constraints:
+    majorVersion: v3
+    release: v3.7
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      The simulator plans and delivers opponent speeches consistent with format rules, strategy and delivery
+      settings.
+  - id: ac2
+    description: >-
+      Judge decisions and RFDs cite the recorded flow and match the configured judge profile.
+  - id: ac3
+    description: >-
+      Scouting data can inform the simulated opponent; coach-curated evals gate release.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e28-round-simulation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+spec:
+  description: >-
+    Task graph for epic E28 (Full Round Simulation). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v3-e28-round-simulation
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v2-e17-t02-library-api
+      kind: External
+      name: 'Prerequisite from E17: Library API'
+      description: >-
+        Cross-epic prerequisite owned by v2-e17-card-library (release v2.3).
+      inputs:
+        goalRef: v2-e17-t02-library-api
+        specRef: plan_specs/v2/e17-card-library/t02-library-api.yaml
+    - id: ext-v3-e25-t03-report-generation
+      kind: External
+      name: 'Prerequisite from E25: Scouting report generation'
+      description: >-
+        Cross-epic prerequisite owned by v3-e25-scouting-reports (release v3.4).
+      inputs:
+        goalRef: v3-e25-t03-report-generation
+        specRef: plan_specs/v3/e25-scouting-reports/t03-report-generation.yaml
+    - id: ext-v3-e25-t05-prediction-integration
+      kind: External
+      name: 'Prerequisite from E25: Disclosure-informed coverage predictions'
+      description: >-
+        Cross-epic prerequisite owned by v3-e25-scouting-reports (release v3.4).
+      inputs:
+        goalRef: v3-e25-t05-prediction-integration
+        specRef: plan_specs/v3/e25-scouting-reports/t05-prediction-integration.yaml
+    - id: ext-v3-e26-t04-judge-profiles
+      kind: External
+      name: 'Prerequisite from E26: Judge profile policies'
+      description: >-
+        Cross-epic prerequisite owned by v3-e26-round-engine (release v3.5).
+      inputs:
+        goalRef: v3-e26-t04-judge-profiles
+        specRef: plan_specs/v3/e26-round-engine/t04-judge-profiles.yaml
+    - id: ext-v3-e26-t05-flow-tracking
+      kind: External
+      name: 'Prerequisite from E26: Flow tracking'
+      description: >-
+        Cross-epic prerequisite owned by v3-e26-round-engine (release v3.5).
+      inputs:
+        goalRef: v3-e26-t05-flow-tracking
+        specRef: plan_specs/v3/e26-round-engine/t05-flow-tracking.yaml
+    - id: ext-v3-e27-t04-cx-session-ui
+      kind: External
+      name: 'Prerequisite from E27: CX session UI'
+      description: >-
+        Cross-epic prerequisite owned by v3-e27-cx-simulator (release v3.6).
+      inputs:
+        goalRef: v3-e27-t04-cx-session-ui
+        specRef: plan_specs/v3/e27-cx-simulator/t04-cx-session-ui.yaml
+    - id: ext-v3-e27-t05-cx-eval
+      kind: External
+      name: 'Prerequisite from E27: CX evaluation'
+      description: >-
+        Cross-epic prerequisite owned by v3-e27-cx-simulator (release v3.6).
+      inputs:
+        goalRef: v3-e27-t05-cx-eval
+        specRef: plan_specs/v3/e27-cx-simulator/t05-cx-eval.yaml
+    - id: t01
+      kind: Task
+      name: Speech planning
+      description: >-
+        SpeechPlan generation from flow state, strategy settings and available evidence.
+      inputs:
+        specRef: plan_specs/v3/e28-round-simulation/t01-speech-planning.yaml
+        goalRef: v3-e28-t01-speech-planning
+      dependsOn:
+      - ext-v3-e26-t05-flow-tracking
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e28-t01-speech-planning reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e28-t01-speech-planning
+    - id: t02
+      kind: Task
+      name: Opponent speech generation
+      description: >-
+        Generate speeches from SpeechPlans using only library/graph evidence, honoring time and delivery
+        speed.
+      inputs:
+        specRef: plan_specs/v3/e28-round-simulation/t02-opponent-speech-generation.yaml
+        goalRef: v3-e28-t02-opponent-speech-generation
+      dependsOn:
+      - t01
+      - ext-v2-e17-t02-library-api
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e28-t02-opponent-speech-generation reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e28-t02-opponent-speech-generation
+    - id: t03
+      kind: Task
+      name: Judge decision and RFD
+      description: >-
+        RoundDecision with ballot and RFD referencing specific flow events, per judge profile.
+      inputs:
+        specRef: plan_specs/v3/e28-round-simulation/t03-judge-decision.yaml
+        goalRef: v3-e28-t03-judge-decision
+      dependsOn:
+      - t02
+      - ext-v3-e26-t04-judge-profiles
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e28-t03-judge-decision reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e28-t03-judge-decision
+    - id: t04
+      kind: Task
+      name: Opponent-informed simulation
+      description: >-
+        Configure the simulated opponent from a scouting report's disclosed positions.
+      inputs:
+        specRef: plan_specs/v3/e28-round-simulation/t04-opponent-informed-sim.yaml
+        goalRef: v3-e28-t04-opponent-informed-sim
+      dependsOn:
+      - t02
+      - ext-v3-e25-t03-report-generation
+      - ext-v3-e25-t05-prediction-integration
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e28-t04-opponent-informed-sim reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e28-t04-opponent-informed-sim
+    - id: t05
+      kind: Task
+      name: Full round UI
+      description: >-
+        Round setup (format, judge, speed, opponent), speech-by-speech progression, student speech input,
+        flow and RFD views.
+      inputs:
+        specRef: plan_specs/v3/e28-round-simulation/t05-full-round-ui.yaml
+        goalRef: v3-e28-t05-full-round-ui
+      dependsOn:
+      - t03
+      - ext-v3-e27-t04-cx-session-ui
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e28-t05-full-round-ui reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e28-t05-full-round-ui
+    - id: t06
+      kind: Task
+      name: Simulation evaluation and coach review
+      description: >-
+        Coach-curated round set evaluating strategic consistency, CX concession use, drop tracking and
+        RFD traceability; release gate.
+      inputs:
+        specRef: plan_specs/v3/e28-round-simulation/t06-simulation-eval.yaml
+        goalRef: v3-e28-t06-simulation-eval
+      dependsOn:
+      - t03
+      - t04
+      - ext-v3-e27-t05-cx-eval
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e28-t06-simulation-eval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e28-t06-simulation-eval
+status:
+  phase: Pending

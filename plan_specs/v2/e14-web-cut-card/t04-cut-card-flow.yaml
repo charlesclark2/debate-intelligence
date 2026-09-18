@@ -1,0 +1,161 @@
+# TASK v2-e14-t04-cut-card-flow — Cut-a-Card flow
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §12 Cut a Card, §8 hard failure rule, §4 Web frontend, ADR-009
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e14-t04-cut-card-flow
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+  annotations:
+    debate/title: Cut-a-Card flow
+    debate/architecture-refs: §4, §12
+spec:
+  description: >-
+    Deliver the V2 headline story: a student pastes an article URL and gets a formatted card. The page
+    has a URL form with format profile selection, submits a CARD job via the generated API client with
+    an Idempotency-Key, and shows live progress from the SSE stream (fetching → extracting → citing →
+    selecting → verifying) with a polling fallback. On success it renders a read-only card preview (tag,
+    cite with author/qualifications/date/URL/accessed date, verbatim evidence with underlining and
+    highlighting from CardSpans) and hands off to the editor (t05). On failure it shows an explicit,
+    actionable state per error code: PAYWALLED or BLOCKED (we do not bypass access controls; suggest an
+    open-access version), NOT_FOUND/retrieval failure, extraction failure, and VERIFICATION_FAILED, where
+    an UNVERIFIED card is shown only with a prominent warning and cannot be exported or copied. Editing
+    is t05; export/copy is t06.
+  priority: 1
+  constraints:
+    packages: [web]
+    forbidden:
+      - Rendering a non-VERIFIED card as a finished card or enabling export/copy for it
+      - Hand-written API types instead of the generated client
+      - Suggesting paywall-bypass services or archive workarounds in failure messages
+      - Blocking the UI on a synchronous request while the job runs
+  context:
+    - kind: TaskRef
+      name: v2-e14-t02-auth-ui
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t03-card-job-workflow
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t05-job-status-api
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t06-openapi-client
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Submitting a valid URL creates exactly one CARD job (double-click safe via Idempotency-Key) and
+        shows stage-by-stage progress within 2 seconds of each server event.
+    - id: ac2
+      description: >-
+        If the SSE connection drops, the page reconnects with Last-Event-ID or falls back to polling and
+        still reaches the terminal state.
+    - id: ac3
+      description: >-
+        A VERIFIED result renders tag, full cite and verbatim evidence with underline/highlight spans
+        matching the API's CardSpans, and offers "Edit card".
+    - id: ac4
+      description: >-
+        Each failure code (PAYWALLED, BLOCKED, NOT_FOUND, EXTRACTION_FAILED, VERIFICATION_FAILED, INTERNAL)
+        has a distinct message and next step; Playwright tests cover every code with a mocked API.
+    - id: ac5
+      description: >-
+        The flow passes axe checks with zero serious/critical violations and is usable by keyboard only.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e14-t04-cut-card-flow-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e14-web-cut-card
+spec:
+  description: >-
+    Job hooks first, then the form and progress UI, then the card preview renderer, then failure states
+    and end-to-end tests with a mocked API plus one dev run.
+  goalRef:
+    name: v2-e14-t04-cut-card-flow
+  graph:
+    nodes:
+      - id: job-hooks
+        kind: Task
+        name: Job submission and SSE hooks
+        description: >-
+          useSubmitJob (idempotency key per submission) and useJobEvents (EventSource with Last-Event-ID
+          resume and polling fallback) built on the generated client.
+        outputs: [web/src/features/jobs/useJobEvents.ts, web/src/features/jobs/useSubmitJob.ts]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Job hook tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/jobs]
+      - id: form-progress
+        kind: Task
+        name: URL form and progress stepper
+        description: >-
+          Cut a Card page with URL validation, format profile select, submit, and an accessible stage
+          stepper with live region announcements.
+        dependsOn: [job-hooks]
+        outputs: [web/src/app/(app)/cut/page.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Form and progress component tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/app/(app)/cut]
+      - id: card-preview
+        kind: Task
+        name: Read-only card preview renderer
+        description: >-
+          CardView component rendering tag, cite block and evidence with underline/highlight from span
+          offsets (no HTML from the server), and a verification badge.
+        dependsOn: [job-hooks]
+        outputs: [web/src/features/cards/CardView.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CardView span rendering tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/cards/CardView]
+      - id: failure-states
+        kind: Task
+        name: Explicit failure and unverified states
+        description: >-
+          Error panels per JobError code, and an UNVERIFIED card view with warning and disabled
+          export/copy actions.
+        dependsOn: [form-progress, card-preview]
+        outputs: [web/src/features/cards/JobFailure.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cut-a-Card e2e tests pass with mocked API
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/cut-card.spec.ts]
+      - id: dev-run
+        kind: Task
+        name: Dev run with real articles
+        description: >-
+          Cut cards in the dev environment from three open-access articles and one paywalled article.
+        dependsOn: [failure-states]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Coach and debater review of cut cards
+            description: >-
+              Charlie and a pilot debater confirm tags/cites are debate-usable, underlining matches the
+              warrants, and the paywalled article shows PAYWALLED with no card presented as finished.
+status:
+  phase: Pending

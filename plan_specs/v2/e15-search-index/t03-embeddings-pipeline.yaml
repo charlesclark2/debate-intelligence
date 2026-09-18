@@ -1,0 +1,173 @@
+# TASK v2-e15-t03-embeddings-pipeline — Titan embeddings pipeline
+# Epic: E15 Search Index & Hybrid Retrieval | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §5, §10, §15, ADR-005
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e15-t03-embeddings-pipeline
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+  annotations:
+    debate/title: Titan embeddings pipeline
+    debate/architecture-refs: §5, §10, §15, ADR-005
+spec:
+  description: >-
+    Add an embeddings pipeline that turns t02 chunks and saved cards into Titan Text Embeddings V2 vectors
+    through the ModelRouter `embeddings` task class, caches each vector by (normalized_text_hash,
+    embedding model id, dimensions) so identical content is never re-embedded, and writes vectors to the
+    index via the IndexWriter port. Runs as a debate_workers SQS handler (embed-chunks queue) triggered
+    after snapshot persistence and card save, plus a backfill command for existing snapshots. The model
+    id and dimensions are routing config, not code. This task does NOT build queries (t04), rerank (t05),
+    or implement full index rebuilds (t06, which reuses this handler and cache).
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.retrieval, debate_core.integrations, debate_workers]
+    forbidden:
+      - Calling Bedrock directly instead of through ModelRouter
+      - Hard-coding the embedding model id or dimensions in business logic
+      - Re-embedding content whose (normalized_text_hash, model id, dims) is already cached
+      - Real Bedrock calls in CI; use the fake/replay ModelRouter
+      - Embedding user-supplied private notes or PII fields
+  context:
+    - kind: TaskRef
+      name: v2-e15-t02-index-mappings-chunking
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t01-model-router-port
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t02-sqs-workers
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        EmbeddingService.embed_chunks batches inputs up to a configured batch size and returns one vector per
+        chunk with model_id, dims and normalized_text_hash recorded on the indexed document.
+    - id: ac2
+      description: >-
+        A second run over the same snapshot results in zero ModelRouter embedding calls (verified by the fake
+        router call counter) because every vector is served from the EmbeddingCache.
+    - id: ac3
+      description: >-
+        The embed-chunks worker handler is idempotent on SQS redelivery, reports per-message failures to the
+        DLQ after max receives, and emits tokens/cost telemetry per batch.
+    - id: ac4
+      description: >-
+        `uv run debate-workers backfill-embeddings --since <date> --dry-run` reports how many chunks would be
+        embedded vs served from cache without calling the model.
+    - id: ac5
+      description: >-
+        Changing the configured embedding model id invalidates cache hits for that model only, and old vectors
+        remain queryable until a rebuild swaps the alias.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e15-t03-embeddings-pipeline-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+spec:
+  description: >-
+    Build the cache port and its DynamoDB adapter, then the application-level EmbeddingService on the fake
+    router, then the SQS handler and the backfill command, with telemetry throughout.
+  goalRef:
+    name: v2-e15-t03-embeddings-pipeline
+  graph:
+    nodes:
+      - id: embedding-cache
+        kind: Task
+        name: EmbeddingCache port and DynamoDB adapter
+        description: >-
+          EmbeddingCache port keyed by (normalized_text_hash, model_id, dims); DynamoDB AppTable adapter
+          storing float16-packed vectors (EMB#<hash>#<model>) and an in-memory adapter for tests.
+        outputs:
+          - packages/debate_core/src/debate_core/retrieval/embedding_cache.py
+          - packages/debate_core/src/debate_core/integrations/aws/dynamodb_embedding_cache.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cache contract tests pass for in-memory and moto-backed adapters
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_embedding_cache.py]
+      - id: embedding-service
+        kind: Task
+        name: EmbeddingService over ModelRouter
+        description: >-
+          Application service that dedupes inputs by hash, consults the cache, batches misses to
+          ModelRouter.embed(task_class=embeddings), validates vector dims, writes back to the cache and
+          returns vectors aligned to inputs.
+        dependsOn: [embedding-cache]
+        outputs: [packages/debate_core/src/debate_core/application/embedding_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cache-hit and batching tests pass with the fake router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_embedding_service.py]
+      - id: worker-handler
+        kind: Task
+        name: embed-chunks SQS handler
+        description: >-
+          debate_workers handler that loads a snapshot, chunks it (t02), embeds via EmbeddingService and
+          upserts via IndexWriter; idempotent per snapshot_id + mapping_version; Terraform queue + DLQ
+          registration using the E13 worker module.
+        dependsOn: [embedding-service]
+        outputs:
+          - packages/debate_workers/src/debate_workers/handlers/embed_chunks.py
+          - infrastructure/envs/dev/queues_embeddings.tf
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Handler idempotency and DLQ tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_embed_chunks.py]
+          - type: command_succeeds
+            name: Dev Terraform validates with the new queue
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: backfill
+        kind: Task
+        name: Backfill command with dry-run
+        description: >-
+          `debate-workers backfill-embeddings` enumerates snapshots/cards from DynamoDB and enqueues
+          embed-chunks messages; --dry-run reports cache hits/misses and estimated cost without enqueuing.
+        dependsOn: [worker-handler]
+        outputs: [packages/debate_workers/src/debate_workers/commands/backfill_embeddings.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Backfill dry-run test passes
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/commands/test_backfill_embeddings.py]
+      - id: quality-gates
+        kind: Task
+        name: Type check and import boundaries
+        description: Run pyright on touched packages and the import-linter contracts.
+        dependsOn: [backfill]
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Type check passes for debate_workers
+            command: uv
+            args: [run, pyright, packages/debate_workers]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

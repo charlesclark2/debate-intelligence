@@ -1,0 +1,110 @@
+# TASK v1-e07-t02-openalex-adapter — OpenAlex adapter
+# Epic: E07 Discovery Provider Adapters | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §9 Discovery adapters (scholarly), §15, §16 (recorded fixtures), §21 ref 10
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t02-openalex-adapter
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: OpenAlex adapter
+    debate/architecture-refs: §9, §15, §16, §21
+spec:
+  description: >-
+    Implement OpenAlexProvider, the primary scholarly SearchProvider (satisfies the V1 "at least one
+    scholarly adapter" criterion). It calls the /works endpoint with search=<query>, from/to_publication_date
+    filters, per-page limits and a select= field list, sending the polite-pool mailto from settings. It maps
+    works to CandidateResult: DOI, OpenAlex ID, title, authorships (display names only), host venue,
+    publication date, type → source_type, cited_by_count, is_oa, best_oa_location/primary_location URLs,
+    and reconstructs the abstract from abstract_inverted_index. Boundaries: no ranking or dedupe (E08); the
+    adapter never downloads full text (ArticleService does that for accessible OA URLs).
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations]
+    forbidden:
+      - Live OpenAlex calls in CI (respx-recorded fixtures only)
+      - Omitting the polite-pool contact identity when configured
+      - Storing author affiliations or ORCIDs beyond what CandidateResult defines
+  context:
+    - kind: TaskRef
+      name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A query with --since/--until produces a request with from_publication_date/to_publication_date
+        filters and mailto parameter, verified by respx route assertions.
+    - id: ac2
+      description: >-
+        Recorded fixtures map to CandidateResults with DOI, OpenAlex id, authors, venue, published_at,
+        cited_by_count and best open-access URL when present; abstracts are rebuilt in word order.
+    - id: ac3
+      description: >-
+        429 and 5xx responses map to typed ProviderErrors consumed by the circuit breaker, and the adapter
+        passes the shared contract kit.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t02-openalex-adapter-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Record fixtures, build the request, map results, then run the contract kit.
+  goalRef:
+    name: v1-e07-t02-openalex-adapter
+  graph:
+    nodes:
+      - id: record-fixtures
+        kind: Task
+        name: Record OpenAlex fixtures
+        description: >-
+          Capture representative /works responses (health insurance, AI regulation, space policy queries;
+          empty result; 429) into tests/fixtures/providers/openalex/.
+        outputs: [tests/fixtures/providers/openalex/]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: OpenAlex fixtures recorded
+            path: tests/fixtures/providers/openalex/works_search.json
+      - id: request-builder
+        kind: Task
+        name: Query and filter request builder
+        description: >-
+          Build /works requests with search, date filters, per_page, select and mailto; async httpx client
+          from the shared integrations HTTP settings.
+        dependsOn: [record-fixtures]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/openalex.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Request builder tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_openalex.py, -k, request]
+      - id: result-mapping
+        kind: Task
+        name: Work to CandidateResult mapping
+        description: >-
+          Map works fields including inverted-index abstract reconstruction and OA location selection.
+        dependsOn: [request-builder]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full OpenAlex adapter tests and contract kit pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_openalex.py]
+status:
+  phase: Pending

@@ -1,0 +1,146 @@
+# TASK v2-e10-t02-terraform-bootstrap — Terraform bootstrap and environments
+# Epic: E10 AWS & Infrastructure-as-Code Foundation | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §4 Terraform, §5, §14, §15 (infrastructure-as-code for data-loss recovery)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e10-t02-terraform-bootstrap
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+  annotations:
+    debate/title: Terraform bootstrap and environments
+    debate/architecture-refs: §4, §5, §14, §15
+spec:
+  description: >-
+    Create the Terraform foundation every later V2 infrastructure task builds on: an S3 remote-state
+    bucket per environment with native S3 state locking (or DynamoDB lock table if the pinned Terraform
+    version requires it), the module/env layout under infrastructure/, dev/stage/prod root modules with
+    pinned provider versions, a default_tags tagging standard, and CI checks for fmt, validate and tflint.
+    This task owns layout and conventions only; it does NOT create OIDC roles (t03), KMS keys (t04),
+    networking/ECS (t05) or any application resources (E11+). Until t03 lands, CI runs only
+    credential-free checks (fmt/validate/tflint), never plan/apply.
+  priority: 1
+  constraints:
+    packages: [infrastructure/bootstrap, infrastructure/envs, infrastructure/modules, .github/workflows]
+    forbidden:
+      - Local or unencrypted Terraform state for shared environments
+      - Unpinned provider or module versions
+      - Hard-coded account ids, regions or credentials inside reusable modules
+      - Running terraform apply from CI before OIDC roles exist (t03)
+  context:
+    - kind: TaskRef
+      name: v2-e10-t01-aws-account-baseline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each environment's state lives in a private, versioned, encrypted S3 bucket with block public
+        access and state locking; two concurrent plans against the same env cannot both acquire the lock.
+    - id: ac2
+      description: >-
+        infrastructure/ contains bootstrap/, modules/ and envs/{dev,stage,prod}/ with a README describing
+        how to add a module and how environments differ (only via tfvars, not copied code).
+    - id: ac3
+      description: >-
+        Every resource inherits default_tags project, environment, owner, cost-center and managed-by=terraform,
+        and a tflint rule or check fails when a module overrides them away.
+    - id: ac4
+      description: >-
+        A CI job runs terraform fmt -check, terraform validate for all three envs and tflint on every PR
+        touching infrastructure/, and fails the build on any error.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e10-t02-terraform-bootstrap-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+spec:
+  description: >-
+    Bootstrap state storage once per account, lay out modules and environment roots, apply the tagging
+    standard, then add credential-free static checks to CI.
+  goalRef:
+    name: v2-e10-t02-terraform-bootstrap
+  graph:
+    nodes:
+      - id: state-bootstrap
+        kind: Task
+        name: Remote state bucket and locking
+        description: >-
+          A bootstrap root module (applied once per account with local state, then migrated) creates the
+          versioned, encrypted, private state bucket with lockfile support and a deny-insecure-transport
+          bucket policy.
+        outputs: [infrastructure/bootstrap/state/main.tf, infrastructure/bootstrap/state/README.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: State bootstrap module validates
+            command: terraform
+            args: [-chdir=infrastructure/bootstrap/state, validate]
+      - id: env-layout
+        kind: Task
+        name: Module and environment layout
+        description: >-
+          Create envs/dev, envs/stage and envs/prod roots with backend.tf, versions.tf (pinned
+          hashicorp/aws), providers.tf and terraform.tfvars; add infrastructure/README.md.
+        dependsOn: [state-bootstrap]
+        outputs:
+          - infrastructure/envs/dev/backend.tf
+          - infrastructure/envs/stage/backend.tf
+          - infrastructure/envs/prod/backend.tf
+          - infrastructure/README.md
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: command_succeeds
+            name: prod environment validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/prod, validate]
+      - id: tagging-standard
+        kind: Task
+        name: Tagging standard via default_tags
+        description: >-
+          Configure provider default_tags from a shared locals block and document the required tag keys;
+          add a tflint config enforcing them.
+        dependsOn: [env-layout]
+        outputs: [infrastructure/.tflint.hcl, infrastructure/modules/tags/main.tf]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: tflint passes with tagging rules
+            command: tflint
+            args: [--chdir=infrastructure, --recursive]
+      - id: ci-static-checks
+        kind: Task
+        name: CI fmt/validate/tflint job
+        description: >-
+          Add a GitHub Actions workflow triggered on infrastructure/** changes that runs fmt -check,
+          init -backend=false + validate for each env, and tflint, with no AWS credentials.
+        dependsOn: [tagging-standard]
+        outputs: [.github/workflows/terraform-checks.yml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Terraform CI workflow exists
+            path: .github/workflows/terraform-checks.yml
+            contentMatch: "terraform fmt -check"
+          - type: command_succeeds
+            name: Formatting is clean
+            command: terraform
+            args: [fmt, -check, -recursive, infrastructure]
+status:
+  phase: Pending

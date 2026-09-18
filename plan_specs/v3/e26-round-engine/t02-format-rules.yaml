@@ -1,0 +1,145 @@
+# TASK v3-e26-t02-format-rules — Format rule modules
+# Epic: E26 Round Engine Core | Release: v3.5 (Round engine core) | Major: V3
+# Architecture refs: §7 Round, §13 Round simulator (format-specific rules), §17 V3.5
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e26-t02-format-rules
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+  annotations:
+    debate/title: Format rule modules
+    debate/architecture-refs: §7, §13, §17
+spec:
+  description: >-
+    Encode Policy, Lincoln-Douglas and Public Forum as declarative FormatRules modules that the state
+    machine (t03) consumes: ordered segments (speeches and cross-examinations), speaker/partner roles,
+    default times, prep-time pools and CX style. Policy is 2v2 with 1AC, CX, 1NC, CX, 2AC, CX, 2NC, CX,
+    1NR, 1AR, 2NR, 2AR (NSDA defaults 8/3/5 minutes, 8 minutes prep per team) and the rule that each
+    CX is conducted by the non-speaking opponent designated by convention. LD is 1v1 with AC, CX, NC, CX,
+    1AR, NR, 2AR (6/3/7/3/4/6/3, 4 minutes prep). PF is 2v2 with first/second-speaker constructives,
+    crossfire, rebuttals, crossfire, summaries, grand crossfire and final focus (4/3/4/3/3/3/2, 3 minutes
+    prep per team) where side and speaking order are separate choices. Tournament overrides (e.g. 5-minute
+    Policy prep, 10-minute LD NC) are data, validated against the base format. No transition logic,
+    persistence or judging here: those are t03, t01 and t04.
+  priority: 1
+  constraints:
+    packages: [debate_core.rounds]
+    forbidden:
+      - Hard-coding speech order or times inside the state machine or UI instead of FormatRules
+      - Model calls of any kind; rules are deterministic data plus pure functions
+      - Importing boto3/typer/fastapi in debate_core
+  context:
+    - kind: TaskRef
+      name: v3-e26-t01-round-model
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        FormatRules for POLICY, LD and PF list segments in the order and default durations stated above,
+        each with speaker role(s), side and segment kind (CONSTRUCTIVE, REBUTTAL, CX, CROSSFIRE,
+        GRAND_CROSSFIRE, SUMMARY, FINAL_FOCUS).
+    - id: ac2
+      description: >-
+        CX/crossfire rules identify questioner and answerer roles (Policy and LD) or all permitted
+        participants (PF crossfire and grand crossfire).
+    - id: ac3
+      description: >-
+        Prep time is modeled as a per-side pool with format defaults, and a TournamentOverrides object can
+        change durations or prep but cannot add, remove or reorder segments.
+    - id: ac4
+      description: >-
+        PF rules support all four side/speaking-order combinations from a coin flip, producing the
+        correct first speaker for every segment.
+    - id: ac5
+      description: >-
+        Table-driven tests cover every segment of all three formats and every override validation error.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e26-t02-format-rules-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+spec:
+  description: >-
+    Define the rule vocabulary, encode each format, add overrides, then lock behavior with table-driven
+    tests.
+  goalRef:
+    name: v3-e26-t02-format-rules
+  graph:
+    nodes:
+      - id: rule-vocabulary
+        kind: Task
+        name: FormatRules vocabulary
+        description: >-
+          Segment, SegmentKind, SpeakerRole, CxStyle, PrepPolicy and FormatRules models plus a registry
+          keyed by DebateFormat.
+        outputs: [packages/debate_core/src/debate_core/rounds/formats/base.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Rule vocabulary module exists
+            path: packages/debate_core/src/debate_core/rounds/formats/base.py
+            contentMatch: "class FormatRules"
+      - id: policy-and-ld
+        kind: Task
+        name: Policy and Lincoln-Douglas modules
+        description: >-
+          Encode Policy (2v2, 8 speeches, 4 CX, block structure) and LD (1v1, 5 speeches, 2 CX) with
+          questioner/answerer mapping.
+        dependsOn: [rule-vocabulary]
+        outputs:
+          - packages/debate_core/src/debate_core/rounds/formats/policy.py
+          - packages/debate_core/src/debate_core/rounds/formats/lincoln_douglas.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Policy and LD tables pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_format_rules.py, -k, "policy or ld"]
+      - id: public-forum
+        kind: Task
+        name: Public Forum module with coin-flip ordering
+        description: >-
+          Encode PF segments including both crossfires and grand crossfire, with side and speaking order
+          as independent inputs.
+        dependsOn: [rule-vocabulary]
+        outputs: [packages/debate_core/src/debate_core/rounds/formats/public_forum.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: PF ordering tests pass for all four combinations
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_format_rules.py, -k, pf]
+      - id: tournament-overrides
+        kind: Task
+        name: Tournament overrides and validation
+        description: >-
+          TournamentOverrides for durations and prep with validation that segment structure is unchanged;
+          named presets for local and national circuit defaults.
+        dependsOn: [policy-and-ld, public-forum]
+        outputs: [packages/debate_core/src/debate_core/rounds/formats/overrides.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Override tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_format_rules.py, -k, override]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

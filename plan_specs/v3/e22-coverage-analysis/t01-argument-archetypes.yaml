@@ -1,0 +1,176 @@
+# TASK v3-e22-t01-argument-archetypes — Argument archetype library
+# Epic: E22 Case Coverage Analysis | Release: v3.1 (Case coverage analysis) | Major: V3
+# Architecture refs: §3 V3 stories, §13 Coverage analysis, §19 weak argument predictions
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e22-t01-argument-archetypes
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+  annotations:
+    debate/title: Argument archetype library
+    debate/architecture-refs: §3, §13, §19
+spec:
+  description: >-
+    Build a versioned library of argument archetypes, meaning reusable templates for the positions a team
+    can expect to face. Each archetype is a small graph template (nodes with roles and slots, typed edges)
+    with format, side, on-case/off-case kind, topic scope and trigger features describing which case
+    features make it likely. The library covers generic Policy positions (spending/deficit and politics DAs,
+    states and agent CPs, capitalism K, topicality) and the current topics: Policy national health insurance
+    (e.g. T-"establish" against an ACA-expansion aff, provider-revenue and hospital DAs against
+    Medicare-payment-rate solvency, public-option and states CPs), LD "outer space colonization is a moral
+    imperative" (justice-before-expansion and precaution/non-domination NCs, colonialism K, good-vs-required
+    and colonization-vs-exploration attacks) and PF hyperscale data-center moratorium (grid and bills,
+    fossil lock-in, water; AI leadership and leakage, jobs and tax base, regulate-instead). Archetypes are
+    strategic content only, with no evidence text, and load into the ArgumentTable with origin ARCHETYPE.
+    Boundaries: matching archetypes to a case is t03.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.domain]
+    forbidden:
+      - Evidence text, quotations or citations inside archetype templates
+      - Archetype content that has not been reviewed by the coach
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+  context:
+    - kind: TaskRef
+      name: v3-e21-t01-graph-repository
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        ArgumentArchetype (id, format, side, kind, topic scope, template nodes with role/slot, template
+        edges, trigger features, answer hints, library version) validates, and templates of kind DA contain
+        a uniqueness, link, internal link and impact chain.
+    - id: ac2
+      description: >-
+        The library has at least 12 Policy archetypes (8 generic plus NHI-specific), at least 8 LD
+        archetypes for the space colonization topic and at least 8 PF archetypes covering both sides of the
+        moratorium topic.
+    - id: ac3
+      description: >-
+        A loader idempotently upserts each archetype as GRAPH#ARCHETYPE#<library_version>#<id> with origin
+        ARCHETYPE, and loading the same version twice changes nothing.
+    - id: ac4
+      description: >-
+        A validator rejects quotation marks, cite-like strings (author + year) and evidence fields in
+        templates.
+    - id: ac5
+      description: >-
+        The coach has reviewed the library, and changes to it are recorded as a semver bump with a changelog
+        entry.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e22-t01-argument-archetypes-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+spec:
+  description: >-
+    Schema and validator, then Policy content, LD/PF content, the loader, and coach review.
+  goalRef:
+    name: v3-e22-t01-argument-archetypes
+  graph:
+    nodes:
+      - id: schema
+        kind: Task
+        name: Archetype schema and validator
+        description: >-
+          Pydantic models, template structure checks (DA chain, slot references) and the no-evidence
+          validator.
+        outputs: [packages/debate_core/src/debate_core/arguments/archetypes/models.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Archetype schema tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_archetypes.py, -k, schema]
+      - id: policy-library
+        kind: Task
+        name: Policy archetypes
+        description: >-
+          Generic Policy archetypes plus national health insurance positions with trigger features tied to
+          plan mechanism (Medicare expansion, ACA expansion, new single payer), funding and agent.
+        dependsOn: [schema]
+        outputs: [packages/debate_core/src/debate_core/arguments/archetypes/library/policy/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy NHI archetypes exist
+            path: packages/debate_core/src/debate_core/arguments/archetypes/library/policy/nhi.yaml
+            contentMatch: "T-establish"
+          - type: test_passes
+            name: Policy library validates
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_archetypes.py, -k, policy]
+      - id: ld-pf-library
+        kind: Task
+        name: LD and PF archetypes
+        description: >-
+          LD space colonization frameworks, kritiks and contention-level attacks; PF moratorium arguments
+          for both sides, structured as contention templates with weighing hints.
+        dependsOn: [schema]
+        outputs:
+          - packages/debate_core/src/debate_core/arguments/archetypes/library/ld/
+          - packages/debate_core/src/debate_core/arguments/archetypes/library/pf/
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: LD archetypes exist
+            path: packages/debate_core/src/debate_core/arguments/archetypes/library/ld/space_colonization.yaml
+            contentMatch: "colonialism"
+          - type: artifact_exists
+            name: PF archetypes exist
+            path: packages/debate_core/src/debate_core/arguments/archetypes/library/pf/dc_moratorium.yaml
+            contentMatch: "regulate"
+          - type: test_passes
+            name: LD/PF library validates
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_archetypes.py, -k, "ld or pf"]
+      - id: loader
+        kind: Task
+        name: Library loader
+        description: >-
+          Load a library version into GraphRepository idempotently; CLI command to list and load.
+        dependsOn: [policy-library, ld-pf-library]
+        outputs: [packages/debate_core/src/debate_core/arguments/archetypes/loader.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Loader tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_archetypes.py, -k, loader]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+      - id: coach-review
+        kind: Task
+        name: Coach review
+        description: >-
+          Walk the coach through the library; record accepted/changed archetypes and publish version 1.0.0.
+        dependsOn: [loader]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Library changelog exists
+            path: packages/debate_core/src/debate_core/arguments/archetypes/library/CHANGELOG.md
+            contentMatch: "1.0.0"
+          - type: custom
+            name: Coach approves archetype library
+            description: >-
+              Coach confirms each current-topic archetype reflects what the team expects to hit this season
+              and that trigger features are sensible.
+status:
+  phase: Pending

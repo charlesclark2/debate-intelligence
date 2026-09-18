@@ -1,0 +1,141 @@
+# TASK v2-e10-t03-github-oidc-deploy — GitHub OIDC deploy roles
+# Epic: E10 AWS & Infrastructure-as-Code Foundation | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §4 GitHub Actions + ECR, §5, §14 least-privilege IAM, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e10-t03-github-oidc-deploy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+  annotations:
+    debate/title: GitHub OIDC deploy roles
+    debate/architecture-refs: §4, §5, §14, §15
+spec:
+  description: >-
+    Let GitHub Actions reach AWS without long-lived keys. Create the GitHub OIDC identity provider and,
+    per environment, three least-privilege roles: a read-only plan role (assumable from pull requests),
+    an apply role (assumable only from main / protected environments with required reviewers for prod)
+    and an app-deploy role (push to ECR, update ECS services). Wire reusable workflows that assume them.
+    This task does NOT define what gets deployed (API deploy is E12-t04, workers E13-t02, web E14-t03);
+    it supplies the trust relationships and reusable workflow plumbing they call.
+  priority: 1
+  constraints:
+    packages: [infrastructure/modules/github_oidc, infrastructure/envs, .github/workflows]
+    forbidden:
+      - Long-lived AWS access keys stored as GitHub secrets
+      - Trust policies with wildcard repository or branch subjects (e.g. repo:*)
+      - AdministratorAccess or "*:*" on any CI role
+      - Pull-request workflows able to assume apply or deploy roles
+  context:
+    - kind: TaskRef
+      name: v2-e10-t02-terraform-bootstrap
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An IAM OIDC provider for token.actions.githubusercontent.com exists in each environment account,
+        and role trust policies pin aud=sts.amazonaws.com and a sub scoped to this repository.
+    - id: ac2
+      description: >-
+        The plan role trusts pull_request subjects and has read-only permissions plus state-bucket access;
+        apply/deploy roles trust only refs/heads/main or the named GitHub environment.
+    - id: ac3
+      description: >-
+        Prod apply requires a GitHub environment with required reviewers; a PR workflow attempting to
+        assume the prod apply role fails with AccessDenied.
+    - id: ac4
+      description: >-
+        A CI run on a PR posts terraform plan output for dev using the plan role, and no AWS secret keys
+        exist in the repository or organization secrets.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e10-t03-github-oidc-deploy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+spec:
+  description: >-
+    Build a reusable OIDC module, instantiate it per environment with scoped roles, then switch CI to
+    plan-on-PR and apply-on-main using those roles and prove the negative cases.
+  goalRef:
+    name: v2-e10-t03-github-oidc-deploy
+  graph:
+    nodes:
+      - id: oidc-module
+        kind: Task
+        name: github_oidc Terraform module
+        description: >-
+          Module creating the OIDC provider and parameterized roles (plan/apply/deploy) with trust
+          conditions on aud and sub, and inline least-privilege policies passed in by the caller.
+        outputs: [infrastructure/modules/github_oidc/main.tf, infrastructure/modules/github_oidc/variables.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: OIDC module pins the audience condition
+            path: infrastructure/modules/github_oidc/main.tf
+            contentMatch: "token.actions.githubusercontent.com:aud"
+      - id: env-roles
+        kind: Task
+        name: Per-environment role instances
+        description: >-
+          Instantiate the module in dev/stage/prod with subjects for pull_request (plan),
+          refs/heads/main and environment:prod (apply/deploy); scope deploy to ECR push and
+          ecs:UpdateService on tagged resources.
+        dependsOn: [oidc-module]
+        outputs: [infrastructure/envs/dev/ci_roles.tf, infrastructure/envs/prod/ci_roles.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates with CI roles
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: command_succeeds
+            name: dev plan succeeds
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock-timeout=60s]
+      - id: ci-workflows
+        kind: Task
+        name: Plan-on-PR and apply-on-main workflows
+        description: >-
+          Add reusable workflows using aws-actions/configure-aws-credentials with role-to-assume,
+          id-token write permission, plan comment on PRs, and gated apply per GitHub environment.
+        dependsOn: [env-roles]
+        outputs: [.github/workflows/terraform-plan.yml, .github/workflows/terraform-apply.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Plan workflow requests an OIDC token
+            path: .github/workflows/terraform-plan.yml
+            contentMatch: "id-token: write"
+      - id: negative-tests
+        kind: Task
+        name: Prove least privilege
+        description: >-
+          From a PR branch, attempt to assume the prod apply role and to write to ECR with the plan role;
+          both must fail. Record results and remove any legacy access keys.
+        dependsOn: [ci-workflows]
+        outputs: [docs/runbooks/ci-aws-access.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Negative assume-role checks recorded
+            description: >-
+              Coach reviews the CI logs showing AccessDenied for the PR-to-prod-apply attempt and
+              confirms no AWS access keys exist in GitHub secrets.
+          - type: artifact_exists
+            name: CI AWS access runbook exists
+            path: docs/runbooks/ci-aws-access.md
+status:
+  phase: Pending

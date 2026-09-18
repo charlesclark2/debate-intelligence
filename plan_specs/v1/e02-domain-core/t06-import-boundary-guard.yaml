@@ -1,0 +1,137 @@
+# TASK v1-e02-t06-import-boundary-guard — Import-boundary enforcement
+# Epic: E02 Domain Core: Entities, Ports & Local Persistence | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §1 (primary rule), §6 (no AWS SDK in domain), §17 guardrails, §20 step 1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e02-t06-import-boundary-guard
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+  annotations:
+    debate/title: Import-boundary enforcement
+    debate/architecture-refs: §1, §6, §17, §20 step 1
+spec:
+  description: >-
+    Make the ports-and-adapters architecture mechanically enforced with import-linter contracts run by
+    `uv run lint-imports` (already a CI job from E01-t04): debate_core.domain and
+    debate_core.application may not import boto3/botocore, httpx, typer, rich or fastapi; domain may
+    not import application or integrations; debate_core may never import debate_cli, debate_api or
+    debate_workers; and delivery packages may import debate_core.application but not
+    debate_core.integrations internals except through the composition root. A lightweight AST check
+    flags debate_cli/debate_api modules that exceed a thin-handler budget. Does not refactor existing
+    code beyond what is needed to satisfy the contracts.
+  priority: 2
+  constraints:
+    packages: [pyproject.toml (importlinter), scripts, .github/workflows]
+    forbidden:
+      - Broad ignore_imports entries that exempt whole packages
+      - Disabling a contract to get CI green
+  context:
+    - kind: TaskRef
+      name: v1-e02-t02-ports
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t04-ci-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        import-linter forbidden and layers contracts are configured and `uv run lint-imports` passes on
+        main.
+    - id: ac2
+      description: >-
+        A fixture branch adding `import boto3` to debate_core.application makes lint-imports fail with
+        the contract name in the output.
+    - id: ac3
+      description: >-
+        scripts/check_thin_handlers.py fails when a CLI command or API route function contains more than
+        the configured statement budget or imports from debate_core.integrations directly.
+    - id: ac4
+      description: >-
+        The import-boundaries CI job runs both checks and is a required status check.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e02-t06-import-boundary-guard-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+spec:
+  description: >-
+    Configure contracts, add negative tests proving they bite, add the thin-handler check, and wire
+    both into the existing CI job.
+  goalRef:
+    name: v1-e02-t06-import-boundary-guard
+  graph:
+    nodes:
+      - id: contracts
+        kind: Task
+        name: import-linter contracts
+        description: >-
+          [tool.importlinter] with forbidden (no AWS SDK/httpx/typer/fastapi in domain+application),
+          layers (domain < application < integrations) and independence (core vs delivery) contracts.
+        outputs: [pyproject.toml]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: lint-imports passes
+            command: uv
+            args: [run, lint-imports]
+      - id: negative-tests
+        kind: Task
+        name: Tests that contracts fail on violations
+        description: >-
+          pytest that copies a minimal package tree with a forbidden import into tmp_path and asserts
+          lint-imports exits non-zero naming the contract.
+        dependsOn: [contracts]
+        outputs: [tests/architecture/test_import_contracts.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contract violation tests pass
+            command: uv
+            args: [run, pytest, tests/architecture/test_import_contracts.py]
+      - id: thin-handlers
+        kind: Task
+        name: Thin-handler AST check
+        description: >-
+          scripts/check_thin_handlers.py walks debate_cli commands and debate_api routes, enforcing a
+          statement budget and no direct integrations imports.
+        dependsOn: [contracts]
+        outputs: [scripts/check_thin_handlers.py, tests/architecture/test_thin_handlers.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Thin-handler check tests pass
+            command: uv
+            args: [run, pytest, tests/architecture/test_thin_handlers.py]
+      - id: ci-wiring
+        kind: Task
+        name: Wire into the import-boundaries CI job
+        description: >-
+          Extend the existing import-boundaries job in ci.yml to run both checks.
+        dependsOn: [negative-tests, thin-handlers]
+        outputs: [.github/workflows/ci.yml]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CI runs the thin-handler check
+            path: .github/workflows/ci.yml
+            contentMatch: "check_thin_handlers.py"
+          - type: command_succeeds
+            name: Thin-handler check passes on the repo
+            command: uv
+            args: [run, scripts/check_thin_handlers.py]
+status:
+  phase: Pending

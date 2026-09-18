@@ -1,0 +1,155 @@
+# TASK v3-e21-t04-graph-queries — Coverage and coherence query primitives
+# Epic: E21 Argument Graph | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §7 ArgumentTable, §13 Argument graph, ADR-007, ADR-008
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e21-t04-graph-queries
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+  annotations:
+    debate/title: Coverage and coherence query primitives
+    debate/architecture-refs: §13, §16, ADR-008
+spec:
+  description: >-
+    Provide deterministic query primitives on ArgumentGraphService that coverage analysis (E22) and file
+    auditing (E23) build on: answers_to(node) across graphs, unanswered(target nodes, responding graphs),
+    chain_completeness for a disadvantage (uniqueness, link, internal link, impact) and an advantage (harms,
+    internal link, impact, solvency), and contradiction detection. Queries load a bounded graph partition
+    through GraphRepository into an in-memory adjacency and never call a model. Boundaries: gap
+    classification policy is E22-t04, shell identification and coherence findings are E23, and this task
+    writes no nodes or edges.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application]
+    forbidden:
+      - Model calls inside query primitives
+      - Direct DynamoDB access (queries use GraphRepository only)
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+  context:
+    - kind: TaskRef
+      name: v3-e21-t01-graph-repository
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        answers_to(node_ref, min_confidence) returns inbound ANSWERS, TURNS and MITIGATES edges from any
+        loaded graph, each marked card-backed or analytic-only.
+    - id: ac2
+      description: >-
+        unanswered(targets, responding_graphs, policy) returns target nodes with no response edge meeting
+        the policy (minimum confidence, card backing required or not).
+    - id: ac3
+      description: >-
+        chain_completeness(root) returns present, missing or ambiguous for every step of the configured
+        chain template with the node refs used, for disadvantage and advantage templates.
+    - id: ac4
+      description: >-
+        contradictions(graph) reports CONTRADICTS edges plus structural contradictions (a link turn and an
+        impact turn on the same disadvantage from one side, conflicting uniqueness directions), each with
+        node refs.
+    - id: ac5
+      description: >-
+        All primitives are pure over the adjacency, covered by hypothesis property tests, and run in under
+        200 ms on a 5,000-node synthetic graph.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e21-t04-graph-queries-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+spec:
+  description: >-
+    Adjacency loading first, then the response queries, chain completeness, contradictions and performance
+    and property tests.
+  goalRef:
+    name: v3-e21-t04-graph-queries
+  graph:
+    nodes:
+      - id: adjacency
+        kind: Task
+        name: Graph adjacency loader
+        description: >-
+          Load one or more graphs through GraphRepository into an immutable adjacency with inbound/outbound
+          indexes and a size cap.
+        outputs: [packages/debate_core/src/debate_core/arguments/graph_queries.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Adjacency tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_graph_queries.py, -k, adjacency]
+      - id: response-queries
+        kind: Task
+        name: answers_to and unanswered
+        description: >-
+          Response edge lookup with support classification and a ResponsePolicy value object.
+        dependsOn: [adjacency]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Response query tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/test_graph_queries.py
+              - "-k"
+              - answers or unanswered
+      - id: chain-completeness
+        kind: Task
+        name: Chain completeness
+        description: >-
+          Chain templates as data (DA and advantage), path search over LINKS_TO/IMPACTS/SUPPORTS/SOLVES with
+          ambiguity when several candidates tie.
+        dependsOn: [adjacency]
+        outputs: [packages/debate_core/src/debate_core/arguments/chain_templates.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Chain completeness tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_graph_queries.py, -k, chain]
+      - id: contradictions
+        kind: Task
+        name: Contradiction detection
+        description: >-
+          Explicit CONTRADICTS edges, double-turn detection and uniqueness-direction conflicts.
+        dependsOn: [adjacency]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contradiction tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_graph_queries.py, -k, contradiction]
+      - id: props-perf
+        kind: Task
+        name: Property and performance tests
+        description: >-
+          Hypothesis generators for random graphs, invariants (e.g. unanswered is the complement of
+          answered), 5k-node timing test, type check.
+        dependsOn: [response-queries, chain-completeness, contradictions]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Property and performance tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_graph_queries_properties.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

@@ -1,0 +1,113 @@
+# TASK v1-e07-t04-semantic-scholar-adapter — Semantic Scholar adapter
+# Epic: E07 Discovery Provider Adapters | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §9 Discovery adapters (scholarly), §14 (secrets), §15, §21 ref 9
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t04-semantic-scholar-adapter
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: Semantic Scholar adapter
+    debate/architecture-refs: §9, §14, §15, §21
+spec:
+  description: >-
+    Implement SemanticScholarProvider using the Academic Graph API /graph/v1/paper/search with a fields list
+    (title, authors, year, publicationDate, venue, externalIds, citationCount, influentialCitationCount,
+    isOpenAccess, openAccessPdf, publicationTypes, abstract) and a publicationDateOrYear range filter. An
+    optional API key (x-api-key) is read from settings/env and never logged; without a key the adapter
+    uses a stricter default rate limit. Maps to CandidateResult with S2 paper id, DOI/arXiv/PMID, citation
+    counts and the open-access PDF link. Boundaries: search only, no citation-graph traversal, no PDF
+    download.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations]
+    forbidden:
+      - Logging or persisting the API key
+      - Live Semantic Scholar calls in CI (respx fixtures only)
+      - Exceeding the unauthenticated shared rate limit when no key is configured
+  context:
+    - kind: TaskRef
+      name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With a key configured the x-api-key header is sent; without it no header is sent and the per-host
+        interval defaults to the unauthenticated limit.
+    - id: ac2
+      description: >-
+        Fixtures map to CandidateResults including externalIds (DOI, ArXiv, PubMed), citationCount and
+        openAccessPdf.url.
+    - id: ac3
+      description: >-
+        The adapter passes the contract kit, and a redaction test confirms the key never appears in logs
+        or error messages.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t04-semantic-scholar-adapter-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Record fixtures, implement keyed/unkeyed requests with redaction, map results, run contract kit.
+  goalRef:
+    name: v1-e07-t04-semantic-scholar-adapter
+  graph:
+    nodes:
+      - id: record-fixtures
+        kind: Task
+        name: Record Semantic Scholar fixtures
+        description: >-
+          Capture paper/search responses with and without open-access PDFs plus a 429 response.
+        outputs: [tests/fixtures/providers/semantic_scholar/]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Semantic Scholar fixtures recorded
+            path: tests/fixtures/providers/semantic_scholar/paper_search.json
+      - id: keyed-client
+        kind: Task
+        name: Keyed/unkeyed client with redaction
+        description: >-
+          Build requests with fields and date range; attach key when present; redact key in logs and errors.
+        dependsOn: [record-fixtures]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/semantic_scholar.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Client and redaction tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/search/test_semantic_scholar.py
+              - -k
+              - "key or request"
+      - id: result-mapping
+        kind: Task
+        name: Paper to CandidateResult mapping
+        description: >-
+          Map papers to CandidateResult and run the contract kit.
+        dependsOn: [keyed-client]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full Semantic Scholar adapter tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_semantic_scholar.py]
+status:
+  phase: Pending

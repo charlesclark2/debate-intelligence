@@ -1,0 +1,148 @@
+# TASK v2-e18-t01-card-parser — Pasted-card parser
+# Epic: E18 Card Extensions | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §3 V2 extension story, §8 (provenance modes), §12 Extend a Card, §16 (golden fixtures)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e18-t01-card-parser
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+  annotations:
+    debate/title: Pasted-card parser
+    debate/architecture-refs: §3, §8, §12, §16
+spec:
+  description: >-
+    Deterministically parse a card pasted from Word/Verbatim (clipboard HTML) or plain text into a
+    ParsedCard: tag, cite (short cite like "Smith 26" plus the full citation block), evidence paragraphs,
+    and underline/highlight/bold spans as offsets into the parsed evidence text when rich formatting is
+    present. Layout detection is driven by the v1-e06-t03 format profiles (tag heading style, cite
+    formatting, condensed vs paragraph evidence) with heuristics for common Verbatim layouts and plain-text
+    pastes. Pasted cards have provenance_mode=PASTED (not snapshot-backed) and are never labeled VERIFIED.
+    This is pure parsing: no model calls. It does NOT extract claim/warrant components (t02) or generate
+    extensions (t03).
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence, debate_core.domain]
+    forbidden:
+      - Model/LLM calls in the parser (deterministic code only)
+      - Altering evidence text beyond the v1 normalizer (no spelling fixes, no re-wrapping words)
+      - Marking a pasted card VERIFIED or snapshot-backed
+      - Executing or rendering pasted HTML server-side beyond sanitizing parse (no remote resource loads)
+  context:
+    - kind: TaskRef
+      name: v1-e06-t03-format-profiles
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Given clipboard HTML copied from a Verbatim file, the parser returns tag, short cite, full cite and
+        evidence with underline and highlight spans whose offsets reproduce the formatted runs exactly.
+    - id: ac2
+      description: >-
+        Plain-text pastes (no formatting) parse tag, cite and evidence on at least 18 of 20 golden fixtures,
+        with spans empty and a formatting_present=false flag.
+    - id: ac3
+      description: >-
+        Unparseable input returns a ParseResult with status=AMBIGUOUS and per-field confidence rather than
+        raising or guessing silently.
+    - id: ac4
+      description: >-
+        Every ParsedCard carries provenance_mode=PASTED, parser_version and the matched format profile id.
+    - id: ac5
+      description: >-
+        Pasted HTML is sanitized (scripts, images, remote styles removed) before parsing, verified by tests
+        with malicious fixtures.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e18-t01-card-parser-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+spec:
+  description: >-
+    Collect pasted-card fixtures, model ParsedCard, then build the HTML and plain-text parsers with profile
+    detection, and gate on golden fixtures.
+  goalRef:
+    name: v2-e18-t01-card-parser
+  graph:
+    nodes:
+      - id: fixtures
+        kind: Task
+        name: Pasted-card golden fixtures
+        description: >-
+          Capture 20+ clipboard HTML and plain-text pastes from team files (Policy, LD, PF) with expected
+          ParsedCard JSON, plus malicious HTML fixtures.
+        outputs: [tests/fixtures/pasted_cards/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Fixture index exists
+            path: tests/fixtures/pasted_cards/index.json
+      - id: parsed-card-model
+        kind: Task
+        name: ParsedCard and ParseResult models
+        description: Pydantic models with provenance_mode, per-field confidence and span offsets.
+        outputs: [packages/debate_core/src/debate_core/evidence/parsed_card.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ParsedCard model exists
+            path: packages/debate_core/src/debate_core/evidence/parsed_card.py
+            contentMatch: "class ParsedCard"
+      - id: html-parser
+        kind: Task
+        name: Sanitizing clipboard-HTML parser
+        description: >-
+          Sanitize with an allow-list, walk runs to collect underline/highlight/bold spans, and classify
+          blocks into tag/cite/evidence using format-profile rules.
+        dependsOn: [fixtures, parsed-card-model]
+        outputs: [packages/debate_core/src/debate_core/evidence/card_parser/html.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: HTML parser golden tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_card_parser.py, -k, html]
+      - id: text-parser
+        kind: Task
+        name: Plain-text parser and ambiguity handling
+        description: >-
+          Heuristics for tag line, short cite pattern (Author YY), bracketed full cite and evidence body;
+          AMBIGUOUS result with confidences when rules conflict.
+        dependsOn: [fixtures, parsed-card-model]
+        outputs: [packages/debate_core/src/debate_core/evidence/card_parser/text.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Plain-text parser golden tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_card_parser.py, -k, text]
+      - id: quality-gates
+        kind: Task
+        name: Full suite and gates
+        description: Run the whole parser suite, type check and import boundaries.
+        dependsOn: [html-parser, text-parser]
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card parser suite passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_card_parser.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

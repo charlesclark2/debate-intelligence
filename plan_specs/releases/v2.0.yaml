@@ -1,0 +1,117 @@
+# RELEASE v2.0 — Cloud platform foundation
+# Major version: V2. Epics: E10, E11, E12
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v2-0
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.0
+  annotations:
+    debate/title: v2.0 — Cloud platform foundation
+spec:
+  description: >-
+    AWS accounts/Terraform/CI deploy, DynamoDB + S3 repositories passing the same contract tests, Cognito
+    auth and the FastAPI service are live in dev/stage.
+  priority: 5
+  acceptanceCriteria:
+  - id: epic-e10
+    description: >-
+      Epic E10 (AWS & Infrastructure-as-Code Foundation) goal is Succeeded.
+  - id: epic-e11
+    description: >-
+      Epic E11 (Cloud Persistence Adapters) goal is Succeeded.
+  - id: epic-e12
+    description: >-
+      Epic E12 (Identity & API Service) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v2.0.0 is pushed and CHANGELOG.md has a v2.0 section.
+  - id: gate
+    description: >-
+      Gate release-v2-0-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v2-0-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.0
+spec:
+  gateType: review
+  description: >-
+    Release review for v2.0 (Cloud platform foundation): demo the release goal end to end, confirm CI
+    green on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v2-0-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.0
+spec:
+  description: >-
+    Release plan for v2.0: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v2-0
+  series: v2
+  version: v2.0
+  graph:
+    nodes:
+    - id: e10
+      kind: External
+      name: Epic E10 — AWS & Infrastructure-as-Code Foundation
+      inputs:
+        goalRef: v2-e10-aws-foundation
+        specRef: plan_specs/v2/e10-aws-foundation/epic.yaml
+    - id: e11
+      kind: External
+      name: Epic E11 — Cloud Persistence Adapters
+      inputs:
+        goalRef: v2-e11-cloud-persistence
+        specRef: plan_specs/v2/e11-cloud-persistence/epic.yaml
+    - id: e12
+      kind: External
+      name: Epic E12 — Identity & API Service
+      inputs:
+        goalRef: v2-e12-identity-api
+        specRef: plan_specs/v2/e12-identity-api/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v2.0.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e10
+      - e11
+      - e12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v2.0.0
+    - id: release-review
+      kind: Gate
+      name: v2.0 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v2-0-gate
+status:
+  phase: Pending

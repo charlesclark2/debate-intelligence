@@ -1,0 +1,143 @@
+# TASK v3-e21-t05-graph-eval — Graph extraction evaluation
+# Epic: E21 Argument Graph | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §10 prompt/version governance, §13 Argument graph, §16 argument extraction eval
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e21-t05-graph-eval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+  annotations:
+    debate/title: Graph extraction evaluation
+    debate/architecture-refs: §10, §16
+spec:
+  description: >-
+    Measure node and edge extraction against coach labels and gate prompt/model promotion on the results.
+    The labeled set covers the current topics (Policy national health insurance aff and neg files, LD space
+    colonization AC/NC, PF data-center moratorium pro/con) plus prior-season files, drawn from the scrubbed
+    fixtures in tests/fixtures/debate_files. Metrics are node-type accuracy, edge precision/recall by
+    relationship, and support-citation accuracy, run offline in CI against replay recordings and plugged
+    into the E09 promotion gate. Boundaries: parser accuracy is E20-t04 and coverage accuracy is E22-t06.
+  priority: 2
+  constraints:
+    packages: [tests/evals, tests/fixtures, docs/evals]
+    forbidden:
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+      - Promoting a prompt or model version without an eval comparison against the baseline
+      - >-
+        Committing unscrubbed team files to tests/fixtures (student names, docProps author/lastModifiedBy,
+        comments, tracked-change authors)
+  context:
+    - kind: TaskRef
+      name: v3-e21-t03-edge-extraction
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        At least 12 files are labeled with node types, edges and supporting cards following
+        docs/evals/argument-graph-labeling.md, and the coach has approved the labels.
+    - id: ac2
+      description: >-
+        Reports give node-type accuracy and macro-F1, edge precision/recall/F1 per relationship type,
+        support-citation precision, and a count of invalid references that must be 0.
+    - id: ac3
+      description: >-
+        Initial gate thresholds: node-type accuracy at least 0.85, edge F1 at least 0.65 overall and 0.75
+        for SUPPORTS and ANSWERS, support-citation precision at least 0.95; a candidate may not regress more
+        than 2 points on any of them.
+    - id: ac4
+      description: >-
+        CI runs the eval offline on replay recordings; re-recording against Bedrock is a manual workflow
+        with a cost cap.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e21-t05-graph-eval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+spec:
+  description: >-
+    Write the labeling guide, label with the coach, build the harness and metrics, then connect to the
+    promotion gate.
+  goalRef:
+    name: v3-e21-t05-graph-eval
+  graph:
+    nodes:
+      - id: label-guide
+        kind: Task
+        name: Labeling guide
+        description: >-
+          Definitions and worked examples for each node type and relationship in debate terms, including
+          edge cases (TURNS vs ANSWERS, analytic vs card-backed).
+        outputs: [docs/evals/argument-graph-labeling.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Labeling guide exists
+            path: docs/evals/argument-graph-labeling.md
+            contentMatch: "TURNS"
+      - id: dataset
+        kind: Task
+        name: Labeled graph dataset
+        description: >-
+          Labels keyed by section_path and parsed card hash so they survive re-parses.
+        dependsOn: [label-guide]
+        outputs: [tests/fixtures/graph_labels/]
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Graph labels exist
+            path: tests/fixtures/graph_labels/MANIFEST.md
+            contentMatch: "space colonization"
+          - type: custom
+            name: Coach approves graph labels
+            description: >-
+              Coach reviews labels for at least 4 files (one per format plus one NHI neg file) and signs off
+              on the labeling guide.
+      - id: harness
+        kind: Task
+        name: Eval harness and metrics
+        description: >-
+          Match predicted to labeled nodes by section path, compute metrics, write JSON/Markdown reports
+          with confusion matrices and per-file errors.
+        dependsOn: [dataset]
+        outputs: [tests/evals/argument_graph/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Metric tests pass
+            command: uv
+            args: [run, pytest, tests/evals/argument_graph/test_metrics.py]
+      - id: gate
+        kind: Task
+        name: Baseline and promotion gate
+        description: >-
+          Record replay fixtures once, commit the baseline and register the eval with the E09 promotion
+          gate.
+        dependsOn: [harness]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Graph baseline committed
+            path: tests/evals/baselines/argument_graph.json
+            contentMatch: "node_type_accuracy"
+          - type: test_passes
+            name: Graph eval passes offline
+            command: uv
+            args: [run, pytest, tests/evals/argument_graph, -m, eval]
+status:
+  phase: Pending

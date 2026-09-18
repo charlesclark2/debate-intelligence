@@ -1,0 +1,133 @@
+# TASK v1-e02-t04-repo-contract-tests — Reusable repository contract test suite
+# Epic: E02 Domain Core: Entities, Ports & Local Persistence | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §7, §16 (contract tests for repository interfaces), §17 (swap implementations, not use cases)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e02-t04-repo-contract-tests
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+  annotations:
+    debate/title: Reusable repository contract test suite
+    debate/architecture-refs: §7, §16, §17
+spec:
+  description: >-
+    Write implementation-agnostic pytest contract suites for every persistence port so the V2
+    DynamoDB/S3 adapters must behave exactly like the V1 local ones: CRUD, get-missing raises
+    NotFound, idempotent put of identical content, immutability of blobs, optimistic concurrency on
+    Card revisions, and stable listing order/pagination. Suites are packaged in debate_core.testing
+    as abstract test classes parametrized by an adapter factory fixture and run here against the
+    in-memory fakes (t02) and local adapters (t03). Cloud adapters opt in during V2; this task writes
+    no cloud code.
+  priority: 2
+  constraints:
+    packages: [debate_core.testing, debate_core tests]
+    forbidden:
+      - Contract tests that reach into adapter internals (tables, file paths)
+      - Network or cloud access (moto/LocalStack wiring belongs to V2)
+  context:
+    - kind: TaskRef
+      name: v1-e02-t03-local-repositories
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Contract classes exist for SnapshotStore, ArticleRepository, CardRepository and SearchRepository,
+        each importable from debate_core.testing.contracts.
+    - id: ac2
+      description: >-
+        Every contract runs against both the in-memory fake and the local adapter, and all pass.
+    - id: ac3
+      description: >-
+        The CardRepository contract proves two writers with the same expected_revision result in exactly
+        one success and one RevisionMismatch.
+    - id: ac4
+      description: >-
+        A README in the contracts module explains how a new adapter (e.g. DynamoDbCardRepository) opts in
+        with a single fixture.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e02-t04-repo-contract-tests-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+spec:
+  description: >-
+    Build the fixture/parametrization harness, write the blob and repository contracts, then bind
+    them to fakes and local adapters.
+  goalRef:
+    name: v1-e02-t04-repo-contract-tests
+  graph:
+    nodes:
+      - id: harness
+        kind: Task
+        name: Contract harness and entity factories
+        description: >-
+          Base contract class pattern with an abstract `make_adapter` fixture, and polyfactory-style
+          builders for valid domain entities.
+        outputs: [packages/debate_core/src/debate_core/testing/contracts/__init__.py,
+                  packages/debate_core/src/debate_core/testing/builders.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Builders module exists
+            path: packages/debate_core/src/debate_core/testing/builders.py
+      - id: blob-contract
+        kind: Task
+        name: SnapshotStore contract
+        description: >-
+          Put/get/exists, content-addressed dedupe, immutability, NotFound on missing key.
+        dependsOn: [harness]
+        outputs: [packages/debate_core/src/debate_core/testing/contracts/snapshot_store.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: SnapshotStore contract passes for fake and filesystem adapters
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/contracts, -k, snapshot_store]
+      - id: repo-contracts
+        kind: Task
+        name: Article, Card and Search repository contracts
+        description: >-
+          CRUD, NotFound, idempotent upsert, revision conflict, listing order and cursor pagination.
+        dependsOn: [harness]
+        outputs:
+          - packages/debate_core/src/debate_core/testing/contracts/repositories.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Repository contracts pass for fakes and SQLite adapters
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/contracts, -k, "article or card or search"]
+      - id: bind-and-document
+        kind: Task
+        name: Bind adapters and document opt-in
+        description: >-
+          Concrete test modules binding fakes and local adapters; contracts README with the V2 opt-in
+          example.
+        dependsOn: [blob-contract, repo-contracts]
+        outputs: [packages/debate_core/src/debate_core/testing/contracts/README.md]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full contract suite passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/contracts]
+          - type: artifact_exists
+            name: Opt-in guide exists
+            path: packages/debate_core/src/debate_core/testing/contracts/README.md
+            contentMatch: "make_adapter"
+status:
+  phase: Pending

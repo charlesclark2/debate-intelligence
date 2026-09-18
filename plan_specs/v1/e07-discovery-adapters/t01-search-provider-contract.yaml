@@ -1,0 +1,137 @@
+# TASK v1-e07-t01-search-provider-contract — SearchProvider contract, health and circuit breaking
+# Epic: E07 Discovery Provider Adapters | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §9 Discovery adapters, §15 (timeouts, circuit breakers), §19 (API changes), §20 step 4
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t01-search-provider-contract
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: SearchProvider contract, health and circuit breaking
+    debate/architecture-refs: §9, §15, §19, §20 step 4
+spec:
+  description: >-
+    Finalize the SearchProvider port from v1-e02-t02-ports and the shared machinery every discovery adapter
+    uses. CandidateResult becomes the normalized unit: provider, provider_id, title, url, canonical_url,
+    identifiers (doi, openalex_id, s2_id, arxiv, pmid), source_type (scholarly | news | government |
+    think_tank | other), published_at, authors, venue, abstract/snippet, open-access links and raw
+    provider payload reference. A ProviderQuery carries text, since/until, max_results and language. A
+    ProviderRegistry builds enabled providers from settings; a ResilientProvider wrapper adds per-provider
+    timeout, a consecutive-failure circuit breaker with half-open probing, and health metrics (latency,
+    success/error counts, breaker state). A reusable contract test kit checks each adapter against its
+    recorded fixtures. Boundaries: concrete adapters are t02-t07; fan-out and dedupe are E08.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations]
+    forbidden:
+      - Provider-specific fields leaking into CandidateResult outside the identifiers/raw_ref slots
+      - Live provider calls in CI (recorded respx fixtures only)
+      - Retrying non-idempotent requests or ignoring provider rate limits
+  context:
+    - kind: TaskRef
+      name: v1-e02-t02-ports
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        SearchProvider.search(ProviderQuery) -> ProviderResponse(results, provider, elapsed, partial, error)
+        is the only discovery port, and CandidateResult validates identifiers (DOI normalized to lowercase,
+        no URL prefix) and timezone-aware published_at.
+    - id: ac2
+      description: >-
+        ResilientProvider enforces the configured timeout and opens the breaker after N consecutive
+        failures, skipping calls for the cool-down, then half-opens with a single probe.
+    - id: ac3
+      description: >-
+        ProviderRegistry instantiates only providers enabled in settings and exposes health snapshots
+        (state, last error, p50 latency, success/error counts) for the CLI provider status footer.
+    - id: ac4
+      description: >-
+        A contract test kit (fixture loader + assertions) exists and a FakeProvider passes it; each later
+        adapter imports it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t01-search-provider-contract-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Types, then the resilient wrapper, then the registry and health, then the reusable contract kit.
+  goalRef:
+    name: v1-e07-t01-search-provider-contract
+  graph:
+    nodes:
+      - id: candidate-types
+        kind: Task
+        name: CandidateResult, ProviderQuery and ProviderResponse
+        description: >-
+          Define the normalized models with identifier validation and SourceType enum; update the port.
+        outputs: [packages/debate_core/src/debate_core/domain/discovery.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Discovery model tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_discovery.py]
+      - id: resilient-wrapper
+        kind: Task
+        name: Timeout and circuit breaker wrapper
+        description: >-
+          Implement ResilientProvider with asyncio timeouts, a clock-injected breaker (closed/open/half-open)
+          and error classification into ProviderError types.
+        dependsOn: [candidate-types]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/resilience.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Breaker and timeout tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_resilience.py]
+      - id: registry-health
+        kind: Task
+        name: ProviderRegistry and health metrics
+        description: >-
+          Build providers from settings.providers (enabled, api keys, contact email), wrap each in
+          ResilientProvider and collect health snapshots.
+        dependsOn: [resilient-wrapper]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/registry.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Registry tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_registry.py]
+      - id: contract-kit
+        kind: Task
+        name: Provider contract test kit
+        description: >-
+          Shared fixtures/assertions under tests/contracts for adapters (maps fixture → expected
+          CandidateResults, error mapping, rate-limit headers) validated with a FakeProvider.
+        dependsOn: [candidate-types]
+        outputs: [packages/debate_core/tests/contracts/search_provider_contract.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: FakeProvider passes the contract kit
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_fake_provider.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

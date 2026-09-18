@@ -1,0 +1,186 @@
+# TASK v3-e21-t01-graph-repository — ArgumentTable and GraphRepository
+# Epic: E21 Argument Graph | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §7 ArgumentTable + future graph database note, §13 Argument graph, ADR-007, ADR-008
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e21-t01-graph-repository
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+  annotations:
+    debate/title: ArgumentTable and GraphRepository
+    debate/architecture-refs: §7, §13, ADR-007, ADR-008
+spec:
+  description: >-
+    Define the argument-graph domain model and the GraphRepository port, and implement it on a DynamoDB
+    ArgumentTable (PK GRAPH#<graph_id>, SK NODE#<node_id> or EDGE#<from>#<rel>#<to>) plus a local
+    implementation, both proven by a shared contract suite. Nodes and edges are explicit persisted
+    assertions with SourceRefs (file, section, parsed card or library card), confidence, origin and model
+    provenance; edges may reference nodes in another graph so later answer-file-to-case mapping works. Per
+    ADR-008 there is no Neptune: application code sees only the port, so a Neptune adapter could be added
+    later without application changes. Boundaries: extraction of nodes/edges is t02/t03, traversal queries
+    are t04, and archetype graph content is E22-t01.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.arguments, debate_core.integrations, infrastructure]
+    forbidden:
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+      - DynamoDB item shapes or boto3 types leaking through the GraphRepository port
+      - Introducing Amazon Neptune or another graph database (ADR-008)
+      - Nodes or edges without source references, confidence and origin
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v2-e11-t03-dynamodb-repositories
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t04-repo-contract-tests
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        ArgumentNode (argument_type from the §13 list plus SOLVENCY, FRAMEWORK and CONTENTION for LD/PF,
+        side, claim, warrant_summary, card_ids, section_path, SourceRefs, confidence, origin
+        EXTRACTED|ARCHETYPE|PREDICTED| COACH, GeneratedArtifactMetadata, revision) and ArgumentEdge
+        (qualified NodeRefs, relationship_type in
+        SUPPORTS/ANSWERS/TURNS/MITIGATES/CONTRADICTS/PREREQUISITE/LINKS_TO/SOLVES/IMPACTS/PERMUTES,
+        rationale, confidence, supporting refs) validate with Pydantic.
+    - id: ac2
+      description: >-
+        GraphRepository offers idempotent batch upsert with deterministic ids, get node, list nodes by type,
+        lookup by normalized-claim hash, outbound and inbound edges filtered by relationship, load_graph,
+        and delete_graph that removes nodes and edges together.
+    - id: ac3
+      description: >-
+        The DynamoDB ArgumentTable stores an inverse REDGE#<to>#<rel>#<from> item per edge for inbound
+        queries, a GSI for node type and a GSI for claim hash, and is provisioned by Terraform with
+        on-demand capacity, PITR and KMS encryption.
+    - id: ac4
+      description: >-
+        Local and DynamoDB (moto) implementations pass one contract suite covering re-upsert idempotency,
+        inbound/outbound symmetry, cross-graph NodeRefs, delete cascade and revision conflicts.
+    - id: ac5
+      description: >-
+        An import-linter contract prevents application/ and arguments/ modules from importing the DynamoDB
+        adapter.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e21-t01-graph-repository-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+spec:
+  description: >-
+    Domain types and the port first, then two implementations and the table, with the contract suite as the
+    shared definition of done.
+  goalRef:
+    name: v3-e21-t01-graph-repository
+  graph:
+    nodes:
+      - id: graph-domain
+        kind: Task
+        name: ArgumentNode and ArgumentEdge models
+        description: >-
+          Enums, NodeRef/SourceRef, ArgumentNode, ArgumentEdge, deterministic id helpers (hash of graph id,
+          source ref and type) and claim normalization for the claim-hash index.
+        outputs: [packages/debate_core/src/debate_core/domain/argument_graph.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Graph domain tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_argument_graph.py]
+      - id: graph-port
+        kind: Task
+        name: GraphRepository port
+        description: >-
+          Protocol with typed errors and pagination-free load_graph for bounded graphs (documented cap),
+          plus an import-linter contract for adapter isolation.
+        dependsOn: [graph-domain]
+        outputs: [packages/debate_core/src/debate_core/arguments/graph_repository.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: GraphRepository port exists
+            path: packages/debate_core/src/debate_core/arguments/graph_repository.py
+            contentMatch: "class GraphRepository"
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+      - id: local-impl
+        kind: Task
+        name: Local graph repository
+        description: >-
+          In-memory and SQLite-backed implementation used by the CLI, unit tests and later query tests.
+        dependsOn: [graph-port]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/local/graph_repository.py
+          - packages/debate_core/tests/contracts/test_graph_repository_contract.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contract suite passes locally
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/contracts/test_graph_repository_contract.py
+              - "-k"
+              - local
+      - id: argument-table
+        kind: Task
+        name: ArgumentTable Terraform
+        description: >-
+          Table with PK/SK, GSI1 (GRAPH#<id>#TYPE#<type>), GSI2 (CLAIM#<hash>), on-demand billing, PITR,
+          KMS.
+        outputs: [infrastructure/modules/argument_table/main.tf]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Terraform configuration validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: artifact_exists
+            name: ArgumentTable module exists
+            path: infrastructure/modules/argument_table/main.tf
+            contentMatch: "GRAPH#"
+      - id: dynamodb-impl
+        kind: Task
+        name: DynamoDB GraphRepository
+        description: >-
+          Batch writes of node, edge and inverse-edge items, conditional writes on revision, query helpers
+          and delete cascade; contract suite against moto.
+        dependsOn: [local-impl, argument-table]
+        outputs: [packages/debate_core/src/debate_core/integrations/aws/dynamodb_graph_repository.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contract suite passes for DynamoDB
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/contracts/test_graph_repository_contract.py
+              - "-k"
+              - dynamodb
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

@@ -1,0 +1,157 @@
+# TASK v2-e16-t05-relevance-eval — Search relevance evaluation
+# Epic: E16 Research Workspace UI | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §9 Ranking pipeline, §10 (promotion requires evaluation), §16 Testing and evaluation
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e16-t05-relevance-eval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+  annotations:
+    debate/title: Search relevance evaluation
+    debate/architecture-refs: §9, §10, §16
+spec:
+  description: >-
+    Create a team-labeled relevance set and harness so search quality is measured release over release
+    rather than by impression. Students and Charlie label ~40 queries drawn from current topics (Policy
+    national health insurance, LD space colonization, PF data-center moratorium) spanning argument/need
+    combinations (e.g. politics DA link, NHI solvency, moratorium econ impact), grading candidate results
+    0-3 against a written rubric. The harness replays the E15 pipeline over a frozen, recorded candidate
+    pool (no live providers or models) and reports NDCG@10 and precision@10 per query and overall, by
+    config variant (BM25-only, hybrid, hybrid+rerank). This task does NOT tune ranking weights (changes go
+    through E15 tasks) and is not the prompt promotion gate itself.
+  priority: 2
+  constraints:
+    packages: [evals/search_relevance, debate_core.retrieval]
+    forbidden:
+      - Live provider, OpenSearch or Bedrock calls in the CI eval run (frozen pool + replay router only)
+      - Storing student labeler names in the dataset (use anonymous labeler ids)
+      - Including copyrighted full article text in the repo beyond what recorded fixtures already hold
+      - Labels that grade sources by ideology rather than relevance to the stated need
+  context:
+    - kind: TaskRef
+      name: v2-e15-t05-rerank-rationale
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        evals/search_relevance/queries.jsonl holds at least 40 queries with topic, event (Policy/LD/PF),
+        argument, need and date window, and qrels.jsonl holds 0-3 grades with anonymous labeler ids.
+    - id: ac2
+      description: >-
+        A labeling rubric document defines each grade with debate-specific examples (e.g. a 3 for a link card
+        states the causal mechanism the need asks for) and reports inter-labeler agreement on a 10-query
+        overlap.
+    - id: ac3
+      description: >-
+        `uv run python -m evals.search_relevance.run --variant all` runs offline and writes a report with
+        NDCG@10 and precision@10 per variant and per event.
+    - id: ac4
+      description: >-
+        A CI job runs the eval on demand and on changes to retrieval/ranking code, failing if hybrid+rerank
+        NDCG@10 drops more than 0.02 below the committed baseline.
+    - id: ac5
+      description: >-
+        The v2.2 baseline report is committed and summarized for the release review.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e16-t05-relevance-eval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+spec:
+  description: >-
+    Write the rubric and query set, freeze a candidate pool, run a labeling session with the team, then build
+    the metrics harness and the CI regression job with a committed baseline.
+  goalRef:
+    name: v2-e16-t05-relevance-eval
+  graph:
+    nodes:
+      - id: rubric-queries
+        kind: Task
+        name: Rubric and query set
+        description: >-
+          Draft the 0-3 relevance rubric with debate examples and 40+ queries across the three current topics
+          and events.
+        outputs:
+          - evals/search_relevance/RUBRIC.md
+          - evals/search_relevance/queries.jsonl
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Rubric exists
+            path: evals/search_relevance/RUBRIC.md
+            contentMatch: "Grade 3"
+      - id: frozen-pool
+        kind: Task
+        name: Frozen candidate pool
+        description: >-
+          Record provider and pipeline outputs for each query once (top 30 per variant, pooled) into fixtures
+          with the replay router so the eval is reproducible offline.
+        dependsOn: [rubric-queries]
+        outputs: [evals/search_relevance/pool/]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Candidate pool manifest exists
+            path: evals/search_relevance/pool/manifest.json
+      - id: labeling
+        kind: Task
+        name: Team labeling session
+        description: >-
+          Run a labeling session with 4-6 debaters using a simple labeling sheet; export to qrels.jsonl with
+          anonymous labeler ids; compute agreement on the overlap set.
+        dependsOn: [frozen-pool]
+        outputs: [evals/search_relevance/qrels.jsonl]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Relevance judgments exist
+            path: evals/search_relevance/qrels.jsonl
+          - type: custom
+            name: Coach reviews label quality
+            description: >-
+              Charlie spot-checks 20 judgments against the rubric and signs off in the PR before the baseline
+              is committed.
+      - id: harness
+        kind: Task
+        name: Metrics harness
+        description: NDCG@10 and precision@10 implementation with unit tests and per-variant, per-event report.
+        dependsOn: [frozen-pool]
+        outputs: [evals/search_relevance/run.py, evals/search_relevance/metrics.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Metric unit tests pass
+            command: uv
+            args: [run, pytest, evals/search_relevance/tests]
+      - id: ci-baseline
+        kind: Task
+        name: CI regression job and committed baseline
+        description: >-
+          Run all variants, commit baseline.json and the report, and add a path-filtered CI job with a
+          0.02 NDCG@10 regression tolerance.
+        dependsOn: [labeling, harness]
+        outputs:
+          - evals/search_relevance/baseline.json
+          - .github/workflows/search-relevance-eval.yml
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Eval runs offline against the baseline
+            command: uv
+            args: [run, python, -m, evals.search_relevance.run, --variant, all, --check-baseline]
+status:
+  phase: Pending

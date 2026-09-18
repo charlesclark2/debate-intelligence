@@ -1,0 +1,98 @@
+# RELEASE v3.3 — Opponent data integrations
+# Major version: V3. Epics: E24
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v3-3
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.3
+  annotations:
+    debate/title: v3.3 — Opponent data integrations
+spec:
+  description: >-
+    Public OpenCaselist disclosures and Tabroom results are ingested with provenance and resolved to team
+    identities.
+  priority: 13
+  acceptanceCriteria:
+  - id: epic-e24
+    description: >-
+      Epic E24 (Opponent Data Integrations) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v3.3.0 is pushed and CHANGELOG.md has a v3.3 section.
+  - id: gate
+    description: >-
+      Gate release-v3-3-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v3-3-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.3
+spec:
+  gateType: review
+  description: >-
+    Release review for v3.3 (Opponent data integrations): demo the release goal end to end, confirm CI
+    green on the release tag, and confirm no evidence-integrity regressions. Includes sign-off on the
+    opponent-data governance policy.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v3-3-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.3
+spec:
+  description: >-
+    Release plan for v3.3: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v3-3
+  series: v3
+  version: v3.3
+  graph:
+    nodes:
+    - id: e24
+      kind: External
+      name: Epic E24 — Opponent Data Integrations
+      inputs:
+        goalRef: v3-e24-opponent-data
+        specRef: plan_specs/v3/e24-opponent-data/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v3.3.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e24
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v3.3.0
+    - id: release-review
+      kind: Gate
+      name: v3.3 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v3-3-gate
+status:
+  phase: Pending

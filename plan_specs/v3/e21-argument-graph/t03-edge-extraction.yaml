@@ -1,0 +1,163 @@
+# TASK v3-e21-t03-edge-extraction — Argument edge extraction
+# Epic: E21 Argument Graph | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §9 embeddings, §10 structured model contracts, §13 Argument graph
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e21-t03-edge-extraction
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+  annotations:
+    debate/title: Argument edge extraction
+    debate/architecture-refs: §9, §10, §13
+spec:
+  description: >-
+    Create typed ArgumentEdges between nodes. Candidate pairs come from two sources: structural rules (a
+    card SUPPORTS its tag's claim, an A2:/AT: block ANSWERS the argument it names, 1NC ordering suggests
+    LINKS_TO and IMPACTS, perm blocks PERMUTES) and Titan embedding nearest neighbours over node claims,
+    reusing the E15 embedding pipeline and cache. An ArgumentEdgeExtraction call (prompt
+    argument.edge_extraction) classifies each capped candidate pair into a relationship or NONE with
+    rationale, confidence and supporting node/card refs. Pairing works within one graph and across graphs (a
+    student answer file against another file or case graph) so E22 can map responses to predicted positions.
+    Boundaries: traversal queries are t04, evaluation is t05, and embeddings infrastructure is E15.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_workers, prompts]
+    forbidden:
+      - Persisting nodes, edges or findings whose card/node references do not resolve
+      - Persisting edges inferred from embedding similarity alone without a classified relationship
+      - Model calls without a registered prompt_id/semver and persisted GeneratedArtifactMetadata
+      - Treating OpenSearch as authoritative; DynamoDB/S3 remain the systems of record
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e21-t02-node-extraction
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e15-t03-embeddings-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        ArgumentEdgeExtraction (from/to NodeRef, relationship_type or NONE, rationale, confidence,
+        supporting_node_ids, supporting_card_ids) is registered as argument.edge_extraction with a semver.
+    - id: ac2
+      description: >-
+        Structural candidates and embedding kNN candidates (top-k per node, cosine threshold configurable)
+        are merged and de-duplicated, with pair counts capped per graph and per job budget and the cap
+        recorded when hit.
+    - id: ac3
+      description: >-
+        Cross-graph pairing takes a source graph and one or more target graphs and persists edges with
+        qualified NodeRefs.
+    - id: ac4
+      description: >-
+        Edges below the minimum confidence (default 0.5) are dropped; persisted edges must cite at least one
+        supporting node or card that resolves; dangling references fail validation.
+    - id: ac5
+      description: >-
+        The edge stage runs after the node stage in ExtractArgumentsJob, is idempotent, and records pairs
+        evaluated, edges kept and token cost in telemetry; tests run on replay fixtures.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e21-t03-edge-extraction-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+spec:
+  description: >-
+    Schema and prompt, the two candidate generators, classification with validation, then persistence in the
+    job stage.
+  goalRef:
+    name: v3-e21-t03-edge-extraction
+  graph:
+    nodes:
+      - id: schema-prompt
+        kind: Task
+        name: Edge schema and prompt
+        description: >-
+          Output schema with relationship definitions written for debaters (e.g. TURNS vs ANSWERS) and
+          prompt registration.
+        outputs:
+          - packages/debate_core/src/debate_core/arguments/edge_extraction.py
+          - prompts/argument/edge_extraction.yaml
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Edge extraction prompt registered
+            path: prompts/argument/edge_extraction.yaml
+            contentMatch: "prompt_id: argument.edge_extraction"
+      - id: structural-candidates
+        kind: Task
+        name: Structural candidate rules
+        description: >-
+          Rules for SUPPORTS, ANSWERS from A2:/AT: titles, 1NC chain order and perm blocks, with unit tests
+          on synthetic graphs.
+        outputs: [packages/debate_core/src/debate_core/arguments/edge_candidates.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Structural candidate tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_edge_candidates.py, -k, structural]
+      - id: embedding-candidates
+        kind: Task
+        name: Embedding nearest-neighbour candidates
+        description: >-
+          Embed node claims via the E15 pipeline (cache by claim hash + model version), in-memory cosine kNN
+          within and across graphs, caps and thresholds from settings.
+        dependsOn: [structural-candidates]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Embedding candidate tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_edge_candidates.py, -k, embedding]
+      - id: classify-validate
+        kind: Task
+        name: Classify pairs and validate
+        description: >-
+          Batched classification, reference validation, confidence filter, repair retry.
+        dependsOn: [schema-prompt, embedding-candidates]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Classification tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_edge_extraction.py]
+      - id: job-stage
+        kind: Task
+        name: Persist edges in ExtractArgumentsJob
+        description: >-
+          Edge stage with idempotent upserts and telemetry; cross-graph entry point for E22.
+        dependsOn: [classify-validate]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Edge stage tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_extract_arguments.py, -k, edges]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

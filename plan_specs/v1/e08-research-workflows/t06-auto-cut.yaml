@@ -1,0 +1,128 @@
+# TASK v1-e08-t06-auto-cut — `--auto-cut N` batch cutting
+# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §11 (`search ... --auto-cut 10`), §6 CardService, §8 hard failure rule, §15 (cost)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t06-auto-cut
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "`--auto-cut N` batch cutting"
+    debate/architecture-refs: §6, §8, §11, §15
+spec:
+  description: >-
+    Add `--auto-cut N` (with --output bundle.docx, --format, --concurrency, --max-cost) to `search`. A
+    BatchCutService in debate_core.application walks ranked results in order, skipping ones whose URL or
+    access hint is known inaccessible, and cuts until N cards are VERIFIED or candidates run out: each item
+    goes through ArticleService then CardService using the search's argument/need as the research need, with
+    a bounded concurrency semaphore and the model budget guard. Outputs one DOCX bundle (verified cards
+    grouped under the search as a block heading; any UNVERIFIED cards only in a separate clearly-bannered
+    section), a JSON manifest bundle, and a per-result report (rank, URL, access status, card status,
+    reasons, cost). Boundaries: reuses cut pipeline and renderer unchanged; digests are t07.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli]
+    forbidden:
+      - Placing UNVERIFIED cards among verified cards in the bundle
+      - Unbounded concurrency or retries that ignore per-host rate limits
+      - Business logic in debate_cli
+      - Live network or model calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e08-t05-search-command
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t06-cut-command
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t07-usage-telemetry
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `search "health insurance" --argument politics-da --need link --auto-cut 3` on fixtures produces a
+        DOCX bundle with 3 verified cards under one block heading and a matching JSON manifest bundle.
+    - id: ac2
+      description: >-
+        Paywalled or robots-disallowed results are skipped and listed in the report with their access
+        status; the batch continues to the next candidate.
+    - id: ac3
+      description: >-
+        No more than --concurrency cuts run at once (asserted with instrumented fakes), and the run stops
+        with a BUDGET_EXCEEDED report entry when --max-cost is reached.
+    - id: ac4
+      description: >-
+        The per-result report prints as a Rich table and is written as report.json beside the bundle;
+        exit code is 0 only if N verified cards were produced.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t06-auto-cut-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    Batch use case first, then bundle export, then CLI flag and report.
+  goalRef:
+    name: v1-e08-t06-auto-cut
+  graph:
+    nodes:
+      - id: batch-service
+        kind: Task
+        name: BatchCutService with concurrency and skipping
+        description: >-
+          Iterate ranked results with a semaphore, skip known-inaccessible items, stop at N verified or on
+          budget exhaustion, and produce BatchReport entries.
+        outputs: [packages/debate_core/src/debate_core/application/batch_cut_service.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Batch service tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_batch_cut_service.py]
+      - id: bundle-export
+        kind: Task
+        name: DOCX and manifest bundle export
+        description: >-
+          Render verified cards under a block heading and UNVERIFIED cards in a separate bannered section;
+          export one JSON manifest bundle.
+        dependsOn: [batch-service]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bundle export tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_export_service.py, -k, bundle]
+      - id: cli-auto-cut
+        kind: Task
+        name: --auto-cut flag and report output
+        description: >-
+          Add --auto-cut, --output, --format, --concurrency, --max-cost to search; render report table and
+          write report.json; fixture CLI tests.
+        dependsOn: [bundle-export]
+        outputs: [packages/debate_cli/src/debate_cli/presenters/batch_report_presenter.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: auto-cut CLI tests pass offline
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_search_command.py, -k, auto_cut]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

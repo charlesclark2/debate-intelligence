@@ -1,0 +1,134 @@
+# TASK v1-e03-t03-span-extraction — Span-addressed evidence extraction
+# Epic: E03 Evidence Integrity & Verification Engine | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §7 Card/CardSpan, §8 steps 3–4, ADR-006, §20 step 2
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e03-t03-span-extraction
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+  annotations:
+    debate/title: Span-addressed evidence extraction
+    debate/architecture-refs: §7, §8, ADR-006, §20 step 2
+spec:
+  description: >-
+    Implement EvidenceExtractor: the only code path that puts quoted text on a card. Given a
+    SourceSnapshot and a selection expressed as paragraph IDs and/or [start, end) character offsets
+    into the normalized text, it slices the evidence directly from the stored snapshot, represents
+    omitted ranges between selected segments explicitly (rendered as an ellipsis marker, never as
+    invented text), and builds CardSpan records for underline/highlight markup with purposes
+    claim/warrant/internal_link/impact that must fall inside the extracted evidence. The model-facing
+    CardSelection contract (E05/E06) will feed this; verification is t04 and the edit policy t05.
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence]
+    forbidden:
+      - Accepting evidence text as input (selections are ids/offsets only)
+      - Markup spans outside the extracted evidence ranges or overlapping in the same style
+      - Silently clamping out-of-range offsets (raise InvalidSelection instead)
+  context:
+    - kind: TaskRef
+      name: v1-e03-t02-hashing-provenance
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        extract(snapshot, selection) returns evidence segments whose text equals the normalized snapshot
+        text at the recorded offsets, for both paragraph-ID and offset selections.
+    - id: ac2
+      description: >-
+        Non-contiguous selections produce an ordered list of segments with explicit OmittedRange records;
+        overlapping or reversed ranges raise InvalidSelection.
+    - id: ac3
+      description: >-
+        CardSpan builders reject spans that are empty, out of evidence bounds, or overlap another span of
+        the same style, and record snapshot-relative offsets.
+    - id: ac4
+      description: >-
+        The extractor API has no parameter that accepts free text, enforced by a signature test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e03-t03-span-extraction-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+spec:
+  description: >-
+    Selection types, then segment extraction with omitted ranges, then markup span construction, then
+    property tests.
+  goalRef:
+    name: v1-e03-t03-span-extraction
+  graph:
+    nodes:
+      - id: selection-types
+        kind: Task
+        name: EvidenceSelection and segment types
+        description: >-
+          EvidenceSelection (paragraph_ids | offset ranges), EvidenceSegment, OmittedRange and
+          InvalidSelection error.
+        outputs: [packages/debate_core/src/debate_core/evidence/selection.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Selection module exists
+            path: packages/debate_core/src/debate_core/evidence/selection.py
+            contentMatch: "class EvidenceSelection"
+      - id: extractor
+        kind: Task
+        name: EvidenceExtractor
+        description: >-
+          Resolve paragraph IDs to offsets, validate and order ranges, slice from snapshot normalized
+          text, emit segments and omitted ranges.
+        dependsOn: [selection-types]
+        outputs: [packages/debate_core/src/debate_core/evidence/extractor.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Extraction tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_extractor.py]
+      - id: markup-spans
+        kind: Task
+        name: CardSpan construction
+        description: >-
+          Build underline/highlight CardSpans with purposes, validating containment and same-style
+          non-overlap; highlight must lie within underline per debate formatting convention.
+        dependsOn: [extractor]
+        outputs: [packages/debate_core/src/debate_core/evidence/markup.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Markup span tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_markup.py]
+      - id: property-tests
+        kind: Task
+        name: Property tests and type check
+        description: >-
+          hypothesis tests generating random snapshots and valid/invalid selections; signature test that
+          no extractor entry point takes a str of evidence.
+        dependsOn: [markup-spans]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Property tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence, -k, "extract or markup"]
+          - type: command_succeeds
+            name: pyright strict passes
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

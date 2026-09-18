@@ -1,0 +1,180 @@
+# TASK v3-e24-t02-opencaselist-adapter — OpenCaselist adapter
+# Epic: E24 Opponent Data Integrations | Release: v3.3 (Opponent data integrations) | Major: V3
+# Architecture refs: §9 Opponent data adapters, §13 Opponent intelligence, §14, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e24-t02-opencaselist-adapter
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+  annotations:
+    debate/title: OpenCaselist adapter
+    debate/architecture-refs: §9, §13, §14, §19
+spec:
+  description: >-
+    Implement the OpponentDataSource port for OpenCaselist using its documented v1 API (caselists, schools,
+    teams, rounds, cites) with the team's authorized account, and an IngestDisclosures use case that maps
+    rounds and cites into Disclosure records with provenance. Credentials come from settings/Secrets Manager
+    and are never logged. The adapter honors rate limits, retries only idempotent GETs, records open-source
+    documents as links without downloading them, drops fields the governance policy excludes, and refuses to
+    run unless the t06 approval gate is satisfied. Tests use sanitized recorded fixtures with synthetic
+    names. Boundaries: identity resolution is t04 and scheduling/removal is t05.
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations, debate_core.application]
+    forbidden:
+      - >-
+        Accessing private or authenticated opponent data without authorization, or circumventing access
+        controls, terms of service or rate limits
+      - Running ingestion when the governance approval gate is not satisfied
+      - >-
+        Storing student contact details, ages, grades, speaker points or judge names in opponent records
+        (unless the governance policy explicitly allows it)
+      - Downloading or storing open-source disclosure documents
+      - Logging credentials or session cookies
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e24-t01-opponent-table
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e24-t06-data-governance
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        OpenCaselistAdapter implements OpponentDataSource for caselists, schools, teams, rounds and cites
+        using documented endpoints only, authenticating with the configured authorized account.
+    - id: ac2
+      description: >-
+        Rounds and cites map to Disclosure records with season/caselist, tournament, round, side, positions,
+        cite titles, a source_url to the public caselist page, retrieved_at, source record id and adapter
+        version; excluded fields are dropped before persistence.
+    - id: ac3
+      description: >-
+        Requests are rate limited (default at most 1 per second), 429/503 back off honoring Retry-After, and
+        only GETs are retried.
+    - id: ac4
+      description: >-
+        With the governance gate unapproved or the source disabled, ingestion exits with a typed
+        IngestionNotApproved error and makes no request.
+    - id: ac5
+      description: >-
+        IngestDisclosures upserts idempotently by source record id and skips suppressed records; respx
+        fixtures cover each endpoint and error path offline.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e24-t02-opencaselist-adapter-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+spec:
+  description: >-
+    Client and auth, mapping, politeness and policy gate, fixtures, then the ingest use case.
+  goalRef:
+    name: v3-e24-t02-opencaselist-adapter
+  graph:
+    nodes:
+      - id: client
+        kind: Task
+        name: OpenCaselist API client
+        description: >-
+          httpx client for documented endpoints with authorized-account login, session handling and typed
+          errors.
+        outputs: [packages/debate_core/src/debate_core/integrations/opponent/opencaselist.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Client tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/opponent/test_opencaselist.py
+              - "-k"
+              - client
+      - id: mapping
+        kind: Task
+        name: Disclosure mapping and minimization
+        description: >-
+          Map rounds/cites to Disclosure with provenance; apply the policy field allowlist.
+        dependsOn: [client]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Mapping tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/opponent/test_opencaselist.py
+              - "-k"
+              - mapping
+      - id: politeness-gate
+        kind: Task
+        name: Rate limiting and approval gate
+        description: >-
+          Per-source limiter, backoff, idempotent-only retries, and the governance gate check at start.
+        dependsOn: [client]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Politeness and gate tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/opponent/test_opencaselist.py
+              - "-k"
+              - rate or gate
+      - id: fixtures
+        kind: Task
+        name: Sanitized recorded fixtures
+        description: >-
+          Record fixtures once from an approved run, replace names with synthetic ones, document the
+          recording procedure.
+        dependsOn: [mapping]
+        outputs: [tests/fixtures/opencaselist/]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: OpenCaselist fixtures documented
+            path: tests/fixtures/opencaselist/README.md
+            contentMatch: "synthetic"
+      - id: ingest
+        kind: Task
+        name: IngestDisclosures use case
+        description: >-
+          Idempotent upsert, suppression skip, run summary; type check and import boundaries.
+        dependsOn: [fixtures, politeness-gate]
+        outputs: [packages/debate_core/src/debate_core/application/ingest_disclosures.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Ingest tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_ingest_disclosures.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

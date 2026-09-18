@@ -1,0 +1,146 @@
+# TASK v3-e28-t04-opponent-informed-sim — Opponent-informed simulation
+# Epic: E28 Full Round Simulation | Release: v3.7 (Full round simulation) | Major: V3
+# Architecture refs: §3 V3 simulation + scouting stories, §13, §14, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e28-t04-opponent-informed-sim
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+  annotations:
+    debate/title: Opponent-informed simulation
+    debate/architecture-refs: §3, §13, §14, §19
+spec:
+  description: >-
+    Let a student practice against a simulated version of a real upcoming opponent's disclosed strategy.
+    From an E25 ScoutingReport, build an OpponentProfile for the round: the positions the team disclosed
+    on the relevant side (e.g. their Neg runs Politics DA, Consult CP and Cap K), their observed
+    frequencies and side tendencies, mapped to argument archetypes and to evidence in OUR library/graph
+    that can stand in for those positions. The simulated opponent then plans with t01 using this profile
+    as a strategy prior. The simulator never downloads or reads the opponent's disclosed round documents
+    as speech evidence; it only uses the disclosed position labels and cites to choose which of our
+    library's arguments to run, and positions with no stand-in evidence are listed as unsupported rather
+    than invented. The profile retains links to the report assertions it came from and is shown to the
+    student as inference. Report generation is E25 t03; UI selection of an opponent is t05.
+  priority: 2
+  constraints:
+    packages: [debate_core.domain, debate_core.rounds, debate_core.application]
+    forbidden:
+      - Using opponents' disclosed documents or cards as the simulated speech evidence
+      - Generating evidence to fill positions the library lacks; mark them UNSUPPORTED instead
+      - Profiles without links back to ScoutingReport assertion ids
+      - Presenting a scouted profile as what the opponent will certainly run; it is labeled inference
+      - Live network or real model calls in CI
+  context:
+    - kind: TaskRef
+      name: v3-e28-t02-opponent-speech-generation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e25-t03-report-generation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e25-t05-prediction-integration
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        build_opponent_profile(report_id, side) returns an OpponentProfile listing positions with
+        frequency, archetype id, stand-in card/node ids or UNSUPPORTED, and source report assertion ids.
+    - id: ac2
+      description: >-
+        A round created with opponent_profile set produces SpeechPlans whose off-case selection favors the
+        profile's high-frequency positions on fixtures, compared with a round without the profile.
+    - id: ac3
+      description: >-
+        No generated speech in an opponent-informed round contains a CardInsertion whose card is not in
+        the simulating user's organization library.
+    - id: ac4
+      description: >-
+        Positions with no stand-in evidence appear as UNSUPPORTED in the profile and are never planned.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e28-t04-opponent-informed-sim-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+spec:
+  description: >-
+    Define OpponentProfile, map report positions to archetypes and stand-in library evidence, feed the
+    profile into planning as a prior, then prove behavior on fixtures.
+  goalRef:
+    name: v3-e28-t04-opponent-informed-sim
+  graph:
+    nodes:
+      - id: profile-schema
+        kind: Task
+        name: OpponentProfile schema
+        description: >-
+          OpponentProfile and ProfiledPosition (label, side, frequency, archetype id, stand-in refs,
+          support status, report assertion ids) models.
+        outputs: [packages/debate_core/src/debate_core/domain/opponent_profile.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: OpponentProfile schema exists
+            path: packages/debate_core/src/debate_core/domain/opponent_profile.py
+            contentMatch: "class OpponentProfile"
+      - id: stand-in-mapping
+        kind: Task
+        name: Map disclosed positions to stand-in library evidence
+        description: >-
+          Map report position families to archetypes (reuse E25 t05 mapping) and then to our org's graph
+          nodes/cards via GraphRepository and library search; unmatched become UNSUPPORTED.
+        dependsOn: [profile-schema]
+        outputs: [packages/debate_core/src/debate_core/application/rounds/build_opponent_profile.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Stand-in mapping tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_build_opponent_profile.py]
+      - id: planning-prior
+        kind: Task
+        name: Profile as a planning prior
+        description: >-
+          Thread OpponentProfile into obligations and the planning prompt as a weighted strategy prior;
+          enforce that UNSUPPORTED positions are excluded.
+        dependsOn: [stand-in-mapping]
+        outputs: [packages/debate_core/src/debate_core/rounds/planning/opponent_prior.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prior influences plans on fixtures
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_opponent_prior.py]
+      - id: fixture-rounds
+        kind: Task
+        name: Opponent-informed fixture rounds
+        description: >-
+          End-to-end replayed rounds with and without a profile verifying selection shift, library-only
+          evidence and UNSUPPORTED handling.
+        dependsOn: [planning-prior]
+        outputs: [tests/fixtures/rounds/opponent_informed/]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Opponent-informed round tests pass
+            command: uv
+            args: [run, pytest, tests/integration/rounds/test_opponent_informed_round.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

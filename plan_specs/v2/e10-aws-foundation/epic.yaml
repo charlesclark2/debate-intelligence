@@ -1,0 +1,179 @@
+# EPIC E10 — AWS & Infrastructure-as-Code Foundation
+# Major version: V2 | Release: v2.0 (Cloud platform foundation)
+# Architecture refs: §4, §5, §14, §15
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e10-aws-foundation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+  annotations:
+    debate/title: E10 — AWS & Infrastructure-as-Code Foundation
+    debate/architecture-refs: §4, §5, §14, §15
+spec:
+  description: >-
+    Stand up the AWS account baseline, Terraform environments, keyless CI deploys, encryption/secrets,
+    container platform and observability.
+  priority: 5
+  constraints:
+    majorVersion: v2
+    release: v2.0
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      dev/stage/prod are reproducible from Terraform with remote state and budgets/alarms.
+  - id: ac2
+    description: >-
+      GitHub Actions deploys via OIDC roles; no long-lived AWS keys exist.
+  - id: ac3
+    description: >-
+      KMS, Secrets Manager, ECR, ECS/Fargate cluster and CloudWatch/X-Ray baselines are in place.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e10-aws-foundation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+spec:
+  description: >-
+    Task graph for epic E10 (AWS & Infrastructure-as-Code Foundation). Each Task node points at its own
+    task-level PlanSpec.
+  goalRef:
+    name: v2-e10-aws-foundation
+  version: '1'
+  graph:
+    nodes:
+    - id: t01
+      kind: Task
+      name: AWS account baseline
+      description: >-
+        Account/Organization setup, IAM Identity Center users, primary region decision (Bedrock model
+        availability), budgets and billing alarms, CloudTrail.
+      inputs:
+        specRef: plan_specs/v2/e10-aws-foundation/t01-aws-account-baseline.yaml
+        goalRef: v2-e10-t01-aws-account-baseline
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e10-t01-aws-account-baseline reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e10-t01-aws-account-baseline
+    - id: t02
+      kind: Task
+      name: Terraform bootstrap and environments
+      description: >-
+        Remote state (S3 + locking), module layout under infrastructure/, dev/stage/prod environments,
+        tagging standard, fmt/validate/tflint in CI.
+      inputs:
+        specRef: plan_specs/v2/e10-aws-foundation/t02-terraform-bootstrap.yaml
+        goalRef: v2-e10-t02-terraform-bootstrap
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e10-t02-terraform-bootstrap reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e10-t02-terraform-bootstrap
+    - id: t03
+      kind: Task
+      name: GitHub OIDC deploy roles
+      description: >-
+        IAM OIDC provider and least-privilege plan/apply/deploy roles per environment; CI workflows use
+        them.
+      inputs:
+        specRef: plan_specs/v2/e10-aws-foundation/t03-github-oidc-deploy.yaml
+        goalRef: v2-e10-t03-github-oidc-deploy
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e10-t03-github-oidc-deploy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e10-t03-github-oidc-deploy
+    - id: t04
+      kind: Task
+      name: KMS keys and Secrets Manager
+      description: >-
+        Customer-managed or AWS-managed KMS keys per data class, Secrets Manager entries for provider
+        API keys, rotation guidance.
+      inputs:
+        specRef: plan_specs/v2/e10-aws-foundation/t04-kms-secrets.yaml
+        goalRef: v2-e10-t04-kms-secrets
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e10-t04-kms-secrets reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e10-t04-kms-secrets
+    - id: t05
+      kind: Task
+      name: Networking, ECR and ECS/Fargate cluster
+      description: >-
+        VPC design (cost-aware NAT/endpoints), ECR repositories with scanning, ECS cluster, task execution
+        roles, CloudWatch log groups.
+      inputs:
+        specRef: plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml
+        goalRef: v2-e10-t05-container-platform
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e10-t05-container-platform reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e10-t05-container-platform
+    - id: t06
+      kind: Task
+      name: Observability baseline
+      description: >-
+        Structured JSON logging library in debate_core, correlation/job ids, CloudWatch dashboards and
+        alarms, X-Ray/OpenTelemetry tracing.
+      inputs:
+        specRef: plan_specs/v2/e10-aws-foundation/t06-observability-baseline.yaml
+        goalRef: v2-e10-t06-observability-baseline
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e10-t06-observability-baseline reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e10-t06-observability-baseline
+status:
+  phase: Pending

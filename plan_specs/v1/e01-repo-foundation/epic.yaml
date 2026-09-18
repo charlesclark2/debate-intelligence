@@ -1,0 +1,211 @@
+# EPIC E01 — Repository & Delivery Foundation
+# Major version: V1 | Release: v1.0 (Foundation & verified evidence core)
+# Architecture refs: §4, §6, §17, §18
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-repo-foundation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: E01 — Repository & Delivery Foundation
+    debate/architecture-refs: §4, §6, §17, §18
+spec:
+  description: >-
+    Create the git repository, GitHub remote, uv workspace, quality tooling, CI, PlanSpec tooling, ADR
+    docs, and the thin Typer CLI shell every later epic plugs into.
+  priority: 1
+  constraints:
+    majorVersion: v1
+    release: v1.0
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      A GitHub repository exists with protected main, PR template, and required CI checks.
+  - id: ac2
+    description: >-
+      `uv sync` builds the workspace; ruff, type checking, pytest and spec validation all run in CI on
+      every PR.
+  - id: ac3
+    description: >-
+      ADR-001..009 and the architecture proposal are versioned under docs/.
+  - id: ac4
+    description: >-
+      `debate-research --version` runs from an installed CLI with no business logic in the CLI package.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-repo-foundation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Task graph for epic E01 (Repository & Delivery Foundation). Each Task node points at its own task-level
+    PlanSpec.
+  goalRef:
+    name: v1-e01-repo-foundation
+  version: '1'
+  graph:
+    nodes:
+    - id: t01
+      kind: Task
+      name: Initialize local git repository and monorepo skeleton
+      description: >-
+        git init, .gitignore, README, the §6 directory layout (packages/debate_core, debate_cli, debate_api,
+        debate_workers, web, infrastructure, tests), plan_specs/ tree. Completed during project setup
+        (2026-09-17).
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t01-init-local-repo.yaml
+        goalRef: v1-e01-t01-init-local-repo
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t01-init-local-repo reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t01-init-local-repo
+    - id: t02
+      kind: Task
+      name: Create GitHub repository, push, and protect main
+      description: >-
+        Create the private GitHub repo, add remote, push history, enable branch protection on main (PR
+        required, required status checks, no force-push), add CODEOWNERS, PR and issue templates, and
+        a dev→main or trunk-based branching convention documented in CONTRIBUTING.md.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t02-github-remote.yaml
+        goalRef: v1-e01-t02-github-remote
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t02-github-remote reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t02-github-remote
+    - id: t03
+      kind: Task
+      name: uv workspace, Python 3.12 and quality tooling
+      description: >-
+        Root pyproject with uv workspace members for each package, Python 3.12 pin, ruff (lint+format),
+        pyright or mypy strict for debate_core, pytest + pytest-xdist + coverage, pre-commit hooks.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t03-uv-workspace-tooling.yaml
+        goalRef: v1-e01-t03-uv-workspace-tooling
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t03-uv-workspace-tooling reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t03-uv-workspace-tooling
+    - id: t04
+      kind: Task
+      name: GitHub Actions CI pipeline
+      description: >-
+        Workflow running lint, type check, unit tests, import-boundary checks and PlanSpec validation
+        on PRs and pushes; caching for uv; status check names stable so they can be required in branch
+        protection.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t04-ci-pipeline.yaml
+        goalRef: v1-e01-t04-ci-pipeline
+      dependsOn:
+      - t02
+      - t03
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t04-ci-pipeline reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t04-ci-pipeline
+    - id: t05
+      kind: Task
+      name: PlanSpec validation and index tooling
+      description: >-
+        scripts/validate_specs.py (schema shape, unique names, dependsOn resolution, acyclicity, epic-in-one-major-version
+        rule) and scripts/spec_index.py (regenerates ROADMAP tables). Initial version written during setup;
+        this task wires it into pre-commit and CI and adds status reporting.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t05-spec-tooling.yaml
+        goalRef: v1-e01-t05-spec-tooling
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t05-spec-tooling reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t05-spec-tooling
+    - id: t06
+      kind: Task
+      name: Architecture proposal and ADR records
+      description: >-
+        Commit the architecture proposal as markdown under docs/architecture, split ADR-001..ADR-009 into
+        docs/adr/NNNN-*.md using a standard ADR template, and add an ADR index plus a process for new
+        ADRs.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t06-adr-docs.yaml
+        goalRef: v1-e01-t06-adr-docs
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t06-adr-docs reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t06-adr-docs
+    - id: t07
+      kind: Task
+      name: debate_cli Typer + Rich skeleton
+      description: >-
+        debate_cli package exposing the `debate-research` entry point with Typer app, Rich console/output
+        helpers, global --verbose/--json flags, `--version`, and a pattern where commands only parse args
+        and call debate_core application services.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t07-cli-skeleton.yaml
+        goalRef: v1-e01-t07-cli-skeleton
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t07-cli-skeleton reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t07-cli-skeleton
+status:
+  phase: Pending

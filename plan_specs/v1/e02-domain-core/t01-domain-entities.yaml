@@ -1,0 +1,150 @@
+# TASK v1-e02-t01-domain-entities — Pydantic domain entities and enums
+# Epic: E02 Domain Core: Entities, Ports & Local Persistence | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §2, §6 (domain/), §7 Key domain models, §8, §20 step 1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e02-t01-domain-entities
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+  annotations:
+    debate/title: Pydantic domain entities and enums
+    debate/architecture-refs: §2, §6, §7, §8, §20 step 1
+spec:
+  description: >-
+    Define the V1 domain vocabulary in debate_core.domain as Pydantic v2 models that already match
+    the §7 cloud data model so V2 swaps storage, not schemas: Article, SourceSnapshot, Card, CardSpan,
+    Citation with per-field CitationField provenance (value, source, verified flag), Search and
+    SearchResult, plus enums AccessStatus, VerificationStatus, SpanStyle (underline/highlight),
+    SpanPurpose (claim/warrant/internal_link/impact), SourceType and ProvenanceMode. Entities carry
+    ULID ids, timezone-aware UTC timestamps, revision counters and owner_id/organization_id. Models
+    are data plus invariants only; ports are t02, normalization/hashing/verification behavior is E03,
+    and Round/Argument/Opponent entities are V3.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain]
+    forbidden:
+      - Importing boto3/httpx/typer/fastapi or any I/O library in debate_core.domain
+      - A Card model that can hold evidence_text without snapshot_id and span offsets
+      - Naive (timezone-less) datetimes
+      - Storing student email or names beyond owner_id/organization_id references (data minimization)
+  context:
+    - kind: TaskRef
+      name: v1-e01-t03-uv-workspace-tooling
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every entity in the §7 V1 subset (Article, SourceSnapshot, Card, CardSpan, Search, SearchResult)
+        exists with the listed key fields, plus Citation/CitationField, and round-trips through
+        model_dump_json/model_validate_json unchanged.
+    - id: ac2
+      description: >-
+        VerificationStatus defaults to UNVERIFIED on Card; a Card cannot be constructed with
+        VERIFIED status unless snapshot_id, normalizer_version and at least one span are present.
+    - id: ac3
+      description: >-
+        CardSpan validates start_offset < end_offset and non-negative offsets; timestamps reject naive
+        datetimes; ids are ULIDs generated via an injectable factory.
+    - id: ac4
+      description: >-
+        JSON Schema for every entity is exported to packages/debate_core/schemas/ by a script and a test
+        fails if the committed schemas are stale.
+    - id: ac5
+      description: >-
+        pyright strict passes on debate_core.domain with no type: ignore comments.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e02-t01-domain-entities-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+spec:
+  description: >-
+    Shared primitives and enums first, then source-side entities, then card-side entities with
+    invariants, then schema export and property tests.
+  goalRef:
+    name: v1-e02-t01-domain-entities
+  graph:
+    nodes:
+      - id: primitives-enums
+        kind: Task
+        name: Base model, ids, timestamps and enums
+        description: >-
+          DomainModel base (frozen where appropriate, extra=forbid), Ulid type, UtcDatetime type, and
+          enums AccessStatus, VerificationStatus, SpanStyle, SpanPurpose, SourceType, ProvenanceMode.
+        outputs:
+          - packages/debate_core/src/debate_core/domain/base.py
+          - packages/debate_core/src/debate_core/domain/enums.py
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Enums module defines VerificationStatus
+            path: packages/debate_core/src/debate_core/domain/enums.py
+            contentMatch: "class VerificationStatus"
+      - id: source-entities
+        kind: Task
+        name: Article, SourceSnapshot, Search, SearchResult
+        description: >-
+          Source-side models with canonical_url, identifiers (DOI/arXiv/PMID), access_status,
+          snapshot hashes, extractor/normalizer versions, retrieved_at, and search filters/scores.
+        dependsOn: [primitives-enums]
+        outputs:
+          - packages/debate_core/src/debate_core/domain/article.py
+          - packages/debate_core/src/debate_core/domain/search.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Source entity tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_article.py,
+                   packages/debate_core/tests/domain/test_search.py]
+      - id: card-entities
+        kind: Task
+        name: Card, CardSpan, Citation with invariants
+        description: >-
+          Card (tag, citation, evidence spans, verification_status, format_profile, revision),
+          CardSpan offsets/style/purpose, Citation with CitationField provenance; validators for
+          the VERIFIED preconditions and span bounds.
+        dependsOn: [primitives-enums]
+        outputs:
+          - packages/debate_core/src/debate_core/domain/card.py
+          - packages/debate_core/src/debate_core/domain/citation.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card invariant tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_card.py]
+      - id: schema-export
+        kind: Task
+        name: JSON Schema export and round-trip property tests
+        description: >-
+          scripts/export_schemas.py writes one JSON Schema per entity; hypothesis round-trip tests for
+          every model; staleness test compares committed schemas.
+        dependsOn: [source-entities, card-entities]
+        outputs: [packages/debate_core/schemas/, scripts/export_schemas.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Domain test suite passes including schema staleness
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain]
+          - type: command_succeeds
+            name: pyright strict passes
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

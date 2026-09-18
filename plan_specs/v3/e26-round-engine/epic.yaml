@@ -1,0 +1,183 @@
+# EPIC E26 — Round Engine Core
+# Major version: V3 | Release: v3.5 (Round engine core)
+# Architecture refs: §7 Round/RoundEvent, §13 Round simulator, §17 V3.5
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e26-round-engine
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+  annotations:
+    debate/title: E26 — Round Engine Core
+    debate/architecture-refs: §7 Round/RoundEvent, §13 Round simulator, §17 V3.5
+spec:
+  description: >-
+    Build the stateful, persisted, replayable round engine: format rules, judge profiles and flow tracking
+    — not a chat thread.
+  priority: 15
+  constraints:
+    majorVersion: v3
+    release: v3.5
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Round and RoundEvent persist every speech/CX event and support deterministic replay.
+  - id: ac2
+    description: >-
+      Policy, LD and PF speech order, timing and CX style are encoded as format rule modules.
+  - id: ac3
+    description: >-
+      Judge profiles (lay, somewhat experienced, flow, circuit) are policy modules; flow state tracks
+      extensions, drops and concessions.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e26-round-engine-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+spec:
+  description: >-
+    Task graph for epic E26 (Round Engine Core). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v3-e26-round-engine
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v2-e11-t03-dynamodb-repositories
+      kind: External
+      name: 'Prerequisite from E11: DynamoDB repository implementations'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t03-dynamodb-repositories
+        specRef: plan_specs/v2/e11-cloud-persistence/t03-dynamodb-repositories.yaml
+    - id: ext-v2-e12-t03-authn-authz
+      kind: External
+      name: 'Prerequisite from E12: Authentication, roles and tenancy'
+      description: >-
+        Cross-epic prerequisite owned by v2-e12-identity-api (release v2.0).
+      inputs:
+        goalRef: v2-e12-t03-authn-authz
+        specRef: plan_specs/v2/e12-identity-api/t03-authn-authz.yaml
+    - id: ext-v3-e21-t04-graph-queries
+      kind: External
+      name: 'Prerequisite from E21: Coverage and coherence query primitives'
+      description: >-
+        Cross-epic prerequisite owned by v3-e21-argument-graph (release v3.0).
+      inputs:
+        goalRef: v3-e21-t04-graph-queries
+        specRef: plan_specs/v3/e21-argument-graph/t04-graph-queries.yaml
+    - id: t01
+      kind: Task
+      name: Round, RoundEvent and flow state model
+      description: >-
+        Entities and persistence for rounds, events, flow sheets, concessions, time.
+      inputs:
+        specRef: plan_specs/v3/e26-round-engine/t01-round-model.yaml
+        goalRef: v3-e26-t01-round-model
+      dependsOn:
+      - ext-v2-e11-t03-dynamodb-repositories
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e26-t01-round-model reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e26-t01-round-model
+    - id: t02
+      kind: Task
+      name: Format rule modules
+      description: >-
+        Policy, LD and PF speech sequence, timing, prep time, partner structure, CX rules.
+      inputs:
+        specRef: plan_specs/v3/e26-round-engine/t02-format-rules.yaml
+        goalRef: v3-e26-t02-format-rules
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e26-t02-format-rules reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e26-t02-format-rules
+    - id: t03
+      kind: Task
+      name: Round state machine
+      description: >-
+        Transitions, validation, persistence and replay; API endpoints to create/advance rounds.
+      inputs:
+        specRef: plan_specs/v3/e26-round-engine/t03-state-machine.yaml
+        goalRef: v3-e26-t03-state-machine
+      dependsOn:
+      - t01
+      - t02
+      - ext-v2-e12-t03-authn-authz
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e26-t03-state-machine reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e26-t03-state-machine
+    - id: t04
+      kind: Task
+      name: Judge profile policies
+      description: >-
+        Lay/somewhat experienced/flow/circuit policy modules defining evaluation constraints and preferences.
+      inputs:
+        specRef: plan_specs/v3/e26-round-engine/t04-judge-profiles.yaml
+        goalRef: v3-e26-t04-judge-profiles
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e26-t04-judge-profiles reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e26-t04-judge-profiles
+    - id: t05
+      kind: Task
+      name: Flow tracking
+      description: >-
+        Update flow from events: responses, extensions, drops, concessions linked to argument graph nodes.
+      inputs:
+        specRef: plan_specs/v3/e26-round-engine/t05-flow-tracking.yaml
+        goalRef: v3-e26-t05-flow-tracking
+      dependsOn:
+      - t03
+      - ext-v3-e21-t04-graph-queries
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e26-t05-flow-tracking reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e26-t05-flow-tracking
+status:
+  phase: Pending

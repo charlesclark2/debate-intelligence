@@ -1,0 +1,144 @@
+# TASK v3-e27-t05-cx-eval — CX evaluation
+# Epic: E27 Cross-Examination Simulator | Release: v3.6 (Cross-examination simulator) | Major: V3
+# Architecture refs: §3 V3 CX story, §10 prompt/version governance, §13, §16 LLM evaluations, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e27-t05-cx-eval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+  annotations:
+    debate/title: CX evaluation
+    debate/architecture-refs: §3, §10, §13, §16, §19
+spec:
+  description: >-
+    Build the coach-curated CX evaluation set and promotion gate for the E27 prompts
+    (cx.question_generation, cx.answer_simulation, cx.concession_detection). Scenarios cover all three
+    formats on the current topics (Policy national health insurance, LD space colonization, PF data-center
+    moratorium) with a known case graph, a persona, and gold expectations: which weak links a good
+    questioner should target, which answers would be strategically inconsistent with the persona's
+    strategy (e.g. granting the link after a "no link" 1NC position), and which exchanges contain real
+    concessions. Metrics: target hit rate, strategic-consistency violation rate, concession precision/recall
+    and evidence-quote integrity (must be 100%). Recorded model responses let CI replay the gate
+    deterministically; a live re-record run is a manual, budgeted step. Candidate prompt/model versions
+    are promoted only when they match or beat the baseline. Full-round simulation evals are E28 t06.
+  priority: 1
+  constraints:
+    packages: [tests/evals/cx, debate_core.application]
+    forbidden:
+      - Live model calls in CI; CI runs on recorded responses via the replay ModelRouter
+      - Promoting a prompt/model version because it is newer without a baseline comparison
+      - Scenario content copied from private team files or non-public opponent material
+      - Using real student transcripts without anonymization and coach approval
+  context:
+    - kind: TaskRef
+      name: v3-e27-t03-concession-detection
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The eval set contains >=30 coach-reviewed scenarios, at least 8 per format, each with a case graph
+        fixture, persona and gold targets, gold inconsistencies and gold concessions.
+    - id: ac2
+      description: >-
+        The eval runner reports target hit rate, strategic-consistency violation rate, concession
+        precision/recall and quote integrity per format and overall, as JSON and a Markdown summary.
+    - id: ac3
+      description: >-
+        CI fails if quote integrity is below 100%, if the consistency violation rate exceeds the configured
+        ceiling, or if any metric regresses beyond tolerance versus the stored baseline.
+    - id: ac4
+      description: >-
+        Promotion records baseline and candidate prompt ids/versions and model ids in an eval report
+        committed with the change.
+    - id: ac5
+      description: >-
+        The coach reviews a sample of 10 replayed sessions and signs off before the v3.6 release gate.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e27-t05-cx-eval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+spec:
+  description: >-
+    Curate scenarios with the coach, build the metric runner on replayed responses, wire the regression
+    gate into CI, then complete coach review.
+  goalRef:
+    name: v3-e27-t05-cx-eval
+  graph:
+    nodes:
+      - id: scenario-set
+        kind: Task
+        name: Coach-curated CX scenario set
+        description: >-
+          Author scenarios (graph fixture, persona, gold labels) for Policy, LD and PF on current topics;
+          schema-validate the dataset.
+        outputs: [tests/fixtures/evals/cx/scenarios/]
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Scenario dataset validates
+            command: uv
+            args: [run, pytest, tests/evals/cx/test_scenario_schema.py]
+      - id: metric-runner
+        kind: Task
+        name: CX eval runner and metrics
+        description: >-
+          Runner that plays scenarios through the E27 use cases with the replay router and computes the
+          four metrics, emitting JSON and Markdown.
+        dependsOn: [scenario-set]
+        outputs: [tests/evals/cx/runner.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Runner metric unit tests pass
+            command: uv
+            args: [run, pytest, tests/evals/cx/test_runner_metrics.py]
+      - id: regression-gate
+        kind: Task
+        name: Baseline and CI regression gate
+        description: >-
+          Record baseline responses and metrics; gate test comparing current prompt versions to baseline
+          with ceilings and tolerances from config.
+        dependsOn: [metric-runner]
+        outputs:
+          - tests/fixtures/evals/cx/baseline_metrics.json
+          - tests/evals/cx/test_cx_gate.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CX promotion gate passes on replay
+            command: uv
+            args: [run, pytest, tests/evals/cx/test_cx_gate.py]
+      - id: coach-review
+        kind: Task
+        name: Coach review of replayed sessions
+        description: >-
+          Charlie reviews 10 sampled replayed sessions for realism and strategic soundness; findings logged.
+        dependsOn: [regression-gate]
+        outputs: [docs/evals/cx_v3.6_review.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Review notes committed
+            path: docs/evals/cx_v3.6_review.md
+          - type: custom
+            name: Coach sign-off
+            description: >-
+              Charlie signs off that simulated CX is realistic for novice and varsity personas and does not
+              teach bad habits (e.g. rewarding evasive non-answers).
+status:
+  phase: Pending

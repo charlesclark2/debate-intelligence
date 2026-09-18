@@ -1,0 +1,96 @@
+# RELEASE v3.2 — File auditing
+# Major version: V3. Epics: E23
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v3-2
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.2
+  annotations:
+    debate/title: v3.2 — File auditing
+spec:
+  description: >-
+    A DA (or other) file can be audited for 1NC shell coherence with explained card-by-card alternatives.
+  priority: 12
+  acceptanceCriteria:
+  - id: epic-e23
+    description: >-
+      Epic E23 (File Auditing) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v3.2.0 is pushed and CHANGELOG.md has a v3.2 section.
+  - id: gate
+    description: >-
+      Gate release-v3-2-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v3-2-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.2
+spec:
+  gateType: review
+  description: >-
+    Release review for v3.2 (File auditing): demo the release goal end to end, confirm CI green on the
+    release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v3-2-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.2
+spec:
+  description: >-
+    Release plan for v3.2: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v3-2
+  series: v3
+  version: v3.2
+  graph:
+    nodes:
+    - id: e23
+      kind: External
+      name: Epic E23 — File Auditing
+      inputs:
+        goalRef: v3-e23-file-auditing
+        specRef: plan_specs/v3/e23-file-auditing/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v3.2.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e23
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v3.2.0
+    - id: release-review
+      kind: Gate
+      name: v3.2 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v3-2-gate
+status:
+  phase: Pending

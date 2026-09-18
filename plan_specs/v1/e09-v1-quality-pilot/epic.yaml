@@ -1,0 +1,245 @@
+# EPIC E09 — V1 Quality, Evaluation & Team Pilot
+# Major version: V1 | Release: v1.3 (V1 quality gate & team pilot)
+# Architecture refs: §16, §10 Prompt governance, §11 acceptance criteria
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e09-v1-quality-pilot
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+  annotations:
+    debate/title: E09 — V1 Quality, Evaluation & Team Pilot
+    debate/architecture-refs: §16, §10 Prompt governance, §11 acceptance criteria
+spec:
+  description: >-
+    Build golden-card and LLM evaluation harnesses that gate prompt/model promotion, package the CLI,
+    and pilot it with the team.
+  priority: 4
+  constraints:
+    majorVersion: v1
+    release: v1.3
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Golden DOCX tests lock formatting; span evals report precision/recall vs coach labels and zero unsupported
+      evidence text.
+  - id: ac2
+    description: >-
+      Prompt/model promotion requires an evaluation comparison in CI.
+  - id: ac3
+    description: >-
+      Students install the CLI with one command and a pilot produces a feedback log that informs V2.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e09-v1-quality-pilot-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+spec:
+  description: >-
+    Task graph for epic E09 (V1 Quality, Evaluation & Team Pilot). Each Task node points at its own task-level
+    PlanSpec.
+  goalRef:
+    name: v1-e09-v1-quality-pilot
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e01-t02-github-remote
+      kind: External
+      name: 'Prerequisite from E01: Create GitHub repository, push, and protect main'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t02-github-remote
+        specRef: plan_specs/v1/e01-repo-foundation/t02-github-remote.yaml
+    - id: ext-v1-e01-t04-ci-pipeline
+      kind: External
+      name: 'Prerequisite from E01: GitHub Actions CI pipeline'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t04-ci-pipeline
+        specRef: plan_specs/v1/e01-repo-foundation/t04-ci-pipeline.yaml
+    - id: ext-v1-e05-t06-card-selection-contract
+      kind: External
+      name: 'Prerequisite from E05: CardSelection / MarkupSpan contract and prompts'
+      description: >-
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.1).
+      inputs:
+        goalRef: v1-e05-t06-card-selection-contract
+        specRef: plan_specs/v1/e05-model-router/t06-card-selection-contract.yaml
+    - id: ext-v1-e06-t04-docx-renderer
+      kind: External
+      name: 'Prerequisite from E06: DOCX renderer'
+      description: >-
+        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+      inputs:
+        goalRef: v1-e06-t04-docx-renderer
+        specRef: plan_specs/v1/e06-card-cutting/t04-docx-renderer.yaml
+    - id: ext-v1-e08-t06-auto-cut
+      kind: External
+      name: 'Prerequisite from E08: `--auto-cut N` batch cutting'
+      description: >-
+        Cross-epic prerequisite owned by v1-e08-research-workflows (release v1.2).
+      inputs:
+        goalRef: v1-e08-t06-auto-cut
+        specRef: plan_specs/v1/e08-research-workflows/t06-auto-cut.yaml
+    - id: t01
+      kind: Task
+      name: Golden card fixtures from team files
+      description: >-
+        Curate representative cards (policy, LD, PF) from the team's evidence files with snapshots, expected
+        spans and expected DOCX formatting.
+      inputs:
+        specRef: plan_specs/v1/e09-v1-quality-pilot/t01-golden-card-fixtures.yaml
+        goalRef: v1-e09-t01-golden-card-fixtures
+      dependsOn:
+      - ext-v1-e06-t04-docx-renderer
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e09-t01-golden-card-fixtures reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e09-t01-golden-card-fixtures
+    - id: t02
+      kind: Task
+      name: Golden DOCX regression tests
+      description: >-
+        Structural comparison of rendered DOCX (runs, styles, underline/highlight ranges) against golden
+        outputs.
+      inputs:
+        specRef: plan_specs/v1/e09-v1-quality-pilot/t02-docx-golden-tests.yaml
+        goalRef: v1-e09-t02-docx-golden-tests
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e09-t02-docx-golden-tests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e09-t02-docx-golden-tests
+    - id: t03
+      kind: Task
+      name: Card selection and underlining eval harness
+      description: >-
+        Coach-labeled warrant spans; precision/recall, completeness of warrant, unsupported-text rate
+        (must be 0) with reports.
+      inputs:
+        specRef: plan_specs/v1/e09-v1-quality-pilot/t03-span-eval-harness.yaml
+        goalRef: v1-e09-t03-span-eval-harness
+      dependsOn:
+      - t01
+      - ext-v1-e05-t06-card-selection-contract
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e09-t03-span-eval-harness reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e09-t03-span-eval-harness
+    - id: t04
+      kind: Task
+      name: Prompt/model promotion gate
+      description: >-
+        CI job comparing candidate prompt/model versions against the current baseline on the eval set;
+        promotion requires non-regression.
+      inputs:
+        specRef: plan_specs/v1/e09-v1-quality-pilot/t04-prompt-promotion-gate.yaml
+        goalRef: v1-e09-t04-prompt-promotion-gate
+      dependsOn:
+      - t03
+      - ext-v1-e01-t04-ci-pipeline
+      - ext-v1-e01-t02-github-remote
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e09-t04-prompt-promotion-gate reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e09-t04-prompt-promotion-gate
+    - id: t05
+      kind: Task
+      name: End-to-end recorded suite
+      description: >-
+        search → auto-cut → verify end-to-end tests on recorded provider/HTTP/model fixtures.
+      inputs:
+        specRef: plan_specs/v1/e09-v1-quality-pilot/t05-e2e-fixture-suite.yaml
+        goalRef: v1-e09-t05-e2e-fixture-suite
+      dependsOn:
+      - ext-v1-e08-t06-auto-cut
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e09-t05-e2e-fixture-suite reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e09-t05-e2e-fixture-suite
+    - id: t06
+      kind: Task
+      name: Packaging and release workflow
+      description: >-
+        Versioning (semver tied to release labels), CHANGELOG, `uv tool install` from GitHub tag, release
+        GitHub Action.
+      inputs:
+        specRef: plan_specs/v1/e09-v1-quality-pilot/t06-packaging-release.yaml
+        goalRef: v1-e09-t06-packaging-release
+      dependsOn:
+      - ext-v1-e01-t04-ci-pipeline
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e09-t06-packaging-release reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e09-t06-packaging-release
+    - id: t07
+      kind: Task
+      name: Student/coach guide and team pilot
+      description: >-
+        Quickstart and command guide for students/coaches, pilot with the team on current topics, structured
+        feedback log feeding V2 prioritization.
+      inputs:
+        specRef: plan_specs/v1/e09-v1-quality-pilot/t07-team-pilot.yaml
+        goalRef: v1-e09-t07-team-pilot
+      dependsOn:
+      - t06
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e09-t07-team-pilot reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e09-t07-team-pilot
+status:
+  phase: Pending

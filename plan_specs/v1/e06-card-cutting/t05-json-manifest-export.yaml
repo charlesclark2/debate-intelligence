@@ -1,0 +1,126 @@
+# TASK v1-e06-t05-json-manifest-export — JSON manifest export
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6 ExportService, §8 step 6 (persist provenance), §10 prompt governance, §11, §20 step 7
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t05-json-manifest-export
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: JSON manifest export
+    debate/architecture-refs: §6, §8, §10, §11, §20 step 7
+spec:
+  description: >-
+    Define and export the versioned card manifest (schema_version "1.0"): a JSON document per export
+    bundle containing each card (tag, citation with per-field provenance, evidence_text, CardSpans,
+    verification status and reasons, revision), its snapshot reference (snapshot_id, sha256,
+    normalized_text_hash, normalizer and extractor versions, retrieved_at, canonical URL) and
+    GeneratedArtifactMetadata (model_id, profile/region, prompt ids/versions, temperature). A JSON Schema
+    is generated from the Pydantic model and committed. The manifest must round-trip through the existing
+    `debate-research verify` (v1-e03-t06), which re-derives evidence from the stored snapshot. This same
+    serialized payload is what t04 embeds in DOCX. Boundaries: no DOCX work (t04/t07) and no CLI flags
+    (t06); student data minimization means no owner email/name in the manifest, only opaque owner_id.
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence, debate_core.application]
+    forbidden:
+      - Breaking schema changes without bumping schema_version and keeping a reader for the prior version
+      - Personal data (names, emails) of the student user in the manifest
+      - Snapshot bodies inlined in the manifest (reference by id and hash only)
+  context:
+    - kind: TaskRef
+      name: v1-e06-t02-card-service
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e03-t06-verify-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        CardManifest v1.0 is a Pydantic model with a committed JSON Schema at
+        schemas/card_manifest.v1.json, and a test fails if the generated schema drifts from the file.
+    - id: ac2
+      description: >-
+        Exporting a VERIFIED fixture card and running `debate-research verify <manifest>.json` against the
+        local data dir exits 0 with status VERIFIED.
+    - id: ac3
+      description: >-
+        Altering one character of evidence_text or one span offset in the manifest makes verify exit
+        non-zero with a SPAN_MISMATCH or EVIDENCE_HASH_MISMATCH reason.
+    - id: ac4
+      description: >-
+        Manifests include model/prompt metadata and snapshot hashes for every card and contain no user
+        email or name fields.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t05-json-manifest-export-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    Model and schema, exporter, then prove the round trip through verify including tamper cases.
+  goalRef:
+    name: v1-e06-t05-json-manifest-export
+  graph:
+    nodes:
+      - id: manifest-model
+        kind: Task
+        name: CardManifest model and committed JSON Schema
+        description: >-
+          Define CardManifest v1.0 and a script that writes schemas/card_manifest.v1.json; add a drift test.
+        outputs:
+          - packages/debate_core/src/debate_core/evidence/manifest.py
+          - schemas/card_manifest.v1.json
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Schema drift test passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_manifest.py, -k, schema]
+      - id: json-exporter
+        kind: Task
+        name: JSON manifest exporter
+        description: >-
+          ExportService.export_json(cards) building manifests from Card, SourceSnapshot and metadata via
+          repositories; deterministic key ordering for diffable output.
+        dependsOn: [manifest-model]
+        outputs: [packages/debate_core/src/debate_core/application/export_service.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Exporter tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_export_service.py, -k, json]
+      - id: verify-round-trip
+        kind: Task
+        name: Round trip through verify with tamper cases
+        description: >-
+          Update the verify command's manifest reader to CardManifest v1.0 if needed and add CLI tests for
+          the verified and tampered cases.
+        dependsOn: [json-exporter]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Verify round-trip tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_verify_command.py, -k, manifest]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

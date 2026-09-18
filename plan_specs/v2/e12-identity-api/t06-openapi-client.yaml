@@ -1,0 +1,136 @@
+# TASK v2-e12-t06-openapi-client — OpenAPI TypeScript client generation
+# Epic: E12 Identity & API Service | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §4 FastAPI OpenAPI generation / Next.js + TypeScript, §12
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e12-t06-openapi-client
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+  annotations:
+    debate/title: OpenAPI TypeScript client generation
+    debate/architecture-refs: §5, §12, §4
+spec:
+  description: >-
+    Keep the web app's types in lockstep with the Python API. Export the FastAPI OpenAPI document to a
+    committed openapi/openapi.json via a script (no running server), generate a typed TypeScript client
+    (openapi-typescript types + openapi-fetch) into a standalone package at clients/ts-api-client/ (its
+    own package.json, built with `pnpm --dir clients/ts-api-client`; the web/ workspace does not exist
+    until v2.1, where v2-e14-t01-nextjs-scaffold consumes this package as a workspace/file dependency),
+    and add a CI drift check that regenerates both and fails if the committed artifacts differ. Stable
+    operationIds are enforced so generated function names do not churn. This task only sets up generation and the drift gate; it
+    does not build any web pages (E14) and it versions the client alongside the API /v1 prefix.
+  priority: 1
+  constraints:
+    packages: [debate_api, openapi, clients/ts-api-client, scripts]
+    forbidden:
+      - Hand-edited generated files
+      - Starting a live server or calling AWS to produce the schema
+      - Auto-generated operationIds derived from function names that change on refactor
+  context:
+    - kind: TaskRef
+      name: v2-e12-t02-fastapi-service
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `uv run scripts/export_openapi.py` writes openapi/openapi.json deterministically (sorted keys,
+        stable ordering) from create_app with test settings, and `--check` exits non-zero if the
+        committed file is stale.
+    - id: ac2
+      description: >-
+        Every route declares an explicit operation_id; a test fails if any operationId is missing or
+        duplicated.
+    - id: ac3
+      description: >-
+        `pnpm --dir clients/ts-api-client run generate` produces typed paths/components and a configured
+        fetch client that injects the bearer token and parses problem+json errors, and
+        `pnpm --dir clients/ts-api-client build` succeeds without any web/ workspace present.
+    - id: ac4
+      description: >-
+        A CI job regenerates the schema and client and fails with a readable diff when committed files are
+        stale.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e12-t06-openapi-client-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+spec:
+  description: >-
+    Deterministic schema export and operationId discipline, then TS generation, then the CI drift gate.
+  goalRef:
+    name: v2-e12-t06-openapi-client
+  graph:
+    nodes:
+      - id: schema-export
+        kind: Task
+        name: Deterministic OpenAPI export
+        description: >-
+          Script importing create_app with test settings and writing sorted JSON; custom
+          generate_unique_id_function using explicit operation ids.
+        outputs: [scripts/export_openapi.py, openapi/openapi.json]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: OpenAPI export runs offline
+            command: uv
+            args: [run, scripts/export_openapi.py]
+          - type: test_passes
+            name: operationId uniqueness test passes
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_openapi.py]
+      - id: ts-client
+        kind: Task
+        name: TypeScript client package
+        description: >-
+          Standalone clients/ts-api-client package (own package.json and tsconfig) with openapi-typescript
+          generated types, an openapi-fetch client factory with auth middleware and a typed ProblemDetails
+          error, built independently of web/.
+        dependsOn: [schema-export]
+        outputs:
+          - clients/ts-api-client/package.json
+          - clients/ts-api-client/src/schema.d.ts
+          - clients/ts-api-client/src/client.ts
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Client generation succeeds
+            command: pnpm
+            args: [--dir, clients/ts-api-client, run, generate]
+          - type: command_succeeds
+            name: Client package builds standalone
+            command: pnpm
+            args: [--dir, clients/ts-api-client, build]
+          - type: test_passes
+            name: Client unit tests pass
+            command: pnpm
+            args: [--dir, clients/ts-api-client, test]
+      - id: drift-gate
+        kind: Task
+        name: CI drift check
+        description: >-
+          CI step regenerating schema and client, then git diff --exit-code on openapi/ and
+          clients/ts-api-client/src with a helpful failure message.
+        dependsOn: [ts-client]
+        outputs: [.github/workflows/api-contract.yml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Drift workflow exists
+            path: .github/workflows/api-contract.yml
+            contentMatch: "git diff --exit-code"
+status:
+  phase: Pending

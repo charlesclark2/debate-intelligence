@@ -1,0 +1,183 @@
+# TASK v3-e21-t02-node-extraction — Argument node extraction
+# Epic: E21 Argument Graph | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §8 evidence integrity, §10 structured model contracts, §13 Argument graph
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e21-t02-node-extraction
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+  annotations:
+    debate/title: Argument node extraction
+    debate/architecture-refs: §8, §10, §13
+spec:
+  description: >-
+    Turn parsed FileSections and ParsedCards into typed ArgumentNodes. A deterministic pre-pass derives
+    structural hints from the Verbatim hierarchy (block titles such as 1NC, 2NC, Uniqueness, Link, Impact,
+    A2:/AT:, Value, Criterion, Contention); an ArgumentNodeExtraction call through the ModelRouter (prompt
+    argument.node_extraction, complex_reasoning class) then assigns argument_type, side, a short claim and
+    warrant summary, card ids and confidence per block. Claims and warrant summaries are model summaries,
+    never quoted evidence, and are validated so they cannot reproduce card text. Nodes are persisted through
+    GraphRepository with full provenance as the node stage of an ExtractArgumentsJob. Boundaries: edges are
+    t03, accuracy measurement is t05, and aff-specific case structure (plan text, advantages) is E22-t02.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_workers, prompts]
+    forbidden:
+      - Model-authored or paraphrased text stored, rendered or exported as quoted evidence
+      - Model calls without a registered prompt_id/semver and persisted GeneratedArtifactMetadata
+      - Persisting nodes, edges or findings whose card/node references do not resolve
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+  context:
+    - kind: TaskRef
+      name: v3-e21-t01-graph-repository
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e20-t03-docx-structure-parser
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e20-t02-upload-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t02-sqs-workers
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        ArgumentNodeExtraction (argument_type, side, claim up to 200 chars, warrant_summary, card_ids,
+        section_path, confidence, rationale) is registered with prompt_id argument.node_extraction and a
+        semver, and routed through the complex_reasoning task class.
+    - id: ac2
+      description: >-
+        Structural hints from headings and block titles are computed deterministically and passed to the
+        model; analytic sections become nodes with empty card_ids and are flagged analytic-only.
+    - id: ac3
+      description: >-
+        Validation rejects card_ids or section_paths absent from the input batch and any
+        claim/warrant_summary containing a run of 12 or more consecutive words from card evidence; one
+        repair retry, then a typed extraction failure for that block.
+    - id: ac4
+      description: >-
+        Persisted nodes carry SourceRefs, confidence, origin EXTRACTED and model/prompt metadata; re-running
+        on the same parse revision and prompt version is a no-op (deterministic ids, cache keyed by section
+        content hash).
+    - id: ac5
+      description: >-
+        The node stage runs in an ExtractArgumentsJob queued after PARSED, and fixture tests with the replay
+        ModelRouter cover an NHI Medicare for All aff, an NHI spending DA, an LD space colonization NC and a
+        PF data-center moratorium con file.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e21-t02-node-extraction-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e21-argument-graph
+spec:
+  description: >-
+    Schema and prompt, deterministic hints, batching with validation, persistence, then the job stage and
+    replay-fixture tests.
+  goalRef:
+    name: v3-e21-t02-node-extraction
+  graph:
+    nodes:
+      - id: schema-prompt
+        kind: Task
+        name: Extraction schema and prompt
+        description: >-
+          Pydantic output schema, prompt file with semver and few-shot examples drawn from scrubbed
+          fixtures, registry entry.
+        outputs:
+          - packages/debate_core/src/debate_core/arguments/node_extraction.py
+          - prompts/argument/node_extraction.yaml
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Node extraction prompt registered
+            path: prompts/argument/node_extraction.yaml
+            contentMatch: "prompt_id: argument.node_extraction"
+          - type: test_passes
+            name: Schema contract tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_node_extraction_schema.py]
+      - id: structural-hints
+        kind: Task
+        name: Deterministic structural hints
+        description: >-
+          Map heading/block-title patterns and section depth to candidate argument types and sides per
+          format; purely rule-based and unit tested.
+        outputs: [packages/debate_core/src/debate_core/arguments/structural_hints.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Structural hint tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_structural_hints.py]
+      - id: batch-validate
+        kind: Task
+        name: Batching and output validation
+        description: >-
+          Batch by block within a token budget, call generate_structured, validate references and the
+          no-verbatim-overlap rule, single repair retry, typed failures recorded per block.
+        dependsOn: [schema-prompt, structural-hints]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_node_extraction.py, -k, validation]
+      - id: persist-nodes
+        kind: Task
+        name: Persist nodes with provenance
+        description: >-
+          Deterministic node ids, GeneratedArtifactMetadata, content-hash cache and GraphRepository batch
+          upsert.
+        dependsOn: [batch-validate]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Persistence tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_node_extraction.py, -k, persist]
+      - id: job-stage
+        kind: Task
+        name: ExtractArgumentsJob node stage and fixtures
+        description: >-
+          Worker stage triggered on PARSED; replay fixtures for the four topic files; type check and import
+          boundaries.
+        dependsOn: [persist-nodes]
+        outputs: [packages/debate_workers/src/debate_workers/handlers/extract_arguments.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Job stage tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_extract_arguments.py, -k, nodes]
+          - type: test_passes
+            name: Replay fixture tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_node_extraction_fixtures.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

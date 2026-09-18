@@ -1,0 +1,137 @@
+# TASK v1-e05-t04-prompt-registry — Versioned prompt registry
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §10 Prompt/version governance, ADR-005, §2 (provenance), §20 step 5
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t04-prompt-registry
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: Versioned prompt registry
+    debate/architecture-refs: §10, ADR-005, §2, §20 step 5
+spec:
+  description: >-
+    Make prompts versioned, reviewable artifacts. Each production prompt is a file under prompts/ with
+    front matter (prompt_id, semver version, task_class, output_schema reference, owner, changelog) and a
+    Jinja2 template body. A PromptRegistry loads and validates them, renders with strict undefined
+    variables, and resolves "latest promoted" or an exact version. GeneratedArtifactMetadata (model_id,
+    inference profile/region, prompt_id, prompt_version, temperature, retrieval/snapshot ids, created_at)
+    is defined here and attached to every structured model result so persisted artifacts carry provenance.
+    Boundaries: this task does not write the card-selection prompts (t06) or the promotion gate (E09 t04);
+    it only provides the registry, metadata type and the rule that a released prompt version is immutable.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.integrations, prompts]
+    forbidden:
+      - Prompt text inlined in Python modules for production calls
+      - Editing the body of an already-released prompt version (bump the version instead)
+      - Persisting a generated artifact without GeneratedArtifactMetadata
+  context:
+    - kind: TaskRef
+      name: v1-e05-t01-model-router-port
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        PromptRegistry loads every prompts/**/*.md file, rejects duplicate (prompt_id, version) pairs,
+        invalid semver, or an output_schema that does not resolve to a Pydantic model.
+    - id: ac2
+      description: >-
+        Rendering with a missing template variable raises PromptRenderError; rendering is deterministic
+        for identical inputs.
+    - id: ac3
+      description: >-
+        GeneratedArtifactMetadata is populated automatically from the ResolvedRoute and prompt on every
+        generate_structured result and round-trips through JSON unchanged.
+    - id: ac4
+      description: >-
+        A lock file (prompts/prompts.lock.json) records the sha256 of each released version's body, and a
+        test fails if a released body changes without a version bump.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t04-prompt-registry-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Specify the prompt file format, build the loader and renderer, add the metadata type and router
+    integration, then lock released versions.
+  goalRef:
+    name: v1-e05-t04-prompt-registry
+  graph:
+    nodes:
+      - id: prompt-format
+        kind: Task
+        name: Prompt file format and example
+        description: >-
+          Define the front-matter schema (PromptSpec) and add a sample prompt used only by tests; document
+          the format in prompts/README.md.
+        outputs: [packages/debate_core/src/debate_core/domain/prompt_spec.py, prompts/README.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: PromptSpec model exists
+            path: packages/debate_core/src/debate_core/domain/prompt_spec.py
+            contentMatch: "class PromptSpec"
+      - id: registry-loader
+        kind: Task
+        name: PromptRegistry loader and renderer
+        description: >-
+          Load and validate prompt files, resolve schemas by dotted path, render templates with StrictUndefined
+          and expose get(prompt_id, version | "latest").
+        dependsOn: [prompt-format]
+        outputs: [packages/debate_core/src/debate_core/integrations/models/prompt_registry.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Registry load/render tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models/test_prompt_registry.py]
+      - id: artifact-metadata
+        kind: Task
+        name: GeneratedArtifactMetadata and router integration
+        description: >-
+          Define GeneratedArtifactMetadata in the domain and have generate_structured results carry it,
+          populated from the ResolvedRoute and PromptSpec plus caller-supplied snapshot/retrieval ids.
+        dependsOn: [registry-loader]
+        outputs: [packages/debate_core/src/debate_core/domain/provenance.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Metadata population tests pass (fake router)
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models, -k, metadata]
+      - id: version-lock
+        kind: Task
+        name: Released-version lock
+        description: >-
+          Generate prompts/prompts.lock.json via a script and add a test that fails when a released body hash
+          changes; run type checks.
+        dependsOn: [registry-loader]
+        outputs: [prompts/prompts.lock.json, scripts/lock_prompts.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prompt lock test passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models/test_prompt_lock.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

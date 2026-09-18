@@ -1,0 +1,164 @@
+# TASK v2-e12-t05-core-endpoints — Core resource endpoints
+# Epic: E12 Identity & API Service | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §6 (routes call use cases), §8 evidence integrity, §12, §14 signed URLs
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e12-t05-core-endpoints
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+  annotations:
+    debate/title: Core resource endpoints
+    debate/architecture-refs: §5, §12, §4
+spec:
+  description: >-
+    Expose the existing V1 use cases over REST for the resources V2 needs first: GET article metadata,
+    GET snapshot metadata plus a short-lived presigned download URL, and GET/list/PATCH cards. Card
+    responses always carry verification_status, snapshot_id, sha256, spans and revision, and a card that
+    is not VERIFIED is flagged so no client can render it as finished evidence. PATCH accepts only the
+    edits the E03 evidence edit policy allows (tag, markup spans, deletions, bracketed insertions) with
+    If-Match revision handling (409 on conflict via the E11-t05 helper), and re-runs verification
+    server-side before persisting. Every route uses the E12-t03 ownership/tenancy helpers. Job creation
+    and status (E13-t05), search endpoints (E16-t01) and library folders/tags (E17-t02) are out of scope;
+    there is no POST /cards here because cards are only created by CardJob.
+  priority: 1
+  constraints:
+    packages: [debate_api.routes, debate_core.application]
+    forbidden:
+      - Accepting client-supplied evidence text that is not reproducible from the snapshot
+      - Returning UNVERIFIED/FAILED cards without an explicit verification_status field and warning flag
+      - Business logic in routes (edit validation and verification live in debate_core use cases)
+      - Presigned URLs longer than 15 minutes or URLs for resources the caller does not own
+  context:
+    - kind: TaskRef
+      name: v2-e12-t03-authn-authz
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e11-t03-dynamodb-repositories
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e11-t04-s3-snapshot-store
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e03-t05-edit-constraints
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e11-t05-optimistic-concurrency
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        GET /v1/articles/{id}, GET /v1/snapshots/{id} (with download_url expiring in at most 900 s),
+        GET /v1/cards/{id} and GET /v1/cards?cursor= exist with typed Pydantic response models in OpenAPI.
+    - id: ac2
+      description: >-
+        PATCH /v1/cards/{id} requires If-Match; a stale revision returns 409 problem+json with the current
+        ETag, and a successful update returns the new revision.
+    - id: ac3
+      description: >-
+        A PATCH that alters quoted evidence characters (other than deletion/markup or bracketed insertion)
+        returns 422 with the offending span, and the stored card is unchanged.
+    - id: ac4
+      description: >-
+        After every accepted PATCH the server re-verifies against the snapshot; if verification fails the
+        card is saved as UNVERIFIED and the response says so.
+    - id: ac5
+      description: >-
+        Requests for another user's or another organization's resources return 404, covered by tests for
+        each route.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e12-t05-core-endpoints-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+spec:
+  description: >-
+    Response schemas first, then read routes, then the edit use case and PATCH route, then an API-level
+    integration test against moto-backed repositories.
+  goalRef:
+    name: v2-e12-t05-core-endpoints
+  graph:
+    nodes:
+      - id: api-schemas
+        kind: Task
+        name: API response and request schemas
+        description: >-
+          ArticleOut, SnapshotOut, CardOut (with verification_status, is_finished flag, spans, revision),
+          CardPatch and Page[T] schemas derived from domain entities without leaking internal fields.
+        outputs: [packages/debate_api/src/debate_api/schemas.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Schema tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_schemas.py]
+      - id: read-routes
+        kind: Task
+        name: Article, snapshot and card read routes
+        description: >-
+          GET routes with ownership checks, cursor pagination for cards, and presigned snapshot URLs.
+        dependsOn: [api-schemas]
+        outputs:
+          - packages/debate_api/src/debate_api/routes/cards.py
+          - packages/debate_api/src/debate_api/routes/sources.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Read route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes, -k, "get or list"]
+      - id: edit-use-case
+        kind: Task
+        name: EditCard use case with re-verification
+        description: >-
+          Application service applying a CardPatch through the E03 edit policy, re-verifying against the
+          snapshot, and saving with expected_revision.
+        dependsOn: [api-schemas]
+        outputs: [packages/debate_core/src/debate_core/application/edit_card.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: EditCard use-case tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_edit_card.py]
+      - id: patch-route
+        kind: Task
+        name: PATCH /v1/cards/{id} with If-Match
+        description: >-
+          Route calling EditCard, mapping RevisionConflict to 409 and edit-policy violations to 422.
+        dependsOn: [read-routes, edit-use-case]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: PATCH route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes, -k, patch]
+      - id: api-integration
+        kind: Task
+        name: API integration test on moto-backed repositories
+        description: >-
+          End-to-end API test with signed test JWTs, moto DynamoDB/S3 and fixture cards covering
+          authorization, pagination and edit flows.
+        dependsOn: [patch-route]
+        outputs: [tests/integration/test_api_core_endpoints.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: API integration tests pass
+            command: uv
+            args: [run, pytest, tests/integration/test_api_core_endpoints.py]
+status:
+  phase: Pending

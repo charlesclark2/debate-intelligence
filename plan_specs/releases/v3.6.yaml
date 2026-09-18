@@ -1,0 +1,97 @@
+# RELEASE v3.6 — Cross-examination simulator
+# Major version: V3. Epics: E27
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v3-6
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.6
+  annotations:
+    debate/title: v3.6 — Cross-examination simulator
+spec:
+  description: >-
+    Students practice CX against a simulated opponent grounded in the argument graph, with concessions
+    recorded to the flow.
+  priority: 16
+  acceptanceCriteria:
+  - id: epic-e27
+    description: >-
+      Epic E27 (Cross-Examination Simulator) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v3.6.0 is pushed and CHANGELOG.md has a v3.6 section.
+  - id: gate
+    description: >-
+      Gate release-v3-6-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v3-6-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.6
+spec:
+  gateType: review
+  description: >-
+    Release review for v3.6 (Cross-examination simulator): demo the release goal end to end, confirm CI
+    green on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v3-6-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.6
+spec:
+  description: >-
+    Release plan for v3.6: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v3-6
+  series: v3
+  version: v3.6
+  graph:
+    nodes:
+    - id: e27
+      kind: External
+      name: Epic E27 — Cross-Examination Simulator
+      inputs:
+        goalRef: v3-e27-cx-simulator
+        specRef: plan_specs/v3/e27-cx-simulator/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v3.6.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e27
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v3.6.0
+    - id: release-review
+      kind: Gate
+      name: v3.6 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v3-6-gate
+status:
+  phase: Pending

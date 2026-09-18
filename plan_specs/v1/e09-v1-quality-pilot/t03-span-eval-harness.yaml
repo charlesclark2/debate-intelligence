@@ -1,0 +1,140 @@
+# TASK v1-e09-t03-span-eval-harness — Card selection and underlining eval harness
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Architecture refs: §16 LLM evaluations, §10 Prompt governance, §8, ADR-006
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e09-t03-span-eval-harness
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+  annotations:
+    debate/title: Card selection and underlining eval harness
+    debate/architecture-refs: §16, §10, §8, ADR-006
+spec:
+  description: >-
+    Build an offline evaluation harness for the card.select and card.markup prompts over the golden corpus.
+    For each case the harness runs selection and markup (via replay cassettes in CI, or a live router when a
+    developer explicitly records a new candidate), then scores: selection overlap with the coach's evidence
+    range (character-level precision/recall/F1), underline precision/recall against coach-labeled warrant
+    spans, warrant completeness (share of coach warrant spans at least 80% covered), tag quality proxy
+    (need alignment label match) and unsupported-text rate, which must be exactly 0 — any card whose
+    evidence is not reproducible from the snapshot fails the run. Results are written as a versioned eval
+    report (JSON + Markdown) keyed by prompt ids/versions and model_id. Boundaries: CI promotion policy is
+    t04; the fixtures come from t01.
+  priority: 1
+  constraints:
+    packages: [evals, debate_core.evidence]
+    forbidden:
+      - Live model calls in CI (replay cassettes only)
+      - Any tolerance above 0 for unsupported evidence text
+      - Tuning prompts against the held-out split
+  context:
+    - kind: TaskRef
+      name: v1-e09-t01-golden-card-fixtures
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t06-card-selection-contract
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `uv run python -m evals.card_spans --split all --router replay` produces
+        evals/reports/<prompt-versions>__<model>.json and .md with per-case and aggregate metrics.
+    - id: ac2
+      description: >-
+        Metrics include selection P/R/F1, underline P/R, warrant completeness and unsupported_text_rate, each
+        broken down by event (Policy, LD, PF) and source type.
+    - id: ac3
+      description: >-
+        An injected fixture with one non-reproducible evidence span makes the harness exit non-zero with
+        unsupported_text_rate > 0 reported.
+    - id: ac4
+      description: >-
+        The corpus has a fixed dev/held-out split recorded in the report, and the report stores prompt ids,
+        versions, model_id and temperature.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e09-t03-span-eval-harness-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+spec:
+  description: >-
+    Metrics as pure functions first, then the runner with replay, then reports and the baseline recording.
+  goalRef:
+    name: v1-e09-t03-span-eval-harness
+  graph:
+    nodes:
+      - id: metrics
+        kind: Task
+        name: Span metrics
+        description: >-
+          Character-level P/R/F1, warrant completeness and unsupported-text detection as pure functions with
+          unit tests.
+        outputs: [evals/card_spans/metrics.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Metric unit tests pass
+            command: uv
+            args: [run, pytest, evals/tests/test_span_metrics.py]
+      - id: runner
+        kind: Task
+        name: Eval runner over golden cases
+        description: >-
+          Run select/markup per case through the configured router (replay default), extract spans and
+          verify reproducibility, with a fixed dev/held-out split.
+        dependsOn: [metrics]
+        outputs: [evals/card_spans/__main__.py, evals/card_spans/split.json]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Eval runs offline on replay cassettes
+            command: uv
+            args: [run, python, -m, evals.card_spans, --split, all, --router, replay]
+      - id: reports
+        kind: Task
+        name: JSON and Markdown reports with breakdowns
+        description: >-
+          Write versioned reports with aggregate and per-event/per-source breakdowns and failing-case detail.
+        dependsOn: [runner]
+        outputs: [evals/card_spans/report.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Report tests pass (including unsupported-text failure case)
+            command: uv
+            args: [run, pytest, evals/tests/test_span_report.py]
+      - id: baseline
+        kind: Task
+        name: Record baseline cassettes and report
+        description: >-
+          Record cassettes for the current prompt/model versions once (developer machine, Bedrock creds) and
+          commit the baseline report; coach reviews worst cases.
+        dependsOn: [reports]
+        outputs: [evals/reports/baseline.json, tests/fixtures/model_cassettes/card/]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Baseline report committed
+            path: evals/reports/baseline.json
+            contentMatch: "unsupported_text_rate"
+          - type: custom
+            name: Coach reviews worst-scoring cases
+            description: >-
+              Charlie reviews the five lowest-F1 cases and classifies each as a labeling error (fix the label)
+              or a genuine model miss (keep, and note it in the report).
+status:
+  phase: Pending

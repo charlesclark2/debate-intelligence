@@ -1,0 +1,143 @@
+# TASK v2-e17-t03-library-ui — Library UI
+# Epic: E17 Card Library | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §3 V2 save/edit/export, §8 (UNVERIFIED never presented as finished), §12 Card Library
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e17-t03-library-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+  annotations:
+    debate/title: Library UI
+    debate/architecture-refs: §3, §8, §12
+spec:
+  description: >-
+    Build the /library workspace: a folder tree (create, rename, drag-to-move, organized like a debater's
+    tub, e.g. "Aff > Advantage 1 > Solvency", "Neg > Politics DA > Link"), a card list with filters (tag,
+    verification status, source type, date) and search, card preview showing tag, cite and evidence with
+    underline/highlight rendered from spans, and bulk select for move/tag (bulk export is triggered here but
+    implemented in t05). Opening a card uses the E14 provenance-constrained editor. UNVERIFIED cards carry a
+    prominent badge and are visually distinct everywhere they appear. This task does NOT build revision
+    diff/restore (t04), the export job (t05) or sharing management (t06).
+  priority: 1
+  constraints:
+    packages: [web/src/app/library, web/src/components/library]
+    forbidden:
+      - Rendering UNVERIFIED cards without a visible unverified badge
+      - Client-side editing of evidence text outside the E14 editor
+      - Fetching more than one page of cards eagerly (use cursor pagination / virtualization)
+      - Live backend calls in unit/component tests
+  context:
+    - kind: TaskRef
+      name: v2-e17-t02-library-api
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e14-t05-card-editor
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The folder tree supports create, rename, delete-with-move and drag-and-drop move, each persisted
+        through the Library API with optimistic UI and rollback on error.
+    - id: ac2
+      description: >-
+        The card list filters by tag, verification status, source type and date, supports search, and
+        virtualizes rendering so a 2,000-card folder scrolls without jank.
+    - id: ac3
+      description: >-
+        Card preview renders underline and highlight from CardSpans identically to the editor, and UNVERIFIED
+        cards show a red "Unverified - not round-ready" badge in list and preview.
+    - id: ac4
+      description: >-
+        Bulk select supports move and tag on up to 200 cards with a single confirmation and a result summary.
+    - id: ac5
+      description: >-
+        Playwright tests cover folder management, filtering, bulk tag and open-in-editor against a mocked API,
+        and axe reports no serious or critical violations.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e17-t03-library-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+spec:
+  description: >-
+    Build the folder tree, then the virtualized card list with filters and preview, then bulk actions, and
+    finish with end-to-end and accessibility tests.
+  goalRef:
+    name: v2-e17-t03-library-ui
+  graph:
+    nodes:
+      - id: folder-tree
+        kind: Task
+        name: Folder tree
+        description: >-
+          Accessible tree view with CRUD and drag-and-drop move, optimistic updates via TanStack Query.
+        outputs: [web/src/components/library/FolderTree.tsx]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Folder tree tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/components/library/FolderTree.test.tsx]
+      - id: card-list
+        kind: Task
+        name: Filterable virtualized card list and preview
+        description: >-
+          Card list with filter bar, search box, cursor pagination and virtualization; preview pane reusing
+          the E14 span renderer with the unverified badge.
+        dependsOn: [folder-tree]
+        outputs:
+          - web/src/components/library/CardList.tsx
+          - web/src/components/library/CardPreview.tsx
+          - web/src/app/library/page.tsx
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card list and preview tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/components/library/CardList.test.tsx]
+      - id: bulk-actions
+        kind: Task
+        name: Bulk select, move and tag
+        description: >-
+          Multi-select with shift-click, bulk move/tag actions calling the API, result summary toast, and an
+          Export selection button stub wired later by t05.
+        dependsOn: [card-list]
+        outputs: [web/src/components/library/BulkActions.tsx]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bulk action tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/components/library/BulkActions.test.tsx]
+      - id: e2e-a11y
+        kind: Task
+        name: End-to-end and accessibility tests
+        description: Playwright specs for the main library flows and an axe scan.
+        dependsOn: [bulk-actions]
+        outputs: [web/e2e/library.spec.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Library e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/library.spec.ts]
+          - type: command_succeeds
+            name: Web lint passes
+            command: pnpm
+            args: [--dir, web, lint]
+status:
+  phase: Pending

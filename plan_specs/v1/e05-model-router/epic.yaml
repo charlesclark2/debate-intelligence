@@ -1,0 +1,228 @@
+# EPIC E05 — Model Router & Structured LLM Contracts
+# Major version: V1 | Release: v1.1 (URL → verified card)
+# Architecture refs: §10, ADR-005, §15, §20 step 5
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-model-router
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: E05 — Model Router & Structured LLM Contracts
+    debate/architecture-refs: §10, ADR-005, §15, §20 step 5
+spec:
+  description: >-
+    Route every model call through a config-driven ModelRouter with Bedrock and offline implementations,
+    versioned prompts, validated structured outputs, and card-selection contracts that return spans —
+    never rewritten evidence.
+  priority: 2
+  constraints:
+    majorVersion: v1
+    release: v1.1
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Model IDs and routing live in config; Bedrock (Claude Sonnet/Haiku) is optional and a deterministic
+      fake/replay model makes CI offline.
+  - id: ac2
+    description: >-
+      Every prompt has a prompt_id + semver and generated artifacts persist model_id, prompt version and
+      parameters.
+  - id: ac3
+    description: >-
+      Structured outputs are Pydantic-validated with a bounded repair retry and fail closed for evidence
+      actions.
+  - id: ac4
+    description: >-
+      CardSelection returns paragraph IDs/offsets plus tag and markup metadata only.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-model-router-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Task graph for epic E05 (Model Router & Structured LLM Contracts). Each Task node points at its own
+    task-level PlanSpec.
+  goalRef:
+    name: v1-e05-model-router
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e02-t02-ports
+      kind: External
+      name: 'Prerequisite from E02: Repository and provider port interfaces'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t02-ports
+        specRef: plan_specs/v1/e02-domain-core/t02-ports.yaml
+    - id: ext-v1-e03-t03-span-extraction
+      kind: External
+      name: 'Prerequisite from E03: Span-addressed evidence extraction'
+      description: >-
+        Cross-epic prerequisite owned by v1-e03-evidence-integrity (release v1.0).
+      inputs:
+        goalRef: v1-e03-t03-span-extraction
+        specRef: plan_specs/v1/e03-evidence-integrity/t03-span-extraction.yaml
+    - id: t01
+      kind: Task
+      name: ModelRouter interface and routing config
+      description: >-
+        ModelRouter port with task classes (complex_reasoning, high_volume, deep_audit, embeddings, rerank),
+        YAML routing policy, per-task parameters, and generate_structured(schema) API.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t01-model-router-port.yaml
+        goalRef: v1-e05-t01-model-router-port
+      dependsOn:
+      - ext-v1-e02-t02-ports
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t01-model-router-port reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t01-model-router-port
+    - id: t02
+      kind: Task
+      name: Amazon Bedrock adapter
+      description: >-
+        Bedrock Converse/InvokeModel implementation with tool-use/JSON-schema structured output, inference-profile/region
+        config, throttling retries, credential chain (no hard-coded keys); optional extra install.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t02-bedrock-adapter.yaml
+        goalRef: v1-e05-t02-bedrock-adapter
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t02-bedrock-adapter reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t02-bedrock-adapter
+    - id: t03
+      kind: Task
+      name: Deterministic fake and record/replay models
+      description: >-
+        Fake router returning fixture outputs keyed by prompt_id+input hash, and a record/replay wrapper
+        for real calls so tests and evals are reproducible offline.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t03-fake-replay-models.yaml
+        goalRef: v1-e05-t03-fake-replay-models
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t03-fake-replay-models reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t03-fake-replay-models
+    - id: t04
+      kind: Task
+      name: Versioned prompt registry
+      description: >-
+        Prompt files with prompt_id, semver, template, output schema; loader and GeneratedArtifactMetadata
+        (model_id, profile/region, prompt version, temperature, retrieval ids) persisted with outputs.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t04-prompt-registry.yaml
+        goalRef: v1-e05-t04-prompt-registry
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t04-prompt-registry reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t04-prompt-registry
+    - id: t05
+      kind: Task
+      name: Structured output validation and repair
+      description: >-
+        Validate outputs against Pydantic schemas, single repair-prompt retry, typed ModelOutputError,
+        fail-closed policy flag for evidence-integrity actions.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t05-structured-output-validation.yaml
+        goalRef: v1-e05-t05-structured-output-validation
+      dependsOn:
+      - t02
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t05-structured-output-validation reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t05-structured-output-validation
+    - id: t06
+      kind: Task
+      name: CardSelection / MarkupSpan contract and prompts
+      description: >-
+        CardSelection, MarkupSpan, TagSuggestion schemas + prompts that take paragraph-numbered snapshot
+        text and a research need and return paragraph IDs/offsets, tag, warrant/claim markup; rejects
+        any output containing quoted evidence text.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t06-card-selection-contract.yaml
+        goalRef: v1-e05-t06-card-selection-contract
+      dependsOn:
+      - t04
+      - t05
+      - ext-v1-e03-t03-span-extraction
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t06-card-selection-contract reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t06-card-selection-contract
+    - id: t07
+      kind: Task
+      name: Token/cost telemetry and budgets
+      description: >-
+        Record tokens, latency and estimated cost per call; per-run and per-day budget limits; `--max-cost`
+        CLI guard.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t07-usage-telemetry.yaml
+        goalRef: v1-e05-t07-usage-telemetry
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t07-usage-telemetry reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t07-usage-telemetry
+status:
+  phase: Pending

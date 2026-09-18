@@ -1,0 +1,142 @@
+# TASK v3-e26-t04-judge-profiles — Judge profile policies
+# Epic: E26 Round Engine Core | Release: v3.5 (Round engine core) | Major: V3
+# Architecture refs: §7 Round.judge_profile, §13 Round simulator (judge settings table), §16, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e26-t04-judge-profiles
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+  annotations:
+    debate/title: Judge profile policies
+    debate/architecture-refs: §7, §13, §16, §19
+spec:
+  description: >-
+    Encode the four judge settings from §13 as JudgePolicy modules: LAY (clarity, story, explained
+    impacts; technical arguments count only when clearly developed; ignores speed beyond conversational),
+    SOMEWHAT_EXPERIENCED (tracks conventional positions and line-by-line reasonably; penalizes jargon and
+    dense theory), EXPERIENCED_FLOW (tracks drops and concessions precisely; weighs comparative warrants,
+    offense/defense and explicit ballot framing), and CIRCUIT_TECHNICAL (accepts advanced strategy, speed
+    and dense line-by-line). Each policy is structured configuration plus pure functions: which flow facts
+    are admissible (e.g. a drop only counts for LAY if extended with explanation), how speed affects
+    comprehension, weighting of framework/weighing, theory threshold, and a rubric text block for the
+    E28 decision prompt. Policies must require decisions to be justified from recorded flow, never from a
+    stereotype of the judge. Format-aware defaults (e.g. PF lay panels, LD value/criterion framing) are
+    included. Producing actual decisions and RFDs is E28 t03; this task only defines the policies.
+  priority: 2
+  constraints:
+    packages: [debate_core.rounds]
+    forbidden:
+      - Model calls; judge policies are deterministic configuration and functions
+      - Policy rules keyed on debater identity, school or demographics
+      - Encoding a preferred ideological or argument-content outcome (e.g. "never vote on kritiks")
+      - Importing boto3/typer/fastapi in debate_core
+  context:
+    - kind: TaskRef
+      name: v3-e26-t01-round-model
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        JudgePolicy exists for LAY, SOMEWHAT_EXPERIENCED, EXPERIENCED_FLOW and CIRCUIT_TECHNICAL with
+        documented parameters (speed tolerance, drop admissibility, jargon penalty, theory threshold,
+        framing weight) and a rubric block.
+    - id: ac2
+      description: >-
+        admissible_flow_facts(policy, flow_state) returns the subset of flow facts a judge would credit;
+        on shared fixtures, a dropped but unexplained argument is credited by EXPERIENCED_FLOW and
+        CIRCUIT_TECHNICAL but not by LAY.
+    - id: ac3
+      description: >-
+        comprehension(policy, words_per_minute) degrades monotonically with speed and returns full
+        comprehension for CIRCUIT_TECHNICAL at circuit speeds used in fixtures.
+    - id: ac4
+      description: >-
+        Policies are versioned (policy_version) so E28 RoundDecisions can record which policy produced
+        them, and a policy doc per profile is reviewed by the coach.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e26-t04-judge-profiles-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+spec:
+  description: >-
+    Define the policy interface, implement the four profiles with format-aware defaults, write fixture
+    tests contrasting profiles, and get coach sign-off on the rubric text.
+  goalRef:
+    name: v3-e26-t04-judge-profiles
+  graph:
+    nodes:
+      - id: policy-interface
+        kind: Task
+        name: JudgePolicy interface and parameters
+        description: >-
+          JudgePolicy model (parameters, rubric, policy_version) and pure function signatures for
+          admissible_flow_facts, comprehension and weighing_emphasis.
+        outputs: [packages/debate_core/src/debate_core/rounds/judges/base.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Judge policy interface exists
+            path: packages/debate_core/src/debate_core/rounds/judges/base.py
+            contentMatch: "class JudgePolicy"
+      - id: four-profiles
+        kind: Task
+        name: Lay, somewhat experienced, flow and circuit profiles
+        description: >-
+          Implement the four profiles with format-aware defaults (Policy, LD, PF) and rubric text.
+        dependsOn: [policy-interface]
+        outputs: [packages/debate_core/src/debate_core/rounds/judges/profiles.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Profile unit tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_judge_profiles.py, -k, profile]
+      - id: contrast-fixtures
+        kind: Task
+        name: Cross-profile contrast fixtures
+        description: >-
+          Shared flow-state fixtures (dropped DA, conceded framework, fast 2NR) with expected admissible
+          facts and comprehension per profile.
+        dependsOn: [four-profiles]
+        outputs: [tests/fixtures/rounds/judge_contrast_flows.yaml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contrast fixture tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_judge_profiles.py, -k, contrast]
+      - id: coach-review
+        kind: Task
+        name: Judge policy docs and coach review
+        description: >-
+          Short doc per profile describing parameters and rubric; coach review and adjustment.
+        dependsOn: [contrast-fixtures]
+        outputs: [docs/simulation/judge_profiles.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Judge profile doc exists
+            path: docs/simulation/judge_profiles.md
+            contentMatch: "EXPERIENCED_FLOW"
+          - type: custom
+            name: Coach sign-off on judge rubrics
+            description: >-
+              Charlie confirms each profile's rubric matches how lay parent judges, experienced flow judges
+              and circuit judges actually decide rounds on the current topics.
+status:
+  phase: Pending

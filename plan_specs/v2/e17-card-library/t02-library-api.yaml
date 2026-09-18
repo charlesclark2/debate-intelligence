@@ -1,0 +1,161 @@
+# TASK v2-e17-t02-library-api — Library API
+# Epic: E17 Card Library | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §3 V2 save/edit/export, §6, §8 (verification status), §12 Card Library + AuthZ, §14
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e17-t02-library-api
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+  annotations:
+    debate/title: Library API
+    debate/architecture-refs: §3, §6, §8, §12, §14
+spec:
+  description: >-
+    Expose the library over FastAPI through a LibraryService in the application layer: CRUD for folders and
+    tags, move/copy cards between folders, bulk tag/untag, list and filter cards (folder, tag, verification
+    status, source type, date cut, format profile) with cursor pagination, full-text search over the
+    caller's own and shared cards via the E15 cards index, and GET revisions for a card. Every response
+    carries verification_status so the UI can badge UNVERIFIED cards; list endpoints never mix another
+    organization's items. This task does NOT implement sharing grants/permissions (t06, which plugs into the
+    authorization helper introduced here), the UI (t03), diff/restore (t04) or bulk export (t05).
+  priority: 1
+  constraints:
+    packages: [debate_api, debate_core.application]
+    forbidden:
+      - Business logic in FastAPI route handlers
+      - Returning UNVERIFIED cards without an explicit verification_status field
+      - Serving search results for cards the caller cannot read (post-filter by DynamoDB authorization)
+      - Accepting evidence-text edits through library endpoints (edits go through the E14 editor path)
+      - Live AWS/OpenSearch calls in API tests
+  context:
+    - kind: TaskRef
+      name: v2-e17-t01-library-model
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t03-authn-authz
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e15-t03-embeddings-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Folder and tag CRUD endpoints return 201/200/204 as appropriate; deleting a non-empty folder returns
+        409 unless ?move_to= is supplied.
+    - id: ac2
+      description: >-
+        GET /v1/library/cards supports folder, tag, verification_status, source_type and date filters with
+        cursor pagination and returns in under 300 ms p95 on a 2,000-card seeded dev library.
+    - id: ac3
+      description: >-
+        GET /v1/library/search?q= returns only cards the caller can read, with matched tag/cite highlights,
+        verified by cross-tenant tests.
+    - id: ac4
+      description: >-
+        GET /v1/cards/{id}/revisions lists revisions newest-first with editor id, reason, created_at and
+        verification_status per revision.
+    - id: ac5
+      description: >-
+        A single can_read/can_write authorization helper in the application layer is used by every library
+        route, and the OpenAPI client drift check passes.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e17-t02-library-api-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+spec:
+  description: >-
+    Build LibraryService and the authorization helper first, then folder/tag routes, card list/search routes
+    and the revisions endpoint, finishing with performance and client-drift checks.
+  goalRef:
+    name: v2-e17-t02-library-api
+  graph:
+    nodes:
+      - id: library-service
+        kind: Task
+        name: LibraryService and authorization helper
+        description: >-
+          Application service with folder/tag/card placement operations and a LibraryAuthorizer (owner,
+          organization, role) that t06 extends with share grants.
+        outputs:
+          - packages/debate_core/src/debate_core/application/library_service.py
+          - packages/debate_core/src/debate_core/application/library_authz.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: LibraryService tests pass with in-memory repositories
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_library_service.py]
+      - id: folder-tag-routes
+        kind: Task
+        name: Folder and tag routes
+        description: CRUD routes for folders and tags plus move/copy and bulk tag operations.
+        dependsOn: [library-service]
+        outputs: [packages/debate_api/src/debate_api/routes/library_folders.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Folder and tag route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_library_folders.py]
+      - id: card-list-search
+        kind: Task
+        name: Card list, filter and search routes
+        description: >-
+          Filtered, paginated card listing from DynamoDB and search via the cards index with authorization
+          post-filtering and hydration from DynamoDB.
+        dependsOn: [library-service]
+        outputs: [packages/debate_api/src/debate_api/routes/library_cards.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card listing and cross-tenant search tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_library_cards.py]
+      - id: revisions-endpoint
+        kind: Task
+        name: Revisions endpoint
+        description: GET /v1/cards/{id}/revisions with pagination and authorization.
+        dependsOn: [card-list-search]
+        outputs: [packages/debate_api/src/debate_api/routes/card_revisions.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Revisions endpoint tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_card_revisions.py]
+      - id: perf-and-client
+        kind: Task
+        name: Seeded performance check and client regeneration
+        description: >-
+          Seed 2,000 cards in dev, measure list p95, regenerate the TS client and run type/import checks.
+        dependsOn: [folder-tag-routes, revisions-endpoint]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Web client builds with regenerated types
+            command: pnpm
+            args: [--dir, web, build]
+          - type: command_succeeds
+            name: Type check passes for debate_api
+            command: uv
+            args: [run, pyright, packages/debate_api]
+          - type: custom
+            name: Dev p95 recorded
+            description: Charlie records the seeded dev list-endpoint p95 latency in the PR.
+status:
+  phase: Pending

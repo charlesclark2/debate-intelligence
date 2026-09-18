@@ -1,0 +1,166 @@
+# TASK v2-e15-t02-index-mappings-chunking — Index mappings and chunking
+# Epic: E15 Search Index & Hybrid Retrieval | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §5 OpenSearch, §7 (SourceSnapshot, Card), §8 (normalization, paragraph ids), §9, ADR-004
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e15-t02-index-mappings-chunking
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+  annotations:
+    debate/title: Index mappings and chunking
+    debate/architecture-refs: §5, §7, §8, §9, ADR-004
+spec:
+  description: >-
+    Define versioned index mappings for article chunks, cards and search candidates, and a deterministic,
+    paragraph-aligned chunker that turns a normalized SourceSnapshot into chunks that carry snapshot_id,
+    paragraph id range, character offsets and normalized_text_hash so every search hit can be traced back
+    to exact snapshot text. Chunking reuses the v1-e03-t01 normalization rules and records the normalizer
+    version. Also define an IndexWriter port plus an OpenSearch adapter that upserts documents by a
+    deterministic id. This task does NOT compute embeddings (t03, the knn_vector field is declared here
+    but filled there), build queries (t04) or run rebuilds (t06). Indexed documents are derived copies:
+    no field in the index is the only copy of any data.
+  priority: 1
+  constraints:
+    packages: [debate_core.retrieval, debate_core.integrations, debate_core.domain]
+    forbidden:
+      - Chunk boundaries that split a paragraph id (chunks align to whole snapshot paragraphs)
+      - Indexing text that was not produced by the versioned normalizer
+      - Indexing user email, cognito_sub or other PII beyond owner_id/organization_id needed for filtering
+      - Importing opensearch-py or boto3 in domain/application layers
+      - Live OpenSearch calls in the unit/CI test suite
+  context:
+    - kind: TaskRef
+      name: v2-e15-t01-opensearch-serverless
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e03-t01-text-normalization
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Mapping JSON files exist for article_chunks, cards and search_candidates with an explicit
+        mapping_version, dynamic mapping disabled, keyword fields for filters (source_type, published_at,
+        access_status, organization_id, owner_id) and a 1024-dim knn_vector field on chunks and cards.
+    - id: ac2
+      description: >-
+        The chunker is deterministic: the same snapshot and normalizer version always produce identical
+        chunk ids, paragraph ranges and offsets, and concatenating chunk texts reproduces the normalized
+        snapshot text exactly.
+    - id: ac3
+      description: >-
+        Chunks respect a configurable token budget (default ~350 tokens) with whole-paragraph boundaries and
+        at most one paragraph of overlap; a single oversize paragraph becomes its own chunk, never split.
+    - id: ac4
+      description: >-
+        Every chunk document carries article_id, snapshot_id, paragraph_start/end, char_start/end,
+        normalized_text_hash and normalizer_version, and its id is sha256(snapshot_id + paragraph range).
+    - id: ac5
+      description: >-
+        The OpenSearch IndexWriter adapter creates versioned physical indexes behind read/write aliases and
+        upserts idempotently; tests run against recorded responses or a local OpenSearch container only.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e15-t02-index-mappings-chunking-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+spec:
+  description: >-
+    Model the index documents first, then the pure chunker with property tests, then mappings, and finally
+    the IndexWriter port and OpenSearch adapter with alias handling.
+  goalRef:
+    name: v2-e15-t02-index-mappings-chunking
+  graph:
+    nodes:
+      - id: index-documents
+        kind: Task
+        name: Index document models
+        description: >-
+          Pydantic models ArticleChunkDoc, CardIndexDoc and SearchCandidateDoc with provenance fields and a
+          deterministic doc-id function; conversion from Card/SourceSnapshot domain entities.
+        outputs: [packages/debate_core/src/debate_core/retrieval/index_documents.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Index document models exist
+            path: packages/debate_core/src/debate_core/retrieval/index_documents.py
+            contentMatch: "class ArticleChunkDoc"
+      - id: chunker
+        kind: Task
+        name: Paragraph-aligned chunker
+        description: >-
+          Pure function chunk_snapshot(snapshot_text, paragraphs, budget, overlap) using the v1 normalizer
+          and a tokenizer estimate; hypothesis tests for determinism, exact reconstruction and no
+          split paragraphs.
+        dependsOn: [index-documents]
+        outputs: [packages/debate_core/src/debate_core/retrieval/chunking.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Chunker property tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_chunking.py]
+      - id: mappings
+        kind: Task
+        name: Versioned index mappings
+        description: >-
+          JSON mappings with mapping_version metadata, english analyzer plus a keyword subfield on titles,
+          date and keyword filter fields, and knn_vector (faiss/hnsw, cosinesimil, 1024 dims) fields.
+        dependsOn: [index-documents]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/opensearch/mappings/article_chunks.json
+          - packages/debate_core/src/debate_core/integrations/opensearch/mappings/cards.json
+          - packages/debate_core/src/debate_core/integrations/opensearch/mappings/search_candidates.json
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Mappings match index document models
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_opensearch_mappings.py]
+      - id: index-writer
+        kind: Task
+        name: IndexWriter port and OpenSearch adapter
+        description: >-
+          IndexWriter port (ensure_index, upsert_many, delete_by_owner, swap_alias) in retrieval/, and an
+          OpenSearch adapter using the t01 client factory, versioned physical names (cards_v3) behind
+          read/write aliases, bulk upserts with per-item error reporting.
+        dependsOn: [chunker, mappings]
+        outputs:
+          - packages/debate_core/src/debate_core/retrieval/ports.py
+          - packages/debate_core/src/debate_core/integrations/opensearch/index_writer.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: IndexWriter adapter tests pass on recorded responses
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_opensearch_index_writer.py]
+      - id: quality-gates
+        kind: Task
+        name: Type check and import boundaries
+        description: Confirm types and that no OpenSearch/AWS import leaks into domain or application layers.
+        dependsOn: [index-writer]
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

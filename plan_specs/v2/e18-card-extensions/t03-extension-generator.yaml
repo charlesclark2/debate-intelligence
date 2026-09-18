@@ -1,0 +1,146 @@
+# TASK v2-e18-t03-extension-generator — Extension, CX question and answer generation
+# Epic: E18 Card Extensions | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §3 V2 extension story, §10, §12 Extend a Card
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e18-t03-extension-generator
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+  annotations:
+    debate/title: Extension, CX question and answer generation
+    debate/architecture-refs: §3, §10, §12
+spec:
+  description: >-
+    Generate in-round material from a card's ArgumentComponents: a 15-second and a 30-second extension
+    (spoken-style bullets that extend the claim and warrant and weigh the impact), CX questions an opponent
+    is likely to ask about the card (qualifications, warrant gaps, date/uniqueness, link specificity) and
+    suggested answers. Every generated statement is tagged TEXT_SUPPORTED with span refs into the evidence,
+    or INFERENCE (strategic reasoning not stated by the author). A deterministic validator rejects any
+    TEXT_SUPPORTED statement whose span refs are missing, out of range or do not lexically support the
+    statement (overlap threshold), downgrading or dropping it; the whole output fails closed if no valid
+    extension remains. Also records prompt/model metadata. This task does NOT expose endpoints or UI (t04)
+    or build the coach-rubric eval (t05).
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application]
+    forbidden:
+      - TEXT_SUPPORTED statements without valid span references
+      - Presenting inference as something the card's author said
+      - Fabricating author qualifications, dates or statistics not in the card or its cite
+      - Direct Bedrock calls, unversioned prompts, or real model calls in CI
+  context:
+    - kind: TaskRef
+      name: v2-e18-t02-component-extraction
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        CardExtensionSet is a validated Pydantic output containing ext_15s and ext_30s bullet lists,
+        cx_questions[] and likely_answers[] where every item has support_type (TEXT_SUPPORTED | INFERENCE),
+        span_refs and text, plus prompt_id/version and model_id.
+    - id: ac2
+      description: >-
+        The support validator downgrades or drops TEXT_SUPPORTED items whose span refs fail bounds or overlap
+        checks, and tests prove a seeded fabricated statistic is never returned as TEXT_SUPPORTED.
+    - id: ac3
+      description: >-
+        The 15-second extension is <= 45 spoken words and the 30-second extension <= 90 words (at ~180 wpm
+        conversational rate), enforced by the validator with one repair retry.
+    - id: ac4
+      description: >-
+        Generation for PASTED cards works but the result carries provenance_mode=PASTED so the UI can warn
+        that the underlying evidence is not snapshot-verified.
+    - id: ac5
+      description: >-
+        Replay fixtures for 10 cards across Policy, LD and PF produce stable outputs in CI with zero
+        validator-rejected TEXT_SUPPORTED items in the final results.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e18-t03-extension-generator-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+spec:
+  description: >-
+    Define the output contract and the support validator before any prompting, then write the prompts and
+    the generator service, and lock behaviour with replay fixtures.
+  goalRef:
+    name: v2-e18-t03-extension-generator
+  graph:
+    nodes:
+      - id: contract
+        kind: Task
+        name: CardExtensionSet contract
+        description: Pydantic models for extension bullets, CXQuestion, LikelyAnswer and SupportType.
+        outputs: [packages/debate_core/src/debate_core/arguments/extensions.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Extension contract exists
+            path: packages/debate_core/src/debate_core/arguments/extensions.py
+            contentMatch: "TEXT_SUPPORTED"
+      - id: support-validator
+        kind: Task
+        name: Support and length validator
+        description: >-
+          Checks span bounds, lexical overlap between statement and referenced spans, number/date presence in
+          referenced text, and word limits; downgrade/drop policy with reasons.
+        dependsOn: [contract]
+        outputs: [packages/debate_core/src/debate_core/arguments/extension_validation.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Support validator tests pass including fabricated-stat cases
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_extension_validation.py]
+      - id: prompts
+        kind: Task
+        name: Extension and CX prompts
+        description: >-
+          card_extensions@1.0.0 and card_cx@1.0.0 prompts (complex_reasoning class) taking components and
+          offset-numbered evidence, instructed to label support type and cite spans.
+        dependsOn: [contract]
+        outputs:
+          - packages/debate_core/src/debate_core/prompts/card_extensions.yaml
+          - packages/debate_core/src/debate_core/prompts/card_cx.yaml
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Extension prompt registered
+            path: packages/debate_core/src/debate_core/prompts/card_extensions.yaml
+            contentMatch: "prompt_id: card_extensions"
+      - id: generator-service
+        kind: Task
+        name: ExtensionGenerator service with replay fixtures
+        description: >-
+          Application service composing component extraction, both prompts, validation with a repair retry
+          and fail-closed behaviour; 10 replay fixtures across events.
+        dependsOn: [support-validator, prompts]
+        outputs:
+          - packages/debate_core/src/debate_core/application/extension_generator.py
+          - tests/fixtures/extensions/
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Generator tests pass on replay fixtures
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_extension_generator.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

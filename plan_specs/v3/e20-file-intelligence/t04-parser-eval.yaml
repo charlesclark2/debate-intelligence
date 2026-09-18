@@ -1,0 +1,165 @@
+# TASK v3-e20-t04-parser-eval — Parser accuracy evaluation
+# Epic: E20 Debate File Intelligence | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §6 FileIntelligenceService, §13 Argument graph (file parsing), §16 deterministic tests
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e20-t04-parser-eval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+  annotations:
+    debate/title: Parser accuracy evaluation
+    debate/architecture-refs: §13, §16
+spec:
+  description: >-
+    Measure the t03 parser against a labeled set of the team's own files from the 2024-25, 2025-26 and
+    2026-27 seasons across Policy, LD and PF. Files are curated copies from ~/Documents/debate on the
+    coach's Mac, scrubbed with the t03 script into tests/fixtures/debate_files/eval/, with paragraph-level
+    unit labels and card boundaries (plus underline/highlight labels on a sample) stored beside them. The
+    task produces per-unit precision/recall/F1, card-boundary and formatting-span metrics, a committed
+    baseline and a CI regression gate. Parser bugs found here are filed against t03's code, not fixed
+    silently inside the eval; LLM graph evaluation is E21-t05.
+  priority: 2
+  constraints:
+    packages: [tests/evals, tests/fixtures, scripts]
+    forbidden:
+      - >-
+        Committing unscrubbed team files to tests/fixtures (student names, docProps author/lastModifiedBy,
+        comments, tracked-change authors)
+      - Editing fixture text to make labels line up
+      - Updating the baseline without a coach-reviewed report in the same PR
+  context:
+    - kind: TaskRef
+      name: v3-e20-t03-docx-structure-parser
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        At least 24 scrubbed files (at least 6 per format, all three seasons, at least 3 not built on the
+        Verbatim template) are listed in a manifest with origin path, season and format, and the coach has
+        reviewed the labels.
+    - id: ac2
+      description: >-
+        The eval reports per-unit (POCKET, HAT, BLOCK, TAG, CITE, EVIDENCE, ANALYTIC) precision/recall/F1,
+        card-boundary exact-match rate and character-level underline/highlight F1, broken down by format and
+        season, as JSON and Markdown.
+    - id: ac3
+      description: >-
+        Initial targets are recorded and met or ticketed: TAG, CITE and EVIDENCE F1 at least 0.97;
+        POCKET/HAT/BLOCK at least 0.95; ANALYTIC at least 0.85; formatting span F1 at least 0.99.
+    - id: ac4
+      description: >-
+        CI fails when any unit F1 drops more than 0.01 below the committed baseline for the current
+        parser_version.
+    - id: ac5
+      description: >-
+        Label files are keyed by paragraph index plus text hash, and a validation step fails when a fixture
+        changes under its labels.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e20-t04-parser-eval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+spec:
+  description: >-
+    Collect and scrub files, build a pre-labeling tool and label schema, label with the coach, then add
+    metrics, reports and the regression gate.
+  goalRef:
+    name: v3-e20-t04-parser-eval
+  graph:
+    nodes:
+      - id: collect-files
+        kind: Task
+        name: Collect and scrub the evaluation files
+        description: >-
+          Select representative files per format and season from ~/Documents/debate, scrub them with
+          scripts/scrub_docx_fixture.py and record provenance in the manifest.
+        outputs: [tests/fixtures/debate_files/eval/MANIFEST.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Eval manifest exists
+            path: tests/fixtures/debate_files/eval/MANIFEST.md
+            contentMatch: "2024-25"
+          - type: custom
+            name: Coach approves the file selection
+            description: >-
+              Coach confirms the selection covers the team's real formatting habits (Verbatim and
+              non-Verbatim, all three formats) and that no student-identifying content remains.
+      - id: label-tooling
+        kind: Task
+        name: Label schema and pre-labeling tool
+        description: >-
+          JSONL label schema (paragraph index, text sha256, unit, card id) with a validator, and
+          scripts/prelabel_docx.py that seeds labels from parser output for human correction.
+        outputs: [scripts/prelabel_docx.py, tests/evals/parser/labels_schema.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Label schema validation tests pass
+            command: uv
+            args: [run, pytest, tests/evals/parser/test_labels_schema.py]
+      - id: labeling
+        kind: Task
+        name: Label the set
+        description: >-
+          Correct pre-labels for every file and label formatting spans on a 20% paragraph sample; ambiguous
+          conventions are resolved in a short labeling guide.
+        dependsOn: [collect-files, label-tooling]
+        outputs: [tests/fixtures/parser_labels/]
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Labels exist
+            path: tests/fixtures/parser_labels/README.md
+            contentMatch: "labeling guide"
+          - type: custom
+            name: Coach spot-checks labels
+            description: >-
+              Coach reviews at least 3 labeled files end to end and signs off on the labeling guide.
+      - id: metrics-report
+        kind: Task
+        name: Metrics and reports
+        description: >-
+          Compute unit P/R/F1, card-boundary accuracy and span F1 with per-format/season breakdowns; write
+          build/eval-reports/parser.json and a Markdown summary.
+        dependsOn: [labeling]
+        outputs: [tests/evals/parser/metrics.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Metric unit tests pass
+            command: uv
+            args: [run, pytest, tests/evals/parser/test_metrics.py]
+      - id: regression-gate
+        kind: Task
+        name: Baseline and CI regression gate
+        description: >-
+          Commit the baseline for the current parser_version and add the eval to CI as a required job.
+        dependsOn: [metrics-report]
+        outputs: [tests/evals/baselines/parser.json]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Parser baseline committed
+            path: tests/evals/baselines/parser.json
+            contentMatch: "parser_version"
+          - type: test_passes
+            name: Parser eval passes against baseline
+            command: uv
+            args: [run, pytest, tests/evals/parser, -m, eval]
+status:
+  phase: Pending

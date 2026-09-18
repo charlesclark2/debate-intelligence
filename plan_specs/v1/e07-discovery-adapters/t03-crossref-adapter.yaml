@@ -1,0 +1,112 @@
+# TASK v1-e07-t03-crossref-adapter — Crossref adapter
+# Epic: E07 Discovery Provider Adapters | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §9 Discovery adapters (scholarly), §15, §16, §21 ref 8
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t03-crossref-adapter
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: Crossref adapter
+    debate/architecture-refs: §9, §15, §16, §21
+spec:
+  description: >-
+    Implement CrossrefProvider for scholarly discovery via /works?query.bibliographic=... with
+    from-pub-date/until-pub-date filters, rows limits and select fields. Follows Crossref polite-pool
+    etiquette: a User-Agent containing the project URL and mailto, honoring X-Rate-Limit-Limit/Interval
+    headers, and backing off on 429. Maps DOI, title, container-title, issued/published date parts (with
+    partial-date handling), authors, type → source_type, is-referenced-by-count and license/link entries to
+    CandidateResult. Reuses the DOI normalization from v1-e06-t01's Crossref DOI client where practical so
+    there is one DOI mapping. Boundaries: search only; citation resolution by DOI stays in CitationService.
+  priority: 2
+  constraints:
+    packages: [debate_core.integrations]
+    forbidden:
+      - Live Crossref calls in CI (respx fixtures only)
+      - Fabricating a day or month when Crossref returns a partial date (keep precision explicit)
+      - Ignoring X-Rate-Limit headers
+  context:
+    - kind: TaskRef
+      name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t01-citation-service
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Requests include query.bibliographic, date filters, rows and a User-Agent with mailto, verified by
+        respx assertions.
+    - id: ac2
+      description: >-
+        Partial issued dates (year-only, year-month) map to published_at with an explicit date_precision
+        field rather than an invented day.
+    - id: ac3
+      description: >-
+        The adapter reads X-Rate-Limit headers into the resilience layer, maps fixtures to expected
+        CandidateResults and passes the contract kit.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t03-crossref-adapter-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Record fixtures, implement request etiquette, map items, run the contract kit.
+  goalRef:
+    name: v1-e07-t03-crossref-adapter
+  graph:
+    nodes:
+      - id: record-fixtures
+        kind: Task
+        name: Record Crossref fixtures
+        description: >-
+          Capture /works query responses including partial dates, missing authors and a 429 with
+          rate-limit headers.
+        outputs: [tests/fixtures/providers/crossref/]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Crossref fixtures recorded
+            path: tests/fixtures/providers/crossref/works_query.json
+      - id: request-etiquette
+        kind: Task
+        name: Request builder with polite-pool etiquette
+        description: >-
+          Build requests with filters and select, polite User-Agent/mailto, and rate-limit header parsing.
+        dependsOn: [record-fixtures]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/crossref.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Request and etiquette tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_crossref.py, -k, request]
+      - id: item-mapping
+        kind: Task
+        name: Item to CandidateResult mapping
+        description: >-
+          Map items with date precision, author name assembly and source_type mapping; run contract kit.
+        dependsOn: [request-etiquette]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full Crossref adapter tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_crossref.py]
+status:
+  phase: Pending

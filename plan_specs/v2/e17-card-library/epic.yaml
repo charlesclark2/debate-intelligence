@@ -1,0 +1,228 @@
+# EPIC E17 — Card Library
+# Major version: V2 | Release: v2.3 (Card library & extensions)
+# Architecture refs: §3 V2 save/edit/export, §12 Card Library
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e17-card-library
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+  annotations:
+    debate/title: E17 — Card Library
+    debate/architecture-refs: §3 V2 save/edit/export, §12 Card Library
+spec:
+  description: >-
+    Let students save, organize, search, revise, share and bulk-export verified cards with provenance
+    intact.
+  priority: 8
+  constraints:
+    majorVersion: v2
+    release: v2.3
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Saved cards keep revisions, snapshot provenance, spans, verification status, tags/folders and extensions.
+  - id: ac2
+    description: >-
+      Coaches can share folders across the organization with role-based permissions.
+  - id: ac3
+    description: >-
+      Folders export to DOCX in the team's format.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e17-card-library-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+spec:
+  description: >-
+    Task graph for epic E17 (Card Library). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v2-e17-card-library
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e06-t04-docx-renderer
+      kind: External
+      name: 'Prerequisite from E06: DOCX renderer'
+      description: >-
+        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+      inputs:
+        goalRef: v1-e06-t04-docx-renderer
+        specRef: plan_specs/v1/e06-card-cutting/t04-docx-renderer.yaml
+    - id: ext-v2-e11-t05-optimistic-concurrency
+      kind: External
+      name: 'Prerequisite from E11: Optimistic concurrency for cards and files'
+      description: >-
+        Cross-epic prerequisite owned by v2-e11-cloud-persistence (release v2.0).
+      inputs:
+        goalRef: v2-e11-t05-optimistic-concurrency
+        specRef: plan_specs/v2/e11-cloud-persistence/t05-optimistic-concurrency.yaml
+    - id: ext-v2-e12-t03-authn-authz
+      kind: External
+      name: 'Prerequisite from E12: Authentication, roles and tenancy'
+      description: >-
+        Cross-epic prerequisite owned by v2-e12-identity-api (release v2.0).
+      inputs:
+        goalRef: v2-e12-t03-authn-authz
+        specRef: plan_specs/v2/e12-identity-api/t03-authn-authz.yaml
+    - id: ext-v2-e13-t02-sqs-workers
+      kind: External
+      name: 'Prerequisite from E13: SQS queues and worker framework'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t02-sqs-workers
+        specRef: plan_specs/v2/e13-async-jobs/t02-sqs-workers.yaml
+    - id: ext-v2-e14-t05-card-editor
+      kind: External
+      name: 'Prerequisite from E14: Provenance-constrained card editor'
+      description: >-
+        Cross-epic prerequisite owned by v2-e14-web-cut-card (release v2.1).
+      inputs:
+        goalRef: v2-e14-t05-card-editor
+        specRef: plan_specs/v2/e14-web-cut-card/t05-card-editor.yaml
+    - id: ext-v2-e15-t03-embeddings-pipeline
+      kind: External
+      name: 'Prerequisite from E15: Titan embeddings pipeline'
+      description: >-
+        Cross-epic prerequisite owned by v2-e15-search-index (release v2.2).
+      inputs:
+        goalRef: v2-e15-t03-embeddings-pipeline
+        specRef: plan_specs/v2/e15-search-index/t03-embeddings-pipeline.yaml
+    - id: t01
+      kind: Task
+      name: Library data model
+      description: >-
+        Folders, tags, card revisions, sharing records in AppTable with access patterns documented.
+      inputs:
+        specRef: plan_specs/v2/e17-card-library/t01-library-model.yaml
+        goalRef: v2-e17-t01-library-model
+      dependsOn:
+      - ext-v2-e11-t05-optimistic-concurrency
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e17-t01-library-model reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e17-t01-library-model
+    - id: t02
+      kind: Task
+      name: Library API
+      description: >-
+        CRUD for folders/tags, move/tag cards, list/filter/search own and shared cards, revisions endpoint.
+      inputs:
+        specRef: plan_specs/v2/e17-card-library/t02-library-api.yaml
+        goalRef: v2-e17-t02-library-api
+      dependsOn:
+      - t01
+      - ext-v2-e12-t03-authn-authz
+      - ext-v2-e15-t03-embeddings-pipeline
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e17-t02-library-api reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e17-t02-library-api
+    - id: t03
+      kind: Task
+      name: Library UI
+      description: >-
+        Browse/filter/search library, folder tree, bulk select.
+      inputs:
+        specRef: plan_specs/v2/e17-card-library/t03-library-ui.yaml
+        goalRef: v2-e17-t03-library-ui
+      dependsOn:
+      - t02
+      - ext-v2-e14-t05-card-editor
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e17-t03-library-ui reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e17-t03-library-ui
+    - id: t04
+      kind: Task
+      name: Revision history and restore
+      description: >-
+        View diffs between revisions and restore a revision (re-verified).
+      inputs:
+        specRef: plan_specs/v2/e17-card-library/t04-revision-history.yaml
+        goalRef: v2-e17-t04-revision-history
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e17-t04-revision-history reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e17-t04-revision-history
+    - id: t05
+      kind: Task
+      name: Bulk DOCX export
+      description: >-
+        Export a folder or selection to a single DOCX file via async ExportJob.
+      inputs:
+        specRef: plan_specs/v2/e17-card-library/t05-bulk-export.yaml
+        goalRef: v2-e17-t05-bulk-export
+      dependsOn:
+      - t02
+      - ext-v1-e06-t04-docx-renderer
+      - ext-v2-e13-t02-sqs-workers
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e17-t05-bulk-export reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e17-t05-bulk-export
+    - id: t06
+      kind: Task
+      name: Organization sharing
+      description: >-
+        Org-level shared folders with coach/student permissions and audit of shares.
+      inputs:
+        specRef: plan_specs/v2/e17-card-library/t06-team-sharing.yaml
+        goalRef: v2-e17-t06-team-sharing
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e17-t06-team-sharing reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e17-t06-team-sharing
+status:
+  phase: Pending

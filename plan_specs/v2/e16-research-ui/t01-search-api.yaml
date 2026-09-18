@@ -1,0 +1,152 @@
+# TASK v2-e16-t01-search-api — Search API endpoints
+# Epic: E16 Research Workspace UI | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §3 V2 user stories, §6 SearchService, §7 Search/SearchResult, §12 Research, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e16-t01-search-api
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+  annotations:
+    debate/title: Search API endpoints
+    debate/architecture-refs: §3, §6, §7, §12, §15
+spec:
+  description: >-
+    Expose research search over FastAPI: POST /v1/searches creates a Search record and SearchJob (E13 t04)
+    with validated filters (query, since/until, argument e.g. politics-da, need e.g. uniqueness/link,
+    source types, max results), and GET /v1/searches/{id}/results returns the ranked top ten from the E15
+    RankingPipeline with source type, published date, access status, per-leg scores, features and optional
+    rationale, paginated by cursor. Routes are thin: they validate, authorize by owner/organization and call
+    SearchService; job progress uses the existing job status API/SSE. This task does NOT implement the
+    workflow (E13 t04), ranking (E15), the UI (t02/t03) or saved searches/history (t04). OpenAPI changes
+    regenerate the typed TS client.
+  priority: 1
+  constraints:
+    packages: [debate_api, debate_core.application]
+    forbidden:
+      - Business logic or OpenSearch queries inside FastAPI route handlers
+      - Returning another user's or organization's searches or results
+      - Synchronous provider fan-out inside the request lifecycle (must be a SearchJob)
+      - Presenting results whose access_status is unknown as accessible
+      - Live provider, OpenSearch or model calls in API tests
+  context:
+    - kind: TaskRef
+      name: v2-e13-t04-search-job-workflow
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e15-t05-rerank-rationale
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        POST /v1/searches with a valid body returns 202 with search_id and job_id; invalid filters (until
+        before since, unknown argument or need slug) return 422 with field-level errors.
+    - id: ac2
+      description: >-
+        GET /v1/searches/{id}/results returns 200 with at most 10 results per page ordered by final_score, each
+        with article_id, title, publication, published_at, source_type, access_status, scores, features and
+        rationale (nullable), plus a partial flag and provider status list when some providers failed.
+    - id: ac3
+      description: >-
+        Requests for a search owned by another user in a different organization return 404, verified by
+        authorization tests using two seeded users.
+    - id: ac4
+      description: >-
+        The OpenAPI schema includes both endpoints with typed request/response models, and the generated TS
+        client drift check passes in CI.
+    - id: ac5
+      description: >-
+        POST /v1/searches is subject to per-route API Gateway throttling configuration and emits a
+        correlation id that appears in the SearchJob logs.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e16-t01-search-api-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e16-research-ui
+spec:
+  description: >-
+    Define request/response contracts, add the application-level search use cases, wire thin routes with
+    authorization, then regenerate the TS client and verify contracts.
+  goalRef:
+    name: v2-e16-t01-search-api
+  graph:
+    nodes:
+      - id: api-contracts
+        kind: Task
+        name: Search request/response models
+        description: >-
+          Pydantic CreateSearchRequest (filters mirroring CLI flags), SearchResultView and paginated
+          SearchResultsPage with cursor, partial flag and provider statuses.
+        outputs: [packages/debate_api/src/debate_api/schemas/search.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contract validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/schemas/test_search_schemas.py]
+      - id: use-cases
+        kind: Task
+        name: Search use cases in the application layer
+        description: >-
+          start_search (persists Search, enqueues SearchJob) and get_search_results (loads ranked results,
+          applies cursor paging, enforces ownership) in debate_core.application.
+        dependsOn: [api-contracts]
+        outputs: [packages/debate_core/src/debate_core/application/search_use_cases.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Search use case tests pass with in-memory repositories
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_search_use_cases.py]
+      - id: routes
+        kind: Task
+        name: FastAPI routes with authorization
+        description: >-
+          POST /v1/searches and GET /v1/searches/{id}/results routers using the auth dependency from E12 t03,
+          correlation-id middleware and error model; route-level throttle settings in Terraform.
+        dependsOn: [use-cases]
+        outputs:
+          - packages/debate_api/src/debate_api/routes/searches.py
+          - infrastructure/modules/api_gateway/routes_search.tf
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Route and cross-tenant authorization tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_searches.py]
+      - id: client-regen
+        kind: Task
+        name: OpenAPI export and TS client regeneration
+        description: >-
+          Export OpenAPI, regenerate the web client, and confirm the drift check and type checks pass.
+        dependsOn: [routes]
+        outputs: [web/src/lib/api/generated/]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Web client builds with regenerated types
+            command: pnpm
+            args: [--dir, web, build]
+          - type: command_succeeds
+            name: Type check passes for debate_api
+            command: uv
+            args: [run, pyright, packages/debate_api]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

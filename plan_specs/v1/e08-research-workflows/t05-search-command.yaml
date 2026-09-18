@@ -1,0 +1,129 @@
+# TASK v1-e08-t05-search-command — `debate-research search` command
+# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §11 CLI commands and V1 acceptance criteria, §6 SearchService, §9, §15 (partial results)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t05-search-command
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "`debate-research search` command"
+    debate/architecture-refs: §6, §9, §11, §15
+spec:
+  description: >-
+    Ship `debate-research search "<query>"` with --since, --until, --max-results, --argument, --need,
+    --providers, --expand-llm, --format table|json and --save. The command builds a SearchRequest, calls
+    SearchService (expand → fan-out → normalize → rank) and renders a Rich table (rank, title, publisher/
+    venue, date, source type, access hint, short explanation) or JSON of SearchResults with full feature
+    vectors. A provider status footer lists each provider's outcome (ok, timeout, error, breaker open, not
+    configured) so partial results are never silent. Exit codes: 0 results returned, 6 partial results, 7
+    no results or all providers failed, 2 usage error. Boundaries: no cutting (t06), no digests (t07); the
+    CLI contains no ranking or dedupe logic.
+  priority: 1
+  constraints:
+    packages: [debate_cli]
+    forbidden:
+      - Business logic (ranking, dedupe, expansion) in debate_cli
+      - Hiding provider failures when results are partial
+      - Live provider calls in CLI tests (recorded fixtures via registry override)
+  context:
+    - kind: TaskRef
+      name: v1-e08-t03-feature-ranking
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t04-argument-need-expansion
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e07-t02-openalex-adapter
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e07-t05-rss-news-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `search "midterm elections" --since 2026-09-14 --max-results 20` on recorded fixtures prints at most
+        20 ranked, deduped rows and a provider status footer, exiting 0.
+    - id: ac2
+      description: >-
+        `search "health insurance" --argument politics-da --need link --format json` emits a JSON array
+        whose items include rank, score, features, explanation, identifiers and provider sources.
+    - id: ac3
+      description: >-
+        When a fixture provider times out, output is marked PARTIAL, the footer names the provider and
+        reason, and the exit code is 6.
+    - id: ac4
+      description: >-
+        Invalid --argument/--need values or since > until exit 2 with the list of valid choices, and
+        `search --help` documents every flag.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t05-search-command-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    Options and wiring, then presenters (table, JSON, footer), then fixture-driven CLI tests.
+  goalRef:
+    name: v1-e08-t05-search-command
+  graph:
+    nodes:
+      - id: command-options
+        kind: Task
+        name: Typer command, options and validation
+        description: >-
+          Define all flags with date parsing and choice validation from the taxonomy; wire SearchService via
+          the CLI service factory.
+        outputs: [packages/debate_cli/src/debate_cli/commands/search.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: search help renders
+            command: uv
+            args: [run, debate-research, search, --help]
+      - id: presenters
+        kind: Task
+        name: Rich table, JSON output and provider footer
+        description: >-
+          Render results table and provider status footer on stdout/stderr appropriately; JSON mode prints
+          only JSON to stdout.
+        dependsOn: [command-options]
+        outputs: [packages/debate_cli/src/debate_cli/presenters/search_presenter.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Presenter tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_search_command.py, -k, presenter]
+      - id: cli-fixture-tests
+        kind: Task
+        name: CLI tests on recorded provider fixtures
+        description: >-
+          CliRunner tests for full, partial, empty and invalid-input cases with a fixture-backed registry.
+        dependsOn: [presenters]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: search command tests pass offline
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_search_command.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

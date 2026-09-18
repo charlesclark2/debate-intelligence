@@ -1,0 +1,155 @@
+# TASK v1-e06-t03-format-profiles — Card format profiles from team conventions
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6 ExportService, §7 (Card.format_profile), §11, §20 step 7 (team debate-card conventions)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t03-format-profiles
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: Card format profiles from team conventions
+    debate/architecture-refs: §6, §7, §11, §20 step 7
+spec:
+  description: >-
+    Derive the team's card formatting conventions from its existing Verbatim-style evidence files and store
+    them as declarative FormatProfile config (config/format_profiles/*.yaml) that the DOCX renderer (t04)
+    consumes. Charlie selects a representative sample from the coach's Mac
+    (~/Documents/debate/2024-2025, 2025-2026 and 2026-2027) spanning Policy, LD and PF; copies — never live
+    paths — are curated into tests/fixtures/team_samples/ with docProps author/lastModifiedBy and any
+    debater names or school codes scrubbed. A one-off analysis script reads the copies with python-docx and
+    reports Verbatim style usage (Pocket/Hat/Block/Tag heading levels, Cite style, underline style,
+    emphasis, highlight colour, font sizes, condensed/shrunk non-underlined text) to justify profile values.
+    Profiles: at least `team-default` plus `flow` (the --format flow in §11) and `plain` (no highlighting).
+    Boundaries: no rendering here (t04); golden cards are E09 t01.
+  priority: 2
+  constraints:
+    packages: [debate_core.domain, debate_core.evidence, config/format_profiles, tests/fixtures/team_samples]
+    forbidden:
+      - Reading from ~/Documents/debate at test or run time (fixtures are committed, scrubbed copies)
+      - Committing sample files containing student names, emails or docProps author metadata
+      - Hard-coding fonts, sizes or colours in renderer code instead of profile config
+  context:
+    - kind: TaskRef
+      name: v1-e02-t01-domain-entities
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        tests/fixtures/team_samples/ holds 6-10 scrubbed .docx copies covering Policy, LD and PF across the
+        2024-25, 2025-26 and 2026-27 seasons, with a MANIFEST.md listing season, event and scrub date only.
+    - id: ac2
+      description: >-
+        scripts/analyze_team_formatting.py produces a report of style names, heading levels, run-level
+        underline/bold/highlight colours and font sizes found in the samples.
+    - id: ac3
+      description: >-
+        FormatProfile (Pydantic) defines tag heading level and style, cite block (short cite bold, full cite
+        size), evidence base size, underline/emphasis/highlight styles, condensed-text size and pocket/hat/
+        block heading mapping; team-default, flow and plain profiles validate.
+    - id: ac4
+      description: >-
+        Charlie reviews the analysis report against the generated profile values and signs off that
+        team-default matches the team's Verbatim conventions.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t03-format-profiles-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    Curate and scrub samples, analyze them, encode the profile model and configs, then get coach sign-off.
+  goalRef:
+    name: v1-e06-t03-format-profiles
+  graph:
+    nodes:
+      - id: curate-samples
+        kind: Task
+        name: Curate and scrub team sample files
+        description: >-
+          Copy representative files from ~/Documents/debate/{2024-2025,2025-2026,2026-2027} into
+          tests/fixtures/team_samples/, strip docProps metadata and debater identifiers with a scrub script,
+          and write MANIFEST.md.
+        outputs: [tests/fixtures/team_samples/, scripts/scrub_docx_samples.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Sample manifest exists
+            path: tests/fixtures/team_samples/MANIFEST.md
+          - type: test_passes
+            name: Scrub check finds no author metadata in samples
+            command: uv
+            args: [run, pytest, tests/fixtures/test_team_samples_scrubbed.py]
+      - id: analyze-formatting
+        kind: Task
+        name: Formatting analysis script
+        description: >-
+          Walk paragraphs and runs with python-docx, tabulating style names, outline levels, underline,
+          bold, highlight colour and font sizes; output a markdown report.
+        dependsOn: [curate-samples]
+        outputs: [scripts/analyze_team_formatting.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Analysis runs over the samples
+            command: uv
+            args: [run, scripts/analyze_team_formatting.py, tests/fixtures/team_samples]
+      - id: profile-model
+        kind: Task
+        name: FormatProfile model and loader
+        description: >-
+          Define FormatProfile and a registry loading config/format_profiles/*.yaml by name with validation.
+        dependsOn: [curate-samples]
+        outputs: [packages/debate_core/src/debate_core/evidence/format_profile.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Profile loader tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_format_profile.py]
+      - id: profile-configs
+        kind: Task
+        name: team-default, flow and plain profiles
+        description: >-
+          Encode the three profiles from the analysis report values and add a test that all profiles in
+          config/format_profiles validate.
+        dependsOn: [analyze-formatting, profile-model]
+        outputs:
+          - config/format_profiles/team-default.yaml
+          - config/format_profiles/flow.yaml
+          - config/format_profiles/plain.yaml
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: team-default profile exists
+            path: config/format_profiles/team-default.yaml
+            contentMatch: "tag"
+      - id: coach-signoff
+        kind: Task
+        name: Coach sign-off on profile values
+        description: >-
+          Charlie compares the analysis report and profile values against real team files and approves in
+          the PR.
+        dependsOn: [profile-configs]
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: custom
+            name: Coach approves team-default profile
+            description: >-
+              Charlie confirms in the PR review that tag, cite, underline, highlight and condensing values in
+              team-default match the team's Verbatim conventions.
+status:
+  phase: Pending

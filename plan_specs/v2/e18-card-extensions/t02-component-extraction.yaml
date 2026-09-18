@@ -1,0 +1,141 @@
+# TASK v2-e18-t02-component-extraction — Claim/warrant component extraction
+# Epic: E18 Card Extensions | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §7 (CardSpan purposes), §10 (structured contracts, prompt governance), §12 Extend a Card
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e18-t02-component-extraction
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+  annotations:
+    debate/title: Claim/warrant component extraction
+    debate/architecture-refs: §7, §10, §12
+spec:
+  description: >-
+    Define the ArgumentComponents contract and extractor that turns a card (saved card or t01 ParsedCard)
+    into its argumentative parts: claim (what the tag asserts), warrants (the reasons the author gives),
+    internal links and impact, each referencing one or more character spans in the card's evidence text,
+    plus a tag_fidelity note when the tag overclaims what the evidence says. The model returns span offsets
+    and short labels only, never rewritten evidence; a deterministic validator checks every span lies inside
+    the evidence and that any quoted substring exists verbatim. Uses ModelRouter (high_volume class with
+    escalation to complex_reasoning on validation failure) and the structured-output validation/repair
+    path. This task does NOT generate extensions, CX questions or answers (t03) or UI (t04).
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_core.evidence]
+    forbidden:
+      - Model output that paraphrases or quotes evidence not found verbatim in the card
+      - Components without at least one valid span reference
+      - Direct Bedrock calls or unversioned prompts
+      - Real model calls in CI (fake/replay router fixtures only)
+  context:
+    - kind: TaskRef
+      name: v2-e18-t01-card-parser
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t05-structured-output-validation
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        ArgumentComponents is a Pydantic schema with claim, warrants[], internal_links[], impact (nullable),
+        tag_fidelity, confidence, and SpanRef(start, end) lists, carrying prompt_id, prompt_version and
+        model_id.
+    - id: ac2
+      description: >-
+        The span validator rejects outputs with out-of-range offsets or quoted text not present verbatim, and
+        the extractor retries once via the repair path before failing closed with a typed error.
+    - id: ac3
+      description: >-
+        On 15 coach-labeled replay fixtures, extracted warrant spans overlap labeled warrants with span-level
+        F1 >= 0.7, reported by the test.
+    - id: ac4
+      description: >-
+        Extraction works identically for saved (snapshot-backed) cards and PASTED cards, and records the
+        card's provenance_mode on the result.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e18-t02-component-extraction-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+spec:
+  description: >-
+    Write the schema and the deterministic span validator first, then the versioned prompt, then the
+    extractor service over the replay router with labeled fixtures.
+  goalRef:
+    name: v2-e18-t02-component-extraction
+  graph:
+    nodes:
+      - id: schema
+        kind: Task
+        name: ArgumentComponents schema
+        description: Pydantic models for components, SpanRef and tag_fidelity with metadata fields.
+        outputs: [packages/debate_core/src/debate_core/arguments/components.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Components schema exists
+            path: packages/debate_core/src/debate_core/arguments/components.py
+            contentMatch: "class ArgumentComponents"
+      - id: span-validator
+        kind: Task
+        name: Deterministic span validator
+        description: >-
+          Validates span bounds, non-overlap rules per component and verbatim presence of quoted text.
+        dependsOn: [schema]
+        outputs: [packages/debate_core/src/debate_core/arguments/component_validation.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Span validator tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_component_validation.py]
+      - id: prompt
+        kind: Task
+        name: Versioned extraction prompt
+        description: >-
+          Prompt card_components@1.0.0 that receives offset-numbered evidence sentences and returns span refs
+          only; registered in the prompt registry with its output schema.
+        dependsOn: [schema]
+        outputs: [packages/debate_core/src/debate_core/prompts/card_components.yaml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Prompt registered with version
+            path: packages/debate_core/src/debate_core/prompts/card_components.yaml
+            contentMatch: "version: 1.0.0"
+      - id: extractor
+        kind: Task
+        name: ComponentExtractor service and labeled fixtures
+        description: >-
+          Application service calling ModelRouter.generate_structured with validation, one repair retry and
+          escalation; replay fixtures for 15 coach-labeled cards with F1 reporting.
+        dependsOn: [span-validator, prompt]
+        outputs:
+          - packages/debate_core/src/debate_core/application/component_extractor.py
+          - tests/fixtures/components/
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Extractor tests pass on replay fixtures
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_component_extractor.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

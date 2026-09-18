@@ -1,0 +1,203 @@
+# EPIC E18 — Card Extensions
+# Major version: V2 | Release: v2.3 (Card library & extensions)
+# Architecture refs: §3 V2 extension story, §12 Extend a Card
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e18-card-extensions
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+  annotations:
+    debate/title: E18 — Card Extensions
+    debate/architecture-refs: §3 V2 extension story, §12 Extend a Card
+spec:
+  description: >-
+    Parse a pasted or saved card into claim/warrant/internal-link/impact components and generate grounded
+    extensions, CX questions and likely answers with inference clearly labeled.
+  priority: 8
+  constraints:
+    majorVersion: v2
+    release: v2.3
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Pasted card text is parsed into tag, cite and evidence components.
+  - id: ac2
+    description: >-
+      15-second and 30-second extensions, CX questions and likely answers are generated with every claim
+      labeled text-supported (with span refs) or strategic inference.
+  - id: ac3
+    description: >-
+      Coach-rubric evaluation gates the extension prompts.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e18-card-extensions-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e18-card-extensions
+spec:
+  description: >-
+    Task graph for epic E18 (Card Extensions). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v2-e18-card-extensions
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e05-t05-structured-output-validation
+      kind: External
+      name: 'Prerequisite from E05: Structured output validation and repair'
+      description: >-
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.1).
+      inputs:
+        goalRef: v1-e05-t05-structured-output-validation
+        specRef: plan_specs/v1/e05-model-router/t05-structured-output-validation.yaml
+    - id: ext-v1-e06-t03-format-profiles
+      kind: External
+      name: 'Prerequisite from E06: Card format profiles from team conventions'
+      description: >-
+        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+      inputs:
+        goalRef: v1-e06-t03-format-profiles
+        specRef: plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml
+    - id: ext-v1-e09-t04-prompt-promotion-gate
+      kind: External
+      name: 'Prerequisite from E09: Prompt/model promotion gate'
+      description: >-
+        Cross-epic prerequisite owned by v1-e09-v1-quality-pilot (release v1.3).
+      inputs:
+        goalRef: v1-e09-t04-prompt-promotion-gate
+        specRef: plan_specs/v1/e09-v1-quality-pilot/t04-prompt-promotion-gate.yaml
+    - id: ext-v2-e13-t05-job-status-api
+      kind: External
+      name: 'Prerequisite from E13: Job status API (polling + SSE)'
+      description: >-
+        Cross-epic prerequisite owned by v2-e13-async-jobs (release v2.1).
+      inputs:
+        goalRef: v2-e13-t05-job-status-api
+        specRef: plan_specs/v2/e13-async-jobs/t05-job-status-api.yaml
+    - id: ext-v2-e17-t03-library-ui
+      kind: External
+      name: 'Prerequisite from E17: Library UI'
+      description: >-
+        Cross-epic prerequisite owned by v2-e17-card-library (release v2.3).
+      inputs:
+        goalRef: v2-e17-t03-library-ui
+        specRef: plan_specs/v2/e17-card-library/t03-library-ui.yaml
+    - id: t01
+      kind: Task
+      name: Pasted-card parser
+      description: >-
+        Parse pasted plain/rich text into tag, cite and evidence with underline/highlight where present;
+        handles common Verbatim layouts.
+      inputs:
+        specRef: plan_specs/v2/e18-card-extensions/t01-card-parser.yaml
+        goalRef: v2-e18-t01-card-parser
+      dependsOn:
+      - ext-v1-e06-t03-format-profiles
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e18-t01-card-parser reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e18-t01-card-parser
+    - id: t02
+      kind: Task
+      name: Claim/warrant component extraction
+      description: >-
+        ArgumentComponents schema (claim, warrant, internal_link, impact) with span references into the
+        evidence.
+      inputs:
+        specRef: plan_specs/v2/e18-card-extensions/t02-component-extraction.yaml
+        goalRef: v2-e18-t02-component-extraction
+      dependsOn:
+      - t01
+      - ext-v1-e05-t05-structured-output-validation
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e18-t02-component-extraction reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e18-t02-component-extraction
+    - id: t03
+      kind: Task
+      name: Extension, CX question and answer generation
+      description: >-
+        Generate 15s/30s extensions, CX questions, likely answers; each statement tagged TEXT_SUPPORTED(span
+        refs) or INFERENCE; validator rejects unsupported TEXT_SUPPORTED claims.
+      inputs:
+        specRef: plan_specs/v2/e18-card-extensions/t03-extension-generator.yaml
+        goalRef: v2-e18-t03-extension-generator
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e18-t03-extension-generator reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e18-t03-extension-generator
+    - id: t04
+      kind: Task
+      name: Extensions API and UI
+      description: >-
+        Endpoint + UI panel on cards and a paste box; save extensions with the card.
+      inputs:
+        specRef: plan_specs/v2/e18-card-extensions/t04-extension-ui.yaml
+        goalRef: v2-e18-t04-extension-ui
+      dependsOn:
+      - t03
+      - ext-v2-e17-t03-library-ui
+      - ext-v2-e13-t05-job-status-api
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e18-t04-extension-ui reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e18-t04-extension-ui
+    - id: t05
+      kind: Task
+      name: Extension evaluation
+      description: >-
+        Coach rubric (accuracy, grounding, usefulness) eval set with promotion gate.
+      inputs:
+        specRef: plan_specs/v2/e18-card-extensions/t05-extension-eval.yaml
+        goalRef: v2-e18-t05-extension-eval
+      dependsOn:
+      - t03
+      - ext-v1-e09-t04-prompt-promotion-gate
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e18-t05-extension-eval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e18-t05-extension-eval
+status:
+  phase: Pending

@@ -1,0 +1,147 @@
+# TASK v2-e10-t06-observability-baseline — Observability baseline
+# Epic: E10 AWS & Infrastructure-as-Code Foundation | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §5 CloudWatch/X-Ray, §14 (no PII in logs), §15 debugging via correlation/job ids
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e10-t06-observability-baseline
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+  annotations:
+    debate/title: Observability baseline
+    debate/architecture-refs: §4, §5, §14, §15
+spec:
+  description: >-
+    Make every V2 request and job traceable end to end. Add a structured JSON logging module in
+    debate_core (stdlib logging + contextvars, no AWS imports) that stamps correlation_id, job_id,
+    user_id (opaque id only) and component on every record and redacts secrets and email addresses;
+    add OpenTelemetry tracing hooks exported to X-Ray via the ADOT collector sidecar; and create
+    baseline CloudWatch dashboards and alarms (5xx rate, p95 latency, ECS task restarts, DLQ depth
+    placeholder, Bedrock throttles). Token/cost telemetry dashboards belong to E19-t06 and audit logging
+    to E19-t02; this task provides the plumbing they reuse. The CLI keeps human-readable Rich output by
+    default and opts into JSON via settings.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, infrastructure/modules/observability]
+    forbidden:
+      - Logging raw emails, student names, JWTs, provider secrets or full source article text
+      - Importing boto3 or OTel exporters in debate_core.domain or debate_core.application
+      - Alarms without an SNS notification target
+      - Unbounded log retention
+  context:
+    - kind: TaskRef
+      name: v2-e10-t05-container-platform
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A configure_logging() helper emits one JSON object per line with timestamp, level, logger,
+        message, correlation_id, job_id and component, and a test proves context propagates across
+        asyncio tasks.
+    - id: ac2
+      description: >-
+        A redaction filter removes values matching email, JWT and configured secret patterns; a test
+        logs a synthetic email and bearer token and asserts neither appears in output.
+    - id: ac3
+      description: >-
+        OpenTelemetry spans are created around ArticleService fetch, ModelRouter calls and repository
+        operations via a no-op-by-default tracer, exporting to X-Ray only when enabled in settings.
+    - id: ac4
+      description: >-
+        CloudWatch dashboards and alarms for API/worker errors, latency, task restarts and Bedrock
+        throttling are defined in Terraform and notify an SNS topic subscribed by the coach.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e10-t06-observability-baseline-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e10-aws-foundation
+spec:
+  description: >-
+    Library first (logging context and redaction), then tracing hooks, then the AWS-side collector,
+    dashboards and alarms.
+  goalRef:
+    name: v2-e10-t06-observability-baseline
+  graph:
+    nodes:
+      - id: json-logging
+        kind: Task
+        name: Structured logging with correlation context
+        description: >-
+          JSON formatter, contextvars-based correlation/job id binding, and a context manager used by
+          CLI commands, API middleware and worker handlers.
+        outputs: [packages/debate_core/src/debate_core/application/observability/logging.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Logging context tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_observability_logging.py]
+      - id: redaction
+        kind: Task
+        name: PII and secret redaction filter
+        description: >-
+          Logging filter that masks emails, bearer tokens/JWTs and SecretStr values; enabled by default.
+        dependsOn: [json-logging]
+        outputs: [packages/debate_core/src/debate_core/application/observability/redaction.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Redaction tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_observability_logging.py
+              - -k
+              - redact
+      - id: tracing-hooks
+        kind: Task
+        name: OpenTelemetry tracing hooks
+        description: >-
+          A Tracer port with a no-op default and an OTel adapter in integrations; spans on fetch, model
+          and repository calls carrying correlation ids and model_id/prompt_id attributes.
+        dependsOn: [json-logging]
+        outputs: [packages/debate_core/src/debate_core/integrations/otel_tracer.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tracing adapter tests pass with in-memory exporter
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_otel_tracer.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+      - id: dashboards-alarms
+        kind: Task
+        name: Collector sidecar config, dashboards and alarms
+        description: >-
+          Observability module with ADOT sidecar container definition snippet, X-Ray sampling rule,
+          SNS alarm topic, baseline dashboards and alarms parameterized by service name.
+        dependsOn: [redaction, tracing-hooks]
+        outputs: [infrastructure/modules/observability/main.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates with observability
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: artifact_exists
+            name: Alarms route to SNS
+            path: infrastructure/modules/observability/main.tf
+            contentMatch: "alarm_actions"
+status:
+  phase: Pending

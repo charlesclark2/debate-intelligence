@@ -1,0 +1,142 @@
+# TASK v1-e04-t06-fetch-command — `debate-research fetch` command and recorded fixtures
+# Epic: E04 Article Retrieval & Extraction | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6, §11 (CLI; explicit retrieval failures), §14, §16 (recorded fixtures), §20 step 3
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e04-t06-fetch-command
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+  annotations:
+    debate/title: "`debate-research fetch` command and recorded fixtures"
+    debate/architecture-refs: §6, §11, §14, §16, §20 step 3
+spec:
+  description: >-
+    Expose ArticleService as `debate-research fetch <URL> [--refresh] [--json]`, printing canonical
+    URL, title, detected identifiers, access status with reason, snapshot id and hashes, paragraph
+    count and extractor version — or an explicit failure panel with a non-zero exit (3) for any
+    non-ACCESSIBLE status. Build the shared recorded-fixture corpus used by E04 integration tests and
+    later E06/E08 end-to-end tests: respx/vcr cassettes for representative news, think-tank,
+    government, open-access PDF, paywalled, robots-disallowed and 404 pages, recorded once with a
+    documented script and scrubbed of cookies and tracking headers. A `--paste` path for
+    USER_SUPPLIED text is exposed with an attestation prompt. Card cutting (`cut`) is E06.
+  priority: 1
+  constraints:
+    packages: [debate_cli.commands.fetch, tests/fixtures/http, tests/integration]
+    forbidden:
+      - Live network calls in CI (cassettes replay only; recording is a manual, documented step)
+      - Cassettes containing cookies, auth headers, or full copies of paywalled article bodies
+      - Retrieval or classification logic inside debate_cli
+  context:
+    - kind: TaskRef
+      name: v1-e04-t05-article-service
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t07-cli-skeleton
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `debate-research fetch <fixture-url>` against replayed cassettes prints metadata, ACCESSIBLE,
+        the snapshot id and sha256, and exits 0.
+    - id: ac2
+      description: >-
+        Paywalled, robots-disallowed and 404 fixtures print the specific AccessStatus and reason and exit
+        3, with no snapshot created in the data dir.
+    - id: ac3
+      description: >-
+        At least seven cassettes (news, think-tank, .gov, open-access PDF, paywalled, robots-disallowed,
+        404) exist under tests/fixtures/http/ with a README recording source, date and scrub rules.
+    - id: ac4
+      description: >-
+        --json output validates against a published schema and --paste creates a USER_SUPPLIED snapshot
+        only after attestation.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e04-t06-fetch-command-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+spec:
+  description: >-
+    Record and scrub the fixture corpus, add the thin CLI command and wiring, then run end-to-end
+    integration tests offline.
+  goalRef:
+    name: v1-e04-t06-fetch-command
+  graph:
+    nodes:
+      - id: record-fixtures
+        kind: Task
+        name: Record and scrub HTTP cassettes
+        description: >-
+          scripts/record_http_fixtures.py records the seven fixture pages (plus robots.txt) once, strips
+          cookies/Set-Cookie/auth headers, truncates paywalled bodies to the teaser, and writes a README.
+        outputs: [scripts/record_http_fixtures.py, tests/fixtures/http/]
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Fixture README documents scrub rules
+            path: tests/fixtures/http/README.md
+            contentMatch: "Set-Cookie"
+          - type: test_passes
+            name: Cassettes contain no cookies or auth headers
+            command: uv
+            args: [run, pytest, tests/fixtures/test_cassette_hygiene.py]
+      - id: fetch-command
+        kind: Task
+        name: fetch command and wiring
+        description: >-
+          Typer command building ArticleService from the composition root with HttpArticleFetcher,
+          extractors and local repositories; Rich metadata panel, failure panel and --json renderer.
+        outputs: [packages/debate_cli/src/debate_cli/commands/fetch.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI unit tests pass with fake service
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_fetch_command.py]
+      - id: paste-mode
+        kind: Task
+        name: --paste USER_SUPPLIED mode
+        description: >-
+          Read text from stdin or a file, require --source-url and an attestation confirmation (or
+          --i-have-lawful-access in --json mode), call ingest_user_text.
+        dependsOn: [fetch-command]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Paste-mode tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_fetch_command.py, -k, paste]
+      - id: e2e-offline
+        kind: Task
+        name: Offline end-to-end integration tests
+        description: >-
+          Run the installed CLI against replayed cassettes in a temp data dir for every fixture and assert
+          output, exit codes and snapshot presence/absence.
+        dependsOn: [record-fixtures, paste-mode]
+        outputs: [tests/integration/test_fetch_cli.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: End-to-end fetch tests pass offline
+            command: uv
+            args: [run, pytest, tests/integration/test_fetch_cli.py]
+          - type: command_succeeds
+            name: pyright passes on debate_cli
+            command: uv
+            args: [run, pyright, packages/debate_cli]
+status:
+  phase: Pending

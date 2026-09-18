@@ -1,0 +1,125 @@
+# TASK v1-e08-t03-feature-ranking — Explainable feature ranking
+# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §9 Ranking pipeline (features, not a truth score), §6 SearchService, §11
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t03-feature-ranking
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: Explainable feature ranking
+    debate/architecture-refs: §6, §9, §11
+spec:
+  description: >-
+    Implement the V1 rank stage with deterministic, transparent features. For each MergedCandidate compute:
+    BM25 lexical relevance of title+abstract/snippet against the (expanded) query, recency relative to the
+    requested window, source_type, peer-reviewed flag, open-access/accessibility, log-scaled citation count
+    (scholarship only) and provider agreement. A config/ranking.yaml weight table combines them into a score,
+    and every SearchResult stores the feature vector and a human-readable explanation ("recent (3 days),
+    peer-reviewed, open access, strong term match"). Source quality is expressed as features — never a hidden
+    truth or ideology score — and no publisher allow/deny list is applied beyond user filters. Boundaries:
+    embeddings, Cohere rerank and LLM rationales are V2 search work; this task does not call a model.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, config/ranking.yaml]
+    forbidden:
+      - Opaque or politically-weighted source "truth" scores
+      - Model calls in the V1 ranking stage
+      - Weights hard-coded in Python instead of config/ranking.yaml
+  context:
+    - kind: TaskRef
+      name: v1-e08-t02-normalize-dedupe
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each ranked SearchResult carries rank, total score, a named feature vector (bm25, recency,
+        source_type, peer_reviewed, open_access, citations, provider_agreement) and an explanation string.
+    - id: ac2
+      description: >-
+        Ranking is deterministic: identical inputs and config produce identical order, with ties broken by
+        published_at then canonical URL.
+    - id: ac3
+      description: >-
+        Changing a weight in config/ranking.yaml changes ordering on a fixture set without code changes.
+    - id: ac4
+      description: >-
+        On a coach-labeled fixture of 3 queries, relevant items appear in the top 10 at least as often as
+        in raw provider order (nDCG@10 not lower), reported by a test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t03-feature-ranking-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    Feature extractors, weighted scorer and explanations, then a small labeled relevance check.
+  goalRef:
+    name: v1-e08-t03-feature-ranking
+  graph:
+    nodes:
+      - id: features
+        kind: Task
+        name: Feature extractors including BM25
+        description: >-
+          Implement per-candidate feature functions; BM25 over the result set with a documented tokenizer.
+        outputs: [packages/debate_core/src/debate_core/application/ranking_features.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Feature tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_ranking.py, -k, feature]
+      - id: scorer-explainer
+        kind: Task
+        name: Weighted scorer and explanations
+        description: >-
+          Load config/ranking.yaml, combine normalized features, deterministic tie-breaks, and template
+          explanations from the top contributing features; register as rank stage.
+        dependsOn: [features]
+        outputs: [packages/debate_core/src/debate_core/application/ranking.py, config/ranking.yaml]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Scorer and explanation tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_ranking.py
+              - -k
+              - "score or explain"
+      - id: relevance-check
+        kind: Task
+        name: Coach-labeled relevance fixture
+        description: >-
+          Charlie labels relevance for 3 queries on current topics; test computes nDCG@10 vs provider order.
+        dependsOn: [scorer-explainer]
+        outputs: [tests/fixtures/ranking/labeled_queries.json]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full ranking module passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_ranking.py]
+          - type: custom
+            name: Coach labels relevance judgments
+            description: >-
+              Charlie labels the relevance fixture for the Policy, LD and PF current topics and approves it in
+              the PR.
+status:
+  phase: Pending

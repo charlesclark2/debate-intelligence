@@ -1,0 +1,96 @@
+# RELEASE v3.5 — Round engine core
+# Major version: V3. Epics: E26
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v3-5
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.5
+  annotations:
+    debate/title: v3.5 — Round engine core
+spec:
+  description: >-
+    A persisted, replayable round state machine models Policy/LD/PF formats, judge profiles and the flow.
+  priority: 15
+  acceptanceCriteria:
+  - id: epic-e26
+    description: >-
+      Epic E26 (Round Engine Core) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v3.5.0 is pushed and CHANGELOG.md has a v3.5 section.
+  - id: gate
+    description: >-
+      Gate release-v3-5-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v3-5-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.5
+spec:
+  gateType: review
+  description: >-
+    Release review for v3.5 (Round engine core): demo the release goal end to end, confirm CI green on
+    the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v3-5-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.5
+spec:
+  description: >-
+    Release plan for v3.5: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v3-5
+  series: v3
+  version: v3.5
+  graph:
+    nodes:
+    - id: e26
+      kind: External
+      name: Epic E26 — Round Engine Core
+      inputs:
+        goalRef: v3-e26-round-engine
+        specRef: plan_specs/v3/e26-round-engine/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v3.5.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e26
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v3.5.0
+    - id: release-review
+      kind: Gate
+      name: v3.5 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v3-5-gate
+status:
+  phase: Pending

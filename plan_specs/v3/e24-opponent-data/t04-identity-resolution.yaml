@@ -1,0 +1,159 @@
+# TASK v3-e24-t04-identity-resolution — Team and debater identity resolution
+# Epic: E24 Opponent Data Integrations | Release: v3.3 (Opponent data integrations) | Major: V3
+# Architecture refs: §7 OpponentTable, §13 Opponent intelligence (resolve teams/debaters), §14
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e24-t04-identity-resolution
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+  annotations:
+    debate/title: Team and debater identity resolution
+    debate/architecture-refs: §7, §13, §14
+spec:
+  description: >-
+    Link OpenCaselist and Tabroom records that refer to the same school, team or debater. School names are
+    normalized (dropping "High School", "HS", punctuation; alias table), team codes compared across sources,
+    and debater surnames or initials matched within school, event and season. A deterministic, explainable
+    score decides: auto-link at 0.9 or above, a review queue from 0.6 to 0.9, never below 0.6. Identity is
+    kept at the debater level with per-tournament team membership, so partner changes mid-season do not
+    corrupt history. Coaches and admins get merge, split and reject tools (API and CLI) that are reversible
+    and audited. Boundaries: no model calls; scouting summaries are E25.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_api, debate_cli]
+    forbidden:
+      - Auto-merging below the configured threshold
+      - Irreversible merges or merges without an audit entry
+      - Model calls for identity decisions
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/ modules
+  context:
+    - kind: TaskRef
+      name: v3-e24-t02-opencaselist-adapter
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e24-t03-tabroom-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        School and team-code normalization is table-driven and unit tested with real-world variants (e.g.
+        "Northside HS" and "Northside High School"; entry code "Northside AR" and caselist team "ArRo").
+    - id: ac2
+      description: >-
+        Match scores come from named features (external id link, school match, surname overlap,
+        event/season, code similarity), and every link stores its feature breakdown.
+    - id: ac3
+      description: >-
+        Scores of 0.9 or above auto-link, 0.6 to 0.9 enter a review queue, and below 0.6 never link.
+    - id: ac4
+      description: >-
+        Coach/admin merge, split and reject via API and `debate-research opponents` commands are reversible
+        with history and write audit events.
+    - id: ac5
+      description: >-
+        On a labeled cross-source pair set, auto-link precision is at least 0.98.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e24-t04-identity-resolution-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.3
+    debate/epic: v3-e24-opponent-data
+spec:
+  description: >-
+    Normalization, matcher, review queue, merge tools, then the labeled pair test.
+  goalRef:
+    name: v3-e24-t04-identity-resolution
+  graph:
+    nodes:
+      - id: normalization
+        kind: Task
+        name: Name and code normalization
+        description: >-
+          Normalization functions and alias table.
+        outputs: [packages/debate_core/src/debate_core/application/identity_resolution.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Normalization tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_identity_resolution.py
+              - "-k"
+              - normalize
+      - id: matcher
+        kind: Task
+        name: Feature-based matcher
+        description: >-
+          Blocking by normalized school and season, feature scoring, thresholds from settings.
+        dependsOn: [normalization]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Matcher tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_identity_resolution.py, -k, match]
+      - id: review-queue
+        kind: Task
+        name: Review queue
+        description: >-
+          Persist candidate links for review with feature breakdowns.
+        dependsOn: [matcher]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Review queue tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_identity_resolution.py, -k, queue]
+      - id: merge-tools
+        kind: Task
+        name: Merge, split and reject tools
+        description: >-
+          Use cases with history and audit events, thin API routes and CLI commands.
+        dependsOn: [review-queue]
+        outputs:
+          - packages/debate_api/src/debate_api/routes/opponents.py
+          - packages/debate_cli/src/debate_cli/commands/opponents.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Merge API tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_opponent_identity.py]
+          - type: test_passes
+            name: CLI merge tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_opponents_commands.py]
+      - id: pair-eval
+        kind: Task
+        name: Labeled pair precision test
+        description: >-
+          Synthetic-name labeled pairs derived from fixture structure; precision assertion; type check.
+        dependsOn: [matcher]
+        outputs: [tests/fixtures/identity_pairs.yaml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Auto-link precision test passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_identity_resolution_pairs.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

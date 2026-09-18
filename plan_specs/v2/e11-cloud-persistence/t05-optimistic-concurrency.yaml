@@ -1,0 +1,149 @@
+# TASK v2-e11-t05-optimistic-concurrency — Optimistic concurrency for cards and files
+# Epic: E11 Cloud Persistence Adapters | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §7 (revision fields so reprocessing cannot overwrite student edits), ADR-002, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e11-t05-optimistic-concurrency
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+  annotations:
+    debate/title: Optimistic concurrency for cards and files
+    debate/architecture-refs: §7, ADR-002, ADR-003, §15
+spec:
+  description: >-
+    Guarantee that a background reprocessing job (e.g. re-running CardJob or re-verification) can never
+    silently overwrite a student's edits to a card, and that two browser tabs cannot clobber each other.
+    Add an integer revision to Card (and the DebateFile metadata shape reserved for V3) that the
+    DynamoDB repository enforces with ConditionExpression on every update, a typed RevisionConflict error
+    carrying the current revision, and application-layer handling that lets callers retry or surface the
+    conflict. The HTTP mapping (409 with ETag/If-Match) is defined here as a helper for E12/E14 to use;
+    the editor's conflict UX belongs to E14-t05 and revision history/restore to E17-t04.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations.dynamodb]
+    forbidden:
+      - Last-writer-wins updates on cards or file metadata
+      - Model/reprocessing paths that bypass the revision check
+      - Retrying a conflicted student edit automatically (only system jobs may re-read and retry)
+  context:
+    - kind: TaskRef
+      name: v2-e11-t03-dynamodb-repositories
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every card update in DynamoDbCardRepository uses a ConditionExpression on revision and increments
+        it atomically; a stale revision raises RevisionConflict(current_revision=...).
+    - id: ac2
+      description: >-
+        The local V1 repository enforces identical semantics so the shared contract suite gains
+        concurrency cases that pass for both backends.
+    - id: ac3
+      description: >-
+        A race test runs a simulated reprocessing job and a student edit against the same card revision;
+        exactly one succeeds and the student's evidence markup is never lost.
+    - id: ac4
+      description: >-
+        System jobs that hit RevisionConflict re-read and either re-apply non-conflicting fields or mark
+        the job CONFLICT, never overwriting student-edited spans.
+    - id: ac5
+      description: >-
+        A helper maps RevisionConflict to HTTP 409 with the current ETag, documented for the API and editor
+        tasks.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e11-t05-optimistic-concurrency-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e11-cloud-persistence
+spec:
+  description: >-
+    Define the error and revision semantics in the core, enforce them in both repository backends, then
+    prove the reprocessing-vs-edit race and document the HTTP mapping.
+  goalRef:
+    name: v2-e11-t05-optimistic-concurrency
+  graph:
+    nodes:
+      - id: revision-semantics
+        kind: Task
+        name: Revision field and RevisionConflict error
+        description: >-
+          Confirm Card.revision semantics (starts at 1, increments per write), add RevisionConflict to the
+          application errors, and add expected_revision to update ports.
+        outputs: [packages/debate_core/src/debate_core/application/errors.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: RevisionConflict error exists
+            path: packages/debate_core/src/debate_core/application/errors.py
+            contentMatch: "class RevisionConflict"
+      - id: dynamo-conditional-writes
+        kind: Task
+        name: Conditional writes in DynamoDB repositories
+        description: >-
+          UpdateItem/TransactWrite with ConditionExpression revision = :expected and SET revision = :next;
+          translate ConditionalCheckFailedException into RevisionConflict with the fresh revision.
+        dependsOn: [revision-semantics]
+        outputs: [packages/debate_core/src/debate_core/integrations/dynamodb/card_repository.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: DynamoDB conditional write tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/dynamodb, -k, revision]
+      - id: local-parity
+        kind: Task
+        name: Local repository parity and contract cases
+        description: >-
+          Implement the same check in the local repository (file lock + revision compare) and add
+          concurrency cases to the shared contract suite.
+        dependsOn: [revision-semantics]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contract concurrency cases pass on both backends
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/contracts, -k, concurrency]
+      - id: race-tests
+        kind: Task
+        name: Reprocessing vs student-edit race tests
+        description: >-
+          Application-level tests with asyncio interleavings covering job-then-edit, edit-then-job and
+          simultaneous edits; job conflict path marks CONFLICT without touching spans.
+        dependsOn: [dynamo-conditional-writes, local-parity]
+        outputs: [packages/debate_core/tests/application/test_card_revision_races.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Race tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_card_revision_races.py]
+      - id: http-mapping-doc
+        kind: Task
+        name: HTTP 409/ETag mapping helper and docs
+        description: >-
+          A small helper (no FastAPI import in core) producing status/ETag/body for conflicts, and a doc
+          section for E12-t05 and E14-t05.
+        dependsOn: [race-tests]
+        outputs: [docs/data/concurrency.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Concurrency doc describes If-Match
+            path: docs/data/concurrency.md
+            contentMatch: "If-Match"
+status:
+  phase: Pending

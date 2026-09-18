@@ -1,0 +1,137 @@
+# TASK v2-e13-t04-search-job-workflow — SearchJob workflow
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Architecture refs: §5 Step Functions/SQS, ADR-009, §9 federated search + ranking pipeline, §15
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e13-t04-search-job-workflow
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+  annotations:
+    debate/title: SearchJob workflow
+    debate/architecture-refs: §5, ADR-009, §15
+spec:
+  description: >-
+    Run the V1 SearchService asynchronously so the V2 Research page (E16) can submit a query with filters
+    (date range, argument type such as politics DA, need such as uniqueness or link) and receive ranked
+    results later. The workflow fans out to each enabled SearchProvider (Step Functions Map state or
+    worker fan-out, with a per-provider timeout), tolerates partial provider failure, then normalizes,
+    deduplicates (DOI, canonical URL, title/author similarity) and ranks with the existing deterministic
+    features, and persists Search and ranked SearchResult records with per-provider status. Result
+    rationales from Bedrock rerank/Claude and hybrid OpenSearch retrieval are E15; the search API and UI
+    are E16. Discovery is metadata only: no article text is fetched here.
+  priority: 2
+  constraints:
+    packages: [debate_workers.handlers, debate_core.application, infrastructure/modules/workflows]
+    forbidden:
+      - Failing the whole job because one provider times out (return partial results with status)
+      - Fetching or storing article bodies during search
+      - A hidden "truth score"; ranking uses the documented source-quality features only
+      - Live provider calls in CI (use recorded fixtures via respx/vcr)
+  context:
+    - kind: TaskRef
+      name: v2-e13-t02-sqs-workers
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t01-federated-search-service
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A SearchJob fans out to all enabled providers in parallel with a per-provider timeout and records
+        each provider's status (ok, timeout, error, rate_limited) on the Search.
+    - id: ac2
+      description: >-
+        When one provider fails the job still SUCCEEDS with results from the others and a partial=true
+        flag; when all fail it ends FAILED with code ALL_PROVIDERS_FAILED.
+    - id: ac3
+      description: >-
+        Persisted SearchResults have rank, lexical_score and source_quality_features identical to
+        running SearchService in-process on the same recorded fixtures.
+    - id: ac4
+      description: >-
+        Re-submitting the same query/filters with the same idempotency key returns the existing job, and
+        provider calls respect the V1 per-provider rate limits.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e13-t04-search-job-workflow-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e13-async-jobs
+spec:
+  description: >-
+    Split SearchService into fan-out and merge steps, wrap them as handlers, add the state machine, and
+    prove parity with the in-process service on recorded fixtures.
+  goalRef:
+    name: v2-e13-t04-search-job-workflow
+  graph:
+    nodes:
+      - id: search-steps
+        kind: Task
+        name: Provider-query and merge-rank steps
+        description: >-
+          Expose query_provider(provider, query) and merge_and_rank(provider_results) from SearchService
+          with serializable models; the CLI path composes them in-process.
+        outputs: [packages/debate_core/src/debate_core/application/search_steps.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Search step tests pass on recorded fixtures
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, search_steps]
+      - id: search-handlers
+        kind: Task
+        name: Search job handlers
+        description: >-
+          Per-provider handler writing interim results to S3/Job progress and a merge handler persisting
+          Search and SearchResult records.
+        dependsOn: [search-steps]
+        outputs: [packages/debate_workers/src/debate_workers/handlers/search_job.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Search handler tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_search_job.py]
+      - id: search-state-machine
+        kind: Task
+        name: SearchJob state machine with Map fan-out
+        description: >-
+          ASL Map over enabled providers with per-iteration TimeoutSeconds and Catch to a provider-failed
+          result, followed by the merge task and success/failure marking.
+        dependsOn: [search-handlers]
+        outputs: [infrastructure/modules/workflows/search_job.asl.json]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates with the search workflow
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: parity-tests
+        kind: Task
+        name: Partial-failure and parity tests
+        description: >-
+          Local workflow tests for all-ok, one-provider-timeout and all-fail; parity check against
+          in-process SearchService rankings.
+        dependsOn: [search-state-machine]
+        outputs: [tests/integration/test_search_job_workflow.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Search workflow tests pass
+            command: uv
+            args: [run, pytest, tests/integration/test_search_job_workflow.py]
+status:
+  phase: Pending

@@ -1,0 +1,139 @@
+# TASK v1-e01-t04-ci-pipeline — GitHub Actions CI pipeline
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §4 (GitHub Actions), §16 (recorded fixtures, no unstable CI), §17 guardrails
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t04-ci-pipeline
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: GitHub Actions CI pipeline
+    debate/architecture-refs: §4, §16, §17
+spec:
+  description: >-
+    Add the GitHub Actions workflow that gates every PR and push to main: ruff lint/format, pyright,
+    pytest, import-boundary checks and PlanSpec validation, each as a separately named job whose
+    name matches the required status checks reserved in t02. CI is hermetic — no live network or
+    model calls, no cloud credentials. The import-linter contracts themselves are authored in
+    E02-t06; this task runs `lint-imports` as a job that passes trivially until those contracts land.
+    Container build/ECR push and deploy workflows belong to V2 and are out of scope.
+  priority: 1
+  constraints:
+    packages: [.github/workflows]
+    forbidden:
+      - Live network, search-provider or Bedrock calls from CI jobs
+      - Long-lived AWS credentials or provider API keys in repository secrets for the test workflow
+      - Renaming job ids once they are required checks without updating branch protection
+  context:
+    - kind: TaskRef
+      name: v1-e01-t02-github-remote
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t03-uv-workspace-tooling
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t05-spec-tooling
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        .github/workflows/ci.yml runs on pull_request and push to main with jobs lint, typecheck, test,
+        import-boundaries and spec-validate.
+    - id: ac2
+      description: >-
+        Jobs use astral-sh/setup-uv with dependency caching keyed on uv.lock; a warm-cache run of the
+        whole workflow finishes in under 5 minutes.
+    - id: ac3
+      description: >-
+        A PR that introduces a ruff error, a failing test or an invalid PlanSpec is blocked by a red
+        required check.
+    - id: ac4
+      description: >-
+        Workflow permissions default to contents read, and the workflow references no secrets.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t04-ci-pipeline-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Write the workflow with stable job names, add caching, lint the workflow locally, then prove the
+    gates by opening a deliberately failing PR.
+  goalRef:
+    name: v1-e01-t04-ci-pipeline
+  graph:
+    nodes:
+      - id: workflow
+        kind: Task
+        name: CI workflow with stable job names
+        description: >-
+          ci.yml with jobs lint (ruff check + format --check), typecheck (pyright), test (pytest -n
+          auto --cov), import-boundaries (lint-imports) and spec-validate (validate_specs.py);
+          top-level `permissions: contents: read`; concurrency group cancels superseded runs.
+        outputs: [.github/workflows/ci.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Workflow defines the spec-validate job
+            path: .github/workflows/ci.yml
+            contentMatch: "spec-validate"
+          - type: command_succeeds
+            name: Workflow passes actionlint
+            command: actionlint
+            args: [.github/workflows/ci.yml]
+      - id: caching
+        kind: Task
+        name: uv caching and Python setup
+        description: >-
+          Use astral-sh/setup-uv with enable-cache and cache-dependency-glob uv.lock; install Python
+          from .python-version; `uv sync --locked` in each job.
+        dependsOn: [workflow]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: setup-uv caching is configured
+            path: .github/workflows/ci.yml
+            contentMatch: "enable-cache: true"
+      - id: green-run
+        kind: Task
+        name: Green run on main
+        description: >-
+          Push the workflow through a PR and confirm every job succeeds on main.
+        dependsOn: [caching]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Latest CI run on main succeeded
+            command: gh
+            args: [run, list, --workflow, ci.yml, --branch, main, --limit, "1", --json, conclusion,
+                   --jq, '.[0] | select(.conclusion == "success")']
+      - id: gate-proof
+        kind: Task
+        name: Prove required checks block bad PRs
+        description: >-
+          Open a throwaway PR with a ruff violation and an invalid spec, confirm the required checks
+          fail and merge is blocked, then close it; mark the job names required in branch protection.
+        dependsOn: [green-run]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: custom
+            name: Failing PR is blocked from merge
+            description: >-
+              Owner confirms the throwaway PR showed red lint and spec-validate checks and GitHub
+              reported "Merging is blocked".
+status:
+  phase: Pending

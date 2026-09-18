@@ -1,0 +1,131 @@
+# TASK v1-e04-t01-url-canonicalization — URL canonicalization and identifier detection
+# Epic: E04 Article Retrieval & Extraction | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6 ArticleService (canonicalize), §9 (dedupe by DOI/canonical URL), §16 (canonical URL unit tests)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e04-t01-url-canonicalization
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+  annotations:
+    debate/title: URL canonicalization and identifier detection
+    debate/architecture-refs: §6, §9, §16
+spec:
+  description: >-
+    Implement pure URL canonicalization and scholarly identifier detection in debate_core.retrieval so
+    the same article reached via a tracking link, an AMP page or a mixed-case host dedupes to one
+    Article. Rules: lowercase scheme/host, drop default ports and fragments, strip tracking parameters
+    (utm_*, fbclid, gclid, mc_cid, ...), sort remaining query params, normalize trailing slashes and
+    AMP variants, and prefer an HTML rel=canonical link when it is same-site. Detect DOI, arXiv id
+    and PMID from URLs and text. Pure functions only — fetching is t02, and ArticleService applies the
+    result in t05.
+  priority: 2
+  constraints:
+    packages: [debate_core.retrieval]
+    forbidden:
+      - Network calls (no redirect following or DOI resolution in this task)
+      - Accepting a cross-domain rel=canonical without an explicit allow rule
+      - Dropping query parameters that select content (e.g. article ids) by default
+  context:
+    - kind: TaskRef
+      name: v1-e02-t01-domain-entities
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        canonicalize_url is idempotent and maps a table of at least 40 real-world variant pairs (news,
+        think-tank, .gov, AMP, Google News redirect patterns) to the expected canonical form.
+    - id: ac2
+      description: >-
+        Tracking-parameter stripping uses a documented allow/deny list, and content-bearing query
+        parameters (id, p, article) are preserved.
+    - id: ac3
+      description: >-
+        apply_rel_canonical accepts same-registrable-domain canonicals, rejects cross-domain ones unless
+        allow-listed (e.g. amp caches), and records which rule applied.
+    - id: ac4
+      description: >-
+        detect_identifiers finds DOI (10.xxxx/...), arXiv (new and old style) and PMID in URLs and text
+        and normalizes them (lowercased DOI, no version suffix for arXiv).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e04-t01-url-canonicalization-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e04-article-retrieval
+spec:
+  description: >-
+    Canonical URL rules first, then rel=canonical handling, then identifier detection, each with a
+    table-driven test module.
+  goalRef:
+    name: v1-e04-t01-url-canonicalization
+  graph:
+    nodes:
+      - id: canonical-rules
+        kind: Task
+        name: canonicalize_url rules
+        description: >-
+          Scheme/host case, default ports, fragments, tracking-param deny list, param sorting,
+          trailing slash and AMP path/host normalization using urllib.parse (IDNA for hosts).
+        outputs: [packages/debate_core/src/debate_core/retrieval/canonical_url.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Canonicalization table tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_canonical_url.py]
+      - id: rel-canonical
+        kind: Task
+        name: rel=canonical application
+        description: >-
+          apply_rel_canonical(fetched_url, html_canonical) with same-site check via a public-suffix
+          aware registrable-domain comparison and an allow list.
+        dependsOn: [canonical-rules]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: rel=canonical tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_canonical_url.py, -k, rel_canonical]
+      - id: identifiers
+        kind: Task
+        name: DOI, arXiv and PMID detection
+        description: >-
+          Regex-based detectors with normalization, returning ScholarlyIdentifiers.
+        outputs: [packages/debate_core/src/debate_core/retrieval/identifiers.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Identifier tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_identifiers.py]
+      - id: quality-gates
+        kind: Task
+        name: Property tests and type check
+        description: >-
+          hypothesis idempotence test for canonicalize_url; pyright strict.
+        dependsOn: [rel-canonical, identifiers]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Retrieval tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval]
+          - type: command_succeeds
+            name: pyright passes
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

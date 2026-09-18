@@ -1,0 +1,138 @@
+# TASK v1-e05-t07-usage-telemetry — Token/cost telemetry and budgets
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §10, ADR-005, §15 (model cost, quotas, token telemetry), §20 step 5
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t07-usage-telemetry
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: Token/cost telemetry and budgets
+    debate/architecture-refs: §10, ADR-005, §15, §20 step 5
+spec:
+  description: >-
+    Record input/output tokens, latency and estimated USD cost for every ModelRouter call (priced from a
+    config/model_pricing.yaml table keyed by model_id, not from code), with a correlation/run id. A
+    BudgetGuard decorator on the router enforces a per-run limit and a per-day local limit (persisted in the
+    local data dir) and raises BudgetExceededError before issuing a call that would exceed them. Delivers a
+    shared `--max-cost` option helper for debate_cli so any model-using command (cut in E06, auto-cut and
+    daily in E08) can adopt it, plus `debate-research usage` for a daily summary. Boundaries: does not
+    implement CloudWatch metrics (V2) or change routing decisions (t01); the fake router reports zero cost.
+  priority: 2
+  constraints:
+    packages: [debate_core.integrations, debate_core.application, debate_cli]
+    forbidden:
+      - Logging prompt bodies or source text in telemetry records
+      - Hard-coded per-token prices in Python code
+      - Calling a model after the budget guard has determined the limit would be exceeded
+  context:
+    - kind: TaskRef
+      name: v1-e05-t02-bedrock-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every ModelResponse carries a UsageRecord (run_id, prompt_id, model_id, input/output tokens,
+        latency_ms, estimated_cost_usd) and records are appended to a local JSONL usage log.
+    - id: ac2
+      description: >-
+        Cost is computed from config/model_pricing.yaml; an unpriced model_id yields cost=null and a warning
+        rather than a guessed price.
+    - id: ac3
+      description: >-
+        With a per-run budget of $0.05 and fixture usage exceeding it, the next call raises
+        BudgetExceededError and no request reaches the delegate router.
+    - id: ac4
+      description: >-
+        `debate-research usage --date 2026-09-17` prints calls, tokens and cost grouped by prompt_id and
+        model_id, and `--json` emits the same data machine-readably.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t07-usage-telemetry-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Usage record and pricing first, then the recording wrapper, then budgets, then CLI surfaces.
+  goalRef:
+    name: v1-e05-t07-usage-telemetry
+  graph:
+    nodes:
+      - id: usage-pricing
+        kind: Task
+        name: UsageRecord and pricing table
+        description: >-
+          Define UsageRecord and a pricing loader over config/model_pricing.yaml (per 1K input/output tokens
+          per model_id, embeddings per 1K tokens, rerank per search unit).
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/models/usage.py
+          - config/model_pricing.yaml
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pricing tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models/test_usage.py, -k, pricing]
+      - id: recording-router
+        kind: Task
+        name: Usage-recording router wrapper
+        description: >-
+          Wrap any ModelRouter to measure latency, read token usage from responses and append records to
+          <data_dir>/usage/YYYY-MM-DD.jsonl.
+        dependsOn: [usage-pricing]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Recording wrapper tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models/test_usage.py, -k, record]
+      - id: budget-guard
+        kind: Task
+        name: Per-run and per-day BudgetGuard
+        description: >-
+          Pre-call estimate (max_tokens × price) and post-call accounting; raise BudgetExceededError before
+          a call that would exceed per-run or per-day limits from settings.
+        dependsOn: [recording-router]
+        outputs: [packages/debate_core/src/debate_core/application/budget.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Budget enforcement tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_budget.py]
+      - id: cli-surfaces
+        kind: Task
+        name: --max-cost option helper and usage command
+        description: >-
+          Add a reusable Typer option/callback for --max-cost and a `usage` command rendering a Rich table
+          or JSON; CLI contains no accounting logic.
+        dependsOn: [budget-guard]
+        outputs:
+          - packages/debate_cli/src/debate_cli/options/budget.py
+          - packages/debate_cli/src/debate_cli/commands/usage.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI usage/max-cost tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_usage_command.py]
+          - type: command_succeeds
+            name: Usage command help renders
+            command: uv
+            args: [run, debate-research, usage, --help]
+status:
+  phase: Pending

@@ -1,0 +1,145 @@
+# TASK v3-e28-t01-speech-planning — Speech planning
+# Epic: E28 Full Round Simulation | Release: v3.7 (Full round simulation) | Major: V3
+# Architecture refs: §3 V3 simulation story, §10 SpeechPlan, §13 Round simulator, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e28-t01-speech-planning
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+  annotations:
+    debate/title: Speech planning
+    debate/architecture-refs: §3, §10, §13, §16
+spec:
+  description: >-
+    Produce a SpeechPlan for the simulated side's next speech from the current flow snapshot, the
+    segment's FormatRules, strategy settings and the evidence available in the opponent library/graph.
+    Deterministic pre-planning computes the obligations: arguments that must be answered, drops to
+    extend, concessions to leverage, what may no longer be raised (no new arguments in the 2NR/2AR or
+    unextended offense in final focus), and a time budget per block from speech length and delivery speed.
+    The model (reasoning tier, versioned prompt) then chooses a strategy within those obligations, such as
+    the Neg block split (2NC takes the CP and case, 1NR takes the DA), collapsing to one position in the
+    2NR, or weighing in PF summary, and returns an ordered list of PlanItems each with target flow node
+    ids, intended move (answer, extend, turn, weigh, collapse), selected card ids and time allocation.
+    Cards are chosen only from the library/graph; plans never contain evidence text. Writing speeches is
+    t02; judging is t03.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.rounds, debate_core.application]
+    forbidden:
+      - Evidence text in SpeechPlans; plans reference card ids only
+      - Card ids not present in the simulated side's library or argument graph
+      - Plans that violate FormatRules (new arguments in last rebuttals, final focus offense not in summary)
+      - Free-form model output; SpeechPlan must validate and record prompt_id/version and model_id
+      - Live network or real model calls in CI; use the fake/replay ModelRouter
+  context:
+    - kind: TaskRef
+      name: v3-e26-t05-flow-tracking
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        plan_speech(round_id) returns a SpeechPlan whose PlanItems reference flow node ids and library
+        card ids, whose time allocations sum to at most the speech length, and which records strategy
+        settings and generation metadata.
+    - id: ac2
+      description: >-
+        On fixtures with a dropped opposing argument, plans for EXPERIENCED_FLOW-targeted strategy
+        include an extend item for that drop; on fixtures with a CONCESSION, a leverage item references it.
+    - id: ac3
+      description: >-
+        Plans for the 2NR/2AR (Policy), NR/2AR (LD) and final focus (PF) contain no new-argument items,
+        and a plan violating this is rejected by post-validation and repaired or failed.
+    - id: ac4
+      description: >-
+        Given identical flow snapshot, settings and replayed model response, the planner produces an
+        identical plan.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e28-t01-speech-planning-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.7
+    debate/epic: v3-e28-round-simulation
+spec:
+  description: >-
+    Define SpeechPlan, compute deterministic obligations and budgets, add the strategy prompt with
+    post-validation, then expose the use case with format fixtures.
+  goalRef:
+    name: v3-e28-t01-speech-planning
+  graph:
+    nodes:
+      - id: speechplan-schema
+        kind: Task
+        name: SpeechPlan and PlanItem schemas
+        description: >-
+          SpeechPlan, PlanItem, PlanMove and StrategySettings models with validators for time sums and
+          card id references.
+        outputs: [packages/debate_core/src/debate_core/domain/speech_plan.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: SpeechPlan schema exists
+            path: packages/debate_core/src/debate_core/domain/speech_plan.py
+            contentMatch: "class SpeechPlan"
+      - id: obligations
+        kind: Task
+        name: Deterministic obligations and time budget
+        description: >-
+          From flow snapshot and FormatRules compute must-answer, extendable drops, leverageable
+          concessions, forbidden new arguments and per-block time budget from speech length and speed.
+        dependsOn: [speechplan-schema]
+        outputs: [packages/debate_core/src/debate_core/rounds/planning/obligations.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Obligation tests pass for all three formats
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_planning_obligations.py]
+      - id: strategy-prompt
+        kind: Task
+        name: Strategy selection prompt and validation
+        description: >-
+          Prompt rounds.speech_planning v1.0.0 with obligations, candidate cards (retrieved via graph and
+          library ports) and settings; post-validation of rules and ids; one repair retry then fail closed.
+        dependsOn: [obligations]
+        outputs:
+          - packages/debate_core/src/debate_core/prompts/rounds_speech_planning.v1.yaml
+          - packages/debate_core/src/debate_core/rounds/planning/planner.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Planner contract tests pass with replay router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_speech_planner.py]
+      - id: use-case
+        kind: Task
+        name: plan_speech use case
+        description: >-
+          Application use case loading round, flow snapshot and library for the simulated side; persists the
+          plan as a PLAN event for traceability.
+        dependsOn: [strategy-prompt]
+        outputs: [packages/debate_core/src/debate_core/application/rounds/plan_speech.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Use-case and determinism tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_plan_speech.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

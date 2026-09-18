@@ -1,0 +1,144 @@
+# TASK v2-e12-t03-authn-authz — Authentication, roles and tenancy
+# Epic: E12 Identity & API Service | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §12 Authentication and authorization, §7 User entity, §14 least privilege / minors
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e12-t03-authn-authz
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+  annotations:
+    debate/title: Authentication, roles and tenancy
+    debate/architecture-refs: §5, §12, §4
+spec:
+  description: >-
+    Turn a Cognito JWT into a trusted Principal inside the API. FastAPI verifies access tokens against the
+    pool's JWKS (signature, iss, token_use, client_id, exp) even though API Gateway's JWT authorizer also
+    checks them (defense in depth and local testability), provisions a User record on first login
+    (user_id, cognito_sub, email_hash, role, organization_id; no raw email or name stored), maps Cognito
+    groups to student/coach/administrator roles, and exposes reusable authorization helpers:
+    require_role, require_same_org and an ownership check used by every resource route. The policy is
+    deny-by-default. Resource routes themselves are E12-t05; library sharing rules are E17-t06.
+  priority: 1
+  constraints:
+    packages: [debate_api.auth, debate_core.application, debate_core.domain]
+    forbidden:
+      - Trusting unverified claims or accepting ID tokens where access tokens are required
+      - Storing raw email addresses, names or Google profile data on User (email_hash only)
+      - Authorization decisions inside route handlers instead of shared policy helpers
+      - Cross-organization reads unless an explicit sharing rule (E17-t06) allows it
+      - Live Cognito calls in tests (use locally signed JWTs and a static JWKS fixture)
+  context:
+    - kind: TaskRef
+      name: v2-e12-t01-cognito-user-pool
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t02-fastapi-service
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Requests with missing, expired, wrong-issuer, wrong-audience or ID tokens return 401 problem+json;
+        a valid access token yields a Principal(user_id, roles, organization_id).
+    - id: ac2
+      description: >-
+        JWKS keys are cached with TTL and refreshed once on unknown kid; tests cover key rotation.
+    - id: ac3
+      description: >-
+        First authenticated request provisions exactly one User (idempotent under concurrent first
+        requests) storing email_hash, never the raw email.
+    - id: ac4
+      description: >-
+        An authorization matrix test covers student/coach/administrator against own, same-org and
+        other-org resources; any cell not explicitly allowed returns 403 (or 404 to avoid existence leaks).
+    - id: ac5
+      description: >-
+        docs/api/authorization.md documents the role model, tenancy rule and helper usage for later routes.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e12-t03-authn-authz-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+spec:
+  description: >-
+    Token verification, then principal/user provisioning, then authorization policy helpers with a
+    matrix test, and documentation.
+  goalRef:
+    name: v2-e12-t03-authn-authz
+  graph:
+    nodes:
+      - id: jwt-verifier
+        kind: Task
+        name: Cognito JWT verifier with JWKS cache
+        description: >-
+          Verify RS256 access tokens using PyJWT/joserfc, cached JWKS, clock-skew tolerance and claim
+          checks; tests use a locally generated key pair and JWKS fixture.
+        outputs: [packages/debate_api/src/debate_api/auth/jwt.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: JWT verification tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/auth/test_jwt.py]
+      - id: principal-provisioning
+        kind: Task
+        name: Principal dependency and first-login provisioning
+        description: >-
+          A ProvisionUser use case in debate_core (conditional put on cognito_sub) and a current_principal
+          dependency mapping groups to roles and reading custom:organization_id.
+        dependsOn: [jwt-verifier]
+        outputs:
+          - packages/debate_core/src/debate_core/application/provision_user.py
+          - packages/debate_api/src/debate_api/auth/principal.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Provisioning tests pass including concurrent first login
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_provision_user.py]
+      - id: policy-helpers
+        kind: Task
+        name: Role, tenancy and ownership policy helpers
+        description: >-
+          Deny-by-default helpers (require_role, require_same_org, authorize_owner_or_coach) returning 403
+          or 404, applied through dependencies.
+        dependsOn: [principal-provisioning]
+        outputs: [packages/debate_api/src/debate_api/auth/policy.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Authorization matrix tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/auth/test_authorization_matrix.py]
+      - id: auth-docs
+        kind: Task
+        name: Authorization documentation and gates
+        description: >-
+          Document roles, tenancy and helper usage; run type and import checks.
+        dependsOn: [policy-helpers]
+        outputs: [docs/api/authorization.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Authorization doc exists
+            path: docs/api/authorization.md
+            contentMatch: "organization_id"
+          - type: command_succeeds
+            name: Type check passes for debate_api
+            command: uv
+            args: [run, pyright, packages/debate_api]
+status:
+  phase: Pending

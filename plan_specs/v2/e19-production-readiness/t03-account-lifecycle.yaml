@@ -1,0 +1,163 @@
+# TASK v2-e19-t03-account-lifecycle — Account export, deletion and retention
+# Epic: E19 Production Readiness, Privacy & Safety | Release: v2.4 (Production readiness & school rollout) | Major: V2
+# Architecture refs: §7, §14, ADR-004
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e19-t03-account-lifecycle
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+  annotations:
+    debate/title: Account export, deletion and retention
+    debate/architecture-refs: §7, §14, ADR-004
+spec:
+  description: >-
+    Give users (who may be minors) control of their data. Self-service export produces a ZIP with the
+    user's profile, cards (JSON manifests plus a DOCX of the library), searches, saved presets and
+    extensions, delivered via a short-lived presigned URL. Account deletion is a durable job that removes
+    or anonymizes the user's items across DynamoDB (AppTable items, embedding cache refs, quota counters),
+    S3 (exports, private uploads; shared source snapshots referenced by others are retained without owner
+    linkage) and OpenSearch (delete-by-owner plus the t06 scoped rebuild as a consistency check), disables
+    the Cognito user, and writes a deletion certificate record. Configurable retention jobs purge transient
+    data (job records, search results, exports) on schedule. Coach-shared org folders transfer ownership
+    to the organization rather than disappearing. This task does NOT decide legal retention periods (t04)
+    or build the audit log (t02).
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_workers, debate_api, web/src/app/account]
+    forbidden:
+      - Leaving user-identifying data in OpenSearch after deletion (index is derived, purge it)
+      - Deleting shared SourceSnapshots that other users' cards depend on
+      - Synchronous deletion inside an API request
+      - Export URLs valid longer than 15 minutes or delivered by email
+      - Live AWS calls in the unit/CI test suite
+  context:
+    - kind: TaskRef
+      name: v2-e17-t02-library-api
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e15-t06-index-rebuild
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e19-t04-privacy-legal-review
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        POST /v1/account/export creates an ExportJob whose ZIP contains profile.json, cards/*.json manifests,
+        library.docx, searches.json, presets.json and extensions.json, downloadable via a <= 15-minute URL.
+    - id: ac2
+      description: >-
+        After POST /v1/account/delete completes, an integration test over moto (DynamoDB/S3) and recorded
+        OpenSearch responses finds zero items keyed by the user's id, and the Cognito user is disabled.
+    - id: ac3
+      description: >-
+        Source snapshots referenced by other users' cards survive deletion with owner linkage removed; org
+        shared folders are reassigned to the organization.
+    - id: ac4
+      description: >-
+        Deletion is idempotent and resumable (re-running after a mid-way failure completes cleanly) and writes
+        a DeletionCertificate with counts per store, plus an audit event.
+    - id: ac5
+      description: >-
+        Scheduled retention jobs purge job records, search results and exports older than configured windows,
+        with windows sourced from config reviewed in t04.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e19-t03-account-lifecycle-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.4
+    debate/epic: v2-e19-production-readiness
+spec:
+  description: >-
+    Build a data inventory of every user-keyed item, then the export job, the resumable deletion job across
+    stores, retention schedules, and the account settings UI.
+  goalRef:
+    name: v2-e19-t03-account-lifecycle
+  graph:
+    nodes:
+      - id: data-map
+        kind: Task
+        name: User data map
+        description: >-
+          Enumerate every entity/key pattern/S3 prefix/index containing user-linked data with its export and
+          deletion rule; shared with t04.
+        outputs: [docs/privacy/user-data-map.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: User data map exists
+            path: docs/privacy/user-data-map.md
+            contentMatch: "OpenSearch"
+      - id: export-job
+        kind: Task
+        name: Account export job
+        description: Worker that assembles the ZIP from repositories and the bulk export renderer; endpoint.
+        dependsOn: [data-map]
+        outputs: [packages/debate_workers/src/debate_workers/handlers/account_export.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Account export tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_account_export.py]
+      - id: deletion-job
+        kind: Task
+        name: Resumable account deletion job
+        description: >-
+          Step-wise deletion (DynamoDB, S3, OpenSearch delete-by-owner, Cognito disable) with checkpoints,
+          shared-snapshot handling, org folder reassignment and DeletionCertificate.
+        dependsOn: [data-map]
+        outputs:
+          - packages/debate_core/src/debate_core/application/account_deletion.py
+          - packages/debate_workers/src/debate_workers/handlers/account_deletion.py
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Deletion leaves no user-keyed items
+            command: uv
+            args: [run, pytest, tests/integration/test_account_deletion.py]
+      - id: retention-jobs
+        kind: Task
+        name: Scheduled retention jobs
+        description: EventBridge schedule and handler purging transient data per configured windows.
+        dependsOn: [data-map]
+        outputs:
+          - packages/debate_workers/src/debate_workers/handlers/retention_purge.py
+          - config/retention.yaml
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Retention purge tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_retention_purge.py]
+      - id: account-ui
+        kind: Task
+        name: Account settings UI and endpoints
+        description: >-
+          Export and delete-account actions with typed confirmation, status display and endpoints under
+          /v1/account.
+        dependsOn: [export-job, deletion-job]
+        outputs:
+          - packages/debate_api/src/debate_api/routes/account.py
+          - web/src/app/account/page.tsx
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Account flow e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/account-lifecycle.spec.ts]
+status:
+  phase: Pending

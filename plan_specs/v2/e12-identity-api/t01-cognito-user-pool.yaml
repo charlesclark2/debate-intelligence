@@ -1,0 +1,140 @@
+# TASK v2-e12-t01-cognito-user-pool — Cognito user pool and Google federation
+# Epic: E12 Identity & API Service | Release: v2.0 (Cloud platform foundation) | Major: V2
+# Architecture refs: §5 Cognito, §12 Authentication and authorization, §14 minors / data minimization
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e12-t01-cognito-user-pool
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+  annotations:
+    debate/title: Cognito user pool and Google federation
+    debate/architecture-refs: §5, §12, §4
+spec:
+  description: >-
+    Provision the identity provider for V2 in Terraform: a Cognito user pool with email/password sign-up
+    (email as username, verified email, strong password policy, optional TOTP MFA required for the coach
+    and administrator groups), a Google identity provider with attribute mapping, a public app client
+    using authorization code + PKCE with the Hosted UI / managed login domain, groups for the student,
+    coach and administrator roles, and an immutable custom:organization_id attribute. Only the minimum
+    attributes are requested (email, sub; no birthdate, phone or address) because users may be minors.
+    Sign-up is invite/allow-list gated for the pilot via a pre-sign-up Lambda that checks an allowed
+    domain/email list. Token verification in the API is E12-t03; the sign-in UX is E14-t02.
+  priority: 1
+  constraints:
+    packages: [infrastructure/modules/cognito, infrastructure/envs]
+    forbidden:
+      - Collecting birthdate, phone, address, gender or other non-essential attributes
+      - Implicit OAuth grant or client secrets in the browser app client
+      - Open self-sign-up in stage/prod without the allow-list trigger
+      - Google OAuth client secret in Terraform variables or state as plaintext (read from Secrets Manager)
+  context:
+    - kind: TaskRef
+      name: v2-e10-t02-terraform-bootstrap
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A user pool per environment requires verified email, enforces a 12+ character password policy,
+        enables advanced security/threat protection in audit mode, and requests only email and profile scopes.
+    - id: ac2
+      description: >-
+        Google federation is configured with email mapping, and the app client allows only the code grant
+        with PKCE, callback/logout URLs per environment, and refresh token validity documented.
+    - id: ac3
+      description: >-
+        Groups student, coach and administrator exist; custom:organization_id is defined as immutable and
+        not writable by the app client.
+    - id: ac4
+      description: >-
+        A pre-sign-up Lambda rejects emails not on the environment's allow-list, with unit tests for
+        allowed, rejected and federated sign-ups.
+    - id: ac5
+      description: >-
+        docs/runbooks/cognito.md explains inviting users, assigning groups/org ids, and resetting MFA.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e12-t01-cognito-user-pool-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.0
+    debate/epic: v2-e12-identity-api
+spec:
+  description: >-
+    Pool and client first, then Google federation and groups, then the allow-list trigger and runbook.
+  goalRef:
+    name: v2-e12-t01-cognito-user-pool
+  graph:
+    nodes:
+      - id: user-pool
+        kind: Task
+        name: User pool, domain and app client
+        description: >-
+          Cognito module with pool policies, minimal schema, custom:organization_id, managed login domain
+          and a public PKCE app client.
+        outputs: [infrastructure/modules/cognito/main.tf, infrastructure/modules/cognito/outputs.tf]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: App client declares OAuth flows explicitly (code only)
+            path: infrastructure/modules/cognito/main.tf
+            contentMatch: "allowed_oauth_flows"
+      - id: google-idp-groups
+        kind: Task
+        name: Google identity provider and role groups
+        description: >-
+          Google IdP with client id/secret read from Secrets Manager, attribute mapping, and student/coach/
+          administrator groups with precedence.
+        dependsOn: [user-pool]
+        outputs: [infrastructure/modules/cognito/federation.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates with Cognito
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: allowlist-trigger
+        kind: Task
+        name: Pre-sign-up allow-list Lambda
+        description: >-
+          Small Python Lambda (in debate_workers.triggers) checking email/domain against an SSM parameter
+          allow-list; federated sign-ups go through the same check.
+        dependsOn: [user-pool]
+        outputs: [packages/debate_workers/src/debate_workers/triggers/pre_sign_up.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pre-sign-up trigger tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/triggers/test_pre_sign_up.py]
+      - id: env-apply-runbook
+        kind: Task
+        name: Environment wiring and runbook
+        description: >-
+          Instantiate the module per environment, plan dev, and document invite/group/org/MFA operations.
+        dependsOn: [google-idp-groups, allowlist-trigger]
+        outputs: [infrastructure/envs/dev/identity.tf, docs/runbooks/cognito.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev plan succeeds
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, plan, -lock-timeout=60s]
+          - type: custom
+            name: Manual sign-in smoke test
+            description: >-
+              Charlie signs in to the dev Hosted UI with a password account and a Google account and
+              confirms an un-allow-listed email is rejected.
+status:
+  phase: Pending

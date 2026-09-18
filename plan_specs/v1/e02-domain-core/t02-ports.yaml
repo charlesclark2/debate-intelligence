@@ -1,0 +1,150 @@
+# TASK v1-e02-t02-ports — Repository and provider port interfaces
+# Epic: E02 Domain Core: Entities, Ports & Local Persistence | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §2 (provider adapters at every boundary), §6, §7, §10 (ModelRouter), §20 step 1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e02-t02-ports
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+  annotations:
+    debate/title: Repository and provider port interfaces
+    debate/architecture-refs: §2, §6, §7, §10, §20 step 1
+spec:
+  description: >-
+    Declare every boundary debate_core talks through as typing.Protocol ports in
+    debate_core.application.ports: ArticleRepository, SnapshotStore (content-addressed blobs),
+    CardRepository, SearchRepository, SearchProvider, ArticleFetcher, ContentExtractor, ModelRouter,
+    Clock and IdGenerator, with a typed error hierarchy (NotFound, Conflict/RevisionMismatch,
+    ProviderUnavailable, ...) and a documented constructor-injection pattern for application
+    services. Ports are async where I/O-bound. Also ships in-memory fakes used by unit tests across
+    the codebase. Concrete local adapters are t03, contract tests t04, the Bedrock/replay ModelRouter
+    E05 and the HTTP fetcher E04-t02.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.domain]
+    forbidden:
+      - Any concrete I/O (filesystem, sqlite3, httpx, boto3) in port modules
+      - Ports that leak provider-specific types (e.g. botocore responses, httpx.Response)
+      - Service locators or globals instead of constructor injection
+  context:
+    - kind: TaskRef
+      name: v1-e02-t01-domain-entities
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        All ten ports exist as Protocols with docstrings stating semantics (idempotency, ordering,
+        revision checks) and only domain types in their signatures.
+    - id: ac2
+      description: >-
+        CardRepository.save requires an expected_revision and raises RevisionMismatch on conflict, so
+        model reprocessing cannot silently overwrite student edits (§7).
+    - id: ac3
+      description: >-
+        ModelRouter.invoke takes a task class, prompt_id, prompt_version and a Pydantic output type and
+        returns a validated instance plus invocation metadata (model_id, tokens, latency).
+    - id: ac4
+      description: >-
+        In-memory fakes for every port live in debate_core.testing and are checked against the
+        Protocols by pyright strict.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e02-t02-ports-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e02-domain-core
+spec:
+  description: >-
+    Errors first, then persistence ports, provider ports, fakes, and a sample service proving the
+    injection pattern.
+  goalRef:
+    name: v1-e02-t02-ports
+  graph:
+    nodes:
+      - id: errors
+        kind: Task
+        name: Typed port error hierarchy
+        description: >-
+          DomainError base with NotFound, AlreadyExists, RevisionMismatch, ProviderUnavailable,
+          ProviderRateLimited and InvalidModelOutput.
+        outputs: [packages/debate_core/src/debate_core/application/errors.py]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Errors module defines RevisionMismatch
+            path: packages/debate_core/src/debate_core/application/errors.py
+            contentMatch: "class RevisionMismatch"
+      - id: persistence-ports
+        kind: Task
+        name: Repository and blob-store ports
+        description: >-
+          ArticleRepository, SnapshotStore (put/get by sha256 key, exists), CardRepository (with
+          expected_revision), SearchRepository.
+        dependsOn: [errors]
+        outputs: [packages/debate_core/src/debate_core/application/ports/persistence.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: SnapshotStore port exists
+            path: packages/debate_core/src/debate_core/application/ports/persistence.py
+            contentMatch: "class SnapshotStore(Protocol)"
+      - id: provider-ports
+        kind: Task
+        name: Provider, model and utility ports
+        description: >-
+          SearchProvider, ArticleFetcher, ContentExtractor, ModelRouter (structured output contract),
+          Clock and IdGenerator.
+        dependsOn: [errors]
+        outputs: [packages/debate_core/src/debate_core/application/ports/providers.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ModelRouter port exists
+            path: packages/debate_core/src/debate_core/application/ports/providers.py
+            contentMatch: "class ModelRouter(Protocol)"
+      - id: fakes
+        kind: Task
+        name: In-memory fakes
+        description: >-
+          debate_core.testing.fakes with in-memory implementations of every port, a FixedClock and a
+          deterministic IdGenerator.
+        dependsOn: [persistence-ports, provider-ports]
+        outputs: [packages/debate_core/src/debate_core/testing/fakes.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fake behavior tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_fakes.py]
+      - id: injection-pattern
+        kind: Task
+        name: Constructor-injection pattern and docs
+        description: >-
+          A trivial example service taking ports in __init__, a docs page on the pattern, and pyright
+          conformance of fakes to Protocols.
+        dependsOn: [fakes]
+        outputs: [docs/architecture/ports-and-adapters.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: pyright strict passes
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: artifact_exists
+            name: Pattern documented
+            path: docs/architecture/ports-and-adapters.md
+status:
+  phase: Pending

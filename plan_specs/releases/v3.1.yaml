@@ -1,0 +1,97 @@
+# RELEASE v3.1 — Case coverage analysis
+# Major version: V3. Epics: E22
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v3-1
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.1
+  annotations:
+    debate/title: v3.1 — Case coverage analysis
+spec:
+  description: >-
+    An uploaded affirmative yields predicted opposition positions and a coverage-gap report against the
+    student's extensions.
+  priority: 11
+  acceptanceCriteria:
+  - id: epic-e22
+    description: >-
+      Epic E22 (Case Coverage Analysis) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v3.1.0 is pushed and CHANGELOG.md has a v3.1 section.
+  - id: gate
+    description: >-
+      Gate release-v3-1-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v3-1-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.1
+spec:
+  gateType: review
+  description: >-
+    Release review for v3.1 (Case coverage analysis): demo the release goal end to end, confirm CI green
+    on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v3-1-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.1
+spec:
+  description: >-
+    Release plan for v3.1: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v3-1
+  series: v3
+  version: v3.1
+  graph:
+    nodes:
+    - id: e22
+      kind: External
+      name: Epic E22 — Case Coverage Analysis
+      inputs:
+        goalRef: v3-e22-coverage-analysis
+        specRef: plan_specs/v3/e22-coverage-analysis/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v3.1.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e22
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v3.1.0
+    - id: release-review
+      kind: Gate
+      name: v3.1 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v3-1-gate
+status:
+  phase: Pending

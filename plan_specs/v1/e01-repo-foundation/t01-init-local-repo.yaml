@@ -1,0 +1,141 @@
+# TASK v1-e01-t01-init-local-repo — Initialize local git repository and monorepo skeleton
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §4, §6, §17, §18
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t01-init-local-repo
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: Initialize local git repository and monorepo skeleton
+    debate/architecture-refs: §4, §6, §17, §18
+spec:
+  description: >-
+    Completed during project setup on 2026-09-17: git init, the §6 monorepo skeleton
+    (packages/debate_core, debate_cli, debate_api, debate_workers, web, infrastructure, tests),
+    the architecture proposal under docs/architecture, the plan_specs/ tree with README conventions
+    and task template, and the initial scripts/validate_specs.py validator. This spec records that
+    baseline so later tasks can depend on it. It does NOT own the GitHub remote or branch protection
+    (t02), the uv workspace and quality tooling (t03), CI (t04), wiring the validator into pre-commit
+    and CI (t05), or splitting ADRs into docs/adr (t06).
+  priority: 1
+  constraints:
+    packages: [repo root, docs/architecture, plan_specs, scripts]
+    forbidden:
+      - Committing secrets, API keys or .env files
+      - Committing student data or recorded fixtures containing personal information
+      - Business logic outside packages/debate_core
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The repository root contains docs/architecture/architecture_proposal.md, plan_specs/ and
+        scripts/validate_specs.py.
+    - id: ac2
+      description: >-
+        plan_specs/README.md documents naming, labels, dependencies, criteria types and repo layout,
+        and plan_specs/_templates/task.template.yaml exists for new task specs.
+    - id: ac3
+      description: >-
+        The worked example task spec (v1-e04-t02-http-fetcher) exists and parses as a Goal + Plan pair.
+    - id: ac4
+      description: >-
+        `uv run scripts/validate_specs.py --require-succeeded v1-e01-t01-init-local-repo` exits 0.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t01-init-local-repo-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Record of the setup session: repository skeleton, architecture document, PlanSpec conventions and
+    validator. Every criterion below is checkable against the working tree today.
+  goalRef:
+    name: v1-e01-t01-init-local-repo
+  graph:
+    nodes:
+      - id: repo-skeleton
+        kind: Task
+        name: Repository skeleton and git init
+        description: >-
+          Initialize git and create the §6 top-level layout (packages/, web/, infrastructure/, tests/,
+          docs/, plan_specs/, scripts/) with a root README and .gitignore.
+        outputs: [docs/, plan_specs/, scripts/]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: plan_specs tree exists
+            path: plan_specs/README.md
+          - type: artifact_exists
+            name: scripts directory exists
+            path: scripts/validate_specs.py
+      - id: architecture-doc
+        kind: Task
+        name: Architecture proposal committed as markdown
+        description: >-
+          Convert the V1–V3 architecture proposal to markdown with its media under docs/architecture.
+        dependsOn: [repo-skeleton]
+        outputs: [docs/architecture/architecture_proposal.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Architecture proposal exists
+            path: docs/architecture/architecture_proposal.md
+            contentMatch: "Evidence Integrity and Provenance"
+      - id: planspec-conventions
+        kind: Task
+        name: PlanSpec conventions, template and worked example
+        description: >-
+          Write plan_specs/README.md, the task template and the worked example task spec that all
+          later task specs follow.
+        dependsOn: [repo-skeleton]
+        outputs:
+          - plan_specs/README.md
+          - plan_specs/_templates/task.template.yaml
+          - plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Conventions README documents criteria types
+            path: plan_specs/README.md
+            contentMatch: "artifact_exists"
+          - type: artifact_exists
+            name: Task template exists
+            path: plan_specs/_templates/task.template.yaml
+          - type: artifact_exists
+            name: Worked example exists
+            path: plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml
+            contentMatch: "name: v1-e04-t02-http-fetcher"
+      - id: initial-validator
+        kind: Task
+        name: Initial PlanSpec validator
+        description: >-
+          Write scripts/validate_specs.py as a uv inline-script (PEP 723) checking schema shape,
+          names, labels, graph acyclicity, criteria fields and cross-task prerequisites.
+        dependsOn: [planspec-conventions]
+        outputs: [scripts/validate_specs.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Validator declares --require-succeeded
+            path: scripts/validate_specs.py
+            contentMatch: "--require-succeeded"
+          - type: command_succeeds
+            name: Validator reports this task as Succeeded
+            command: uv
+            args: [run, scripts/validate_specs.py, --require-succeeded, v1-e01-t01-init-local-repo]
+status:
+  phase: Succeeded

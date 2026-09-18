@@ -1,0 +1,136 @@
+# TASK v1-e01-t05-spec-tooling — PlanSpec validation and index tooling
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §17 (phased delivery), §18 (ADRs as reviewed decisions); plan_specs/README.md
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t05-spec-tooling
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: PlanSpec validation and index tooling
+    debate/architecture-refs: §17, §18
+spec:
+  description: >-
+    Harden the setup-time scripts/validate_specs.py into maintained tooling: unit tests for every
+    rule it enforces (schema shape, unique names, label/folder agreement, graph acyclicity, typed
+    criteria fields, TaskRef resolution, no later-release prerequisites, epic-in-one-release), a
+    `--status` roll-up per release/epic, and a new scripts/spec_index.py that regenerates the
+    ROADMAP.md tables from the specs. Wire both into pre-commit; the CI job that runs them is t04.
+    This task does not author or change any epic/task spec content.
+  priority: 2
+  constraints:
+    packages: [scripts, tests/specs, ROADMAP.md, .pre-commit-config.yaml]
+    forbidden:
+      - Editing epic or task spec content to make the validator pass
+      - Network access from the validator or index generator
+      - Dependencies beyond PyYAML in the PEP 723 script headers
+  context:
+    - kind: TaskRef
+      name: v1-e01-t01-init-local-repo
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each validator rule has at least one failing-fixture test under tests/specs/ that asserts the
+        exact error message, plus a passing minimal fixture tree.
+    - id: ac2
+      description: >-
+        `uv run scripts/validate_specs.py --status` prints phase counts per release and per epic, and
+        `--require-succeeded NAME` exits 0 only for Succeeded Goals.
+    - id: ac3
+      description: >-
+        `uv run scripts/spec_index.py` regenerates ROADMAP.md deterministically (no diff on a second
+        run) and `--check` exits non-zero when ROADMAP.md is stale.
+    - id: ac4
+      description: >-
+        pre-commit runs the validator and the ROADMAP staleness check whenever plan_specs/ changes.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t05-spec-tooling-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Pin the current validator behavior with fixture tests, extend status reporting, add the index
+    generator, then hook both into pre-commit.
+  goalRef:
+    name: v1-e01-t05-spec-tooling
+  graph:
+    nodes:
+      - id: validator-tests
+        kind: Task
+        name: Fixture-based validator tests
+        description: >-
+          Build small valid/invalid spec trees under tests/specs/fixtures and parametrize one test per
+          rule; make the validator's root directory injectable for testing.
+        outputs: [tests/specs/test_validate_specs.py, tests/specs/fixtures/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Validator rule tests pass
+            command: uv
+            args: [run, pytest, tests/specs/test_validate_specs.py]
+      - id: status-report
+        kind: Task
+        name: Per-release and per-epic status roll-up
+        description: >-
+          Extend --status to print counts by release and epic and list Blocked/Failed tasks by name.
+        dependsOn: [validator-tests]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Status output tests pass
+            command: uv
+            args: [run, pytest, tests/specs/test_validate_specs.py, -k, status]
+      - id: spec-index
+        kind: Task
+        name: ROADMAP index generator
+        description: >-
+          scripts/spec_index.py renders release → epic → task tables (name, title, priority, phase,
+          prerequisites) into ROADMAP.md between generated markers; supports --check.
+        dependsOn: [validator-tests]
+        outputs: [scripts/spec_index.py, ROADMAP.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Index generator is deterministic
+            command: uv
+            args: [run, pytest, tests/specs/test_spec_index.py]
+          - type: command_succeeds
+            name: ROADMAP.md is up to date
+            command: uv
+            args: [run, scripts/spec_index.py, --check]
+      - id: pre-commit-hooks
+        kind: Task
+        name: pre-commit wiring
+        description: >-
+          Add local pre-commit hooks running the validator and `spec_index.py --check` on changes under
+          plan_specs/.
+        dependsOn: [status-report, spec-index]
+        outputs: [.pre-commit-config.yaml]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Hook registered
+            path: .pre-commit-config.yaml
+            contentMatch: "validate_specs.py"
+          - type: command_succeeds
+            name: Full spec tree validates
+            command: uv
+            args: [run, scripts/validate_specs.py]
+status:
+  phase: Pending

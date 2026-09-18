@@ -1,0 +1,138 @@
+# TASK v1-e03-t04-verifier — EvidenceVerifier and verification statuses
+# Epic: E03 Evidence Integrity & Verification Engine | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §8 steps 5–6 and hard failure rule, ADR-006, §11 V1 acceptance criteria, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e03-t04-verifier
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+  annotations:
+    debate/title: EvidenceVerifier and verification statuses
+    debate/architecture-refs: §8, ADR-006, §11, §16, §20 step 2
+spec:
+  description: >-
+    Implement EvidenceVerifier, the gate that decides whether a card is finished evidence. It loads the
+    card's snapshot with integrity checks, re-normalizes under the card's recorded normalizer_version,
+    reconstructs evidence from the stored offsets, compares exactly to the card's evidence text,
+    validates span containment and required citation fields, and returns a VerificationResult
+    (status VERIFIED or UNVERIFIED plus machine-readable reason codes such as SNAPSHOT_MISSING,
+    HASH_MISMATCH, TEXT_MISMATCH, SPAN_OUT_OF_RANGE, CITATION_UNVERIFIED). A domain guard
+    (ensure_finished) is exposed for exporters so UNVERIFIED cards can never be presented as finished.
+    CLI surfacing is t06; edit re-verification is t05; DOCX export is E06.
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence, debate_core.application]
+    forbidden:
+      - Fuzzy or similarity-based matching for evidence text (exact match after normalization only)
+      - Setting VERIFIED anywhere except EvidenceVerifier
+      - Any model/LLM call in the verification path
+  context:
+    - kind: TaskRef
+      name: v1-e03-t03-span-extraction
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A card built by EvidenceExtractor from an intact snapshot verifies as VERIFIED with no reasons.
+    - id: ac2
+      description: >-
+        A single changed, inserted or deleted character in evidence text yields UNVERIFIED with
+        TEXT_MISMATCH and the first differing offset.
+    - id: ac3
+      description: >-
+        A missing snapshot, tampered blob (hash mismatch) or unknown normalizer_version yields UNVERIFIED
+        with the matching reason code, never an exception escaping to callers.
+    - id: ac4
+      description: >-
+        ensure_finished(card) raises UnverifiedEvidenceError for any card whose latest VerificationResult
+        is not VERIFIED, and is covered by tests used by later exporters.
+    - id: ac5
+      description: >-
+        A mutation-style test suite of fabricated and paraphrased evidence fixtures has a 0% pass rate.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e03-t04-verifier-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+spec:
+  description: >-
+    Result types and reason codes, the core verifier, the finished-evidence guard, then adversarial
+    fixtures proving fabricated evidence never passes.
+  goalRef:
+    name: v1-e03-t04-verifier
+  graph:
+    nodes:
+      - id: result-types
+        kind: Task
+        name: VerificationResult and reason codes
+        description: >-
+          VerificationResult (status, reasons, verified_at, verifier_version, normalizer_version) and a
+          ReasonCode enum.
+        outputs: [packages/debate_core/src/debate_core/evidence/verification_types.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Reason codes defined
+            path: packages/debate_core/src/debate_core/evidence/verification_types.py
+            contentMatch: "TEXT_MISMATCH"
+      - id: verifier-core
+        kind: Task
+        name: EvidenceVerifier.verify
+        description: >-
+          Load snapshot with integrity check, reconstruct from offsets, exact compare, validate spans
+          and citation-field verification flags; convert all failures to reasons.
+        dependsOn: [result-types]
+        outputs: [packages/debate_core/src/debate_core/evidence/verifier.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Verifier unit tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_verifier.py]
+      - id: finished-guard
+        kind: Task
+        name: ensure_finished guard
+        description: >-
+          Domain guard used by exporters and presenters; raises UnverifiedEvidenceError and documents
+          the hard-failure rule.
+        dependsOn: [verifier-core]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Guard tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_verifier.py, -k, finished]
+      - id: adversarial-fixtures
+        kind: Task
+        name: Fabrication and paraphrase fixtures
+        description: >-
+          Fixtures under tests/fixtures/verification/ with paraphrased, spliced, reordered,
+          homoglyph-substituted and truncated evidence; all must be UNVERIFIED.
+        dependsOn: [verifier-core]
+        outputs: [tests/fixtures/verification/]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: No fabricated fixture verifies
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_verifier_adversarial.py]
+          - type: command_succeeds
+            name: pyright strict passes
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

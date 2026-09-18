@@ -1,0 +1,114 @@
+# TASK v1-e09-t02-docx-golden-tests — Golden DOCX regression tests
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Architecture refs: §16 Deterministic tests (golden DOCX), §11 V1 acceptance criteria
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e09-t02-docx-golden-tests
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+  annotations:
+    debate/title: Golden DOCX regression tests
+    debate/architecture-refs: §16, §11
+spec:
+  description: >-
+    Lock the DOCX output format with structural regression tests. A DocxStructure extractor reduces a
+    document to a canonical, diffable JSON form: paragraph sequence with style names and outline levels,
+    text per paragraph, and run ranges with underline/bold/emphasis/highlight colour/font size, plus the
+    embedded manifest part. Tests render every golden case with the current renderer and compare against
+    expected.docx structurally (not byte-for-byte, since zip timestamps and rsids vary), reporting a
+    readable diff of the first divergent paragraph/run. An explicit `--update-goldens` flow regenerates
+    expected files for intentional changes and requires coach review in the PR. Boundaries: does not judge
+    span choice quality (t03) and does not change the renderer.
+  priority: 1
+  constraints:
+    packages: [tests/golden, scripts]
+    forbidden:
+      - Byte-level DOCX comparison (flaky across python-docx/zip metadata)
+      - Auto-updating goldens in CI
+      - Model calls in golden tests (renders come from expected.json cards)
+  context:
+    - kind: TaskRef
+      name: v1-e09-t01-golden-card-fixtures
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        All golden cases pass structural comparison, covering tag/cite/evidence styles, underline and
+        highlight ranges and the manifest part.
+    - id: ac2
+      description: >-
+        Shifting one underline span by one character in the renderer makes the suite fail with a diff naming
+        the case, paragraph index and run range.
+    - id: ac3
+      description: >-
+        `uv run pytest tests/golden --update-goldens` rewrites expected files locally and refuses when CI=true.
+    - id: ac4
+      description: >-
+        The golden suite runs in the default CI job in under 60 seconds.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e09-t02-docx-golden-tests-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+spec:
+  description: >-
+    Build the canonical extractor, the parametrized comparison with readable diffs, then the update flow.
+  goalRef:
+    name: v1-e09-t02-docx-golden-tests
+  graph:
+    nodes:
+      - id: structure-extractor
+        kind: Task
+        name: DocxStructure canonical extractor
+        description: >-
+          Reduce a DOCX to canonical JSON (styles, levels, text, run formatting ranges, manifest part).
+        outputs: [tests/golden/docx_structure.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Extractor unit tests pass
+            command: uv
+            args: [run, pytest, tests/golden/test_docx_structure.py]
+      - id: golden-comparison
+        kind: Task
+        name: Parametrized golden comparison with diffs
+        description: >-
+          Render every golden case and compare structures, printing the first divergence in a readable form.
+        dependsOn: [structure-extractor]
+        outputs: [tests/golden/test_docx_goldens.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Golden DOCX suite passes
+            command: uv
+            args: [run, pytest, tests/golden/test_docx_goldens.py]
+      - id: update-flow
+        kind: Task
+        name: --update-goldens option
+        description: >-
+          Add a pytest option regenerating expected.docx/structure JSON locally, blocked when CI=true, and
+          document the review expectation in tests/golden/README.md.
+        dependsOn: [golden-comparison]
+        outputs: [tests/golden/conftest.py, tests/golden/README.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Update-flow guard tests pass
+            command: uv
+            args: [run, pytest, tests/golden, -k, update_goldens]
+status:
+  phase: Pending

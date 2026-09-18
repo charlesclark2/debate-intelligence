@@ -1,0 +1,129 @@
+# TASK v1-e06-t06-cut-command — `debate-research cut` command
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §11 CLI commands and V1 acceptance criteria, §6, §8 hard failure rule, §20 step 8
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t06-cut-command
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "`debate-research cut` command"
+    debate/architecture-refs: §6, §8, §11, §20 step 8
+spec:
+  description: >-
+    Ship the release's headline command: `debate-research cut <URL> --need "<research need>" --format
+    <profile> --output evidence.docx [--json]`. The Typer command only parses options, builds a CutRequest,
+    calls ArticleService then CardService then ExportService, and renders a Rich progress display
+    (fetch → extract → select → verify → export). Failures are explicit: retrieval statuses (PAYWALLED,
+    ROBOTS_DISALLOWED, BLOCKED, NOT_FOUND) and verification reasons are printed, never hidden, and an
+    UNVERIFIED card is exported only with its banner and a non-zero exit code. Documented exit codes: 0
+    verified, 2 usage error, 3 retrieval failed, 4 card unverified, 5 model/config error. `--json` prints
+    the CutResult/manifest to stdout for scripting. Boundaries: no business logic in debate_cli; batch
+    cutting is E08 t06; DOCX verification is t07.
+  priority: 1
+  constraints:
+    packages: [debate_cli]
+    forbidden:
+      - Business logic (selection, verification, citation merging) in debate_cli
+      - Exit code 0 when the exported card is not VERIFIED
+      - Live network or model calls in CLI tests (respx fixtures, fake router)
+  context:
+    - kind: TaskRef
+      name: v1-e06-t04-docx-renderer
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t05-json-manifest-export
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t07-usage-telemetry
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On a recorded accessible article with fake-router fixtures, `cut <URL> --format team-default
+        --output out.docx` exits 0 and writes a DOCX with tag, cite, underlined evidence and embedded manifest.
+    - id: ac2
+      description: >-
+        A recorded paywalled URL exits 3 and prints the PAYWALLED status with the canonical URL; no DOCX is
+        written.
+    - id: ac3
+      description: >-
+        A fixture that produces an UNVERIFIED card exits 4, prints each verification reason, and the DOCX
+        contains the UNVERIFIED banner.
+    - id: ac4
+      description: >-
+        `--json` writes a single JSON object (CutResult with manifest) to stdout with progress output sent
+        to stderr, and `cut --help` documents every option and exit code.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t06-cut-command-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    Options and wiring first, then progress/failure presentation, then exit-code tests against recorded
+    fixtures.
+  goalRef:
+    name: v1-e06-t06-cut-command
+  graph:
+    nodes:
+      - id: command-wiring
+        kind: Task
+        name: Typer command and service wiring
+        description: >-
+          Add the cut command with URL argument and --need, --argument, --format, --output, --json options;
+          compose services via the CLI container/factory from settings.
+        outputs: [packages/debate_cli/src/debate_cli/commands/cut.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: cut help renders
+            command: uv
+            args: [run, debate-research, cut, --help]
+      - id: progress-and-errors
+        kind: Task
+        name: Rich progress and explicit failure messages
+        description: >-
+          Stage-by-stage progress on stderr; map AccessStatus and CardFailureReason to human messages and
+          documented exit codes.
+        dependsOn: [command-wiring]
+        outputs: [packages/debate_cli/src/debate_cli/presenters/cut_presenter.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Presenter/exit-code mapping tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_cut_command.py, -k, exit_code]
+      - id: fixture-cli-tests
+        kind: Task
+        name: CLI tests on recorded fixtures
+        description: >-
+          CliRunner tests for verified, paywalled, unverified and --json cases using E04 recorded HTTP
+          fixtures and fake model outputs; confirm debate_cli holds no business logic.
+        dependsOn: [progress-and-errors]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: cut command tests pass offline
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_cut_command.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

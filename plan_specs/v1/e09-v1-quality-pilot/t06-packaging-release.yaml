@@ -1,0 +1,136 @@
+# TASK v1-e09-t06-packaging-release — Packaging and release workflow
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Architecture refs: §4 (uv packaging, GitHub Actions), §17 (V1 MVP deliverable), §14 (no secrets in artifacts)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e09-t06-packaging-release
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+  annotations:
+    debate/title: Packaging and release workflow
+    debate/architecture-refs: §4, §14, §17
+spec:
+  description: >-
+    Make the CLI installable by students with one command and releases reproducible. Versions follow semver
+    tied to the plan's release labels (v1.3.0 for release v1.3, patch bumps for fixes), sourced from a single
+    version file shared by debate_core and debate_cli. CHANGELOG.md follows Keep a Changelog with a section
+    per release linking the release spec. A release GitHub Action triggers on v* tags: verifies the tag
+    matches the package version and the release spec's epics are Succeeded (validate_specs.py
+    --require-succeeded), runs the full test suite, builds wheels/sdists with `uv build`, and publishes a
+    GitHub Release with artifacts and changelog notes. Install path: `uv tool install
+    git+https://github.com/<org>/debate-intelligence@v1.3.0#subdirectory=packages/debate_cli` (or the
+    wheel), with the bedrock extra optional. Boundaries: no PyPI publishing, no Docker images (V2).
+  priority: 2
+  constraints:
+    packages: [.github/workflows, packages/debate_cli, packages/debate_core, CHANGELOG.md]
+    forbidden:
+      - Publishing to public PyPI
+      - Secrets, .env files, local data dirs or team evidence fixtures inside built wheels
+      - Tag/version mismatches reaching a GitHub Release
+  context:
+    - kind: TaskRef
+      name: v1-e01-t04-ci-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `uv build` produces wheels for debate_core and debate_cli whose version equals the single version
+        source, and a test inspects the wheel file list to confirm no fixtures, .env or data files ship.
+    - id: ac2
+      description: >-
+        On a clean machine, `uv tool install` from the git tag installs `debate-research`, and
+        `debate-research --version` prints the tagged version.
+    - id: ac3
+      description: >-
+        The release workflow fails if the tag and package version differ or the release's epics are not
+        Succeeded, and otherwise publishes a GitHub Release with changelog notes and built artifacts.
+    - id: ac4
+      description: >-
+        CHANGELOG.md has entries for v1.0 through v1.3 referencing their release specs.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e09-t06-packaging-release-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e09-v1-quality-pilot
+spec:
+  description: >-
+    Single version source and wheel hygiene, changelog, release workflow, then a clean-machine install check.
+  goalRef:
+    name: v1-e09-t06-packaging-release
+  graph:
+    nodes:
+      - id: version-source
+        kind: Task
+        name: Single version source and wheel hygiene
+        description: >-
+          Dynamic version from one file for both packages, `--version` flag, and a wheel-contents test.
+        outputs: [packages/debate_core/src/debate_core/__about__.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Wheels build
+            command: uv
+            args: [build, --all-packages]
+          - type: test_passes
+            name: Wheel contents test passes
+            command: uv
+            args: [run, pytest, tests/packaging/test_wheel_contents.py]
+      - id: changelog
+        kind: Task
+        name: CHANGELOG with release sections
+        description: >-
+          Create CHANGELOG.md with v1.0-v1.3 sections linked to plan_specs/releases.
+        outputs: [CHANGELOG.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Changelog has v1.3 section
+            path: CHANGELOG.md
+            contentMatch: "v1.3"
+      - id: release-workflow
+        kind: Task
+        name: Tag-triggered release workflow
+        description: >-
+          Workflow on v* tags: version/tag check, spec status check, tests, uv build, GitHub Release upload.
+        dependsOn: [version-source, changelog]
+        outputs: [.github/workflows/release.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Release workflow exists
+            path: .github/workflows/release.yml
+            contentMatch: "require-succeeded"
+      - id: install-check
+        kind: Task
+        name: Clean-machine install verification
+        description: >-
+          Tag a release candidate, install with uv tool install on a clean machine/container and document the
+          command in the README.
+        dependsOn: [release-workflow]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Installed CLI reports version
+            command: debate-research
+            args: [--version]
+          - type: custom
+            name: Clean install confirmed
+            description: >-
+              A student laptop (macOS) installs from the tag with the documented one-line command and runs
+              `debate-research --help`.
+status:
+  phase: Pending

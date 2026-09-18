@@ -1,0 +1,160 @@
+# TASK v1-e07-t07-government-adapters — Government and policy source adapters
+# Epic: E07 Discovery Provider Adapters | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Architecture refs: §9 Discovery adapters (policy/government), §14 (secrets), §15, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t07-government-adapters
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: Government and policy source adapters
+    debate/architecture-refs: §9, §14, §15, §16
+spec:
+  description: >-
+    Implement three high-value policy SearchProviders, enabled per topic in config (e.g. on for the
+    national health insurance Policy topic and the data-center PF topic): CongressGovProvider (Congress.gov
+    API v3 bill search with congress/date filters and api.data.gov key), FederalRegisterProvider (Federal
+    Register API documents search with publication_date gte/lte and document type — rules, proposed rules,
+    notices; no key) and GovInfoProvider (GovInfo search/collections for CRS reports, hearings and GAO
+    reports, api.data.gov key). Each maps results to CandidateResult with source_type government,
+    agency/committee as publisher, official document URL (HTML or PDF) and identifiers (bill number, FR
+    document number, GovInfo package id). Boundaries: no full-text download or PDF parsing here (E04 does
+    that), no court or state sources in V1.
+  priority: 2
+  constraints:
+    packages: [debate_core.integrations, config/feeds]
+    forbidden:
+      - Logging or committing api.data.gov keys
+      - Live government API calls in CI (respx fixtures only)
+      - Enabling providers globally rather than per topic configuration
+  context:
+    - kind: TaskRef
+      name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        CongressGovProvider, FederalRegisterProvider and GovInfoProvider each pass the contract kit on
+        recorded fixtures.
+    - id: ac2
+      description: >-
+        Results carry source_type government, the issuing agency or committee as publisher, and the
+        official identifier (bill number, FR document number, GovInfo package id).
+    - id: ac3
+      description: >-
+        Missing api.data.gov keys disable Congress.gov and GovInfo with a health status of
+        NOT_CONFIGURED rather than an error, while Federal Register works keyless.
+    - id: ac4
+      description: >-
+        Topic config controls which government providers run for a search, verified by a registry test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t07-government-adapters-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Federal Register first (keyless), then Congress.gov and GovInfo sharing the api.data.gov key handling,
+    then topic enablement.
+  goalRef:
+    name: v1-e07-t07-government-adapters
+  graph:
+    nodes:
+      - id: federal-register
+        kind: Task
+        name: Federal Register adapter
+        description: >-
+          Record fixtures and implement documents search with conditions[term], publication_date range and
+          type filters.
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/search/federal_register.py
+          - tests/fixtures/providers/federal_register/
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Federal Register tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/search/test_government.py
+              - -k
+              - federal_register
+      - id: data-gov-key
+        kind: Task
+        name: api.data.gov key handling
+        description: >-
+          Shared key settings with redaction and NOT_CONFIGURED health status when absent.
+        outputs: [packages/debate_core/src/debate_core/integrations/search/data_gov.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Key handling tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_government.py, -k, key]
+      - id: congress-gov
+        kind: Task
+        name: Congress.gov adapter
+        description: >-
+          Record fixtures and implement bill search with congress and update-date filters.
+        dependsOn: [data-gov-key]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/congress_gov.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Congress.gov tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/search/test_government.py
+              - -k
+              - congress
+      - id: govinfo
+        kind: Task
+        name: GovInfo adapter
+        description: >-
+          Record fixtures and implement search over CRPT, CHRG and GAOREPORTS-style collections with date
+          filters.
+        dependsOn: [data-gov-key]
+        outputs: [packages/debate_core/src/debate_core/integrations/search/govinfo.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: GovInfo tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/search/test_government.py
+              - -k
+              - govinfo
+      - id: topic-enablement
+        kind: Task
+        name: Per-topic enablement and full suite
+        description: >-
+          Extend topic config with a government provider list and verify registry selection; run the full
+          government module.
+        dependsOn: [federal-register, congress-gov, govinfo]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full government adapter tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/search/test_government.py]
+status:
+  phase: Pending

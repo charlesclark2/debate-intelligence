@@ -1,0 +1,166 @@
+# TASK v2-e15-t06-index-rebuild — Index rebuild from source of truth
+# Epic: E15 Search Index & Hybrid Retrieval | Release: v2.2 (Research workspace) | Major: V2
+# Architecture refs: §5, §7 (OpenSearch is derived), §15 (data loss, search cost), ADR-002, ADR-003, ADR-004
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e15-t06-index-rebuild
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+  annotations:
+    debate/title: Index rebuild from source of truth
+    debate/architecture-refs: §5, §7, §15, ADR-002, ADR-003, ADR-004
+spec:
+  description: >-
+    Prove ADR-004 operationally: an idempotent rebuild job that creates new versioned physical indexes
+    (e.g. article_chunks_v4), repopulates them solely from DynamoDB (Article, SourceSnapshot, Card
+    records) and S3 (normalized snapshot text), reusing the t02 chunker and the t03 embedding cache so a
+    rebuild costs near-zero model spend, verifies document counts against the source, and atomically swaps
+    read/write aliases, keeping the previous index for a rollback window. Also supports targeted
+    re-indexing of a single owner/organization (used by account deletion in E19 t03) and a runbook. This
+    task does NOT change mappings (t02) or query logic (t04); deleted source records are never resurrected.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.retrieval, debate_workers, docs/runbooks]
+    forbidden:
+      - Reading any data from the old index as input to the new one
+      - Swapping aliases before count/sample verification passes
+      - Deleting the previous physical index inside the rollback window without an explicit flag
+      - Re-embedding content already present in the embedding cache
+      - Live AWS calls in the unit/CI test suite (use moto and recorded OpenSearch responses)
+  context:
+    - kind: TaskRef
+      name: v2-e15-t02-index-mappings-chunking
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t02-sqs-workers
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e15-t03-embeddings-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `uv run debate-workers rebuild-index --index article_chunks --env dev` creates a new versioned index,
+        enqueues per-snapshot work and reports progress; rerunning with the same rebuild_id resumes without
+        duplicating documents.
+    - id: ac2
+      description: >-
+        Before alias swap, the job verifies that indexed chunk/card counts match counts derived from
+        DynamoDB/S3 within zero tolerance and that 50 random documents match their source hashes.
+    - id: ac3
+      description: >-
+        The alias swap is a single atomic alias update; searches issued during the rebuild keep hitting the
+        old index and see no errors.
+    - id: ac4
+      description: >-
+        A rebuild after deleting a Card or Article in DynamoDB produces an index without that document, and
+        a rebuild uses zero embedding model calls when the cache is warm.
+    - id: ac5
+      description: >-
+        docs/runbooks/index-rebuild.md covers full rebuild, scoped rebuild by organization, rollback to the
+        previous index, and cleanup, and was dry-run once against dev.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e15-t06-index-rebuild-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+spec:
+  description: >-
+    Build the source enumerator, then the rebuild orchestrator with resumable state, verification and alias
+    swap, then scoped rebuilds, a CLI entry point and the runbook with a dev drill.
+  goalRef:
+    name: v2-e15-t06-index-rebuild
+  graph:
+    nodes:
+      - id: source-enumerator
+        kind: Task
+        name: Source-of-truth enumerator
+        description: >-
+          Paginated enumeration of Articles/Snapshots/Cards from repository ports (optionally scoped by
+          organization_id or owner_id) yielding index work items with expected hashes.
+        outputs: [packages/debate_core/src/debate_core/application/index_rebuild/source.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Enumerator tests pass against moto-backed repositories
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_index_rebuild_source.py]
+      - id: rebuild-orchestrator
+        kind: Task
+        name: Resumable rebuild orchestrator
+        description: >-
+          RebuildJob with rebuild_id, target physical index, progress checkpoints in AppTable, fan-out through
+          the embed-chunks handler (cache reuse), and idempotent resume.
+        dependsOn: [source-enumerator]
+        outputs:
+          - packages/debate_core/src/debate_core/application/index_rebuild/orchestrator.py
+          - packages/debate_workers/src/debate_workers/handlers/rebuild_index.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Resume and no-duplicate tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_rebuild_index.py]
+      - id: verify-and-swap
+        kind: Task
+        name: Verification and atomic alias swap
+        description: >-
+          Count reconciliation and random-sample hash checks, then a single _aliases update; retain previous
+          index with a rollback command and TTL-based cleanup flag.
+        dependsOn: [rebuild-orchestrator]
+        outputs: [packages/debate_core/src/debate_core/application/index_rebuild/swap.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Verification blocks swap on mismatch
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_index_rebuild_swap.py]
+      - id: cli-entry
+        kind: Task
+        name: rebuild-index and rollback-index commands
+        description: >-
+          `debate-workers rebuild-index` (full or --org/--owner scoped, --resume) and `rollback-index`
+          commands with progress output and non-zero exit on verification failure.
+        dependsOn: [verify-and-swap]
+        outputs: [packages/debate_workers/src/debate_workers/commands/rebuild_index.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: CLI help renders
+            command: uv
+            args: [run, debate-workers, rebuild-index, --help]
+      - id: runbook-drill
+        kind: Task
+        name: Runbook and dev drill
+        description: >-
+          Write the runbook and run a full rebuild in dev, recording duration, document counts and embedding
+          calls (expected zero with a warm cache).
+        dependsOn: [cli-entry]
+        outputs: [docs/runbooks/index-rebuild.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Rebuild runbook exists with rollback section
+            path: docs/runbooks/index-rebuild.md
+            contentMatch: "Rollback"
+          - type: custom
+            name: Dev rebuild drill recorded
+            description: >-
+              Charlie runs a full dev rebuild and pastes counts, duration and embedding-call totals into the
+              runbook's drill log.
+status:
+  phase: Pending

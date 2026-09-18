@@ -1,0 +1,97 @@
+# RELEASE v3.4 — Scouting reports
+# Major version: V3. Epics: E25
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v3-4
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.4
+  annotations:
+    debate/title: v3.4 — Scouting reports
+spec:
+  description: >-
+    Coaches and students generate sourced scouting reports on opponents, and disclosures inform coverage
+    predictions.
+  priority: 14
+  acceptanceCriteria:
+  - id: epic-e25
+    description: >-
+      Epic E25 (Scouting Reports) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v3.4.0 is pushed and CHANGELOG.md has a v3.4 section.
+  - id: gate
+    description: >-
+      Gate release-v3-4-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v3-4-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.4
+spec:
+  gateType: review
+  description: >-
+    Release review for v3.4 (Scouting reports): demo the release goal end to end, confirm CI green on
+    the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v3-4-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v3
+    debate/release: v3.4
+spec:
+  description: >-
+    Release plan for v3.4: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v3-4
+  series: v3
+  version: v3.4
+  graph:
+    nodes:
+    - id: e25
+      kind: External
+      name: Epic E25 — Scouting Reports
+      inputs:
+        goalRef: v3-e25-scouting-reports
+        specRef: plan_specs/v3/e25-scouting-reports/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v3.4.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v3.4.0
+    - id: release-review
+      kind: Gate
+      name: v3.4 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v3-4-gate
+status:
+  phase: Pending

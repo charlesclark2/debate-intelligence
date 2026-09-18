@@ -1,0 +1,200 @@
+# TASK v3-e22-t03-position-prediction — Likely-position prediction
+# Epic: E22 Case Coverage Analysis | Release: v3.1 (Case coverage analysis) | Major: V3
+# Architecture refs: §3 V3 stories, §9 hybrid retrieval, §13 Coverage analysis, §19 weak predictions
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e22-t03-position-prediction
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+  annotations:
+    debate/title: Likely-position prediction
+    debate/architecture-refs: §3, §9, §13, §19
+spec:
+  description: >-
+    Rank the positions an opponent is likely to run against an AffCaseStructure. Candidates come from
+    deterministic archetype trigger matching (e.g. an ACA-expansion plan triggers T-"establish"; solvency
+    resting on Medicare payment rates triggers provider-revenue arguments) and from hybrid retrieval over
+    the organization's indexed case summaries to find similar cases and the positions the team prepared
+    against them. A ranking call (prompt coverage.position_ranking) orders candidates and writes rationales
+    that cite only aff node ids, archetype ids and similar-case ids. Each PredictedPosition is labeled as
+    inference with confidence and basis, and its instantiated template nodes are persisted to a
+    CoverageAnalysis graph with origin PREDICTED. Opponent disclosure data is a later basis (E25-t05).
+    Boundaries: coverage classification is t04; indexing adds a derived case-summary document type to the
+    E15 index.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.retrieval, debate_workers, prompts]
+    forbidden:
+      - Presenting predictions as facts or without rationale and confidence
+      - Treating OpenSearch as authoritative; DynamoDB/S3 remain the systems of record
+      - Persisting nodes, edges or findings whose card/node references do not resolve
+      - Model calls without a registered prompt_id/semver and persisted GeneratedArtifactMetadata
+      - >-
+        Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
+        ModelRouter)
+  context:
+    - kind: TaskRef
+      name: v3-e22-t01-argument-archetypes
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e22-t02-aff-case-parser
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e15-t04-hybrid-retrieval
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        PredictedPosition (archetype_id, label, kind, target aff node refs, instantiated nodes, rationale,
+        basis ARCHETYPE_TRIGGER|SIMILAR_CASE, confidence, inference label) validates.
+    - id: ac2
+      description: >-
+        Trigger matching is deterministic and unit tested per archetype trigger type.
+    - id: ac3
+      description: >-
+        Case summaries (format, topic, plan mechanism, advantage titles, positions prepared against it) are
+        indexed as derived documents rebuildable from DynamoDB/S3, and similar-case retrieval uses the E15
+        hybrid query builder.
+    - id: ac4
+      description: >-
+        Ranking returns the top N (default 12) with at least three position kinds represented when
+        available, and every rationale reference resolves.
+    - id: ac5
+      description: >-
+        Replay-fixture tests show that for each of the three NHI fixture affs the coach's expected positions
+        appear in the top 12.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e22-t03-position-prediction-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.1
+    debate/epic: v3-e22-coverage-analysis
+spec:
+  description: >-
+    Schema, case-summary index, trigger matching and similarity candidates, ranking, then persistence and
+    fixture tests.
+  goalRef:
+    name: v3-e22-t03-position-prediction
+  graph:
+    nodes:
+      - id: schema
+        kind: Task
+        name: PredictedPosition schema
+        description: >-
+          Pydantic model and basis enum.
+        outputs: [packages/debate_core/src/debate_core/arguments/coverage/position_prediction.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prediction schema tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/coverage/test_position_prediction.py
+              - "-k"
+              - schema
+      - id: case-index
+        kind: Task
+        name: Case-summary index documents
+        description: >-
+          Derived case-summary builder, index mapping extension and backfill hook in the rebuild job.
+        outputs: [packages/debate_core/src/debate_core/retrieval/case_summary_index.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Case index tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_case_summary_index.py]
+      - id: trigger-matching
+        kind: Task
+        name: Archetype trigger matching
+        description: >-
+          Feature extraction from AffCaseStructure and matching against archetype triggers with match
+          explanations.
+        dependsOn: [schema]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Trigger matching tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/coverage/test_position_prediction.py
+              - "-k"
+              - trigger
+      - id: similarity
+        kind: Task
+        name: Similar-case candidates
+        description: >-
+          Hybrid query from the case summary, filter by format/topic/org, collect prepared positions.
+        dependsOn: [case-index, schema]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Similarity candidate tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/coverage/test_position_prediction.py
+              - "-k"
+              - similar
+      - id: ranking
+        kind: Task
+        name: Ranking with rationale
+        description: >-
+          Prompt coverage.position_ranking, diversity constraint, reference validation.
+        dependsOn: [trigger-matching, similarity]
+        outputs: [prompts/coverage/position_ranking.yaml]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Ranking prompt registered
+            path: prompts/coverage/position_ranking.yaml
+            contentMatch: "prompt_id: coverage.position_ranking"
+          - type: test_passes
+            name: Ranking tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/coverage/test_position_prediction.py
+              - "-k"
+              - ranking
+      - id: persist-fixtures
+        kind: Task
+        name: Persist predictions and fixture tests
+        description: >-
+          Instantiate templates into the CoverageAnalysis graph with origin PREDICTED; fixture expectations
+          for the three NHI affs; type check.
+        dependsOn: [ranking]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prediction fixture tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/arguments/coverage/test_position_prediction_fixtures.py
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

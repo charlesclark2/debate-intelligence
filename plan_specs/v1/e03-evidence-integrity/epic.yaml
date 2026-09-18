@@ -1,0 +1,224 @@
+# EPIC E03 — Evidence Integrity & Verification Engine
+# Major version: V1 | Release: v1.0 (Foundation & verified evidence core)
+# Architecture refs: §8, ADR-006, §20 step 2
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e03-evidence-integrity
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+  annotations:
+    debate/title: E03 — Evidence Integrity & Verification Engine
+    debate/architecture-refs: §8, ADR-006, §20 step 2
+spec:
+  description: >-
+    Implement deterministic normalization, hashing, span-based evidence extraction and the verifier that
+    makes fabricated evidence impossible to pass — before any LLM is introduced.
+  priority: 1
+  constraints:
+    majorVersion: v1
+    release: v1.0
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Normalization is deterministic, versioned and covered by property-based tests.
+  - id: ac2
+    description: >-
+      Evidence text on a card is always extracted from a stored snapshot by offsets; the verifier reconstructs
+      it and sets VERIFIED only when reproduction is exact.
+  - id: ac3
+    description: >-
+      Unretrievable sources, unreproducible spans or unverifiable metadata yield UNVERIFIED cards that
+      are never presented as finished.
+  - id: ac4
+    description: >-
+      `debate-research verify <manifest.json>` reports per-card verification results with a non-zero exit
+      on failure.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e03-evidence-integrity-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+spec:
+  description: >-
+    Task graph for epic E03 (Evidence Integrity & Verification Engine). Each Task node points at its own
+    task-level PlanSpec.
+  goalRef:
+    name: v1-e03-evidence-integrity
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e01-t07-cli-skeleton
+      kind: External
+      name: 'Prerequisite from E01: debate_cli Typer + Rich skeleton'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t07-cli-skeleton
+        specRef: plan_specs/v1/e01-repo-foundation/t07-cli-skeleton.yaml
+    - id: ext-v1-e02-t01-domain-entities
+      kind: External
+      name: 'Prerequisite from E02: Pydantic domain entities and enums'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t01-domain-entities
+        specRef: plan_specs/v1/e02-domain-core/t01-domain-entities.yaml
+    - id: ext-v1-e02-t03-local-repositories
+      kind: External
+      name: 'Prerequisite from E02: Local filesystem and SQLite repository implementations'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t03-local-repositories
+        specRef: plan_specs/v1/e02-domain-core/t03-local-repositories.yaml
+    - id: ext-v1-e02-t06-import-boundary-guard
+      kind: External
+      name: 'Prerequisite from E02: Import-boundary enforcement'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t06-import-boundary-guard
+        specRef: plan_specs/v1/e02-domain-core/t06-import-boundary-guard.yaml
+    - id: t01
+      kind: Task
+      name: Deterministic, versioned text normalization
+      description: >-
+        Unicode normalization, whitespace/newline rules, quote/dash handling policy, preserved paragraph
+        boundaries with stable paragraph IDs; normalizer_version constant; offset mapping between raw
+        and normalized text.
+      inputs:
+        specRef: plan_specs/v1/e03-evidence-integrity/t01-text-normalization.yaml
+        goalRef: v1-e03-t01-text-normalization
+      dependsOn:
+      - ext-v1-e02-t01-domain-entities
+      - ext-v1-e02-t06-import-boundary-guard
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e03-t01-text-normalization reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e03-t01-text-normalization
+    - id: t02
+      kind: Task
+      name: SHA-256 provenance and snapshot creation
+      description: >-
+        Raw-bytes and normalized-text SHA-256, SourceSnapshot creation service persisting raw + cleaned
+        text via SnapshotStore with retrieved_at, extractor_version, normalizer_version.
+      inputs:
+        specRef: plan_specs/v1/e03-evidence-integrity/t02-hashing-provenance.yaml
+        goalRef: v1-e03-t02-hashing-provenance
+      dependsOn:
+      - t01
+      - ext-v1-e02-t03-local-repositories
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e03-t02-hashing-provenance reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e03-t02-hashing-provenance
+    - id: t03
+      kind: Task
+      name: Span-addressed evidence extraction
+      description: >-
+        Given paragraph IDs and/or character offsets, extract evidence text from a snapshot; CardSpan
+        creation (underline/highlight, claim/warrant/internal_link/impact); ellipsis/omitted-range representation.
+      inputs:
+        specRef: plan_specs/v1/e03-evidence-integrity/t03-span-extraction.yaml
+        goalRef: v1-e03-t03-span-extraction
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e03-t03-span-extraction reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e03-t03-span-extraction
+    - id: t04
+      kind: Task
+      name: EvidenceVerifier and verification statuses
+      description: >-
+        Reconstruct card evidence from snapshot + spans under the same normalizer version, compare exactly,
+        validate hashes, emit VerificationResult with reasons; enforce the hard-failure rule (UNVERIFIED
+        can't be exported as finished).
+      inputs:
+        specRef: plan_specs/v1/e03-evidence-integrity/t04-verifier.yaml
+        goalRef: v1-e03-t04-verifier
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e03-t04-verifier reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e03-t04-verifier
+    - id: t05
+      kind: Task
+      name: Evidence edit policy
+      description: >-
+        Domain rules permitting only deletions/markup changes and explicitly bracketed interpolations
+        on quoted evidence; every edit re-verifies; revision increments.
+      inputs:
+        specRef: plan_specs/v1/e03-evidence-integrity/t05-edit-constraints.yaml
+        goalRef: v1-e03-t05-edit-constraints
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e03-t05-edit-constraints reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e03-t05-edit-constraints
+    - id: t06
+      kind: Task
+      name: '`debate-research verify` command'
+      description: >-
+        CLI command verifying a JSON card manifest (DOCX support added in E06) with a Rich table and machine-readable
+        --json output; exit codes documented.
+      inputs:
+        specRef: plan_specs/v1/e03-evidence-integrity/t06-verify-command.yaml
+        goalRef: v1-e03-t06-verify-command
+      dependsOn:
+      - t04
+      - ext-v1-e01-t07-cli-skeleton
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e03-t06-verify-command reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e03-t06-verify-command
+status:
+  phase: Pending

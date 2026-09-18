@@ -1,0 +1,153 @@
+# TASK v3-e27-t03-concession-detection — Concession detection
+# Epic: E27 Cross-Examination Simulator | Release: v3.6 (Cross-examination simulator) | Major: V3
+# Architecture refs: §3 V3 CX story, §7 RoundEvent.concessions, §10, §13 Round simulator, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e27-t03-concession-detection
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+  annotations:
+    debate/title: Concession detection
+    debate/architecture-refs: §3, §7, §10, §13, §16
+spec:
+  description: >-
+    Detect when a CX exchange produces a concession or admission (e.g. "yes, the plan takes more than a
+    year to implement", "we don't have a card that says the link is unique") and record it as a CONCESSION
+    RoundEvent linked to the affected argument node ids and the source CX_EXCHANGE sequence. Detection
+    runs on every CX_EXCHANGE in both modes and for both sides, so student concessions are caught as well
+    as the simulated opponent's. The detector returns a structured ConcessionFinding (node ids, concession
+    kind such as FACTUAL, LINK_GRANTED, NO_EVIDENCE, SCOPE_LIMIT, exact quoted span offsets from the
+    transcript turn, confidence); only findings above a configurable threshold become CONCESSION events,
+    lower ones are stored as POSSIBLE_CONCESSION for UI review. The E26 t05 FlowTracker then marks nodes
+    CONCEDED. Detection quality evaluation at scale is t05; UI display is t04.
+  priority: 1
+  constraints:
+    packages: [debate_core.rounds, debate_core.application]
+    forbidden:
+      - Concession text that is not an exact span of the recorded CX transcript turn
+      - Writing flow statuses directly; concessions flow through CONCESSION events and the E26 tracker
+      - Concessions linked to node ids outside the round's argument graphs
+      - Live network or real model calls in CI; use the fake/replay ModelRouter
+  context:
+    - kind: TaskRef
+      name: v3-e27-t02-cx-answer-simulation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e26-t05-flow-tracking
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        For each CX_EXCHANGE, detection yields zero or more ConcessionFindings whose quoted text equals the
+        transcript substring at the recorded offsets.
+    - id: ac2
+      description: >-
+        Findings at or above the threshold append a CONCESSION event referencing node ids and the
+        source exchange sequence, and the next flow snapshot marks those nodes CONCEDED.
+    - id: ac3
+      description: >-
+        Findings below the threshold are stored as POSSIBLE_CONCESSION and do not change flow status until
+        a user confirms them via POST /v1/rounds/{id}/concessions/{finding_id}/confirm.
+    - id: ac4
+      description: >-
+        On a labeled fixture of >=40 CX exchanges across Policy, LD and PF, precision is >=0.85 and recall
+        >=0.75 using the replay router.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e27-t03-concession-detection-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.6
+    debate/epic: v3-e27-cx-simulator
+spec:
+  description: >-
+    Define findings, implement detection with span validation, emit events into the flow pipeline, add
+    confirmation for low-confidence findings, and score on a labeled fixture.
+  goalRef:
+    name: v3-e27-t03-concession-detection
+  graph:
+    nodes:
+      - id: finding-schema
+        kind: Task
+        name: ConcessionFinding schema
+        description: >-
+          ConcessionFinding and ConcessionKind models with span offsets, node ids, confidence and
+          generation metadata.
+        outputs: [packages/debate_core/src/debate_core/domain/cx.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Finding model exists
+            path: packages/debate_core/src/debate_core/domain/cx.py
+            contentMatch: "class ConcessionFinding"
+      - id: detector
+        kind: Task
+        name: Concession detector with span validation
+        description: >-
+          Prompt cx.concession_detection v1.0.0 returning findings with offsets; validator checks spans and
+          node ids; failures dropped and logged, never repaired into invented text.
+        dependsOn: [finding-schema]
+        outputs:
+          - packages/debate_core/src/debate_core/prompts/cx_concession_detection.v1.yaml
+          - packages/debate_core/src/debate_core/rounds/cx/concessions.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Detector and span-integrity tests pass with replay router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_concession_detection.py]
+      - id: event-emission
+        kind: Task
+        name: CONCESSION events and flow integration
+        description: >-
+          Hook detection after each CX_EXCHANGE in CxSessionService; append CONCESSION or
+          POSSIBLE_CONCESSION events; assert FlowTracker marks CONCEDED.
+        dependsOn: [detector]
+        outputs: [packages/debate_core/src/debate_core/application/cx/concession_events.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Event emission and flow integration tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_concession_events.py]
+      - id: confirmation-route
+        kind: Task
+        name: Confirm/reject possible concessions
+        description: >-
+          Use case and API route to confirm or reject a POSSIBLE_CONCESSION, appending the resulting event.
+        dependsOn: [event-emission]
+        outputs: [packages/debate_api/src/debate_api/routes/cx.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Confirmation route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_cx.py, -k, concession]
+      - id: labeled-fixture-score
+        kind: Task
+        name: Labeled exchange fixture and thresholds
+        description: >-
+          Coach-labeled CX exchanges with gold concessions; compute precision/recall with the replay router
+          and assert thresholds.
+        dependsOn: [event-emission]
+        outputs: [tests/fixtures/cx/labeled_concessions.jsonl]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Concession precision/recall thresholds met
+            command: uv
+            args: [run, pytest, tests/evals/cx/test_concession_detection_eval.py]
+status:
+  phase: Pending

@@ -1,0 +1,148 @@
+# TASK v1-e06-t02-card-service — CardService pipeline
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §6 CardService, §8 (steps 1-6, hard failure rule), ADR-006, §20 steps 6-7
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t02-card-service
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: CardService pipeline
+    debate/architecture-refs: §6, §8, ADR-006, §11, §20 steps 6-7
+spec:
+  description: >-
+    Implement the CardService.cut_card use case that turns a stored SourceSnapshot plus a research need into
+    a persisted Card: numbered snapshot → CardSelection (fail closed) → span extraction from the snapshot →
+    MarkupSpan to CardSpan mapping and tag → CitationService → EvidenceVerifier → CardRepository.save. The
+    result is a CutResult with the Card, VerificationResult, GeneratedArtifactMetadata and a list of typed
+    failure reasons. Every failure after the snapshot exists (model output error, unreproducible span,
+    unverified citation fields) still produces a persisted card with verification_status UNVERIFIED and
+    reasons, never a silently "finished" card. Boundaries: fetching is ArticleService (E04); rendering and
+    export are t04/t05; the CLI is t06. The use case lives in debate_core.application with injected ports.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.evidence]
+    forbidden:
+      - Evidence text on a card that did not come from span extraction over the stored snapshot
+      - Marking a card VERIFIED when any verifier check or required citation field fails
+      - Importing typer/fastapi/boto3/httpx in debate_core.application
+      - Live network or model calls in tests (fake router, local repositories)
+  context:
+    - kind: TaskRef
+      name: v1-e06-t01-citation-service
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t06-card-selection-contract
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e03-t04-verifier
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On a recorded accessible article with fake-router fixtures, cut_card returns a VERIFIED Card whose
+        evidence_text equals the snapshot slice, with tag, citation, CardSpans and snapshot_id/sha256 set.
+    - id: ac2
+      description: >-
+        A ModelOutputError, an unreproducible span or a missing author/date yields a persisted UNVERIFIED
+        card with machine-readable reasons (e.g. MODEL_OUTPUT_INVALID, SPAN_MISMATCH, CITATION_UNVERIFIED).
+    - id: ac3
+      description: >-
+        A snapshot with access_status other than ACCESSIBLE is rejected before any model call with a typed
+        SourceNotAccessibleError and no card is created.
+    - id: ac4
+      description: >-
+        The persisted card carries GeneratedArtifactMetadata (model_id, prompt ids/versions, temperature,
+        snapshot_id) and a format_profile name, and re-running verification on it reproduces the same status.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t02-card-service-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    Define the request/result types, compose the happy path, add the explicit UNVERIFIED paths, then prove
+    it end to end offline against local repositories and the fake router.
+  goalRef:
+    name: v1-e06-t02-card-service
+  graph:
+    nodes:
+      - id: request-result-types
+        kind: Task
+        name: CutRequest, CutResult and failure reasons
+        description: >-
+          Define CutRequest(snapshot_id, need, argument, format_profile), CutResult and the
+          CardFailureReason enum.
+        outputs: [packages/debate_core/src/debate_core/application/card_types.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Card request/result types exist
+            path: packages/debate_core/src/debate_core/application/card_types.py
+            contentMatch: "class CutResult"
+      - id: happy-path
+        kind: Task
+        name: Compose the cut_card pipeline
+        description: >-
+          Wire selection, span extraction, markup mapping, citation and verification through injected ports
+          and save via CardRepository with revision 1.
+        dependsOn: [request-result-types]
+        outputs: [packages/debate_core/src/debate_core/application/card_service.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Happy-path tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_card_service.py, -k, verified]
+      - id: unverified-paths
+        kind: Task
+        name: Explicit UNVERIFIED and rejection paths
+        description: >-
+          Map each failure (model output, span mismatch, citation gaps, inaccessible source) to reasons and
+          statuses per the §8 hard failure rule; add one test per reason.
+        dependsOn: [happy-path]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Failure-path tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_card_service.py
+              - -k
+              - "unverified or rejected"
+      - id: offline-e2e
+        kind: Task
+        name: Offline service-level end-to-end test
+        description: >-
+          Run ArticleService on a recorded page, then cut_card with fake fixtures and local repositories;
+          assert verification is reproducible; run pyright and import-linter.
+        dependsOn: [unverified-paths]
+        outputs: [packages/debate_core/tests/application/test_card_service_e2e.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Service e2e test passes offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_card_service_e2e.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

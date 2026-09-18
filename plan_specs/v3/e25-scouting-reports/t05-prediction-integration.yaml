@@ -1,0 +1,155 @@
+# TASK v3-e25-t05-prediction-integration — Disclosure-informed coverage predictions
+# Epic: E25 Scouting Reports | Release: v3.4 (Scouting reports) | Major: V3
+# Architecture refs: §3 V3 scouting story, §13 Coverage analysis, §13 Opponent intelligence, §16, §19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e25-t05-prediction-integration
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+  annotations:
+    debate/title: Disclosure-informed coverage predictions
+    debate/architecture-refs: §3, §13, §16, §19
+spec:
+  description: >-
+    Let E22 likely-position prediction optionally take a specific opponent: when a canonical team is
+    supplied, its t01 DisclosureSummary clusters become an additional evidence signal (alongside
+    archetypes and semantic similarity) that raises or adds predicted positions, e.g. a team that ran
+    the same Politics DA in 5 of 6 disclosed Neg rounds. Each disclosure-driven prediction carries a
+    PredictionSource of kind DISCLOSURE with the cluster id, member disclosure ids, source_url and
+    retrieved_at, so the coverage report can show "predicted because disclosed at <tournament>". The
+    integration is a new signal provider behind E22's prediction interface, not a rewrite of the ranker;
+    weights are configuration. Without an opponent the E22 output must be unchanged. Scouting report
+    generation and UI are t03/t04; coverage gap classification and its UI remain E22's.
+  priority: 2
+  constraints:
+    packages: [debate_core.arguments, debate_core.application]
+    forbidden:
+      - Changing E22 prediction output when no opponent team is supplied
+      - Disclosure-driven predictions without DISCLOSURE provenance (cluster id, disclosure ids, source_url)
+      - Presenting a disclosure-driven prediction as certain; confidence and inference labeling are required
+      - Reading OpenCaselist directly; consume only the t01 DisclosureSummary through the service
+      - Live network or real model calls in CI tests
+  context:
+    - kind: TaskRef
+      name: v3-e25-t01-disclosure-summarization
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e22-t03-position-prediction
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e22-t06-coverage-eval
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        predict_positions(aff_graph_id, opponent_team_id=...) returns predictions where each
+        disclosure-influenced item lists DISCLOSURE sources with cluster id, disclosure ids, source_url and
+        retrieved_at.
+    - id: ac2
+      description: >-
+        With opponent_team_id omitted, predictions for the E22 golden cases are identical to the
+        pre-integration baseline (snapshot test).
+    - id: ac3
+      description: >-
+        On a seeded set of >=8 aff/opponent pairs where the opponent's actual Neg strategy is known,
+        top-5 recall of the actual off-case positions improves over the archetype-only baseline, and the
+        comparison is recorded in the eval report.
+    - id: ac4
+      description: >-
+        Disclosure signal weight and recency decay are configuration values, and positions last disclosed
+        before a configurable cutoff do not influence predictions.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e25-t05-prediction-integration-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.4
+    debate/epic: v3-e25-scouting-reports
+spec:
+  description: >-
+    Add provenance types, map disclosure clusters onto E22 position archetypes, plug in a signal provider,
+    and prove both no-regression and uplift offline.
+  goalRef:
+    name: v3-e25-t05-prediction-integration
+  graph:
+    nodes:
+      - id: prediction-provenance
+        kind: Task
+        name: DISCLOSURE PredictionSource type
+        description: >-
+          Extend the PredictionSource union with a DisclosureSource variant (cluster id, disclosure ids,
+          source_url, retrieved_at) and update serializers.
+        outputs: [packages/debate_core/src/debate_core/domain/predictions.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Provenance model tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_predictions.py, -k, disclosure]
+      - id: cluster-archetype-mapping
+        kind: Task
+        name: Map disclosure clusters to position archetypes
+        description: >-
+          Match DisclosureCluster families to E22 archetype ids via alias table first and embedding
+          similarity second (fake embedder in tests); unmatched clusters become opponent-specific positions.
+        dependsOn: [prediction-provenance]
+        outputs: [packages/debate_core/src/debate_core/arguments/disclosure_archetype_mapping.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Mapping tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_disclosure_archetype_mapping.py]
+      - id: signal-provider
+        kind: Task
+        name: DisclosureSignalProvider in the prediction pipeline
+        description: >-
+          Implement the provider behind E22's signal interface with configurable weight and recency decay;
+          thread optional opponent_team_id through the use case and API.
+        dependsOn: [cluster-archetype-mapping]
+        outputs: [packages/debate_core/src/debate_core/arguments/prediction_signals/disclosure.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Signal provider tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_disclosure_signal.py]
+      - id: regression-and-uplift-eval
+        kind: Task
+        name: No-regression snapshot and uplift eval
+        description: >-
+          Snapshot test of E22 golden predictions without opponent; seeded pair eval measuring top-5
+          recall with and without the disclosure signal, written to an eval report.
+        dependsOn: [signal-provider]
+        outputs:
+          - tests/fixtures/coverage/disclosure_pairs.json
+          - tests/evals/coverage/test_disclosure_uplift.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: No-regression snapshot passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/test_prediction_snapshot.py]
+          - type: test_passes
+            name: Disclosure uplift eval passes
+            command: uv
+            args: [run, pytest, tests/evals/coverage/test_disclosure_uplift.py]
+          - type: custom
+            name: Coach review of disclosure-driven predictions
+            description: >-
+              Charlie reviews predictions for two real upcoming opponents and confirms that disclosure-driven
+              positions are plausible and their source links are correct.
+status:
+  phase: Pending

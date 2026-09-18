@@ -1,0 +1,204 @@
+# EPIC E23 — File Auditing
+# Major version: V3 | Release: v3.2 (File auditing)
+# Architecture refs: §3 V3 DA audit story, §13 File auditing
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e23-file-auditing
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+  annotations:
+    debate/title: E23 — File Auditing
+    debate/architecture-refs: §3 V3 DA audit story, §13 File auditing
+spec:
+  description: >-
+    Audit a disadvantage (and later other) file's 1NC shell for coherence and compare shell cards against
+    in-file and newer external alternatives with explained tradeoffs.
+  priority: 12
+  constraints:
+    majorVersion: v3
+    release: v3.2
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      The 1NC shell and its uniqueness/link/internal-link/impact steps are identified.
+  - id: ac2
+    description: >-
+      Coherence findings flag missing or mismatched steps.
+  - id: ac3
+    description: >-
+      Card comparisons explain tradeoffs (directness, recency, qualifications, warrant density, specificity)
+      without opaque overall scores; newer external evidence can be suggested.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e23-file-auditing-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v3
+    debate/release: v3.2
+    debate/epic: v3-e23-file-auditing
+spec:
+  description: >-
+    Task graph for epic E23 (File Auditing). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v3-e23-file-auditing
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v2-e16-t01-search-api
+      kind: External
+      name: 'Prerequisite from E16: Search API endpoints'
+      description: >-
+        Cross-epic prerequisite owned by v2-e16-research-ui (release v2.2).
+      inputs:
+        goalRef: v2-e16-t01-search-api
+        specRef: plan_specs/v2/e16-research-ui/t01-search-api.yaml
+    - id: ext-v3-e21-t03-edge-extraction
+      kind: External
+      name: 'Prerequisite from E21: Argument edge extraction'
+      description: >-
+        Cross-epic prerequisite owned by v3-e21-argument-graph (release v3.0).
+      inputs:
+        goalRef: v3-e21-t03-edge-extraction
+        specRef: plan_specs/v3/e21-argument-graph/t03-edge-extraction.yaml
+    - id: ext-v3-e21-t04-graph-queries
+      kind: External
+      name: 'Prerequisite from E21: Coverage and coherence query primitives'
+      description: >-
+        Cross-epic prerequisite owned by v3-e21-argument-graph (release v3.0).
+      inputs:
+        goalRef: v3-e21-t04-graph-queries
+        specRef: plan_specs/v3/e21-argument-graph/t04-graph-queries.yaml
+    - id: t01
+      kind: Task
+      name: 1NC shell identification
+      description: >-
+        Identify the intended shell and its step structure within a parsed DA file.
+      inputs:
+        specRef: plan_specs/v3/e23-file-auditing/t01-shell-identification.yaml
+        goalRef: v3-e23-t01-shell-identification
+      dependsOn:
+      - ext-v3-e21-t03-edge-extraction
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e23-t01-shell-identification reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e23-t01-shell-identification
+    - id: t02
+      kind: Task
+      name: Shell coherence checks
+      description: >-
+        FileAuditFinding for missing/mismatched steps using graph chain queries.
+      inputs:
+        specRef: plan_specs/v3/e23-file-auditing/t02-coherence-checks.yaml
+        goalRef: v3-e23-t02-coherence-checks
+      dependsOn:
+      - t01
+      - ext-v3-e21-t04-graph-queries
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e23-t02-coherence-checks reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e23-t02-coherence-checks
+    - id: t03
+      kind: Task
+      name: Card-vs-alternative comparison
+      description: >-
+        Compare each shell card to in-file alternatives on explicit features with explanation text.
+      inputs:
+        specRef: plan_specs/v3/e23-file-auditing/t03-card-comparison.yaml
+        goalRef: v3-e23-t03-card-comparison
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e23-t03-card-comparison reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e23-t03-card-comparison
+    - id: t04
+      kind: Task
+      name: Newer external evidence suggestions
+      description: >-
+        Optionally run SearchJobs for more recent evidence per step and offer Cut-a-Card.
+      inputs:
+        specRef: plan_specs/v3/e23-file-auditing/t04-newer-evidence.yaml
+        goalRef: v3-e23-t04-newer-evidence
+      dependsOn:
+      - t03
+      - ext-v2-e16-t01-search-api
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e23-t04-newer-evidence reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e23-t04-newer-evidence
+    - id: t05
+      kind: Task
+      name: Audit report UI
+      description: >-
+        Report grouped by shell step with findings, alternatives and actions.
+      inputs:
+        specRef: plan_specs/v3/e23-file-auditing/t05-audit-report-ui.yaml
+        goalRef: v3-e23-t05-audit-report-ui
+      dependsOn:
+      - t02
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e23-t05-audit-report-ui reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e23-t05-audit-report-ui
+    - id: t06
+      kind: Task
+      name: File audit evaluation
+      description: >-
+        Coach-reviewed audit set measuring finding precision and usefulness.
+      inputs:
+        specRef: plan_specs/v3/e23-file-auditing/t06-audit-eval.yaml
+        goalRef: v3-e23-t06-audit-eval
+      dependsOn:
+      - t02
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v3-e23-t06-audit-eval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v3-e23-t06-audit-eval
+status:
+  phase: Pending

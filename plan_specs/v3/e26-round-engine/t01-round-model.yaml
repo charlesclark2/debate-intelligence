@@ -1,0 +1,163 @@
+# TASK v3-e26-t01-round-model — Round, RoundEvent and flow state model
+# Epic: E26 Round Engine Core | Release: v3.5 (Round engine core) | Major: V3
+# Architecture refs: §7 Round/RoundEvent + DynamoDB strategy, §13 Round simulator, §14, §17 V3.5
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e26-t01-round-model
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+  annotations:
+    debate/title: Round, RoundEvent and flow state model
+    debate/architecture-refs: §7, §13, §14, §17
+spec:
+  description: >-
+    Define the persisted data model the whole simulator stands on: Round (format, judge_profile, speed,
+    opponent_profile, sides, status, current_speech), an append-only RoundEvent log (sequence, event_type
+    such as SPEECH, CX_EXCHANGE, PREP_START/STOP, CONCESSION, FLOW_UPDATE; speaker role, content,
+    argument_refs, timestamps, generation metadata when model-produced), and the derived flow state
+    (FlowSheet per position with FlowEntry cells per speech, statuses such as EXTENDED, ANSWERED, DROPPED,
+    CONCEDED, TURNED; clocks for speech and prep time). Provides the RoundRepository port, an in-memory
+    adapter and a DynamoDB adapter on AppTable (PK ROUND#<id>, SK META / EVENT#<zero-padded seq> /
+    FLOW#SNAPSHOT#<seq>) with conditional writes so two writers cannot claim the same sequence. This task
+    owns entities and persistence only: format rules are t02, transitions/validation/replay and API are
+    t03, judge policies t04, and the logic that updates flow from events is t05.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.rounds, debate_core.integrations]
+    forbidden:
+      - Importing boto3 in debate_core.domain or debate_core.rounds; DynamoDB code lives in integrations
+      - Mutating or deleting persisted RoundEvents; the log is append-only
+      - Storing student speech audio; only text transcripts/content the student submits
+      - Storing opponent debater names on Round; opponent_profile references an OpponentTeam id only
+      - Live AWS calls in tests; use moto or DynamoDB Local
+  context:
+    - kind: TaskRef
+      name: v2-e11-t03-dynamodb-repositories
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Round, RoundEvent, FlowSheet, FlowEntry, Concession and ClockState are Pydantic models with
+        enums for format (POLICY, LD, PF), judge profile, speaker role and flow-entry status.
+    - id: ac2
+      description: >-
+        RoundRepository appends events with a conditional write on sequence; a concurrent append with a
+        duplicate sequence raises SequenceConflict and leaves the log unchanged.
+    - id: ac3
+      description: >-
+        Both in-memory and DynamoDB adapters pass the same RoundRepository contract suite, including
+        ordered event reads by range and flow snapshot save/load.
+    - id: ac4
+      description: >-
+        Model-generated events carry prompt_id, prompt version and model_id; student-authored events carry
+        author role but no free-form personal data fields.
+    - id: ac5
+      description: >-
+        The access-pattern doc for rounds (get round, list rounds by owner and status, read events from
+        seq N) is added and the AppTable GSI usage is documented.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e26-t01-round-model-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.5
+    debate/epic: v3-e26-round-engine
+spec:
+  description: >-
+    Model entities, define the repository port with a contract suite, implement in-memory then DynamoDB
+    adapters, and document access patterns.
+  goalRef:
+    name: v3-e26-t01-round-model
+  graph:
+    nodes:
+      - id: round-entities
+        kind: Task
+        name: Round, RoundEvent and flow-state entities
+        description: >-
+          Pydantic entities and enums for rounds, events, flow sheets/entries, concessions and clocks with
+          invariants (monotonic sequence, non-negative clocks).
+        outputs: [packages/debate_core/src/debate_core/domain/rounds.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Entity invariant tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_rounds.py]
+      - id: repository-port
+        kind: Task
+        name: RoundRepository port and contract suite
+        description: >-
+          Port with create_round, get_round, append_event (expected sequence), read_events(from_seq),
+          save_flow_snapshot, latest_flow_snapshot, list_rounds(owner, status); reusable contract tests.
+        dependsOn: [round-entities]
+        outputs:
+          - packages/debate_core/src/debate_core/rounds/ports.py
+          - packages/debate_core/tests/contracts/round_repository_contract.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Port defined
+            path: packages/debate_core/src/debate_core/rounds/ports.py
+            contentMatch: "class RoundRepository"
+      - id: in-memory-adapter
+        kind: Task
+        name: In-memory RoundRepository
+        description: >-
+          Thread-safe in-memory adapter used by local runs and application tests.
+        dependsOn: [repository-port]
+        outputs: [packages/debate_core/src/debate_core/rounds/in_memory_repository.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contract suite passes for in-memory adapter
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/rounds/test_round_repository.py, -k, in_memory]
+      - id: dynamodb-adapter
+        kind: Task
+        name: DynamoDB RoundRepository on AppTable
+        description: >-
+          Adapter using ROUND#/EVENT#/FLOW#SNAPSHOT# keys with attribute_not_exists conditional puts on
+          event sequence and GSI for owner/status listing.
+        dependsOn: [repository-port]
+        outputs: [packages/debate_core/src/debate_core/integrations/dynamodb/round_repository.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Contract suite passes for DynamoDB adapter under moto
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_dynamodb_round_repository.py]
+      - id: access-patterns-and-gates
+        kind: Task
+        name: Access-pattern documentation and quality gates
+        description: >-
+          Add round access patterns to the AppTable design doc; run pyright and import-linter.
+        dependsOn: [in-memory-adapter, dynamodb-adapter]
+        outputs: [docs/architecture/data/apptable_access_patterns.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Round access patterns documented
+            path: docs/architecture/data/apptable_access_patterns.md
+            contentMatch: "ROUND#"
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

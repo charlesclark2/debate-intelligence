@@ -1,0 +1,134 @@
+# TASK v2-e17-t06-team-sharing — Organization sharing
+# Epic: E17 Card Library | Release: v2.3 (Card library & extensions) | Major: V2
+# Architecture refs: §12 Card Library + Authentication and authorization (roles, organization ids), §14
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e17-t06-team-sharing
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+  annotations:
+    debate/title: Organization sharing
+    debate/architecture-refs: §12, §14
+spec:
+  description: >-
+    Let a team share evidence the way it shares a common backfile: coaches create organization-level shared
+    folders (e.g. "Team Backfiles > NHI Aff") and grant view or contribute permission to the organization's
+    students; students can share their own folders read-only to the organization. Implements ShareGrant
+    management endpoints and UI, extends the t02 LibraryAuthorizer to evaluate grants, and records a share
+    audit trail (who granted/revoked what, when) that E19 t02 later forwards to the central audit log.
+    Sharing stays inside one organization; there is no cross-school or public sharing in V2. Contributors
+    can add and tag cards but cannot edit another student's card evidence or markup. This task does NOT
+    build the central audit log (E19 t02) or export (t05).
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_api, web/src/components/library]
+    forbidden:
+      - Sharing across organizations or via public links
+      - Students granting contribute permission on org folders (coach/admin only)
+      - Contributors editing another user's card evidence or spans
+      - Exposing other students' emails in share dialogs (display name or initials only)
+  context:
+    - kind: TaskRef
+      name: v2-e17-t02-library-api
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A permission matrix test covers student/coach/admin x owner/viewer/contributor x read/add/tag/edit/
+        delete and passes for every cell.
+    - id: ac2
+      description: >-
+        Coaches can create an org shared folder and grant view or contribute; students in the same
+        organization see it under "Team" and students in another organization get 404.
+    - id: ac3
+      description: >-
+        Revoking a grant removes access on the next request (no cached permission beyond 60 seconds).
+    - id: ac4
+      description: >-
+        Every grant and revoke writes a ShareAuditRecord with actor, target folder, permission, action and
+        timestamp, retrievable by coaches.
+    - id: ac5
+      description: >-
+        Share management UI lets a coach add/remove grants and shows current permissions; covered by a
+        Playwright test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e17-t06-team-sharing-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.3
+    debate/epic: v2-e17-card-library
+spec:
+  description: >-
+    Define the permission policy as a tested matrix, extend the authorizer, add grant endpoints with share
+    audit records, then the sharing UI.
+  goalRef:
+    name: v2-e17-t06-team-sharing
+  graph:
+    nodes:
+      - id: permission-policy
+        kind: Task
+        name: Sharing permission policy
+        description: >-
+          Pure policy function (role, relationship, grant, action) -> allow/deny with a table-driven test
+          matrix documented in docs/data/sharing-permissions.md.
+        outputs:
+          - packages/debate_core/src/debate_core/application/sharing_policy.py
+          - docs/data/sharing-permissions.md
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Permission matrix tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_sharing_policy.py]
+      - id: authorizer-extension
+        kind: Task
+        name: LibraryAuthorizer grant evaluation
+        description: Extend the t02 authorizer to load grants (with a 60-second cache) and apply the policy.
+        dependsOn: [permission-policy]
+        outputs: [packages/debate_core/src/debate_core/application/library_authz.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Authorizer tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_library_authz.py]
+      - id: grant-endpoints
+        kind: Task
+        name: Share grant endpoints and audit records
+        description: >-
+          POST/DELETE /v1/folders/{id}/shares and GET share audit (coach only), writing ShareAuditRecord items.
+        dependsOn: [authorizer-extension]
+        outputs: [packages/debate_api/src/debate_api/routes/shares.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Share route and cross-org tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_shares.py]
+      - id: sharing-ui
+        kind: Task
+        name: Sharing UI
+        description: Share dialog, "Team" section in the folder tree and permission indicators.
+        dependsOn: [grant-endpoints]
+        outputs: [web/src/components/library/ShareDialog.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sharing e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/library-sharing.spec.ts]
+status:
+  phase: Pending

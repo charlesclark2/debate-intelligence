@@ -1,0 +1,98 @@
+# RELEASE v2.4 — Production readiness & school rollout
+# Major version: V2. Epics: E19
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v2-4
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.4
+  annotations:
+    debate/title: v2.4 — Production readiness & school rollout
+spec:
+  description: >-
+    Quotas, audit logs, retention/deletion, backups, cost telemetry and a completed privacy/legal review
+    clear the platform for team-wide use.
+  priority: 9
+  acceptanceCriteria:
+  - id: epic-e19
+    description: >-
+      Epic E19 (Production Readiness, Privacy & Safety) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v2.4.0 is pushed and CHANGELOG.md has a v2.4 section.
+  - id: gate
+    description: >-
+      Gate release-v2-4-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v2-4-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.4
+spec:
+  gateType: review
+  description: >-
+    Release review for v2.4 (Production readiness & school rollout): demo the release goal end to end,
+    confirm CI green on the release tag, and confirm no evidence-integrity regressions. Includes sign-off
+    on the privacy/legal review before school-wide rollout.
+  reviewers:
+  - user:charlie
+  - role:coach
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v2-4-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v2
+    debate/release: v2.4
+spec:
+  description: >-
+    Release plan for v2.4: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v2-4
+  series: v2
+  version: v2.4
+  graph:
+    nodes:
+    - id: e19
+      kind: External
+      name: Epic E19 — Production Readiness, Privacy & Safety
+      inputs:
+        goalRef: v2-e19-production-readiness
+        specRef: plan_specs/v2/e19-production-readiness/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v2.4.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v2.4.0
+    - id: release-review
+      kind: Gate
+      name: v2.4 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v2-4-gate
+status:
+  phase: Pending

@@ -1,0 +1,143 @@
+# TASK v1-e05-t01-model-router-port — ModelRouter interface and routing config
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Architecture refs: §10 (task classes, ModelRouter), ADR-005, §15 (cost routing), §20 step 5
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t01-model-router-port
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: ModelRouter interface and routing config
+    debate/architecture-refs: §10, ADR-005, §15, §20 step 5
+spec:
+  description: >-
+    Finalize the ModelRouter port stubbed in v1-e02-t02-ports so every model call in the platform is
+    expressed as a task class (complex_reasoning, high_volume, deep_audit, embeddings, rerank) rather than
+    a hard-coded model ID. Delivers the request/response types, a generate_structured(schema) API that
+    returns a validated Pydantic instance, and a YAML routing policy (task class → provider, model ID,
+    inference profile/region, temperature, max tokens, timeout) loaded through settings. This task owns
+    the contract and config only: the Bedrock implementation is t02, fake/replay models are t03, prompt
+    files and metadata are t04, validation/repair behaviour is t05 and cost telemetry is t07.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_core.integrations]
+    forbidden:
+      - Model IDs, regions or inference profiles hard-coded outside config/model_routing.yaml
+      - Importing boto3/botocore in debate_core.domain or debate_core.application
+      - Free-form text return types on the router API used by application services
+  context:
+    - kind: TaskRef
+      name: v1-e02-t02-ports
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A TaskClass enum defines complex_reasoning, high_volume, deep_audit, embeddings and rerank, and the
+        ModelRouter port exposes generate_structured(task_class, prompt, schema, params), embed(texts) and
+        rerank(query, documents) with typed request/response models.
+    - id: ac2
+      description: >-
+        config/model_routing.yaml maps each task class to provider, model_id, inference profile/region and
+        default parameters; the default file routes complex_reasoning to Claude Sonnet, high_volume to Claude
+        Haiku, embeddings to Titan Text Embeddings V2 and rerank to Cohere Rerank 3.5.
+    - id: ac3
+      description: >-
+        Loading a routing file with an unknown task class, missing model_id or out-of-range temperature fails
+        at startup with a typed RoutingConfigError naming the offending key.
+    - id: ac4
+      description: >-
+        Per-call parameter overrides are merged over task-class defaults and the resolved route (model_id,
+        profile/region, temperature) is returned on every ModelResponse for provenance.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t01-model-router-port-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Define the types first, then the port signature, then the routing policy loader and default config,
+    and finish with contract tests that later adapters (t02, t03) must also pass.
+  goalRef:
+    name: v1-e05-t01-model-router-port
+  graph:
+    nodes:
+      - id: model-types
+        kind: Task
+        name: TaskClass and request/response models
+        description: >-
+          Add TaskClass, ModelParams, ModelRequest, ModelResponse[T], ResolvedRoute and ModelUsage
+          (input/output tokens, latency) Pydantic models in debate_core.domain.
+        outputs: [packages/debate_core/src/debate_core/domain/model_contracts.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Model contract types exist
+            path: packages/debate_core/src/debate_core/domain/model_contracts.py
+            contentMatch: "class TaskClass"
+      - id: router-port
+        kind: Task
+        name: ModelRouter port signature
+        description: >-
+          Replace the e02 ModelRouter stub with the full Protocol: generate_structured bound to a Pydantic
+          schema type, embed and rerank; document error types (RoutingConfigError, ModelUnavailableError).
+        dependsOn: [model-types]
+        outputs: [packages/debate_core/src/debate_core/application/ports/model_router.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Port type-checks under pyright strict
+            command: uv
+            args: [run, pyright, packages/debate_core]
+      - id: routing-policy
+        kind: Task
+        name: YAML routing policy and loader
+        description: >-
+          Implement RoutingPolicy (pydantic model + loader) resolving task class plus overrides into a
+          ResolvedRoute; path comes from the e02 settings object; ship the default routing file.
+        dependsOn: [model-types]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/models/routing_policy.py
+          - config/model_routing.yaml
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Routing policy resolution and validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models/test_routing_policy.py]
+          - type: artifact_exists
+            name: Default routing config routes rerank to Cohere
+            path: config/model_routing.yaml
+            contentMatch: "rerank"
+      - id: contract-tests
+        kind: Task
+        name: Reusable ModelRouter contract tests
+        description: >-
+          Write a parametrizable contract suite (structured output returns schema instance, resolved route is
+          populated, usage is reported) that t02 and t03 implementations import; confirm import boundaries.
+        dependsOn: [router-port, routing-policy]
+        outputs: [packages/debate_core/tests/contracts/model_router_contract.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Contract suite exists
+            path: packages/debate_core/tests/contracts/model_router_contract.py
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

@@ -1,0 +1,174 @@
+# TASK v3-e20-t05-file-library-ui — File library UI
+# Epic: E20 Debate File Intelligence | Release: v3.0 (Debate file intelligence & argument graph) | Major: V3
+# Architecture refs: §6 FileIntelligenceService, §13 Argument graph (file parsing)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v3-e20-t05-file-library-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+  annotations:
+    debate/title: File library UI
+    debate/architecture-refs: §6, §12, §13, §14
+spec:
+  description: >-
+    Give students a Files area in the web app: upload a DOCX (using the t02 presigned flow), watch scan and
+    parse status live, browse a parsed file as a collapsible pocket/hat/block/tag outline, preview cards
+    with their underline/highlight rendered from spans, and open a parsed card in the Card Library. Opening
+    a card imports it idempotently as a library Card with provenance_mode FILE_IMPORT and a visible
+    "imported, source not verified" badge; it is never shown as verified. This task owns the
+    list/outline/import endpoints and use case plus the UI; upload/scan/parse mechanics are t02/t03 and the
+    argument graph view is E21-t06.
+  priority: 2
+  constraints:
+    packages: [debate_api, debate_core.application, web]
+    forbidden:
+      - >-
+        Business logic in debate_api routes or web/ components (they call debate_core services or the typed
+        client)
+      - Presenting imported or UNVERIFIED cards as platform-verified finished evidence
+      - Download links for QUARANTINED or unscanned files
+      - Exposing another user's or organization's files
+  context:
+    - kind: TaskRef
+      name: v3-e20-t02-upload-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v3-e20-t03-docx-structure-parser
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e17-t03-library-ui
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A DOCX can be uploaded from the Files page with progress; non-DOCX or over-25 MB files are rejected
+        in the browser and server rejection reasons (macro-enabled, encrypted, malware) are shown verbatim
+        from the API.
+    - id: ac2
+      description: >-
+        File status moves UPLOADED to SCANNING to QUEUED to PARSING to PARSED/PARSE_FAILED/QUARANTINED live
+        via the job status stream, and quarantined files cannot be opened or downloaded.
+    - id: ac3
+      description: >-
+        The outline view renders the section tree with ARIA tree semantics and keyboard navigation, stays
+        responsive on files over 2,000 sections (virtualized), and filters by tag text.
+    - id: ac4
+      description: >-
+        Card preview reproduces underline, highlight and emphasis from FormattingSpans; "Open in library"
+        creates or reuses one Card per ParsedCard with FILE_IMPORT provenance and the unverified-source
+        badge.
+    - id: ac5
+      description: >-
+        GET /files, GET /files/{id}/outline and POST /files/{id}/parsed-cards/{pcid}/import enforce owner
+        and organization access; other users get 404.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v3-e20-t05-file-library-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v3
+    debate/release: v3.0
+    debate/epic: v3-e20-file-intelligence
+spec:
+  description: >-
+    Build the endpoints and import use case, then the list/upload page, the outline and card preview, and
+    finish with end-to-end tests.
+  goalRef:
+    name: v3-e20-t05-file-library-ui
+  graph:
+    nodes:
+      - id: files-api
+        kind: Task
+        name: List, outline and import endpoints
+        description: >-
+          Thin routes over FileIntelligenceService for list (paginated, newest first), outline (sections
+          grouped by path) and import; typed client regenerated.
+        outputs: [packages/debate_api/src/debate_api/routes/files.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Files library API tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_files_library.py]
+      - id: import-use-case
+        kind: Task
+        name: Import a ParsedCard into the library
+        description: >-
+          import_parsed_card creates a Card (tag, cite, evidence, spans, provenance FILE_IMPORT, no
+          snapshot) or returns the existing one, and links ParsedCard.card_id with a revision-guarded write.
+        outputs: [packages/debate_core/src/debate_core/application/file_intelligence.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Import use case tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_import_parsed_card.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+      - id: upload-status-ui
+        kind: Task
+        name: Files page with upload and live status
+        description: >-
+          Files list, drag-and-drop upload using the presigned POST, client-side type/size checks, and
+          status badges driven by the job SSE stream.
+        dependsOn: [files-api]
+        outputs: [web/app/(app)/files/page.tsx, web/components/files/UploadDropzone.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Files page unit tests pass
+            command: pnpm
+            args: [--dir, web, test, --, files]
+      - id: outline-view
+        kind: Task
+        name: Outline tree and card preview
+        description: >-
+          Virtualized outline tree, search by tag, card preview rendering spans, and the Open in library
+          action with the imported/unverified badge.
+        dependsOn: [upload-status-ui, import-use-case]
+        outputs:
+          - web/app/(app)/files/[fileId]/page.tsx
+          - web/components/files/FileOutlineTree.tsx
+          - web/components/files/CardPreview.tsx
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Outline and preview unit tests pass
+            command: pnpm
+            args: [--dir, web, test, --, outline]
+      - id: e2e
+        kind: Task
+        name: End-to-end tests and build
+        description: >-
+          Playwright flows with mocked API: upload, status progression, quarantine, outline navigation,
+          import; axe accessibility check on both pages; lint and build.
+        dependsOn: [outline-view]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: File library e2e passes
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, tests/e2e/file-library.spec.ts]
+          - type: command_succeeds
+            name: Web lint passes
+            command: pnpm
+            args: [--dir, web, lint]
+          - type: command_succeeds
+            name: Web build succeeds
+            command: pnpm
+            args: [--dir, web, build]
+status:
+  phase: Pending

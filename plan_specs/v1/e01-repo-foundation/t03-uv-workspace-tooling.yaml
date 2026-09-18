@@ -54,7 +54,7 @@ spec:
       description: >-
         pre-commit runs ruff, ruff-format, end-of-file/trailing-whitespace and a large-file guard.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

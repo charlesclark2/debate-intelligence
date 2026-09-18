@@ -53,8 +53,10 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        A policy test (terraform plan JSON checked in CI) fails if any table lacks PITR or any data bucket
-        lacks versioning, block-public-access or KMS encryption.
+        A policy check over terraform plan JSON fails if any table lacks PITR or any data bucket lacks
+        versioning, block-public-access or KMS encryption; it runs on the real dev plan in the post-merge
+        and nightly plan workflows (never on PRs into dev), while its unit tests use committed plan JSON
+        fixtures offline.
     - id: ac2
       description: >-
         A weekly export-manifest job writes counts and SHA-256 rollups per table and S3 prefix to a private
@@ -93,8 +95,9 @@ spec:
         kind: Task
         name: Backup configuration policy checks
         description: >-
-          Confirm PITR/versioning/lifecycle settings in modules and add a CI check over `terraform show -json`
-          plan output for required settings.
+          Confirm PITR/versioning/lifecycle settings in modules and add a check over `terraform show -json`
+          plan output for required settings, run in the post-merge dev plan step and the nightly drift plan
+          (v2-e10-t03 workflows), not on PRs into dev; unit tests run against committed plan JSON fixtures.
         outputs: [scripts/check_backup_policy.py]
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -142,6 +145,13 @@ spec:
         outputs: [docs/runbooks/restore-drill-log.md]
         estimatedEffort: 3h
         acceptanceCriteria:
+          - type: custom
+            name: Operator runs seeding and restore drill
+            description: >-
+              Operator-run (expected > 2 min): `uv run scripts/seed_synthetic_data.py --env dev` then the
+              docs/runbooks/restore.md procedures (scripts/restore_table.sh, S3 version recovery, index
+              rebuild); success = restored counts reconcile with the manifest and 20 sampled cards
+              re-verify VERIFIED, with timings pasted into the drill log.
           - type: artifact_exists
             name: Drill log recorded
             path: docs/runbooks/restore-drill-log.md

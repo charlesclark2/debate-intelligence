@@ -292,5 +292,28 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t10-validate-dev-gate
+    - id: t11
+      kind: Task
+      name: Task lifecycle CLI and session workflow
+      description: >-
+        scripts/task (ready, start, resume, prompt, list, report, review, sync, pr, finish) and scripts/task_helper.py:
+        one git worktree and task/<task> branch per task off origin/dev, prerequisite check, kickoff prompt
+        for the Claude session, session report template with PM verdict, PR into dev gated on PM acceptance,
+        and clean-up of worktree plus local/remote branch after merge. Documented in docs/process/task-workflow.md
+        and working-agreements.md. Completed during project setup (2026-09-18).
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t11-task-workflow-cli.yaml
+        goalRef: v1-e01-t11-task-workflow-cli
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t11-task-workflow-cli reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t11-task-workflow-cli
 status:
   phase: Pending

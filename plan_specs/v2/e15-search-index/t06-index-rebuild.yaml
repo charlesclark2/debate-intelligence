@@ -160,7 +160,9 @@ spec:
           - type: custom
             name: Dev rebuild drill recorded
             description: >-
-              Charlie runs a full dev rebuild and pastes counts, duration and embedding-call totals into the
-              runbook's drill log.
+              Operator-run (expected > 2 min): `uv run debate-workers rebuild-index --index article_chunks
+              --env dev`; success = verification passes, the alias swaps, embedding calls are zero with a warm
+              cache, and Charlie pastes counts, duration and embedding-call totals into the runbook's drill
+              log.
 status:
   phase: Pending

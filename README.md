@@ -54,10 +54,11 @@ and validated in dev before a `dev` → `main` promotion. Details:
 ## Working on a task
 
 ```bash
-uv run scripts/validate_specs.py --status   # validate specs + progress roll-up
-uv run scripts/spec_index.py                # refresh ROADMAP.md after changing a spec's status
+scripts/task ready                 # what can start now
+scripts/task start <task>          # worktree + branch off dev, launches Claude with the spec
+scripts/task pr <task>             # after PM review: PR into dev
+scripts/task finish <task>         # after merge: clean up worktree and branches
 ```
 
-Pick a task whose prerequisites are `Succeeded`, branch `task/<task-name>`, implement its
-plan nodes in order until each node's acceptance criteria pass, set the task Goal's
-`status.phase` to `Succeeded`, and open a PR into `dev` that references the spec path.
+See [docs/process/task-workflow.md](docs/process/task-workflow.md) and the
+[documentation index](docs/README.md).

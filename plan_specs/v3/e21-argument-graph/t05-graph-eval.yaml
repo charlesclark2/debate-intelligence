@@ -17,12 +17,13 @@ metadata:
     debate/architecture-refs: §10, §16
 spec:
   description: >-
-    Measure node and edge extraction against coach labels and gate prompt/model promotion on the results.
-    The labeled set covers the current topics (Policy national health insurance aff and neg files, LD space
+    Measure node and edge extraction against coach labels and gate prompt/model promotion on the results. The
+    labeled set covers the current topics (Policy national health insurance aff and neg files, LD space
     colonization AC/NC, PF data-center moratorium pro/con) plus prior-season files, drawn from the scrubbed
     fixtures in tests/fixtures/debate_files. Metrics are node-type accuracy, edge precision/recall by
-    relationship, and support-citation accuracy, run offline in CI against replay recordings and plugged
-    into the E09 promotion gate. Boundaries: parser accuracy is E20-t04 and coverage accuracy is E22-t06.
+    relationship, and support-citation accuracy, run offline against replay recordings in the validate-dev
+    slow tier and the E09 promotion gate (never in the PR `ci` check into dev). Boundaries: parser accuracy is
+    E20-t04 and coverage accuracy is E22-t06.
   priority: 2
   constraints:
     packages: [tests/evals, tests/fixtures, docs/evals]
@@ -54,7 +55,8 @@ spec:
         than 2 points on any of them.
     - id: ac4
       description: >-
-        CI runs the eval offline on replay recordings; re-recording against Bedrock is a manual workflow
+        The eval (markers `eval` and `slow`) runs offline on replay recordings in validate-dev and the E09
+        promotion gate, not on PRs into dev; re-recording against Bedrock is a manual, operator-run step
         with a cost cap.
 status:
   phase: Pending
@@ -126,8 +128,8 @@ spec:
         kind: Task
         name: Baseline and promotion gate
         description: >-
-          Record replay fixtures once, commit the baseline and register the eval with the E09 promotion
-          gate.
+          Record replay fixtures once (operator step), commit the baseline, mark the suite `eval` and `slow`
+          and register the eval with the E09 promotion gate.
         dependsOn: [harness]
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -135,6 +137,13 @@ spec:
             name: Graph baseline committed
             path: tests/evals/baselines/argument_graph.json
             contentMatch: "node_type_accuracy"
+          - type: custom
+            name: Operator records graph replay fixtures
+            description: >-
+              Operator-run (expected > 2 min): `DEBATE_MODEL_MODE=record uv run pytest
+              tests/evals/argument_graph -m eval` with dev Bedrock credentials,
+              within the cost cap; success = recordings committed for every labeled file and a replay run
+              reproducing the baseline metrics.
           - type: test_passes
             name: Graph eval passes offline
             command: uv

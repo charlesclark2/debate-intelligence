@@ -52,8 +52,9 @@ spec:
         and a tflint rule or check fails when a module overrides them away.
     - id: ac4
       description: >-
-        A CI job runs terraform fmt -check, terraform validate for both envs and tflint on every PR
-        touching infrastructure/, and fails the build on any error.
+        A `terraform-checks` job in .github/workflows/ci.yml, gated on the `infrastructure` path filter
+        and listed in the aggregate `ci` job's needs, runs terraform fmt -check, terraform validate for
+        both envs and tflint on every PR touching infrastructure/, and fails `ci` on any error.
 status:
   phase: Pending
 ---
@@ -128,15 +129,17 @@ spec:
         kind: Task
         name: CI fmt/validate/tflint job
         description: >-
-          Add a GitHub Actions workflow triggered on infrastructure/** changes that runs fmt -check,
-          init -backend=false + validate for each env, and tflint, with no AWS credentials.
+          Add a `terraform-checks` job to .github/workflows/ci.yml (not a separate workflow), gated on
+          `needs.changes.outputs.infrastructure` and appended to the aggregate `ci` job's needs, that
+          runs fmt -check, init -backend=false + validate for each env, and tflint, with no AWS
+          credentials.
         dependsOn: [tagging-standard]
-        outputs: [.github/workflows/terraform-checks.yml]
+        outputs: [.github/workflows/ci.yml]
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: artifact_exists
-            name: Terraform CI workflow exists
-            path: .github/workflows/terraform-checks.yml
+            name: ci.yml runs the terraform checks
+            path: .github/workflows/ci.yml
             contentMatch: "terraform fmt -check"
           - type: command_succeeds
             name: Formatting is clean

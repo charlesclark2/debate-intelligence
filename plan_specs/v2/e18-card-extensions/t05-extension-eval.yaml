@@ -47,8 +47,8 @@ spec:
         defining accuracy/grounding/usefulness levels with examples.
     - id: ac2
       description: >-
-        Automatic metrics (grounding violation rate, support-type accuracy, word-limit compliance) are computed
-        offline from recorded outputs by `uv run python -m evals.card_extensions.run`.
+        Automatic metrics (grounding violation rate, support-type accuracy, word-limit compliance) are
+        computed offline from recorded outputs by `uv run python -m evals.card_extensions.run`.
     - id: ac3
       description: >-
         Coach rubric scores for the baseline prompt versions are recorded, with mean >= 3.0 on accuracy and
@@ -105,6 +105,13 @@ spec:
             name: Metric unit tests pass
             command: uv
             args: [run, pytest, evals/card_extensions/tests]
+          - type: custom
+            name: Operator records baseline outputs
+            description: >-
+              Operator-run (expected > 2 min): `DEBATE_MODEL_MODE=record uv run python -m
+              evals.card_extensions.run` with dev Bedrock credentials;
+              success = redacted recordings for all ~30 cards and three prompts under
+              evals/card_extensions/recorded/ and a replay run reproducing the same metrics offline.
       - id: coach-scoring
         kind: Task
         name: Coach rubric scoring session

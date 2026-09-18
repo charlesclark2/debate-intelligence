@@ -17,24 +17,25 @@ metadata:
     debate/architecture-refs: §4, §8, §16, §17
 spec:
   description: >-
-    Make "validated in dev" a machine-checked fact. A validate-dev workflow runs when a dev pre-release
-    (t09) is published: scripts/validate_dev.py resolves the release for the commit, downloads its
-    assets, verifies SHA256SUMS, installs that exact build into an isolated uv tool dir, asserts that
-    `debate-research --version --json` reports the same commit SHA and channel dev, then runs the smoke
-    suite in tests/smoke/ against the installed binary (not the source tree) with DEBATE_ENV=dev and a
-    temp data dir. The recorded tier (default, always run) covers --version, doctor, `config show`
-    redaction and env selection, and `verify` on a fixture manifest (all-VERIFIED exits 0; a tampered
-    card exits 1 and is reported UNVERIFIED). A small opt-in live canary tier (pytest marker `live`,
-    enabled by workflow_dispatch input or a repo variable) makes at most a handful of polite, low-cost
-    calls under the dev budget. The workflow posts a commit status with context `validate-dev` (pending,
-    then success/failure with the run link) on that exact SHA, so a promotion PR whose dev head moved
-    since validation is blocked until the new head validates. Hotfixes get no exception: a hotfix/* head
-    is validated exactly like a dev head, from the pre-release t09 builds for it by manual
-    workflow_dispatch, with the full suite and the same `validate-dev` status required on the hotfix PR
-    into main. tests/smoke/README.md documents
-    how later tasks add smoke checks. Boundaries: building the pre-release is t09; branch guards and the
-    promotion template are t08; cloud smoke tests against AWS dev extend this gate in v2-e12-t07; eval
-    gates are E09.
+    Make "validated in dev" a machine-checked fact. A validate-dev workflow runs when a dev pre-release (t09)
+    is published: scripts/validate_dev.py resolves the release for the commit, downloads its assets, verifies
+    SHA256SUMS, installs that exact build into an isolated uv tool dir, asserts that `debate-research
+    --version --json` reports the same commit SHA and channel dev, then runs the smoke suite in tests/smoke/
+    against the installed binary (not the source tree) with DEBATE_ENV=dev and a temp data dir. The recorded
+    tier (default, always run) covers --version, doctor, `config show` redaction and env selection, and
+    `verify` on a fixture manifest (all-VERIFIED exits 0; a tampered card exits 1 and is reported UNVERIFIED).
+    An offline slow tier runs from the source at the same SHA (`uv run pytest -m "slow and not live"`): the
+    suites later tasks mark `slow` to keep them out of the PR `ci` check (docs/process/working-agreements.md
+    §1) run here, after the merge and before any promotion, and also on a nightly schedule against the dev
+    head. A small opt-in live canary tier (pytest marker `live`, enabled by workflow_dispatch input or a repo
+    variable) makes at most a handful of polite, low-cost calls under the dev budget. The workflow posts a
+    commit status with context `validate-dev` (pending, then success/failure with the run link) on that exact
+    SHA, so a promotion PR whose dev head moved since validation is blocked until the new head validates.
+    Hotfixes get no exception: a hotfix/* head is validated exactly like a dev head, from the pre-release t09
+    builds for it by manual workflow_dispatch, with the full suite and the same `validate-dev` status required
+    on the hotfix PR into main. tests/smoke/README.md documents how later tasks add smoke checks. Boundaries:
+    building the pre-release is t09; branch guards and the promotion template are t08; cloud smoke tests
+    against AWS dev extend this gate in v2-e12-t07; eval gates are E09.
   priority: 1
   constraints:
     packages: [.github/workflows, scripts, tests/smoke, repo settings]
@@ -60,7 +61,8 @@ spec:
     - id: ac2
       description: >-
         The recorded smoke tier passes offline in under 5 minutes and includes a `verify` check where a
-        tampered fixture card is reported UNVERIFIED with exit code 1.
+        tampered fixture card is reported UNVERIFIED with exit code 1; the offline slow tier
+        (`pytest -m "slow and not live"`) runs for the same SHA and validate-dev is green only if both pass.
     - id: ac3
       description: >-
         protect-main requires `validate-dev`; a promotion PR whose head SHA has no or a failing
@@ -137,10 +139,11 @@ spec:
         kind: Task
         name: validate-dev workflow
         description: >-
-          validate-dev.yml on release (prereleased, which covers dev and hotfix/* pre-releases) and
-          workflow_dispatch (sha, live); posts pending first, then the final state with target_url = run
-          link; permissions contents: read and statuses: write; exposes workflow_call inputs so
-          v2-e12-t07 can add the cloud suite.
+          validate-dev.yml on release (prereleased, which covers dev and hotfix/* pre-releases),
+          workflow_dispatch (sha, live) and a nightly schedule for the dev head; a slow-tier job checks out
+          the SHA and runs `uv run pytest -m "slow and not live"` offline; posts pending first, then the final
+          state with target_url = run link; permissions contents: read and statuses: write; exposes
+          workflow_call inputs so v2-e12-t07 can add the cloud suite.
         dependsOn: [driver-script]
         outputs: [.github/workflows/validate-dev.yml]
         estimatedEffort: 2h
@@ -149,6 +152,10 @@ spec:
             name: Workflow posts the validate-dev context
             path: .github/workflows/validate-dev.yml
             contentMatch: "validate-dev"
+          - type: artifact_exists
+            name: Workflow runs the offline slow tier
+            path: .github/workflows/validate-dev.yml
+            contentMatch: "slow and not live"
           - type: command_succeeds
             name: Workflow passes actionlint
             command: actionlint
@@ -165,9 +172,9 @@ spec:
         acceptanceCriteria:
           - type: command_succeeds
             name: Latest validate-dev run on dev succeeded
-            command: gh
-            args: [run, list, --workflow, validate-dev.yml, --limit, "1", --json, conclusion,
-                   --jq, '.[0] | select(.conclusion == "success")']
+            command: bash
+            args: [-c, "gh run list --workflow validate-dev.yml --limit 1 --json conclusion
+                   | jq -e '.[0].conclusion == \"success\"'"]
           - type: custom
             name: Stale promotion blocked, fresh promotion merged
             description: >-

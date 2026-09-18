@@ -195,8 +195,8 @@ spec:
         acceptanceCriteria:
           - type: command_succeeds
             name: Latest dev pre-release exists
-            command: gh
-            args: [release, list, --limit, "1", --json, isPrerelease, --jq, '.[0] | select(.isPrerelease)']
+            command: bash
+            args: [-c, "gh release list --limit 1 --json isPrerelease | jq -e '.[0].isPrerelease == true'"]
           - type: custom
             name: Clean install reports the dev channel
             description: >-

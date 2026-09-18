@@ -46,7 +46,10 @@ spec:
     - id: ac3
       description: >-
         `uv run pytest` runs each package's smoke test in parallel (-n auto) with a coverage report and
-        socket access disabled by default.
+        socket access disabled by default; every project marker is registered once here (`slow`, `live`,
+        `eval`, and the cloud smoke targets `dev` and `prod`) under --strict-markers, and the default run
+        deselects slow and live tests (addopts `-m "not slow and not live"`), so `-m slow` / `-m live`
+        opt in. Later tasks use these markers and never register their own.
     - id: ac4
       description: >-
         pre-commit runs ruff, ruff-format, end-of-file/trailing-whitespace and a large-file guard.
@@ -129,7 +132,9 @@ spec:
         name: pytest, xdist, coverage, respx, hypothesis
         description: >-
           Add dev dependency group, pytest config (testpaths, strict markers, -n auto, socket
-          disabled), and one smoke test per package importing it.
+          disabled, markers `slow`, `live`, `eval`, `dev` and `prod` registered in [tool.pytest.ini_options]
+          with slow and live deselected by default via `-m "not slow and not live"` in addopts), and one
+          smoke test per package importing it.
         dependsOn: [workspace]
         outputs:
           - packages/debate_core/tests/test_smoke.py
@@ -142,6 +147,15 @@ spec:
             name: Smoke tests pass in parallel with coverage
             command: uv
             args: [run, pytest, -n, auto, --cov]
+          - type: artifact_exists
+            name: Default pytest run excludes slow and live markers
+            path: pyproject.toml
+            contentMatch: "not slow and not live"
+          - type: command_succeeds
+            name: All project markers are registered
+            command: bash
+            args: [-c, "uv run pytest --markers | grep -E '^@pytest.mark.(slow|live|eval|dev|prod):' | wc -l
+                   | grep -qx 5"]
       - id: pre-commit
         kind: Task
         name: pre-commit hooks

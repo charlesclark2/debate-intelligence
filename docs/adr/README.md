@@ -5,6 +5,7 @@ context that forced the choice, the decision itself, the consequences, the alter
 considered, and the references that back it up. ADR-0001 through ADR-0009 make the
 `§18` decision table in [docs/architecture/architecture_proposal.md](../architecture/architecture_proposal.md#18-key-architecture-decisions-adrs)
 individually reviewable; every ADR links back to the proposal sections that motivate it.
+ADR-0013 records a later decision (two environments) that supersedes part of the proposal.
 
 New records use the template in [0000-template.md](0000-template.md).
 
@@ -21,6 +22,7 @@ New records use the template in [0000-template.md](0000-template.md).
 | [0007](0007-argument-graph-before-simulator.md) | Build the argument graph before the round simulator | Accepted 2026-09-17 | V3 sequencing: typed nodes and edges precede coverage, audit, CX, and simulation. |
 | [0008](0008-no-neptune-initially.md) | No Amazon Neptune until DynamoDB adjacency proves insufficient | Accepted 2026-09-17 | Graph storage strategy for V1/V2. |
 | [0009](0009-async-job-architecture.md) | Async job architecture for slow work in V2 and beyond | Accepted 2026-09-17 | Step Functions + SQS + Fargate for slow, retryable work. |
+| [0013](0013-two-environments-and-dev-main-promotion.md) | Two environments (dev, prod) and dev→main promotion | Accepted 2026-09-17 | Supersedes the `stage` environment in proposal [§4](../architecture/architecture_proposal.md#4-technology-stack) and [§5](../architecture/architecture_proposal.md#5-aws-cloud-architecture); operational detail in [docs/process/branching-and-environments.md](../process/branching-and-environments.md). |
 
 ## Reserved numbers
 
@@ -33,10 +35,9 @@ decision lands.
 | 0010 | Primary AWS region | [`v2-e10-t01-aws-account-baseline`](../../plan_specs/v2/e10-aws-foundation/t01-aws-account-baseline.yaml) |
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
 | 0012 | Web hosting | [`v2-e14-t03-app-hosting`](../../plan_specs/v2/e14-web-cut-card/t03-app-hosting.yaml) |
-| 0013 | Two environments (dev, prod) and dev→main promotion — **accepted 2026-09-17**; see [docs/process/branching-and-environments.md](../process/branching-and-environments.md). Supersedes the `stage` environment mentioned in [architecture proposal §4](../architecture/architecture_proposal.md#4-technology-stack) and [§5](../architecture/architecture_proposal.md#5-aws-cloud-architecture). Full ADR file to follow. | [`v1-e01-t06-adr-docs`](../../plan_specs/v1/e01-repo-foundation/t06-adr-docs.yaml) |
 
-New ADRs take the next free number after the last one written (0014 as of this ADR set).
-Do not skip numbers; if a reservation is dropped, note it here rather than silently
+New ADRs take the next free number after the highest written or reserved one: **0014** is the
+next free number. Do not skip numbers; if a reservation is dropped, note it here rather than silently
 reusing the number.
 
 ## Proposing a new ADR (ADR-0014+)

@@ -1,0 +1,33 @@
+# pre-commit hooks. Every hook runs through `uv run --frozen`, so tool versions come from uv.lock
+# (no separate hook revisions to keep in step) and nothing is fetched from the network.
+# Install once per clone:  uv run pre-commit install
+# Run by hand:             uv run pre-commit run --all-files
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen ruff check --fix
+        language: unsupported
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen ruff format
+        language: unsupported
+        types_or: [python, pyi]
+        require_serial: true
+      - id: trailing-whitespace
+        name: trim trailing whitespace
+        entry: uv run --frozen trailing-whitespace-fixer --markdown-linebreak-ext=md
+        language: unsupported
+        types: [text]
+      - id: end-of-file-fixer
+        name: fix end of files
+        entry: uv run --frozen end-of-file-fixer
+        language: unsupported
+        types: [text]
+      - id: check-added-large-files
+        name: check for added large files
+        entry: uv run --frozen check-added-large-files --maxkb=500
+        language: unsupported

@@ -216,9 +216,26 @@ until `v1-e29-t03` adds the least-privilege operator permission set, as
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- All five Goal criteria pass, and the evidence comes from the live account.
+  - Both state buckets are in place, with native locking checked by two concurrent plans. The
+    debate-dev profile is denied the prod bucket, confirmed with the policy simulator.
+  - The organization root's state is migrated, no local state remains in the main clone, and dated
+    backups sit outside the repo.
+- Leaving the Goal InProgress until the operator steps had been verified was the right call.
+- Security check: no account ids, org ids or Identity Center ids are committed. The committed
+  tfvars carry only the environment, region and a random suffix.
+- Accepted deviations:
+  - The Terraform floor is now 1.10, and `.terraform-version` pins it. The organization state was
+    rewritten by 1.16.3 and can no longer be read by older versions, so the pin and the runbook
+    both need to say so.
+  - There is no CI job yet because ci.yml does not exist. The job definition in Follow-up work
+    carries forward to v1-e01-t04, which its spec already allows for.
+- Carried forward:
+  - v1-e01-t04 adds the terraform-checks job.
+  - v1-e36-t02 (site hosting) is unblocked once this merges.

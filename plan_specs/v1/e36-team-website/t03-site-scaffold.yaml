@@ -62,7 +62,7 @@ spec:
         Design tokens live in one file whose values cite the team brand guidelines, and body text and
         link colors meet 4.5:1 contrast against their backgrounds in a unit test.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -53,7 +53,7 @@ spec:
         A composition-root module (debate_cli.container) is the only place commands obtain services,
         and CliRunner tests cover --version, --help and --json output shape.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

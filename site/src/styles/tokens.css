@@ -1,0 +1,119 @@
+/*
+ * Design tokens for the public Whitefish Bay debate team site.
+ *
+ * SOURCE OF THE PALETTE
+ * ---------------------
+ * Sampled by the operator from the team deck template, taken off the Blue Dukes "W BAY"
+ * wordmark. Wikipedia lists the school colours as blue and grey; the district publishes no
+ * official hex codes, so these sampled values are the team's working brand reference until the
+ * Branding section of docs/policies/website-publishing.md (task v1-e36-t01) records something
+ * more authoritative. No colour below was invented for this site.
+ *
+ *   Primary navy      #2E2578
+ *   Accent            #4A41A8
+ *   Light blue        #B9B4E8   (for use on navy)
+ *   Body grey         #55596B
+ *   Muted grey        #74798E
+ *   Panel tint        #EEEEF7
+ *   Warm accent       #B36B00   (used sparingly)
+ *   Backgrounds are white by default; no decorative colour bars or stripes.
+ *
+ * CONTRAST (WCAG 2.1; AA needs 4.5:1 for normal text, 3:1 for large text and non-text)
+ * ------------------------------------------------------------------------------------
+ * Measured with the sRGB relative-luminance formula; tests/tokens.test.ts recomputes every row
+ * from this file, so the numbers cannot drift away from the values above.
+ *
+ *   12.71  body grey is not involved   navy #2E2578      on white      AA
+ *   11.02                              navy              on panel      AA
+ *    8.04                              accent #4A41A8    on white      AA
+ *    6.97                              accent            on panel      AA
+ *    6.94                              body #55596B      on white      AA
+ *    6.01                              body              on panel      AA
+ *   12.71                              white             on navy       AA
+ *    8.04                              white             on accent     AA
+ *    6.51                              light #B9B4E8     on navy       AA
+ *
+ * Two brand colours do NOT reach 4.5:1 and are therefore restricted to large text (>=24px, or
+ * >=18.66px bold) and to non-text use such as borders, rules and icons, which need only 3:1:
+ *
+ *    4.31  AA large only                muted #74798E    on white
+ *    3.74  AA large only                muted            on panel
+ *    4.18  AA large only                warm #B36B00     on white
+ *    3.63  AA large only                warm             on panel
+ *
+ * Small secondary copy therefore uses --color-text-body, never --color-text-muted. This is the
+ * deviation the operator authorised: keep the brand colour, restrict it to large text.
+ *
+ * TYPEFACE
+ * --------
+ * The decks use Arial. The site may not load a remote font (see the forbidden list in the task
+ * spec: no CDN assets or third-party fonts at runtime, and no network during the build), so it
+ * asks for Arial first and falls back to the metric-compatible faces already installed on each
+ * platform: Helvetica Neue on macOS, Liberation Sans on Linux, Roboto on Android. No web font is
+ * downloaded. That substitution is the only difference from the deck template.
+ */
+
+:root {
+  /* Brand palette, exactly as sampled. */
+  --color-brand-navy: #2e2578;
+  --color-brand-accent: #4a41a8;
+  --color-brand-light: #b9b4e8;
+  --color-brand-warm: #b36b00;
+
+  /* Surfaces. White by default; the panel tint is the only other background. */
+  --color-surface: #ffffff;
+  --color-surface-panel: #eeeef7;
+  --color-surface-inverse: var(--color-brand-navy);
+
+  /* Text. --color-text-muted is large-text-and-borders only: see the contrast table above. */
+  --color-text-heading: var(--color-brand-navy);
+  --color-text-body: #55596b;
+  --color-text-muted: #74798e;
+  --color-text-inverse: #ffffff;
+
+  /* Links. */
+  --color-link: var(--color-brand-accent);
+  --color-link-hover: var(--color-brand-navy);
+  --color-link-inverse: var(--color-brand-light);
+
+  /* Borders and focus. The focus ring reaches 12.71:1 on white and 6.51:1 on navy, well past
+     the 3:1 that WCAG 2.1 SC 1.4.11 asks of non-text indicators. */
+  --color-border: #d6d6e6;
+  --color-focus-ring: var(--color-brand-navy);
+  --color-focus-ring-inverse: var(--color-brand-light);
+
+  /* Type. Arial first, then metric-compatible system faces; nothing is fetched. */
+  --font-family-base: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", Roboto, system-ui,
+    sans-serif;
+
+  --font-size-small: 0.875rem; /* 14px */
+  --font-size-body: 1rem; /* 16px */
+  --font-size-lead: 1.125rem; /* 18px */
+  --font-size-large: 1.5rem; /* 24px: the WCAG large-text threshold at normal weight */
+  --font-size-heading-3: 1.375rem;
+  --font-size-heading-2: 1.75rem;
+  --font-size-heading-1: 2.25rem;
+
+  --font-weight-regular: 400;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.25;
+  --line-height-body: 1.6;
+
+  /* Spacing, on a 4px base. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  --radius-small: 4px;
+  --radius-medium: 8px;
+
+  --layout-max-width: 68rem;
+  --layout-prose-width: 40rem;
+  --layout-gutter: var(--space-4);
+}

@@ -1,0 +1,174 @@
+/* Mobile-first page frame: skip link, header, main, footer. */
+
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  z-index: 10;
+  transform: translateY(-200%);
+  background-color: var(--color-surface);
+  color: var(--color-link);
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--color-focus-ring);
+  border-radius: var(--radius-small);
+  font-weight: var(--font-weight-bold);
+  text-decoration: underline;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+.site-header {
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.site-header__inner {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding: var(--space-3) var(--layout-gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.site-header__brand {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/*
+ * The lockup is an opaque white-background PNG, so it may only sit on the white header. Its
+ * intrinsic size is 476x384; it is displayed at a height that keeps the "Blue Dukes" script
+ * legible on a phone.
+ */
+.site-header__logo {
+  width: auto;
+  height: 56px;
+}
+
+.site-nav__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface);
+  color: var(--color-brand-navy);
+  border: 2px solid var(--color-brand-navy);
+  border-radius: var(--radius-small);
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.site-nav__toggle-icon {
+  width: 18px;
+  height: 2px;
+  background-color: currentColor;
+  box-shadow:
+    0 -6px 0 currentColor,
+    0 6px 0 currentColor;
+}
+
+.site-nav__list {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-nav__list--open {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-2) var(--layout-gutter) var(--space-4);
+}
+
+.site-nav__link {
+  display: block;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-2);
+  color: var(--color-link);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
+.site-nav__link:hover,
+.site-nav__link:focus-visible {
+  color: var(--color-link-hover);
+  text-decoration: underline;
+}
+
+@media (min-width: 48rem) {
+  .site-nav__toggle {
+    display: none;
+  }
+
+  .site-nav__list,
+  .site-nav__list--open {
+    display: flex;
+    position: static;
+    gap: var(--space-4);
+    border-bottom: none;
+    padding: 0;
+  }
+}
+
+.site-main {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding: var(--space-6) var(--layout-gutter) var(--space-8);
+}
+
+/* <main> carries tabIndex={-1} so the skip link moves focus there; it must not draw a ring
+   when the page is merely clicked. */
+.site-main:focus {
+  outline: none;
+}
+
+.site-main:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 4px;
+}
+
+.site-footer {
+  background-color: var(--color-surface-inverse);
+  color: var(--color-text-inverse);
+}
+
+.site-footer__inner {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding: var(--space-6) var(--layout-gutter);
+}
+
+/* The wordmark stands in for the "W BAY" mark, which cannot go on navy while it is an opaque
+   white-background PNG. 24px bold clears the WCAG large-text threshold. */
+.site-footer__wordmark {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-large);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.site-footer__note {
+  margin: 0;
+  color: var(--color-text-inverse);
+}
+
+.site-footer a {
+  color: var(--color-link-inverse);
+}
+
+.site-footer :focus-visible {
+  outline-color: var(--color-focus-ring-inverse);
+}

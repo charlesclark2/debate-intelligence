@@ -1,0 +1,11 @@
+# Site-wide strings. Validated by siteSettingsSchema in src/lib/content.ts at build time.
+# House style: no em dashes, and spell out every acronym the first time a page uses it.
+name: Whitefish Bay Debate
+shortName: WFB Debate
+tagline: The competitive debate team at Whitefish Bay High School.
+navigationLabel: Main
+skipLinkLabel: Skip to main content
+logoAlternativeText: Whitefish Bay Blue Dukes
+footerNote: >-
+  Whitefish Bay High School, Whitefish Bay, Wisconsin. This site is maintained by the debate team's
+  coaches.

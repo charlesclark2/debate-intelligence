@@ -33,6 +33,7 @@ model in architecture proposal §7, so V2 swaps storage rather than schemas.
 | `card.py` | `Card`, `CardSpan` |
 | `citation.py` | `Citation`, `CitationField[T]` |
 | `schema_export.py` | Renders the published JSON Schemas (no I/O; the script writes them) |
+| `caselist/` | Disclosed and camp evidence: see below (v1-e30-t02-caselist-domain-model) |
 
 Things worth knowing before you add a field:
 
@@ -45,6 +46,30 @@ Things worth knowing before you add a field:
 * **Enum values are a wire format.** State enums are `SCREAMING_SNAKE_CASE`, label enums are
   `lower_snake_case`; both follow the tokens the PlanSpecs use. Changing one is a migration.
 
+### `domain/caselist/` — disclosed and camp evidence (v1-e30-t02-caselist-domain-model)
+
+The vocabulary the E30 importers, the E31 parser and the E32 landscape reports share, kept in its
+own subpackage and *not* re-exported from `debate_core.domain`, because names like `Event` and
+`Side` are only unambiguous inside it. Import from `debate_core.domain.caselist`.
+
+| Module | Contents |
+|---|---|
+| `values.py` | `CaselistSlug`, `Season`, `TeamCodeText`, `SnapshotDate`, the `Event`/`Side`/`SourceFormat`/`SourceOrigin`/`Acquisition`/`CompetitionLevel` enums, and `RoundLabel` with its normalization table |
+| `entities.py` | `Caselist`, `School`, `TeamCode`, `ArchiveSnapshot`, `SourceDocument`, `Disclosure`, `CampFile` |
+
+Things worth knowing before you add a field:
+
+* **Caselist slugs are data, not an enum.** `hsld26`, `hspolicy26` and `hspf26` are validated
+  strings, because every season mints new ones.
+* **Identity is natural, so these extend `DomainModel`, not `DomainEntity`.** A source document is
+  its SHA-256 and a snapshot is its `(caselist, date)`; there is no ULID, no owner and no revision,
+  because an import re-states what a public archive says rather than recording someone's edit.
+* **No model may identify a person.** A school name and a disclosed team code are all that is
+  stored. `tests/domain/caselist/test_minimization.py` pins every model's field set and bans
+  name-shaped field names, so adding one fails CI (architecture proposal §14).
+* **Imported evidence is always `ProvenanceMode.FILE_IMPORT`,** enforced on the model rather than
+  left to the importer.
+
 ### `application/` — ports and errors (v1-e02-t02-ports)
 
 Every boundary the core talks through, as `typing.Protocol` ports, plus the typed errors that
@@ -55,6 +80,7 @@ cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/
 | `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable`, `ProviderRateLimited`) |
 | `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository`, and the `Page` returned by every listing |
 | `ports/providers.py` | `SearchProvider`, `ArticleFetcher`, `ContentExtractor`, `ModelRouter`, `Clock`, `IdGenerator`, and the value objects they exchange |
+| `ports/caselist.py` | `CaselistRepository`, the boundary the E30 importers, publisher and removal command store through (v1-e30-t02) |
 | `services/article_registration.py` | The worked example of the constructor-injection pattern every service follows |
 
 Things worth knowing before you write a service:
@@ -74,7 +100,9 @@ Things worth knowing before you write a service:
 and `SequentialIdGenerator`. They enforce what their ports promise — dedupe, blob integrity,
 revision conflicts, listing order — so a test against a fake exercises the same rules as the real
 adapter. `build_fake_ports()` assembles one of each, and is where pyright checks that the fakes
-still conform to the Protocols.
+still conform to the Protocols. `InMemoryCaselistRepository` lives there too — built by
+`build_fake_caselist_repository()` rather than by `build_fake_ports()`, because a caselist
+repository is not one of the ten ports every service takes.
 
 ### `integrations/local/` — the filesystem and SQLite adapters (v1-e02-t03-local-repositories)
 

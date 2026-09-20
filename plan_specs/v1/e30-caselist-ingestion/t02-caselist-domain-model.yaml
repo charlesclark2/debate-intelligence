@@ -70,7 +70,7 @@ spec:
         No caselist model has a field for full names, and a test asserts the model field sets so that
         adding one fails CI.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

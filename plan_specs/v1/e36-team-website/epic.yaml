@@ -38,8 +38,10 @@ spec:
       with ADR-0012 recording the hosting decision.
   - id: ac3
     description: >-
-      Home, about, events explained, join, coaches, parent FAQ and contact pages are live, mobile-first
-      and WCAG 2.1 AA, before October 1, 2026.
+      Home, about, events explained, join, coaches, parent FAQ and contact are live, mobile-first and
+      WCAG 2.1 AA, and look professionally designed: a real home page hero and October 1 panel, cards
+      and sections rather than prose columns, and scannable FAQ and events pages, all verified at phone,
+      tablet and desktop widths before October 1, 2026.
 status:
   phase: Pending
 ---
@@ -179,5 +181,82 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e36-t05-site-deploy
+    - id: t06
+      kind: Task
+      name: 'Visual design pass: layout system and home page'
+      description: >-
+        Turn the pages from single prose columns into a designed site, inside the existing static export
+        (no server, no new hosting; ADR-0012 stands). A reusable layout kit built on the existing tokens:
+        a typographic scale with measured line length, vertical rhythm and section spacing, a section
+        component with optional tinted background, the existing Card component actually used, primary
+        and secondary buttons/links with hover, focus-visible and active states, and a footer that carries
+        the knockout mark. A home page with a real hero (team name, one-line description, primary action),
+        a prominent October 1 parent-session panel, three to five scannable entry points into the site,
+        and a short 'what debate builds' section. Motion is restrained and respects prefers-reduced-motion.
+        Every pair still passes the contrast rules from v1-e36-t03 and axe stays clean.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t06-visual-design-pass.yaml
+        goalRef: v1-e36-t06-visual-design-pass
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t06-visual-design-pass reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t06-visual-design-pass
+    - id: t07
+      kind: Task
+      name: Scannable structure for the FAQ, events and remaining pages
+      description: >-
+        Restructure the long pages so a parent finds one answer without reading everything. FAQ: grouped
+        into topic sections with native <details>/<summary> disclosure (no hand-rolled ARIA, Ctrl+F and
+        printing still work), the two or three most-asked questions open by default, and an in-page topic
+        index. Events: Policy, Lincoln-Douglas and Public Forum as parallel cards with a compact comparison
+        (team size, speech pattern, topic cadence, best for) and the detail beneath each. About, join,
+        coaches and contact get the same treatment at their own scale: summary first, detail second, no
+        wall of prose. Content stays in site/content as data the pages render; copy edits are Charlie's.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t07-page-structure-pass.yaml
+        goalRef: v1-e36-t07-page-structure-pass
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t07-page-structure-pass reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t07-page-structure-pass
+    - id: t08
+      kind: Task
+      name: Pre-launch visual QA and launch readiness
+      description: >-
+        Prove the site looks right before it is shown to parents: screenshots of every page at 390px,
+        768px and 1280px committed as an artifact-free checklist in the report, Lighthouse (or equivalent)
+        scores for performance, accessibility, best practices and SEO recorded per page with a floor of
+        95 on accessibility and best practices, axe clean, keyboard-only walk of every interactive element,
+        print stylesheet check on the FAQ, and a check in Safari and Chrome on a phone. Ends with the
+        October 1 room filled in, a clean prod build, and the promotion checklist ready for Charlie.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t08-prelaunch-visual-qa.yaml
+        goalRef: v1-e36-t08-prelaunch-visual-qa
+      dependsOn:
+      - t06
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t08-prelaunch-visual-qa reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t08-prelaunch-visual-qa
 status:
   phase: Pending

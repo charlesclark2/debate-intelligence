@@ -1,0 +1,211 @@
+# TASK v1-e36-t07-page-structure-pass — Scannable structure for the FAQ, events and remaining pages
+# Epic: E36 Team Website Foundation | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t07-page-structure-pass
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: Scannable structure for the FAQ, events and remaining pages
+    debate/architecture-refs: §4, §5, §14, ADR-0010, ADR-0012, ADR-0013
+spec:
+  description: >-
+    The copy t04 shipped is good and Charlie has approved it; the problem is that a parent has to read
+    all of it. The FAQ is 16 questions and about 1,000 words of flat prose, the events page about 1,200,
+    and every remaining page is one undifferentiated column. This task restructures those pages so a
+    parent finds one answer without reading everything, changing structure and presentation only.
+    The FAQ becomes topic sections (money and travel, time, judging, getting started, competing) with
+    each question in a native <details>/<summary> disclosure, the two or three most-asked questions open
+    by default, and an in-page topic index at the top. Native disclosure is required rather than a
+    hand-rolled ARIA widget so that keyboard and screen-reader behaviour comes from the browser, and so
+    find-in-page and printing still reach collapsed answers. The events page presents Public Forum,
+    Lincoln-Douglas and Policy as parallel cards with a compact comparison (team size, speech pattern,
+    topic cadence, best for) and the full explanation beneath each. About, join, coaches and contact get
+    the same treatment at their own scale: a summary or at-a-glance block first, detail second. All of
+    it stays data under site/content/, validated by the loader, so copy edits remain Charlie's and need
+    no code change. Out of scope: rewriting the copy itself, the layout kit and home page (t06), the
+    pre-launch QA sweep (t08), the events calendar (E37) and donations (E38). This task shares only the
+    tokens with t06 and must build whether or not t06 has landed; where a page uses a component t06
+    also touches, t07 owns the page's structure and t06 owns the component's look.
+  priority: 1
+  constraints:
+    packages: [site/content, site/src/app, site/src/lib, site/src/components, site/src/styles, site/tests]
+    forbidden:
+      - A hand-rolled accordion using role="button" and aria-expanded instead of <details>/<summary>
+      - Hiding an answer from find-in-page or from print (content removed from the DOM, or display:none in print)
+      - Question, answer or comparison text hard-coded in a component instead of site/content/
+      - Server-only Next.js features that break static export (API routes, middleware, server actions, ISR)
+      - Third-party accordion, tab or table libraries, remote fonts or CDN assets
+      - Colours outside tokens.css, or #74798E and #B36B00 as small text
+      - Changing the facts in the approved copy without Charlie
+      - Network access during lint, test or build
+  context:
+    - kind: TaskRef
+      name: v1-e36-t06-visual-design-pass
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The built FAQ page groups its questions into named topic sections, renders each question as a
+        native <details> with its question text in <summary>, and carries an in-page index linking to
+        each topic section heading; no disclosure is built from role="button" and aria-expanded.
+    - id: ac2
+      description: >-
+        Two or three named most-asked questions carry the `open` attribute in the export, and the full
+        text of every answer is present in the built HTML whether or not its disclosure is open, so
+        find-in-page and a screen reader's browse mode reach it.
+    - id: ac3
+      description: >-
+        The events page shows Public Forum, Lincoln-Douglas and Policy as parallel cards with the same
+        four comparison fields each (team size, speech pattern, topic cadence, best for) and the detail
+        beneath each; at a 390px viewport the comparison stacks with no horizontal overflow.
+    - id: ac4
+      description: >-
+        About, join, coaches and contact each open with a summary or at-a-glance block before their
+        detail, and a test fails any of those pages whose body is a single run of prose with no
+        sub-structure.
+    - id: ac5
+      description: >-
+        Every question, answer, comparison field and summary item is a field in site/content/ validated
+        by src/lib/content.ts, and a file missing a required field fails the build naming that file.
+    - id: ac6
+      description: >-
+        axe-core reports no WCAG 2.1 AA violations on the restructured pages, every <summary> is
+        reachable and operable by keyboard alone, the print stylesheet expands all disclosures, and the
+        publishing-policy guard still reports only the October 1 room placeholder.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t07-page-structure-pass-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Give the long pages a content shape the loader can validate, build the FAQ disclosure and the
+    events comparison on it, apply the lighter treatment to the remaining pages, then close with the
+    accessibility, print and build gates. About one day.
+  goalRef:
+    name: v1-e36-t07-page-structure-pass
+  graph:
+    nodes:
+      - id: structured-content
+        kind: Task
+        name: Structured content shape for the long pages
+        description: >-
+          Move the approved FAQ copy into site/content/faq.yaml (topic groups, each with an id, a label
+          and its questions; each question with a question, an answer in Markdown and an optional
+          openByDefault) and the events copy into site/content/events.yaml (per event: name, the four
+          comparison fields, and the detail body). Extend src/lib/content.ts with zod schemas and
+          loaders for both, keeping the existing house-style rules (no em dashes, acronyms expanded).
+        outputs:
+          - site/content/faq.yaml
+          - site/content/events.yaml
+          - site/src/lib/content.ts
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: FAQ content is grouped data
+            path: site/content/faq.yaml
+            contentMatch: "openByDefault"
+          - type: test_passes
+            name: Loader validates the new content files and names a bad one
+            command: pnpm
+            args: [--dir, site, test, content]
+      - id: faq-disclosure
+        kind: Task
+        name: FAQ topic index and native disclosure
+        description: >-
+          Add site/src/app/faq/page.tsx (taking the slug ahead of the generic [slug] route) rendering a
+          topic index of in-page links, then one section per group with each question as
+          <details><summary>, open where openByDefault is set. Style the marker, the 44px summary target
+          and the panel from tokens; add a print rule that shows every panel.
+        dependsOn: [structured-content]
+        outputs:
+          - site/src/app/faq/page.tsx
+          - site/src/components/Disclosure.tsx
+          - site/src/styles/disclosure.css
+          - site/tests/faq.test.tsx
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: FAQ uses native details, opens the named questions and indexes its topics
+            command: pnpm
+            args: [--dir, site, test, faq]
+      - id: events-comparison
+        kind: Task
+        name: Events as parallel cards with a compact comparison
+        description: >-
+          Add site/src/app/events/page.tsx rendering Public Forum, Lincoln-Douglas and Policy as Cards
+          in a grid, each with the four comparison fields as a definition list and the detail beneath,
+          plus the shared sections on cross-examination and prep time, what a judge does and a
+          tournament day; one column on a phone, side by side above 48rem.
+        dependsOn: [structured-content]
+        outputs: [site/src/app/events/page.tsx, site/tests/events.test.tsx]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Events page renders three parallel cards with the same comparison fields
+            command: pnpm
+            args: [--dir, site, test, events]
+      - id: remaining-pages
+        kind: Task
+        name: Summary-first treatment for about, join, coaches and contact
+        description: >-
+          Give each remaining page a lead paragraph and an at-a-glance block (join: the three steps and
+          what to bring; about: who the team is and when it meets; coaches: one card per coach; contact:
+          the ways to reach the team), keeping every string in its Markdown front matter or YAML so the
+          pages stay editable without code.
+        dependsOn: [events-comparison]
+        outputs:
+          - site/content/pages/join.md
+          - site/content/pages/about.md
+          - site/tests/page-structure.test.tsx
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Every core page leads with a summary block before its detail
+            command: pnpm
+            args: [--dir, site, test, page-structure]
+      - id: structure-gates
+        kind: Task
+        name: Accessibility, print and build gates
+        description: >-
+          Run axe-core over the restructured pages through the site frame, drive every <summary> with
+          keyboard events in a test, assert the print stylesheet opens all disclosures and that no
+          answer text is absent from the export, then run the full offline gate set.
+        dependsOn: [faq-disclosure, remaining-pages]
+        outputs: [site/tests/pages-a11y.test.tsx]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Restructured pages have no WCAG 2.1 AA violations
+            command: pnpm
+            args: [--dir, site, test, pages-a11y]
+          - type: test_passes
+            name: Full site suite passes offline
+            command: pnpm
+            args: [--dir, site, test]
+          - type: command_succeeds
+            name: Static export builds
+            command: pnpm
+            args: [--dir, site, build]
+          - type: command_succeeds
+            name: Lint passes
+            command: pnpm
+            args: [--dir, site, lint]
+status:
+  phase: Pending

@@ -30,7 +30,12 @@ spec:
     topic cadence, best for) and the full explanation beneath each. About, join, coaches and contact get
     the same treatment at their own scale: a summary or at-a-glance block first, detail second. All of
     it stays data under site/content/, validated by the loader, so copy edits remain Charlie's and need
-    no code change. Out of scope: rewriting the copy itself, the layout kit and home page (t06), the
+    no code change. It also owns the site's navigation: the nav is currently generated from every file
+    in site/content/pages/, so the accessibility statement sits in it by accident. Navigation becomes an
+    explicit, ordered list of the pages a parent or prospective debater needs (home, about, events, join,
+    coaches, FAQ, contact), with utility pages such as the accessibility statement in the footer instead;
+    a page can opt out of the primary nav in its front matter; the current page is marked with
+    aria-current; and the mobile menu is checked at 390px for target size and reachability. Out of scope: rewriting the copy itself, the layout kit and home page (t06), the
     pre-launch QA sweep (t08), the events calendar (E37) and donations (E38). This task shares only the
     tokens with t06 and must build whether or not t06 has landed; where a page uses a component t06
     also touches, t07 owns the page's structure and t06 owns the component's look.
@@ -51,6 +56,12 @@ spec:
       name: v1-e36-t06-visual-design-pass
       relation: dependsOn
   acceptanceCriteria:
+    - id: ac0
+      description: >-
+        The primary navigation is an explicit ordered list of parent-facing pages rather than every file
+        in site/content/pages/; the accessibility statement and other utility pages are linked from the
+        footer; the current page carries aria-current; and the mobile menu passes a 390px check for
+        target size, focus order and Escape returning focus.
     - id: ac1
       description: >-
         The built FAQ page groups its questions into named topic sections, renders each question as a
@@ -180,6 +191,24 @@ spec:
             name: Every core page leads with a summary block before its detail
             command: pnpm
             args: [--dir, site, test, page-structure]
+      - id: navigation-and-footer
+        kind: Task
+        name: Explicit navigation and footer utility links
+        description: >-
+          Replace the "every content page is a nav item" rule with an explicit ordered nav list in
+          site/content/site.yaml (or equivalent) plus a front-matter opt-out; move the accessibility
+          statement and any other utility page to the footer; mark the current page with aria-current;
+          verify the mobile menu at 390px (target size, focus order, Escape returning focus).
+        dependsOn: [remaining-pages]
+        outputs:
+          - site/src/components/SiteNav.tsx
+          - site/tests/navigation.test.tsx
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Nav lists exactly the configured pages, footer carries the utility links
+            command: pnpm
+            args: [--dir, site, test, navigation]
       - id: structure-gates
         kind: Task
         name: Accessibility, print and build gates
@@ -187,7 +216,7 @@ spec:
           Run axe-core over the restructured pages through the site frame, drive every <summary> with
           keyboard events in a test, assert the print stylesheet opens all disclosures and that no
           answer text is absent from the export, then run the full offline gate set.
-        dependsOn: [faq-disclosure, remaining-pages]
+        dependsOn: [faq-disclosure, remaining-pages, navigation-and-footer]
         outputs: [site/tests/pages-a11y.test.tsx]
         estimatedEffort: 1h
         acceptanceCriteria:

@@ -264,9 +264,23 @@ it is not needed to review the page.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- Charlie reviewed the home page on the preview and the direction is right. The remaining pages and
+  the navigation are t07's scope, not a failure of this task.
+- The left-offset fix is the right kind of fix: one centred text column shared by a section's heading
+  and its content, the wide band narrowed so the grid and the column share an axis, the header and
+  footer on the same width, and two tests that stop it regressing. Removing
+  `--layout-heading-width` rather than nudging a margin is what makes it stay fixed.
+- Replacing the hero's scroll button with a link to /join/ is better than what the spec implied: a
+  button that scrolls to something already on screen is decoration. Dropping smooth scrolling with it
+  leaves the site with no scroll motion, which suits the audience and the reduced-motion rule.
+- **PM action taken:** t07's spec now owns navigation and footer placement. The nav was built from
+  every file in `content/pages/`, so the accessibility statement was there by accident and t07 would
+  have refused to move it. The amended spec adds an explicit ordered nav list with a front-matter
+  opt-out, utility pages in the footer, `aria-current` on the current page, and a 390px check of the
+  mobile menu. Branch: `specs/t07-nav-and-footer`.

@@ -165,6 +165,74 @@ Success looks like: both domains listed, and every `REGISTER_DOMAIN` operation `
 `FAILED` operation carries the reason in `Message`; an `IN_PROGRESS` one just needs time. A domain
 that appears in neither list was never bought from this account.
 
+### If a registration failed
+
+`wfbdebate.org` failed this way on 2026-09-20, 0.9 seconds after it was submitted and two seconds
+after `wfbdebate.com` succeeded with the same contacts, with the generic "Contact AWS Support"
+message. A failure that fast, on the same account and contacts that had just worked, is the
+registry declining rather than anything wrong with the data — and those are often transient. Check
+the name is still free and try once more before opening a case.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+export AWS_PROFILE=debate-admin
+aws route53domains check-domain-availability --region us-east-1 \
+  --domain-name wfbdebate.org --query Availability --output text
+```
+Success looks like: `AVAILABLE`. `UNAVAILABLE` means someone else has taken it since — stop and
+re-decide the canonical name; do not keep retrying.
+
+The retry itself is easiest in the **Route 53 console** (*Registered domains → Register domains*),
+which fills the contact panel from your account and keeps the details off your disk entirely.
+
+The CLI version reuses the contacts from the domain that *did* register, without printing them.
+They are a person's name, address, phone and email, so the temp file is mode 600 and is removed
+on the way out.
+
+**Operator command** (expected runtime ~2 min to submit, up to ~15 min to complete)
+Where: your Mac, anywhere
+```bash
+export AWS_PROFILE=debate-admin
+
+CONTACTS=$(mktemp -t wfbdebate-register) && chmod 600 "$CONTACTS"
+trap 'rm -f "$CONTACTS"' EXIT
+
+aws route53domains get-domain-detail --region us-east-1 --domain-name wfbdebate.com \
+  --query '{AdminContact:AdminContact,RegistrantContact:RegistrantContact,TechContact:TechContact}' \
+  --output json > "$CONTACTS"
+
+aws route53domains register-domain --region us-east-1 \
+  --cli-input-json "file://$CONTACTS" \
+  --domain-name wfbdebate.org \
+  --duration-in-years 1 \
+  --auto-renew \
+  --privacy-protect-admin-contact \
+  --privacy-protect-registrant-contact \
+  --privacy-protect-tech-contact \
+  --query OperationId --output text
+```
+This **spends money** (about $12 for a year of `.org`) and is a mutating call: run it yourself, not
+from an agent session. Explicit flags win over the values in `--cli-input-json`, which is what lets
+the file carry only the three contacts.
+
+Then watch the operation it printed:
+
+```bash
+export AWS_PROFILE=debate-admin
+aws route53domains get-operation-detail --region us-east-1 \
+  --operation-id <the-operation-id> \
+  --query '{Status:Status,Message:Message}' --output json
+```
+Success looks like `"Status": "SUCCESSFUL"`, usually within a few minutes. Route 53 creates the
+hosted zone for you; re-run step 1 and the registry line should fill in shortly afterwards.
+
+If it reports `FAILED` a second time, stop retrying: open the AWS Support case the message points
+at, and decide whether to wait for it or to make `wfbdebate.com` the canonical name instead. That
+second choice is a spec change — `envs/prod/terraform.tfvars`, `envs/dev/terraform.tfvars` and
+ADR-0012 all name `wfbdebate.org` — and it is cheap, because nothing but tfvars and prose depends
+on which name is canonical.
+
 Changing name servers at a registrar is a manual step in the registrar's console. It is not
 Terraform's job and never an agent's.
 
@@ -466,7 +534,7 @@ and hosted zone names are fine here; **the account id is not**.
 
 | Check | Result | Date |
 |---|---|---|
-| Both domains registered (`whois`) | `wfbdebate.com` registered 2026-09-20T17:11:33Z (Amazon Registrar). **`wfbdebate.org`: `Domain not found` at the `.org` registry as of 2026-09-20T17:54Z** | 2026-09-20 |
+| Both domains registered (`whois`) | `wfbdebate.com` registered 2026-09-20T17:11:33Z (Amazon Registrar). **`wfbdebate.org` registration FAILED** 0.9 s after submission (operation `4cb18c5e-dc01-4b99-8cff-b782eecf8cd5`, generic "Contact AWS Support" message); `Domain not found` at the `.org` registry, `check-domain-availability` → `AVAILABLE`. Retry pending | 2026-09-20 |
 | Hosted zones delegated (registry `NS`) | `wfbdebate.com` delegated to four `awsdns` servers, visible at the registry and at 1.1.1.1 and 8.8.8.8. `wfbdebate.org` has no delegation, because it has no registration | 2026-09-20 |
 | `DebateMaintainer` denied Identity Center writes and `debate-prod-*` | _pending_ | |
 | Four block-public-access flags on both buckets | _pending_ | |

@@ -58,7 +58,7 @@ Terraform commands were run with every AWS environment variable unset and
 | **ac3** both roots instantiate the module with their own prefix, domains and noindex; the roots stay identical apart from tfvars and backend; both validate and the checks pass | PASS | `diff` of `main.tf`, `providers.tf`, `versions.tf`, `variables.tf`, `outputs.tf`, `site.tf` between `envs/dev` and `envs/prod` → no output; `terraform -chdir=infrastructure/envs/dev validate` and `…/prod validate` → `Success! The configuration is valid.` twice; `bash scripts/terraform_checks.sh` → `All Terraform checks passed.` (fmt, validate on all seven directories, tflint clean) |
 | **ac4** `SitePublisher` allows only ListBucket, GetObject, PutObject, DeleteObject on its bucket and CreateInvalidation on its distribution, with the two SSO profiles | PASS | Test run `publisher_permission_set_can_publish_and_nothing_else` asserts the action set is exactly those five, that every statement is an `Allow`, that every resource is this environment's own bucket or distribution, and that the named publisher is assigned. Profile names come from `publisher_profile_name` (= `name_prefix`), so `debate-dev-site` / `debate-prod-site`; the runbook's step 7 carries the `~/.aws/config` stanzas |
 | **ac5** the operator has applied dev and prod, and the runbook records dates, names, domains, DNS and certificate status, with every permission check via `simulate-principal-policy` | **NOT RUN** (runbook PASS, applies pending) | `docs/runbooks/team-website.md` exists with eight steps, fifteen paste-ready blocks, and four `simulate-principal-policy` checks and no attempted-action permission tests (`grep -c 'debate-prod-site'` → `8`). Every bash block parses (`bash -n`, 15/15). The record tables read `_pending_`: **no apply has been run** |
-| **ac6** prod on `wfbdebate.org` with `www` redirecting, dev on `dev.wfbdebate.org` with noindex, per-environment ACM certificates in us-east-1, DNS validated | **BLOCKED** live; configuration PASS | Configured in `envs/*/terraform.tfvars` and asserted offline by `prod_serves_the_team_domain_and_redirects_www` and `dev_preview_is_not_indexable`. Blocked on the domain: `whois -h whois.publicinterestregistry.org wfbdebate.org` → `Domain not found` (2026-09-20T17:54Z). Every name in ac6 is under `wfbdebate.org`, including the dev preview host |
+| **ac6** prod on `wfbdebate.org` with `www` redirecting, dev on `dev.wfbdebate.org` with noindex, per-environment ACM certificates in us-east-1, DNS validated | **BLOCKED** live; configuration PASS | Configured in `envs/*/terraform.tfvars` and asserted offline by `prod_serves_the_team_domain_and_redirects_www` and `dev_preview_is_not_indexable`. Blocked on the domain: the `REGISTER_DOMAIN` operation for `wfbdebate.org` is `FAILED` (0.9 s after submission, generic AWS Support message), the `.org` registry returns `Domain not found`, and the name is still `AVAILABLE`. Every name in ac6 is under `wfbdebate.org`, including the dev preview host. Retry pending |
 | **ac7** the `.com` names 301 to their `.org` equivalents with their own certificate and no S3 website endpoint; `domain_redirect` tests pass offline | Offline PASS; live **NOT RUN** | `terraform -chdir=infrastructure/modules/domain_redirect test` → `Success! 5 passed, 0 failed.` including `the_origin_is_never_a_public_bucket_or_a_website_endpoint`. The live 301 check is the runbook's step 6 |
 | Node `adr-0012` — ADR accepted; index lists it | PASS | As ac1 |
 | Node `static-site-module` — `main.tf` contains `aws_cloudfront_origin_access_control` and `aws_cloudfront_response_headers_policy` | PASS | `grep -c` → `2` and `2` |
@@ -189,13 +189,22 @@ full block for each with its expected runtime and success criteria. In order:
    | `wfbdebate.com` | Registered 2026-09-20T17:11:33Z, Amazon Registrar | Four `awsdns` name servers, visible at the registry and at 1.1.1.1 and 8.8.8.8 |
    | `wfbdebate.org` | **`Domain not found`** at `whois.publicinterestregistry.org` | None — there is no registration to delegate |
 
-   This is not a propagation delay: the `.org` registry has no record of the name, and a `.com`
-   bought eight minutes earlier is already fully delegated. Either the `.org` purchase did not go
-   through, or it was made somewhere other than this AWS account. The `route53domains` block in
-   runbook step 1 says which. `wfbdebate.org` is the canonical name and is written into
-   `envs/prod/terraform.tfvars`, and `dev.wfbdebate.org` sits under it, so **neither environment
-   can take its domain until this is resolved** — and an unregistered name someone else can buy is
-   worth resolving today.
+   `route53domains list-operations` then said why: the `REGISTER_DOMAIN` operation for
+   `wfbdebate.org` (`4cb18c5e-dc01-4b99-8cff-b782eecf8cd5`, submitted 2026-09-20T12:11:28.064
+   CDT) is **`FAILED`**, with the generic "We can't finish registering your domain. Contact AWS
+   Support" message. It failed 0.9 seconds after submission, two seconds after `wfbdebate.com`
+   succeeded from the same account with the same contacts — a registry-side rejection rather than
+   a problem with the contact data. `check-domain-availability` reports the name still
+   `AVAILABLE`.
+
+   **Decision (operator, 2026-09-20): retry the `.org` registration once; if it fails again, make
+   `wfbdebate.com` the canonical name rather than waiting on AWS Support**, because the parent
+   information session is on October 1. The retry block is in runbook step 1 under *If a
+   registration failed*; it reuses the contacts from the successful `.com` registration without
+   printing them. `wfbdebate.org` is the canonical name in `envs/prod/terraform.tfvars` and
+   `dev.wfbdebate.org` sits under it, so **neither environment can take its domain until this is
+   resolved**. Falling back to `.com` is a tfvars-and-prose change — nothing in the modules or the
+   tests depends on which name is canonical.
 
 1. **Confirm both hosted zones are delegated** (~1 min) — runbook step 1, which now tells an
    unregistered domain apart from a slow delegation and includes `aws sso login`, because an

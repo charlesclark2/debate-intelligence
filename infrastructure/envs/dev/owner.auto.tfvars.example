@@ -1,3 +1,9 @@
 # Copy to owner.auto.tfvars, which is gitignored and loaded automatically. It carries the
-# maintainer's email, which the task spec keeps out of the repository.
+# maintainer's email and Identity Center user name, which the task spec keeps out of the
+# repository.
 owner = "you@example.com"
+
+# Identity Center user names assigned this environment's SitePublisher permission set, which is
+# what `scripts/site_deploy.sh` publishes with (v1-e36-t05-site-deploy). Adult maintainers only.
+# Leave it empty and the permission set exists but nobody can assume it.
+site_publisher_user_names = ["your-identity-center-user-name"]

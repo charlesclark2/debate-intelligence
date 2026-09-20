@@ -23,6 +23,7 @@ New records use the template in [0000-template.md](0000-template.md).
 | [0008](0008-no-neptune-initially.md) | No Amazon Neptune until DynamoDB adjacency proves insufficient | Accepted 2026-09-17 | Graph storage strategy for V1/V2. |
 | [0009](0009-async-job-architecture.md) | Async job architecture for slow work in V2 and beyond | Accepted 2026-09-17 | Step Functions + SQS + Fargate for slow, retryable work. |
 | [0010](0010-primary-aws-region.md) | Primary AWS region (us-east-1) and single-account environment separation | Accepted 2026-09-19 | Region for S3, Bedrock and OpenSearch Serverless; dev/prod separated by tag and name inside one account. |
+| [0012](0012-web-hosting.md) | Web hosting — a static export on S3 and CloudFront, under one team domain | Accepted 2026-09-20 | Private bucket + CloudFront with origin access control, security headers at the edge, no access logging; the public team site first, the V2 app later under the same domain. |
 | [0013](0013-two-environments-and-dev-main-promotion.md) | Two environments (dev, prod) and dev→main promotion | Accepted 2026-09-17 | Supersedes the `stage` environment in proposal [§4](../architecture/architecture_proposal.md#4-technology-stack) and [§5](../architecture/architecture_proposal.md#5-aws-cloud-architecture); operational detail in [docs/process/branching-and-environments.md](../process/branching-and-environments.md). |
 | [0014](0014-debate-file-editor.md) | Debate file editor and format reference (CardMirror) | Accepted 2026-09-20 | CardMirror is a compatibility target for every debate `.docx` we write, and an allowed (not mandated) team editor; not embedded or forked. Evidence in [cardmirror-evaluation.md](../architecture/cardmirror-evaluation.md). |
 
@@ -30,12 +31,12 @@ New records use the template in [0000-template.md](0000-template.md).
 
 Some numbers are already referenced by task specs but the ADR files themselves have not
 been written yet. Keep the numbers reserved for these topics; write the record when the
-decision lands.
+decision lands. A reservation moves into the index above when its record is written —
+0012 did so in `v1-e36-t02-site-hosting`.
 
 | ADR | Topic | Owning spec |
 |---|---|---|
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
-| 0012 | Web hosting (public team site first; the V2 app mounts under the same domain) | [`v1-e36-t02-site-hosting`](../../plan_specs/v1/e36-team-website/t02-site-hosting.yaml) |
 | 0015 | How coaches edit website content (calendar source and CMS) | [`v1-e37-t01-content-editing-decision`](../../plan_specs/v1/e37-calendar-and-announcements/t01-content-editing-decision.yaml) |
 
 New ADRs take the next free number after the highest written or reserved one: **0016** is the

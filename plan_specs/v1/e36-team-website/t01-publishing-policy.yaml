@@ -70,7 +70,7 @@ spec:
         The Pre-publication checklist is a numbered list that t04, E37 and E38 can cite item by item,
         and the policy status reads Approved with Charlie's name and date.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

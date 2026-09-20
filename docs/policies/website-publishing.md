@@ -3,11 +3,11 @@
 | | |
 |---|---|
 | Policy version | 1.0 |
-| Status | **Draft**, version 1.0, 2026-09-20. Awaiting Charlie's approval; see [Approval](#approval). |
+| Status | **Approved**, version 1.0, 2026-09-20. See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e36-t01-publishing-policy implementation session, 2026-09-20 |
 | Applies to | Everything published on the public Whitefish Bay debate team website at `wfbdebate.org`, in the dev preview and in prod, and every source the site is built from |
-| Approved by | _Not yet approved_ |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-20 |
 | Next review | Start of the 2027-28 season, or sooner if the district's conditions, the media-consent process, or domain ownership change |
 
 This is the policy that governs everything published on the public Whitefish Bay debate team
@@ -108,9 +108,13 @@ This is the site's single largest continuity risk and is written down rather tha
 4. **A takedown under 3 removes content, not just DNS.** Objects are deleted from the prod bucket
    and a CloudFront invalidation is issued, because pointing a domain elsewhere leaves the content
    reachable at its distribution URL.
-5. **At least one other person can reach the site's controls.** Charlie names a second coach or
-   district contact who can take the site down if Charlie is unavailable, and records how. This is
-   [open question 2](#open-questions).
+5. **There is no second holder of the site's controls, and that is written down rather than
+   implied.** The registrar account and the AWS account are Charlie's alone; no assistant coach
+   has independent access today. What exists instead is a **route to Charlie**: the activities
+   office holds a way to reach him, so the district always has a person to call about the site
+   even outside the season. Giving a second coach real access is recorded as
+   [open question 2](#open-questions) and is worth doing before the site carries much about
+   students.
 
 ## Students
 
@@ -573,9 +577,9 @@ policy without the answer; **open** means the answer is still needed before the 
 | # | Question | Status | Who resolves it | What it blocks |
 |---|---|---|---|---|
 | 1 | The district's **official brand colors**. None are published, so the palette in `site/src/styles/tokens.css` was sampled from the team's own deck template and is the team's working reference | Open | Charlie, with the district communications office | Nothing today. If official colors appear, the tokens file is corrected within the contrast limits in [Accessibility](#accessibility) |
-| 2 | **Who besides Charlie can take the site down** if he is unavailable, and how they do it (registrar access, AWS access, or a district contact who can reach him) | Open | Charlie | [Domains and continuity](#domains-and-continuity) 5. Should be answered before the first prod launch |
+| 2 | **Whether a second person should hold real access** (registrar and AWS) to take the site down. Today nobody does; the activities office holds a way to reach Charlie, which is the interim answer recorded in [Domains and continuity](#domains-and-continuity) 5 | **Accepted as a known gap**, 2026-09-20 | Charlie | Nothing today. Revisit at the next review, or sooner once the site carries student names and photographs |
 | 3 | Whether the activities office's **media-consent form covers website publication specifically**, and how often it is renewed or re-signed | Open | Charlie, with the activities office | Publishing the first student photograph. Until answered, photographs publish only where Charlie has confirmed the individual form with the office |
-| 4 | Whether the district or the high school wants a **review of the site before it goes live to prod**, given that none was stated as a condition | Open | Charlie, with Randee Drew | The first prod launch (`v1-e36-t05`). Cheap to ask and awkward to skip |
+| 4 | Whether the district or the high school wants a **review of the site before it goes live to prod** | **Resolved** 2026-09-20 — no pre-launch review is wanted. The activities director attached no conditions and asked for no review, so the first prod launch (`v1-e36-t05`) is not gated on one | Charlie, with Randee Drew | — |
 | 5 | Whether the district would prefer the site under a **district-owned domain or district hosting** rather than domains registered to a coach personally | Open | Charlie, with the district | Nothing today. [Domains and continuity](#domains-and-continuity) records the risk in the meantime |
 | 6 | A **brand asset set that survives the sizes the site needs**: the lockup and mark as SVG or transparent PNG, plus square icon artwork cropped to the W. Today's assets are opaque, recovered from a JPEG, and blur at icon sizes | Open | Charlie | Nothing. Recorded in the `v1-e36-t03` session report as follow-up work |
 
@@ -595,19 +599,25 @@ policy without the answer; **open** means the answer is still needed before the 
 
 ## Approval
 
-**Until this table records an approval, nothing this policy governs may be published.** That
-covers the core pages (`v1-e36-t04`), the first prod deploy (`v1-e36-t05`), announcements and the
-calendar (E37), and the donation page (E38).
+**Version 1.0 of this policy is approved.** The core pages (`v1-e36-t04`), the first prod deploy
+(`v1-e36-t05`), announcements and the calendar (E37) and the donation page (E38) may proceed, each
+still subject to the [Pre-publication checklist](#pre-publication-checklist) and to the open
+questions that gate them: **no student photograph publishes until
+[open question 3](#open-questions) is answered for that student's form.**
+
+The standing rule for every future version: until this table records an approval of that version,
+nothing this policy governs may be published under it.
 
 | Field | Value |
 |---|---|
 | Policy version | 1.0 |
-| Approved by | _Pending_ |
+| Approved by | **Charlie Clark** |
 | Role | Product owner and head coach |
-| Approval date | _Pending_ |
+| Approval date | **2026-09-20** |
 | Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.0, including the district approval recorded from Randee Drew on 2026-09-18 and the [Pre-publication checklist](#pre-publication-checklist) |
-| Open questions accepted as known gaps | _Pending_ |
-| Open questions left open | _Pending_ |
+| Open questions resolved at approval | **4** — no district pre-launch review is wanted, so `v1-e36-t05` is not gated on one |
+| Open questions accepted as known gaps | **2** — no second holder of the registrar and AWS access; the activities office holds a route to Charlie instead |
+| Open questions left open | **1** — official district brand colors. **3** — whether the media-consent form covers website publication specifically, and how often it renews; this one gates the first student photograph. **5** — whether the district would prefer a district-owned domain. **6** — a brand asset set that survives icon sizes |
 
 A later version is approved by editing this table in a pull request, with the version bumped in
 the header and in [Review and change control](#review-and-change-control).

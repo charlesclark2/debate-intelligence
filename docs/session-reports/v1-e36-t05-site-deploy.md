@@ -48,7 +48,7 @@ page, which correctly fails a prod build).
 |---|---|---|
 | Goal ac1 — deploy script passes shellcheck; offline tests show prod refused from a non-main branch, a dirty tree or a commit ≠ `origin/main`, and `--dry-run` makes no `aws s3`/`cloudfront` write | PASS | `uv run shellcheck scripts/site_deploy.sh` → no output, exit 0. `uv run pytest tests/scripts/test_site_deploy.py` → `21 passed in 14.17s`, including `test_prod_is_refused_from_a_branch_other_than_main`, `..._when_the_tree_is_dirty`, `..._when_head_has_drifted_from_origin_main`, `..._when_origin_cannot_be_fetched` and `test_dry_run_makes_no_aws_call_at_all`. |
 | Goal ac2 — smoke checker fails on a non-200 page, a missing HSTS/CSP/`X-Content-Type-Options` header, a missing http→https redirect, `noindex` on prod, or a `version.json` sha mismatch, with no live call | PASS | `uv run pytest tests/scripts/test_site_smoke.py` → `27 passed in 1.20s`. One test per failure, all respx-mocked; the default pytest run also has `--disable-socket`. |
-| Goal ac3 — the dev preview has been deployed, passes the smoke check with its `noindex` header, and the same commit reached `main` through a validated promotion | NOT RUN | Operator follow-ups 3 and 4. No AWS action has been taken in this session. |
+| Goal ac3 — the dev preview has been deployed, passes the smoke check with its `noindex` header, and the same commit reached `main` through a validated promotion | PARTIAL | Deployed and checked: `scripts/site_deploy.sh dev` at `f15fa16` on 2026-09-20, invalidation `IAM1U04QZPV5D7HUB6CQL4WGCH` created and waited on; `scripts/site_smoke.py --env dev --url https://dev.wfbdebate.com --expect-sha f15fa16…` → **All 28 checks passed**, including `X-Robots-Tag: noindex` on all eight pages. Not yet satisfied: that was the task branch, and a squash merge gives the work a new sha on `dev`, so the commit actually promoted is re-deployed and re-checked before the promotion PR. |
 | Goal ac4 — runbook has a deploy and rollback procedure and a *First prod launch* entry (date, sha, URL, smoke result, no account ids) | PARTIAL | Procedures: `docs/runbooks/team-website.md` §*Deploying the site*, §*Rolling back a deploy*, §*Taking something down on request*. Entry: §*First prod launch* exists with its fields `_pending_`; the launch has not happened, so there is nothing truthful to put in them yet. Operator follow-up 5 fills it. |
 | Goal ac5 — the prod site is live and passes the smoke check before the October 1, 2026 parent session | NOT RUN | Operator follow-up 5. Blocked behind follow-ups 1 to 4 and the room fact. |
 | `deploy-script` — `shellcheck scripts/site_deploy.sh` | PASS | `uv run shellcheck scripts/site_deploy.sh` → exit 0. (Run through `uv run`: ShellCheck is now a dev dependency, see Deviations.) |
@@ -56,12 +56,15 @@ page, which correctly fails a prod build).
 | `smoke-check` — `uv run pytest tests/scripts/test_site_smoke.py` | PASS | `27 passed in 1.20s`. |
 | `smoke-check` — `uv run ruff check scripts/site_smoke.py tests/scripts tests/smoke/test_site.py` | PASS | `All checks passed!` Repo-wide: `uv run ruff check .` → `All checks passed!`, `uv run ruff format --check .` → `125 files already formatted`. |
 | `dev-preview` — `docs/runbooks/team-website.md` contains `site_deploy.sh` | PASS | `grep -c site_deploy.sh docs/runbooks/team-website.md` → `11` matching lines, in the deploy, rollback, takedown and launch sections. |
-| `dev-preview` — custom: Charlie confirms the dev smoke check passed for the commit being promoted, including `noindex`, and the preview looks right on a phone | NOT RUN | Operator follow-ups 3 and 4. |
+| `dev-preview` — custom: Charlie confirms the dev smoke check passed for the commit being promoted, including `noindex`, and the preview looks right on a phone | PARTIAL | The smoke check passed in full for `f15fa16` (28/28). Outstanding: the same run against the promoted commit, and Charlie's read of the preview on a phone, which no check covers. |
 | `prod-launch` — `docs/runbooks/team-website.md` contains `First prod launch` | PASS (placeholder) | The section exists with the right fields; its values are `_pending_` until the launch. Reported as PASS against the literal criterion and as not-yet-true in substance. |
 | `prod-launch` — custom: Charlie confirms, on or before September 30 2026, that the prod site passes the smoke check at the URL he will give parents | NOT RUN | Operator follow-up 5. |
 | Regression — Terraform static checks still pass after the policy change | PASS | Re-run after the rebase onto `dev` at `9a3e86f`: `scripts/terraform_checks.sh` → `ok test infrastructure/modules/static_site`, `All Terraform checks passed.` The script now runs `terraform test` itself (#23), so the module suite is covered rather than hand-run; the direct run earlier in the session gave `Success! 11 passed, 0 failed.` |
 | Regression — spec validation | PASS | `uv run scripts/validate_specs.py` → `OK: 278 files, 38 epics, 220 tasks, 20 releases`. |
 | Regression — cross-package tests and pre-commit | PASS | `uv run pytest tests` → `78 passed in 14.39s` after the rebase. `uv run pre-commit run --files <changed>` → every hook Passed or Skipped. |
+| Operator step 4 — both maintainer profiles can read their root's Terraform outputs | PASS | `AWS_PROFILE=debate-dev terraform -chdir=infrastructure/envs/dev output -raw site_bucket_name` → `debate-dev-site-a7508de8`; the same with `debate-prod` → `debate-prod-site-a7508de8`. So the script's default split holds in both environments and no `SITE_TERRAFORM_PROFILE=debate-admin` override is needed — an open question at the time the script was written. |
+| Operator step 3 — prod converged, and the extra changes are accounted for | PASS | The prod apply reported `0 added, 9 changed, 0 destroyed` where the policy change alone is 1. Prod holds exactly eight taggable resources (`terraform state list`: the site bucket, distribution and certificate, the evidence bucket and KMS key, and three permission sets), and a changed `owner` rewrites the `Owner` tag on all of them through the provider's `default_tags` — eight tag updates plus the inline policy is nine. The `Owner` tag now reads `ctcb57@gmail.com`. A read-only `terraform plan -lock=false` afterwards reports `No changes. Your infrastructure matches the configuration.`, so nothing is outstanding and no resource was replaced. Cause: the operator block in this report supplied a concrete `OWNER_EMAIL` where the runbook had a placeholder; the runbook now says to read the deployed value back instead. |
+| Operator step 3 — the publisher policy is applied in both environments | PASS | `aws sso-admin get-inline-policy-for-permission-set` for `DebateDevSitePublisher` and `DebateProdSitePublisher` both return six actions, ending `cloudfront:CreateInvalidation`, `cloudfront:GetInvalidation`. Confirmed in use: the dev deploy's wait on the invalidation returned rather than failing `AccessDenied`. |
 | Regression — the branch is current with `dev` | PASS | `scripts/task sync v1-e36-t05-site-deploy` → `Successfully rebased and updated refs/heads/task/v1-e36-t05-site-deploy` onto `9a3e86f`, no conflicts, nothing pushed (the branch is not on origin). `uv run shellcheck scripts/site_deploy.sh`, `uv run ruff check .` and `uv run scripts/validate_specs.py` all clean afterwards. |
 
 ## Files changed
@@ -113,14 +116,23 @@ rather than five; `README.md` records why. See Deviations.
    criterion would have passed vacuously — ruff would have reported "No Python files found" and
    exited 0.
 
-3. **`prod-launch`'s `artifact_exists` criterion passes on a placeholder.** The runbook has the
+3. **The `Owner` tag on eight prod resources was rewritten as a side effect.** The step 3 operator
+   block in this report gave `OWNER_EMAIL` a concrete value, where the runbook's own *Before you
+   start* block deliberately carries a placeholder and the variable's description says it is kept
+   out of the repository. The value that reached the apply differed from the one the previous
+   applies used, so every taggable resource in each root picked up a new `Owner` tag: benign, not
+   reverted, and the reason prod reported nine changes rather than one. The runbook now tells the
+   operator to read the deployed value back with `aws s3api get-bucket-tagging` rather than retype
+   it, and says what each change count means. Worth the PM deciding what the canonical value is,
+   since it is now different from what `v1-e36-t02` and `v1-e29-t03` applied.
+
+4. **`prod-launch`'s `artifact_exists` criterion passes on a placeholder.** The runbook has the
    *First prod launch* section and the string the criterion matches, but its fields are `_pending_`
    because the launch has not happened. Flagged rather than left to look like a pass.
 
-4. **Nothing was deployed.** The spec's `dev-preview` and `prod-launch` nodes are operator work by
-   design; this session produced the procedures and the blocks and stopped there, so the task Goal
-   is left at `InProgress` rather than `Succeeded`. The PM sets it to `Succeeded` after follow-up 5
-   and the runbook entry.
+5. **Prod is not deployed yet.** The dev preview is live and passes its smoke check, but the
+   `prod-launch` node needs the promotion first, so the task Goal stays `InProgress` until the
+   prod deploy and its runbook entry.
 
 ## Decisions and assumptions
 

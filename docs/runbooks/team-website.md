@@ -88,6 +88,17 @@ Success looks like: an ARN containing `AWSReservedSSO_DebateBreakGlassAdmin`.
 **The operator-local tfvars**, which are gitignored. They carry the maintainer's email and
 Identity Center user name; the second is what makes the publisher permission set usable.
 
+**Use the same `OWNER_EMAIL` as the last apply.** It becomes the `Owner` tag on every taggable
+resource in the root through the provider's `default_tags`, so a different value rewrites all of
+them — eight resources in prod — and the apply reports a change count far larger than whatever
+you actually came to change. The value is not written down in this repository on purpose, so read
+it back from what is deployed rather than retyping it from memory:
+
+```bash
+AWS_PROFILE=debate-admin aws s3api get-bucket-tagging \
+  --bucket debate-prod-site-a7508de8 --query "TagSet[?Key=='Owner'].Value" --output text
+```
+
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`
 ```bash
@@ -643,10 +654,15 @@ for env in dev prod; do
   terraform -chdir="infrastructure/envs/$env" apply
 done
 ```
-Success looks like: one plan per environment showing **1 to change, 0 to add, 0 to destroy** — the
-change is `module.site.aws_ssoadmin_permission_set_inline_policy.site_publisher[0]`, and the diff
-adds `cloudfront:GetInvalidation` beside `cloudfront:CreateInvalidation`. The permission set's
-description changes too. **Anything else in the plan, above all a destroy of
+Success looks like: one plan per environment whose **only** substantive change is
+`module.site.aws_ssoadmin_permission_set_inline_policy.site_publisher[0]`, with the diff adding
+`cloudfront:GetInvalidation` beside `cloudfront:CreateInvalidation`. The permission set's
+description changes too.
+
+The count itself depends on your tfvars. With an unchanged `OWNER_EMAIL` it is `1 to change`; with
+a different one every taggable resource in the root picks up a new `Owner` tag and prod reports
+`9 changed` (eight tag updates plus the policy). Both are benign, but only one of them is what you
+asked for, so read the resource names. **Anything else in the plan, above all a destroy of
 `aws_ssoadmin_account_assignment.site_publishers`, means the tfvars are missing: answer `no` and
 fix them.**
 
@@ -945,8 +961,8 @@ shows `debate-dev-site` with `dev.wfbdebate.com` and `debate-prod-site` with `wf
 | `dev.wfbdebate.com` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.com` does not | Confirmed on both | 2026-09-20 |
 | `www.wfbdebate.com` 301s to `https://wfbdebate.com/`, path preserved | `https://www.wfbdebate.com/` → `301 https://wfbdebate.com/`; `https://www.wfbdebate.com/parents/faq/?x=1` → `301 https://wfbdebate.com/parents/faq/?x=1`, path **and query** preserved. `http://www.wfbdebate.com/` takes two hops — CloudFront upgrades to HTTPS first, then the function redirects to the apex — which is normal and costs one extra round trip on a spelling nobody types twice | 2026-09-20 |
 | Publishers allowed only their own site bucket and distribution | Both: `allowed` on their own bucket for `ListBucket`, `GetObject`, `PutObject`, `DeleteObject` and on their own distribution for `CreateInvalidation`; `implicitDeny` on the *other* environment's bucket and distribution, on the state bucket, and on `iam:CreateAccessKey`, `cloudfront:CreateDistribution`, `cloudfront:GetInvalidation` and `sso:CreatePermissionSet` | 2026-09-20 |
-| Publishers may read their own invalidation's progress (step 9, `v1-e36-t05`) | _pending_ — expect `allowed` for `cloudfront:GetInvalidation` on the publisher's own distribution and `implicitDeny` on the other environment's | |
-| First dev deploy and smoke check | _pending_ | |
+| Publishers may read their own invalidation's progress (step 9, `v1-e36-t05`) | Applied 2026-09-20. Both permission sets' inline policies now list six actions ending `cloudfront:CreateInvalidation`, `cloudfront:GetInvalidation`, read back with `aws sso-admin get-inline-policy-for-permission-set`. Proven in use the same day: the dev deploy's `aws cloudfront wait invalidation-completed` returned instead of failing `AccessDenied` | 2026-09-20 |
+| First dev deploy and smoke check | 2026-09-20. `scripts/site_deploy.sh dev` from the task worktree at `f15fa16`: 71 objects uploaded, invalidation `IAM1U04QZPV5D7HUB6CQL4WGCH` created and waited on. `scripts/site_smoke.py --env dev` → **All 28 checks passed** (8 sitemap pages at 200, `301` to HTTPS, six security headers and `X-Robots-Tag: noindex` on every page, `robots.txt` disallowing everything, `version.json` at `f15fa16`) | 2026-09-20 |
 | First prod deploy and smoke check | _pending_ | |
 
 ## Recurring checks

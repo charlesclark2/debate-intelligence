@@ -76,7 +76,7 @@ spec:
         per template family (Verbatim, CardMirror, other/heuristic, wiki-converted) across the hsld26
         snapshots and camp files, with no file names, schools or team codes.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

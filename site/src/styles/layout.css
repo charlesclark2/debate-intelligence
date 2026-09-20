@@ -122,23 +122,17 @@
   }
 }
 
-/* The reading column, centred in the viewport.
+/*
+ * <main> is a plain wrapper now.
  *
- * It is the prose measure rather than --layout-max-width on purpose. Every content page renders
- * an <h1> and a <Prose>, and .prose caps itself at --layout-prose-width; capping only the inner
- * element inside a 68rem container left the text flush against the left edge with the whole
- * difference as one gutter on the right, which reads as a page that is off centre. Capping the
- * column here keeps the heading and the body on the same measure and centres both. The header
- * and footer keep --layout-max-width, so the navigation still spans wider than the text, which is
- * deliberate.
- *
- * The cap includes the gutters (box-sizing is border-box globally), so it is the measure plus two
- * of them: that keeps the text itself at exactly --layout-prose-width, which is the width the
- * type scale was set for, rather than a gutter narrower. */
+ * Until v1-e36-t06 it was the reading column itself: it capped its own width at the measure and
+ * carried the page's vertical padding. A designed page needs bands that reach the edge of the
+ * viewport, so the width moved out into .page-column and .section in sections.css. A Markdown
+ * page renders one .page-column and is exactly as wide as it was before; a composed page such as
+ * the home page renders a stack of .section bands instead.
+ */
 .site-main {
-  max-width: calc(var(--layout-prose-width) + 2 * var(--layout-gutter));
-  margin: 0 auto;
-  padding: var(--space-6) var(--layout-gutter) var(--space-8);
+  display: block;
 }
 
 /* <main> carries tabIndex={-1} so the skip link moves focus there; it must not draw a ring

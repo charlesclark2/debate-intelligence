@@ -7,9 +7,9 @@ import { loadNotFoundPage } from '@/lib/content'
 export default function NotFoundPage() {
   const page = loadNotFoundPage()
   return (
-    <>
+    <div className="page-column">
       <h1>{page.title}</h1>
       <Prose html={page.html} />
-    </>
+    </div>
   )
 }

@@ -81,6 +81,76 @@ export const siteSettingsSchema = z.object({
   debaterLoginLabel: z.string().min(1),
 })
 
+/**
+ * The structured parts of the home page, in content/home.yaml.
+ *
+ * The home page is the one page that is laid out rather than read straight through, so its
+ * headings, panel facts, card labels and links are data rather than Markdown. The prose on it is
+ * still content/pages/home.md; this schema covers everything around that prose.
+ *
+ * `.min(3).max(5)` on the entry-point cards is the acceptance criterion for v1-e36-t06 written
+ * as a schema: a sixth card fails the build rather than quietly making the row unscannable.
+ */
+
+/** A link out of a panel or a card. Internal only: see `internalHref`. */
+const internalHref = z
+  .string()
+  .min(1)
+  .refine(
+    (value) => value.startsWith('/') || value.startsWith('#'),
+    'must point inside this site, so start with "/" or "#"',
+  )
+
+export const homeActionSchema = z.object({
+  label: z.string().min(1),
+  href: internalHref,
+})
+
+export const homeContentSchema = z.object({
+  hero: z.object({
+    lead: z.string().min(1),
+    action: homeActionSchema,
+  }),
+  parentSession: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    facts: z.array(z.object({ label: z.string().min(1), value: z.string().min(1) })).min(1),
+    whatToExpect: z.array(z.string().min(1)).min(1),
+    note: z.string().min(1),
+    action: homeActionSchema,
+  }),
+  entryPoints: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    cards: z
+      .array(
+        z.object({
+          title: z.string().min(1),
+          body: z.string().min(1),
+          actionLabel: z.string().min(1),
+          href: internalHref,
+        }),
+      )
+      .min(3, 'the home page needs at least three entry points')
+      .max(5, 'more than five entry points stops being scannable'),
+  }),
+  prose: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+  }),
+  whatDebateBuilds: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    claims: z.array(z.object({ title: z.string().min(1), body: z.string().min(1) })).min(1),
+  }),
+})
+
+export type HomeAction = z.infer<typeof homeActionSchema>
+export type HomeContent = z.infer<typeof homeContentSchema>
+
 export type PageFrontMatter = z.infer<typeof pageFrontMatterSchema>
 export type ContactEmail = z.infer<typeof contactEmailSchema>
 export type SiteSettings = z.infer<typeof siteSettingsSchema>
@@ -289,4 +359,89 @@ export function loadNotFoundPage(
     throw new ContentValidationError(filePath, 'file is missing')
   }
   return parsePage('not-found', filePath, readFileSync(absolutePath, 'utf8'))
+}
+
+/** Every string in the home content, in reading order, for the checks that scan copy. */
+function homeContentStrings(content: HomeContent): string[] {
+  const { hero, parentSession, entryPoints, prose, whatDebateBuilds } = content
+  return [
+    hero.lead,
+    hero.action.label,
+    parentSession.eyebrow,
+    parentSession.title,
+    parentSession.intro,
+    ...parentSession.facts.flatMap((fact) => [fact.label, fact.value]),
+    ...parentSession.whatToExpect,
+    parentSession.note,
+    parentSession.action.label,
+    entryPoints.eyebrow,
+    entryPoints.title,
+    entryPoints.intro,
+    ...entryPoints.cards.flatMap((card) => [card.title, card.body, card.actionLabel]),
+    prose.eyebrow,
+    prose.title,
+    whatDebateBuilds.eyebrow,
+    whatDebateBuilds.title,
+    whatDebateBuilds.intro,
+    ...whatDebateBuilds.claims.flatMap((claim) => [claim.title, claim.body]),
+  ]
+}
+
+/**
+ * The structured home-page content, validated and held to the same house style as the Markdown
+ * pages: no em dashes, and no acronym left unexpanded. Both rules exist because the audience is
+ * parents and students new to debate, and a heading in a panel is read by exactly the same people
+ * as a sentence in a paragraph.
+ */
+export function loadHomeContent(
+  contentDirectory: string = defaultContentDirectory(),
+): HomeContent {
+  const filePath = 'content/home.yaml'
+  const absolutePath = join(contentDirectory, 'home.yaml')
+  if (!existsSync(absolutePath)) {
+    throw new ContentValidationError(filePath, 'file is missing')
+  }
+
+  // Read through gray-matter, the same YAML parser the pages and site.yaml use.
+  const parsed = matter(`---\n${readFileSync(absolutePath, 'utf8')}\n---\n`)
+  const result = homeContentSchema.safeParse(parsed.data)
+  if (!result.success) {
+    throw new ContentValidationError(filePath, `invalid home content (${formatIssues(result.error)})`)
+  }
+
+  const content = result.data
+  const text = homeContentStrings(content).join('\n')
+  if (text.includes(EM_DASH)) {
+    throw new ContentValidationError(filePath, `uses an em dash. ${HOUSE_STYLE_REWRITE}`)
+  }
+  assertAcronymsAreExpanded(filePath, text)
+  return content
+}
+
+/**
+ * content/home.yaml as the publishing-policy guard sees it.
+ *
+ * The guard reads pages, so copy that lives in a YAML file would otherwise be the one place on
+ * the site where an email address, a phone number, an unreviewed name or an unfilled placeholder
+ * is not checked. Giving it a ContentPage shape costs one function and closes that hole: the
+ * root layout passes this alongside loadPages(), and tests/content-policy.test.ts checks it with
+ * the rest of the content.
+ */
+export function homeContentAsPage(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const content = loadHomeContent(contentDirectory)
+  const text = homeContentStrings(content).join('\n\n')
+  return {
+    slug: 'home-content',
+    route: '/',
+    filePath: 'content/home.yaml',
+    title: content.parentSession.title,
+    description: content.hero.lead,
+    navLabel: content.parentSession.title,
+    navOrder: Number.MAX_SAFE_INTEGER,
+    draft: false,
+    html: text,
+    placeholders: findPlaceholders(text),
+  }
 }

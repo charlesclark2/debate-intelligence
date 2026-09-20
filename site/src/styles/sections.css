@@ -1,0 +1,264 @@
+/*
+ * The layout kit: bands, the reading column, card grids and the home page hero.
+ *
+ * Before v1-e36-t06 every page was one prose column inside <main>. The kit splits that into two
+ * shapes. A Markdown page still renders one .page-column, exactly the measure it had. A composed
+ * page such as the home page renders a stack of .section bands instead: each one is full bleed,
+ * carries its own background, and centres its content at --layout-max-width. <main> itself no
+ * longer sets a width or padding, because a band has to be able to reach the edge of the
+ * viewport for its background to read as a band at all.
+ *
+ * All vertical rhythm comes from --space-section-block and --space-section-gap in tokens.css, so
+ * how much air the site has is one edit in one place rather than a number per component.
+ */
+
+/* The reading column: a Markdown page, unchanged in width from v1-e36-t04. */
+.page-column {
+  max-width: calc(var(--layout-prose-width) + 2 * var(--layout-gutter));
+  margin: 0 auto;
+  padding: var(--space-section-block) var(--layout-gutter);
+}
+
+.section {
+  padding-block: var(--space-section-block);
+}
+
+.section__inner {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding-inline: var(--layout-gutter);
+}
+
+/*
+ * A section heading and its intro are set wider than body copy. At heading sizes the same 36rem
+ * holds far fewer characters, and a two-word heading wrapped onto three lines is the single
+ * clearest sign of a page laid out by nobody.
+ */
+.section__header {
+  max-width: var(--layout-heading-width);
+  margin-bottom: var(--space-section-gap);
+}
+
+.section__eyebrow {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.section__title {
+  margin-bottom: var(--space-3);
+}
+
+.section__intro {
+  max-width: var(--layout-prose-width);
+  margin: 0;
+  font-size: var(--font-size-lead);
+}
+
+.section__intro:last-child {
+  margin-bottom: 0;
+}
+
+/* The tinted band. The panel tint is the only background other than white and navy. */
+.section--tinted {
+  background-color: var(--color-surface-panel);
+}
+
+/*
+ * The inverse band: brand navy, white copy, light-blue links and the light-blue focus ring, the
+ * same treatment the footer uses. One band per page at most. The warm accent never appears here:
+ * it measures 3.04:1 on navy, which is too close to the non-text floor to rely on.
+ */
+.section--inverse {
+  background-color: var(--color-surface-inverse);
+  color: var(--color-text-inverse);
+}
+
+.section--inverse h2,
+.section--inverse h3,
+.section--inverse .section__eyebrow {
+  color: var(--color-text-inverse);
+}
+
+.section--inverse .section__eyebrow {
+  color: var(--color-link-inverse);
+}
+
+.section--inverse a {
+  color: var(--color-link-inverse);
+}
+
+.section--inverse :focus-visible {
+  outline-color: var(--color-focus-ring-inverse);
+}
+
+/* A white section following a white section gets a hairline, so the two do not run together. */
+.section--plain + .section--plain {
+  border-top: 1px solid var(--color-border);
+}
+
+/*
+ * The home page hero. No background image and no colour wash: the weight comes from the size of
+ * the type and from the space around it. The short warm rule above the heading is the one place
+ * the warm accent appears on a white surface, and it is a rule rather than text because #B36B00
+ * on white measures 4.18:1, which is large-text and non-text only.
+ */
+.hero {
+  padding-block: var(--space-8) var(--space-section-block);
+}
+
+.hero__rule {
+  width: var(--space-7);
+  height: 4px;
+  margin-bottom: var(--space-5);
+  border: 0;
+  background-color: var(--color-brand-warm);
+}
+
+.hero__title {
+  max-width: var(--layout-heading-width);
+  margin-bottom: var(--space-5);
+  font-size: var(--font-size-display);
+  line-height: var(--line-height-display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.hero__lead {
+  max-width: var(--layout-prose-width);
+  margin-bottom: var(--space-6);
+  font-size: var(--font-size-lead-hero);
+}
+
+/*
+ * The parent session panel: the most prominent block on the home page after the hero. It is the
+ * page's only inverse band, which is what makes it outrank the cards below it without needing a
+ * larger heading than the sections around it.
+ */
+.parent-session__facts {
+  display: grid;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-6);
+}
+
+.parent-session__facts dt {
+  color: var(--color-link-inverse);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.parent-session__facts dd {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-lead);
+}
+
+.parent-session__facts dd:last-of-type {
+  margin-bottom: 0;
+}
+
+.parent-session__expect {
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  list-style: none;
+}
+
+.parent-session__expect li {
+  max-width: var(--layout-prose-width);
+  margin-bottom: var(--space-3);
+  padding-left: var(--space-5);
+  position: relative;
+}
+
+/* A tick drawn from a border rather than an icon font, so nothing is fetched. */
+.parent-session__expect li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 0.55em;
+  height: 0.3em;
+  border-left: 2px solid var(--color-link-inverse);
+  border-bottom: 2px solid var(--color-link-inverse);
+  transform: rotate(-45deg);
+}
+
+@media (min-width: 48rem) {
+  .parent-session__facts {
+    grid-template-columns: max-content 1fr;
+  }
+
+  .parent-session__facts dd {
+    margin-bottom: var(--space-2);
+  }
+}
+
+/* The card grid: one up on a phone, two or three up from 48rem. */
+.card-grid {
+  display: grid;
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-grid__item {
+  display: flex;
+}
+
+.card-grid__item > * {
+  width: 100%;
+}
+
+@media (min-width: 48rem) {
+  .card-grid--2-up {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .card-grid--3-up {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 64rem) {
+  .card-grid--3-up {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/*
+ * "What debate builds": four short claims, set as a list with a rule above each rather than as
+ * cards, so the page does not end on a second grid of boxes.
+ */
+.claim-list {
+  display: grid;
+  gap: var(--space-5) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.claim-list__item {
+  padding-top: var(--space-4);
+  border-top: 3px solid var(--color-brand-navy);
+}
+
+.claim-list__title {
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-heading-3);
+}
+
+.claim-list__body {
+  margin: 0;
+  max-width: var(--layout-prose-width);
+}
+
+@media (min-width: 48rem) {
+  .claim-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

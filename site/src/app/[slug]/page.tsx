@@ -26,9 +26,9 @@ export default async function ContentPageRoute({ params }: { params: Promise<{ s
   const { slug } = await params
   const page = loadPage(slug)
   return (
-    <>
+    <div className="page-column">
       <h1>{page.title}</h1>
       <Prose html={page.html} />
-    </>
+    </div>
   )
 }

@@ -291,18 +291,28 @@ reads or overwrites the prod state file.
 `debate-admin` while the principal being simulated is the `DebateMaintainer` role that `debate-dev`
 assumes:
 
+Pass **one resource ARN per call**. With several at once the top-level `EvalDecision` is a
+roll-up and `EvalResourceName` comes back as the policy's own variable pattern
+(`arn:aws:s3:::${BucketName}/${KeyName}`), which records a decision without recording what it was
+about; the per-ARN detail is then buried in `ResourceSpecificResults[].EvalResourceDecision`. One
+ARN per call keeps the resource concrete in the output.
+
 ```bash
 ROLE=$(aws iam list-roles --profile debate-admin \
   --query 'Roles[?starts_with(RoleName, `AWSReservedSSO_DebateMaintainer`)].Arn' --output text)
 
-aws iam simulate-principal-policy --profile debate-admin --policy-source-arn "$ROLE" \
-  --action-names s3:ListBucket s3:GetObject s3:PutObject s3:DeleteObject \
-  --resource-arns \
-    "arn:aws:s3:::debate-prod-tfstate-a7508de8" \
-    "arn:aws:s3:::debate-prod-tfstate-a7508de8/envs/prod/terraform.tfstate" \
-    "arn:aws:s3:::debate-prod-tfstate-a7508de8/bootstrap/organization/terraform.tfstate" \
-  --query 'EvaluationResults[].{Action:EvalActionName,Resource:EvalResourceName,Decision:EvalDecision}' \
-  --output table
+for ARN in \
+  "arn:aws:s3:::debate-prod-tfstate-a7508de8" \
+  "arn:aws:s3:::debate-prod-tfstate-a7508de8/envs/prod/terraform.tfstate" \
+  "arn:aws:s3:::debate-prod-tfstate-a7508de8/bootstrap/organization/terraform.tfstate"
+do
+  echo "== $ARN"
+  aws iam simulate-principal-policy --profile debate-admin --policy-source-arn "$ROLE" \
+    --action-names s3:ListBucket s3:GetObject s3:PutObject s3:DeleteObject \
+    --resource-arns "$ARN" \
+    --query 'EvaluationResults[].{Action:EvalActionName,Resource:EvalResourceName,Decision:EvalDecision}' \
+    --output table
+done
 ```
 
 Every row must read `explicitDeny`. Anything reading `allowed` means the environment boundary is
@@ -311,13 +321,22 @@ gone: stop and fix `identity.tf` before putting anything else in the account.
 The same simulation against the **dev** bucket must read `allowed`, or the dev roots cannot work:
 
 ```bash
-aws iam simulate-principal-policy --profile debate-admin --policy-source-arn "$ROLE" \
-  --action-names s3:ListBucket s3:GetObject s3:PutObject \
-  --resource-arns \
-    "arn:aws:s3:::debate-dev-tfstate-a7508de8" \
-    "arn:aws:s3:::debate-dev-tfstate-a7508de8/envs/dev/terraform.tfstate" \
-  --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
+for ARN in \
+  "arn:aws:s3:::debate-dev-tfstate-a7508de8" \
+  "arn:aws:s3:::debate-dev-tfstate-a7508de8/envs/dev/terraform.tfstate"
+do
+  echo "== $ARN"
+  aws iam simulate-principal-policy --profile debate-admin --policy-source-arn "$ROLE" \
+    --action-names s3:ListBucket s3:GetObject s3:PutObject \
+    --resource-arns "$ARN" \
+    --query 'EvaluationResults[].{Action:EvalActionName,Resource:EvalResourceName,Decision:EvalDecision}' \
+    --output table
+done
 ```
+
+`s3:ListBucket` is a bucket-level action, so its row against an *object* ARN is not meaningful in
+either direction; read it on the bucket ARN. The object-level actions are the ones that matter for
+a state file.
 
 ## Step 6 — Migrate the organization root's state out of the main clone
 

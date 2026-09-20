@@ -98,7 +98,7 @@ spec:
         The operator has applied dev and then prod; docs/runbooks/evidence-store.md records apply dates,
         bucket names (no account ids) and a put/get/delete-denied check with each SSO profile.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -308,10 +308,21 @@ run is a cheap confirmation rather than a suspicion.
   ever issued it becomes a redirect to `.com`, which is a tfvars change and an apply.
 * **The env roots are shared and nothing sequences applies across tasks.** Two tasks in flight
   today (`v1-e29-t03-evidence-buckets` and this one) each change `infrastructure/envs/*`, and an
-  apply from whichever branch is behind either destroys the other's resources or reverts its
-  policy. The plan's counts are the only guard, and they are read by a human. Worth a rule in
-  `docs/process/` — apply only from a branch rebased on the latest `dev`, and never from a task
-  branch once another task's resources are live in that root.
+  apply from whichever branch is behind either destroys the other's resources or silently reverts
+  its policy. **A revert is invisible in the plan's counts**: undoing a shared module's change
+  reads as `1 to change`, indistinguishable from an intended edit, so only reading the diff body
+  for that resource catches it. Counts catch the destroy case and nothing else. Raised from both
+  sides — `v1-e29-t03`'s report carries the same item — and it wants a rule in `docs/process/`
+  (apply only from a branch rebased on the latest `dev`; never from a task branch once another
+  task's resources are live in that root). Neither session wrote that rule: `working-agreements.md`
+  says changes to it go through their own PR, so it is the PM's to make rather than something to
+  slip into a task branch.
+* **`scripts/terraform_checks.sh` does not run `terraform test`** — it runs `fmt`, `validate` and
+  `tflint` only, so module test suites are run by hand and nothing fails a PR when one breaks.
+  This session ran `terraform test` in `infrastructure/modules/static_site` manually (11 passed);
+  `v1-e29-t03-evidence-buckets` reports the same for its own module. Seconding their
+  recommendation that this wants its own small task: the script is `v1-e29-t02`'s output and
+  editing it touches every task in flight, so it should not be amended from either of ours.
 * **Automatic republish on a content change** is `v1-e37-t04`, and **keyless CI deploys** are
   `v2-e10-t03`. When the latter lands, the prod guard in `scripts/site_deploy.sh` has to be
   reproduced in the workflow, or the script has to be what the workflow runs.

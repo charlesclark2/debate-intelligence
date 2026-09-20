@@ -651,10 +651,17 @@ description changes too. **Anything else in the plan, above all a destroy of
 fix them.**
 
 After this, an apply from any branch that predates it **reverts** `cloudfront:GetInvalidation`,
-because that branch's `modules/static_site` still grants five actions. The symptom is a deploy
-that uploads and then fails on the wait with `AccessDenied`. If a later plan shows
-`aws_ssoadmin_permission_set_inline_policy.site_publisher` changing and you did not mean to touch
-it, that is what happened: rebase and re-apply.
+because that branch's `modules/static_site` still grants five actions. The symptom appears much
+later and nowhere near the cause: a deploy uploads the whole site and then fails on the wait with
+`AccessDenied`, so the files are in the bucket and nobody can confirm the edge is serving them.
+
+**The plan's counts do not catch this.** A revert of a shared module reads as `1 to change` —
+which is exactly what an intended edit reads as. The counts catch a stale branch that is about to
+*destroy* something; only reading the diff body for that one resource catches a stale branch that
+is about to *undo* something. So on any apply that touches
+`aws_ssoadmin_permission_set_inline_policy.site_publisher`, read the JSON in the diff and count
+the actions: six, including `cloudfront:GetInvalidation`. Five means the branch is behind — stop,
+rebase, re-plan.
 
 Then pick up the new policy in your publisher sessions and prove the widening is exactly one
 action wide:

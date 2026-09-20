@@ -309,6 +309,55 @@ Success looks like: the version list is non-empty to begin with, and empty (`{}`
 takedown credential can remove an object *and its versions*, which is what a removal request
 requires. Delete the probe from any local copy too.
 
+**The bucket's own configuration**, read back from the account rather than from the plan. This is
+the live half of what `tests/evidence_bucket.tftest.hcl` asserts offline, and it is cheaper to
+catch a wrong lifecycle rule in dev than to create it in prod first.
+
+**Operator command** (expected runtime ~2 min)
+```bash
+export AWS_PROFILE=debate-admin
+export AWS_PAGER=""          # the lifecycle output is long enough to trigger the pager otherwise
+BUCKET=debate-dev-evidence-a7508de8
+ALIAS=alias/debate-dev-evidence
+
+echo "== public access block (expect all four true)"
+aws s3api get-public-access-block --bucket "$BUCKET" --query 'PublicAccessBlockConfiguration' --output json
+
+echo "== versioning (expect Enabled)"
+aws s3api get-bucket-versioning --bucket "$BUCKET" --output json
+
+echo "== encryption (expect aws:kms with this environment's key, BucketKeyEnabled true)"
+aws s3api get-bucket-encryption --bucket "$BUCKET" \
+  --query 'ServerSideEncryptionConfiguration.Rules' --output json
+
+echo "== lifecycle (expect 3 rules, and exactly one Expiration block, under exports/)"
+aws s3api get-bucket-lifecycle-configuration --bucket "$BUCKET" --output json
+
+echo "== the key is customer-managed and rotating"
+# get-key-rotation-status does not accept an alias, unlike most KMS calls, so resolve it first.
+KEY_ID=$(aws kms describe-key --key-id "$ALIAS" --query 'KeyMetadata.KeyId' --output text)
+aws kms describe-key --key-id "$ALIAS" \
+  --query 'KeyMetadata.{KeyId:KeyId,Manager:KeyManager,State:KeyState}' --output table
+aws kms get-key-rotation-status --key-id "$KEY_ID" --output json
+```
+Success looks like: all four public-access flags `true`; versioning `Enabled`; `aws:kms` with the
+`KMSMasterKeyID` this environment's own key and `BucketKeyEnabled: true`; `KeyManager: CUSTOMER`,
+`KeyState: Enabled` and `"KeyRotationEnabled": true`; and three lifecycle rules —
+
+* `age-out-superseded-evidence-versions`: `NoncurrentVersionExpiration.NoncurrentDays` 30 in dev
+  and 365 in prod, **no `Expiration` block**, and a `NoncurrentVersionTransitions` entry to
+  `STANDARD_IA` at 30 days in prod only (dev omits it on purpose — see the module README).
+* `expire-bulk-export-archives`: `Filter.Prefix: "exports/"`, `Expiration.Days: 1`.
+* `abort-incomplete-multipart-uploads`: `DaysAfterInitiation: 7`.
+
+**The thing to look hardest at is that no rule except the `exports/` one has an `Expiration`
+block.** That is the guarantee that evidence is never deleted by a timer.
+
+`TransitionDefaultMinimumObjectSize: all_storage_classes_128K` also appears, and is the provider
+and S3 default: objects under 128 KB are not transitioned to Standard-IA. That is the behaviour to
+want, because Standard-IA bills a 128 KB minimum per object, so moving a smaller object there
+costs more than leaving it in Standard.
+
 ## Step 6 — Apply prod, then repeat the checks
 
 Only after dev is applied and every check above has passed.

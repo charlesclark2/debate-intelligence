@@ -93,28 +93,77 @@ hosted zones and never creates or destroys one; a `destroy` that took a zone wit
 the domain. A zone whose name servers have not propagated will make the certificate step in step 3
 sit for its full 30-minute timeout, so check first.
 
+The `aws sso login` is part of this block on purpose: an expired token fails the two `aws` calls
+while `dig` still answers, which reads like a DNS result and is not one.
+
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere
 ```bash
 export AWS_PROFILE=debate-admin
+aws sso login --sso-session debate
+
 for DOMAIN in wfbdebate.org wfbdebate.com; do
-  echo "== $DOMAIN"
-  aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN" \
-    --query "HostedZones[?Name=='${DOMAIN}.'].{Id:Id,Records:ResourceRecordSetCount}" --output table
-  echo "-- name servers the internet sees:"
-  dig +short NS "$DOMAIN" @1.1.1.1
+  echo "===== $DOMAIN"
+
+  echo "-- the hosted zone, and the name servers it expects to be delegated to:"
+  ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN" \
+    --query "HostedZones[?Name=='${DOMAIN}.'].Id | [0]" --output text)
+  echo "   zone: $ZONE_ID"
+  aws route53 get-hosted-zone --id "$ZONE_ID" \
+    --query 'DelegationSet.NameServers' --output text | tr '\t' '\n' | sed 's/^/   /'
+
+  echo "-- is it registered at all, and with which name servers?"
+  whois "$DOMAIN" 2>/dev/null \
+    | grep -iE '^[[:space:]]*(Domain Name|Registrar|Creation Date|Name Server|Domain Status):' \
+    | sed 's/^[[:space:]]*/   /' | head -12
+
+  echo "-- what the registry itself publishes (authoritative; no resolver cache in the way):"
+  # NS rows only. An answer that holds nothing but the TLD's own SOA means the registry has no
+  # delegation for this name, and reading its TTL as a name server is an easy mistake to make.
+  dig +noall +authority +answer NS "$DOMAIN" @$(dig +short NS "${DOMAIN##*.}." | head -1) \
+    | awk '$4 == "NS" { print "   " $5 }'
+
+  echo "-- what a public resolver sees:"
+  dig +short NS "$DOMAIN" @1.1.1.1 | sed 's/^/   /'
 done
 ```
-Success looks like: one hosted zone per domain, and four `awsdns` name servers returned by the
-public resolver for each. If `dig` returns nothing, the delegation has not propagated yet —
-registration the same day can take a few hours. Wait and re-run; do not go on to step 3's domain
-apply until both answer.
+Success looks like: a `whois` block naming a registrar and a creation date, a zone id, and the
+**same four `awsdns` name servers** in the zone, the registry and the public resolver. The
+registry line is the one that matters — a public resolver can lag it by minutes, but it cannot be
+ahead of it.
 
-If a domain's registrar is not Route 53, compare the registrar's name-server list with the zone's:
+Three ways this comes back wrong, and what each means:
 
+| What you see | What it means | What to do |
+|---|---|---|
+| `whois` says `Domain not found` / `No match` | **The domain is not registered.** It is not a propagation delay; there is nothing to propagate | Register it, or check whether the purchase completed — see the block below. Nothing in step 3b or step 5 can work for that name |
+| `whois` names a registrar, but the registry line is empty | Registered; the delegation has not been published yet. Same-day registration can take a few hours | Wait and re-run |
+| The registry's name servers differ from the zone's | The registrar points somewhere else | Fix the name-server list in the registrar's console — an operator step, never Terraform — then re-run |
+
+**Do not run step 3b or step 5 for a domain whose registry line is still empty**: the certificate
+wait will sit for its full 30 minutes and then fail the apply. Step 3a needs no DNS at all and can
+be run meanwhile, which is the point of it being a separate step.
+
+If a domain was bought through Route 53 and has not appeared, the registration may still be
+running or may have failed. The Route 53 Domains API lives only in `us-east-1`.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
 ```bash
-aws route53 get-hosted-zone --id <zone-id> --query 'DelegationSet.NameServers' --output text
+export AWS_PROFILE=debate-admin
+
+echo "== domains this account holds"
+aws route53domains list-domains --region us-east-1 \
+  --query 'Domains[].{Name:DomainName,Expiry:Expiry,AutoRenew:AutoRenew}' --output table
+
+echo "== recent registration operations and how they ended"
+aws route53domains list-operations --region us-east-1 \
+  --query 'Operations[?Type==`REGISTER_DOMAIN`].{Domain:DomainName,Status:Status,Submitted:SubmittedDate,Message:Message}' \
+  --output table
 ```
+Success looks like: both domains listed, and every `REGISTER_DOMAIN` operation `SUCCESSFUL`. A
+`FAILED` operation carries the reason in `Message`; an `IN_PROGRESS` one just needs time. A domain
+that appears in neither list was never bought from this account.
 
 Changing name servers at a registrar is a manual step in the registrar's console. It is not
 Terraform's job and never an agent's.
@@ -417,7 +466,8 @@ and hosted zone names are fine here; **the account id is not**.
 
 | Check | Result | Date |
 |---|---|---|
-| Hosted zones delegated (`dig NS`) | _pending_ | |
+| Both domains registered (`whois`) | `wfbdebate.com` registered 2026-09-20T17:11:33Z (Amazon Registrar). **`wfbdebate.org`: `Domain not found` at the `.org` registry as of 2026-09-20T17:54Z** | 2026-09-20 |
+| Hosted zones delegated (registry `NS`) | `wfbdebate.com` delegated to four `awsdns` servers, visible at the registry and at 1.1.1.1 and 8.8.8.8. `wfbdebate.org` has no delegation, because it has no registration | 2026-09-20 |
 | `DebateMaintainer` denied Identity Center writes and `debate-prod-*` | _pending_ | |
 | Four block-public-access flags on both buckets | _pending_ | |
 | Direct S3 object URL returns `AccessDenied` (both) | _pending_ | |

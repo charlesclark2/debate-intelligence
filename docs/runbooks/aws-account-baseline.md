@@ -236,24 +236,23 @@ write is a deliberate break-glass action through `DebateBreakGlassAdmin`.
 
 ## Step 7 — Verify the baseline
 
+Which profile runs each check matters. `debate-dev` (`DebateMaintainer`) is **denied** every
+`debate-shared-*` and `debate-prod-*` bucket by design, so the audit-bucket checks run under
+`debate-prod` (`DebateReadOnly`), which has read access and no denies.
+
 ```bash
-# Identity: three permission sets exist and you can reach the account through them
 aws sso-admin list-permission-sets --instance-arn <instance-arn> --profile debate-dev
 
-# Audit: the trail is organization-wide, multi-region and validating log files
 aws cloudtrail describe-trails --profile debate-dev \
   --query 'trailList[?Name==`debate-shared-organization-trail`].{Org:IsOrganizationTrail,MultiRegion:IsMultiRegionTrail,Validation:LogFileValidationEnabled,Kms:KmsKeyId}'
 
-# Audit: it is actually logging
 aws cloudtrail get-trail-status --name debate-shared-organization-trail --profile debate-dev \
   --query '{Logging:IsLogging,LastDelivery:LatestDeliveryTime}'
 
-# Audit: the log bucket is private, versioned and encrypted
-aws s3api get-public-access-block --bucket debate-shared-cloudtrail-<account-id> --profile debate-dev
-aws s3api get-bucket-versioning   --bucket debate-shared-cloudtrail-<account-id> --profile debate-dev
-aws s3api get-bucket-encryption   --bucket debate-shared-cloudtrail-<account-id> --profile debate-dev
+aws s3api get-public-access-block --bucket debate-shared-cloudtrail-<account-id> --profile debate-prod
+aws s3api get-bucket-versioning   --bucket debate-shared-cloudtrail-<account-id> --profile debate-prod
+aws s3api get-bucket-encryption   --bucket debate-shared-cloudtrail-<account-id> --profile debate-prod
 
-# Cost: budgets and the anomaly monitor exist
 aws budgets describe-budgets --account-id <account-id> --profile debate-dev \
   --query 'Budgets[?starts_with(BudgetName, `debate-`)].{Name:BudgetName,Limit:BudgetLimit.Amount}'
 aws ce get-anomaly-monitors --profile debate-dev \
@@ -261,6 +260,25 @@ aws ce get-anomaly-monitors --profile debate-dev \
 ```
 
 The trail's first log delivery can take up to 15 minutes. `IsLogging` should be `true` immediately.
+
+Trail *metadata* is readable from `debate-dev` — the maintainer denies cover `DeleteTrail`,
+`StopLogging`, `UpdateTrail` and `PutEventSelectors`, not `describe-trails` or `get-trail-status`.
+Seeing that the trail exists and is logging is not a privilege worth withholding.
+
+### Verify the environment boundary actually holds
+
+ADR-0010's single-account fallback rests on `DebateMaintainer` being unable to reach prod and
+shared resources. Confirm the deny is real rather than assumed - **both of these must fail**:
+
+```bash
+aws s3 ls s3://debate-shared-cloudtrail-<account-id>/ --profile debate-dev
+aws s3api get-bucket-versioning --bucket debate-shared-cloudtrail-<account-id> --profile debate-dev
+```
+
+Each must return `AccessDenied ... with an explicit deny in an identity-based policy`. A success
+here means the boundary is gone and the fallback's premise no longer holds: stop and fix the
+permission set before putting evidence in the account. Re-run this check after
+`v1-e29-t03-evidence-buckets` lands, against the prod evidence bucket.
 
 ### Confirm a budget alert actually arrives
 

@@ -62,9 +62,6 @@ spec:
     - kind: TaskRef
       name: v1-e02-t05-settings-config
       relation: dependsOn
-    - kind: TaskRef
-      name: v1-e02-t05-settings-config
-      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

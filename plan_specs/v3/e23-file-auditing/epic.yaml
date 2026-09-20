@@ -20,7 +20,7 @@ spec:
   description: >-
     Audit a disadvantage (and later other) file's 1NC shell for coherence and compare shell cards against
     in-file and newer external alternatives with explained tradeoffs.
-  priority: 14
+  priority: 15
   constraints:
     majorVersion: v3
     release: v3.2

@@ -20,7 +20,7 @@ spec:
   description: >-
     Summarize an opponent's disclosed positions and results into a sourced scouting report and feed disclosures
     into coverage predictions.
-  priority: 16
+  priority: 17
   constraints:
     majorVersion: v3
     release: v3.4

@@ -35,13 +35,14 @@ decision lands.
 | ADR | Topic | Owning spec |
 |---|---|---|
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
-| 0012 | Web hosting | [`v2-e14-t03-app-hosting`](../../plan_specs/v2/e14-web-cut-card/t03-app-hosting.yaml) |
+| 0012 | Web hosting (public team site first; the V2 app mounts under the same domain) | [`v1-e36-t02-site-hosting`](../../plan_specs/v1/e36-team-website/t02-site-hosting.yaml) |
+| 0015 | How coaches edit website content (calendar source and CMS) | [`v1-e37-t01-content-editing-decision`](../../plan_specs/v1/e37-calendar-and-announcements/t01-content-editing-decision.yaml) |
 
-New ADRs take the next free number after the highest written or reserved one: **0015** is the
+New ADRs take the next free number after the highest written or reserved one: **0016** is the
 next free number. Do not skip numbers; if a reservation is dropped, note it here rather than silently
 reusing the number.
 
-## Proposing a new ADR (ADR-0015+)
+## Proposing a new ADR (ADR-0016+)
 
 1. **Confirm this needs an ADR.** ADRs record decisions that shape the architecture and
    would be expensive to reverse. Configuration choices, feature toggles, and everyday
@@ -51,7 +52,7 @@ reusing the number.
    numbers* table in this README in the same PR.
 3. **Copy [0000-template.md](0000-template.md)** to `docs/adr/NNNN-short-descriptive-title.md`.
    Use kebab-case slugs; keep the title short but say what the decision is
-   (`0015-signed-url-download-strategy.md`, not `0015-download.md`).
+   (`0016-signed-url-download-strategy.md`, not `0016-download.md`).
 4. **Write in the standard sections.** Status, Context, Decision, Consequences,
    Alternatives considered, References. Reference at least one section anchor in
    [docs/architecture/architecture_proposal.md](../architecture/architecture_proposal.md);

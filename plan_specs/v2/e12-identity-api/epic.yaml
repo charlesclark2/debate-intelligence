@@ -20,7 +20,7 @@ spec:
   description: >-
     Provide Cognito sign-in (password + Google), the FastAPI service over debate_core use cases, role/tenant
     authorization, and API Gateway → Fargate deployment.
-  priority: 7
+  priority: 8
   constraints:
     majorVersion: v2
     release: v2.0

@@ -16,7 +16,7 @@ spec:
   description: >-
     Quotas, audit logs, retention/deletion, backups, cost telemetry and a completed privacy/legal review
     clear the platform for team-wide use.
-  priority: 11
+  priority: 12
   acceptanceCriteria:
   - id: epic-e19
     description: >-

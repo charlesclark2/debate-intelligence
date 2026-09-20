@@ -16,7 +16,7 @@ spec:
   description: >-
     Uploaded debate files are parsed (with the V1 parser) into sections/cards and an explicit, sourced
     argument graph.
-  priority: 12
+  priority: 13
   acceptanceCriteria:
   - id: epic-e20
     description: >-

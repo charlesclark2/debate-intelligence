@@ -20,7 +20,7 @@ spec:
   description: >-
     Design AppTable access patterns, provision DynamoDB and S3, and implement cloud repositories that
     pass the V1 contract tests unchanged.
-  priority: 7
+  priority: 8
   constraints:
     majorVersion: v2
     release: v2.0

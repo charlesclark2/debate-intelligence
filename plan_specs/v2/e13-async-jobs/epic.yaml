@@ -20,7 +20,7 @@ spec:
   description: >-
     Represent slow work as durable jobs: SQS-backed workers, Step Functions workflows for card and search
     jobs, status APIs and domain events.
-  priority: 8
+  priority: 9
   constraints:
     majorVersion: v2
     release: v2.1

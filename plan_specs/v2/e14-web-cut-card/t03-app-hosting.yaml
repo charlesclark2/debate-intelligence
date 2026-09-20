@@ -19,11 +19,14 @@ spec:
   description: >-
     Host the Next.js app in two environments, dev and prod (ADR-0013,
     docs/process/branching-and-environments.md), with per-environment configuration and preview deploys
-    for pull requests. The dev web environment deploys from the dev branch; prod hosting deploys only from
+    for pull requests, under the team domain that v1-e36-t02 already set up for the public team site
+    (ADR-0012 records the domain, CloudFront and certificate approach; this task adds the app's hosting
+    decision to it as a dated amendment or a superseding ADR, and mounts the app at a subdomain or path
+    without disturbing the public site). The dev web environment deploys from the dev branch; prod hosting deploys only from
     main, through the `production` GitHub Environment approval and the promotion pipeline of v2-e12-t07;
     PR preview deploys always point at the DEV API and dev Cognito. Decide between Amplify Hosting
     (managed SSR, built-in previews, lowest effort) and CloudFront + ECS Fargate (reuses E10 platform,
-    more control) in an ADR weighing cost at team scale, SSR/middleware support, preview environments and
+    more control), recorded against ADR-0012, weighing cost at team scale, SSR/middleware support, preview environments and
     operational burden, then implement the choice in Terraform with a custom domain, ACM certificate,
     HTTPS-only, security headers (CSP, HSTS, frame-ancestors none) and environment variables sourced per
     environment. Cognito callback URLs and API CORS origins are updated to match. This task owns hosting
@@ -52,6 +55,9 @@ spec:
       relation: dependsOn
     - kind: TaskRef
       name: v2-e12-t07-promotion-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t02-site-hosting
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

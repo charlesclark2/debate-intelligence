@@ -16,7 +16,7 @@ spec:
   description: >-
     Debaters sign in to the web app and browse, search and download the team's evidence files (the debate
     tub); students paste a URL and get a verified card through an async job.
-  priority: 8
+  priority: 9
   acceptanceCriteria:
   - id: epic-e13
     description: >-

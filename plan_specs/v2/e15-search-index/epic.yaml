@@ -20,7 +20,7 @@ spec:
   description: >-
     Provision OpenSearch Serverless as a derived index, embed snapshots/cards with Titan, run hybrid BM25
     + vector retrieval, rerank with Cohere, and rebuild indexes from the source of truth.
-  priority: 9
+  priority: 10
   constraints:
     majorVersion: v2
     release: v2.2

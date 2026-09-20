@@ -21,7 +21,7 @@ spec:
     Give debaters a signed-in "debate tub" in the web app: browse, search and download the team's built
     files, caselist sources and camp files from the S3 evidence store, organized by topic, position and
     side.
-  priority: 8
+  priority: 9
   constraints:
     majorVersion: v2
     release: v2.1

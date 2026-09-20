@@ -20,7 +20,7 @@ spec:
   description: >-
     Extend the V1 AWS baseline (E29: account, Terraform state, evidence buckets) into the V2 platform:
     keyless CI deploys, KMS and secrets, the container platform and observability.
-  priority: 7
+  priority: 8
   constraints:
     majorVersion: v2
     release: v2.0

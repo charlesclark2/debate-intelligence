@@ -20,7 +20,7 @@ spec:
   description: >-
     Parse a pasted or saved card into claim/warrant/internal-link/impact components and generate grounded
     extensions, CX questions and likely answers with inference clearly labeled.
-  priority: 10
+  priority: 11
   constraints:
     majorVersion: v2
     release: v2.3

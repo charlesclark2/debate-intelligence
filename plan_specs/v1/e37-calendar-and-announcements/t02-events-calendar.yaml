@@ -1,0 +1,204 @@
+# TASK v1-e37-t02-events-calendar — Events and tournaments calendar
+# Epic: E37 Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §14 (privacy), §15 (external source failures), ADR-0012, ADR-0015
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t02-events-calendar
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: Events and tournaments calendar
+    debate/architecture-refs: §14, §15, ADR-0012, ADR-0015
+spec:
+  description: >-
+    Turn the team Google Calendar chosen in ADR-0015 into site pages at build time. A prebuild step in
+    site/ fetches the public ICS feed (or the Calendar API with a read-only key from the environment, never
+    from git), normalizes events (America/Chicago time zone, all-day and multi-day tournaments, recurring
+    practices expanded for a bounded window), and writes a typed events dataset the static export renders
+    into an upcoming-events page and per-tournament pages (dates, location, entry deadline, travel notes,
+    event types such as Policy/LD/PF where the coach tagged them). Parents get a subscribe link (webcal/ICS
+    plus an add-to-Google link) that works in Google, Apple and Outlook calendars. When the fetch fails or
+    returns an invalid feed, the build uses the last good snapshot and shows its "last updated" date instead
+    of failing or publishing an empty calendar. Event text is public: the build drops email addresses and
+    phone numbers from descriptions and warns. Boundaries: announcements are t03, scheduled rebuilds and
+    deploy triggers are t04, account setup and conventions are t01; the existing "events explained" copy
+    from v1-e36-t04 is linked, not rewritten.
+  priority: 1
+  constraints:
+    packages: [site/lib/calendar, site/app/events, site/scripts]
+    forbidden:
+      - Committing calendar API keys or the private ICS ("secret address") URL; env-provided values only
+      - Client-side calls to Google from visitors' browsers or embedding Google's calendar iframe
+      - Live network calls in `pnpm --dir site test`; tests use recorded ICS fixtures and an injected fetcher
+      - Failing the build or publishing an empty calendar because the calendar source is unreachable
+      - Publishing student names, contact details or rosters from event text
+  context:
+    - kind: TaskRef
+      name: v1-e37-t01-content-editing-decision
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t04-core-pages
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `pnpm --dir site build` with the recorded fixture feed produces /events listing upcoming events in
+        date order (past events hidden) and one page per tournament showing dates, location, entry deadline
+        and travel notes, all times rendered in America/Chicago.
+    - id: ac2
+      description: >-
+        When the calendar fetch errors, times out or returns an unparseable feed, the build succeeds using
+        the last good snapshot, logs a warning with the snapshot age, and the page shows a "last updated"
+        date; with no snapshot at all it renders a "calendar temporarily unavailable" message plus the
+        subscribe link.
+    - id: ac3
+      description: >-
+        The subscribe section offers a webcal:// link, the plain https ICS URL and an add-to-Google link, and
+        the ICS URL is the calendar's public address (not the secret address).
+    - id: ac4
+      description: >-
+        The calendar URL/key are read only from environment variables documented in site/.env.example, the
+        repository contains no key, and descriptions containing an email address or phone number are
+        stripped of it with a build warning.
+    - id: ac5
+      description: >-
+        Pages pass the site's accessibility and lint checks and the calendar tests run offline in under ten
+        seconds.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t02-events-calendar-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Record fixtures, build the parser and normalizer, add the fetch step with last-good fallback, render the
+    pages and subscribe links, then run the full offline quality gates.
+  goalRef:
+    name: v1-e37-t02-events-calendar
+  graph:
+    nodes:
+      - id: fixtures-and-model
+        kind: Task
+        name: Recorded ICS fixtures and event model
+        description: >-
+          Export the test calendar from t01 as recorded ICS fixtures (normal, all-day multi-day tournament,
+          recurring practice, DST boundary, malformed feed) with any real names removed, and define the
+          TeamEvent type and zod schema (id, title, kind, start, end, allDay, location, entryDeadline,
+          travelNotes, divisions, sourceUpdatedAt).
+        outputs:
+          - site/tests/fixtures/calendar/team.ics
+          - site/tests/fixtures/calendar/malformed.ics
+          - site/lib/calendar/types.ts
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Recorded calendar fixture exists
+            path: site/tests/fixtures/calendar/team.ics
+            contentMatch: "BEGIN:VCALENDAR"
+          - type: artifact_exists
+            name: Event schema defined
+            path: site/lib/calendar/types.ts
+            contentMatch: "entryDeadline"
+      - id: parse-normalize
+        kind: Task
+        name: ICS parsing and normalization
+        description: >-
+          Parse ICS with a maintained library (e.g. ical.js), expand recurrences for a bounded window, convert
+          to America/Chicago, extract entry deadline / travel notes / division tags using the conventions from
+          the coach guide, classify tournaments vs. other events, and strip emails and phone numbers from
+          descriptions with a warning.
+        dependsOn: [fixtures-and-model]
+        outputs: [site/lib/calendar/parse.ts, site/tests/calendar/parse.test.ts]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parsing and normalization tests pass
+            command: pnpm
+            args: [--dir, site, test, --, tests/calendar/parse.test.ts]
+      - id: fetch-with-fallback
+        kind: Task
+        name: Build-time fetch with last-good fallback
+        description: >-
+          Add a prebuild script that reads SITE_CALENDAR_ICS_URL (or GOOGLE_CALENDAR_ID plus
+          GOOGLE_CALENDAR_API_KEY) from the environment, fetches with a timeout and one retry through an
+          injectable fetcher, validates the result, writes the dataset and refreshes the last-good snapshot
+          only on success; on failure it falls back to the snapshot with a warning. Document variables in
+          site/.env.example (placeholders) and keep .env*.local and the cache dir gitignored.
+        dependsOn: [parse-normalize]
+        outputs:
+          - site/scripts/fetch-calendar.ts
+          - site/.env.example
+          - site/tests/calendar/fetch.test.ts
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fetch success, timeout, bad feed and no-snapshot cases pass offline
+            command: pnpm
+            args: [--dir, site, test, --, tests/calendar/fetch.test.ts]
+          - type: artifact_exists
+            name: Calendar variables documented with placeholders
+            path: site/.env.example
+            contentMatch: "SITE_CALENDAR_ICS_URL="
+      - id: pages-and-subscribe
+        kind: Task
+        name: Events pages and subscribe links
+        description: >-
+          Render /events (upcoming list grouped by month, tournament badge, "last updated" note) and
+          /events/[slug] tournament pages via generateStaticParams, add an upcoming-events teaser to the home
+          page, link to the "events explained" page, and add the subscribe block (webcal, https ICS,
+          add-to-Google). Update the sitemap.
+        dependsOn: [fetch-with-fallback]
+        outputs:
+          - site/app/events/page.tsx
+          - "site/app/events/[slug]/page.tsx"
+          - site/components/SubscribeCalendar.tsx
+          - site/tests/calendar/pages.test.tsx
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Events page rendering tests pass
+            command: pnpm
+            args: [--dir, site, test, --, tests/calendar/pages.test.tsx]
+          - type: command_succeeds
+            name: Static export builds from fixture data
+            command: pnpm
+            args: [--dir, site, build]
+      - id: quality-gates
+        kind: Task
+        name: Offline quality gates and smoke check
+        description: >-
+          Run lint, the full offline test suite and the build with the network-free fixture fetcher; add
+          /events to the site smoke checks used by the deploy flow from v1-e36-t05; verify on the dev preview
+          (after an operator deploy) that the subscribe link imports in Google, Apple and Outlook.
+        dependsOn: [pages-and-subscribe]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Site lint passes
+            command: pnpm
+            args: [--dir, site, lint]
+          - type: test_passes
+            name: Full site test suite passes offline
+            command: pnpm
+            args: [--dir, site, test]
+          - type: custom
+            name: Subscribe link works in three calendar apps
+            description: >-
+              Charlie subscribes to the feed from the dev preview in Google Calendar, Apple Calendar and
+              Outlook and sees the test tournament with the right local time.
+status:
+  phase: Pending

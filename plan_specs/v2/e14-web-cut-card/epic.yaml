@@ -20,7 +20,7 @@ spec:
   description: >-
     Build the Next.js application, authentication UX, hosting, and the first end-to-end web workflow:
     paste a URL, get a verified card, edit within provenance rules, export.
-  priority: 8
+  priority: 9
   constraints:
     majorVersion: v2
     release: v2.1
@@ -89,6 +89,14 @@ spec:
       inputs:
         goalRef: v1-e29-t02-terraform-bootstrap
         specRef: plan_specs/v1/e29-cloud-evidence-store/t02-terraform-bootstrap.yaml
+    - id: ext-v1-e36-t02-site-hosting
+      kind: External
+      name: 'Prerequisite from E36: Site hosting infrastructure (ADR-0012)'
+      description: >-
+        Cross-epic prerequisite owned by v1-e36-team-website (release v1.6).
+      inputs:
+        goalRef: v1-e36-t02-site-hosting
+        specRef: plan_specs/v1/e36-team-website/t02-site-hosting.yaml
     - id: ext-v2-e11-t05-optimistic-concurrency
       kind: External
       name: 'Prerequisite from E11: Optimistic concurrency for cards and files'
@@ -201,6 +209,7 @@ spec:
       - ext-v2-e12-t01-cognito-user-pool
       - ext-v2-e12-t04-api-deploy
       - ext-v2-e12-t07-promotion-pipeline
+      - ext-v1-e36-t02-site-hosting
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e14-t03-app-hosting reports phase Succeeded

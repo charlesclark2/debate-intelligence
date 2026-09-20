@@ -204,9 +204,26 @@ exits 0. It exits 1 today, on purpose.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- The pages match the facts Charlie supplied, including the practice schedule, the Remind code, the
+  school email, the affiliations and the October 1 announcement. No student names, no photos and an
+  empty consent manifest, which is what the policy requires while the roster does not exist.
+- `publishing-policy.ts` running inside `next build` is the right place for this. A policy that only
+  lives in a document drifts; one that fails the production build does not. Verifying each rule
+  against real prod builds rather than only unit tests is what makes that credible.
+- Both deviations are accepted:
+  - No per-page route files: the t03 `[slug]` route already generates them and adding them would
+    collide.
+  - The brand-asset swap touches `site/public/` and `site/src/components/`, outside the stated
+    packages. It was necessary to use the transparent and knockout marks the PM supplied, and it is
+    the smaller change compared with leaving a text wordmark in the footer.
+- ac5(b) (phone-width walk plus the 16-item checklist) is Charlie's to run at PR time, where the
+  spec puts it. Accepting on that basis: if the walk turns something up, it is a follow-up commit on
+  this branch before merge, not a new task.
+- The `[[TBD]]` room marker correctly fails a prod build. It blocks the t05 launch, not this task.
+  The room goes in as a content edit once Charlie has it.

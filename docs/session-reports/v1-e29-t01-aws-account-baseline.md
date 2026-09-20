@@ -253,10 +253,16 @@ alert email received. Two items remain. Neither blocks a Goal criterion.
 
 **1. Activate the `Project` and `Environment` cost allocation tags** (~1 min, once AWS surfaces them)
 
-**The three budgets measure $0 until this is done.** They exist and alert correctly - the delivery
-path is proven - but with the tags inactive they have nothing to measure, so they will never fire
-on real spend. A tag key only becomes activatable after AWS has seen a resource carrying it, which
-is why it could not be done before the apply; as of 2026-09-20 they had not yet surfaced.
+The only item still open. **The three budgets measure $0 until this is done** - they exist and
+alert correctly, but with the tags inactive they have nothing to measure and will never fire on
+real spend.
+
+This is a billing-data lag, not a configuration defect. Both tags were confirmed present on the
+two billable resources on 2026-09-20 - the S3 log bucket and the KMS key, each carrying
+`Project=debate-intelligence` and `Environment=shared` - so the keys will surface once AWS
+attributes a billed line item to them. The KMS key is the dependable one: it bills about $1/month
+whether or not it is used, while the log bucket holds very little. An attempt on 2026-09-20
+returned `ValidationException: Tag keys not found`, which is expected that soon after the apply.
 
 ```bash
 aws ce list-cost-allocation-tags \
@@ -266,17 +272,15 @@ aws ce update-cost-allocation-tags-status --cost-allocation-tags-status \
   TagKey=Project,Status=Active TagKey=Environment,Status=Active
 ```
 
-Both must read `Active`. If they have not appeared within 48 hours of the apply, that is worth
-investigating rather than waiting on - it would mean no billed usage is being attributed to the
-tagged resources.
+Both must read `Active`. Activation is per tag *key*, not per value, so activating `Environment`
+from its `shared` value also covers `dev` and `prod` once t03 creates resources carrying them.
 
-**2. Delete the alert-delivery test budget** (~10 seconds)
+If the keys have not appeared within 48 hours of the apply, investigate rather than keep waiting:
+it would mean no billed usage is being attributed to the tagged resources, and the budgets would
+stay silent indefinitely.
 
-Created outside Terraform, so it never entered state, but it will keep emailing until removed.
-
-```bash
-aws budgets delete-budget --account-id <account-id> --budget-name debate-alert-delivery-test
-```
+**2. Delete the alert-delivery test budget** — done 2026-09-20; `describe-budget` returns
+`NotFoundException`.
 
 ## Follow-up work
 

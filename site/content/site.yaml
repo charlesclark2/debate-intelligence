@@ -7,5 +7,18 @@ navigationLabel: Main
 skipLinkLabel: Skip to main content
 logoAlternativeText: Whitefish Bay Blue Dukes
 footerNote: >-
-  Whitefish Bay High School, Whitefish Bay, Wisconsin. This site is maintained by the debate team's
-  coaches.
+  A site run by the Whitefish Bay High School Debate Team, Whitefish Bay, Wisconsin. It is
+  maintained by the team's coaches and is not an official district communication.
+
+# The email allowlist. These are the only addresses that may appear anywhere on the site, in copy
+# or in a mailto link; src/lib/publishing-policy.ts fails the build on any other address, and on
+# any phone number. Coach and team addresses only: a student address is never published
+# (docs/policies/website-publishing.md, Students 6).
+contactEmails:
+  - address: charles.clark@wfbschools.org
+    name: Charlie Clark
+    role: Head Coach
+
+# Navigation label for the Debater login link. The link itself only renders when the debaterLogin
+# feature flag is on, which it is not until the V2 app in web/ exists. See src/lib/feature-flags.ts.
+debaterLoginLabel: Debater login

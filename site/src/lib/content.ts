@@ -32,7 +32,26 @@ export const ACRONYM_EXPANSIONS: ReadonlyMap<string, string> = new Map([
   ['TOC', 'Tournament of Champions'],
   ['LD', 'Lincoln-Douglas'],
   ['PF', 'Public Forum'],
+  ['WDCA', 'Wisconsin Debate Coaches Association'],
 ])
+
+/**
+ * A fact only Charlie can supply, written into the copy as `[[TBD]]` or `[[TBD: what is needed]]`.
+ *
+ * The marker renders as a visible "TBD" so a dev preview shows exactly where the gaps are, and
+ * `src/lib/publishing-policy.ts` fails a prod build while any of them remain. That is the build
+ * guard the task spec asks for: nobody has to remember that the room number was never filled in.
+ */
+export const PLACEHOLDER_PATTERN = /\[\[TBD(?::\s*([^\]]*))?\]\]/g
+
+/** The notes attached to every placeholder marker in a string, in the order they appear. */
+export function findPlaceholders(text: string): string[] {
+  return [...text.matchAll(PLACEHOLDER_PATTERN)].map((match) => match[1]?.trim() ?? '')
+}
+
+function renderPlaceholders(text: string): string {
+  return text.replace(PLACEHOLDER_PATTERN, '<span class="placeholder">TBD</span>')
+}
 
 export const pageFrontMatterSchema = z.object({
   title: z.string().min(1, 'title must not be empty'),
@@ -43,6 +62,13 @@ export const pageFrontMatterSchema = z.object({
   draft: z.boolean().optional(),
 })
 
+/** One coach or team address. The site publishes no other kind of address. */
+export const contactEmailSchema = z.object({
+  address: z.string().min(1).regex(/^[^@\s]+@[^@\s]+\.[^@\s]+$/, 'must be an email address'),
+  name: z.string().min(1),
+  role: z.string().min(1),
+})
+
 export const siteSettingsSchema = z.object({
   name: z.string().min(1),
   shortName: z.string().min(1),
@@ -51,9 +77,12 @@ export const siteSettingsSchema = z.object({
   logoAlternativeText: z.string().min(1),
   navigationLabel: z.string().min(1),
   skipLinkLabel: z.string().min(1),
+  contactEmails: z.array(contactEmailSchema).min(1),
+  debaterLoginLabel: z.string().min(1),
 })
 
 export type PageFrontMatter = z.infer<typeof pageFrontMatterSchema>
+export type ContactEmail = z.infer<typeof contactEmailSchema>
 export type SiteSettings = z.infer<typeof siteSettingsSchema>
 
 export interface ContentPage {
@@ -71,6 +100,11 @@ export interface ContentPage {
   draft: boolean
   /** Markdown body rendered to HTML at build time. */
   html: string
+  /**
+   * One entry per `[[TBD]]` marker left in the file, holding the note written beside it. Empty on
+   * a page that is ready to publish.
+   */
+  placeholders: string[]
 }
 
 /** Thrown when a content file is missing a required field or breaks a house-style rule. */
@@ -158,7 +192,7 @@ export function parsePage(slug: string, filePath: string, source: string): Conte
   assertNoEmDashesInBody(filePath, body, lineOffset)
   assertAcronymsAreExpanded(filePath, `${frontMatter.title}\n${frontMatter.description}\n${body}`)
 
-  const rendered = marked.parse(body, { async: false })
+  const rendered = marked.parse(renderPlaceholders(body), { async: false })
   if (typeof rendered !== 'string') {
     throw new ContentValidationError(filePath, 'Markdown could not be rendered synchronously')
   }
@@ -174,6 +208,7 @@ export function parsePage(slug: string, filePath: string, source: string): Conte
     ...(frontMatter.openGraphImage ? { openGraphImage: frontMatter.openGraphImage } : {}),
     draft: frontMatter.draft ?? false,
     html: rendered,
+    placeholders: findPlaceholders(`${frontMatter.title}\n${frontMatter.description}\n${body}`),
   }
 }
 

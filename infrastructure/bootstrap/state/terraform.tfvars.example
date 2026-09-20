@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored: it carries the
+# maintainer's email, which the task spec keeps out of the repository.
+#
+# Everything that is not operator-specific lives in dev.tfvars and prod.tfvars beside this file
+# and is committed, so that an apply is `-var-file=<environment>.tfvars` and nothing else.
+
+# Email of the adult maintainer accountable for these resources; becomes the Owner tag.
+owner = "you@example.com"

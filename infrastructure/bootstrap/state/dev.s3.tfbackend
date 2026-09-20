@@ -1,0 +1,6 @@
+# terraform init -migrate-state -backend-config=dev.s3.tfbackend
+bucket       = "debate-dev-tfstate-a7508de8"
+key          = "bootstrap/state/dev/terraform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true

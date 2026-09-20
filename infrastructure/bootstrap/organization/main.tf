@@ -28,9 +28,9 @@ locals {
   identity_store_id            = tolist(data.aws_ssoadmin_instances.current.identity_store_ids)[0]
 
   # ADR-0010 names every resource debate-<environment>-<purpose>. Account-wide controls that
-  # protect both environments use the `shared` scope and are treated as prod for access.
-  environments = ["dev", "prod"]
-
+  # protect both environments use the `shared` scope and are treated as prod for access, which
+  # is why the patterns below cover debate-shared-* alongside debate-prod-*.
+  #
   # Resource-name and tag patterns the permission sets use to separate environments. Written
   # once here so identity.tf cannot drift from the naming rule.
   prod_bucket_arns = [

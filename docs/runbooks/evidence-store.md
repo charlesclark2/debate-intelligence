@@ -385,35 +385,70 @@ Then add `[profile debate-prod-evidence]` and `[profile debate-prod-evidence-rem
 `BUCKET=debate-prod-evidence-a7508de8` and the prod profiles. The probe object is synthetic and
 under `quarantine/_probe/`; remove it at the end, as step 5 does.
 
-## Step 7 — Confirm in the console
+## Step 7 — Confirm the assignments
 
-The task's own acceptance criterion, and the one thing a policy simulation cannot show you.
+The configuration read-back in step 5 covers the bucket and the key. The one thing left is who
+holds each permission set — and `DebateProdEvidenceRemoval` having exactly one assignee is the
+task's own acceptance criterion.
 
-- [ ] Both buckets show **Block all public access: On** (all four).
-- [ ] Both show **Bucket Versioning: Enabled**.
-- [ ] Both show **Default encryption: SSE-KMS** with the environment's own key, and **Bucket Key:
-      Enabled**.
-- [ ] Both show a lifecycle configuration with three rules, and the only one with a current-version
-      expiration is scoped to `exports/`.
-- [ ] Both keys show **Key rotation: Enabled**.
-- [ ] In Identity Center, `DebateProdEvidenceRemoval` is assigned to exactly one user.
+**Operator command** (expected runtime ~2 min)
+```bash
+export AWS_PROFILE=debate-admin
+export AWS_PAGER=""
+INSTANCE_ARN=$(aws sso-admin list-instances --query 'Instances[0].InstanceArn' --output text)
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+for ARN in $(aws sso-admin list-permission-sets --instance-arn "$INSTANCE_ARN" \
+               --query 'PermissionSets[]' --output text); do
+  NAME=$(aws sso-admin describe-permission-set --instance-arn "$INSTANCE_ARN" \
+           --permission-set-arn "$ARN" --query 'PermissionSet.Name' --output text)
+  case "$NAME" in
+    DebateDevEvidence*|DebateProdEvidence*)
+      COUNT=$(aws sso-admin list-account-assignments --instance-arn "$INSTANCE_ARN" \
+                --account-id "$ACCOUNT_ID" --permission-set-arn "$ARN" \
+                --query 'length(AccountAssignments)' --output text)
+      echo "$NAME: $COUNT assignment(s)" ;;
+  esac
+done
+```
+Success looks like: all four sets reporting `1 assignment(s)`. More than one on either
+`*EvidenceRemoval` set means someone was added outside Terraform — the module's own variable
+validation allows only one name.
+
+The same facts are visible in the console (Identity Center → Permission sets → the set → AWS
+accounts), and S3 → the bucket → Properties and Permissions shows the block-public-access,
+versioning, encryption and lifecycle state that step 5 read back.
 
 ## The record
 
-Filled in by the operator as the applies happen. Bucket names and dates only — **no account
+Both environments applied on **2026-09-20**. Bucket names, aliases and dates only — **no account
 ids** (this repository is public).
 
 | | dev | prod |
 |---|---|---|
-| Applied on | _not yet applied_ | _not yet applied_ |
+| Applied on | 2026-09-20 | 2026-09-20 |
+| Apply result | `15 added, 0 changed, 0 destroyed` | `15 added, 0 changed, 0 destroyed` |
 | Bucket | `debate-dev-evidence-a7508de8` | `debate-prod-evidence-a7508de8` |
 | Key alias | `alias/debate-dev-evidence` | `alias/debate-prod-evidence` |
-| Put/get round trip with the everyday profile | _pending_ | _pending_ |
-| Object encrypted with this environment's key | _pending_ | _pending_ |
-| `s3:DeleteObject` denied to the everyday profile | _pending_ | _pending_ |
-| Takedown profile deleted a probe's versions under `quarantine/` | _pending_ | _pending_ |
-| Takedown profile denied a delete under `reports/` | _pending_ | _pending_ |
-| Console checklist (step 7) | _pending_ | _pending_ |
+| Key is customer-managed, enabled, rotating | PASS — `CUSTOMER`, `Enabled`, `KeyRotationEnabled: true`, 365-day period | PASS — same |
+| Put/get round trip, everyday profile | PASS — version id returned, `round trip ok` | PASS |
+| Object encrypted with this environment's own key | PASS — `aws:kms` with this environment's CMK, and **not** the other environment's | PASS |
+| Block all public access (four flags) | PASS — all four `true` | PASS |
+| Versioning | PASS — `Enabled` | PASS |
+| Default encryption, bucket key | PASS — `aws:kms` + `BucketKeyEnabled: true` | PASS |
+| Lifecycle: superseded versions | PASS — expire at 30 days, no Standard-IA transition | PASS — Standard-IA at 30, expire at 365 |
+| Lifecycle: only `exports/` expires current versions | PASS — one `Expiration` block in the whole configuration, scoped to `exports/`, `Days: 1` | PASS |
+| Lifecycle: abort incomplete multipart | PASS — 7 days | PASS |
+| `s3:ListBucket` scoped to prefixes | PASS — prefix listing works, bare bucket listing `AccessDenied` | PASS |
+| `s3:DeleteObject` denied to the everyday profile | PASS — `implicitDeny` | PASS |
+| Bucket policy / lifecycle / public-access changes denied to the everyday profile | PASS — `implicitDeny` on all three | PASS |
+| Takedown profile deletes an object **and its versions** under `quarantine/` | PASS — one version before, none after, and no delete marker left behind | PASS |
+| Takedown profile denied a delete under `reports/` | PASS — `implicitDeny` | PASS |
+| Takedown profile denied `PutObject` outside `manifests/_suppression/` | PASS — `implicitDeny` | PASS |
+| Permission set assignments | PASS — `DebateDevEvidenceOperator` 1, `DebateDevEvidenceRemoval` 1 | PASS — `DebateProdEvidenceOperator` 1, `DebateProdEvidenceRemoval` 1 |
+
+The two environments hold **different** customer-managed keys, which is what ADR-0010 rule 4 rests
+on: a dev-scoped credential cannot decrypt prod evidence even if it somehow reached the object.
 
 ## If something is wrong
 

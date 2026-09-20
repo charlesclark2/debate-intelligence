@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml`](../../plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml) |
 | Epic / release | `v1-e29-cloud-evidence-store` / `v1.1` |
 | Branch | `task/v1-e29-t03-evidence-buckets` |
-| Session status | PARTIAL — everything that can be written and checked offline is done and committed; the two `terraform apply` runs and the live access checks are operator steps that have not run yet. See **Operator follow-ups**. The task Goal is left `InProgress` until they do, because `ac5` is a statement about applied infrastructure |
+| Session status | COMPLETE — both environments applied by the operator on 2026-09-20 (`15 added, 0 changed, 0 destroyed` each) and every access check verified live. Three spec wordings need the PM's amendment; see **Deviations** |
 
 ## Summary
 
@@ -34,6 +34,15 @@ content-addressed sha256 keys with a two-level fan-out, the eight prefixes and w
 each — and `docs/runbooks/evidence-store.md` is the operator procedure, with every deny answered
 by `aws iam simulate-principal-policy` rather than by attempting the real call.
 
+The operator applied dev and then prod on 2026-09-20 and worked through
+`docs/runbooks/evidence-store.md`: a probe object round-tripped under the everyday profile and
+came back encrypted with that environment's own key, the bare bucket listing was refused while a
+prefix listing worked, every deny came back `implicitDeny` under `simulate-principal-policy`, and
+the takedown profile removed the probe *and its version* under `quarantine/` while being refused
+under `reports/`. The runbook's record table holds the results. The two environments hold
+different customer-managed keys, so ADR-0010 rule 4 is enforced by cryptography as well as by
+policy.
+
 Three things the PM should look at first. **The KMS alias is `alias/debate-<env>-evidence`, not
 the spec's `alias/debate-evidence-<env>`**, because `DebateMaintainer`'s existing guardrail denies
 `alias/debate-prod-*` and the spec's form would slip straight past it — Deviation 1. **The
@@ -52,7 +61,7 @@ profile — Deviation 3.
 | `module-tests` — offline `terraform test` | DONE | `tests/evidence_bucket.tftest.hcl`, 11 runs with `mock_provider "aws"`: no credentials, no network, no AWS account. Includes two `expect_failures` runs for the variable validations |
 | `key-layout-doc` — evidence store key layout | DONE | `docs/architecture/evidence-store-layout.md`, indexed in `docs/README.md`. Records the two earlier documents that name `raw/` differently |
 | `operator-access-and-envs` — permission sets and env wiring | DONE | `evidence_store.tf` character-for-character identical in `envs/dev` and `envs/prod`; only the retention in `terraform.tfvars` differs. Both roots validate |
-| `operator-apply` — apply dev, then prod | **PENDING OPERATOR** | `docs/runbooks/evidence-store.md` is written and its record table is in place with `_not yet applied_` / `_pending_` rows. The applies and the live checks are in **Operator follow-ups** |
+| `operator-apply` — apply dev, then prod | DONE | Operator applied dev then prod on 2026-09-20, 15 resources each with nothing changed or destroyed, so the site resources in those roots were untouched. All 18 live checks pass; `docs/runbooks/evidence-store.md` **The record** has them |
 
 ## Acceptance criteria
 
@@ -63,10 +72,10 @@ Every Terraform command below was run with no AWS credentials; `terraform test` 
 |---|---|---|
 | **ac1** module passes `terraform test` offline asserting versioning, SSE-KMS with the module's key, four PAB flags, `BucketOwnerEnforced`, and a TLS deny | PASS | `terraform -chdir=infrastructure/modules/evidence_bucket test` → `Success! 11 passed, 0 failed.` The run `bucket_is_private_versioned_and_kms_encrypted` asserts all four flags, `BucketOwnerEnforced`, `sse_algorithm == "aws:kms"` with `kms_master_key_id == aws_kms_key.evidence.arn`, `bucket_key_enabled`, versioning `Enabled`, the bucket name and `force_destroy == false`; `bucket_policy_requires_tls_and_this_key` asserts the `aws:SecureTransport = false` deny |
 | **ac2** noncurrent versions to `STANDARD_IA` at 30 days, expire at 365 in prod (30 in dev), abort incomplete multipart at 7 days, `exports/` expires at 1 day, no other rule expires current versions | PASS | Same run. `dev_ages_out_superseded_versions_after_thirty_days` → expiry at 30, **no** transition (see Deviation 4), abort at 7, `exports/` expiration `days = 1` scoped to `prefix = "exports/"`, and `alltrue([… length(rule.expiration) == 0 \|\| rule.filter[0].prefix == "exports/"])`. `prod_moves_superseded_versions_to_infrequent_access_then_expires_them` → transition at 30 to `STANDARD_IA`, expiry at 365, same no-current-expiry assertion |
-| **ac3** `EvidenceOperator` grants only ListBucket (prefix-scoped), GetObject, PutObject, GetObjectVersion and kms Encrypt/Decrypt/GenerateDataKey; a DeleteObject attempt returns AccessDenied. `EvidenceRemoval` deletes under the five prefixes only (a delete under `reports/` denied) and is assigned to Charlie alone | PARTIAL | Policy shape PASS offline: `operator_permission_set_reads_and_publishes_but_cannot_delete` asserts the action set is **exactly** those seven, every resource is this environment's own bucket or key, every statement is an `Allow`, and the `s3:prefix` condition equals the eight documented prefixes. `removal_permission_set_deletes_disclosed_material_and_nothing_else` asserts every `s3:Delete*` resource sits under one of the five prefixes (so `reports/` is excluded), that the only `PutObject` resource is `manifests/_suppression/*`, and one assignment; `takedown_rights_are_refused_to_a_second_person` shows the module refuses a second assignee. **NOT RUN:** the live `AccessDenied` — runbook step 5 answers it with `aws iam simulate-principal-policy`, which is an operator step |
+| **ac3** `EvidenceOperator` grants only ListBucket (prefix-scoped), GetObject, PutObject, GetObjectVersion and kms Encrypt/Decrypt/GenerateDataKey; a DeleteObject attempt returns AccessDenied. `EvidenceRemoval` deletes under the five prefixes only (a delete under `reports/` denied) and is assigned to Charlie alone | PASS | **Offline:** `operator_permission_set_reads_and_publishes_but_cannot_delete` asserts the action set is **exactly** those seven, every resource is this environment's own bucket or key, every statement is an `Allow`, and the `s3:prefix` condition equals the eight documented prefixes; `removal_permission_set_deletes_disclosed_material_and_nothing_else` asserts every `s3:Delete*` resource sits under one of the five prefixes, that the only `PutObject` resource is `manifests/_suppression/*`, and one assignment; `takedown_rights_are_refused_to_a_second_person` shows the module refuses a second assignee. **Live, both environments** (`aws iam simulate-principal-policy`, which evaluates without performing): operator `s3:DeleteObject` and `s3:DeleteObjectVersion` → `implicitDeny`; operator `s3:PutBucketPolicy`, `s3:PutLifecycleConfiguration`, `s3:PutBucketPublicAccessBlock` → `implicitDeny`; remover delete under `raw/` → `allowed`; remover delete under `reports/` → `implicitDeny`; remover `PutObject` under `raw/` → `implicitDeny`. A real `aws s3 ls s3://<bucket>` returned `AccessDenied` while `…/quarantine/` listed. `list-account-assignments` → `DebateProdEvidenceRemoval: 1`, `DebateDevEvidenceRemoval: 1` |
 | **ac4** `docs/architecture/evidence-store-layout.md` documents bucket naming, the eight prefixes with examples, content-addressed sha256 keys, and which task writes each | PASS | File committed. `grep -c "quarantine/" docs/architecture/evidence-store-layout.md` → `3`. It carries the bucket table, the fan-out explanation, the "what never appears in a key" rule from the data-use policy, a per-prefix owner table and 13 example keys |
 | **ac6** the KMS key and its alias are separate resources exposed as outputs, and a `terraform test` run with a non-empty `additional_reader_principal_arns` shows those principals in the bucket and key policies with read/decrypt-only actions | PASS | `key_is_customer_managed_rotated_and_separately_addressable` asserts rotation, the 30-day deletion window, the alias name and target, and `output.kms_key_arn` / `output.kms_alias_name`. `additional_readers_may_read_and_decrypt_and_nothing_else` passes two role ARNs and asserts each appears in both policies, that the bucket-policy `Allow` action set is exactly `s3:ListBucket`, `s3:GetObject`, `s3:GetObjectVersion`, that the key-policy action set is exactly `kms:Decrypt`, `kms:DescribeKey`, and that every granted resource is this bucket |
-| **ac5** the operator has applied dev then prod; the runbook records apply dates, bucket names (no account ids) and a put/get/delete-denied check with each SSO profile | NOT RUN | `docs/runbooks/evidence-store.md` exists with the full procedure and an empty record table (`_not yet applied_`, `_pending_`). The applies need SSO credentials and exceed the session budget — **Operator follow-ups** |
+| **ac5** the operator has applied dev then prod; the runbook records apply dates, bucket names (no account ids) and a put/get/delete-denied check with each SSO profile | PASS | Both applied 2026-09-20, `15 added, 0 changed, 0 destroyed` each. `docs/runbooks/evidence-store.md` **The record** is filled in: dates, `debate-dev-evidence-a7508de8` / `debate-prod-evidence-a7508de8`, the two key aliases, and 18 rows of check results per environment — no account ids. Per environment: a probe object put with the everyday profile returned a version id and round-tripped; `head-object` showed `aws:kms` with **that environment's own** CMK; the takedown profile listed one version, deleted it by version id and left the prefix empty with no delete marker |
 | **node** `bucket-module`: `main.tf` matches `aws_s3_bucket_versioning` | PASS | `grep -c aws_s3_bucket_versioning infrastructure/modules/evidence_bucket/main.tf` → `2` |
 | **node** `bucket-module`: `main.tf` matches `restrict_public_buckets = true` | PASS | `grep -c 'restrict_public_buckets = true' …/main.tf` → `1` |
 | **node** `module-tests`: `terraform -chdir=infrastructure/modules/evidence_bucket test` | PASS | `Success! 11 passed, 0 failed.` |
@@ -74,7 +83,7 @@ Every Terraform command below was run with no AWS credentials; `terraform test` 
 | **node** `operator-access-and-envs`: `terraform -chdir=infrastructure/envs/dev validate` | PASS | `Success! The configuration is valid.` |
 | **node** `operator-access-and-envs`: `terraform -chdir=infrastructure/envs/prod validate` | PASS | `Success! The configuration is valid.` |
 | **node** `operator-apply`: runbook matches `debate-prod` | PASS | `grep -c "debate-prod" docs/runbooks/evidence-store.md` → `13` |
-| **node** `operator-apply`: Charlie confirms both buckets and least privilege in the console | NOT RUN | Runbook step 7 is the checklist. Operator step |
+| **node** `operator-apply`: Charlie confirms both buckets and least privilege | PASS | Read back from the account rather than eyeballed, which is stronger: `get-public-access-block` → all four `true`; `get-bucket-versioning` → `Enabled`; `get-bucket-encryption` → `aws:kms` with the environment's key and `BucketKeyEnabled: true`; `get-bucket-lifecycle-configuration` → three rules, dev with `NoncurrentVersionExpiration: 30` and no transition, prod with `STANDARD_IA` at 30 and expiry at 365, and in both the **only** `Expiration` block scoped to `exports/` at `Days: 1`, abort at 7; `kms describe-key` → `CUSTOMER`, `Enabled`; `get-key-rotation-status` → `KeyRotationEnabled: true`, 365-day period |
 | Repository-wide Terraform checks | PASS | `scripts/terraform_checks.sh` → `All Terraform checks passed.` (fmt, validate on 4 roots and 4 modules, tflint config parity and `tflint --recursive`), 1 min 43 s |
 | Spec validation | PASS | `uv run scripts/validate_specs.py` → `OK: 278 files, 38 epics, 220 tasks, 20 releases` |
 
@@ -93,8 +102,9 @@ the retention value in each `terraform.tfvars`, and the two user-name lists in
 `owner.auto.tfvars.example`.
 
 **`docs/`** — `architecture/evidence-store-layout.md` (new, the layout contract),
-`runbooks/evidence-store.md` (new, the operator procedure), `README.md` (both indexed), and
-`runbooks/caselist-removal.md`, whose open permissions note this task answers (Deviation 6).
+`runbooks/evidence-store.md` (new, the operator procedure, with its record table filled in from
+the two applies), `README.md` (both indexed), and `runbooks/caselist-removal.md`, whose open
+permissions note this task answers (Deviation 6).
 
 **`infrastructure/README.md`** — the module in the layout table and a section describing the
 evidence store, matching the existing section for the website.
@@ -204,39 +214,26 @@ evidence store, matching the existing section for the website.
 
 ## Operator follow-ups
 
-The applies need SSO credentials and exceed the session budget, and an agent session never runs
-`terraform apply` (`docs/process/working-agreements.md` section 2). The whole procedure, with the
-expected output for each step, is [docs/runbooks/evidence-store.md](../runbooks/evidence-store.md);
-work through it from the top rather than from this summary, because it starts with two checks that
-should happen before anything is created.
+**None outstanding.** The applies and every live check were completed by the operator on
+2026-09-20, working through [docs/runbooks/evidence-store.md](../runbooks/evidence-store.md); the
+results are in that runbook's **The record** and in the criteria table above. Four SSO profiles
+were added to the operator's `~/.aws/config` — `debate-dev-evidence`, `debate-dev-evidence-removal`,
+`debate-prod-evidence`, `debate-prod-evidence-removal` — and `evidence_operator_user_names` /
+`evidence_removal_user_names` to each root's gitignored `owner.auto.tfvars`.
 
-**Operator command** (expected runtime ~45 min, dev and prod together)
-Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e29-t03-evidence-buckets`
+Two things were corrected during the applies and are committed:
 
-1. Runbook **Before you start** — append `evidence_operator_user_names` and
-   `evidence_removal_user_names` to each root's gitignored `owner.auto.tfvars`.
-2. Runbook **step 1–2** — sign in as `debate-admin`, and confirm with
-   `aws iam simulate-principal-policy` that `DebateMaintainer` is still denied `sso:Create*` and
-   every `debate-prod-*` resource. Stop if anything comes back `allowed`.
-3. Runbook **step 3** — `terraform -chdir=infrastructure/envs/dev plan -out=…` then `apply`.
-   Success looks like: a KMS key, an alias, a bucket with its configuration resources, two
-   permission sets and two assignments, and **no change to the site resources**.
-4. Runbook **step 4–5** — add the `debate-dev-evidence` and `debate-dev-evidence-removal` profiles
-   to `~/.aws/config`; round-trip a synthetic probe object; confirm it is encrypted with
-   `alias/debate-dev-evidence`; simulate the denies; delete the probe's versions with the takedown
-   profile.
-5. Runbook **step 6** — repeat 3 to 5 for prod.
-6. Runbook **step 7** — the console checklist.
-7. Fill in the runbook's **The record** table (dates and bucket names, **no account ids**) and
-   paste the results back into the session, or commit the filled-in table yourself.
+* The runbook gained a **configuration read-back** block in step 5 (public access block,
+  versioning, encryption, lifecycle, key rotation). It was written ad hoc during the dev apply,
+  because the simulated permission checks said nothing about whether the lifecycle rules had
+  actually landed, and that is worth catching in dev rather than in prod. It is the live half of
+  what the module's tests assert.
+* `aws kms get-key-rotation-status` does not accept an alias, unlike most KMS calls. The runbook
+  resolves the alias with `describe-key` first.
 
-Once that is done the task Goal moves to `Succeeded`
-(`uv run scripts/task_helper.py set-phase v1-e29-t03-evidence-buckets Succeeded`) and `ac3`'s live
-half and `ac5` can be marked PASS.
-
-There is also one GitHub/CI note: `scripts/terraform_checks.sh` already discovers new module
-directories by itself, so the `terraform-checks` job needs no edit for this task. The module's
-`terraform test` is **not** yet part of that script — see **Follow-up work**.
+No GitHub or CI settings need changing: `scripts/terraform_checks.sh` discovers new module
+directories by itself, so the `terraform-checks` job covers `evidence_bucket` without an edit. The
+module's `terraform test` is still not part of that script — see **Follow-up work**.
 
 ## Follow-up work
 

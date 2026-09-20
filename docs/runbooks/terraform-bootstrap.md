@@ -143,7 +143,7 @@ outside the repository and then remove it:
 ```bash
 mkdir -p ~/aws-backups/debate-terraform-state
 cp bootstrap-dev.tfstate ~/aws-backups/debate-terraform-state/bootstrap-state-dev-$(date +%Y%m%d).tfstate
-rm bootstrap-dev.tfstate bootstrap-dev.tfstate.backup
+rm -f bootstrap-dev.tfstate bootstrap-dev.tfstate.backup
 ```
 
 If the bucket name is already taken globally, `apply` fails with `BucketAlreadyExists`. Pick a new
@@ -187,7 +187,7 @@ terraform init -migrate-state -backend-config=prod.s3.tfbackend
 terraform plan -var-file=prod.tfvars          # "No changes."
 
 cp bootstrap-prod.tfstate ~/aws-backups/debate-terraform-state/bootstrap-state-prod-$(date +%Y%m%d).tfstate
-rm bootstrap-prod.tfstate bootstrap-prod.tfstate.backup
+rm -f bootstrap-prod.tfstate bootstrap-prod.tfstate.backup
 ```
 
 Afterwards, switching this root between environments is an explicit `init`, and the `-var-file`
@@ -323,6 +323,10 @@ terraform -chdir=infrastructure/bootstrap/organization init -migrate-state
 terraform -chdir=infrastructure/bootstrap/organization plan
 ```
 
+This state was written by Terraform 1.7.3 (serial 31, 31 resources). The first write from 1.16.3
+upgrades its recorded version, and 1.7.3 cannot read it afterwards — which is the point of the
+dated backup above, and harmless now that every root pins `>= 1.10`.
+
 Answer `yes` to the copy. The plan must report **no changes**; a plan that wants to create the
 permission sets or the trail again means the state did not come across — stop, restore the backup
 over `terraform.tfstate`, and do not apply.
@@ -332,8 +336,8 @@ bucket:
 
 ```bash
 cd <main-clone>
-rm infrastructure/bootstrap/organization/terraform.tfstate \
-   infrastructure/bootstrap/organization/terraform.tfstate.backup
+rm -f infrastructure/bootstrap/organization/terraform.tfstate \
+      infrastructure/bootstrap/organization/terraform.tfstate.backup
 aws s3api list-objects-v2 --profile debate-admin \
   --bucket debate-prod-tfstate-a7508de8 --query 'Contents[].Key'
 terraform -chdir=infrastructure/bootstrap/organization plan   # still "No changes."

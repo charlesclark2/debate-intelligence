@@ -235,9 +235,30 @@ Each developer machine and CI runner needs `npm install -g pnpm@10.15.0` and the
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- All Goal and node criteria pass, and the indexing default fails closed: only `SITE_ENV=prod`
+  is indexable, so a misconfigured deploy is invisible to search engines rather than accidentally
+  public. Checks run offline in about nine seconds, which keeps the CI budget intact when
+  v1-e01-t04 adds the job.
+- Accessibility: keeping the two failing brand colours for large text and non-text use, with small
+  copy falling back to body grey, is the right call, and enforcing it with a test that fails on a
+  stylesheet violation is better than a note in a README. The fifteen measurements belong in the
+  publishing policy's accessibility section too (v1-e36-t01).
+- The accessibility-statement page is accepted as a build requirement, not scope creep. It is copy,
+  so it goes through the same review as t04's pages before launch.
+- The Arial fallback stack is correct under the no-network rule; no remote font is fetched.
+- Carried forward:
+  - Brand assets: the PM has produced a trimmed transparent-background mark, a white knockout for
+    the navy footer, a 512px navy favicon source and a light square variant, all derived from the
+    deck template's artwork. They go to v1-e36-t04 with the page work. A vector original from the
+    school would still be better and is worth asking for.
+  - Spec wording: node criteria of the form `pnpm run test -- <file>` run the whole suite because
+    pnpm forwards the `--`. Later site specs should use the filter without `--`. The PM will fix
+    the remaining site specs.
+  - `corepack enable pnpm` fails on corepack 0.30.0 (expired signing key); the working install
+    step belongs in the site README so the next session does not rediscover it.

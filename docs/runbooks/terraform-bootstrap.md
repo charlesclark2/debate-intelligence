@@ -223,9 +223,21 @@ AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod init
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod plan
 ```
 
-Each `init` must print `Successfully configured the backend "s3"!`, and each `plan` must report no
-changes. A plan that fails the `environment_matches_directory` check means `terraform.tfvars` and
-the directory disagree — fix the tfvars, do not silence the check.
+Each `init` must print `Successfully configured the backend "s3"!`. Each `plan` proposes
+**`Changes to Outputs` only** — the three outputs in `outputs.tf`, which a freshly created state
+has never recorded — and Terraform says so itself: *"You can apply this plan to save these new
+output values to the Terraform state, without changing any real infrastructure."* What must be
+absent is a `Plan: N to add` line: these roots manage no resources until
+`v1-e29-t03-evidence-buckets`.
+
+Check the `Environment` value in each plan's `standard_tags`: `dev` in `envs/dev`, `prod` in
+`envs/prod`. A plan that fails the `environment_matches_directory` check means `terraform.tfvars`
+and the directory disagree — fix the tfvars, do not silence the check.
+
+Optionally `terraform apply` each of them. It creates no AWS resources; it writes the outputs into
+state, which proves each profile can *write* its own state bucket and makes later plans read
+`No changes.` The prod one needs `AWS_PROFILE=debate-admin`, since `DebateMaintainer` is denied
+`debate-prod-*`.
 
 ## Step 4 — Confirm locking works
 

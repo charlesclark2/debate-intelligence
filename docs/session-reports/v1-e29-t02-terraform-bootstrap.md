@@ -211,8 +211,9 @@ AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod init
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod plan
 ```
 
-Success: each `init` prints `Successfully configured the backend "s3"!` and each `plan` reports no
-changes. Then run the concurrent-plan race in runbook step 4; success is one of the two runs
+Success: each `init` prints `Successfully configured the backend "s3"!` and each `plan` shows
+`Changes to Outputs` only, with no `Plan: N to add` line — these roots manage no resources yet, and
+a new state has never recorded their outputs. Then run the concurrent-plan race in runbook step 4; success is one of the two runs
 containing `Error acquiring the state lock`. If both succeed, use the step-4 fallback against
 `infrastructure/bootstrap/state`, which holds the lock long enough to collide.
 

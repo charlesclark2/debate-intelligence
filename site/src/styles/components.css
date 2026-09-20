@@ -82,3 +82,23 @@
   padding-left: var(--space-4);
   border-left: 4px solid var(--color-brand-accent);
 }
+
+/*
+ * A fact Charlie has not supplied yet, written into the copy as [[TBD]] or [[TBD: note]] and
+ * rendered by src/lib/content.ts. It is styled to be impossible to miss on a dev preview, which
+ * is how the gaps get found during review; a prod build never reaches this rule, because
+ * src/lib/publishing-policy.ts fails the build while any placeholder remains.
+ *
+ * Body grey on the panel tint is 5.94:1, so the badge meets AA for normal text. The warm accent
+ * is used for the border only, which needs 3:1. See tests/tokens.test.ts.
+ */
+.placeholder {
+  display: inline-block;
+  padding: 0 var(--space-2);
+  border: 2px dashed var(--color-brand-warm);
+  border-radius: var(--radius-small);
+  background: var(--color-surface-panel);
+  color: var(--color-text-body);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}

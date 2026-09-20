@@ -5,10 +5,10 @@ import type { NavigationItem } from './SiteNav'
 import { SiteNav } from './SiteNav'
 
 /**
- * The banner landmark: the Blue Dukes lockup linking home, and the main navigation.
+ * The banner landmark: the "W BAY" mark linking home, and the main navigation.
  *
- * The lockup PNG has an opaque white background (it was recovered from a JPEG), so it is only
- * ever placed on the white header. See site/README.md for the asset limitations.
+ * The mark is a transparent PNG, so it sits on the white header without a white box around it.
+ * The footer uses the white knockout version of the same artwork on brand navy.
  */
 export function SiteHeader({
   homeHref,
@@ -28,10 +28,10 @@ export function SiteHeader({
           <Image
             alt={logoAlternativeText}
             className="site-header__logo"
-            height={384}
+            height={264}
             priority
-            src="/brand/wfb-blue-dukes-lockup.png"
-            width={476}
+            src="/brand/wfb-mark-navy-transparent.png"
+            width={441}
           />
         </Link>
         <SiteNav items={items} label={navigationLabel} />

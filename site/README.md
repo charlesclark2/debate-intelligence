@@ -22,7 +22,7 @@ pnpm --dir site install
 | `pnpm --dir site dev` | Local dev server on <http://localhost:3000> |
 | `pnpm --dir site lint` | ESLint: the Next rules plus the full `jsx-a11y` recommended set |
 | `pnpm --dir site typecheck` | `tsc --noEmit` against a strict config |
-| `pnpm --dir site test` | vitest with jsdom: content, tokens, layout, SEO, offline guards |
+| `pnpm --dir site test` | vitest with jsdom: content, tokens, layout, SEO, routes, contact, the login flag, the content guard, page accessibility and the offline guards |
 | `pnpm --dir site build` | Static export into `site/out/` |
 
 `site/scripts/pre-commit-checks.sh` runs all four. The `site-checks` pre-commit hook runs it
@@ -40,6 +40,8 @@ Both are read at build time only and never reach the browser.
 |---|---|---|
 | `SITE_ENV` | `prod`, anything else | `prod` allows indexing and writes a sitemap reference into `robots.txt`. Every other value, including unset, is treated as `dev`: `robots.txt` disallows all paths and every page carries `noindex, nofollow`. The default fails closed on purpose, so a misconfigured build cannot put a preview into search results. |
 | `SITE_URL` | an origin | Canonical URLs, Open Graph URLs and sitemap entries. Defaults to `http://localhost:3000`. |
+| `SITE_DEBATER_LOGIN` | `on`, anything else | `on` puts the Debater login link in the main navigation. Anything else, including unset, leaves it out of the export entirely: not hidden, absent. It stays off until the V2 app in `web/` exists. |
+| `SITE_DEBATER_LOGIN_URL` | a path or URL | Where that link points. Defaults to `/app/`, because the V2 app mounts under this same domain. |
 
 ```bash
 SITE_ENV=prod SITE_URL=https://the-team-domain pnpm --dir site build
@@ -51,10 +53,16 @@ No page component contains copy. Everything a visitor reads is a file under `sit
 
 ```
 content/
-  site.yaml          site-wide strings: name, tagline, footer note, navigation and skip-link labels
-  pages/<slug>.md    one page each; home.md renders at /, every other file at /<slug>/
-  not-found.md       the 404 page, kept out of pages/ so it never enters the navigation or sitemap
+  site.yaml            site-wide strings, the email allowlist and the Debater login label
+  media-consent.yaml   who may be named, which images may be published, and when each was checked
+  pages/<slug>.md      one page each; home.md renders at /, every other file at /<slug>/
+  not-found.md         the 404 page, kept out of pages/ so it never enters the navigation or sitemap
 ```
+
+The core pages parents need are `home`, `about`, `events`, `join`, `coaches`, `faq` and
+`contact`, in that navigation order, plus the `accessibility` statement. Adding a page means
+adding a file: `src/app/[slug]/page.tsx` generates a route for every one of them, so there is no
+per-page component to write and no navigation list to keep in step.
 
 Each page carries YAML front matter:
 
@@ -73,9 +81,34 @@ file name, so a page missing a title fails `pnpm --dir site build` instead of sh
 ### House style, enforced by the build
 
 1. **No em dashes in body copy.** Use a comma, a colon or two sentences. The error names the line.
-2. **Spell out every acronym.** A page that uses `NSDA`, `NCFL`, `TOC`, `LD` or `PF` must also
-   contain the full name somewhere on the same page. The list is `ACRONYM_EXPANSIONS` in
+2. **Spell out every acronym.** A page that uses `NSDA`, `NCFL`, `WDCA`, `TOC`, `LD` or `PF` must
+   also contain the full name somewhere on the same page. The list is `ACRONYM_EXPANSIONS` in
    `src/lib/content.ts`; add to it as the site grows. Parents and new students are the audience.
+3. **Facts nobody has supplied are marked, not invented.** Write `[[TBD]]`, or
+   `[[TBD: what is needed]]`, where a fact has to come from Charlie. It renders as a visible
+   **TBD** badge so a dev preview shows every gap, and it fails a prod build until it is filled.
+
+## The content guard
+
+`src/lib/publishing-policy.ts` is the part of
+[`docs/policies/website-publishing.md`](../docs/policies/website-publishing.md) that a build can
+check by itself. It runs over `content/` during `next build`, from `src/app/layout.tsx`, and
+again over the exported HTML in `tests/content-policy.test.ts`. **A prod build fails on an error;
+a dev build prints it and carries on**, so the copy can be reviewed with the gaps visible.
+
+| It fails the build on | Because |
+|---|---|
+| An email address that is not in `contactEmails` in `site.yaml` | Only coach and team addresses publish; a student address never does |
+| Anything shaped like a phone number | The site publishes none, of anyone |
+| An image with no entry in `media-consent.yaml` | Every image of a person needs a current-season consent reference; every other image needs a line saying nobody is in it |
+| A capitalised name whose words are not in `permittedNameWords` | A student name cannot reach prod unreviewed. The full published-names allowlist is `v1-e37-t03` |
+| A named student whose consent entry is from a previous season | The district's form renews annually; consent does not carry over |
+| A `[[TBD]]` marker | A half-written page is not published |
+| A script or an iframe from another origin, in the built HTML | The site loads nothing from anyone else |
+
+It **warns**, in every environment, when a consent entry was last checked before the current
+season began. That is the start-of-season check in the policy: the warning makes a lapsed one
+visible without anyone having to remember to look.
 
 ## Design tokens
 
@@ -108,26 +141,25 @@ deck template.
 
 | File | Size | Used for |
 |---|---|---|
-| `public/brand/wfb-blue-dukes-lockup.png` | 476x384 | Header, linking home |
-| `public/brand/wfb-wbay-mark.png` | 455x279 | Source for the icons below |
-| `src/app/icon.png` | 512x512 | Browser icon, generated from the mark |
-| `src/app/apple-icon.png` | 180x180 | Touch icon, generated from the mark |
-| `public/favicon.ico` | 16 to 256 | `/favicon.ico`, generated from the mark |
+| `public/brand/wfb-mark-navy-transparent.png` | 441x264 | Header, linking home |
+| `public/brand/wfb-mark-white-knockout.png` | 441x264 | Footer, on brand navy |
+| `public/brand/wfb-mark-square-light-512.png` | 512x512 | Square light-background mark, for sharing |
+| `src/app/icon.png` | 512x512 | Browser icon |
+| `src/app/apple-icon.png` | 180x180 | Touch icon |
+| `public/favicon.ico` | 16 to 256 | `/favicon.ico` |
 
-**Both PNGs are opaque, with a white background**, because they were recovered from a JPEG. Two
-consequences the site works around:
+**All of these are transparent PNGs**, supplied by the operator in `v1-e36-t04`. They replace the
+opaque JPEG-recovered assets the scaffold shipped with, and they lift the two restrictions those
+carried: the mark may now sit on any surface, and the footer uses the white knockout version on
+brand navy instead of standing in a text wordmark for it. The icons are cropped square rather
+than letterboxed, so the W silhouette survives 32px.
 
-* They may only be placed on white or very light surfaces. On anything darker a white box shows.
-* The footer sits on brand navy, so it uses the `WFB Debate` wordmark as text rather than the
-  mark. Do not put the mark there until a transparent version exists.
+The footer mark is decorative (`alt=""`): it repeats the header's link home and carries no
+information of its own, and the team name is spelled out in the wordmark beside it.
 
-The icons letterbox the mark onto a white square. At 32px the W silhouette reads clearly, but the
-"BAY" lettering inside it blurs into a smudge.
-
-A proper asset set would be: the lockup and the mark as **SVG**, or as **transparent PNGs at 1x
-and 2x**; plus a **square icon artwork** cropped to the W alone, which would survive 32px far
-better than a letterboxed wide mark. See the follow-up work in
-[`docs/session-reports/v1-e36-t03-site-scaffold.md`](../docs/session-reports/v1-e36-t03-site-scaffold.md).
+This resolves open question 6 in
+[`docs/policies/website-publishing.md`](../docs/policies/website-publishing.md), which recorded
+the old asset set as inadequate. An SVG set would still be better than PNGs at every size.
 
 ## Accessibility
 
@@ -136,8 +168,23 @@ landmarks, one visible focus style, 44px touch targets and a navigation menu tha
 Enter or Space and closes with Escape, returning focus to its button.
 
 `tests/layout.test.tsx` runs axe-core over the real frame and components on the WCAG 2.1 A and AA
-rule sets. axe cannot evaluate colour contrast under jsdom, which has no layout engine, so
-contrast is asserted against the tokens instead, in `tests/tokens.test.ts`.
+rule sets. `tests/pages-a11y.test.tsx` runs it over **every page**, twice: once rendered through
+the frame, which always runs, and once over the exported HTML in `site/out/` when a build has
+produced it. The second pass is the one the acceptance criterion is about, because it includes
+the head, the `lang` attribute and Next's own markup, so `html-has-lang` and `document-title` are
+evaluated as a browser would evaluate them.
+
+axe cannot evaluate colour contrast under jsdom, which has no layout engine, so contrast is
+asserted against the tokens instead, in `tests/tokens.test.ts`.
+
+**`pnpm test` before `pnpm build` means no export yet**, which is the order CI uses, so the
+suites that read `site/out/` skip themselves when it is absent rather than failing.
+`site/scripts/pre-commit-checks.sh` runs test then build, so the second run of it checks the real
+files. Build first when you want that coverage in one go:
+
+```bash
+pnpm --dir site build && pnpm --dir site test
+```
 
 ## What this project must not do
 

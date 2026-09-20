@@ -5,3 +5,8 @@ footerNote: A fixture footer.
 logoAlternativeText: Fixture logo
 navigationLabel: Main
 skipLinkLabel: Skip to main content
+contactEmails:
+  - address: fixture.coach@example.invalid
+    name: Fixture Coach
+    role: Head Coach
+debaterLoginLabel: Debater login

@@ -150,8 +150,16 @@
   padding: var(--space-6) var(--layout-gutter);
 }
 
-/* The wordmark stands in for the "W BAY" mark, which cannot go on navy while it is an opaque
-   white-background PNG. 24px bold clears the WCAG large-text threshold. */
+/* The white knockout mark, on brand navy. It is decorative (empty alt), so the team name is
+   still spelled out in the wordmark below it. */
+.site-footer__mark {
+  width: auto;
+  height: 44px;
+  margin-bottom: var(--space-3);
+}
+
+/* The wordmark carries the team name as text beside the mark. 24px bold clears the WCAG
+   large-text threshold. */
 .site-footer__wordmark {
   margin: 0 0 var(--space-2);
   font-size: var(--font-size-large);

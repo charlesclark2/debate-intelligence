@@ -191,7 +191,7 @@ Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e29-t02-
 in `infrastructure/bootstrap/state`. Runbook steps 1 and 2 — please follow them rather than this
 summary, because each `apply` has a plan to read before approving and a dated backup afterwards.
 Create `infrastructure/bootstrap/state/terraform.tfvars` with your email first
-(`printf 'owner = "<your-email>"\n' > terraform.tfvars`).
+(`printf 'owner = "%s"\n' "$OWNER_EMAIL" > terraform.tfvars`).
 
 Success: `debate-dev-tfstate-a7508de8` and `debate-prod-tfstate-a7508de8` exist; after
 `init -migrate-state`, `terraform plan -var-file=<env>.tfvars` reports **No changes** for both; the
@@ -203,8 +203,8 @@ removed. Paste the two bucket names and the two "No changes" lines back.
 Where: the same worktree, repository root. Runbook steps 3 and 4.
 
 ```bash
-printf 'owner = "<your-email>"\n' > infrastructure/envs/dev/owner.auto.tfvars
-printf 'owner = "<your-email>"\n' > infrastructure/envs/prod/owner.auto.tfvars
+printf 'owner = "%s"\n' "$OWNER_EMAIL" > infrastructure/envs/dev/owner.auto.tfvars
+printf 'owner = "%s"\n' "$OWNER_EMAIL" > infrastructure/envs/prod/owner.auto.tfvars
 AWS_PROFILE=debate-dev   terraform -chdir=infrastructure/envs/dev  init
 AWS_PROFILE=debate-dev   terraform -chdir=infrastructure/envs/dev  plan
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod init
@@ -234,7 +234,7 @@ with this PR — either run it after the merge into `dev`, or bring that one fil
 The backup comes first:
 
 ```bash
-cd <main-clone>
+cd "$MAIN"
 mkdir -p ~/aws-backups/debate-terraform-state
 cp infrastructure/bootstrap/organization/terraform.tfstate \
    ~/aws-backups/debate-terraform-state/organization-$(date +%Y%m%d-%H%M%S).tfstate

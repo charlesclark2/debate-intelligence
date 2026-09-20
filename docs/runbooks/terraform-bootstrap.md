@@ -86,13 +86,24 @@ aws sts get-caller-identity --profile debate-dev
 aws sts get-caller-identity --profile debate-admin
 ```
 
-**The owner email**, which is not in the repository. Create the two gitignored files:
+**Two shell variables**, used by every block below. `WT` is the checkout you are working in (the
+task worktree during the task, the main clone afterwards); `MAIN` is always the main clone,
+because that is where step 6's local state file lives. Quote the email — an unquoted `<...>`
+placeholder is a redirection to zsh and fails with `parse error near '\n'`:
 
 ```bash
-cd <repo>
-printf 'owner = "<your-email>"\n' > infrastructure/bootstrap/state/terraform.tfvars
-printf 'owner = "<your-email>"\n' > infrastructure/envs/dev/owner.auto.tfvars
-printf 'owner = "<your-email>"\n' > infrastructure/envs/prod/owner.auto.tfvars
+WT=/path/to/your/checkout
+MAIN=/path/to/debate-intelligence
+OWNER_EMAIL='you@example.com'
+```
+
+**The owner email**, which is not in the repository. Create the three gitignored files:
+
+```bash
+cd "$WT"
+printf 'owner = "%s"\n' "$OWNER_EMAIL" > infrastructure/bootstrap/state/terraform.tfvars
+printf 'owner = "%s"\n' "$OWNER_EMAIL" > infrastructure/envs/dev/owner.auto.tfvars
+printf 'owner = "%s"\n' "$OWNER_EMAIL" > infrastructure/envs/prod/owner.auto.tfvars
 ```
 
 ## Step 1 — Create the dev state bucket and migrate its state
@@ -105,7 +116,7 @@ gitignored `backend_override.tf`, which Terraform merges over the real one. The 
 is per environment so dev's state can never be picked up by a prod apply.
 
 ```bash
-cd <repo>/infrastructure/bootstrap/state
+cd "$WT/infrastructure/bootstrap/state"
 export AWS_PROFILE=debate-dev
 
 cat > backend_override.tf <<'OVERRIDE'
@@ -162,7 +173,7 @@ so the override has to be re-established with `-reconfigure`, which discards tha
 touching the dev state already in S3.
 
 ```bash
-cd <repo>/infrastructure/bootstrap/state
+cd "$WT/infrastructure/bootstrap/state"
 export AWS_PROFILE=debate-admin
 
 cat > backend_override.tf <<'OVERRIDE'
@@ -205,7 +216,7 @@ task — the evidence buckets arrive in `v1-e29-t03-evidence-buckets` — so thi
 works, nothing more.
 
 ```bash
-cd <repo>
+cd "$WT"
 AWS_PROFILE=debate-dev   terraform -chdir=infrastructure/envs/dev  init
 AWS_PROFILE=debate-dev   terraform -chdir=infrastructure/envs/dev  plan
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod init
@@ -222,7 +233,7 @@ Two plans at once against the same state key. `-lock-timeout=0` makes the loser 
 instead of retrying for the default ten minutes.
 
 ```bash
-cd <repo>
+cd "$WT"
 export AWS_PROFILE=debate-dev
 terraform -chdir=infrastructure/envs/dev plan -lock-timeout=0 > /tmp/lock-a.txt 2>&1 &
 terraform -chdir=infrastructure/envs/dev plan -lock-timeout=0 > /tmp/lock-b.txt 2>&1 &
@@ -236,7 +247,7 @@ Repeat the same race against `infrastructure/bootstrap/state`, which has real re
 and so holds the lock for several seconds:
 
 ```bash
-cd <repo>/infrastructure/bootstrap/state
+cd "$WT/infrastructure/bootstrap/state"
 terraform init -reconfigure -backend-config=dev.s3.tfbackend
 terraform plan -var-file=dev.tfvars -lock-timeout=0 > /tmp/lock-a.txt 2>&1 &
 terraform plan -var-file=dev.tfvars -lock-timeout=0 > /tmp/lock-b.txt 2>&1 &
@@ -300,7 +311,7 @@ step needs `infrastructure/bootstrap/organization/backend.tf`, which arrives wit
 so either run it after the PR has merged into `dev`, or bring that one file over first:
 
 ```bash
-cd <main-clone>
+cd "$MAIN"
 git checkout task/v1-e29-t02-terraform-bootstrap -- infrastructure/bootstrap/organization/backend.tf
 ```
 
@@ -308,7 +319,7 @@ Back the state up first, outside the repository, with the date in the name. This
 permission set and policy in the account; treat it as sensitive even though it holds no secrets:
 
 ```bash
-cd <main-clone>
+cd "$MAIN"
 mkdir -p ~/aws-backups/debate-terraform-state
 cp infrastructure/bootstrap/organization/terraform.tfstate \
    ~/aws-backups/debate-terraform-state/organization-$(date +%Y%m%d-%H%M%S).tfstate
@@ -335,7 +346,7 @@ With a clean plan confirmed, remove the local state from the clone and check the
 bucket:
 
 ```bash
-cd <main-clone>
+cd "$MAIN"
 rm -f infrastructure/bootstrap/organization/terraform.tfstate \
       infrastructure/bootstrap/organization/terraform.tfstate.backup
 aws s3api list-objects-v2 --profile debate-admin \

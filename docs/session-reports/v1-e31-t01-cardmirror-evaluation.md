@@ -214,9 +214,30 @@ failure in a new worktree as real.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- All five Goal criteria are met. ADR-0014 is Accepted with Charlie's two answers: CardMirror is a
+  compatibility target, and an allowed but not mandated editor. The license review is signed off.
+  The results cover 36 files across all five categories, above the spec's minimum of 25.
+- Both defects were reproduced synthetically before being recorded. The alt-text bug was traced to
+  a specific function and the upstream issue is drafted but not filed. Treating soft-hyphen loss as
+  a reported normalization, while a real text change in the same paragraph still counts as a
+  difference, is the right design.
+- Privacy check passed: no school, team or file names from the sample appear in docs/, scripts/ or
+  tests/. Results are keyed by sha256 prefix only.
+- Accepted deviations:
+  - pyproject.toml gets the python-docx and lxml dependencies and the anchored ruff exclude. Both
+    were required by the plan and are needed by t02 and t03.
+  - .gitignore now ignores `/*.docx` and `/*.doc`, anchored at the repository root.
+- `testing.roundtripped.docx` at the worktree root was an operator artifact. The PM moved it to
+  ~/Documents/debate/cardmirror-roundtrip-out/. It was never committed.
+- Carried forward:
+  - U+00AD handling passes to t03 and t04, as recorded in the ADR.
+  - The lossless writer (v1-e33-t02) must write the team's own style definitions rather than
+    treat a CardMirror-normalized file as a template. The PM will fold this into that spec at
+    the next spec refresh.
+  - Charlie decides whether to file the upstream issue.

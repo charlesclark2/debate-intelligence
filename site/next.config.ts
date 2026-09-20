@@ -9,6 +9,10 @@ import type { NextConfig } from 'next'
  * - `trailingSlash: true`   every route becomes `<route>/index.html`, which is what CloudFront's
  *                           default-root-object behaviour expects for sub-paths.
  * - `images.unoptimized`    the Next image optimiser needs a server; images ship as-is.
+ * - `agentRules: false`     `next dev` otherwise writes an AGENTS.md and a CLAUDE.md into site/
+ *                           on first run. A CLAUDE.md there would shadow the repository guide at
+ *                           the root for any session working in this directory, so the generator
+ *                           is off and the guidance stays in one place.
  */
 const nextConfig: NextConfig = {
   output: 'export',
@@ -17,6 +21,7 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   reactStrictMode: true,
+  agentRules: false,
 }
 
 export default nextConfig

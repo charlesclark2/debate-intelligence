@@ -46,7 +46,7 @@ describe('the root layout imports the global stylesheet', () => {
 
   it('reaches every other stylesheet through it', () => {
     const globals = readFileSync(join(process.cwd(), 'src/styles/globals.css'), 'utf8')
-    for (const stylesheet of ['tokens.css', 'layout.css', 'components.css']) {
+    for (const stylesheet of ['tokens.css', 'layout.css', 'sections.css', 'components.css']) {
       expect(globals).toContain(`@import "./${stylesheet}"`)
     }
   })

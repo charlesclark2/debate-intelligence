@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { SiteFrame } from '@/components/SiteFrame'
-import { loadPages, loadSiteSettings } from '@/lib/content'
+import { homeContentAsPage, loadPages, loadSiteSettings } from '@/lib/content'
 import { debaterLoginNavigationItem } from '@/lib/feature-flags'
 import { loadMediaConsent } from '@/lib/media-consent'
 import { enforcePublishingPolicy } from '@/lib/publishing-policy'
@@ -37,7 +37,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   const settings = loadSiteSettings()
   const pages = loadPages()
 
-  enforcePublishingPolicy({ pages, settings, consent: loadMediaConsent() })
+  // content/home.yaml carries copy too, so it is guarded alongside the Markdown pages rather
+  // than being the one file on the site where an address or a name is not checked.
+  enforcePublishingPolicy({
+    pages: [...pages, homeContentAsPage()],
+    settings,
+    consent: loadMediaConsent(),
+  })
 
   const items = pages.map((page) => ({ href: page.route, label: page.navLabel }))
   const debaterLogin = debaterLoginNavigationItem(settings.debaterLoginLabel)

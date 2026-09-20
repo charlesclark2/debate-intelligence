@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest'
 
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
+import { CardGrid } from '@/components/CardGrid'
 import { MAIN_CONTENT_ID } from '@/components/landmark-ids'
 import { Prose } from '@/components/Prose'
+import { Section } from '@/components/Section'
 import { SiteFrame } from '@/components/SiteFrame'
 
 import { describeViolations, findAccessibilityViolations } from './axe'
@@ -194,6 +196,132 @@ describe('the shared components', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'A heading' })).toBeDefined()
 
     const violations = await findAccessibilityViolations(container)
+    expect(violations, describeViolations(violations)).toHaveLength(0)
+  })
+})
+
+/**
+ * The layout kit added by v1-e36-t06. These assertions render it through the real SiteFrame, so
+ * the landmark structure the rest of this file pins down is the structure the kit lands in: a
+ * band is a <section> inside <main>, never a second <main> or a bare <div> that has lost its
+ * place in the outline.
+ */
+describe('the layout kit', () => {
+  const bands = (
+    <>
+      <Section eyebrow="Start here" id="entry" title="Four things worth knowing" tone="tinted">
+        <CardGrid columns={2}>
+          <Card headingLevel={3} title="What the events are">
+            <p>Body copy.</p>
+          </Card>
+          <Card headingLevel={3} title="How to join">
+            <p>Body copy.</p>
+          </Card>
+        </CardGrid>
+      </Section>
+      <Section id="session" title="Parent information session" tone="inverse">
+        <p>Body copy.</p>
+      </Section>
+    </>
+  )
+
+  function renderBands() {
+    return render(
+      <SiteFrame items={items} strings={strings}>
+        <h1>Page heading</h1>
+        {bands}
+      </SiteFrame>,
+      { container: document.body },
+    )
+  }
+
+  it('puts every band inside the main landmark', () => {
+    const { container } = renderBands()
+    const sections = container.querySelectorAll('main > section')
+    expect(sections).toHaveLength(2)
+    expect(container.querySelectorAll('main')).toHaveLength(1)
+  })
+
+  it('names a titled band for a screen reader and leaves the outline unbroken', () => {
+    renderBands()
+    const band = document.getElementById('entry')
+    expect(band?.getAttribute('aria-labelledby')).toBe('entry-title')
+    expect(screen.getByRole('heading', { level: 2, name: 'Four things worth knowing' })).toBeDefined()
+    expect(screen.getByRole('heading', { level: 3, name: 'How to join' })).toBeDefined()
+  })
+
+  it('carries the tone on the element, so the surface is one class not a set of overrides', () => {
+    renderBands()
+    expect(document.getElementById('entry')?.className).toContain('section--tinted')
+    expect(document.getElementById('session')?.className).toContain('section--inverse')
+  })
+
+  it('lays the cards out as a list, one item per card', () => {
+    const { container } = renderBands()
+    const grid = container.querySelector('.card-grid')
+    expect(grid?.tagName).toBe('UL')
+    expect(grid?.className).toContain('card-grid--2-up')
+    expect(grid?.querySelectorAll(':scope > li.card-grid__item')).toHaveLength(2)
+    // A <ul> may contain only <li>, so each Card's <article> has to be wrapped rather than
+    // dropped straight into the grid.
+    for (const item of grid?.querySelectorAll(':scope > li') ?? []) {
+      expect(item.firstElementChild?.tagName).toBe('ARTICLE')
+    }
+  })
+
+  /**
+   * The left-offset defect: a 36rem paragraph sitting against the left edge of a much wider band
+   * with all the empty space on its right. The fix is one centred text column that the heading
+   * and the content share, which a card grid opts out of.
+   */
+  it('puts a text band in one centred column, and lets a grid break out of it', () => {
+    const { container } = render(
+      <main>
+        <Section id="text-band" intro="An intro." title="A text band">
+          <p>Body copy.</p>
+        </Section>
+        <Section contentWidth="wide" id="grid-band" title="A grid band">
+          <CardGrid>
+            <Card headingLevel={3} title="A card">
+              <p>Body copy.</p>
+            </Card>
+          </CardGrid>
+        </Section>
+      </main>,
+    )
+
+    const textBand = container.querySelector('#text-band .section__inner')
+    expect(textBand?.querySelector(':scope > .section__column')).not.toBeNull()
+    expect(textBand?.querySelector('.section__column > p')?.textContent).toBe('Body copy.')
+
+    // The header always sits in the column, in both kinds of band, so every page is centred on
+    // one axis.
+    expect(container.querySelector('#text-band .section__header')).not.toBeNull()
+    expect(container.querySelector('#grid-band .section__header')).not.toBeNull()
+
+    // A grid is the one thing allowed out of the column.
+    const gridBand = container.querySelector('#grid-band .section__inner')
+    expect(gridBand?.querySelector(':scope > .section__column')).toBeNull()
+    expect(gridBand?.querySelector(':scope > .card-grid')).not.toBeNull()
+  })
+
+  it('renders a band with no heading at all, for a hero', () => {
+    const { container } = render(
+      <main>
+        <Section>
+          <p>Body copy with no section heading above it.</p>
+        </Section>
+      </main>,
+    )
+    const band = container.querySelector('section')
+    expect(band?.getAttribute('aria-labelledby')).toBeNull()
+    expect(band?.querySelector('.section__header')).toBeNull()
+  })
+
+  it('has no WCAG 2.1 AA violations', async () => {
+    renderBands()
+    await flushPendingEffects()
+    const violations = await findAccessibilityViolations(document.body)
     expect(violations, describeViolations(violations)).toHaveLength(0)
   })
 })

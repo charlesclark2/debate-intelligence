@@ -187,9 +187,26 @@ None. Every command in this task runs in seconds; the full suite is `563 passed 
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- All criteria pass and the two things this task had to get right are right: content-addressed blob
+  keys that match what S3 will use in v1-e29-t04, so the local and cloud stores are the same shape;
+  and re-hashing on read so a tampered blob raises BlobIntegrityError instead of being handed back
+  as evidence. Checking that the migration .sql actually ships in a built wheel is the kind of
+  verification that saves a confusing bug later.
+- Synchronous file and SQLite I/O inside `async def` is accepted for V1. It is documented at the
+  point of use and reversible behind the port, and the CLI is the only caller. The V2 API must not
+  reuse these adapters on an event loop that serves requests; that boundary is already drawn by
+  v2-e11 having its own DynamoDB/S3 adapters.
+- The `save_results` divergence is a contract question, and your recommendation is the right one:
+  rejecting two results for the same article is the correct behaviour, so the fake gets the check
+  rather than the adapter losing it. v1-e02-t04 settles it, and its contract suite is the place the
+  decision belongs.
+- The `docs/architecture/ports-and-adapters.md` fix is accepted although the line belonged to t02.
+  Four repositories each opening the same file would mean four connections and four racing
+  migration runs; leaving a known-wrong example for the next reader to copy would have been worse
+  than the scope deviation.

@@ -192,9 +192,26 @@ None. Every command in this task runs in seconds; the longest was `uv run pre-co
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- All Goal and node criteria pass. `domain/` imports only the standard library, pydantic and ulid,
+  and the package's runtime dependencies are pydantic and python-ulid, so the ports/adapters
+  boundary holds. There are no ignore comments, schema drift is caught by both the script and the
+  test, and there are no deviations.
+- The three judgement calls are agreed:
+  1. Not enforcing evidence_text == snapshot slice at construction is right. Tampered cards must
+     be constructible so the E03 verifier can return UNVERIFIED/TEXT_MISMATCH. Verification lives
+     in the verifier, not the constructor.
+  2. The enum casing split follows the specs' wire formats; keep it.
+  3. The extra enums (AccessStatus.UNKNOWN, SearchStatus, CitationFieldSource) are sourced from
+     their owning specs; accepted.
+- Carried forward (spec notes, PM):
+  - The re-plan made imported cards a V1 concern. v1-e31-t03 emits ParsedCards with provenance_mode
+    FILE_IMPORT, and ProvenanceMode has no FILE_IMPORT value today, so t03 adds it.
+  - Any later conversion of a ParsedCard into a domain Card, whether by the E33 file builder or the
+    V2 library, meets the same snapshot-backing invariant question as the PASTED follow-up. Resolve
+    both together when the first converter is specified.

@@ -51,7 +51,7 @@ spec:
         A README in the contracts module explains how a new adapter (e.g. DynamoDbCardRepository) opts in
         with a single fixture.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

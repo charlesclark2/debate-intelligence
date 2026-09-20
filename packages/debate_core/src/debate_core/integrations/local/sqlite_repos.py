@@ -275,13 +275,14 @@ class SqliteArticleRepository:
     async def find_by_canonical_url(self, canonical_url: str) -> Article | None:
         """Return the article stored under this URL, matched byte for byte.
 
-        The port does not make the canonical URL unique, so the oldest matching article wins: it is
-        the one other records already point at, and picking it makes the answer stable rather than
-        dependent on which row SQLite happened to visit first.
+        The port does not make the canonical URL unique, so it states which match wins: the most
+        recently created one, `article_id` descending to break a tie. That is the same total order
+        `list_by_owner` pages in, and the `ORDER BY` here is what stops the answer depending on
+        which row SQLite happened to visit first.
         """
         row = self._database.connection.execute(
             "SELECT article_id, document FROM articles WHERE canonical_url = ? "
-            "ORDER BY created_at ASC, article_id ASC LIMIT 1",
+            "ORDER BY created_at DESC, article_id DESC LIMIT 1",
             (canonical_url,),
         ).fetchone()
         if row is None:
@@ -617,10 +618,11 @@ class SqliteSearchRepository:
 def _check_results_belong_to(search_id: str, results: Sequence[SearchResult]) -> None:
     """Reject a ranking that is not a ranking of this search — all caller bugs, not storage states.
 
-    The third check has no counterpart in the in-memory fake, which would store two results for one
-    article. The schema's primary key refuses them, and a raw `sqlite3.IntegrityError` crossing a
-    port would be worse than a named `ValueError`, so the rule the domain already states — one
-    search holds at most one result per article — is checked here explicitly.
+    All three checks are the port's, so the in-memory fake makes them too. The third one exists
+    here in explicit form because the schema's primary key would refuse a repeated article anyway,
+    and a raw `sqlite3.IntegrityError` crossing a port would be worse than a named `ValueError`.
+
+    They run before the replacement starts, so a rejected call leaves the stored ranking untouched.
     """
     foreign = [result.article_id for result in results if result.search_id != search_id]
     if foreign:

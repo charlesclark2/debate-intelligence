@@ -166,10 +166,15 @@ class InMemoryArticleRepository:
         return stored
 
     async def find_by_canonical_url(self, canonical_url: str) -> Article | None:
-        for article in self._articles.values():
-            if article.canonical_url == canonical_url:
-                return article
-        return None
+        """The most recently created match, breaking a tie on the id, exactly as the port says.
+
+        Returning the first article the dictionary happened to yield would make the answer depend
+        on insertion order, which is precisely the non-answer the port rules out.
+        """
+        matching = [article for article in self._articles.values() if article.canonical_url == canonical_url]
+        if not matching:
+            return None
+        return max(matching, key=lambda article: (article.created_at, article.article_id))
 
     async def save(self, article: Article) -> Article:
         stored = self._articles.get(article.article_id)
@@ -343,6 +348,12 @@ class InMemorySearchRepository:
         ranks = [result.rank for result in results]
         if len(set(ranks)) != len(ranks):
             raise ValueError(f"two results share a rank in search {search_id}: {sorted(ranks)}")
+        articles = [result.article_id for result in results]
+        if len(set(articles)) != len(articles):
+            # A ranking is a total order over distinct articles. SQLite's primary key refuses this
+            # too; the fake has to refuse it in the same words, or a caller's bug survives every
+            # fake-backed test and only appears against real storage.
+            raise ValueError(f"two results name the same article in search {search_id}: {sorted(articles)}")
         self._results[search_id] = tuple(sorted(results, key=lambda result: result.rank))
 
     async def list_results(self, search_id: str) -> tuple[SearchResult, ...]:

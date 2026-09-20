@@ -21,6 +21,7 @@ members = [
 
 [dependency-groups]
 dev = [
+    "anyio>=4.4",
     "httpx>=0.28",
     "hypothesis>=6.100",
     "lxml>=5.3",
@@ -114,6 +115,11 @@ addopts = [
     "--cov",
     "--cov-report=term-missing",
     "--disable-socket",
+    # The repository contract suite (v1-e02-t04) runs its `async def` tests on a real asyncio
+    # loop, and a loop builds its self-pipe from `socket.socketpair()`. AF_UNIX sockets cannot
+    # reach a network, so allowing them keeps the suite offline while letting the loop start;
+    # AF_INET and AF_INET6 stay blocked by `--disable-socket`.
+    "--allow-unix-socket",
     "-m", "not slow and not live",
 ]
 markers = [

@@ -249,17 +249,6 @@ def test_find_by_canonical_url_matches_byte_for_byte(articles: SqliteArticleRepo
     assert run(articles.find_by_canonical_url("https://example.org/a")) is None
 
 
-def test_find_by_canonical_url_returns_the_oldest_of_several(
-    articles: SqliteArticleRepository,
-) -> None:
-    """The port does not make the URL unique, so the answer still has to be deterministic."""
-    url = "https://example.org/shared"
-    first = run(articles.save(make_article(url=url, created_at=EPOCH)))
-    run(articles.save(make_article(url=url, created_at=EPOCH + timedelta(days=1))))
-
-    assert run(articles.find_by_canonical_url(url)) == first
-
-
 def test_deleting_an_article(articles: SqliteArticleRepository) -> None:
     saved = run(articles.save(make_article()))
 

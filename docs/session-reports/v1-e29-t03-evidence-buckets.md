@@ -183,9 +183,11 @@ evidence store, matching the existing section for the website.
   metadata that SDKs ask for, and no `kms:ViaService` condition was added: it would be tighter,
   but a wrong `ViaService` silently breaks presigning in V2 and `DescribeKey` is not called
   through S3.
-* **A `check` block in each root** fails the plan when `evidence_operator_user_names` is empty.
-  The names live in a gitignored file, so an empty list is easy to end up with and otherwise
-  invisible until a sync fails with `AccessDenied`.
+* **A `check` block in each root** warns at plan time when `evidence_operator_user_names` is
+  empty. The names live in a gitignored file, so an empty list is easy to end up with and
+  otherwise invisible until a sync fails with `AccessDenied`. A `check` block is a warning and not
+  a hard failure — which is the right strength here, since a root with no operator assigned is
+  still a legitimate thing to apply.
 * **The bucket suffix is `a7508de8`**, the committed constant the state and site buckets already
   use. The buckets differ by their `-evidence` purpose segment, and a committed suffix is what
   lets the runbook, a takedown and `debate-research store` name the bucket without reading state.

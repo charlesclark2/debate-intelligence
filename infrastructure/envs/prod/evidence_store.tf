@@ -40,7 +40,8 @@ module "evidence_store" {
 
 # A store nobody can reach is a store nobody can publish to, and the operator user names live in a
 # gitignored file — so an empty list is easy to end up with by accident and invisible until a sync
-# fails with AccessDenied. The check says so at plan time instead.
+# fails with AccessDenied. This says so at plan time instead. A `check` block warns rather than
+# failing, which is the right strength: a root with nobody assigned is still applyable.
 check "someone_can_operate_the_evidence_store" {
   assert {
     condition = length(var.evidence_operator_user_names) > 0

@@ -16,6 +16,7 @@
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
 | [runbooks/terraform-bootstrap.md](runbooks/terraform-bootstrap.md) | Creating the Terraform state buckets and the dev/prod environment roots |
 | [runbooks/caselist-removal.md](runbooks/caselist-removal.md) | Removing a caselist or OpenEv source on request |
+| [runbooks/team-website.md](runbooks/team-website.md) | Standing up the team website's hosting, domains and publisher credentials |
 | [session-reports/](session-reports/README.md) | One report per completed task |
 | [runbooks/](runbooks/) | Operational procedures run by the operator |
 | [../plan_specs/README.md](../plan_specs/README.md) | PlanSpec conventions |

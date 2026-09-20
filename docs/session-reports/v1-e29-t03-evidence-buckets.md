@@ -259,9 +259,33 @@ module's `terraform test` is still not part of that script — see **Follow-up w
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- Every criterion passes with live evidence in both environments, and the strongest proof here is
+  the cryptographic one: separate customer-managed keys per environment mean ADR-0010's rule 4
+  holds even if a policy is later mis-edited. The takedown profile deleting an object and its
+  version under quarantine/ while being refused under reports/ is the check that matters for the
+  publishing policy's removal clock.
+- All three spec amendments are correct and the PM has made them on branch
+  `specs/evidence-layout-alignment`:
+  1. The alias is `alias/debate-<env>-evidence`. The spec's form would have fallen outside
+     DebateMaintainer's `DenyProdKmsKeysByAlias` guardrail, which is exactly the boundary this
+     epic exists to hold. Code was right; spec was wrong.
+  2. `v1-e30-t05` now publishes to `raw/caselist/<slug>/sha256/ab/cd/<hash>`. Dropping the file
+     extension is right: a content-addressed key with an extension makes identical bytes two
+     objects.
+  3. The delete-denied check now names the evidence profile rather than `debate-dev`, which is
+     PowerUser and proves nothing about least privilege.
+- The three judgement calls are accepted as written: the `-evidence-removal` profile names, the
+  `GetObject` on `manifests/_suppression/` only (an append-only list must be read before it is
+  written), and dev omitting the Standard-IA transition.
+- Follow-up taken up rather than deferred: `scripts/terraform_checks.sh` now runs `terraform test`
+  for every module with a `tests/` directory (credential-free, seconds, `--no-test` to skip), and
+  v1-e29-t02's ac4 was updated to match. It is on the same specs branch, so no separate task.
+- Next: `v1-e29-t04-s3-blob-store` reads the bucket and key from each root's
+  `evidence_bucket_name` / `evidence_kms_key_arn` outputs rather than hard-coding a third copy of
+  the name.

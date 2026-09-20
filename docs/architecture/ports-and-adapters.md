@@ -165,7 +165,7 @@ invocation = await router.invoke(
     output_type=PassageChoice,
     variables={"tag": tag, "paragraphs": numbered_paragraphs},
 )
-choice = invocation.output           # a validated PassageChoice
+choice = invocation.output  # a validated PassageChoice
 model_id = invocation.metadata.model_id
 ```
 

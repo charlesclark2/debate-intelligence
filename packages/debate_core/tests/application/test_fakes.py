@@ -240,14 +240,24 @@ def test_a_cursor_from_another_listing_is_rejected() -> None:
     articles = InMemoryArticleRepository()
     owner = new_id()
     run(articles.save(make_article(owner_id=owner, url="https://example.org/a")))
+    # Wrong listing entirely.
     with pytest.raises(InvalidCursor):
-        run(articles.list_by_owner(owner, cursor="card:01J0000000000000000000000"))
+        run(articles.list_by_owner(owner, cursor="card:" + new_id()))
+    # Right listing, but an id that is not in it.
+    with pytest.raises(InvalidCursor):
+        run(articles.list_by_owner(owner, cursor="article:" + new_id()))
 
 
 def test_listing_rejects_a_limit_below_one() -> None:
     articles = InMemoryArticleRepository()
     with pytest.raises(ValueError, match="limit must be at least 1"):
         run(articles.list_by_owner(new_id(), limit=0))
+
+
+def test_an_unknown_snapshot_is_not_found() -> None:
+    articles = InMemoryArticleRepository()
+    with pytest.raises(NotFound):
+        run(articles.get_snapshot(new_id()))
 
 
 def test_snapshots_are_immutable_and_listed_newest_retrieval_first() -> None:
@@ -296,6 +306,11 @@ def test_a_missing_blob_raises_not_found() -> None:
         run(store.get(absent))
 
 
+def test_tampering_with_a_blob_that_was_never_stored_is_a_test_bug() -> None:
+    with pytest.raises(NotFound):
+        InMemorySnapshotStore().corrupt(hashlib.sha256(b"never stored").hexdigest(), b"x")
+
+
 def test_a_tampered_blob_is_never_served() -> None:
     store = InMemorySnapshotStore()
     key = run(store.put(b"the article text"))
@@ -309,6 +324,16 @@ def test_a_tampered_blob_is_never_served() -> None:
 # --------------------------------------------------------------------------------------------
 # InMemoryCardRepository
 # --------------------------------------------------------------------------------------------
+
+
+def test_an_unknown_card_is_not_found_by_get_or_delete() -> None:
+    cards = InMemoryCardRepository()
+    missing = new_id()
+    with pytest.raises(NotFound):
+        run(cards.get(missing))
+    with pytest.raises(NotFound):
+        run(cards.delete(missing, expected_revision=1))
+    assert run(cards.find(missing)) is None
 
 
 def test_creating_a_card_twice_is_refused() -> None:
@@ -429,6 +454,23 @@ def test_a_search_with_no_results_is_not_a_missing_search() -> None:
     assert run(searches.list_results(search.search_id)) == ()
 
 
+def test_searches_are_fetched_by_id_and_listed_newest_first_per_owner() -> None:
+    searches = InMemorySearchRepository()
+    owner = new_id()
+    first = run(searches.save(make_search(owner_id=owner, query="methane")))
+    second = run(searches.save(make_search(owner_id=owner, query="permafrost")))
+    run(searches.save(make_search(owner_id=new_id(), query="someone else's")))
+
+    assert run(searches.get(first.search_id)) == first
+    with pytest.raises(NotFound):
+        run(searches.get(new_id()))
+
+    listed = run(searches.list_by_owner(owner))
+    assert {search.query for search in listed.items} == {"methane", "permafrost"}
+    assert listed.items[0].search_id > listed.items[1].search_id  # ULIDs break the tie
+    assert second.revision == 1
+
+
 # --------------------------------------------------------------------------------------------
 # FakeSearchProvider
 # --------------------------------------------------------------------------------------------
@@ -504,7 +546,9 @@ def test_a_refused_retrieval_is_an_answer_not_an_exception() -> None:
 def test_the_extractor_splits_paragraphs_and_refuses_what_it_cannot_read() -> None:
     fetcher = FakeArticleFetcher()
     fetched = fetcher.add("https://example.org/a", b"First paragraph.\n\nSecond paragraph.\n\n")
-    extracted = FakeContentExtractor().extract(fetched)
+    extractor = FakeContentExtractor()
+    assert extractor.name == "fake-extractor"
+    extracted = extractor.extract(fetched)
     assert extracted.paragraphs == ("First paragraph.", "Second paragraph.")
     assert extracted.text == "First paragraph.\n\nSecond paragraph."
     assert extracted.quality.paragraph_count == 2
@@ -578,6 +622,20 @@ def test_output_that_does_not_fit_the_schema_raises_invalid_model_output() -> No
             )
         assert caught.value.prompt_id == "select-passage"
         assert caught.value.model_id == "fake-model"
+
+
+def test_responses_can_be_enqueued_after_construction() -> None:
+    router = FakeModelRouter()
+    router.enqueue(PassageChoice(paragraph_id=9, start_offset=1, end_offset=2))
+    invocation = run(
+        router.invoke(
+            task_class=ModelTaskClass.DEEP_AUDIT,
+            prompt_id="p",
+            prompt_version="1.0.0",
+            output_type=PassageChoice,
+        )
+    )
+    assert invocation.output.paragraph_id == 9
 
 
 def test_an_unreachable_model_and_an_empty_script_are_both_provider_failures() -> None:
@@ -654,6 +712,13 @@ def test_generated_ids_are_valid_ulids_that_count_up() -> None:
         ).card_id
         == first
     )
+
+
+def test_a_counter_that_outgrows_the_id_is_refused_rather_than_truncated() -> None:
+    """A silently truncated id would collide, which is worse than a loud failure."""
+    generator = SequentialIdGenerator("A" * 24, start=10)
+    with pytest.raises(ValueError, match="does not fit"):
+        generator.new_id()
 
 
 def test_a_prefix_outside_the_ulid_alphabet_is_refused() -> None:

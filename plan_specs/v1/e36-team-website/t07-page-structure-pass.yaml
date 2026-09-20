@@ -92,7 +92,7 @@ spec:
         reachable and operable by keyboard alone, the print stylesheet expands all disclosures, and the
         publishing-policy guard still reports only the October 1 room placeholder.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

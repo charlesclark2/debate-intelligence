@@ -1,0 +1,24 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored: the task spec forbids
+# committing account ids, emails or credentials.
+
+aws_region = "us-east-1"
+
+# Email of the adult maintainer accountable for these resources; becomes the Owner tag.
+owner = "you@example.com"
+
+# IAM Identity Center user names (not emails) for adult maintainers. Never students.
+identity_center_user_names = ["your-identity-center-username"]
+
+# Subset of the above allowed to assume DebateBreakGlassAdmin.
+break_glass_user_names = ["your-identity-center-username"]
+
+# Where budget and cost-anomaly alerts go.
+budget_notification_emails = ["you@example.com"]
+
+# Monthly alert thresholds per environment, in USD.
+monthly_budget_usd = {
+  dev  = 25
+  prod = 50
+}
+
+bedrock_monthly_budget_usd = 40

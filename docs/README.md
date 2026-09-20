@@ -13,6 +13,7 @@
 | [policies/caselist-data-use.md](policies/caselist-data-use.md) | Data-use policy for OpenCaselist disclosures and OpenEv camp files |
 | [runbooks/caselist-removal.md](runbooks/caselist-removal.md) | Removing a caselist or OpenEv source on request |
 | [session-reports/](session-reports/README.md) | One report per completed task |
+| [runbooks/](runbooks/) | Operational procedures run by the operator |
 | [../plan_specs/README.md](../plan_specs/README.md) | PlanSpec conventions |
 | [../ROADMAP.md](../ROADMAP.md) | Releases, epics and tasks with status |
 

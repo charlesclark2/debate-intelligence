@@ -45,3 +45,7 @@ crash.log
 
 # Task workflow scratch (kickoff prompt, PR body)
 .task/
+
+# Operator-local Terraform inputs (account ids, emails); never committed.
+infrastructure/bootstrap/**/terraform.tfvars
+infrastructure/bootstrap/**/*.auto.tfvars

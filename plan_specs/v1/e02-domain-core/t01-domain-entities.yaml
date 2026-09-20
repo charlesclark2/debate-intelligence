@@ -59,7 +59,7 @@ spec:
       description: >-
         pyright strict passes on debate_core.domain with no type: ignore comments.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

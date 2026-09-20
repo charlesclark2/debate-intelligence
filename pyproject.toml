@@ -1,0 +1,118 @@
+# Workspace root for the Debate Intelligence Platform. Not a distributable package itself: it holds
+# the uv workspace definition, the shared dev tooling and every tool's configuration.
+[project]
+name = "debate-intelligence"
+version = "0.1.0"
+description = "Workspace root for the Debate Intelligence Platform."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+    "packages/debate_core",
+    "packages/debate_cli",
+    "packages/debate_api",
+    "packages/debate_workers",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.100",
+    "pre-commit>=4.0",
+    "pre-commit-hooks>=5.0",
+    "pyright[nodejs]>=1.1.400",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-socket>=0.7",
+    "pytest-xdist>=3.6",
+    "respx>=0.22",
+    "ruff>=0.11",
+]
+
+# ---------------------------------------------------------------------------------------------
+# ruff: lint + format
+# ---------------------------------------------------------------------------------------------
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+# scripts/ (spec and task tooling) predates this config and is owned by v1-e01-t05-spec-tooling and
+# v1-e01-t11-task-workflow-cli; it comes under ruff when that tooling is brought into line.
+extend-exclude = ["scripts"]
+force-exclude = true  # honour the excludes when pre-commit passes file names explicitly
+src = [
+    "packages/debate_core/src",
+    "packages/debate_cli/src",
+    "packages/debate_api/src",
+    "packages/debate_workers/src",
+]
+
+[tool.ruff.lint]
+select = [
+    "F",   # pyflakes
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["debate_core", "debate_cli", "debate_api", "debate_workers"]
+
+# ---------------------------------------------------------------------------------------------
+# pyright: strict for the domain core, standard for the delivery packages
+# ---------------------------------------------------------------------------------------------
+[tool.pyright]
+include = ["packages"]
+exclude = ["**/__pycache__", "**/.*"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+strict = ["packages/debate_core"]
+
+# ---------------------------------------------------------------------------------------------
+# pytest: every project marker is registered here, once. Later tasks use them, never add their own.
+# ---------------------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = [
+    "packages/debate_core/tests",
+    "packages/debate_cli/tests",
+    "packages/debate_api/tests",
+    "packages/debate_workers/tests",
+    "tests",
+]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--import-mode=importlib",
+    "--numprocesses=auto",
+    "--cov",
+    "--cov-report=term-missing",
+    "--disable-socket",
+    "-m", "not slow and not live",
+]
+markers = [
+    "slow: takes more than a few seconds; excluded by default, opt in with -m slow",
+    "live: needs the network or a real model/provider; excluded by default, opt in with -m live",
+    "eval: LLM evaluation suite, run outside the PR CI path",
+    "dev: cloud smoke check targeting the dev environment",
+    "prod: cloud smoke check targeting the prod environment",
+]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["debate_core", "debate_cli", "debate_api", "debate_workers"]
+# xdist workers that receive no tests collect nothing; that is expected, not a problem.
+disable_warnings = ["no-data-collected"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

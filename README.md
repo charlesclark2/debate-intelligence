@@ -45,6 +45,26 @@ docs/                     architecture proposal, ADRs
 scripts/                  validate_specs.py, spec_index.py
 ```
 
+## Development setup
+
+Python 3.12 (pinned in `.python-version`) and [uv](https://docs.astral.sh/uv/). The root
+`pyproject.toml` is a uv workspace whose members are the four packages under `packages/`; it also
+holds the configuration for every quality tool.
+
+```bash
+uv sync --all-packages             # create .venv with all packages + dev tools from uv.lock
+uv run pre-commit install          # once per clone: ruff, formatting, whitespace, large-file guard
+uv run ruff check                  # lint
+uv run ruff format --check         # formatting
+uv run pyright packages/debate_core   # strict type check of the domain core
+uv run pytest                      # parallel, with coverage, network blocked
+```
+
+`pytest` runs with `-n auto`, coverage and sockets disabled, and deselects `slow` and `live`
+tests; opt in with `uv run pytest -m slow` or `-m live`. The project's markers (`slow`, `live`,
+`eval`, `dev`, `prod`) are all registered in the root `pyproject.toml`; `--strict-markers`
+rejects any other.
+
 ## Branches and environments
 
 `main` is production and `dev` is the development environment; every change is deployed to

@@ -60,12 +60,13 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 3 | 150 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 3 | 18 | 0 | 194 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 5 | 150 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 3 | 18 | 3 | 196 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 4 | 20 | 0 | 210 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 13 | 0 | 112 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 11 | 0 | 109 |
@@ -92,7 +93,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 |---|---|---|---|
 | [Initialize local git repository and monorepo skeleton](plan_specs/v1/e01-repo-foundation/t01-init-local-repo.yaml) `v1-e01-t01-init-local-repo` | Succeeded | 0 | 6.0 |
 | [Create GitHub repository, push, and protect main](plan_specs/v1/e01-repo-foundation/t02-github-remote.yaml) `v1-e01-t02-github-remote` | Pending | 1 | 2.5 |
-| [uv workspace, Python 3.12 and quality tooling](plan_specs/v1/e01-repo-foundation/t03-uv-workspace-tooling.yaml) `v1-e01-t03-uv-workspace-tooling` | Pending | 1 | 5.5 |
+| [uv workspace, Python 3.12 and quality tooling](plan_specs/v1/e01-repo-foundation/t03-uv-workspace-tooling.yaml) `v1-e01-t03-uv-workspace-tooling` | Succeeded | 1 | 5.5 |
 | [GitHub Actions CI pipeline](plan_specs/v1/e01-repo-foundation/t04-ci-pipeline.yaml) `v1-e01-t04-ci-pipeline` | Pending | 3 | 4.0 |
 | [PlanSpec validation and index tooling](plan_specs/v1/e01-repo-foundation/t05-spec-tooling.yaml) `v1-e01-t05-spec-tooling` | Pending | 2 | 9.5 |
 | [Architecture proposal and ADR records](plan_specs/v1/e01-repo-foundation/t06-adr-docs.yaml) `v1-e01-t06-adr-docs` | Succeeded | 1 | 4.5 |
@@ -106,7 +107,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [Pydantic domain entities and enums](plan_specs/v1/e02-domain-core/t01-domain-entities.yaml) `v1-e02-t01-domain-entities` | Pending | 1 | 8.0 |
+| [Pydantic domain entities and enums](plan_specs/v1/e02-domain-core/t01-domain-entities.yaml) `v1-e02-t01-domain-entities` | Succeeded | 1 | 8.0 |
 | [Repository and provider port interfaces](plan_specs/v1/e02-domain-core/t02-ports.yaml) `v1-e02-t02-ports` | Pending | 1 | 6.5 |
 | [Local filesystem and SQLite repository implementations](plan_specs/v1/e02-domain-core/t03-local-repositories.yaml) `v1-e02-t03-local-repositories` | Pending | 2 | 7.0 |
 | [Reusable repository contract test suite](plan_specs/v1/e02-domain-core/t04-repo-contract-tests.yaml) `v1-e02-t04-repo-contract-tests` | Pending | 1 | 6.0 |
@@ -133,7 +134,7 @@ Weekly OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are 
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [AWS account baseline](plan_specs/v1/e29-cloud-evidence-store/t01-aws-account-baseline.yaml) `v1-e29-t01-aws-account-baseline` | Pending | 0 | 10.0 |
+| [AWS account baseline](plan_specs/v1/e29-cloud-evidence-store/t01-aws-account-baseline.yaml) `v1-e29-t01-aws-account-baseline` | Succeeded | 0 | 10.0 |
 | [Terraform bootstrap and environments](plan_specs/v1/e29-cloud-evidence-store/t02-terraform-bootstrap.yaml) `v1-e29-t02-terraform-bootstrap` | Pending | 1 | 7.0 |
 | [Evidence buckets and operator access](plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml) `v1-e29-t03-evidence-buckets` | Pending | 1 | 9.0 |
 | [S3 blob-store adapter](plan_specs/v1/e29-cloud-evidence-store/t04-s3-blob-store.yaml) `v1-e29-t04-s3-blob-store` | Pending | 2 | 11.0 |
@@ -143,19 +144,19 @@ Weekly OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are 
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [Caselist and OpenEv data-use policy](plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml) `v1-e30-t01-caselist-data-use-policy` | Pending | 0 | 9.0 |
+| [Caselist and OpenEv data-use policy](plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml) `v1-e30-t01-caselist-data-use-policy` | Succeeded | 0 | 9.0 |
 | [Caselist domain model](plan_specs/v1/e30-caselist-ingestion/t02-caselist-domain-model.yaml) `v1-e30-t02-caselist-domain-model` | Pending | 2 | 7.0 |
-| [Weekly archive importer](plan_specs/v1/e30-caselist-ingestion/t03-archive-importer.yaml) `v1-e30-t03-archive-importer` | Pending | 5 | 15.0 |
+| [Weekly archive importer](plan_specs/v1/e30-caselist-ingestion/t03-archive-importer.yaml) `v1-e30-t03-archive-importer` | Pending | 4 | 15.0 |
 | [OpenEv camp-file importer](plan_specs/v1/e30-caselist-ingestion/t04-openev-importer.yaml) `v1-e30-t04-openev-importer` | Pending | 1 | 8.0 |
 | [Publish sources and manifests to S3](plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml) `v1-e30-t05-caselist-publish` | Pending | 2 | 9.0 |
 | [Initial caselist and camp-file backfill](plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml) `v1-e30-t06-initial-backfill` | Pending | 3 | 5.0 |
-| [Source removal and suppression list](plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml) `v1-e30-t07-source-removal` | Pending | 2 | 11.0 |
+| [Source removal and suppression list](plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml) `v1-e30-t07-source-removal` | Pending | 2 | 12.5 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [CardMirror evaluation and editor decision](plan_specs/v1/e31-debate-file-parsing/t01-cardmirror-evaluation.yaml) `v1-e31-t01-cardmirror-evaluation` | Pending | 1 | 11.5 |
+| [CardMirror evaluation and editor decision](plan_specs/v1/e31-debate-file-parsing/t01-cardmirror-evaluation.yaml) `v1-e31-t01-cardmirror-evaluation` | Succeeded | 1 | 11.5 |
 | [Verbatim/CardMirror style profile](plan_specs/v1/e31-debate-file-parsing/t02-verbatim-style-profile.yaml) `v1-e31-t02-verbatim-style-profile` | Pending | 2 | 13.0 |
 | [Debate .docx parser](plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml) `v1-e31-t03-debate-docx-parser` | Pending | 2 | 15.0 |
 | [Card fingerprints and occurrences](plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml) `v1-e31-t04-card-fingerprints` | Pending | 1 | 13.0 |
@@ -282,6 +283,39 @@ Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged a
 | [Student/coach guide and team pilot](plan_specs/v1/e09-v1-quality-pilot/t07-team-pilot.yaml) `v1-e09-t07-team-pilot` | Pending | 2 | 14.0 |
 
 
+### v1.6 — Public team website
+
+Whitefish Bay Debate has a public, mobile-friendly team website: team information, a tournament and events calendar parents can subscribe to, coach-posted announcements, and a donation page that links to the district's payment process; a minimal version is live before the October 1, 2026 parent information session. Independent of v1.1-v1.5: it needs only the repo foundation and the AWS baseline.
+
+#### [E36 — Team Website Foundation](plan_specs/v1/e36-team-website/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [Website publishing and student-privacy policy](plan_specs/v1/e36-team-website/t01-publishing-policy.yaml) `v1-e36-t01-publishing-policy` | Pending | 0 | 6.0 |
+| [Site hosting infrastructure (ADR-0012)](plan_specs/v1/e36-team-website/t02-site-hosting.yaml) `v1-e36-t02-site-hosting` | Pending | 1 | 8.5 |
+| [Static site scaffold](plan_specs/v1/e36-team-website/t03-site-scaffold.yaml) `v1-e36-t03-site-scaffold` | Pending | 0 | 8.0 |
+| [Core pages for parents and students](plan_specs/v1/e36-team-website/t04-core-pages.yaml) `v1-e36-t04-core-pages` | Pending | 2 | 8.5 |
+| [Deploy flow: dev preview then prod](plan_specs/v1/e36-team-website/t05-site-deploy.yaml) `v1-e36-t05-site-deploy` | Pending | 2 | 5.5 |
+
+#### [E37 — Calendar & Announcements (Coach-Editable)](plan_specs/v1/e37-calendar-and-announcements/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [How coaches edit content (ADR-0015)](plan_specs/v1/e37-calendar-and-announcements/t01-content-editing-decision.yaml) `v1-e37-t01-content-editing-decision` | Pending | 1 | 13.0 |
+| [Events and tournaments calendar](plan_specs/v1/e37-calendar-and-announcements/t02-events-calendar.yaml) `v1-e37-t02-events-calendar` | Pending | 2 | 12.0 |
+| [Announcements and news](plan_specs/v1/e37-calendar-and-announcements/t03-announcements.yaml) `v1-e37-t03-announcements` | Pending | 2 | 12.0 |
+| [Automatic republish on content changes](plan_specs/v1/e37-calendar-and-announcements/t04-auto-republish.yaml) `v1-e37-t04-auto-republish` | Pending | 3 | 11.0 |
+| [Parent email updates](plan_specs/v1/e37-calendar-and-announcements/t05-parent-email-signup.yaml) `v1-e37-t05-parent-email-signup` | Pending | 2 | 6.0 |
+
+#### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [District donation process](plan_specs/v1/e38-donations/t01-district-donation-process.yaml) `v1-e38-t01-district-donation-process` | Pending | 0 | 6.0 |
+| [Donation page](plan_specs/v1/e38-donations/t02-donation-page.yaml) `v1-e38-t02-donation-page` | Pending | 4 | 9.0 |
+| [Opt-in donor recognition](plan_specs/v1/e38-donations/t03-donor-recognition.yaml) `v1-e38-t03-donor-recognition` | Pending | 3 | 6.0 |
+
+
 ## V2
 
 ### v2.0 — Cloud platform foundation
@@ -342,7 +376,7 @@ Debaters sign in to the web app and browse, search and download the team's evide
 |---|---|---|---|
 | [Next.js application scaffold](plan_specs/v2/e14-web-cut-card/t01-nextjs-scaffold.yaml) `v2-e14-t01-nextjs-scaffold` | Pending | 2 | 8.0 |
 | [Authentication UX](plan_specs/v2/e14-web-cut-card/t02-auth-ui.yaml) `v2-e14-t02-auth-ui` | Pending | 2 | 10.0 |
-| [Web hosting and environments](plan_specs/v2/e14-web-cut-card/t03-app-hosting.yaml) `v2-e14-t03-app-hosting` | Pending | 5 | 9.0 |
+| [Web hosting and environments](plan_specs/v2/e14-web-cut-card/t03-app-hosting.yaml) `v2-e14-t03-app-hosting` | Pending | 6 | 9.0 |
 | [Cut-a-Card flow](plan_specs/v2/e14-web-cut-card/t04-cut-card-flow.yaml) `v2-e14-t04-cut-card-flow` | Pending | 4 | 12.0 |
 | [Provenance-constrained card editor](plan_specs/v2/e14-web-cut-card/t05-card-editor.yaml) `v2-e14-t05-card-editor` | Pending | 3 | 14.0 |
 | [DOCX export and copy-as-rich-text](plan_specs/v2/e14-web-cut-card/t06-export-copy.yaml) `v2-e14-t06-export-copy` | Pending | 2 | 9.0 |

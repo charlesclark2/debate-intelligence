@@ -1,0 +1,209 @@
+# TASK v1-e37-t01-content-editing-decision — How coaches edit content (ADR-0015)
+# Epic: E37 Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §14 (privacy), ADR-0012 (static export on S3 + CloudFront), ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t01-content-editing-decision
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: How coaches edit content (ADR-0015)
+    debate/architecture-refs: §14, ADR-0012, ADR-0013
+spec:
+  description: >-
+    Decide, in ADR-0015 (number reserved for this task), how Whitefish Bay coaches keep the public site
+    current without touching code, then stand up the chosen accounts and write the coach guide. Options
+    compared at minimum: (a) a shared team Google Calendar as the events source; (b) a git-backed CMS in
+    the Decap/Sveltia style, where content lives as Markdown in site/content/ but every editing coach needs
+    a GitHub account and an OAuth login flow (real friction for volunteer coaches, recorded as such);
+    (c) a hosted headless CMS on a free tier; (d) Google Docs/Sheets as a content source. Criteria: coach
+    usability with no code or git knowledge, $0 at team scale, no student PII stored or required, works
+    with the static export from ADR-0012 (build-time fetch only, no runtime backend), and account/ownership
+    continuity (content and logins owned by a team or district account with at least two owners, never a
+    single coach's personal account). Charlie adds his own criteria and weights, and the top options are
+    tried by a coach in a dry-run before the ADR is accepted. The ADR also fixes two rules the later tasks
+    implement: calendar API keys, CMS tokens and webhook secrets are never committed (environment/secret
+    store only, placeholders in .env.example), and all external content is fetched at build time with a
+    last-good fallback so a source outage never breaks a deploy. Operator steps (Charlie): create the team
+    calendar and CMS/Google accounts, set sharing, store secrets. Boundaries: this task writes no site code
+    or fetchers (calendar rendering is t02, announcements t03, rebuild automation t04, parent email t05),
+    and it does not change hosting (ADR-0012, v1-e36-t02) or the student rules in the publishing policy
+    (v1-e36-t01), which it cites.
+  priority: 1
+  constraints:
+    packages: [docs/adr, docs/guides, docs/runbooks]
+    forbidden:
+      - Choosing a tool whose content or logins are owned by one coach's personal account
+      - Any option that requires storing student names, contact details or photos outside the publishing policy
+      - Committing calendar API keys, CMS tokens, OAuth client secrets or webhook secrets to the repository
+      - Options that need a runtime server or database for the public site (static export only)
+      - Paid plans or trials that lapse into charges; third-party trackers or ads injected into the site
+      - Account creation, sharing changes or secret storage from an agent session (operator steps)
+  context:
+    - kind: TaskRef
+      name: v1-e36-t03-site-scaffold
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/adr/0015-website-content-editing.md is Accepted and scores Google Calendar (events), a
+        Decap/Sveltia-style git-backed CMS, a hosted headless CMS free tier and Google Docs/Sheets against
+        coach usability, $0 cost, no student PII, static-export fit and ownership continuity, plus Charlie's
+        added criteria, and names one events source and one announcements/page source.
+    - id: ac2
+      description: >-
+        The ADR states that keys/tokens live only in the operator's environment or CI secret store (never in
+        git), that content is fetched at build time with a last-good fallback, and how content-only edits
+        relate to the ADR-0013 dev→main flow (e.g. whether git-backed content commits land on dev or main).
+    - id: ac3
+      description: >-
+        A coach other than Charlie completes a dry-run on the prototype of the chosen option(s): adds one
+        test event and one test announcement using only the guide, with no code or terminal, and the time
+        taken and any friction (including GitHub sign-up, if applicable) are recorded in the ADR.
+    - id: ac4
+      description: >-
+        The team calendar and CMS accounts exist under a team/district-owned identity with at least two
+        owners and a documented recovery path, recorded in docs/runbooks/website-content-accounts.md
+        (no secrets in the file).
+    - id: ac5
+      description: >-
+        docs/guides/coach-website-editing.md explains, in plain language, how to add/edit/remove an event
+        and an announcement, what may never be posted about students, how long until changes appear, and who
+        to contact when something fails.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t01-content-editing-decision-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Agree the criteria with Charlie, draft the options comparison, prototype and dry-run the top options with
+    a coach, accept ADR-0015, then have the operator create the accounts and publish the coach guide.
+  goalRef:
+    name: v1-e37-t01-content-editing-decision
+  graph:
+    nodes:
+      - id: criteria-and-options
+        kind: Task
+        name: Criteria, weights and options matrix
+        description: >-
+          Draft ADR-0015 as Proposed from docs/adr/0000-template.md with the fixed criteria (coach usability
+          without code, $0 at team scale, no student PII, static-export fit, ownership continuity) and a
+          matrix for Google Calendar, Decap/Sveltia (GitHub account + OAuth proxy friction noted), a hosted
+          headless CMS free tier (seat/record limits, webhook support, lock-in, export) and Google Docs/Sheets
+          (familiar, but weak structure and validation). Ask Charlie for his custom criteria and weights
+          (e.g. works on a phone, district IT acceptability, handoff when a coach leaves) and add them.
+        outputs: [docs/adr/0015-website-content-editing.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ADR-0015 draft with the options matrix exists
+            path: docs/adr/0015-website-content-editing.md
+            contentMatch: "Ownership continuity"
+          - type: custom
+            name: Charlie's custom criteria and weights recorded
+            description: >-
+              Charlie reviews the fixed criteria, adds his own criteria and weights, and confirms the matrix
+              lists every option he wants considered before prototyping starts.
+      - id: prototype-and-dry-run
+        kind: Task
+        name: Prototype top options and coach dry-run
+        description: >-
+          Build throwaway prototypes of the top one or two combinations against a test calendar and a test
+          CMS space/sheet (no real student content), then run a scripted dry-run with a coach other than
+          Charlie: add a tournament event with entry deadline and travel notes, post and then expire an
+          announcement, all from a laptop or phone with only the draft guide. Record time taken, where they
+          got stuck, and whether a GitHub account was needed.
+        dependsOn: [criteria-and-options]
+        outputs: [docs/adr/0015-website-content-editing.md]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: custom
+            name: Coach dry-run completed without code
+            description: >-
+              A non-Charlie coach completes the dry-run tasks with no terminal, code editor or git commands;
+              timings and friction notes are recorded in the ADR's dry-run section.
+          - type: artifact_exists
+            name: Dry-run results recorded in the ADR
+            path: docs/adr/0015-website-content-editing.md
+            contentMatch: "Dry-run"
+      - id: accept-adr
+        kind: Task
+        name: Accept ADR-0015 and index it
+        description: >-
+          Finalize the decision (events source, announcements/page source), the secrets rule (keys and tokens
+          only in env/secret store, .env.example placeholders), build-time fetch with last-good fallback, the
+          relationship between content-only edits and ADR-0013 branch promotion, the exit plan if a free tier
+          changes, and the consequences for t02–t05. Add the row to docs/adr/README.md; Charlie approves.
+        dependsOn: [prototype-and-dry-run]
+        outputs: [docs/adr/0015-website-content-editing.md, docs/adr/README.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ADR-0015 is Accepted
+            path: docs/adr/0015-website-content-editing.md
+            contentMatch: "Status: Accepted"
+          - type: artifact_exists
+            name: ADR index lists ADR-0015
+            path: docs/adr/README.md
+            contentMatch: "0015-website-content-editing.md"
+          - type: custom
+            name: Charlie approves ADR-0015
+            description: Charlie reviews and approves the decision, including the ownership and secrets rules.
+      - id: operator-accounts
+        kind: Task
+        name: Operator creates team-owned accounts
+        description: >-
+          Write the runbook, then Charlie (operator) creates the public team Google Calendar and the chosen
+          CMS space under a team/district-owned identity, adds a second owner, grants editor access to
+          coaches, makes the calendar public (event details only), and stores any read-only key or token in
+          his local env and the CI secret store. The runbook lists owners, recovery, and how to rotate keys.
+        dependsOn: [accept-adr]
+        outputs: [docs/runbooks/website-content-accounts.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Content accounts runbook exists
+            path: docs/runbooks/website-content-accounts.md
+            contentMatch: "Second owner"
+          - type: custom
+            name: Accounts created and team-owned
+            description: >-
+              Charlie confirms the calendar and CMS exist under the team/district identity with two owners,
+              coaches have editor access, and no key or token appears in the repository.
+      - id: coach-guide
+        kind: Task
+        name: Coach website editing guide
+        description: >-
+          Write docs/guides/coach-website-editing.md in plain language with screenshots-to-add markers:
+          adding events (title conventions for tournaments, entry deadline and travel note fields), posting
+          and expiring announcements, the student rules from the publishing policy (first names or none,
+          photos only with district media consent, no student contact info), expected delay before the site
+          updates, and who to contact. Link it from the ADR.
+        dependsOn: [accept-adr]
+        outputs: [docs/guides/coach-website-editing.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Coach guide exists and cites the publishing policy
+            path: docs/guides/coach-website-editing.md
+            contentMatch: "website-publishing.md"
+          - type: custom
+            name: Coach guide reviewed by a coach
+            description: The dry-run coach confirms the guide is followable without help.
+status:
+  phase: Pending

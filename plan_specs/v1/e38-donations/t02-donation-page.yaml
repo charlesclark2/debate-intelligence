@@ -1,0 +1,198 @@
+# TASK v1-e38-t02-donation-page — Donation page
+# Epic: E38 Team Donations | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §14 (security, privacy, student safety), ADR-0012 (site hosting)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e38-t02-donation-page
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e38-donations
+  annotations:
+    debate/title: Donation page
+    debate/architecture-refs: §14, ADR-0012
+spec:
+  description: >-
+    Add a /donate page to the static site in site/ that explains why the team needs support and sends
+    donors to the district's payment method exactly as approved in docs/policies/donations.md (t01). Copy
+    lives in site/content (no hard-coded prose in components): the budget needs (tournament entry fees,
+    travel and hotel for overnight tournaments, camp scholarships, judging costs when the team must hire
+    or pay for judges to cover its judge obligation), what a gift covers, the district's required wording
+    verbatim, and a note that receipts and tax acknowledgments come from the district. Any dollar figures
+    come from Charlie, never invented. The outbound link is not content: it lives in a reviewed config file
+    (site/config/donations.json) holding the approved URL, its host and the policy version, so coaches
+    editing copy cannot change where money goes. A build-time check fails the build if the rendered page
+    contains any form, input, payment iframe or third-party payment script, or if any outbound donation
+    link differs from the approved URL, or if the config URL is not the one recorded in the policy. The
+    page is linked from the home page and the footer and follows the team brand guidelines and the
+    site's accessibility bar. Boundaries: the district process and approved URL are t01; the opt-in donor
+    thank-you section is t03; hosting, security headers and deploys are v1-e36-t02/t05; the page layout
+    and footer components come from v1-e36-t03/t04.
+  priority: 1
+  constraints:
+    packages: [site/app, site/content, site/config, site/scripts, site/tests]
+    forbidden:
+      - Embedded payment forms, card or bank fields, payment iframes or payment-provider scripts
+      - Collecting, logging or storing donor names, emails or any other personal data
+      - Any outbound donation URL other than the one approved in docs/policies/donations.md
+      - Wording that states a gift's tax treatment or implies the team issues receipts
+      - Third-party trackers, analytics pixels or ads on the page
+      - Network access in site tests or the build-time check
+  context:
+    - kind: TaskRef
+      name: v1-e38-t01-district-donation-process
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t04-core-pages
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t05-site-deploy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t01-publishing-policy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `pnpm --dir site build` emits out/donate/index.html whose copy (budget needs, what a gift covers,
+        required district wording, receipts note) comes from site/content, with no invented amounts.
+    - id: ac2
+      description: >-
+        site/config/donations.json holds approvedUrl, approvedHost and policyVersion, and the build fails
+        when approvedUrl does not appear verbatim in docs/policies/donations.md.
+    - id: ac3
+      description: >-
+        The build-time check fails on any form, input, select, textarea, iframe, third-party script or
+        cc-* autocomplete attribute in the donate page, and on any outbound link to approvedHost (or
+        marked as the donate link) whose href is not exactly approvedUrl; fixtures prove each failure.
+    - id: ac4
+      description: >-
+        The home page and the site footer link to /donate, and the outbound link is visibly labeled as
+        leaving the team site for the district's payment page.
+    - id: ac5
+      description: >-
+        The page passes the site's automated accessibility check (WCAG 2.1 AA), and Charlie approves the
+        rendered copy on the dev preview against the approved policy.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e38-t02-donation-page-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e38-donations
+spec:
+  description: >-
+    Lock the approved URL into config first, then write the content and page, add the build-time guard
+    with failing fixtures, wire the home and footer links, and finish with offline checks and Charlie's
+    copy review.
+  goalRef:
+    name: v1-e38-t02-donation-page
+  graph:
+    nodes:
+      - id: donation-config
+        kind: Task
+        name: Approved payment config
+        description: >-
+          Create site/config/donations.json (approvedUrl, approvedHost, policyVersion, optional check
+          instructions key) from the approved policy, with a typed loader in site/lib/donations.ts that
+          rejects non-HTTPS URLs and a host that does not match approvedUrl.
+        outputs: [site/config/donations.json, site/lib/donations.ts]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Donation config records the policy version
+            path: site/config/donations.json
+            contentMatch: "policyVersion"
+      - id: content-and-page
+        kind: Task
+        name: Donate content and page
+        description: >-
+          Draft site/content/pages/donate.md (budget needs, what a gift covers, required wording verbatim
+          from the policy, receipts come from the district, contact for questions) from the team intro
+          materials and brand guidelines, and render it in site/app/donate/page.tsx with a single clearly
+          labeled external link (rel noopener noreferrer, data-donate-link) built from the config.
+        dependsOn: [donation-config]
+        outputs: [site/content/pages/donate.md, site/app/donate/page.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Static export builds with the donate page
+            command: pnpm
+            args: [--dir, site, build]
+          - type: artifact_exists
+            name: Donate page exported
+            path: site/out/donate/index.html
+            contentMatch: "data-donate-link"
+      - id: build-guard
+        kind: Task
+        name: Build-time payment-safety and link check
+        description: >-
+          Add site/scripts/check-donate-page.ts, run as a postbuild step: parse out/donate/index.html
+          offline and fail on form/input/select/textarea/iframe elements, external script tags, cc-*
+          autocomplete, any link to approvedHost or data-donate-link whose href is not exactly approvedUrl,
+          or a config URL missing from docs/policies/donations.md. Negative HTML fixtures cover each rule.
+        dependsOn: [content-and-page]
+        outputs:
+          - site/scripts/check-donate-page.ts
+          - site/tests/donate-page-guard.test.ts
+          - site/tests/fixtures/donate/
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Guard rejects every forbidden fixture and accepts the real page
+            command: pnpm
+            args: [--dir, site, test, --, tests/donate-page-guard.test.ts]
+          - type: command_succeeds
+            name: Build runs the donate guard and passes
+            command: pnpm
+            args: [--dir, site, build]
+      - id: navigation-links
+        kind: Task
+        name: Home and footer links
+        description: >-
+          Add a Donate call-to-action to the home page content and a Donate link to the footer component
+          from the scaffold, with an offline test over the exported HTML that both link to /donate.
+        dependsOn: [content-and-page]
+        outputs: [site/content/pages/home.md, site/tests/donate-links.test.ts]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Home and footer link to the donate page
+            command: pnpm
+            args: [--dir, site, test, --, tests/donate-links.test.ts]
+      - id: quality-and-review
+        kind: Task
+        name: Lint, accessibility and coach review
+        description: >-
+          Run lint and the full offline site suite (including the axe accessibility check on /donate),
+          then the operator deploys to the dev preview with the E36 deploy script and Charlie reviews the
+          copy, link and wording against the approved policy.
+        dependsOn: [build-guard, navigation-links]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Site lint passes
+            command: pnpm
+            args: [--dir, site, lint]
+          - type: test_passes
+            name: Full offline site test suite passes
+            command: pnpm
+            args: [--dir, site, test]
+          - type: custom
+            name: Charlie approves the donate page on the dev preview
+            description: >-
+              Charlie opens /donate on the dev preview, follows the link to confirm it reaches the
+              district's approved payment page, and approves the copy and required wording as matching
+              docs/policies/donations.md before the page is promoted to prod.
+status:
+  phase: Pending

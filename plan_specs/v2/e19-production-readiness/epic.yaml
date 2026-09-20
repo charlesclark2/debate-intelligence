@@ -20,7 +20,7 @@ spec:
   description: >-
     Add quotas, audit logs, account export/deletion and retention, backups/restore drills, cost telemetry,
     load/security testing and a privacy/legal review before school-wide use.
-  priority: 11
+  priority: 12
   constraints:
     majorVersion: v2
     release: v2.4

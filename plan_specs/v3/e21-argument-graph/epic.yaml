@@ -20,7 +20,7 @@ spec:
   description: >-
     Persist typed argument nodes and edges with source references and confidence behind a GraphRepository,
     extract them from parsed files, and provide coverage/coherence queries.
-  priority: 12
+  priority: 13
   constraints:
     majorVersion: v3
     release: v3.0

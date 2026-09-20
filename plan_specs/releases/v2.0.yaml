@@ -16,7 +16,7 @@ spec:
   description: >-
     Keyless CI deploys, DynamoDB + S3 repositories passing the same contract tests, Cognito auth and the
     FastAPI service are live in dev and prod, with every prod deploy promoted from a validated dev deploy.
-  priority: 7
+  priority: 8
   acceptanceCriteria:
   - id: epic-e10
     description: >-

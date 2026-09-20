@@ -20,7 +20,7 @@ spec:
   description: >-
     Ingest public OpenCaselist disclosures and Tabroom results through documented interfaces with provenance,
     resolve team identities, and govern data use.
-  priority: 15
+  priority: 16
   constraints:
     majorVersion: v3
     release: v3.3

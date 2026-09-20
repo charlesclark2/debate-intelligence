@@ -1,0 +1,201 @@
+# TASK v1-e37-t04-auto-republish — Automatic republish on content changes
+# Epic: E37 Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §14 (least privilege, no general AWS credentials), ADR-0012, ADR-0013, ADR-0015
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t04-auto-republish
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: Automatic republish on content changes
+    debate/architecture-refs: §14, ADR-0012, ADR-0013, ADR-0015
+spec:
+  description: >-
+    Make coach edits reach the site without anyone running code by hand, without ever introducing long-lived
+    AWS access keys. A GitHub Actions workflow (.github/workflows/site-content-refresh.yml) runs on a schedule
+    (hourly; catches calendar edits and announcement expiry, since Google Calendar has no simple push hook),
+    on a CMS webhook (repository_dispatch; or a push to site/content/** if ADR-0015 chose a git-backed CMS),
+    and on manual dispatch. It checks out main, runs the content fetches from t02/t03, lint, tests and the
+    static build, and compares a content digest against the content-manifest.json the deployed site
+    publishes; unchanged content ends the run quietly. A "content-only change" means new external content or
+    changes only under site/content/**; code changes keep the normal ADR-0013 dev→main promotion. The deploy
+    path is staged by what credentials exist. INTERIM (until the GitHub OIDC deploy role from v2-e10-t03
+    exists): the workflow holds no AWS credentials of any kind; when content changed it uploads the built
+    site as a workflow artifact and opens or updates one "Site republish needed" GitHub issue (deduplicated,
+    auto-closed when the deployed digest matches) telling Charlie to run scripts/site_republish.sh, a
+    one-command operator wrapper over v1-e36-t05's scripts/site_deploy.sh that builds, deploys dev, runs the
+    smoke check, then deploys prod from main using his SSO profiles. The workflow may deploy to dev
+    automatically only when the repo variable SITE_DEPLOY_DEV_ROLE_ARN is set (OIDC role exists); prod
+    auto-deploy additionally needs SITE_DEPLOY_PROD_ROLE_ARN and runs only after the dev smoke check passes.
+    Any failure (fetch fallback used for more than a day, validation error, build or deploy failure) opens
+    or updates a "Site refresh failed" issue, which GitHub emails to Charlie. Boundaries: the deploy script,
+    buckets and smoke checks belong to v1-e36-t05/t02; the OIDC role itself is v2-e10-t03; content
+    fetching/validation is t02/t03.
+  priority: 1
+  constraints:
+    packages: [.github/workflows, scripts, site/scripts, docs/runbooks]
+    forbidden:
+      - Long-lived AWS access keys (AWS_ACCESS_KEY_ID/SECRET) in GitHub secrets, the CMS or the repo
+      - Deploying to prod from any ref other than main, or before the dev smoke check passes
+      - Auto-deploying code changes; only content-only changes take this path
+      - Agent sessions running deploys; deploys are operator-run until the OIDC role exists
+      - Committed webhook/GitHub tokens; the CMS webhook token is fine-grained, expiring and team-owned
+      - Third-party notification services receiving site or student data; use GitHub issues/email
+  context:
+    - kind: TaskRef
+      name: v1-e37-t02-events-calendar
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e37-t03-announcements
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t05-site-deploy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The refresh workflow runs hourly, on repository_dispatch from the CMS (or content push) and on
+        workflow_dispatch; with unchanged content it finishes without opening an issue or deploying.
+    - id: ac2
+      description: >-
+        The workflow declares least-privilege permissions, references no AWS access-key secrets, and only
+        requests id-token write and assumes a role when SITE_DEPLOY_DEV_ROLE_ARN is set; a test enforces this.
+    - id: ac3
+      description: >-
+        Interim mode: with no role variable set, a content change produces a build artifact and one open
+        "Site republish needed" issue containing the digest and the exact scripts/site_republish.sh command,
+        and running that command (operator) deploys dev, passes the smoke check and deploys prod from main in
+        under five minutes of operator time.
+    - id: ac4
+      description: >-
+        A failed fetch beyond the staleness threshold, a policy-validation error or a build failure opens or
+        updates a single "Site refresh failed" issue naming the step and the fix (e.g. which announcement broke
+        which rule).
+    - id: ac5
+      description: >-
+        docs/runbooks/site-content-republish.md explains the interim operator loop, the switch to automatic
+        dev (and later prod) deploys when the OIDC roles exist, webhook token ownership and rotation, and how
+        to pause the schedule.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t04-auto-republish-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Add a content digest and manifest, the credential-free refresh workflow with issue notifications, the
+    operator republish wrapper, the OIDC-gated auto-deploy path (dormant until roles exist), and the runbook.
+  goalRef:
+    name: v1-e37-t04-auto-republish
+  graph:
+    nodes:
+      - id: content-digest
+        kind: Task
+        name: Content digest and published manifest
+        description: >-
+          Compute a stable SHA-256 digest over the normalized events and announcements datasets (ignoring
+          fetch timestamps) and emit it as content-manifest.json in the static export, plus a script that
+          compares a fresh digest with the one served by the dev or prod site.
+        outputs:
+          - site/scripts/content-digest.ts
+          - site/tests/republish/digest.test.ts
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Digest is stable and changes only with content
+            command: pnpm
+            args: [--dir, site, test, --, tests/republish/digest.test.ts]
+      - id: refresh-workflow
+        kind: Task
+        name: Credential-free refresh workflow with notifications
+        description: >-
+          Write site-content-refresh.yml: triggers (hourly schedule, repository_dispatch type
+          site-content-changed, workflow_dispatch, and push on site/content/** if git-backed), concurrency
+          group, permissions contents read + issues write, pnpm install/lint/test/build, digest compare,
+          artifact upload, and deduplicated "Site republish needed" / "Site refresh failed" issues via the
+          GitHub CLI. No AWS step runs unless a role variable is set.
+        dependsOn: [content-digest]
+        outputs: [.github/workflows/site-content-refresh.yml, site/tests/republish/workflow.test.ts]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Workflow policy test (no AWS key secrets, gated OIDC, minimal permissions) passes
+            command: pnpm
+            args: [--dir, site, test, --, tests/republish/workflow.test.ts]
+          - type: command_succeeds
+            name: Workflow passes actionlint
+            command: uv
+            args: [run, --with, actionlint-py, actionlint, .github/workflows/site-content-refresh.yml]
+      - id: operator-wrapper
+        kind: Task
+        name: Operator republish command
+        description: >-
+          Add scripts/site_republish.sh wrapping scripts/site_deploy.sh: refuse unless on a clean, up-to-date
+          main, fetch content, build, deploy dev with the debate-dev profile, run the smoke check, deploy prod
+          with the prod operator profile, verify the served digest, and close the "republish needed" issue.
+          Supports --dev-only and --dry-run; never run from an agent session.
+        dependsOn: [content-digest]
+        outputs: [scripts/site_republish.sh]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Republish dry-run prints the plan without calling AWS
+            command: bash
+            args: [scripts/site_republish.sh, --dry-run]
+          - type: command_succeeds
+            name: Script passes shellcheck
+            command: shellcheck
+            args: [scripts/site_republish.sh]
+      - id: oidc-gated-deploy
+        kind: Task
+        name: Dormant OIDC auto-deploy path
+        description: >-
+          Add the deploy job guarded by `vars.SITE_DEPLOY_DEV_ROLE_ARN != ''`: id-token write, assume the dev
+          role via aws-actions/configure-aws-credentials, deploy dev, smoke check; then a prod job guarded by
+          SITE_DEPLOY_PROD_ROLE_ARN, ref main and a passing dev smoke. Stays inactive until v2-e10-t03
+          provides the roles; the interim path remains the notification.
+        dependsOn: [refresh-workflow]
+        outputs: [.github/workflows/site-content-refresh.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Workflow test covers role-gated dev and prod deploy jobs
+            command: pnpm
+            args: [--dir, site, test, --, tests/republish/workflow.test.ts, -t, oidc]
+      - id: runbook-and-trial
+        kind: Task
+        name: Runbook and live interim trial
+        description: >-
+          Write docs/runbooks/site-content-republish.md (interim loop, target turnaround, switching on OIDC
+          deploys, CMS webhook token ownership/rotation, pausing the schedule, reading failure issues) and link
+          it from the coach guide. Then a coach edits an event and an announcement and Charlie follows the
+          issue to republish.
+        dependsOn: [refresh-workflow, operator-wrapper, oidc-gated-deploy]
+        outputs: [docs/runbooks/site-content-republish.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Republish runbook documents the interim mode
+            path: docs/runbooks/site-content-republish.md
+            contentMatch: "Interim"
+          - type: custom
+            name: End-to-end interim republish trial
+            description: >-
+              A coach edit triggers a "Site republish needed" issue within the hour; Charlie runs
+              scripts/site_republish.sh and the change is live on prod, and the issue closes.
+status:
+  phase: Pending

@@ -1,0 +1,161 @@
+# EPIC E38 — Team Donations
+# Major version: V1 | Release: v1.6 (Public team website)
+# Architecture refs: §14 (security), ADR-0012
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e38-donations
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e38-donations
+  annotations:
+    debate/title: E38 — Team Donations
+    debate/architecture-refs: §14 (security), ADR-0012
+spec:
+  description: >-
+    Let parents and supporters donate to the team's district activity account: confirm the district's
+    donation process, publish a donation page that explains the budget and links out to the district's
+    payment method, and thank donors with their consent. The platform never handles money or card data.
+  priority: 7
+  constraints:
+    majorVersion: v1
+    release: v1.6
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      The district's donation process (payment method, account, receipts, allowed wording) is documented
+      and approved by Charlie.
+  - id: ac2
+    description: >-
+      A donation page explains what donations fund and links to the district's payment method; no payment
+      data touches the platform.
+  - id: ac3
+    description: >-
+      Donor recognition is opt-in and follows the publishing policy.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e38-donations-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e38-donations
+spec:
+  description: >-
+    Task graph for epic E38 (Team Donations). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v1-e38-donations
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e36-t01-publishing-policy
+      kind: External
+      name: 'Prerequisite from E36: Website publishing and student-privacy policy'
+      description: >-
+        Cross-epic prerequisite owned by v1-e36-team-website (release v1.6).
+      inputs:
+        goalRef: v1-e36-t01-publishing-policy
+        specRef: plan_specs/v1/e36-team-website/t01-publishing-policy.yaml
+    - id: ext-v1-e36-t04-core-pages
+      kind: External
+      name: 'Prerequisite from E36: Core pages for parents and students'
+      description: >-
+        Cross-epic prerequisite owned by v1-e36-team-website (release v1.6).
+      inputs:
+        goalRef: v1-e36-t04-core-pages
+        specRef: plan_specs/v1/e36-team-website/t04-core-pages.yaml
+    - id: ext-v1-e36-t05-site-deploy
+      kind: External
+      name: 'Prerequisite from E36: Deploy flow: dev preview then prod'
+      description: >-
+        Cross-epic prerequisite owned by v1-e36-team-website (release v1.6).
+      inputs:
+        goalRef: v1-e36-t05-site-deploy
+        specRef: plan_specs/v1/e36-team-website/t05-site-deploy.yaml
+    - id: ext-v1-e37-t01-content-editing-decision
+      kind: External
+      name: 'Prerequisite from E37: How coaches edit content (ADR-0015)'
+      description: >-
+        Cross-epic prerequisite owned by v1-e37-calendar-and-announcements (release v1.6).
+      inputs:
+        goalRef: v1-e37-t01-content-editing-decision
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t01-content-editing-decision.yaml
+    - id: t01
+      kind: Task
+      name: District donation process
+      description: >-
+        With the district business office / activities director: how gifts reach the debate activity account
+        (online payment portal link or check instructions), who issues receipts and tax acknowledgment,
+        required wording and any restrictions; recorded in docs/policies/donations.md and approved by
+        Charlie. Not legal or tax advice.
+      inputs:
+        specRef: plan_specs/v1/e38-donations/t01-district-donation-process.yaml
+        goalRef: v1-e38-t01-district-donation-process
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e38-t01-district-donation-process reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e38-t01-district-donation-process
+    - id: t02
+      kind: Task
+      name: Donation page
+      description: >-
+        Donate page: team budget needs (entry fees, travel, camp scholarships, judging costs), what a
+        gift covers, and a clear link or instructions for the district's payment method exactly as approved;
+        no embedded payment forms or card fields; linked from the home page and footer.
+      inputs:
+        specRef: plan_specs/v1/e38-donations/t02-donation-page.yaml
+        goalRef: v1-e38-t02-donation-page
+      dependsOn:
+      - t01
+      - ext-v1-e36-t04-core-pages
+      - ext-v1-e36-t05-site-deploy
+      - ext-v1-e36-t01-publishing-policy
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e38-t02-donation-page reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e38-t02-donation-page
+    - id: t03
+      kind: Task
+      name: Opt-in donor recognition
+      description: >-
+        Optional thank-you section: donors listed only with written opt-in and in the form they choose,
+        maintained by coaches through the CMS; follows the publishing policy.
+      inputs:
+        specRef: plan_specs/v1/e38-donations/t03-donor-recognition.yaml
+        goalRef: v1-e38-t03-donor-recognition
+      dependsOn:
+      - t02
+      - ext-v1-e37-t01-content-editing-decision
+      - ext-v1-e36-t01-publishing-policy
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e38-t03-donor-recognition reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e38-t03-donor-recognition
+status:
+  phase: Pending

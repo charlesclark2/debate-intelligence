@@ -20,7 +20,7 @@ spec:
   description: >-
     Upload debate files through the web app and parse them with the V1 debate-docx parser (E31) into pockets/hats/blocks/tags,
     cites, evidence and analytics, preserving formatting metadata.
-  priority: 12
+  priority: 13
   constraints:
     majorVersion: v3
     release: v3.0

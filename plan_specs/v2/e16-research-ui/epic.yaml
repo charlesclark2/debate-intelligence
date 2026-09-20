@@ -20,7 +20,7 @@ spec:
   description: >-
     Expose federated + indexed search in the web app with filters, explained top-ten results, open/cut
     actions, history, and a relevance evaluation set.
-  priority: 9
+  priority: 10
   constraints:
     majorVersion: v2
     release: v2.2

@@ -1,0 +1,217 @@
+# TASK v1-e36-t02-site-hosting — Site hosting infrastructure (ADR-0012)
+# Epic: E36 Team Website Foundation | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t02-site-hosting
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: Site hosting infrastructure (ADR-0012)
+    debate/architecture-refs: §4, §5, §14, ADR-0010, ADR-0012, ADR-0013
+spec:
+  description: >-
+    Decide and build hosting for the public team website. ADR-0012 (docs/adr/0012-web-hosting.md, a
+    number previously reserved for V2 app hosting, which v2-e14-t03 later amends) records: a static
+    export served from a private S3 bucket through CloudFront with origin access control; HTTPS only
+    with an ACM certificate in us-east-1 once a team domain exists (the default *.cloudfront.net domain
+    until then); DNS in Route 53 or at an external registrar; the V2 app later mounting under the same
+    domain; same AWS account and region per ADR-0010, dev (preview) and prod (public) per ADR-0013. A
+    reusable Terraform module infrastructure/modules/static_site creates the bucket (all four
+    block-public-access flags, BucketOwnerEnforced, SSE-S3, versioning, TLS-only policy readable only by
+    its distribution), the distribution (redirect-to-https, TLS 1.2+, PriceClass_100, compression, a
+    CloudFront Function that maps /path/ to /path/index.html for the Next.js export, a custom 404), a
+    response headers policy (HSTS, CSP, X-Content-Type-Options, Referrer-Policy, frame-ancestors none,
+    Permissions-Policy; X-Robots-Tag noindex in dev) and no CloudFront access logging, so visitor IPs are
+    not stored beyond CloudFront's own aggregate reports. It is wired into envs/dev and envs/prod
+    (debate-dev-site-* and debate-prod-site-*) on the remote state from v1-e29-t02, with a least-privilege
+    SitePublisher permission set (sync to the env's site bucket, invalidate its distribution) so t05 can
+    deploy prod, where the debate-prod profile is read-only. terraform test runs offline with a mocked
+    provider. Applies, domain purchase, certificate validation records and DNS are operator steps
+    recorded in docs/runbooks/team-website.md. Out of scope: the site code (t03), content (t04), the
+    deploy script and smoke checks (t05), GitHub OIDC deploy roles (v2-e10-t03), V2 app hosting
+    (v2-e14-t03).
+  priority: 1
+  constraints:
+    packages:
+      - docs/adr
+      - docs/runbooks
+      - infrastructure/modules/static_site
+      - infrastructure/envs/dev
+      - infrastructure/envs/prod
+    forbidden:
+      - Public buckets, public ACLs or S3 static website hosting endpoints (CloudFront OAC only)
+      - Plain-HTTP delivery, TLS below 1.2, or legacy origin access identity
+      - CloudFront standard or real-time access logs, or any third-party analytics or tracking
+      - Hard-coded account ids, regions, domain names or credentials in the module
+      - A stage environment (ADR-0013) or a second AWS account (ADR-0010)
+      - terraform apply, domain purchase or DNS changes from CI or an agent session (operator-run only)
+      - Long-lived IAM access keys for deploys (Identity Center SSO profiles only)
+  context:
+    - kind: TaskRef
+      name: v1-e29-t02-terraform-bootstrap
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/adr/0012-web-hosting.md is Accepted and records S3 + CloudFront with OAC, the certificate and
+        DNS approach, dev as preview and prod as public, and how the V2 app later shares the domain; the
+        ADR index in docs/adr/README.md lists it.
+    - id: ac2
+      description: >-
+        `terraform -chdir=infrastructure/modules/static_site test` passes without AWS credentials and
+        asserts the four public-access-block flags, OAC-only bucket access, redirect-to-https, the
+        response headers policy (HSTS, CSP, nosniff, frame-ancestors none) and that logging is not set.
+    - id: ac3
+      description: >-
+        envs/dev and envs/prod each instantiate the module with the debate-dev-site / debate-prod-site
+        prefix, an optional domain (null uses the CloudFront domain) and noindex in dev only; both
+        roots validate and scripts/terraform_checks.sh passes.
+    - id: ac4
+      description: >-
+        A SitePublisher permission set allows only ListBucket, GetObject, PutObject and DeleteObject on
+        its environment's site bucket and CreateInvalidation on its distribution, with SSO profiles
+        debate-dev-site and debate-prod-site.
+    - id: ac5
+      description: >-
+        The operator has applied dev and prod, and docs/runbooks/team-website.md records apply dates,
+        bucket names and distribution domains (no account ids), the domain and DNS status, and the
+        certificate validation steps.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t02-site-hosting-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Write ADR-0012, build the static_site module and its offline tests, wire both environments and
+    the publisher permission set, then hand the applies and the domain work to the operator and record
+    them in the runbook. About one day of session time plus operator applies.
+  goalRef:
+    name: v1-e36-t02-site-hosting
+  graph:
+    nodes:
+      - id: adr-0012
+        kind: Task
+        name: ADR-0012 web hosting
+        description: >-
+          Write the ADR from docs/adr/0000-template.md: context (public parent site before Oct 1, static
+          content, low budget, minors), options (S3 + CloudFront, Amplify Hosting, a school-provided site,
+          a third-party site builder), decision, consequences (operator-run deploys until v2-e10-t03, the
+          CloudFront domain until a team domain is bought, V2 app under the same domain amended by
+          v2-e14-t03); add it to the ADR index.
+        outputs: [docs/adr/0012-web-hosting.md, docs/adr/README.md]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ADR-0012 is accepted
+            path: docs/adr/0012-web-hosting.md
+            contentMatch: "Status: Accepted"
+          - type: artifact_exists
+            name: ADR index lists ADR-0012
+            path: docs/adr/README.md
+            contentMatch: "0012-web-hosting.md"
+      - id: static-site-module
+        kind: Task
+        name: static_site module (bucket, OAC, distribution, headers)
+        description: >-
+          Module with the private bucket, OAC, distribution, index-rewrite CloudFront Function, custom
+          404, response headers policy (CSP compatible with the Next.js export) and an optional ACM
+          certificate with DNS validation when domain_names is non-empty; variables for name prefix,
+          domain_names, route53_zone_id (null for an external registrar), noindex; outputs bucket name,
+          distribution id and domain, and certificate validation records.
+        dependsOn: [adr-0012]
+        outputs:
+          - infrastructure/modules/static_site/main.tf
+          - infrastructure/modules/static_site/variables.tf
+          - infrastructure/modules/static_site/outputs.tf
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Module uses origin access control
+            path: infrastructure/modules/static_site/main.tf
+            contentMatch: "aws_cloudfront_origin_access_control"
+          - type: artifact_exists
+            name: Module defines a response headers policy
+            path: infrastructure/modules/static_site/main.tf
+            contentMatch: "aws_cloudfront_response_headers_policy"
+      - id: module-tests
+        kind: Task
+        name: Offline terraform test with a mocked provider
+        description: >-
+          terraform test files using mock_provider "aws" assert the public access block, a bucket policy
+          granting only the distribution, redirect-to-https and TLS 1.2 minimum, the security headers,
+          noindex only when set, no logging_config, and certificate plus aliases only when domain_names
+          is non-empty.
+        dependsOn: [static-site-module]
+        outputs: [infrastructure/modules/static_site/tests/static_site.tftest.hcl]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: static_site terraform tests pass offline
+            command: terraform
+            args: [-chdir=infrastructure/modules/static_site, test]
+      - id: env-wiring
+        kind: Task
+        name: dev and prod wiring and SitePublisher permission set
+        description: >-
+          Instantiate the module in envs/dev (noindex, CloudFront domain) and envs/prod (team domain once
+          chosen, else null) and define the SitePublisher permission set scoped to each environment's
+          bucket and distribution; both roots validate and the credential-free checks pass.
+        dependsOn: [module-tests]
+        outputs:
+          - infrastructure/envs/dev/site.tf
+          - infrastructure/envs/prod/site.tf
+          - infrastructure/modules/static_site/publisher_access.tf
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev root validates with the site
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: command_succeeds
+            name: prod root validates with the site
+            command: terraform
+            args: [-chdir=infrastructure/envs/prod, validate]
+          - type: command_succeeds
+            name: Terraform checks pass without AWS credentials
+            command: bash
+            args: [scripts/terraform_checks.sh]
+      - id: operator-apply
+        kind: Task
+        name: Operator applies dev then prod and records the domain steps
+        description: >-
+          Operator-run: apply dev and confirm the placeholder page is served over HTTPS and that the bucket
+          URL returns AccessDenied; apply prod; if a domain has been bought, add the ACM validation and
+          alias records (Route 53 or registrar) and re-apply. The runbook records dates, bucket names,
+          distribution domains, domain and DNS status (no account ids) and the steps still pending.
+        dependsOn: [env-wiring]
+        outputs: [docs/runbooks/team-website.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Runbook records the prod site apply
+            path: docs/runbooks/team-website.md
+            contentMatch: "debate-prod-site"
+          - type: custom
+            name: Operator confirms private buckets and HTTPS delivery
+            description: >-
+              Charlie confirms both site buckets show "Block all public access", that direct S3 object
+              URLs return AccessDenied, that http:// redirects to https:// on both distributions, and
+              records whether the team domain is purchased and its DNS status in the runbook.
+status:
+  phase: Pending

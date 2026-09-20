@@ -1,0 +1,118 @@
+# RELEASE v1.6 — Public team website
+# Major version: V1. Epics: E36, E37, E38
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v1-6
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.6
+  annotations:
+    debate/title: v1.6 — Public team website
+spec:
+  description: >-
+    Whitefish Bay Debate has a public, mobile-friendly team website: team information, a tournament and
+    events calendar parents can subscribe to, coach-posted announcements, and a donation page that links
+    to the district's payment process; a minimal version is live before the October 1, 2026 parent information
+    session. Independent of v1.1-v1.5: it needs only the repo foundation and the AWS baseline.
+  priority: 7
+  acceptanceCriteria:
+  - id: epic-e36
+    description: >-
+      Epic E36 (Team Website Foundation) goal is Succeeded.
+  - id: epic-e37
+    description: >-
+      Epic E37 (Calendar & Announcements (Coach-Editable)) goal is Succeeded.
+  - id: epic-e38
+    description: >-
+      Epic E38 (Team Donations) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v1.6.0 is pushed and CHANGELOG.md has a v1.6 section.
+  - id: gate
+    description: >-
+      Gate release-v1-6-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v1-6-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.6
+spec:
+  gateType: review
+  description: >-
+    Release review for v1.6 (Public team website): demo the release goal end to end, confirm CI green
+    on the release tag, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v1-6-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.6
+spec:
+  description: >-
+    Release plan for v1.6: complete its epics, tag, and pass the release gate.
+  goalRef:
+    name: release-v1-6
+  series: v1
+  version: v1.6
+  graph:
+    nodes:
+    - id: e36
+      kind: External
+      name: Epic E36 — Team Website Foundation
+      inputs:
+        goalRef: v1-e36-team-website
+        specRef: plan_specs/v1/e36-team-website/epic.yaml
+    - id: e37
+      kind: External
+      name: Epic E37 — Calendar & Announcements (Coach-Editable)
+      inputs:
+        goalRef: v1-e37-calendar-and-announcements
+        specRef: plan_specs/v1/e37-calendar-and-announcements/epic.yaml
+    - id: e38
+      kind: External
+      name: Epic E38 — Team Donations
+      inputs:
+        goalRef: v1-e38-donations
+        specRef: plan_specs/v1/e38-donations/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v1.6.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e36
+      - e37
+      - e38
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v1.6.0
+    - id: release-review
+      kind: Gate
+      name: v1.6 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v1-6-gate
+status:
+  phase: Pending

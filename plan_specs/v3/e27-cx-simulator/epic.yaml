@@ -20,7 +20,7 @@ spec:
   description: >-
     Let students practice cross-examination against a simulated opponent grounded in the argument graph,
     recording concessions to the flow.
-  priority: 18
+  priority: 19
   constraints:
     majorVersion: v3
     release: v3.6

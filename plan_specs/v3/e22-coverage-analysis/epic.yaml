@@ -20,7 +20,7 @@ spec:
   description: >-
     Predict likely opposition positions against an uploaded affirmative from archetypes and similarity,
     map the student's extensions, and report gaps as unsupported predicted nodes.
-  priority: 13
+  priority: 14
   constraints:
     majorVersion: v3
     release: v3.1

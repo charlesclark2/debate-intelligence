@@ -20,7 +20,7 @@ spec:
   description: >-
     Let students save, organize, search, revise, share and bulk-export verified cards with provenance
     intact.
-  priority: 10
+  priority: 11
   constraints:
     majorVersion: v2
     release: v2.3

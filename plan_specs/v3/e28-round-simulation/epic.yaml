@@ -20,7 +20,7 @@ spec:
   description: >-
     Run full simulated rounds with speech planning, opponent generation, opponent-informed strategy and
     a judge decision/RFD traceable to the recorded flow.
-  priority: 19
+  priority: 20
   constraints:
     majorVersion: v3
     release: v3.7

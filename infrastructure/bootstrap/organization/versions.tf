@@ -1,7 +1,8 @@
 terraform {
-  # The bootstrap root runs before remote state exists (v1-e29-t02-terraform-bootstrap), so it
-  # keeps local state. See README.md in this directory for how that state is handled.
-  required_version = ">= 1.7.0, < 2.0.0"
+  # State lives in the prod state bucket; see backend.tf. The floor is 1.10 because that is
+  # where the S3 backend's native state locking (`use_lockfile`) arrives, and every root in this
+  # repository is pinned the same way.
+  required_version = ">= 1.10.0, < 2.0.0"
 
   required_providers {
     aws = {

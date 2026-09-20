@@ -21,10 +21,10 @@ a human operator. **No step in this runbook is ever run by CI or by an agent ses
 | CLI profiles | `debate-dev` and `debate-prod`, used by `debate-research store` (`v1-e29-t05`) |
 
 Terraform for this baseline lives in
-[`infrastructure/bootstrap/organization/`](../../infrastructure/bootstrap/organization/). It keeps
-**local state**: it runs before the remote state bucket exists, which is
-`v1-e29-t02-terraform-bootstrap`'s job. See that directory's README for how the state file is
-handled.
+[`infrastructure/bootstrap/organization/`](../../infrastructure/bootstrap/organization/). It kept
+**local state** while it was the only root: it runs before any remote state bucket exists.
+`v1-e29-t02-terraform-bootstrap` created those buckets and moved this root's state into the prod
+one — see [terraform-bootstrap.md](terraform-bootstrap.md) step 6.
 
 Students never receive AWS console, CLI or IAM access of any kind. Some are minors
 ([architecture proposal §14](../architecture/architecture_proposal.md#14-security-privacy-and-student-safety)).
@@ -34,7 +34,9 @@ Students never receive AWS console, CLI or IAM access of any kind. Some are mino
 You need:
 
 - Administrator access to the Organization's management account, through Identity Center.
-- The AWS CLI v2 and Terraform ≥ 1.7 (`aws --version`, `terraform version`).
+- The AWS CLI v2 and Terraform ≥ 1.10 (`aws --version`, `terraform version`). The floor moved
+  from 1.7 with `v1-e29-t02-terraform-bootstrap`, which needs the S3 backend's native state
+  locking.
 - The account id, the Organization id and the Identity Center instance — **not recorded in this
   repository**. Read them from the account itself:
 

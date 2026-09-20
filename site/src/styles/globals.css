@@ -12,6 +12,13 @@
 html {
   /* Anchor targets are not hidden behind the sticky header. */
   scroll-padding-top: var(--space-7);
+  /*
+   * The home page hero points at the October 1 panel further down the page, and a jump that
+   * lands with no sense of travel leaves a visitor unsure whether the page moved or replaced
+   * itself. This is the only scrolling the site does for anyone, it happens on activation and
+   * never on load, and the prefers-reduced-motion block below turns it back into a jump.
+   */
+  scroll-behavior: smooth;
 }
 
 body {

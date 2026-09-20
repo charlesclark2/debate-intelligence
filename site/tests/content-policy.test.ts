@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { ContentPage, SiteSettings } from '@/lib/content'
-import { loadPages, loadSiteSettings, parsePage } from '@/lib/content'
+import { homeContentAsPage, loadPages, loadSiteSettings, parsePage } from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
 import { isStale, loadMediaConsent, seasonStart } from '@/lib/media-consent'
 import {
@@ -267,7 +267,9 @@ describe('the build guard', () => {
 })
 
 describe('the content this site actually ships', () => {
-  const pages = loadPages()
+  // content/home.yaml holds copy as well, so it goes through the guard with the Markdown pages.
+  // src/app/layout.tsx passes exactly this list at build time.
+  const pages = [...loadPages(), homeContentAsPage()]
 
   it('breaks no rule except the placeholders still waiting on Charlie', () => {
     const { errors } = checkPublishingPolicy({ pages, settings, consent })

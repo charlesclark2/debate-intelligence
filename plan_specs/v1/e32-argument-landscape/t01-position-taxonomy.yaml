@@ -1,0 +1,206 @@
+# TASK v1-e32-t01-position-taxonomy — Topic position taxonomies
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §13 Coverage analysis (archetypes), §10 structured outputs, §2 (debate semantics)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t01-position-taxonomy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: Topic position taxonomies
+    debate/architecture-refs: §2, §6, §10, §13, §14
+spec:
+  description: >-
+    Define the position taxonomy that every landscape report counts against: a coach-editable YAML file
+    per topic under config/landscape/taxonomies/, plus config/landscape/topics.yaml mapping each caselist
+    slug (hspolicy26, hsld26, hspf26, passed in, never hardcoded in code) and an effective snapshot date
+    range to a topic id, because the LD and PF caselists span several topics per season. Initial files
+    cover the Policy 2026-27 national health insurance topic (affs, advantages, DAs, CPs, Ks, T, theory),
+    the Sept-Oct 2026 LD topic on space colonization (values, criteria/standards, contention types, plus
+    the usual theory, T, K and phil frameworks) and the Sept-Oct 2026 PF data center moratorium topic
+    (pro/con contentions and their common responses), with a shared generic.yaml for format-level
+    positions (condo, PICs bad, generic Ks, LD tricks). Each position has a stable kebab-case id, label,
+    kind, side, optional parent, heading aliases and tag keywords, and a deprecated/merged_into field so
+    renames never break earlier classifications. Taxonomies are seeded, not invented: a seeding step
+    normalizes pocket/hat/block headings from the E31 parsed card store, clusters them and emits a
+    candidate list the coach curates. Boundaries: matching headings to positions at classification time
+    and any model use are t02; counting and reports are t03/t04; the landscape CLI is t05.
+  priority: 1
+  constraints:
+    packages:
+      - debate_core.domain
+      - debate_core.arguments
+      - debate_core.integrations
+      - config/landscape
+      - scripts
+    forbidden:
+      - Debater names, team codes or initials anywhere in taxonomy YAML or seeding fixtures
+      - Hardcoding caselist slugs or topic wording in Python code (config only)
+      - Model calls in the taxonomy loader or seeding step (seeding is deterministic)
+      - Deleting or reusing a position id once released; retire it with deprecated/merged_into instead
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/
+      - Committing the real parsed corpus or heading dumps that include source paths with team codes
+  context:
+    - kind: TaskRef
+      name: v1-e31-t06-parse-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Topic, Position and Taxonomy Pydantic models (extra=forbid) load every file in
+        config/landscape/taxonomies/ and reject duplicate ids, unknown parent ids, cycles, a merged_into
+        target that does not exist, and an alias claimed by two positions of the same topic.
+    - id: ac2
+      description: >-
+        config/landscape/topics.yaml resolves (caselist slug, snapshot date) to exactly one topic id and a
+        taxonomy_version (semver); overlapping date ranges for the same caselist fail validation.
+    - id: ac3
+      description: >-
+        Three topic taxonomies plus generic.yaml exist, each with at least 12 active positions, and every
+        position declares kind (e.g. aff, advantage, da, cp, k, t, theory, value, criterion, contention,
+        response) and side (aff, neg or both, with PF pro/con mapped to aff/neg).
+    - id: ac4
+      description: >-
+        The deterministic seeding step turns parsed-store headings into a candidates CSV of normalized
+        heading, level (pocket/hat/block), document count, distinct-team count and suggested position id,
+        stripping round prefixes (1AC, 1NC, 2NR), numbering and "AT:"/"A2" answer markers.
+    - id: ac5
+      description: >-
+        docs/guides/landscape-taxonomy.md explains how a coach adds a position, adds an alias, retires or
+        merges a position and bumps taxonomy_version, and the coach has reviewed the three seeded files.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t01-position-taxonomy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Model the taxonomy and its validation first, then the deterministic heading normalizer and seeding
+    step, then run seeding on the real parsed store and have the coach curate the three topic files.
+  goalRef:
+    name: v1-e32-t01-position-taxonomy
+  graph:
+    nodes:
+      - id: taxonomy-models
+        kind: Task
+        name: Taxonomy domain models and validation
+        description: >-
+          Pydantic models Topic, Position (id, label, kind, side, parent, aliases, tag_keywords,
+          description, deprecated, merged_into) and Taxonomy (topic_id, taxonomy_version, positions) with
+          cross-field validators for ids, parents, cycles, merges and alias collisions.
+        outputs: [packages/debate_core/src/debate_core/domain/landscape.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Taxonomy model validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_landscape_taxonomy.py]
+      - id: yaml-repository
+        kind: Task
+        name: YAML taxonomy repository and topic resolution
+        description: >-
+          TaxonomyRepository port in application/ports and a YAML adapter in integrations that loads
+          config/landscape/topics.yaml and taxonomies/*.yaml, merges generic.yaml positions into each
+          topic by format, and resolves (caselist slug, snapshot date) to a topic and version.
+        dependsOn: [taxonomy-models]
+        outputs:
+          - packages/debate_core/src/debate_core/application/ports/taxonomy_repository.py
+          - packages/debate_core/src/debate_core/integrations/landscape/yaml_taxonomy_repository.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Repository and topic-resolution tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/landscape/test_yaml_taxonomy_repository.py
+      - id: heading-normalizer
+        kind: Task
+        name: Heading normalizer and deterministic seeding
+        description: >-
+          A pure normalizer (case-fold, strip numbering, round prefixes like 1NC/2NR, "Off"/"Shell"/"Block"
+          suffixes, and detect AT:/A2 answer markers) plus a seeding function that reads FileSections from
+          the parsed card store, counts headings by level, documents and distinct teams, and writes a
+          candidates CSV with suggested ids; a thin operator script wraps it. Synthetic fixtures only.
+        dependsOn: [taxonomy-models]
+        outputs:
+          - packages/debate_core/src/debate_core/arguments/landscape/headings.py
+          - packages/debate_core/src/debate_core/arguments/landscape/seeding.py
+          - scripts/seed_landscape_taxonomy.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Normalizer and seeding tests pass on synthetic parsed-store fixtures
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape/test_headings.py]
+      - id: seed-and-curate
+        kind: Task
+        name: Seed and curate the three topic taxonomies
+        description: >-
+          Operator-run on the coach's Mac: run the seeding script over the parsed store for hsld26 and any
+          imported Policy/PF caselists, keep the candidates CSV outside the repo, and hand-curate
+          policy-2026-27-nhi.yaml, ld-2026-sep-oct-space-colonization.yaml,
+          pf-2026-sep-oct-data-center-moratorium.yaml and generic.yaml; topics.yaml maps caselists and
+          date ranges to them at taxonomy_version 1.0.0.
+        dependsOn: [yaml-repository, heading-normalizer]
+        outputs:
+          - config/landscape/topics.yaml
+          - config/landscape/taxonomies/policy-2026-27-nhi.yaml
+          - config/landscape/taxonomies/ld-2026-sep-oct-space-colonization.yaml
+          - config/landscape/taxonomies/pf-2026-sep-oct-data-center-moratorium.yaml
+          - config/landscape/taxonomies/generic.yaml
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Topic map lists the LD caselist
+            path: config/landscape/topics.yaml
+            contentMatch: "hsld26"
+          - type: test_passes
+            name: Every committed taxonomy file validates and has no personal data
+            command: uv
+            args: [run, pytest, tests/config/test_landscape_taxonomies.py]
+          - type: custom
+            name: Coach curates the seeded taxonomies
+            description: >-
+              Coach reviews each topic file against the candidate headings and the team's own prep, confirms
+              the position list and labels match how debaters on this topic actually name positions, and
+              approves taxonomy_version 1.0.0.
+      - id: coach-guide
+        kind: Task
+        name: Coach editing guide and quality gates
+        description: >-
+          Write the editing guide with worked examples (add alias, split a DA, merge two K labels) and
+          run type check and import boundaries.
+        dependsOn: [seed-and-curate]
+        outputs: [docs/guides/landscape-taxonomy.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Taxonomy editing guide exists
+            path: docs/guides/landscape-taxonomy.md
+            contentMatch: "merged_into"
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

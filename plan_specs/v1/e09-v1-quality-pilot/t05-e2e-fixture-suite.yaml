@@ -1,5 +1,5 @@
 # TASK v1-e09-t05-e2e-fixture-suite — End-to-end recorded suite
-# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.5 (V1 quality gate & team pilot) | Major: V1
 # Architecture refs: §16 (integration tests on recorded fixtures), §11 V1 acceptance criteria, §8
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,21 +10,24 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
   annotations:
     debate/title: End-to-end recorded suite
     debate/architecture-refs: §16, §11, §8
 spec:
   description: >-
-    Prove the V1 acceptance criteria end to end through the real CLI entry point with every external boundary
-    recorded: provider APIs and publisher pages via respx/vcr cassettes, models via replay cassettes, and a
-    temporary local data dir. Scenarios: (1) `search ... --auto-cut 3` → DOCX bundle → `verify bundle.docx`
-    exits 0; (2) `cut <URL>` on a news, a think-tank, a government PDF and an open-access journal source; (3)
-    a paywalled and a robots-disallowed URL fail explicitly with the right exit codes; (4) a provider outage
-    yields PARTIAL search results; (5) a hand-edited evidence word in the exported DOCX makes verify fail with
-    MANUAL_EDIT. Each V1 acceptance criterion from §11 maps to at least one named test. Boundaries: does not
-    re-test unit behaviour, golden formatting (t02) or span quality (t03).
+    Prove the V1 acceptance criteria end to end through the real CLI entry point with every external
+    boundary recorded: provider APIs and publisher pages via respx/vcr cassettes, models via replay
+    cassettes, and a temporary local data dir. Scenarios: (1) `search ... --auto-cut 3` → DOCX bundle →
+    `verify bundle.docx` exits 0; (2) `cut <URL>` on a news, a think-tank, a government PDF and an
+    open-access journal source; (3) a paywalled and a robots-disallowed URL fail explicitly with the right
+    exit codes; (4) a provider outage yields PARTIAL search results; (5) a hand-edited evidence word in the
+    exported DOCX makes verify fail with MANUAL_EDIT; (6) the V1 caselist workflow on a tiny synthetic
+    weekly archive (no real team files): `caselist import` → `caselist parse` → `landscape report` (replay
+    models) → `files build` from a recipe → `store sync` to an in-process moto bucket. Each V1 acceptance
+    criterion from §11 maps to at least one named test. Boundaries: does not re-test unit behaviour, golden
+    formatting (t02) or span quality (t03).
   priority: 1
   constraints:
     packages: [tests/integration, tests/fixtures]
@@ -52,6 +55,11 @@ spec:
         not in the PR `ci` check into dev.
     - id: ac4
       description: >-
+        The caselist scenario imports and deduplicates the synthetic archive, parses its cards, writes a
+        landscape report, builds a file whose card text hashes match the sources, and syncs it with matching
+        checksums to the moto bucket.
+    - id: ac5
+      description: >-
         tests/integration/ACCEPTANCE.md maps each §11 V1 acceptance criterion to the test ids covering it.
 status:
   phase: Pending
@@ -64,7 +72,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
 spec:
   description: >-
@@ -113,12 +121,27 @@ spec:
             name: Failure scenarios pass
             command: uv
             args: [run, pytest, -m, slow, tests/integration/test_e2e_failures.py]
+      - id: caselist-workflow
+        kind: Task
+        name: caselist import → parse → landscape → files build → store sync scenario
+        description: >-
+          A synthetic two-team weekly archive fixture (fake school/team codes) run through the CLI with
+          replay models and moto S3; asserts dedupe counts, parsed cards, the landscape report, the built
+          file's card hashes and the sync summary.
+        dependsOn: [e2e-harness]
+        outputs: [tests/integration/test_e2e_caselist.py, tests/fixtures/caselist/synthetic_archive/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist workflow e2e passes
+            command: uv
+            args: [run, pytest, -m, slow, tests/integration/test_e2e_caselist.py]
       - id: acceptance-map
         kind: Task
         name: Acceptance criteria map
         description: >-
           Write ACCEPTANCE.md mapping §11 criteria to tests and run the whole integration directory.
-        dependsOn: [happy-path, failure-scenarios]
+        dependsOn: [happy-path, failure-scenarios, caselist-workflow]
         outputs: [tests/integration/ACCEPTANCE.md]
         estimatedEffort: 1h
         acceptanceCriteria:

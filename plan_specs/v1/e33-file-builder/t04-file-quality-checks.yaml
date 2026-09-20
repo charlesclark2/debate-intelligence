@@ -1,0 +1,162 @@
+# TASK v1-e33-t04-file-quality-checks — Built-file quality checks
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §6 ExportService, §8 provenance, §16 deterministic tests, ADR-0006
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t04-file-quality-checks
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: Built-file quality checks
+    debate/architecture-refs: §6, §8, §16, ADR-0006
+spec:
+  description: >-
+    Independently verify a built evidence file against its provenance sidecar and its source documents
+    before anyone reads from it or it is published. FileQualityService re-parses the built .docx with the
+    E31 DebateFileParser (it does not trust the writer) and runs deterministic checks: each card's
+    evidence text and formatting spans hash-identical to the card re-parsed from its source document;
+    every card has a cite with a short cite; no fingerprint appears twice (near-duplicate buckets are
+    warnings); headings follow the style profile (pocket > hat > block > tag, no skipped levels, profile
+    style ids only); the manifest and document agree card-for-card and every entry has complete
+    provenance with provenance_mode FILE_IMPORT. It writes <file>.quality.json and a readable
+    <file>.quality.md with PASS/FAIL per check and card. Boundaries: running checks as the gate before
+    upload is wired by `files publish` (t05), and `files build`/`files check` (t03) call this service;
+    this task owns the service, check library and report only, with no CLI surface.
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence, debate_core.application, docs/data]
+    forbidden:
+      - Trusting writer-reported hashes without re-parsing the built file and the source document
+      - Model calls in any check
+      - Auto-fixing a failing file (checks report; they never rewrite evidence)
+      - Downgrading an evidence-identity failure to a warning
+  context:
+    - kind: TaskRef
+      name: v1-e33-t02-lossless-card-writer
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A mutation suite flips one character in a copied w:t, removes one underline run, changes a
+        highlight color, deletes a cite paragraph and duplicates a card; each mutation is detected by the
+        matching check and makes the file FAIL.
+    - id: ac2
+      description: >-
+        Files built by t02 from the synthetic fixtures PASS every check, and the check runs in under 5 s
+        per 100 cards on the CI runner.
+    - id: ac3
+      description: >-
+        Heading-structure violations (a tag outside any block when the file has blocks, a skipped level, a
+        non-profile heading style) are reported with section path and paragraph index.
+    - id: ac4
+      description: >-
+        Manifest/document disagreements (card missing from either side, wrong order, missing source sha256,
+        team code, round or snapshot, provenance_mode not FILE_IMPORT) are FAIL.
+    - id: ac5
+      description: >-
+        <file>.quality.json validates against docs/data/file-quality-report.schema.json and records
+        checker_version, parser_version, style_profile_version and overall status.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t04-file-quality-checks-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Define the report model, implement the evidence-identity check, then structure/cite/duplicate and
+    manifest checks, and prove them with a mutation suite.
+  goalRef:
+    name: v1-e33-t04-file-quality-checks
+  graph:
+    nodes:
+      - id: report-model
+        kind: Task
+        name: Quality report model and schema
+        description: >-
+          CheckResult (check id, status PASS/WARN/FAIL, card or section reference, message) and
+          FileQualityReport with versions and overall status; JSON and Markdown renderers; generated
+          docs/data/file-quality-report.schema.json.
+        outputs:
+          - packages/debate_core/src/debate_core/evidence/file_checks/report.py
+          - docs/data/file-quality-report.schema.json
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Quality report schema exists
+            path: docs/data/file-quality-report.schema.json
+            contentMatch: "checker_version"
+          - type: test_passes
+            name: Report model tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/file_checks/test_report.py]
+      - id: identity-check
+        kind: Task
+        name: Evidence and cite identity check
+        description: >-
+          For each manifest entry, parse the source document's card at the recorded element index and the
+          built file's card at its position; compare evidence text sha256, cite text and a formatting-span
+          hash (underline, emphasis, bold, highlight color, font size by offset).
+        dependsOn: [report-model]
+        outputs: [packages/debate_core/src/debate_core/evidence/file_checks/identity.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Identity check tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/file_checks/test_identity.py]
+      - id: structure-checks
+        kind: Task
+        name: Cite, duplicate, heading and manifest checks
+        description: >-
+          Cite presence and short-cite detection, exact duplicate fingerprints (FAIL) and near-duplicate
+          buckets (WARN), heading-order and profile-style checks, and manifest/document card alignment and
+          provenance completeness.
+        dependsOn: [report-model]
+        outputs: [packages/debate_core/src/debate_core/evidence/file_checks/structure.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Structure check tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/file_checks/test_structure.py]
+      - id: quality-service
+        kind: Task
+        name: FileQualityService and mutation suite
+        description: >-
+          FileQualityService.check(built_path) loads the sidecar, fetches sources by sha256 from the
+          blob-store port, runs all checks and writes .quality.json/.quality.md; a mutation suite
+          tampers with synthetic built files at the OOXML level to prove each failure is caught.
+        dependsOn: [identity-check, structure-checks]
+        outputs:
+          - packages/debate_core/src/debate_core/application/file_quality_service.py
+          - packages/debate_core/tests/application/test_file_quality_mutations.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Mutation suite detects every tampering
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_quality_mutations.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

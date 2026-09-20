@@ -20,7 +20,7 @@ spec:
   description: >-
     Let students save, organize, search, revise, share and bulk-export verified cards with provenance
     intact.
-  priority: 8
+  priority: 10
   constraints:
     majorVersion: v2
     release: v2.3
@@ -60,7 +60,7 @@ spec:
       kind: External
       name: 'Prerequisite from E06: DOCX renderer'
       description: >-
-        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.3).
       inputs:
         goalRef: v1-e06-t04-docx-renderer
         specRef: plan_specs/v1/e06-card-cutting/t04-docx-renderer.yaml

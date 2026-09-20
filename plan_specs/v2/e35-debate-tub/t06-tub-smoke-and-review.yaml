@@ -1,0 +1,169 @@
+# TASK v2-e35-t06-tub-smoke-and-review — Tub smoke checks and debater review
+# Epic: E35 Debate Tub (Web File Access) | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
+# Architecture refs: §12, §14 (minors, signed URLs), §16 testing strategy, ADR-0013 (dev before prod)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e35-t06-tub-smoke-and-review
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+  annotations:
+    debate/title: Tub smoke checks and debater review
+    debate/architecture-refs: §12, §14, §16, ADR-0013
+spec:
+  description: >-
+    Close the epic by proving the deployed tub works in dev and that debaters can actually use it. Add
+    cloud smoke checks under tests/smoke/cloud marked `dev` (run by validate-dev before any dev-to-main
+    promotion, never in PR CI): a synthetic dev user lists and searches seeded synthetic tub files,
+    requests a download URL, fetches the object and matches its sha256, sees X-Amz-Expires within the
+    configured bound, and a synthetic user from a second organization gets 404. The seed data is a small
+    set of synthetic .docx files (fake schools, no real disclosures, no names) loaded by an idempotent
+    script. Then run a usability pass with three team debaters (at least one LD and one PF, one on a
+    phone) on the dev tub with sample data, recording tasks, completion and issues without personal data.
+    This task fixes only blocking usability defects it finds; larger changes become spec edits. Access
+    matrix, audit and takedown behavior are proven in t05.
+  priority: 2
+  constraints:
+    packages: [tests/smoke/cloud, scripts, docs/guides, docs/data]
+    forbidden:
+      - Running `dev` smoke tests in PR CI, or pointing them at prod
+      - Real caselist files, real student accounts or debater names in seed data or smoke fixtures
+      - Recording debaters' names, faces, voices or screens during the usability pass
+      - Printing presigned URLs or tokens in smoke output
+  context:
+    - kind: TaskRef
+      name: v2-e35-t04-tub-ui
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e35-t05-tub-access-and-removal
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `uv run pytest tests/smoke/cloud -m dev -k tub` passes against dev, covering list, facet filter,
+        search, download with sha256 match, URL expiry bound and cross-organization 404.
+    - id: ac2
+      description: >-
+        The tub smoke checks are registered in the validate-dev suite and are deselected by the PR CI
+        marker expression.
+    - id: ac3
+      description: >-
+        scripts/seed_tub_dev.py loads the synthetic seed set idempotently (a second run changes nothing)
+        and refuses to run when DEBATE_ENV is prod.
+    - id: ac4
+      description: >-
+        Three debaters complete "find a NEG file for a given position and download it" and "open a file's
+        provenance" on dev; results and prioritized issues are recorded without personal data.
+    - id: ac5
+      description: >-
+        docs/guides/debate-tub.md explains to debaters how to browse, download and open files and what
+        "disclosed evidence, not platform-verified" means.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e35-t06-tub-smoke-and-review-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+spec:
+  description: >-
+    Synthetic seed data first, then the dev smoke suite and its validate-dev registration, then the
+    debater guide and the usability pass.
+  goalRef:
+    name: v2-e35-t06-tub-smoke-and-review
+  graph:
+    nodes:
+      - id: synthetic-seed
+        kind: Task
+        name: Synthetic tub seed data for dev
+        description: >-
+          A handful of generated .docx files (built file, caselist source, camp file; AFF and NEG; two
+          positions) with metadata and a manifest, loaded to the dev bucket by an idempotent script that
+          refuses prod; the t02 indexer picks them up.
+        outputs: [scripts/seed_tub_dev.py, tests/smoke/cloud/fixtures/tub_seed/manifest.json]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Seed script tests pass offline under moto
+            command: uv
+            args: [run, pytest, tests/scripts/test_seed_tub_dev.py]
+      - id: smoke-suite
+        kind: Task
+        name: Tub cloud smoke checks
+        description: >-
+          pytest smoke module marked `dev` using the synthetic dev Cognito users from the E12 smoke
+          fixtures: list, facet filter, search, download plus sha256 check, expiry bound, second-org 404.
+        dependsOn: [synthetic-seed]
+        outputs: [tests/smoke/cloud/test_tub_smoke.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tub smoke checks pass in dev
+            command: uv
+            args: [run, pytest, tests/smoke/cloud, -m, dev, -k, tub]
+          - type: endpoint_responds
+            name: Tub list rejects unauthenticated requests in dev
+            url: https://api.dev.debate-intelligence.example/v1/tub/files
+            method: GET
+            expectedStatus: 401
+      - id: validate-dev-registration
+        kind: Task
+        name: Register tub checks in validate-dev
+        description: >-
+          Add the tub smoke module to the validate-dev suite list and confirm the PR CI marker expression
+          (not dev and not prod) deselects it.
+        dependsOn: [smoke-suite]
+        outputs: [scripts/validate_dev.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: validate-dev suite includes the tub checks
+            command: uv
+            args: [run, pytest, tests/scripts/test_validate_dev.py, -k, tub]
+      - id: debater-guide
+        kind: Task
+        name: Debater guide for the tub
+        description: >-
+          A short guide with phone-friendly steps for browsing, downloading and opening files (per ADR-0014)
+          and what disclosed, not-verified evidence means for cutting and citing.
+        dependsOn: [smoke-suite]
+        outputs: [docs/guides/debate-tub.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Debater guide exists
+            path: docs/guides/debate-tub.md
+            contentMatch: "not platform-verified"
+      - id: usability-pass
+        kind: Task
+        name: Usability pass with three debaters
+        description: >-
+          Charlie runs scripted tasks with three debaters on dev sample data (one on a phone), records
+          completion, time and issues under neutral participant labels, fixes blocking defects and files
+          the rest as spec edits.
+        dependsOn: [debater-guide, validate-dev-registration]
+        outputs: [docs/data/tub-usability-review.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Usability findings are recorded
+            path: docs/data/tub-usability-review.md
+            contentMatch: "Findings"
+          - type: custom
+            name: Three debaters complete the core tub tasks
+            description: >-
+              Three team debaters (at least one LD and one PF, one on a phone) find, download and inspect a
+              file on dev; Charlie confirms no blocking issue remains and no personal data was recorded.
+status:
+  phase: Pending

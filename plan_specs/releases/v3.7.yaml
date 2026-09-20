@@ -16,7 +16,7 @@ spec:
   description: >-
     Full simulated rounds with opponent-informed strategy and a traceable judge decision/RFD, gated by
     coach-curated evals.
-  priority: 17
+  priority: 19
   acceptanceCriteria:
   - id: epic-e28
     description: >-

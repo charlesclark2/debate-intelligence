@@ -1,0 +1,214 @@
+# TASK v1-e34-t02-scheduled-sync — Weekly scheduled sync
+# Epic: E34 Scheduled Caselist Sync | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §2 async/slow work, §6 thin CLI, §9 Opponent data, §14, §15 reliability
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t02-scheduled-sync
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: Weekly scheduled sync
+    debate/architecture-refs: §2, §6, §9, §14, §15
+spec:
+  description: >-
+    Automate the weekly caselist and OpenEv cycle on the operator's Mac. A CaselistSyncService in
+    debate_core.application composes existing services in order: list archives for each configured
+    caselist slug (t01), select archives newer than the latest imported snapshot per the manifests,
+    download them oldest-first, import (v1-e30-t03; OpenEv camp files listed by the client are
+    downloaded and imported through the OpenEv importer, v1-e30-t04), parse (v1-e31-t06), publish
+    sources, manifests
+    and parsed cards to S3 (v1-e30-t05), and regenerate landscape reports (v1-e32-t05). Because
+    archives are cumulative, each archive becomes its own snapshot so week-over-week landscape diffs
+    stay meaningful, while content deduplication keeps storage flat. The run is idempotent (a re-run
+    with nothing new downloads nothing and exits 0), holds a lock file so two runs never overlap, and
+    writes a structured per-run summary. Local stages (download, import, parse) need no AWS credentials;
+    if the AWS SSO session has expired the S3 publish and report steps are recorded as pending and
+    retried on the next run or by `caselist pull --publish-pending`. `debate-research caselist pull
+    --caselist <slug> [--caselist <slug> ...] [--dry-run]` is the entry point; --dry-run lists what
+    would be downloaded and processed without writing anything. The launchd agent (plist template,
+    wrapper script and install script under ops/launchd/) runs pull weekly; installing and enabling it
+    is an operator step, taken only after one manual DEBATE_ENV=dev run validates the pipeline and the
+    first scheduled prod run is recorded. Out of scope: the API client and token (t01), run-log
+    storage, failure notifications and the stale-data banner (t03), and the importer/parser/landscape
+    internals (E30, E31, E32).
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli.commands, ops/launchd, tests/smoke]
+    forbidden:
+      - Pipeline logic in debate_cli or in the launchd shell wrapper (they only call `caselist pull`)
+      - Long-lived AWS access keys for unattended runs (SSO profile only; publish is deferred when expired)
+      - Hardcoded caselist slugs or absolute user paths in committed files (templated at install time)
+      - Committing downloaded archives, parsed caselist data or run output containing student names
+      - Enabling the schedule from an agent session, or running full-corpus pulls in CI
+      - Live network or AWS calls in CI tests (respx, moto and fakes only)
+  context:
+    - kind: TaskRef
+      name: v1-e34-t01-caselist-api-client
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t06-parse-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t05-caselist-publish
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t05-landscape-cli
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t04-openev-importer
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With a fake source exposing two new synthetic weekly archives and one new OpenEv file, `caselist
+        pull` downloads, imports (archive and OpenEv importers), parses, publishes (moto) and reports
+        them, archives oldest-first, and an immediate re-run
+        performs no downloads and reports "nothing new" with exit code 0.
+    - id: ac2
+      description: >-
+        `caselist pull --dry-run` prints the archives it would download and the stages it would run, and
+        leaves the local store, S3 (moto) and the manifests unchanged.
+    - id: ac3
+      description: >-
+        When S3 credentials are expired, local stages still complete, publish and report stages are
+        recorded as pending, and `caselist pull --publish-pending` completes them later.
+    - id: ac4
+      description: >-
+        A second concurrent run exits immediately with a lock message; each run writes a JSON summary
+        (archives seen/downloaded, files imported/duplicate, cards parsed, parse failures, objects
+        published, reports written, duration) with no token or student names.
+    - id: ac5
+      description: >-
+        ops/launchd/ contains a plist template that passes `plutil -lint`, a wrapper setting
+        DEBATE_ENV and the AWS profile, and an install script with a --dry-run mode that renders the plist
+        without loading it; the operator has recorded the dev validation run and the first scheduled run.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t02-scheduled-sync-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Build the orchestration service against fakes, add dry-run and deferred publish, expose the thin
+    command with smoke checks, package the launchd agent, then hand enabling and the first runs to the
+    operator.
+  goalRef:
+    name: v1-e34-t02-scheduled-sync
+  graph:
+    nodes:
+      - id: sync-service
+        kind: Task
+        name: CaselistSyncService orchestration
+        description: >-
+          Compose archive source, archive importer, OpenEv importer, parse pipeline, publisher and landscape
+          services behind their ports; select archives newer than the latest manifest snapshot and OpenEv
+          files not yet in the OpenEv manifest; process archives oldest-first;
+          lock file; RunSummary model. Tested with fakes and a tiny synthetic archive fixture.
+        outputs:
+          - packages/debate_core/src/debate_core/application/caselist_sync.py
+          - packages/debate_core/tests/application/test_caselist_sync.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Orchestration and idempotency tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_sync.py]
+      - id: dry-run-and-deferred-publish
+        kind: Task
+        name: Dry-run mode and deferred publish on expired credentials
+        description: >-
+          A dry-run plan that performs only listing calls; detection of expired SSO credentials
+          (StoreCredentialsExpired from the S3 adapter) that marks publish/report stages pending in a
+          local pending-work file, and a publish-pending path that drains it.
+        dependsOn: [sync-service]
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Dry-run and deferred-publish tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_caselist_sync.py
+              - -k
+              - "dry_run or pending"
+      - id: pull-command
+        kind: Task
+        name: caselist pull command and smoke check
+        description: >-
+          Thin Typer command (repeatable --caselist, --dry-run, --publish-pending) printing a Rich stage
+          table and writing the JSON summary; smoke check runs `caselist pull --dry-run` in validate-dev.
+        dependsOn: [dry-run-and-deferred-publish]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/caselist_pull.py
+          - tests/smoke/test_caselist_pull.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: pull command tests pass offline
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_caselist_pull.py]
+          - type: command_succeeds
+            name: pull help renders
+            command: uv
+            args: [run, debate-research, caselist, pull, --help]
+      - id: launchd-agent
+        kind: Task
+        name: launchd agent template, wrapper and installer
+        description: >-
+          Plist template (StartCalendarInterval weekly, e.g. Wednesday 06:00 local after the Tuesday
+          archives; runs missed jobs on wake), wrapper script (DEBATE_ENV, AWS_PROFILE, log path under
+          ~/Library/Logs/debate-research) and install.sh with --dry-run that renders to stdout; runbook
+          explains install, enable, disable and logs.
+        dependsOn: [pull-command]
+        outputs:
+          - ops/launchd/com.debate-intelligence.caselist-sync.plist.template
+          - ops/launchd/run-caselist-sync.sh
+          - ops/launchd/install.sh
+          - docs/runbooks/caselist-scheduled-sync.md
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Plist template schedules a weekly run
+            path: ops/launchd/com.debate-intelligence.caselist-sync.plist.template
+            contentMatch: "StartCalendarInterval"
+          - type: test_passes
+            name: Installer dry-run renders a lint-clean plist (skipped off macOS)
+            command: uv
+            args: [run, pytest, tests/integration/test_launchd_install.py]
+      - id: operator-enable
+        kind: Task
+        name: Operator validates in dev and enables the schedule
+        description: >-
+          Operator-run: one manual `DEBATE_ENV=dev debate-research caselist pull --caselist hsld26`, then
+          install.sh and `launchctl bootstrap` for the prod schedule; after the first scheduled run,
+          record both run summaries (counts only) in the data log.
+        dependsOn: [launchd-agent]
+        outputs: [docs/data/caselist-sync-runs.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: First scheduled run is recorded
+            path: docs/data/caselist-sync-runs.md
+            contentMatch: "scheduled"
+          - type: custom
+            name: Operator confirms the agent is loaded
+            description: >-
+              Charlie confirms `launchctl print gui/$UID/com.debate-intelligence.caselist-sync` shows the
+              agent and that the first scheduled run's summary matches the S3 manifests.
+status:
+  phase: Pending

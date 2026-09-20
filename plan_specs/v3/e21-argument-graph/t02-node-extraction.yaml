@@ -41,7 +41,7 @@ spec:
       name: v3-e21-t01-graph-repository
       relation: dependsOn
     - kind: TaskRef
-      name: v3-e20-t03-docx-structure-parser
+      name: v1-e31-t03-debate-docx-parser
       relation: dependsOn
     - kind: TaskRef
       name: v3-e20-t02-upload-pipeline

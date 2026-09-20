@@ -1,5 +1,5 @@
 # EPIC E08 — Federated Research Workflows
-# Major version: V1 | Release: v1.2 (Federated research from the CLI)
+# Major version: V1 | Release: v1.4 (Federated research from the CLI)
 # Architecture refs: §6 SearchService, §9 Ranking pipeline, §11 CLI commands
 # Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
 ---
@@ -11,7 +11,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e08-research-workflows
   annotations:
     debate/title: E08 — Federated Research Workflows
@@ -20,10 +20,10 @@ spec:
   description: >-
     Fan out searches across providers, normalize/dedupe, rank with explainable features, expand queries
     by debate argument and need, and ship `search`, `--auto-cut` and `daily`.
-  priority: 3
+  priority: 5
   constraints:
     majorVersion: v1
-    release: v1.2
+    release: v1.4
     rule: Every task in this epic ships in this release; no task crosses major versions.
   acceptanceCriteria:
   - id: ac1
@@ -48,7 +48,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e08-research-workflows
 spec:
   description: >-
@@ -63,7 +63,7 @@ spec:
       kind: External
       name: 'Prerequisite from E04: URL canonicalization and identifier detection'
       description: >-
-        Cross-epic prerequisite owned by v1-e04-article-retrieval (release v1.1).
+        Cross-epic prerequisite owned by v1-e04-article-retrieval (release v1.3).
       inputs:
         goalRef: v1-e04-t01-url-canonicalization
         specRef: plan_specs/v1/e04-article-retrieval/t01-url-canonicalization.yaml
@@ -71,7 +71,7 @@ spec:
       kind: External
       name: 'Prerequisite from E05: Versioned prompt registry'
       description: >-
-        Cross-epic prerequisite owned by v1-e05-model-router (release v1.1).
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.2).
       inputs:
         goalRef: v1-e05-t04-prompt-registry
         specRef: plan_specs/v1/e05-model-router/t04-prompt-registry.yaml
@@ -79,7 +79,7 @@ spec:
       kind: External
       name: 'Prerequisite from E05: Structured output validation and repair'
       description: >-
-        Cross-epic prerequisite owned by v1-e05-model-router (release v1.1).
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.2).
       inputs:
         goalRef: v1-e05-t05-structured-output-validation
         specRef: plan_specs/v1/e05-model-router/t05-structured-output-validation.yaml
@@ -87,7 +87,7 @@ spec:
       kind: External
       name: 'Prerequisite from E05: Token/cost telemetry and budgets'
       description: >-
-        Cross-epic prerequisite owned by v1-e05-model-router (release v1.1).
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.2).
       inputs:
         goalRef: v1-e05-t07-usage-telemetry
         specRef: plan_specs/v1/e05-model-router/t07-usage-telemetry.yaml
@@ -95,7 +95,7 @@ spec:
       kind: External
       name: 'Prerequisite from E06: `debate-research cut` command'
       description: >-
-        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.3).
       inputs:
         goalRef: v1-e06-t06-cut-command
         specRef: plan_specs/v1/e06-card-cutting/t06-cut-command.yaml
@@ -103,7 +103,7 @@ spec:
       kind: External
       name: 'Prerequisite from E07: SearchProvider contract, health and circuit breaking'
       description: >-
-        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.2).
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
       inputs:
         goalRef: v1-e07-t01-search-provider-contract
         specRef: plan_specs/v1/e07-discovery-adapters/t01-search-provider-contract.yaml
@@ -111,7 +111,7 @@ spec:
       kind: External
       name: 'Prerequisite from E07: OpenAlex adapter'
       description: >-
-        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.2).
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
       inputs:
         goalRef: v1-e07-t02-openalex-adapter
         specRef: plan_specs/v1/e07-discovery-adapters/t02-openalex-adapter.yaml
@@ -119,7 +119,7 @@ spec:
       kind: External
       name: 'Prerequisite from E07: Publisher RSS/Atom and Google News RSS adapter'
       description: >-
-        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.2).
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
       inputs:
         goalRef: v1-e07-t05-rss-news-adapter
         specRef: plan_specs/v1/e07-discovery-adapters/t05-rss-news-adapter.yaml

@@ -1,5 +1,5 @@
-# RELEASE v1.2 — Federated research from the CLI
-# Major version: V1. Epics: E07, E08
+# RELEASE v1.2 — Argument landscape & file building
+# Major version: V1. Epics: E05, E32, E33, E34
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -11,19 +11,26 @@ metadata:
     debate/major-version: v1
     debate/release: v1.2
   annotations:
-    debate/title: v1.2 — Federated research from the CLI
+    debate/title: v1.2 — Argument landscape & file building
 spec:
   description: >-
-    `debate-research search` fans out to scholarly/news/government adapters, dedupes and ranks results,
-    supports --argument/--need and --auto-cut, and `daily` digests.
+    Weekly argument-landscape reports show which positions are being read and with which cards; coaches
+    build Verbatim/CardMirror-compatible files from disclosed cards with provenance; caselist sync can
+    run on a schedule.
   priority: 3
   acceptanceCriteria:
-  - id: epic-e07
+  - id: epic-e05
     description: >-
-      Epic E07 (Discovery Provider Adapters) goal is Succeeded.
-  - id: epic-e08
+      Epic E05 (Model Router & Structured LLM Contracts) goal is Succeeded.
+  - id: epic-e32
     description: >-
-      Epic E08 (Federated Research Workflows) goal is Succeeded.
+      Epic E32 (Argument Landscape Reports) goal is Succeeded.
+  - id: epic-e33
+    description: >-
+      Epic E33 (Evidence File Builder) goal is Succeeded.
+  - id: epic-e34
+    description: >-
+      Epic E34 (Scheduled Caselist Sync) goal is Succeeded.
   - id: tagged
     description: >-
       Release tag v1.2.0 is pushed and CHANGELOG.md has a v1.2 section.
@@ -45,7 +52,7 @@ metadata:
 spec:
   gateType: review
   description: >-
-    Release review for v1.2 (Federated research from the CLI): demo the release goal end to end, confirm
+    Release review for v1.2 (Argument landscape & file building): demo the release goal end to end, confirm
     CI green on the release tag, and confirm no evidence-integrity regressions.
   reviewers:
   - user:charlie
@@ -68,26 +75,40 @@ spec:
   version: v1.2
   graph:
     nodes:
-    - id: e07
+    - id: e05
       kind: External
-      name: Epic E07 — Discovery Provider Adapters
+      name: Epic E05 — Model Router & Structured LLM Contracts
       inputs:
-        goalRef: v1-e07-discovery-adapters
-        specRef: plan_specs/v1/e07-discovery-adapters/epic.yaml
-    - id: e08
+        goalRef: v1-e05-model-router
+        specRef: plan_specs/v1/e05-model-router/epic.yaml
+    - id: e32
       kind: External
-      name: Epic E08 — Federated Research Workflows
+      name: Epic E32 — Argument Landscape Reports
       inputs:
-        goalRef: v1-e08-research-workflows
-        specRef: plan_specs/v1/e08-research-workflows/epic.yaml
+        goalRef: v1-e32-argument-landscape
+        specRef: plan_specs/v1/e32-argument-landscape/epic.yaml
+    - id: e33
+      kind: External
+      name: Epic E33 — Evidence File Builder
+      inputs:
+        goalRef: v1-e33-file-builder
+        specRef: plan_specs/v1/e33-file-builder/epic.yaml
+    - id: e34
+      kind: External
+      name: Epic E34 — Scheduled Caselist Sync
+      inputs:
+        goalRef: v1-e34-caselist-sync
+        specRef: plan_specs/v1/e34-caselist-sync/epic.yaml
     - id: tag-release
       kind: Task
       name: Tag and publish v1.2.0
       description: >-
         Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
       dependsOn:
-      - e07
-      - e08
+      - e05
+      - e32
+      - e33
+      - e34
       acceptanceCriteria:
       - type: command_succeeds
         name: Release tag exists

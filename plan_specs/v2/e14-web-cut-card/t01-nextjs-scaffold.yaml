@@ -1,5 +1,5 @@
 # TASK v2-e14-t01-nextjs-scaffold — Next.js application scaffold
-# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §4 Next.js + TypeScript + React, Tailwind + shadcn/ui, §6 web/, §12
 ---
 apiVersion: planspec.io/v1alpha1

@@ -1,0 +1,212 @@
+# EPIC E32 — Argument Landscape Reports
+# Major version: V1 | Release: v1.2 (Argument landscape & file building)
+# Architecture refs: §13 Coverage analysis (archetypes), §10 structured outputs
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-argument-landscape
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: E32 — Argument Landscape Reports
+    debate/architecture-refs: §13 Coverage analysis (archetypes), §10 structured outputs
+spec:
+  description: >-
+    Classify parsed blocks and cards into the positions being read on each topic and publish weekly landscape
+    reports: what is read, by how many teams, on which side, what is new, and the most-read cards.
+  priority: 3
+  constraints:
+    majorVersion: v1
+    release: v1.2
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Per-topic position taxonomies exist for the current Policy, LD and PF topics and are editable by
+      coaches.
+  - id: ac2
+    description: >-
+      Blocks and cards are classified into positions with confidence and rationale; unknowns are queued
+      for review.
+  - id: ac3
+    description: >-
+      A weekly landscape report per caselist (Markdown and CSV, published to S3) shows positions, frequency,
+      side split, week-over-week change and top cards with sources.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-argument-landscape-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Task graph for epic E32 (Argument Landscape Reports). Each Task node points at its own task-level
+    PlanSpec.
+  goalRef:
+    name: v1-e32-argument-landscape
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e05-t05-structured-output-validation
+      kind: External
+      name: 'Prerequisite from E05: Structured output validation and repair'
+      description: >-
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.2).
+      inputs:
+        goalRef: v1-e05-t05-structured-output-validation
+        specRef: plan_specs/v1/e05-model-router/t05-structured-output-validation.yaml
+    - id: ext-v1-e29-t05-evidence-sync-cli
+      kind: External
+      name: 'Prerequisite from E29: `debate-research store` sync commands'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t05-evidence-sync-cli
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml
+    - id: ext-v1-e30-t01-caselist-data-use-policy
+      kind: External
+      name: 'Prerequisite from E30: Caselist and OpenEv data-use policy'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t01-caselist-data-use-policy
+        specRef: plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml
+    - id: ext-v1-e31-t04-card-fingerprints
+      kind: External
+      name: 'Prerequisite from E31: Card fingerprints and occurrences'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t04-card-fingerprints
+        specRef: plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml
+    - id: ext-v1-e31-t06-parse-pipeline
+      kind: External
+      name: 'Prerequisite from E31: Incremental parse pipeline'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t06-parse-pipeline
+        specRef: plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml
+    - id: t01
+      kind: Task
+      name: Topic position taxonomies
+      description: >-
+        Per-topic taxonomies of positions (Policy national health insurance: affs, DAs, CPs, Ks, T, theory;
+        LD space colonization: values, criteria, contention types; PF data-center moratorium: contentions
+        and responses), seeded from pocket/hat/block headings in the parsed cards, stored as editable
+        YAML.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml
+        goalRef: v1-e32-t01-position-taxonomy
+      dependsOn:
+      - ext-v1-e31-t06-parse-pipeline
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t01-position-taxonomy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t01-position-taxonomy
+    - id: t02
+      kind: Task
+      name: Position classification
+      description: >-
+        Deterministic heading and tag matching first, then ModelRouter-based classification of the remaining
+        blocks and cards into taxonomy positions with confidence and rationale; unclassified items go
+        to a review queue.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml
+        goalRef: v1-e32-t02-position-classification
+      dependsOn:
+      - t01
+      - ext-v1-e05-t05-structured-output-validation
+      - ext-v1-e30-t01-caselist-data-use-policy
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t02-position-classification reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t02-position-classification
+    - id: t03
+      kind: Task
+      name: Weekly landscape report
+      description: >-
+        Per caselist and snapshot: positions read, number of teams, aff/neg split, positions new this
+        week, and the most-read cards per position with links to their sources; Markdown and CSV.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml
+        goalRef: v1-e32-t03-landscape-report
+      dependsOn:
+      - t02
+      - ext-v1-e31-t04-card-fingerprints
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t03-landscape-report reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t03-landscape-report
+    - id: t04
+      kind: Task
+      name: Trends and per-school views
+      description: >-
+        Week-over-week diff (new, rising and falling positions) and a per-school view of disclosed positions
+        to seed later scouting.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml
+        goalRef: v1-e32-t04-trend-and-school-views
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t04-trend-and-school-views reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t04-trend-and-school-views
+    - id: t05
+      kind: Task
+      name: '`debate-research landscape` command'
+      description: >-
+        `debate-research landscape report --caselist <name> [--snapshot <date>]`, writing locally and
+        publishing to the reports/ prefix in S3.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml
+        goalRef: v1-e32-t05-landscape-cli
+      dependsOn:
+      - t03
+      - ext-v1-e29-t05-evidence-sync-cli
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t05-landscape-cli reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t05-landscape-cli
+status:
+  phase: Pending

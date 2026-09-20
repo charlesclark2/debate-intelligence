@@ -1,0 +1,186 @@
+# TASK v1-e31-t05-parser-eval — Parser accuracy evaluation
+# Epic: E31 Debate File Parsing | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §6 FileIntelligenceService, §13 file parsing, §14, §16 deterministic tests
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t05-parser-eval
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: Parser accuracy evaluation
+    debate/architecture-refs: §6, §13, §14, §16
+spec:
+  description: >-
+    Measure the t03 parser on the files it will actually see. Moved from V3 (was v3-e20-t04). The labeled
+    set mixes the team's own files (2024-25 through 2026-27, Policy/LD/PF) with caselist uploads from the
+    hsld26 weekly snapshots (Verbatim, non-Verbatim and wiki-converted) and OpenEv/Policy camp files, all
+    scrubbed with the t02 script into tests/fixtures/debate_files/eval/. Labels are paragraph-level units and
+    card boundaries (plus card completeness and underline/highlight spans on a sample), keyed by paragraph
+    index and text hash. The eval reports per-unit precision/recall/F1, card-boundary exact match, completeness
+    accuracy and span F1, broken down by source (team, caselist, camp), template family and format. It runs in
+    three tiers: a small labeled subset (about 6 files, marker `eval`) in the PR `ci` check within seconds; the
+    full labeled set (markers `eval` and `slow`) in the validate-dev slow tier and nightly, gated against a
+    committed baseline; and an unlabeled corpus health run over all downloaded caselist and camp .docx files
+    (about 2,400 files, well over 2 minutes), which is operator-run on Charlie's Mac and produces an
+    aggregate report under docs/data/ (parse success rate, failure reasons, template-family and completeness
+    distribution, no file names or team codes). Parser bugs found here are filed against t03's code, not
+    fixed silently inside the eval; fingerprint quality is t04; LLM argument-graph evaluation is v3-e21-t05.
+  priority: 2
+  constraints:
+    packages: [tests/evals, tests/fixtures, scripts, docs/data]
+    forbidden:
+      - >-
+        Committing unscrubbed team, caselist or camp files to tests/fixtures (student or debater names, team
+        codes, docProps author/lastModifiedBy, comments, tracked-change authors)
+      - Running the full-corpus health run in CI or a session (operator-run only)
+      - Editing fixture text to make labels line up
+      - Updating the baseline without a coach-reviewed report in the same PR
+      - File names, schools, team codes or card text in the corpus health report
+  context:
+    - kind: TaskRef
+      name: v1-e31-t03-debate-docx-parser
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        At least 30 scrubbed files are labeled: at least 12 team files (all three formats and seasons, at least
+        3 not built on the Verbatim template), at least 12 caselist files (at least 4 non-Verbatim and 2
+        wiki-converted) and at least 6 camp files, listed in a manifest by category, season and format; the
+        coach has reviewed the labels.
+    - id: ac2
+      description: >-
+        The eval writes JSON and Markdown reports with per-unit (POCKET, HAT, BLOCK, TAG, CITE, EVIDENCE,
+        ANALYTIC, UNDERTAG) precision/recall/F1, card-boundary exact-match rate, completeness accuracy and
+        character-level underline/highlight F1, broken down by source, template family and format.
+    - id: ac3
+      description: >-
+        Targets are recorded and met or ticketed: on Verbatim files TAG, CITE and EVIDENCE F1 at least 0.97,
+        POCKET/HAT/BLOCK at least 0.95, ANALYTIC at least 0.85, span F1 at least 0.99; on non-Verbatim and
+        wiki-converted files TAG/CITE/EVIDENCE F1 at least 0.90.
+    - id: ac4
+      description: >-
+        The labeled subset runs in the default PR pytest run in under 30 s; the full labeled suite (`eval` and
+        `slow`) fails in the validate-dev slow tier and nightly when any unit F1 drops more than 0.01 below the
+        baseline for the current parser_version; a label validator fails when a fixture changes under its labels.
+    - id: ac5
+      description: >-
+        An operator-run corpus health report for the hsld26 snapshots and camp files is committed under
+        docs/data/ with parse success rate at least 0.98 of .docx files and every failure reason counted.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t05-parser-eval-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Select and scrub files, build label tooling, label with the coach, add metrics and the tiered gates, then
+    have the operator run the full-corpus health check and commit its report.
+  goalRef:
+    name: v1-e31-t05-parser-eval
+  graph:
+    nodes:
+      - id: collect-files
+        kind: Task
+        name: Select and scrub the evaluation files
+        description: >-
+          Choose team, caselist and camp files per category from the local folders (stratified by template
+          family seen in the t02 style survey), scrub with scripts/scrub_docx_fixture.py and record them in the
+          manifest; mark the 6-file PR subset.
+        outputs: [tests/fixtures/debate_files/eval/MANIFEST.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Eval manifest lists caselist and camp files
+            path: tests/fixtures/debate_files/eval/MANIFEST.md
+            contentMatch: "caselist"
+          - type: custom
+            name: Coach approves the file selection
+            description: >-
+              Charlie confirms the selection covers team, caselist (Verbatim, non-Verbatim, wiki-converted)
+              and camp formatting and that no student- or debater-identifying content remains.
+      - id: label-tooling
+        kind: Task
+        name: Label schema and pre-labeling tool
+        description: >-
+          JSONL label schema (paragraph index, text sha256, unit, card id, completeness, sampled spans) with a
+          validator, and scripts/prelabel_docx.py that seeds labels from parser output for human correction.
+        outputs: [scripts/prelabel_docx.py, tests/evals/parser/labels_schema.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Label schema validation tests pass
+            command: uv
+            args: [run, pytest, tests/evals/parser/test_labels_schema.py]
+      - id: labeling
+        kind: Task
+        name: Label the set
+        description: >-
+          Correct pre-labels for every file, label spans on a 20% paragraph sample, and write a short labeling
+          guide for ambiguous conventions (undertags, analytics between cards, cite-only disclosures).
+        dependsOn: [collect-files, label-tooling]
+        outputs: [tests/fixtures/debate_files/eval/labels/README.md]
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Labeling guide exists
+            path: tests/fixtures/debate_files/eval/labels/README.md
+            contentMatch: "labeling guide"
+          - type: custom
+            name: Coach spot-checks labels
+            description: >-
+              Charlie reviews at least 3 labeled files end to end (one team, one caselist, one camp) and signs
+              off on the labeling guide.
+      - id: metrics-and-gates
+        kind: Task
+        name: Metrics, reports, baseline and tiered gates
+        description: >-
+          Compute the metrics with breakdowns into build/eval-reports/parser.json and a Markdown summary;
+          commit the baseline; the PR subset uses marker `eval`, the full set `eval` and `slow` (markers from
+          v1-e01-t03) so it runs in the validate-dev slow tier and nightly.
+        dependsOn: [labeling]
+        outputs: [tests/evals/parser/metrics.py, tests/evals/baselines/parser.json]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Metric unit tests pass
+            command: uv
+            args: [run, pytest, tests/evals/parser/test_metrics.py]
+          - type: test_passes
+            name: Labeled PR subset passes against the baseline
+            command: uv
+            args: [run, pytest, tests/evals/parser, -m, "eval and not slow"]
+          - type: artifact_exists
+            name: Parser baseline committed
+            path: tests/evals/baselines/parser.json
+            contentMatch: "parser_version"
+      - id: corpus-health-run
+        kind: Task
+        name: Full-corpus health run (operator-run)
+        description: >-
+          scripts/parser_corpus_health.py parses every .docx under a given folder and writes aggregate counts
+          only. Operator-run on Charlie's Mac over the hsld26 snapshots and camp files (expected 10-20 min);
+          the report is committed and failures are ticketed against t03.
+        dependsOn: [metrics-and-gates]
+        outputs: [scripts/parser_corpus_health.py, docs/data/parser-corpus-health.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Corpus health report committed
+            path: docs/data/parser-corpus-health.md
+            contentMatch: "parse success rate"
+status:
+  phase: Pending

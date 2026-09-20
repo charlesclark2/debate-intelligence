@@ -1,5 +1,5 @@
 # TASK v1-e08-t04-argument-need-expansion — Argument/need query expansion
-# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
 # Architecture refs: §6 SearchService (query expansion), §3 V1 user stories, §10, §11 CLI flags
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e08-research-workflows
   annotations:
     debate/title: Argument/need query expansion
@@ -71,7 +71,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e08-research-workflows
 spec:
   description: >-

@@ -17,15 +17,18 @@ metadata:
     debate/architecture-refs: §6, §7, §13
 spec:
   description: >-
-    Define the DebateFile, FileSection and ParsedCard domain entities, the FileRepository port, and the
-    AppTable access patterns that let FileIntelligenceService store an uploaded debate file and its parsed
-    structure. A FileSection is one structural unit (pocket, hat, block, tag, cite, evidence, analytic) with
-    its section path and character-offset formatting spans; a ParsedCard groups a tag, cite and evidence
-    into a card that may later be linked to a library Card. Every parse output carries parser_version and a
-    parse revision so a re-parse can never silently overwrite ParsedCard-to-Card links or student edits.
-    This task owns entities, the port, the access-pattern document and the local + DynamoDB repository
-    implementations only; presigned upload, scanning and ParseFileJob belong to t02, DOCX parsing logic to
-    t03, and ArgumentNode/ArgumentEdge to E21.
+    Define the DebateFile entity for a user-uploaded debate file, the FileRepository port, and the
+    AppTable access patterns that let FileIntelligenceService store an upload and its parsed structure.
+    FileSection (one pocket/hat/block/tag/cite/evidence/analytic unit with section path and
+    character-offset formatting spans) and ParsedCard (tag + cite + evidence) already exist from the V1
+    parser (v1-e31-t03, emitted with source sha256/element-index provenance); this task reuses them and
+    only extends them with file_id, parse_revision and a nullable library card link, never redefining
+    them. Every parse output carries parser_version and a parse revision so a re-parse can never silently
+    overwrite ParsedCard-to-Card links or student edits. DebateFile covers uploads only: caselist sources
+    stay SourceDocuments (v1-e30-t02) and files shown in the debate tub stay TubFiles (v2-e35-t01).
+    This task owns the DebateFile entity, the port, the access-pattern document and the local + DynamoDB
+    repository implementations only; presigned upload, scanning and ParseFileJob belong to t02, DOCX
+    parsing logic is the V1 parser (v1-e31-t03), and ArgumentNode/ArgumentEdge belong to E21.
   priority: 1
   constraints:
     packages: [debate_core.domain, debate_core.application, debate_core.integrations, docs/data]
@@ -55,7 +58,8 @@ spec:
         timestamps) validates with Pydantic and exports a JSON schema.
     - id: ac2
       description: >-
-        FileSection carries file_id, parse_revision, ordinal, level
+        The V1 FileSection/ParsedCard entities are imported, not copied; FileSection carries file_id,
+        parse_revision, ordinal, level
         POCKET|HAT|BLOCK|TAG|CITE|EVIDENCE|ANALYTIC|OTHER, section_path (ancestor heading titles), exact
         text, source paragraph indices and formatting spans (start/end offsets, underline, highlight color,
         bold, emphasis, font size); ParsedCard references its tag, cite and evidence sections plus a
@@ -97,17 +101,18 @@ spec:
     nodes:
       - id: domain-entities
         kind: Task
-        name: DebateFile, FileSection and ParsedCard entities
+        name: DebateFile entity and parse-output extensions
         description: >-
-          Pydantic entities and enums in debate_core.domain with FormattingSpan offsets relative to section
-          text, validators (offsets in range, ordinals contiguous) and JSON-schema export.
+          DebateFile Pydantic entity and status enums in debate_core.domain, plus file_id/parse_revision/
+          card-link extensions to the V1 FileSection and ParsedCard (FormattingSpan offsets unchanged),
+          validators (offsets in range, ordinals contiguous) and JSON-schema export.
         outputs: [packages/debate_core/src/debate_core/domain/debate_file.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: artifact_exists
             name: Debate file domain module exists
             path: packages/debate_core/src/debate_core/domain/debate_file.py
-            contentMatch: "class ParsedCard"
+            contentMatch: "class DebateFile"
           - type: test_passes
             name: Entity validation tests pass
             command: uv

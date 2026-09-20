@@ -1,0 +1,171 @@
+# TASK v2-e35-t04-tub-ui — Tub UI
+# Epic: E35 Debate Tub (Web File Access) | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
+# Architecture refs: §12 Web workflows / Card Library, §8 provenance, §14, ADR-0014 (CardMirror)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e35-t04-tub-ui
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+  annotations:
+    debate/title: Tub UI
+    debate/architecture-refs: §8, §12, §14, ADR-0014
+spec:
+  description: >-
+    Give signed-in debaters a /tub area in the Next.js app that works the way they already think about a
+    tub: pick an event and topic, then browse by position and side (e.g. hspf26 data-center moratorium >
+    "Grid Reliability DA" > NEG), or search file titles and positions. The list shows kind badges (built
+    file, caselist source, camp file, coach upload); the file detail page shows provenance (caselist and
+    weekly snapshot, school/team code and tournament round as disclosed, recipe hash for built files) and
+    a clear "Disclosed evidence, not platform-verified" label on caselist and camp material. Download asks
+    the API for a fresh presigned URL on each click and never caches or shares it; "Open in CardMirror"
+    follows ADR-0014 (e.g. download the .docx with a hand-off hint, or a documented CardMirror hand-off if
+    the ADR and its license review allow one). Coaches get a minimal upload form and debaters can select
+    files for a zipped bulk download with job progress. Layout works one-handed on a 360 px phone. Routes
+    and authorization are t03; audit views and takedown screens are t05.
+  priority: 1
+  constraints:
+    packages: [web/src/app/(app)/tub, web/src/features/tub, web/e2e]
+    forbidden:
+      - Passing presigned URLs to third-party origins (e.g. hosted CardMirror) unless ADR-0014 allows it
+      - Caching presigned URLs in localStorage, service workers or shareable links
+      - Authorization decisions made only in the browser (hidden buttons are not access control)
+      - Presenting caselist or camp files as platform-verified evidence
+      - Showing debater names; display school and team codes only as disclosed
+      - Analytics or third-party trackers on tub pages
+  context:
+    - kind: TaskRef
+      name: v2-e35-t03-tub-api
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e14-t02-auth-ui
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A debater can go from /tub to a NEG file for a chosen topic and position in three taps or fewer,
+        and filter state is kept in the URL so a teammate link reopens the same view (not the file URL).
+    - id: ac2
+      description: >-
+        The file detail page shows kind, topic, position, side, source provenance and the not-verified label
+        for caselist and camp files, covered by component tests.
+    - id: ac3
+      description: >-
+        Clicking download requests a new URL from the API every time; a Playwright test asserts no
+        presigned URL is written to storage or rendered into the DOM before the click.
+    - id: ac4
+      description: >-
+        Coach upload and bulk-download selection work end to end against the mocked API; students do not
+        see upload controls and the API's 403 is handled gracefully if forced.
+    - id: ac5
+      description: >-
+        Playwright runs the browse, search and download flows at a 360x740 mobile viewport and a desktop
+        viewport, and an axe check reports no serious accessibility violations on tub pages.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e35-t04-tub-ui-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+spec:
+  description: >-
+    Data hooks on the generated client first, then browse and search, file detail with download and
+    CardMirror hand-off, coach upload and bulk download, and finally mobile end-to-end tests.
+  goalRef:
+    name: v2-e35-t04-tub-ui
+  graph:
+    nodes:
+      - id: tub-data-hooks
+        kind: Task
+        name: Tub data hooks and URL-synced filters
+        description: >-
+          Typed hooks over the generated OpenAPI client for list, facets, search, detail and download, with
+          filter state (event, topic, position, side, kind, q) serialized to search params.
+        outputs: [web/src/features/tub/useTubFiles.ts, web/src/features/tub/tubFilters.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tub hook and filter tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/tub]
+      - id: browse-search
+        kind: Task
+        name: Browse by topic, position and side, plus search
+        description: >-
+          /tub page with an event/topic picker, position list with AFF/NEG counts, side toggle, kind
+          badges, search box, empty and loading states, and infinite scroll on the cursor API.
+        dependsOn: [tub-data-hooks]
+        outputs: [web/src/app/(app)/tub/page.tsx, web/src/features/tub/TubBrowser.tsx]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Browser component tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/tub/TubBrowser]
+      - id: file-detail
+        kind: Task
+        name: File detail, download and CardMirror hand-off
+        description: >-
+          Detail page with provenance panel and not-verified label; a download button that fetches a fresh
+          presigned URL and navigates to it; an "Open in CardMirror" action implemented as ADR-0014 decides.
+        dependsOn: [browse-search]
+        outputs:
+          - web/src/app/(app)/tub/[fileId]/page.tsx
+          - web/src/features/tub/FileProvenance.tsx
+          - web/src/features/tub/DownloadButton.tsx
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Detail and provenance component tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/tub/FileProvenance]
+      - id: upload-and-bulk
+        kind: Task
+        name: Coach upload form and bulk-download selection
+        description: >-
+          Coach-only upload dialog (docx/pdf, topic, position, side) posting to the presigned POST, and a
+          multi-select bulk download that shows E13 job progress and the final download action.
+        dependsOn: [file-detail]
+        outputs: [web/src/features/tub/UploadDialog.tsx, web/src/features/tub/BulkDownload.tsx]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Upload and bulk-download component tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/tub/UploadDialog, src/features/tub/BulkDownload]
+      - id: tub-e2e
+        kind: Task
+        name: Mobile and desktop end-to-end tests
+        description: >-
+          Playwright specs against the mocked API at mobile and desktop viewports covering browse, search,
+          detail, download (no URL persisted), upload role gating and an axe scan; lint and build.
+        dependsOn: [upload-and-bulk]
+        outputs: [web/e2e/tub.spec.ts]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tub e2e tests pass
+            command: pnpm
+            args: [--dir, web, exec, playwright, test, e2e/tub.spec.ts]
+          - type: command_succeeds
+            name: Web lint passes
+            command: pnpm
+            args: [--dir, web, lint]
+          - type: command_succeeds
+            name: Web build passes
+            command: pnpm
+            args: [--dir, web, build]
+status:
+  phase: Pending

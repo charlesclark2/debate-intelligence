@@ -20,7 +20,7 @@ spec:
   description: >-
     Provide Cognito sign-in (password + Google), the FastAPI service over debate_core use cases, role/tenant
     authorization, and API Gateway → Fargate deployment.
-  priority: 5
+  priority: 7
   constraints:
     majorVersion: v2
     release: v2.0
@@ -82,14 +82,14 @@ spec:
       inputs:
         goalRef: v1-e03-t05-edit-constraints
         specRef: plan_specs/v1/e03-evidence-integrity/t05-edit-constraints.yaml
-    - id: ext-v2-e10-t02-terraform-bootstrap
+    - id: ext-v1-e29-t02-terraform-bootstrap
       kind: External
-      name: 'Prerequisite from E10: Terraform bootstrap and environments'
+      name: 'Prerequisite from E29: Terraform bootstrap and environments'
       description: >-
-        Cross-epic prerequisite owned by v2-e10-aws-foundation (release v2.0).
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
       inputs:
-        goalRef: v2-e10-t02-terraform-bootstrap
-        specRef: plan_specs/v2/e10-aws-foundation/t02-terraform-bootstrap.yaml
+        goalRef: v1-e29-t02-terraform-bootstrap
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t02-terraform-bootstrap.yaml
     - id: ext-v2-e10-t03-github-oidc-deploy
       kind: External
       name: 'Prerequisite from E10: GitHub OIDC deploy roles'
@@ -140,7 +140,7 @@ spec:
         specRef: plan_specs/v2/e12-identity-api/t01-cognito-user-pool.yaml
         goalRef: v2-e12-t01-cognito-user-pool
       dependsOn:
-      - ext-v2-e10-t02-terraform-bootstrap
+      - ext-v1-e29-t02-terraform-bootstrap
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e12-t01-cognito-user-pool reports phase Succeeded

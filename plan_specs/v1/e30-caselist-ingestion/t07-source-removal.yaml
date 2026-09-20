@@ -1,0 +1,180 @@
+# TASK v1-e30-t07-source-removal — Source removal and suppression list
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §7 S3 system of record, §14 retention/deletion, §19 administrative removal
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t07-source-removal
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: Source removal and suppression list
+    debate/architecture-refs: §7, §14, §19
+spec:
+  description: >-
+    Ship `debate-research caselist remove --source <sha256> | --team <caselist>/<school>/<team>` so the
+    operator can honor a takedown request under the data-use policy (t01). The command resolves the
+    selector to SourceDocuments, deletes each source and its derived data locally (blob, SourceDocument,
+    Disclosure and CampFile records, manifest rows, parsed cards) and from the evidence bucket of the
+    environment chosen by DEBATE_ENV (raw/ object with all noncurrent versions, parsed/ objects for that
+    sha256, rewritten manifests with superseded versions purged), then appends the sha256 to a
+    suppression list. The suppression list lives locally and at manifests/_suppression/suppression-list.jsonl
+    in S3; the archive and OpenEv importers and the publisher consult it through a SuppressionList port so
+    a cumulative weekly archive can never re-import a removed file. Every removal is logged (request id,
+    date, reason code, environment, sha256 values; no school, team code or names). It is a dry run by
+    default; --execute performs it and prod additionally needs --confirm-prod. Content shared with another
+    team or a camp file is only removed with --include-shared. v2-e35-t05 builds the debate-tub takedown
+    flow on this suppression list. Boundaries: the policy and runbook are t01, flagging built files that
+    quoted a removed card belongs to E33, and automated API download (E34) inherits the importer check.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, tests/smoke]
+    forbidden:
+      - School names, team codes or student names in the removal log or suppression list
+      - Deleting anything without --execute, or in prod without --confirm-prod
+      - Removing a source shared with other teams or camp files without --include-shared
+      - Leaving noncurrent S3 versions of removed sources or of superseded manifests behind
+      - Importing boto3/botocore in debate_core domain/ or application/
+      - Live AWS calls in CI tests (moto or the in-memory fake only)
+  context:
+    - kind: TaskRef
+      name: v1-e30-t01-caselist-data-use-policy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t05-caselist-publish
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Without --execute the command prints the removal plan (sources, disclosure records, manifest rows,
+        local and S3 objects including version counts, shared references) and changes nothing; with
+        --execute against moto every listed object and version is gone and `caselist status` is clean.
+    - id: ac2
+      description: >-
+        After removal, re-importing the synthetic snapshots that still contain the file reports it as
+        SUPPRESSED, stores no blob and writes no manifest row, for both `caselist import` and
+        `caselist import-openev`; `caselist publish` never uploads a suppressed sha256.
+    - id: ac3
+      description: >-
+        --team resolves every source disclosed by that team across snapshots; sources also referenced by
+        another team or a camp file are listed as shared; without --include-shared only this team's
+        Disclosure records are dropped and the shared blob stays, with the flag the blob is removed too.
+    - id: ac4
+      description: >-
+        The suppression list is an append-only JSONL of sha256, removed_at, reason code and request id, merged
+        (set union) between local and S3 on every run, and readable through the SuppressionList port so
+        v2-e35-t05 can use it.
+    - id: ac5
+      description: >-
+        Each execution appends one entry to the removal log (local and manifests/_suppression/removal-log.jsonl)
+        with no school, team code or names, and prod runs are refused without --confirm-prod.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t07-source-removal-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    The suppression list and its checks first (so nothing removed can come back), then the removal planner,
+    the executor, and the command with smoke checks.
+  goalRef:
+    name: v1-e30-t07-source-removal
+  graph:
+    nodes:
+      - id: suppression-list
+        kind: Task
+        name: SuppressionList port and adapters
+        description: >-
+          SuppressionList Protocol in debate_core.application.ports, a local JSONL adapter, an S3 adapter
+          behind the blob-store port, an in-memory fake, and union-merge of local and remote lists.
+        outputs:
+          - packages/debate_core/src/debate_core/application/ports/suppression.py
+          - packages/debate_core/src/debate_core/integrations/local/suppression_list.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Suppression list tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist/test_suppression_list.py]
+      - id: importer-and-publisher-checks
+        kind: Task
+        name: Suppression checks in importers and publisher
+        description: >-
+          SourceImportPipeline skips suppressed sha256 values and counts them as SUPPRESSED in the summary and
+          manifest trailer; the publish plan excludes them; extend the t03/t04/t05 tests with a suppressed case.
+        dependsOn: [suppression-list]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Importers and publisher honor the suppression list
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist, -k, suppress]
+      - id: removal-planner
+        kind: Task
+        name: Removal planner
+        description: >-
+          Resolve --source or --team to sources, find shared references (other teams, camp files), and list
+          the local records, manifest rows, parsed artifacts and S3 objects/versions to delete.
+        dependsOn: [suppression-list]
+        outputs: [packages/debate_core/src/debate_core/application/caselist/removal_plan.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal planner tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist/test_removal_plan.py]
+      - id: removal-executor
+        kind: Task
+        name: Removal executor and log
+        description: >-
+          CaselistRemovalService deletes local blobs and records, rewrites local and S3 manifests, deletes S3
+          objects and all versions under raw/ and parsed/, purges superseded manifest versions, then appends
+          to the suppression list and the removal log; safe to re-run after a partial failure.
+        dependsOn: [removal-planner]
+        outputs: [packages/debate_core/src/debate_core/application/caselist/removal_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal executor tests pass against moto
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist/test_removal_service.py]
+      - id: cli-and-smoke
+        kind: Task
+        name: "`caselist remove` command, smoke check and quality gates"
+        description: >-
+          Typer command with --source/--team, --reason, --execute, --include-shared, --confirm-prod and
+          --json; a tests/smoke check that imports, publishes, removes and re-imports the synthetic snapshots
+          against moto; type check and import boundaries.
+        dependsOn: [importer-and-publisher-checks, removal-executor]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/caselist.py
+          - tests/smoke/test_caselist_remove_smoke.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal smoke check passes
+            command: uv
+            args: [run, pytest, tests/smoke/test_caselist_remove_smoke.py]
+          - type: command_succeeds
+            name: Type check passes
+            command: uv
+            args: [run, pyright, packages/debate_core, packages/debate_cli]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

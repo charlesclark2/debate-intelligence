@@ -19,9 +19,13 @@ spec:
   description: >-
     Deliver the path from a browser upload to a queued parse: presigned S3 POST into a quarantine prefix,
     server-side DOCX package validation, malware scanning, server-computed sha256 with per-owner dedupe,
-    promotion to the private files prefix and exactly one ParseFileJob per clean file. The ParseFileJob
-    worker handler calls FileIntelligenceService.parse_file through a DebateFileParser port; the DOCX
-    implementation of that port is t03. This task owns the upload/complete/status endpoints and
+    promotion to the uploads/ prefix of the V1 evidence bucket (v1-e29-t03 defines uploads/ and quarantine/;
+    no separate bucket) and exactly one ParseFileJob per clean file. The ParseFileJob worker handler calls
+    FileIntelligenceService.parse_file through the DebateFileParser port and V1 DOCX parser (v1-e31-t03,
+    with the shared style profile v1-e31-t02); no parser is written here. Uploads use uploads/<org>/ so they
+    never mix with the raw/, parsed/ and files/ prefixes that the debate tub serves; presigning reuses the
+    v2-e11-t04 presigner. The tub's coach upload (v2-e35-t03) shares files unparsed, while this pipeline
+    scans and parses any student's upload. This task owns the upload/complete/status endpoints and
     infrastructure; the file list, outline view and card import endpoints and UI belong to t05.
   priority: 1
   constraints:
@@ -58,7 +62,8 @@ spec:
         over 100:1) with typed rejection reasons stored on the DebateFile.
     - id: ac3
       description: >-
-        Only a GuardDuty Malware Protection result of NO_THREATS_FOUND promotes the object to files/<org>/;
+        Only a GuardDuty Malware Protection result of NO_THREATS_FOUND promotes the object to
+        uploads/<org>/;
         threats set QUARANTINED, the object is never parsed or downloadable, and quarantine objects expire
         after 1 day.
     - id: ac4
@@ -93,11 +98,12 @@ spec:
     nodes:
       - id: upload-infra
         kind: Task
-        name: Upload bucket prefixes, scanning and routing
+        name: Upload scanning and routing on the evidence bucket
         description: >-
-          Terraform module: quarantine/ and files/ prefixes on the private KMS-encrypted bucket, lifecycle
-          expiry on quarantine, GuardDuty Malware Protection plan for the quarantine prefix, EventBridge
-          rule forwarding scan results to an SQS queue with DLQ, least-privilege worker IAM.
+          Terraform module attached to the V1 evidence bucket's quarantine/ and uploads/ prefixes (no new
+          bucket; the bucket and prefixes come from v1-e29-t03): lifecycle expiry on quarantine, GuardDuty
+          Malware Protection plan for the quarantine prefix, EventBridge rule forwarding scan results to an
+          SQS queue with DLQ, least-privilege worker IAM.
         outputs: [infrastructure/modules/debate_files/main.tf]
         estimatedEffort: 3h
         acceptanceCriteria:
@@ -142,7 +148,7 @@ spec:
         name: Scan result, hashing, dedupe and promotion
         description: >-
           Worker handler for scan-result events: verify the object version, stream sha256, run package
-          validation, dedupe by owner+sha256, copy to files/, delete from quarantine, update status, enqueue
+          validation, dedupe by owner+sha256, copy to uploads/, delete from quarantine, update status, enqueue
           the ParseFileJob via the E13 job model.
         dependsOn: [upload-infra, upload-api, package-validation]
         outputs: [packages/debate_workers/src/debate_workers/handlers/scan_result.py]
@@ -156,9 +162,9 @@ spec:
         kind: Task
         name: ParseFileJob handler and parser port
         description: >-
-          DebateFileParser port, parse_file use case (PARSING → PARSED/PARSE_FAILED with reasons, revision-
-          guarded writes via FileRepository) and the idempotent worker handler; a stub parser is used in
-          tests.
+          parse_file use case over the existing V1 DebateFileParser port (PARSING → PARSED/PARSE_FAILED
+          with reasons, revision-guarded writes via FileRepository) and the idempotent worker handler
+          wired to the V1 DOCX parser in production; a stub parser is used in tests.
         dependsOn: [scan-result-handler]
         outputs:
           - packages/debate_workers/src/debate_workers/handlers/parse_file.py

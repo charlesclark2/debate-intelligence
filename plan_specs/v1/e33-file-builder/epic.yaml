@@ -1,0 +1,211 @@
+# EPIC E33 — Evidence File Builder
+# Major version: V1 | Release: v1.2 (Argument landscape & file building)
+# Architecture refs: §6 ExportService, §8 provenance, ADR-0006
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-file-builder
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: E33 — Evidence File Builder
+    debate/architecture-refs: §6 ExportService, §8 provenance, ADR-0006
+spec:
+  description: >-
+    Build Verbatim/CardMirror-compatible evidence files from disclosed cards: a file recipe, a lossless
+    writer that carries each card's original formatting, provenance for every card, and publication to
+    S3.
+  priority: 3
+  constraints:
+    majorVersion: v1
+    release: v1.2
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      A YAML file recipe describes a file's pockets/hats/blocks and the cards (by fingerprint) and analytics
+      in it.
+  - id: ac2
+    description: >-
+      Built files open cleanly in Verbatim and CardMirror, with every card's text and formatting identical
+      to its source and a provenance record per card.
+  - id: ac3
+    description: >-
+      Built files are published to the files/ prefix in S3 with topic, position, side and source metadata
+      for the debate tub.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-file-builder-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Task graph for epic E33 (Evidence File Builder). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v1-e33-file-builder
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e29-t05-evidence-sync-cli
+      kind: External
+      name: 'Prerequisite from E29: `debate-research store` sync commands'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t05-evidence-sync-cli
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml
+    - id: ext-v1-e31-t02-verbatim-style-profile
+      kind: External
+      name: 'Prerequisite from E31: Verbatim/CardMirror style profile'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t02-verbatim-style-profile
+        specRef: plan_specs/v1/e31-debate-file-parsing/t02-verbatim-style-profile.yaml
+    - id: ext-v1-e31-t03-debate-docx-parser
+      kind: External
+      name: 'Prerequisite from E31: Debate .docx parser'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t03-debate-docx-parser
+        specRef: plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml
+    - id: ext-v1-e31-t04-card-fingerprints
+      kind: External
+      name: 'Prerequisite from E31: Card fingerprints and occurrences'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t04-card-fingerprints
+        specRef: plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml
+    - id: ext-v1-e32-t03-landscape-report
+      kind: External
+      name: 'Prerequisite from E32: Weekly landscape report'
+      description: >-
+        Cross-epic prerequisite owned by v1-e32-argument-landscape (release v1.2).
+      inputs:
+        goalRef: v1-e32-t03-landscape-report
+        specRef: plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml
+    - id: t01
+      kind: Task
+      name: File recipe format
+      description: >-
+        YAML recipe: title, structure (pockets/hats/blocks), cards by fingerprint with optional re-tagging,
+        analytics, and per-card provenance (caselist, team code, round, snapshot, source hash).
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t01-file-recipe-format.yaml
+        goalRef: v1-e33-t01-file-recipe-format
+      dependsOn:
+      - ext-v1-e31-t04-card-fingerprints
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t01-file-recipe-format reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t01-file-recipe-format
+    - id: t02
+      kind: Task
+      name: Lossless card writer
+      description: >-
+        Writer that copies each card's runs and styles from its source document into a new document using
+        the style profile, never retyping card text; tags may be rewritten, quoted evidence may not. Provenance
+        recorded per card; output round-trips through CardMirror if ADR-0014 adopts it.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml
+        goalRef: v1-e33-t02-lossless-card-writer
+      dependsOn:
+      - t01
+      - ext-v1-e31-t02-verbatim-style-profile
+      - ext-v1-e31-t03-debate-docx-parser
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t02-lossless-card-writer reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t02-lossless-card-writer
+    - id: t03
+      kind: Task
+      name: '`debate-research files` commands'
+      description: >-
+        `debate-research files build <recipe>` and `files suggest --position <p>` (a draft recipe from
+        the landscape's most-read cards for a position).
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml
+        goalRef: v1-e33-t03-file-build-cli
+      dependsOn:
+      - t02
+      - ext-v1-e32-t03-landscape-report
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t03-file-build-cli reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t03-file-build-cli
+    - id: t04
+      kind: Task
+      name: Built-file quality checks
+      description: >-
+        Checks that each card's text is identical to its source (hash), every card has a cite, there are
+        no duplicate cards, and headings follow the style profile; a report per built file.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml
+        goalRef: v1-e33-t04-file-quality-checks
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t04-file-quality-checks reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t04-file-quality-checks
+    - id: t05
+      kind: Task
+      name: Publish built files to S3
+      description: >-
+        Publish built files to the files/ prefix with metadata (topic, position, side, sources, recipe
+        hash) that the V2 debate tub indexes.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t05-file-publish.yaml
+        goalRef: v1-e33-t05-file-publish
+      dependsOn:
+      - t03
+      - t04
+      - ext-v1-e29-t05-evidence-sync-cli
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t05-file-publish reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t05-file-publish
+status:
+  phase: Pending

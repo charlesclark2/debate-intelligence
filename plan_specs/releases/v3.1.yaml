@@ -16,7 +16,7 @@ spec:
   description: >-
     An uploaded affirmative yields predicted opposition positions and a coverage-gap report against the
     student's extensions.
-  priority: 11
+  priority: 13
   acceptanceCriteria:
   - id: epic-e22
     description: >-

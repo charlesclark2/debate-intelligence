@@ -1,5 +1,5 @@
 # TASK v2-e13-t03-card-job-workflow — CardJob Step Functions workflow
-# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §5 Step Functions, ADR-009, §8 hard failure rule, §12 Cut a Card, §15
 ---
 apiVersion: planspec.io/v1alpha1

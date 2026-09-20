@@ -1,0 +1,235 @@
+# EPIC E31 — Debate File Parsing
+# Major version: V1 | Release: v1.1 (Caselist evidence store)
+# Architecture refs: §6 FileIntelligenceService, §13 Argument graph (file parsing), §16
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-debate-file-parsing
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: E31 — Debate File Parsing
+    debate/architecture-refs: §6 FileIntelligenceService, §13 Argument graph (file parsing), §16
+spec:
+  description: >-
+    Decide the editor and file-format reference (CardMirror evaluation, ADR-0014), define the shared Verbatim/CardMirror
+    style profile, and parse imported .docx files into pockets, hats, blocks, tags, cites and card bodies
+    with formatting and provenance, with card-level deduplication across teams.
+  priority: 2
+  constraints:
+    majorVersion: v1
+    release: v1.1
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      ADR-0014 records whether CardMirror becomes the team's editor and how our files stay compatible
+      with it.
+  - id: ac2
+    description: >-
+      The parser turns caselist and camp .docx files into structured cards with formatting offsets and
+      source provenance, with measured accuracy.
+  - id: ac3
+    description: >-
+      Cards are fingerprinted so the same card disclosed by many teams is counted once, with every occurrence
+      recorded.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-debate-file-parsing-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Task graph for epic E31 (Debate File Parsing). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v1-e31-debate-file-parsing
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e01-t06-adr-docs
+      kind: External
+      name: 'Prerequisite from E01: Architecture proposal and ADR records'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t06-adr-docs
+        specRef: plan_specs/v1/e01-repo-foundation/t06-adr-docs.yaml
+    - id: ext-v1-e02-t01-domain-entities
+      kind: External
+      name: 'Prerequisite from E02: Pydantic domain entities and enums'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t01-domain-entities
+        specRef: plan_specs/v1/e02-domain-core/t01-domain-entities.yaml
+    - id: ext-v1-e30-t02-caselist-domain-model
+      kind: External
+      name: 'Prerequisite from E30: Caselist domain model'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t02-caselist-domain-model
+        specRef: plan_specs/v1/e30-caselist-ingestion/t02-caselist-domain-model.yaml
+    - id: ext-v1-e30-t05-caselist-publish
+      kind: External
+      name: 'Prerequisite from E30: Publish sources and manifests to S3'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t05-caselist-publish
+        specRef: plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml
+    - id: ext-v1-e30-t06-initial-backfill
+      kind: External
+      name: 'Prerequisite from E30: Initial caselist and camp-file backfill'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t06-initial-backfill
+        specRef: plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml
+    - id: t01
+      kind: Task
+      name: CardMirror evaluation and editor decision
+      description: >-
+        Spike: round-trip team and caselist files through CardMirror (web and desktop), review its document
+        schema (pockets/hats/blocks/tags/cards/cites/analytics/undertags) and fromDocx/toDocx API, the
+        PolyForm Noncommercial license, the plugin bridge, and which features need a Debate Decoded subscription.
+        Write ADR-0014 (adopt as team editor, or compatibility target only) with the consequences for
+        later epics (card editor, library, file builder).
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t01-cardmirror-evaluation.yaml
+        goalRef: v1-e31-t01-cardmirror-evaluation
+      dependsOn:
+      - ext-v1-e01-t06-adr-docs
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t01-cardmirror-evaluation reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t01-cardmirror-evaluation
+    - id: t02
+      kind: Task
+      name: Verbatim/CardMirror style profile
+      description: >-
+        Canonical style profile shared by the parser and every writer: heading levels (pocket/hat/block/tag),
+        cite style, underline/emphasis/highlight, analytic and undertag styles, and heuristics for files
+        that don't use Verbatim styles; fixtures curated from team and caselist files.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t02-verbatim-style-profile.yaml
+        goalRef: v1-e31-t02-verbatim-style-profile
+      dependsOn:
+      - t01
+      - ext-v1-e02-t01-domain-entities
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t02-verbatim-style-profile reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t02-verbatim-style-profile
+    - id: t03
+      kind: Task
+      name: Debate .docx parser
+      description: >-
+        Moved from V3 (was v3-e20-t03). Detect Verbatim-style heading levels (pocket/hat/block/tag), cites,
+        evidence, analytics, underline/highlight/bold runs into FileSections and ParsedCards. Emits ParsedCards
+        with source sha256 and element-index provenance for caselist and camp files.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml
+        goalRef: v1-e31-t03-debate-docx-parser
+      dependsOn:
+      - t02
+      - ext-v1-e30-t02-caselist-domain-model
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t03-debate-docx-parser reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t03-debate-docx-parser
+    - id: t04
+      kind: Task
+      name: Card fingerprints and occurrences
+      description: >-
+        Card fingerprints (normalized body-text hash plus near-duplicate buckets), an occurrence table
+        across teams, rounds and snapshots, and `debate-research caselist cards` statistics.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml
+        goalRef: v1-e31-t04-card-fingerprints
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t04-card-fingerprints reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t04-card-fingerprints
+    - id: t05
+      kind: Task
+      name: Parser accuracy evaluation
+      description: >-
+        Moved from V3 (was v3-e20-t04). Labeled set from team files and caselist/camp files; per-unit
+        precision/recall report and regression gate.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml
+        goalRef: v1-e31-t05-parser-eval
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t05-parser-eval reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t05-parser-eval
+    - id: t06
+      kind: Task
+      name: Incremental parse pipeline
+      description: >-
+        `debate-research caselist parse`: parse newly imported sources incrementally, write the parsed
+        card store (JSONL or Parquet) locally and to the parsed/ prefix in S3, and list files that failed
+        to parse.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml
+        goalRef: v1-e31-t06-parse-pipeline
+      dependsOn:
+      - t03
+      - t04
+      - ext-v1-e30-t05-caselist-publish
+      - ext-v1-e30-t06-initial-backfill
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t06-parse-pipeline reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t06-parse-pipeline
+status:
+  phase: Pending

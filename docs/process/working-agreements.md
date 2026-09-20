@@ -51,7 +51,8 @@ follow-ups** in the session report.
 | `docs/session-reports/` | One report per task, `<task-name>.md`, committed with the task's PR |
 | `docs/runbooks/` | Operational procedures (deploys, restores, incident steps), added as V2 needs them |
 | `docs/guides/` | Student- and coach-facing guides for using the tools |
-| `docs/data/` | Data models and DynamoDB access patterns |
+| `docs/data/` | Data models and DynamoDB access patterns; recorded results of operator-run data jobs (counts, eval summaries; aggregates only, no debater names) |
+| `docs/policies/` | Data-use policies (caselist and OpenEv data use, removal process), approved by Charlie |
 | `plan_specs/` | PlanSpecs only: releases, epics, tasks |
 | `packages/<pkg>/README.md` | Package-level developer notes |
 

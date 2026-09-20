@@ -1,0 +1,199 @@
+# TASK v1-e31-t06-parse-pipeline — Incremental parse pipeline
+# Epic: E31 Debate File Parsing | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §6 FileIntelligenceService, §7 S3 of record, §13 file parsing, §14, §15, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t06-parse-pipeline
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: Incremental parse pipeline
+    debate/architecture-refs: §6, §7, §13, §14, §15, §16
+spec:
+  description: >-
+    Turn imported caselist and camp sources into a parsed card store that E32 (landscape), E33 (file builder)
+    and E34 (scheduled sync) read. `debate-research caselist parse --caselist <slug> [--snapshot <date>]
+    [--publish] [--reparse] [--dry-run]` enumerates SourceDocuments from the local E30 manifests, skips any
+    source already parsed for the same source sha256, parser_version and profile_version, parses the rest with
+    the t03 DebateFileParser in a bounded process pool, rebuilds the t04 fingerprints and occurrence table, and
+    writes the parsed store. The store is JSONL (one ParsedDocument file per source, content-addressed by
+    source sha256 and parser_version, plus an index, the occurrence table and a failures file) under
+    <data_dir>/parsed/<caselist>/<parser_version>/; Parquet is deferred until a reader needs it. With
+    --publish the same objects go to the parsed/ prefix of the evidence bucket for DEBATE_ENV through the
+    blob-store port (S3 adapter from E29), idempotently, so S3 remains the system of record the V2 debate tub
+    indexes. `caselist parse --failures` lists sources that failed with their typed reason (PDF, legacy .doc,
+    malformed, oversized, macro-enabled) by sha256 prefix and caselist path. Parsing the full downloaded
+    corpus is an operator step (well over 2 minutes), run first against dev and then prod, with counts
+    recorded in docs/data/. Boundaries: importing and raw publishing are E30 (t03-t05); parser behavior is
+    t03, fingerprints t04, accuracy t05; the weekly schedule and API download are E34; OpenSearch indexing is
+    V2 and derived from this store.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, tests/smoke, docs/data]
+    forbidden:
+      - Importing boto3/botocore in debate_core domain/ or application/ (S3 only through the blob-store port)
+      - Overwriting or deleting parsed objects of an earlier parser_version (a re-parse writes a new version)
+      - Business logic in debate_cli (the command calls CaselistParseService)
+      - Live AWS or network calls in the unit/CI test suite (fakes and moto only)
+      - Running the full-corpus parse or publish in CI or a session (operator-run only)
+      - Card text, debater names or team codes in logs at INFO or above
+  context:
+    - kind: TaskRef
+      name: v1-e31-t03-debate-docx-parser
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t04-card-fingerprints
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t05-caselist-publish
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t06-initial-backfill
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A second `caselist parse` run over an unchanged store parses zero files and reports all sources as
+        skipped; importing a new snapshot parses only its new sources; --reparse or a parser_version bump
+        re-parses into a new version directory without touching the old one.
+    - id: ac2
+      description: >-
+        The parsed store layout (index, per-source ParsedDocument JSONL, occurrences, failures) is documented
+        in docs/data/parsed-card-store.md, and every record carries caselist, snapshot, source sha256,
+        parser_version, profile_version and fingerprint_version.
+    - id: ac3
+      description: >-
+        One failing source never aborts the run: it is recorded in failures.jsonl with a typed reason and
+        listed by `caselist parse --failures`, and the command's exit code is 0 unless the failure rate
+        exceeds a configurable threshold.
+    - id: ac4
+      description: >-
+        --publish uploads new parsed objects to parsed/<caselist>/<parser_version>/ in the DEBATE_ENV bucket
+        through the blob-store port, skips objects whose checksum already matches, and a rerun uploads nothing.
+    - id: ac5
+      description: >-
+        docs/data/caselist-parse-report.md records the operator-run parse of the downloaded hsld26 snapshots
+        and camp files in dev and then prod: sources, parsed, skipped, failed by reason, cards, clusters and
+        wall-clock time.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t06-parse-pipeline-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Define the parsed store, build the incremental parse service, add S3 publishing through the blob-store
+    port, expose the CLI with smoke checks, then hand the full-corpus parse to the operator.
+  goalRef:
+    name: v1-e31-t06-parse-pipeline
+  graph:
+    nodes:
+      - id: parsed-store
+        kind: Task
+        name: Parsed card store port and local JSONL adapter
+        description: >-
+          ParsedStore port (put document, read index, list by caselist/snapshot, write occurrences and
+          failures) with an in-memory fake and a local JSONL adapter under <data_dir>/parsed/; layout
+          documented in docs/data/parsed-card-store.md.
+        outputs:
+          - packages/debate_core/src/debate_core/application/ports/parsed_store.py
+          - packages/debate_core/src/debate_core/integrations/local_parsed_store.py
+          - docs/data/parsed-card-store.md
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parsed store adapter tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/test_local_parsed_store.py]
+          - type: artifact_exists
+            name: Parsed store layout documented
+            path: docs/data/parsed-card-store.md
+            contentMatch: "parser_version"
+      - id: incremental-parse-service
+        kind: Task
+        name: CaselistParseService with incremental skipping
+        description: >-
+          Enumerate SourceDocuments from E30 manifests, compute the (sha256, parser_version, profile_version)
+          skip key, parse in a bounded process pool with per-file timeout, record typed failures, then rebuild
+          fingerprints and the occurrence table with the t04 service; returns a run summary.
+        dependsOn: [parsed-store]
+        outputs: [packages/debate_core/src/debate_core/application/caselist_parse.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Incremental parse service tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_parse.py]
+      - id: publish-parsed
+        kind: Task
+        name: Publish the parsed store to S3
+        description: >-
+          Publish new parsed objects to parsed/<caselist>/<parser_version>/ via the blob-store port with
+          checksum-based skipping, reusing the E30 publish summary format; tested against the fake blob store.
+        dependsOn: [incremental-parse-service]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parsed publish tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_parse.py, -k, publish]
+      - id: parse-cli-and-smoke
+        kind: Task
+        name: "`caselist parse` command, smoke check and gates"
+        description: >-
+          Thin Typer command with --snapshot, --publish, --reparse, --dry-run, --failures and --json; a
+          tests/smoke/ check parses the structural fixtures into a temp data_dir without publishing; type check
+          and import boundaries.
+        dependsOn: [publish-parsed]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/caselist_parse.py
+          - tests/smoke/test_caselist_parse.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_caselist_parse.py]
+          - type: test_passes
+            name: Smoke check passes
+            command: uv
+            args: [run, pytest, tests/smoke/test_caselist_parse.py]
+          - type: command_succeeds
+            name: Type check passes
+            command: uv
+            args: [run, pyright, packages/debate_core, packages/debate_cli]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+      - id: operator-corpus-parse
+        kind: Task
+        name: First full-corpus parse and publish (operator-run)
+        description: >-
+          Operator-run on Charlie's Mac after the sources are imported locally: `debate-research caselist
+          parse --caselist hsld26 --publish` (and camp files) with DEBATE_ENV=dev, check counts and a sample
+          in dev, then repeat for prod; record the summaries in the parse report.
+        dependsOn: [parse-cli-and-smoke]
+        outputs: [docs/data/caselist-parse-report.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Parse report records dev and prod runs
+            path: docs/data/caselist-parse-report.md
+            contentMatch: "prod"
+status:
+  phase: Pending

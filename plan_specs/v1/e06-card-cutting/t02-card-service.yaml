@@ -1,5 +1,5 @@
 # TASK v1-e06-t02-card-service — CardService pipeline
-# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
 # Architecture refs: §6 CardService, §8 (steps 1-6, hard failure rule), ADR-006, §20 steps 6-7
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
   annotations:
     debate/title: CardService pipeline
@@ -71,7 +71,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
 spec:
   description: >-

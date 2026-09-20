@@ -1,5 +1,5 @@
-# RELEASE v1.3 — V1 quality gate & team pilot
-# Major version: V1. Epics: E09
+# RELEASE v1.3 — URL → verified card
+# Major version: V1. Epics: E04, E06
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -11,16 +11,19 @@ metadata:
     debate/major-version: v1
     debate/release: v1.3
   annotations:
-    debate/title: v1.3 — V1 quality gate & team pilot
+    debate/title: v1.3 — URL → verified card
 spec:
   description: >-
-    Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged and piloted with the
-    team.
+    A student can run `debate-research cut <URL>` and receive a verified, tagged, cited, underlined card
+    as DOCX + JSON.
   priority: 4
   acceptanceCriteria:
-  - id: epic-e09
+  - id: epic-e04
     description: >-
-      Epic E09 (V1 Quality, Evaluation & Team Pilot) goal is Succeeded.
+      Epic E04 (Article Retrieval & Extraction) goal is Succeeded.
+  - id: epic-e06
+    description: >-
+      Epic E06 (Card Cutting, Citation & Export) goal is Succeeded.
   - id: tagged
     description: >-
       Release tag v1.3.0 is pushed and CHANGELOG.md has a v1.3 section.
@@ -42,8 +45,8 @@ metadata:
 spec:
   gateType: review
   description: >-
-    Release review for v1.3 (V1 quality gate & team pilot): demo the release goal end to end, confirm
-    CI green on the release tag, and confirm no evidence-integrity regressions.
+    Release review for v1.3 (URL → verified card): demo the release goal end to end, confirm CI green
+    on the release tag, and confirm no evidence-integrity regressions.
   reviewers:
   - user:charlie
   - role:coach
@@ -66,19 +69,26 @@ spec:
   version: v1.3
   graph:
     nodes:
-    - id: e09
+    - id: e04
       kind: External
-      name: Epic E09 — V1 Quality, Evaluation & Team Pilot
+      name: Epic E04 — Article Retrieval & Extraction
       inputs:
-        goalRef: v1-e09-v1-quality-pilot
-        specRef: plan_specs/v1/e09-v1-quality-pilot/epic.yaml
+        goalRef: v1-e04-article-retrieval
+        specRef: plan_specs/v1/e04-article-retrieval/epic.yaml
+    - id: e06
+      kind: External
+      name: Epic E06 — Card Cutting, Citation & Export
+      inputs:
+        goalRef: v1-e06-card-cutting
+        specRef: plan_specs/v1/e06-card-cutting/epic.yaml
     - id: tag-release
       kind: Task
       name: Tag and publish v1.3.0
       description: >-
         Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
       dependsOn:
-      - e09
+      - e04
+      - e06
       acceptanceCriteria:
       - type: command_succeeds
         name: Release tag exists

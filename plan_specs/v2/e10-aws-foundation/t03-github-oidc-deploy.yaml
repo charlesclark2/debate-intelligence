@@ -30,7 +30,10 @@ spec:
     step and pastes the summary into the PR; CI plans run after the merge (before dev apply), nightly as a
     drift check, and on workflow_dispatch.
     This task does NOT define what gets deployed (API deploy is E12-t04, workers E13-t02, web E14-t03);
-    it supplies the trust relationships and reusable workflow plumbing they call.
+    it supplies the trust relationships and reusable workflow plumbing they call. It builds on the V1
+    AWS baseline: the dev and prod accounts, Identity Center and state buckets come from v1-e29-t01 and
+    v1-e29-t02, and the V1 evidence buckets (v1-e29-t03) join the CI-managed Terraform roots unchanged;
+    V1's operator SSO access stays for operator steps. Environments are dev and prod only (ADR-0013).
   priority: 1
   constraints:
     packages: [infrastructure/modules/github_oidc, infrastructure/envs, .github/workflows]
@@ -44,7 +47,7 @@ spec:
       - Dev roles trusting refs/heads/main or any branch other than dev
   context:
     - kind: TaskRef
-      name: v2-e10-t02-terraform-bootstrap
+      name: v1-e29-t02-terraform-bootstrap
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

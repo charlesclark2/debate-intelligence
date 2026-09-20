@@ -20,7 +20,9 @@ spec:
     Provide the V1 local adapters for the persistence ports so the CLI runs with no cloud account: a
     filesystem content-addressed SnapshotStore (blobs at <data_dir>/blobs/sha256/ab/cd/<hash>, written
     atomically, immutable once written — the local analogue of S3) and SQLite-backed ArticleRepository,
-    CardRepository and SearchRepository storing each entity as validated JSON plus indexed key columns
+    CardRepository and SearchRepository storing each entity as validated JSON plus indexed key columns;
+    SourceSnapshot metadata is stored through ArticleRepository (save_snapshot, get_snapshot,
+    list_snapshots, as defined in v1-e02-t02) in its own table, while snapshot bytes go to SnapshotStore
     (the local analogue of DynamoDB's AppTable). The data directory is a constructor argument; wiring it
     from settings is t05. The shared contract suite is t04 — this task ships only adapter-specific
     tests (atomic writes, migrations, corruption detection).
@@ -80,7 +82,8 @@ spec:
         name: Content-addressed filesystem SnapshotStore
         description: >-
           Sharded sha256 paths, atomic temp+rename writes, read-time hash check raising
-          CorruptBlobError, exists/get/put.
+          BlobIntegrityError (defined in debate_core.application.errors by v1-e02-t02 and shared with the
+          S3 adapter in v1-e29-t04), exists/get/put.
         outputs: [packages/debate_core/src/debate_core/integrations/local/fs_blob_store.py]
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -107,7 +110,8 @@ spec:
         kind: Task
         name: Article, Card and Search repositories
         description: >-
-          JSON-column repositories with indexed canonical_url, owner_id, snapshot_id, created_at;
+          JSON-column repositories with indexed canonical_url, owner_id, snapshot_id, created_at, plus the
+          source_snapshots table behind ArticleRepository's snapshot methods;
           conditional UPDATE on revision for cards.
         dependsOn: [sqlite-base]
         outputs: [packages/debate_core/src/debate_core/integrations/local/sqlite_repos.py]

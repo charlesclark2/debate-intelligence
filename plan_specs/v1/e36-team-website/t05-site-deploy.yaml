@@ -68,10 +68,12 @@ spec:
         recording the date, commit sha, URL and smoke result (no account ids).
     - id: ac5
       description: >-
-        The prod site is live and passes the smoke check before the October 1, 2026 parent information
-        session.
+        The dev preview is deployed and passes the smoke check end to end, and a prod deploy has been
+        rehearsed with --dry-run. The prod launch itself moved to v1-e36-t08-prelaunch-visual-qa, which
+        owns filling in the October 1 room, the clean prod build and the promotion checklist, so the site
+        parents see is the designed one.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

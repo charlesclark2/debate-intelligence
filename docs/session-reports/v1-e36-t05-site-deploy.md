@@ -6,12 +6,14 @@
 | Spec | [`plan_specs/v1/e36-team-website/t05-site-deploy.yaml`](../../plan_specs/v1/e36-team-website/t05-site-deploy.yaml) |
 | Epic / release | `v1-e36-team-website` / `v1.6` |
 | Branch | `task/v1-e36-t05-site-deploy` |
-| Session status | PARTIAL |
+| Session status | COMPLETE |
 
 ## Summary
 
-The publishing machinery is written, linted and tested offline; nothing has been published,
-because every step that touches AWS is an operator step and none of them has run yet.
+The publishing machinery is written, tested offline and **proven in use**: the dev preview is live
+at <https://dev.wfbdebate.com/> and passes all 28 of its smoke checks. Prod has not been deployed,
+because that needs this PR merged and a dev-to-main promotion first; it is one operator run of the
+same script.
 
 `scripts/site_deploy.sh <dev|prod> [--dry-run]` builds `site/` for one environment, writes
 `site/out/version.json` with the commit sha, syncs the export into that environment's bucket with
@@ -22,15 +24,27 @@ page in the sitemap, the HTTPS redirect, the six security headers, `X-Robots-Tag
 preview and its absence on prod, `robots.txt`, and the commit in `version.json`.
 `tests/smoke/test_site.py` is the first entry in a new `tests/smoke/` directory.
 
-Two things the PM should look at first. **One infrastructure change is in this PR**: the site
-publisher permission set gains `cloudfront:GetInvalidation`, because `v1-e36-t02` granted
-`CreateInvalidation` alone and a deploy could therefore start an invalidation but never confirm
-the edge had picked the new files up — which is exactly what the publishing policy's 24-hour
-student-removal clock depends on. That is outside this task's stated `constraints.packages` and is
-written up under Deviations. **And the session stops before the deploys**: applying that policy,
-deploying dev, promoting, and launching prod are five operator blocks below, one of which is
-blocked on a fact only Charlie has (the room for the October 1 session, still `[[TBD]]` on the home
-page, which correctly fails a prod build).
+Three things the PM should look at first, all under Deviations, all outside this task's stated
+`constraints.packages`.
+
+**The site was shipping no CSS.** `v1-e36-t04` dropped the stylesheet import from the root layout,
+so every build since exported markup styled only by browser defaults, and this task deployed it to
+the preview before a human looked at it on a phone. Restored, with a regression test, because
+nothing in the existing suite could see it. Deviation 3, and it raises whether `v1-e36-t04`'s Goal
+should return from `Succeeded`.
+
+**One infrastructure change is in this PR**: the site publisher permission set gains
+`cloudfront:GetInvalidation`. `v1-e36-t02` granted `CreateInvalidation` alone, so a deploy could
+start an invalidation but never confirm the edge had picked the new files up, which is exactly what
+the publishing policy's 24-hour student-removal clock depends on. Applied and proven.
+
+**The home page no longer carries a `[[TBD]]` marker.** The room for the October 1 session is still
+undecided and a placeholder fails a prod build by design, so the copy now states the date, time and
+building and says the room will be posted before the session. Parent-facing copy, so the wording
+wants the PM's eye.
+
+Beyond those, *Site polish before the October 1 parent session* under Follow-up work is what
+Charlie most wants picked up next.
 
 ## Plan nodes
 
@@ -39,8 +53,8 @@ page, which correctly fails a prod build).
 | `deploy-script` | Done | `scripts/site_deploy.sh`: argument parsing, tool preflight, prod guard, Terraform outputs, build, `version.json`, three sync passes, invalidation with wait, `--dry-run`. |
 | `deploy-script-tests` | Done | `tests/scripts/test_site_deploy.py`: 21 cases against a throwaway checkout with stub `git`, `terraform`, `pnpm` and `aws` on `PATH`. |
 | `smoke-check` | Done | `scripts/site_smoke.py`, `tests/scripts/test_site_smoke.py` (27 respx cases), `tests/smoke/test_site.py` + `tests/smoke/README.md`. |
-| `dev-preview` | Partial | Runbook procedures written (deploy, rollback, takedown). The dev deploy and its smoke check are operator follow-ups 3 and 4; not run. |
-| `prod-launch` | Not started | Needs the promotion and the room fact. The *First prod launch* record exists in the runbook with `_pending_` fields for the operator to fill; operator follow-up 5. |
+| `dev-preview` | Done | Runbook procedures written (deploy, rollback, takedown). Dev deployed and smoke-checked twice: the first round exposed the missing stylesheet, the second confirmed the fix, the centred reading column and 28/28 checks. |
+| `prod-launch` | Operator-pending | The script, the guard and the smoke checker are done and exercised; prod needs this PR merged and a promotion first. The *First prod launch* record is in the runbook with `_pending_` fields; operator follow-up 5. |
 
 ## Acceptance criteria
 
@@ -50,7 +64,7 @@ page, which correctly fails a prod build).
 | Goal ac2 — smoke checker fails on a non-200 page, a missing HSTS/CSP/`X-Content-Type-Options` header, a missing http→https redirect, `noindex` on prod, or a `version.json` sha mismatch, with no live call | PASS | `uv run pytest tests/scripts/test_site_smoke.py` → `27 passed in 1.20s`. One test per failure, all respx-mocked; the default pytest run also has `--disable-socket`. |
 | Goal ac3 — the dev preview has been deployed, passes the smoke check with its `noindex` header, and the same commit reached `main` through a validated promotion | PARTIAL, redeploy needed | Deployed and checked: `scripts/site_deploy.sh dev` at `f15fa16` on 2026-09-20, invalidation `IAM1U04QZPV5D7HUB6CQL4WGCH` created and waited on; `scripts/site_smoke.py --env dev --url https://dev.wfbdebate.com --expect-sha f15fa16…` → **All 28 checks passed**, including `X-Robots-Tag: noindex` on all eight pages. Not yet satisfied: that was the task branch, and a squash merge gives the work a new sha on `dev`, so the commit actually promoted is re-deployed and re-checked before the promotion PR. |
 | Goal ac4 — runbook has a deploy and rollback procedure and a *First prod launch* entry (date, sha, URL, smoke result, no account ids) | PARTIAL | Procedures: `docs/runbooks/team-website.md` §*Deploying the site*, §*Rolling back a deploy*, §*Taking something down on request*. Entry: §*First prod launch* exists with its fields `_pending_`; the launch has not happened, so there is nothing truthful to put in them yet. Operator follow-up 5 fills it. |
-| Goal ac5 — the prod site is live and passes the smoke check before the October 1, 2026 parent session | NOT RUN | Operator follow-up 5. Blocked behind follow-ups 1 to 4 and the room fact. |
+| Goal ac5 — the prod site is live and passes the smoke check before the October 1, 2026 parent session | NOT RUN | Operator follow-up 5, which needs this PR merged and the promotion first. No longer blocked on anything else: the publisher policy is applied, both profile paths are proven, the prod build is clean since the room placeholder was replaced, and the same script and smoke checker have now done the whole journey against dev. |
 | `deploy-script` — `shellcheck scripts/site_deploy.sh` | PASS | `uv run shellcheck scripts/site_deploy.sh` → exit 0. (Run through `uv run`: ShellCheck is now a dev dependency, see Deviations.) |
 | `deploy-script-tests` — `uv run pytest tests/scripts/test_site_deploy.py` | PASS | `21 passed in 14.17s`. |
 | `smoke-check` — `uv run pytest tests/scripts/test_site_smoke.py` | PASS | `27 passed in 1.20s`. |
@@ -173,9 +187,13 @@ rather than five; `README.md` records why. See Deviations.
    *First prod launch* section and the string the criterion matches, but its fields are `_pending_`
    because the launch has not happened. Flagged rather than left to look like a pass.
 
-7. **Prod is not deployed yet.** The dev preview is live and passes its smoke check, but the
-   `prod-launch` node needs the promotion first, so the task Goal stays `InProgress` until the
-   prod deploy and its runbook entry.
+7. **Prod is not deployed at the time of writing, and the Goal is `Succeeded` anyway.** The
+   deploy flow is built, tested and proven end to end against dev; what remains is the promotion
+   and one operator run of the same script against prod, which cannot happen before this PR
+   merges. Per `plan_specs/README.md` step 4 the Goal is set to `Succeeded` in the task PR, and
+   the prod launch is recorded in the follow-up PR described in operator follow-up 5. Decided with
+   Charlie: closing the task now is what makes each polish item a five-minute deploy through a
+   working pipeline, rather than holding prod dark behind styling work.
 
 ## Decisions and assumptions
 
@@ -445,9 +463,29 @@ the deploy flow.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- Close it now, as you recommended. The deploy flow works end to end and is what makes each polish
+  change a minutes-long ship; holding this task open would only delay the work that fixes the
+  design.
+- **ac5 amended by the PM in this worktree:** this task now ends at a verified dev preview plus a
+  rehearsed prod dry run. The prod launch, the October 1 room fill and the promotion checklist move
+  to the new v1-e36-t08. Commit that spec change with your final commit and mark ac5 PASS against the
+  amended text, then set the Goal to Succeeded.
+- The design audit is accepted as the basis for three new tasks the PM has specced (branch
+  `specs/site-design-polish`): t06 visual design pass, t07 page structure (FAQ and events), t08
+  pre-launch visual QA and launch. They run t06 → t07 → t08 so they do not collide in the shared
+  stylesheets and content loader.
+- **Staying on the static export is the right call**, for the reasons given: client-side React is
+  already available in the export, so accordions, tabs and filters need no server; a server would
+  amend ADR-0012, add hosting and ops surface for a site read a few thousand times a year, and
+  reintroduce per-request logs of visitors who are mostly children. Native `<details>`/`<summary>`
+  for the FAQ is also right: keyboard and screen-reader behaviour, Ctrl+F and printing all keep
+  working.
+- Catching the unstyled build on a phone, which 28 passing smoke checks did not, is the lesson worth
+  keeping: t08's criteria are built around looking at the pages at three widths rather than only
+  asserting headers.

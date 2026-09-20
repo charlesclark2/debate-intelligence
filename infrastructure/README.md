@@ -17,6 +17,9 @@ that keeps binding.
 | [`bootstrap/organization/`](bootstrap/organization/) | Identity Center permission sets, organization CloudTrail, budgets and cost anomaly detection | `v1-e29-t01-aws-account-baseline` |
 | [`bootstrap/state/`](bootstrap/state/) | The remote-state bucket for one environment; applied once per environment | `v1-e29-t02-terraform-bootstrap` |
 | [`modules/`](modules/) | Reusable modules. No account ids, regions or credentials inside them — those are inputs | `v1-e29-t02-terraform-bootstrap` |
+| [`modules/tags/`](modules/tags/) | The tagging standard | `v1-e29-t02-terraform-bootstrap` |
+| [`modules/static_site/`](modules/static_site/) | One environment's public website: private bucket, CloudFront with OAC, security headers, the SitePublisher permission set | `v1-e36-t02-site-hosting` |
+| [`modules/domain_redirect/`](modules/domain_redirect/) | The `.com` names, which 301 to the canonical `.org` site and hold no content | `v1-e36-t02-site-hosting` |
 | [`envs/dev/`](envs/dev/), [`envs/prod/`](envs/prod/) | The two environment roots | `v1-e29-t02-terraform-bootstrap` |
 
 There is no `envs/stage`, and adding one means changing ADR-0013 first.
@@ -52,6 +55,29 @@ the moment one of them is fixed, and there is no account boundary here to make t
    directory without its own copy is silently linted with tflint's defaults; the checks script
    fails when a copy is missing or has drifted.
 5. Call it from `envs/dev` and `envs/prod` and run `scripts/terraform_checks.sh`.
+
+## The public team website
+
+Both roots call [`modules/static_site`](modules/static_site/); only prod also calls
+[`modules/domain_redirect`](modules/domain_redirect/), through a `count` driven by its tfvars, so
+`site.tf` stays identical in the two roots. The decision is
+[ADR-0012](../docs/adr/0012-web-hosting.md) and the operator steps are
+[docs/runbooks/team-website.md](../docs/runbooks/team-website.md).
+
+| | dev | prod |
+|---|---|---|
+| Site | `https://dev.wfbdebate.org/` — the preview, never indexable | `https://wfbdebate.org/` — what parents see |
+| Other names | — | `www.wfbdebate.org`, `wfbdebate.com`, `www.wfbdebate.com`, all 301 to the apex |
+| Bucket | `debate-dev-site-a7508de8` | `debate-prod-site-a7508de8` |
+| Publisher profile | `debate-dev-site` | `debate-prod-site` |
+
+The hosted zones came with the domain registration and are read with `aws_route53_zone` data
+sources. **Terraform never creates or destroys a zone here**: a `destroy` that took one with it
+would strand the domain. Name-server changes and anything at the registrar are operator steps.
+
+`site_domain_names` is a variable with an empty default in both roots, so
+`terraform apply -var 'site_domain_names=[]'` brings the site up on its `*.cloudfront.net` domain
+with no certificate at all. That is the escape hatch for applying while DNS is still settling.
 
 ## Tagging
 

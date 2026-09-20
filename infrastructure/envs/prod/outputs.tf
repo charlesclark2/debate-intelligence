@@ -12,3 +12,58 @@ output "standard_tags" {
   description = "The default_tags every resource in this root inherits."
   value       = module.tags.tags
 }
+
+# --- The public team website (v1-e36-t02-site-hosting) ---------------------------------------
+#
+# v1-e36-t05-site-deploy reads these to know where to sync and what to invalidate, so renaming
+# one is a change to the deploy script too.
+
+output "site_bucket_name" {
+  description = "The bucket the built site is synced into."
+  value       = module.site.bucket_name
+}
+
+output "site_distribution_id" {
+  description = "The distribution to invalidate after a deploy."
+  value       = module.site.distribution_id
+}
+
+output "site_distribution_domain_name" {
+  description = "The *.cloudfront.net domain. The site answers here whether or not the team domain is configured."
+  value       = module.site.distribution_domain_name
+}
+
+output "site_url" {
+  description = "Where this environment's site actually is."
+  value       = module.site.site_url
+}
+
+output "site_certificate_validation_records" {
+  description = "DNS records proving domain ownership to ACM. Terraform writes them itself when the hosted zone is known; this is what the operator pastes into an external registrar when it is not."
+  value       = module.site.certificate_validation_records
+}
+
+output "site_publisher_permission_set_name" {
+  description = "The Identity Center permission set that may publish this site, as it appears in `aws configure sso`."
+  value       = module.site.publisher_permission_set_name
+}
+
+output "site_publisher_profile_name" {
+  description = "The name to give the operator's SSO profile for publishing this environment (debate-dev-site / debate-prod-site)."
+  value       = module.site.publisher_profile_name
+}
+
+output "site_redirect_domain_names" {
+  description = "Names that 301 to the canonical site host. Empty in dev."
+  value       = try(module.site_domain_redirect[0].domain_names, [])
+}
+
+output "site_redirect_distribution_id" {
+  description = "The redirect distribution, or null where there is none."
+  value       = try(module.site_domain_redirect[0].distribution_id, null)
+}
+
+output "site_redirect_certificate_validation_records" {
+  description = "DNS records proving ownership of the redirected names, for an operator to add by hand when the zone is not managed here."
+  value       = try(module.site_domain_redirect[0].certificate_validation_records, [])
+}

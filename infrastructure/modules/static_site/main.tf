@@ -23,17 +23,28 @@ locals {
   # wait on in Terraform and the operator runs the apply twice (certificate.tf).
   certificate_arn = (
     !local.has_custom_domain ? null :
-    var.route53_zone_id != null ? aws_acm_certificate_validation.site[0].certificate_arn :
+    local.manage_dns ? aws_acm_certificate_validation.site[0].certificate_arn :
     aws_acm_certificate.site[0].arn
   )
 
-  site_url = local.has_custom_domain ? "https://${var.domain_names[0]}/" : "https://${aws_cloudfront_distribution.site.domain_name}/"
+  # The one name the site answers on for real; every other alias is 301'd to it by the viewer
+  # function. Empty when there is no team domain yet, which turns the redirect off so the
+  # *.cloudfront.net domain keeps working.
+  canonical_host = local.has_custom_domain ? coalesce(var.canonical_domain_name, var.domain_names[0]) : ""
+
+  site_url = local.has_custom_domain ? "https://${local.canonical_host}/" : "https://${aws_cloudfront_distribution.site.domain_name}/"
 }
 
 # ---------------------------------------------------------------------------------------------
 # Origin: a private bucket
 # ---------------------------------------------------------------------------------------------
 
+# The five standard tags reach every resource in this module through the calling root's provider
+# `default_tags` (infrastructure/README.md). tflint's aws_resource_missing_tags rule reads that
+# block, and cannot see it when it lints this directory on its own — linting envs/dev or envs/prod
+# follows the module call and does check it. Hence the annotation, rather than a tags argument on
+# every resource or a relaxed .tflint.hcl for this directory.
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_s3_bucket" "site" {
   bucket = local.bucket_name
 }
@@ -171,14 +182,18 @@ resource "aws_cloudfront_origin_access_control" "site" {
   signing_protocol                  = "sigv4"
 }
 
-# Viewer-request rewrite from a page URL to the object holding it. functions/index_rewrite.js
-# explains why this exists rather than the S3 website endpoint.
-resource "aws_cloudfront_function" "index_rewrite" {
-  name    = "${var.name_prefix}-index-rewrite"
+# One viewer-request function: the canonical-host 301 and the page-URL-to-object rewrite.
+# A cache behaviour takes exactly one function per event type, and functions/site_request.js.tftpl
+# explains why both jobs land here rather than in an S3 website redirect bucket.
+resource "aws_cloudfront_function" "site_request" {
+  name    = "${var.name_prefix}-site-request"
   runtime = "cloudfront-js-2.0"
-  comment = "Maps /path/ and /path to /path/index.html for the Next.js static export (ADR-0012)."
+  comment = "Redirects non-canonical hosts and maps /path/ to /path/index.html for the Next.js static export (ADR-0012)."
   publish = true
-  code    = file("${path.module}/functions/index_rewrite.js")
+
+  code = templatefile("${path.module}/functions/site_request.js.tftpl", {
+    canonical_host = local.canonical_host
+  })
 }
 
 # Caching is the AWS managed CachingOptimized policy: compress, respect the origin's
@@ -246,6 +261,12 @@ resource "aws_cloudfront_response_headers_policy" "site" {
   }
 }
 
+# The five standard tags reach every resource in this module through the calling root's provider
+# `default_tags` (infrastructure/README.md). tflint's aws_resource_missing_tags rule reads that
+# block, and cannot see it when it lints this directory on its own — linting envs/dev or envs/prod
+# follows the module call and does check it. Hence the annotation, rather than a tags argument on
+# every resource or a relaxed .tflint.hcl for this directory.
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_cloudfront_distribution" "site" {
   enabled             = true
   comment             = "${var.name_prefix} — public team website (ADR-0012)"
@@ -278,7 +299,7 @@ resource "aws_cloudfront_distribution" "site" {
 
     function_association {
       event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.index_rewrite.arn
+      function_arn = aws_cloudfront_function.site_request.arn
     }
   }
 

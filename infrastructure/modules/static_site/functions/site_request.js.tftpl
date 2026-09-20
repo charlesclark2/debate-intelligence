@@ -1,0 +1,78 @@
+// CloudFront Function, viewer request. Terraform template: ${canonical_host} is filled in by
+// main.tf, so this file is a .tftpl rather than a .js — the published function is valid
+// JavaScript, this source is not.
+//
+// It does two things, in this order, because a distribution allows exactly one viewer-request
+// function per cache behaviour.
+//
+// 1. Send every non-canonical host to the canonical one with a 301, preserving path and query:
+//    https://www.wfbdebate.org/parents/faq/ -> https://wfbdebate.org/parents/faq/
+//    An empty canonical host (no team domain configured yet, or an environment that has only one
+//    name) turns this off, so the site still answers on its *.cloudfront.net domain.
+//
+// 2. Map a page URL to the object that holds it. The site is a Next.js App Router export with
+//    `trailingSlash: true` (v1-e36-t03-site-scaffold), so the page at /parents/faq/ is the
+//    object parents/faq/index.html. S3's REST endpoint has no directory index — that belongs to
+//    the S3 *website* endpoint, which is plain HTTP and cannot be kept private, so ADR-0012 does
+//    not use it. These few lines are what replaces it.
+//
+//      /parents/faq/           -> /parents/faq/index.html
+//      /parents/faq            -> /parents/faq/index.html
+//      /_next/static/a1b2.js   -> unchanged (the last segment has an extension)
+//      /                       -> unchanged (default_root_object serves index.html)
+//
+// Written for the cloudfront-js-2.0 runtime without ES6 string helpers: a syntax error here is
+// only reported when the function is published, and a broken viewer-request function takes every
+// page down at once.
+
+var CANONICAL_HOST = '${canonical_host}';
+
+function queryString(querystring) {
+  var parts = [];
+  for (var key in querystring) {
+    var parameter = querystring[key];
+    if (parameter.multiValue) {
+      for (var i = 0; i < parameter.multiValue.length; i++) {
+        parts.push(key + '=' + parameter.multiValue[i].value);
+      }
+    } else if (parameter.value === '') {
+      parts.push(key);
+    } else {
+      parts.push(key + '=' + parameter.value);
+    }
+  }
+  return parts.length === 0 ? '' : '?' + parts.join('&');
+}
+
+function handler(event) {
+  var request = event.request;
+
+  if (CANONICAL_HOST !== '' && request.headers.host) {
+    var host = request.headers.host.value.toLowerCase();
+    if (host !== CANONICAL_HOST) {
+      return {
+        statusCode: 301,
+        statusDescription: 'Moved Permanently',
+        headers: {
+          location: {
+            value: 'https://' + CANONICAL_HOST + request.uri + queryString(request.querystring),
+          },
+        },
+      };
+    }
+  }
+
+  var uri = request.uri;
+
+  if (uri.charAt(uri.length - 1) === '/') {
+    request.uri = uri + 'index.html';
+    return request;
+  }
+
+  var lastSegment = uri.substring(uri.lastIndexOf('/') + 1);
+  if (lastSegment.indexOf('.') === -1) {
+    request.uri = uri + '/index.html';
+  }
+
+  return request;
+}

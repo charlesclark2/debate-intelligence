@@ -61,6 +61,21 @@ variable "domain_names" {
   }
 }
 
+variable "canonical_domain_name" {
+  description = <<-EOT
+    The one name in domain_names the site really answers on. Every other name is answered with a
+    301 to the same path on this one, by the viewer-request function, so parents, search engines
+    and the V2 app all see a single address. Null uses the first entry of domain_names.
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.canonical_domain_name == null ? true : contains(var.domain_names, var.canonical_domain_name)
+    error_message = "canonical_domain_name must be one of domain_names, or null to use the first of them."
+  }
+}
+
 variable "route53_zone_id" {
   description = <<-EOT
     Route 53 hosted zone holding domain_names. When it is set the module creates the certificate's
@@ -125,20 +140,9 @@ variable "content_security_policy" {
     without changing the module.
   EOT
   type        = string
-  default = join("; ", [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-    "form-action 'self'",
-    "img-src 'self' data:",
-    "font-src 'self'",
-    "style-src 'self' 'unsafe-inline'",
-    "script-src 'self' 'unsafe-inline'",
-    "connect-src 'self'",
-    "manifest-src 'self'",
-    "upgrade-insecure-requests",
-  ])
+  # A literal, not a join(): a variable default cannot call a function. The order matches the
+  # order a reader checks these in — what may load, where it may load from, what may embed us.
+  default = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; manifest-src 'self'; upgrade-insecure-requests"
 
   validation {
     condition     = strcontains(var.content_security_policy, "frame-ancestors 'none'")

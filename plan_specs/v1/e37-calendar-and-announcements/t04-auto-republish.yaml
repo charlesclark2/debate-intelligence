@@ -118,7 +118,7 @@ spec:
           - type: test_passes
             name: Digest is stable and changes only with content
             command: pnpm
-            args: [--dir, site, test, --, tests/republish/digest.test.ts]
+            args: [--dir, site, test, tests/republish/digest.test.ts]
       - id: refresh-workflow
         kind: Task
         name: Credential-free refresh workflow with notifications
@@ -135,7 +135,7 @@ spec:
           - type: test_passes
             name: Workflow policy test (no AWS key secrets, gated OIDC, minimal permissions) passes
             command: pnpm
-            args: [--dir, site, test, --, tests/republish/workflow.test.ts]
+            args: [--dir, site, test, tests/republish/workflow.test.ts]
           - type: command_succeeds
             name: Workflow passes actionlint
             command: uv
@@ -175,7 +175,7 @@ spec:
           - type: test_passes
             name: Workflow test covers role-gated dev and prod deploy jobs
             command: pnpm
-            args: [--dir, site, test, --, tests/republish/workflow.test.ts, -t, oidc]
+            args: [--dir, site, test, tests/republish/workflow.test.ts, -t, oidc]
       - id: runbook-and-trial
         kind: Task
         name: Runbook and live interim trial

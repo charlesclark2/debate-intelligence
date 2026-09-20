@@ -142,7 +142,7 @@ spec:
           - type: test_passes
             name: Email-updates component tests pass
             command: pnpm
-            args: [--dir, site, test, --, tests/email-updates.test.tsx]
+            args: [--dir, site, test, tests/email-updates.test.tsx]
           - type: command_succeeds
             name: Static export builds
             command: pnpm
@@ -150,7 +150,7 @@ spec:
           - type: test_passes
             name: Built output has no third-party scripts
             command: pnpm
-            args: [--dir, site, test, --, tests/no-third-party-scripts.test.ts]
+            args: [--dir, site, test, tests/no-third-party-scripts.test.ts]
       - id: verify-and-guide
         kind: Task
         name: Opt-in loop check and coach guide

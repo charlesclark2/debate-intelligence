@@ -124,7 +124,7 @@ spec:
           - type: test_passes
             name: Policy validator tests pass
             command: pnpm
-            args: [--dir, site, test, --, tests/announcements/validate.test.ts]
+            args: [--dir, site, test, tests/announcements/validate.test.ts]
       - id: source-adapter
         kind: Task
         name: Source adapter for the ADR-0015 choice
@@ -140,7 +140,7 @@ spec:
           - type: test_passes
             name: Source adapter and fallback tests pass offline
             command: pnpm
-            args: [--dir, site, test, --, tests/announcements/source.test.ts]
+            args: [--dir, site, test, tests/announcements/source.test.ts]
       - id: pages
         kind: Task
         name: Home feed, news list and item pages
@@ -159,7 +159,7 @@ spec:
           - type: test_passes
             name: Home feed, expiry and news page tests pass
             command: pnpm
-            args: [--dir, site, test, --, tests/announcements/pages.test.tsx]
+            args: [--dir, site, test, tests/announcements/pages.test.tsx]
       - id: quality-gates
         kind: Task
         name: Quality gates and coach end-to-end check

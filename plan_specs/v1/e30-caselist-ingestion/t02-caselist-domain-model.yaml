@@ -25,7 +25,8 @@ spec:
     count), SourceDocument (sha256 identity, size, format DOCX/DOC/PDF/OTHER, first and last seen
     snapshot, origin CASELIST_ARCHIVE or OPENEV), Disclosure (source sha256, school, team code, side
     AFF/NEG/PRO/CON/UNKNOWN, tournament and round label as written plus a normalized round, source path,
-    snapshot, parse warnings) and CampFile (source sha256, camp, year, event, file title). Every entity
+    snapshot, parse warnings, and the event, so a PF disclosure cannot be marked AFF) and CampFile
+    (source sha256, camp, year, event, file title, snapshot and parse warnings). Every entity
     carries provenance (caselist or camp, snapshot, source sha256) and imported evidence uses the
     FILE_IMPORT provenance mode from the E02 enums. Boundaries: path/filename parsing and SQLite storage
     are t03, OpenEv metadata extraction t04, ParsedCard and card fingerprints are E31, Tabroom identity
@@ -94,7 +95,9 @@ spec:
         kind: Task
         name: Caselist value types and enums
         description: >-
-          CaselistSlug, Sha256, SnapshotDate, TeamCode, Event, Side, RoundLabel, SourceFormat, SourceOrigin
+          CaselistSlug, SnapshotDate, TeamCodeText (the constrained string; the entity keeps the name
+          TeamCode), Event, Side, RoundLabel, SourceFormat, SourceOrigin, re-using Sha256Hex from
+          debate_core.domain.base rather than defining a second hash scalar
           and Acquisition types with validators and the round-label normalization table.
         outputs: [packages/debate_core/src/debate_core/domain/caselist/values.py]
         estimatedEffort: 2h
@@ -131,7 +134,7 @@ spec:
         dependsOn: [entities]
         outputs:
           - packages/debate_core/src/debate_core/application/ports/caselist.py
-          - packages/debate_core/src/debate_core/application/fakes/caselist.py
+          - packages/debate_core/src/debate_core/testing/fakes.py
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
@@ -155,9 +158,9 @@ spec:
             name: Type check passes for debate_core
             command: uv
             args: [run, pyright, packages/debate_core]
-          - type: command_succeeds
-            name: Import boundaries hold
+          - type: test_passes
+            name: Ports import no provider SDKs (repo-wide contracts arrive with v1-e02-t06)
             command: uv
-            args: [run, lint-imports]
+            args: [run, pytest, packages/debate_core/tests/application/test_port_conformance.py]
 status:
   phase: Pending

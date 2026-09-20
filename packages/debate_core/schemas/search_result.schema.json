@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One article's position in one search, with the features that put it there.\n\nIdentified by the pair (`search_id`, `article_id`) rather than by an id of its own: a result\nonly exists as part of a search, and a search holds at most one result per article.\n\nThe scores are all optional because the V1 ranking pipeline is deterministic and lexical;\n`semantic_score` and `rerank_score` are filled in by the embedding and rerank stages that\narrive with the V2 search index.",
+  "properties": {
+    "search_id": {
+      "description": "The search this result belongs to.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Search Id",
+      "type": "string"
+    },
+    "article_id": {
+      "description": "The article that was returned.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Article Id",
+      "type": "string"
+    },
+    "rank": {
+      "description": "1-based position in the final ordering.",
+      "minimum": 1,
+      "title": "Rank",
+      "type": "integer"
+    },
+    "total_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Combined score from the configured ranking weights.",
+      "title": "Total Score"
+    },
+    "lexical_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "BM25 relevance of title and snippet.",
+      "title": "Lexical Score"
+    },
+    "semantic_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Embedding similarity to the query.",
+      "title": "Semantic Score"
+    },
+    "rerank_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Cross-encoder rerank score, when run.",
+      "title": "Rerank Score"
+    },
+    "source_quality_features": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "description": "Named ranking features and their values, for example recency, peer_reviewed, open_access, citations, provider_agreement. Never a hidden credibility score.",
+      "title": "Source Quality Features",
+      "type": "object"
+    },
+    "explanation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Human-readable reason for the rank, e.g. \"recent (3 days), peer-reviewed\".",
+      "title": "Explanation"
+    },
+    "providers": {
+      "default": [],
+      "description": "Providers that returned this article; more than one means agreement.",
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Providers",
+      "type": "array"
+    }
+  },
+  "required": [
+    "search_id",
+    "article_id",
+    "rank"
+  ],
+  "title": "SearchResult",
+  "type": "object"
+}

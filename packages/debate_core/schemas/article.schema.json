@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "AccessStatus": {
+      "description": "Whether a source's full text could legitimately be retrieved.\n\nThe retrieval layer (E04) classifies every fetch into exactly one of these. There is no\n\"partially readable\" state: a metered or truncated page is `PAYWALLED`, never `ACCESSIBLE`,\nand nothing in the platform attempts to work around an access control.",
+      "enum": [
+        "UNKNOWN",
+        "ACCESSIBLE",
+        "PAYWALLED",
+        "BLOCKED",
+        "ROBOTS_DISALLOWED",
+        "NOT_FOUND",
+        "UNSUPPORTED_TYPE",
+        "ERROR"
+      ],
+      "title": "AccessStatus",
+      "type": "string"
+    },
+    "ArticleIdentifiers": {
+      "additionalProperties": false,
+      "description": "External identifiers for one source, used to deduplicate results across providers.\n\nEvery field is optional: a news article usually has none of them, a journal article usually has\nseveral. Provider-specific payloads do not belong here — adapters keep those in their own\nresult types (E07).",
+      "properties": {
+        "doi": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bare lowercase DOI, for example 10.1038/nature12373.",
+          "title": "Doi"
+        },
+        "arxiv_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "arXiv identifier, e.g. 2301.00234.",
+          "title": "Arxiv Id"
+        },
+        "pmid": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PubMed identifier, digits only.",
+          "title": "Pmid"
+        },
+        "openalex_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OpenAlex work id, e.g. W2741809807.",
+          "title": "Openalex Id"
+        },
+        "semantic_scholar_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Semantic Scholar paper id.",
+          "title": "Semantic Scholar Id"
+        }
+      },
+      "title": "ArticleIdentifiers",
+      "type": "object"
+    },
+    "SourceType": {
+      "description": "The kind of publication a source is, used as a ranking feature and a search filter.\n\nThis is a descriptive category, never a quality or credibility score: source quality is\nexpressed as named, explainable features (architecture proposal §9).",
+      "enum": [
+        "scholarly",
+        "news",
+        "government",
+        "think_tank",
+        "other"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A source the platform knows about, identified by its canonical URL.\n\nAn article is metadata only. Its text lives in :class:`SourceSnapshot` records, because text\nis what has to be hashed, versioned and held immutable.\n\n`access_status` is the latest known answer to \"can we legitimately read this?\"; it starts as\n`UNKNOWN` for an article that has only been discovered through search.",
+  "properties": {
+    "created_at": {
+      "description": "When this record was first created, in UTC.",
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "When this record was last written, in UTC.",
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "revision": {
+      "default": 1,
+      "description": "Optimistic-concurrency counter; incremented by the repository on every write.",
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "article_id": {
+      "description": "ULID primary key.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Article Id",
+      "type": "string"
+    },
+    "owner_id": {
+      "anyOf": [
+        {
+          "maxLength": 26,
+          "minLength": 26,
+          "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ULID of the user who owns this record.",
+      "title": "Owner Id"
+    },
+    "organization_id": {
+      "anyOf": [
+        {
+          "maxLength": 26,
+          "minLength": 26,
+          "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ULID of the owning organization (school or team); None outside a tenant.",
+      "title": "Organization Id"
+    },
+    "canonical_url": {
+      "description": "The deduplicated, canonical http(s) URL of the source.",
+      "title": "Canonical Url",
+      "type": "string"
+    },
+    "title": {
+      "description": "Title as published.",
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "authors": {
+      "default": [],
+      "description": "Author names as published, in published order.",
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Authors",
+      "type": "array"
+    },
+    "publication": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Publication, journal, outlet or issuing body.",
+      "title": "Publication"
+    },
+    "published_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Publication timestamp in UTC; None when the source states no date.",
+      "title": "Published At"
+    },
+    "source_type": {
+      "$ref": "#/$defs/SourceType",
+      "default": "other",
+      "description": "Descriptive category of the publication, never a quality score."
+    },
+    "access_status": {
+      "$ref": "#/$defs/AccessStatus",
+      "default": "UNKNOWN",
+      "description": "Most recent retrieval outcome for this source."
+    },
+    "identifiers": {
+      "$ref": "#/$defs/ArticleIdentifiers",
+      "description": "External identifiers used for deduplication."
+    }
+  },
+  "required": [
+    "canonical_url",
+    "title"
+  ],
+  "title": "Article",
+  "type": "object"
+}

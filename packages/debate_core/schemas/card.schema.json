@@ -1,0 +1,468 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "CardSpan": {
+      "additionalProperties": false,
+      "description": "A marked region of a card's evidence.\n\nOffsets are character positions **into the card's `evidence_text`**, half-open (`start`\ninclusive, `end` exclusive) — not into the snapshot. The renderer marks up the quotation it is\ngiven, so spans stay correct no matter where in the source the quotation was taken from.",
+      "properties": {
+        "span_id": {
+          "description": "ULID identifying this span.",
+          "maxLength": 26,
+          "minLength": 26,
+          "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "start_offset": {
+          "description": "Inclusive start character offset into evidence_text.",
+          "minimum": 0,
+          "title": "Start Offset",
+          "type": "integer"
+        },
+        "end_offset": {
+          "description": "Exclusive end character offset into evidence_text.",
+          "exclusiveMinimum": 0,
+          "title": "End Offset",
+          "type": "integer"
+        },
+        "style": {
+          "$ref": "#/$defs/SpanStyle",
+          "description": "How the region is rendered: underlined or highlighted."
+        },
+        "purpose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpanPurpose"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What argumentative work the region does, when known."
+        }
+      },
+      "required": [
+        "start_offset",
+        "end_offset",
+        "style"
+      ],
+      "title": "CardSpan",
+      "type": "object"
+    },
+    "Citation": {
+      "additionalProperties": false,
+      "description": "The cite for one card, with per-field provenance.\n\n`authors` is a single field holding the ordered author list rather than one field per author,\nbecause a page's byline is harvested (and verified) as a unit.\n\nResolution — harvesting these values from a snapshot's HTML and from Crossref — is the\ncitation service's job (E06); this model only records the outcome and its provenance.",
+      "properties": {
+        "authors": {
+          "$ref": "#/$defs/CitationField_tuple_Annotated_str__StringConstraints___________",
+          "description": "Author names, in order."
+        },
+        "author_credentials": {
+          "$ref": "#/$defs/CitationField_str_",
+          "description": "Author qualification as stated on the source or in Crossref/ORCID; never inferred."
+        },
+        "title": {
+          "$ref": "#/$defs/CitationField_str_",
+          "description": "Article title."
+        },
+        "publication": {
+          "$ref": "#/$defs/CitationField_str_",
+          "description": "Publication, journal or issuing body."
+        },
+        "published_at": {
+          "$ref": "#/$defs/CitationField_Annotated_datetime__AfterValidator__",
+          "description": "Publication date, in UTC."
+        },
+        "canonical_url": {
+          "$ref": "#/$defs/CitationField_str_",
+          "description": "Canonical URL of the source."
+        },
+        "accessed_at": {
+          "$ref": "#/$defs/CitationField_Annotated_datetime__AfterValidator__",
+          "description": "When the platform retrieved the source."
+        }
+      },
+      "title": "Citation",
+      "type": "object"
+    },
+    "CitationFieldSource": {
+      "description": "Where one citation field's value was harvested from.\n\nRecorded per field so an export can mark exactly which parts of a cite are unverified. A model\nis never a source: authors, credentials, publications and dates are harvested deterministically\nor left missing (architecture proposal §8).",
+      "enum": [
+        "meta_tag",
+        "json_ld",
+        "opengraph",
+        "crossref",
+        "byline",
+        "heuristic",
+        "missing"
+      ],
+      "title": "CitationFieldSource",
+      "type": "string"
+    },
+    "CitationField_Annotated_datetime__AfterValidator__": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The harvested value, if any.",
+          "title": "Value"
+        },
+        "source": {
+          "$ref": "#/$defs/CitationFieldSource",
+          "default": "missing",
+          "description": "Where the value was harvested from."
+        },
+        "verified": {
+          "default": false,
+          "description": "True only when the source independently confirms the value.",
+          "title": "Verified",
+          "type": "boolean"
+        },
+        "raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The unparsed text the value was read from, kept for auditing.",
+          "title": "Raw"
+        }
+      },
+      "title": "CitationField[Annotated[datetime, AfterValidator]]",
+      "type": "object"
+    },
+    "CitationField_str_": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The harvested value, if any.",
+          "title": "Value"
+        },
+        "source": {
+          "$ref": "#/$defs/CitationFieldSource",
+          "default": "missing",
+          "description": "Where the value was harvested from."
+        },
+        "verified": {
+          "default": false,
+          "description": "True only when the source independently confirms the value.",
+          "title": "Verified",
+          "type": "boolean"
+        },
+        "raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The unparsed text the value was read from, kept for auditing.",
+          "title": "Raw"
+        }
+      },
+      "title": "CitationField[str]",
+      "type": "object"
+    },
+    "CitationField_tuple_Annotated_str__StringConstraints___________": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The harvested value, if any.",
+          "title": "Value"
+        },
+        "source": {
+          "$ref": "#/$defs/CitationFieldSource",
+          "default": "missing",
+          "description": "Where the value was harvested from."
+        },
+        "verified": {
+          "default": false,
+          "description": "True only when the source independently confirms the value.",
+          "title": "Verified",
+          "type": "boolean"
+        },
+        "raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The unparsed text the value was read from, kept for auditing.",
+          "title": "Raw"
+        }
+      },
+      "title": "CitationField[tuple[Annotated[str, StringConstraints], ...]]",
+      "type": "object"
+    },
+    "ProvenanceMode": {
+      "description": "Where a snapshot's or card's text came from.\n\nThis travels from the snapshot onto every card cut from it, so a reader can always tell\npublisher-retrieved evidence from text a person supplied.",
+      "enum": [
+        "PUBLISHER_RETRIEVED",
+        "USER_SUPPLIED",
+        "PASTED",
+        "FILE_IMPORT"
+      ],
+      "title": "ProvenanceMode",
+      "type": "string"
+    },
+    "SpanPurpose": {
+      "description": "What argumentative work a marked region of evidence does.",
+      "enum": [
+        "claim",
+        "warrant",
+        "internal_link",
+        "impact"
+      ],
+      "title": "SpanPurpose",
+      "type": "string"
+    },
+    "SpanStyle": {
+      "description": "How a marked region of a card's evidence is rendered on export.",
+      "enum": [
+        "underline",
+        "highlight"
+      ],
+      "title": "SpanStyle",
+      "type": "string"
+    },
+    "VerificationStatus": {
+      "description": "Whether a card's quoted evidence has been reproduced from its stored snapshot.\n\n`VERIFIED` is set only by the evidence verifier (E03), only after the evidence text has been\nreconstructed byte for byte from the recorded snapshot offsets. Anything else is `UNVERIFIED`\nand must never be presented as a finished card.",
+      "enum": [
+        "UNVERIFIED",
+        "VERIFIED",
+        "FAILED"
+      ],
+      "title": "VerificationStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A piece of evidence cut from a source snapshot.\n\n`evidence_text` is verbatim: it is extracted from the stored snapshot at\n`[evidence_start_offset:evidence_end_offset]`, never written or paraphrased by a model. A model\nmay choose *which* span to cut and may write the `tag`, but the quotation itself only ever\ncomes out of the snapshot (architecture proposal §8).\n\n`provenance_mode` has no default on purpose. Defaulting it would make\n`PUBLISHER_RETRIEVED` — the strongest claim the platform can make about a piece of text — the\nthing that happens when a caller says nothing, which is exactly backwards.\n\n`verification_status` defaults to `UNVERIFIED`, and only the evidence verifier (E03) promotes\na card to `VERIFIED`.",
+  "properties": {
+    "created_at": {
+      "description": "When this record was first created, in UTC.",
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "When this record was last written, in UTC.",
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "revision": {
+      "default": 1,
+      "description": "Optimistic-concurrency counter; incremented by the repository on every write.",
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "card_id": {
+      "description": "ULID primary key.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Card Id",
+      "type": "string"
+    },
+    "owner_id": {
+      "description": "ULID of the user who owns this record. Required: a card always belongs to a student.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "organization_id": {
+      "anyOf": [
+        {
+          "maxLength": 26,
+          "minLength": 26,
+          "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ULID of the owning organization (school or team); None outside a tenant.",
+      "title": "Organization Id"
+    },
+    "article_id": {
+      "description": "The article the evidence was cut from.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Article Id",
+      "type": "string"
+    },
+    "snapshot_id": {
+      "anyOf": [
+        {
+          "maxLength": 26,
+          "minLength": 26,
+          "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The snapshot the evidence was cut from; required once there is evidence.",
+      "title": "Snapshot Id"
+    },
+    "tag": {
+      "description": "The claim the card is read for, written above the cite.",
+      "minLength": 1,
+      "title": "Tag",
+      "type": "string"
+    },
+    "citation": {
+      "$ref": "#/$defs/Citation",
+      "description": "The cite, with per-field provenance."
+    },
+    "evidence_text": {
+      "default": "",
+      "description": "Verbatim quotation taken from the snapshot; empty until extraction runs.",
+      "title": "Evidence Text",
+      "type": "string"
+    },
+    "evidence_start_offset": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Inclusive start offset of the quotation in the normalized snapshot.",
+      "title": "Evidence Start Offset"
+    },
+    "evidence_end_offset": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Exclusive end offset of the quotation in the normalized snapshot.",
+      "title": "Evidence End Offset"
+    },
+    "normalized_text_hash": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "SHA-256 of the snapshot's normalized text the offsets refer to.",
+      "title": "Normalized Text Hash"
+    },
+    "normalizer_version": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Normalizer version the offsets were taken under; needed to re-verify.",
+      "title": "Normalizer Version"
+    },
+    "spans": {
+      "default": [],
+      "description": "Underline and highlight regions within evidence_text.",
+      "items": {
+        "$ref": "#/$defs/CardSpan"
+      },
+      "title": "Spans",
+      "type": "array"
+    },
+    "verification_status": {
+      "$ref": "#/$defs/VerificationStatus",
+      "default": "UNVERIFIED",
+      "description": "Set to VERIFIED only by the evidence verifier, after reproducing the quotation."
+    },
+    "provenance_mode": {
+      "$ref": "#/$defs/ProvenanceMode",
+      "description": "Where the evidence text came from."
+    },
+    "format_profile": {
+      "default": "team-default",
+      "description": "Name of the team's formatting profile for export.",
+      "minLength": 1,
+      "title": "Format Profile",
+      "type": "string"
+    }
+  },
+  "required": [
+    "owner_id",
+    "article_id",
+    "tag",
+    "provenance_mode"
+  ],
+  "title": "Card",
+  "type": "object"
+}

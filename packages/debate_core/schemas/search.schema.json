@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "SearchFilters": {
+      "additionalProperties": false,
+      "description": "The constraints a user put on a search, stored with the search so it can be replayed.",
+      "properties": {
+        "since": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only results published at or after this UTC instant.",
+          "title": "Since"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only results published at or before this UTC instant.",
+          "title": "Until"
+        },
+        "source_types": {
+          "default": [],
+          "description": "Restrict to these source types; empty means no restriction.",
+          "items": {
+            "$ref": "#/$defs/SourceType"
+          },
+          "title": "Source Types",
+          "type": "array"
+        },
+        "max_results": {
+          "default": 20,
+          "description": "Maximum results to return.",
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Max Results",
+          "type": "integer"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "BCP 47 language tag to restrict results to, if any.",
+          "title": "Language"
+        }
+      },
+      "title": "SearchFilters",
+      "type": "object"
+    },
+    "SearchStatus": {
+      "description": "The outcome of a federated search across the enabled providers.\n\nA provider failure never fails the whole search; it downgrades the result to `PARTIAL` and is\nreported per provider, so the user can see what was and was not searched.",
+      "enum": [
+        "COMPLETE",
+        "PARTIAL",
+        "FAILED"
+      ],
+      "title": "SearchStatus",
+      "type": "string"
+    },
+    "SourceType": {
+      "description": "The kind of publication a source is, used as a ranking feature and a search filter.\n\nThis is a descriptive category, never a quality or credibility score: source quality is\nexpressed as named, explainable features (architecture proposal §9).",
+      "enum": [
+        "scholarly",
+        "news",
+        "government",
+        "think_tank",
+        "other"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One federated search across the enabled discovery providers.\n\n`provider_set` records which providers were actually selected for this search, and `status`\nrecords whether they all answered. Together they are what lets the CLI say \"these results are\npartial because OpenAlex timed out\" instead of quietly returning less.",
+  "properties": {
+    "created_at": {
+      "description": "When this record was first created, in UTC.",
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "When this record was last written, in UTC.",
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "revision": {
+      "default": 1,
+      "description": "Optimistic-concurrency counter; incremented by the repository on every write.",
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "search_id": {
+      "description": "ULID primary key.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Search Id",
+      "type": "string"
+    },
+    "owner_id": {
+      "anyOf": [
+        {
+          "maxLength": 26,
+          "minLength": 26,
+          "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ULID of the user who owns this record.",
+      "title": "Owner Id"
+    },
+    "organization_id": {
+      "anyOf": [
+        {
+          "maxLength": 26,
+          "minLength": 26,
+          "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ULID of the owning organization (school or team); None outside a tenant.",
+      "title": "Organization Id"
+    },
+    "query": {
+      "description": "The query text as the user entered it.",
+      "minLength": 1,
+      "title": "Query",
+      "type": "string"
+    },
+    "filters": {
+      "$ref": "#/$defs/SearchFilters",
+      "description": "Constraints applied."
+    },
+    "provider_set": {
+      "default": [],
+      "description": "Names of the providers selected for this search.",
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Provider Set",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/SearchStatus",
+      "description": "Whether every selected provider answered."
+    }
+  },
+  "required": [
+    "query",
+    "status"
+  ],
+  "title": "Search",
+  "type": "object"
+}

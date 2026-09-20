@@ -403,16 +403,16 @@ account id is not.
 | | dev | prod |
 |---|---|---|
 | State bucket | `debate-dev-tfstate-a7508de8` | `debate-prod-tfstate-a7508de8` |
-| Applied on | | |
+| Applied on | 2026-09-20 | 2026-09-20 |
 | Applied as | `debate-dev` (DebateMaintainer) | `debate-admin` (DebateBreakGlassAdmin) |
-| State migrated into the bucket | | |
-| `envs/<env>` init against the S3 backend | | |
-| Concurrent-plan lock error observed | 2026-09-20, `bootstrap/state` race | |
+| State migrated into the bucket | 2026-09-20 | 2026-09-20 |
+| `envs/<env>` init against the S3 backend | 2026-09-20, `Successfully configured the backend "s3"!` | 2026-09-20, same |
+| Concurrent-plan lock error observed | 2026-09-20, HTTP 412 on the `bootstrap/state` race | not raced separately; same backend and lock mechanism |
 
 | Check | Result | Date |
 |---|---|---|
-| `DebateMaintainer` denied the prod state bucket (simulate-principal-policy) | | |
-| `DebateMaintainer` allowed the dev state bucket | | |
+| `DebateMaintainer` denied the prod state bucket (simulate-principal-policy) | `explicitDeny` on `ListBucket`, `GetObject`, `PutObject`, `DeleteObject`, against the bucket ARN and both the `envs/prod/` and `bootstrap/organization/` state keys by name | 2026-09-20 |
+| `DebateMaintainer` allowed the dev state bucket | `allowed` on `ListBucket`, `GetObject`, `PutObject` | 2026-09-20 |
 | `bootstrap/organization` migrated, plan clean, local state removed | | |
 | Dated state backups in `~/aws-backups/debate-terraform-state/` | | |
 

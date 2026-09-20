@@ -106,7 +106,10 @@ spec:
         name: Model-routing config schema
         description: >-
           RoutingConfig Pydantic model and loader for config/model_routing.yaml with an example file
-          mapping task classes (card_selection, citation_cleanup, relevance_classification) to model ids.
+          mapping the ModelTaskClass values shipped in v1-e02-t02 (complex_reasoning, high_volume,
+          deep_audit, embeddings, rerank) to model ids, annotated with the uses that fall into each
+          (card selection is complex_reasoning; citation cleanup and relevance classification are
+          high_volume). v1-e05-t01 loads this file against the same enum.
         dependsOn: [settings-model]
         outputs:
           - packages/debate_core/src/debate_core/application/routing_config.py

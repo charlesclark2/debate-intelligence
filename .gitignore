@@ -46,6 +46,14 @@ crash.log
 # Task workflow scratch (kickoff prompt, PR body)
 .task/
 
-# Operator-local Terraform inputs (account ids, emails); never committed.
+# Operator-local Terraform inputs (account ids, emails); never committed. The committed
+# per-environment inputs are infrastructure/bootstrap/state/<env>.tfvars and
+# infrastructure/envs/<env>/terraform.tfvars, which carry no operator-specific values.
 infrastructure/bootstrap/**/terraform.tfvars
-infrastructure/bootstrap/**/*.auto.tfvars
+infrastructure/**/*.auto.tfvars
+!infrastructure/**/*.auto.tfvars.example
+
+# The temporary local backend used for the first apply of infrastructure/bootstrap/state, before
+# the bucket it creates exists (docs/runbooks/terraform-bootstrap.md). Never committed: it would
+# override the real backend for everyone.
+infrastructure/**/backend_override.tf

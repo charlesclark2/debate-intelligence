@@ -31,3 +31,15 @@ repos:
         name: check for added large files
         entry: uv run --frozen check-added-large-files --maxkb=500
         language: unsupported
+      # Terraform is not a uv dependency: it and tflint come from the operator's machine
+      # (`brew install hashicorp/tap/terraform tflint`) and from the CI runner's setup steps, and
+      # the script says so if either is missing. It runs only when infrastructure/ or the script
+      # itself changed, because it takes a few seconds and downloads the AWS provider the first
+      # time. It needs no AWS credentials: see the header of scripts/terraform_checks.sh.
+      - id: terraform-checks
+        name: terraform fmt, validate and tflint
+        entry: scripts/terraform_checks.sh
+        language: unsupported
+        files: ^(infrastructure/|scripts/terraform_checks\.sh$)
+        pass_filenames: false
+        require_serial: true

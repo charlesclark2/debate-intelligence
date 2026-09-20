@@ -184,9 +184,24 @@ None. Everything in this task runs in seconds; the longest command was the full 
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- All Goal and node criteria pass. debate_cli imports only from debate_cli and
+  debate_core.application.errors, so the layering holds, and handling failures once in the root
+  group is what makes the later command groups (store, caselist, landscape, files) cheap and
+  consistent.
+- Both deviations accepted. Resolving `--version` in the root callback so `--json --version` still
+  emits an envelope is the right trade: the scheduled caselist sync (v1-e34-t02) parses that output,
+  and a bare version string would have been a special case forever. The three extra modules are the
+  seams later tasks need.
+- The exit-code module and the JSON envelope are now contracts. Later specs cite them
+  (v1-e32-t05 assumes 1 = domain failure, 2 = usage error), so treat a change to either as a spec
+  change, not an implementation detail.
+- The smoke-test gap is real and correctly left alone: tests/smoke/ belongs to v1-e01-t10, whose
+  spec already names it. The three checks listed under Follow-up work carry there. Note that
+  v1-e36-t05 (site deploy) also creates tests/smoke/test_site.py, so whichever merges first creates
+  the directory and the other adds to it.

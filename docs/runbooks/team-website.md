@@ -91,19 +91,35 @@ Where: `$WT`
 cd "$WT"
 for env in dev prod; do
   cat > "infrastructure/envs/$env/owner.auto.tfvars" <<TFVARS
-owner = "$OWNER_EMAIL"
+owner                     = "$OWNER_EMAIL"
 site_publisher_user_names = ["$SSO_USER_NAME"]
 TFVARS
 done
+
+# scripts/terraform_checks.sh runs `terraform fmt -check -recursive` over the working tree, and
+# that includes gitignored .tfvars. Unaligned `=` here fails pre-commit on every later commit from
+# this checkout, which is a confusing thing to debug later. Format them now.
+terraform fmt infrastructure/envs/dev infrastructure/envs/prod
 cat infrastructure/envs/dev/owner.auto.tfvars
 ```
-Success looks like: two lines, the email and the user name. `git status` still reports a clean
-tree — these files are gitignored.
+Success looks like: two lines, the email and the user name, with their `=` aligned, and no output
+from `terraform fmt` (nothing left to change). `git status` still reports a clean tree — these
+files are gitignored.
 
-Skipping this is why an apply stops to ask `Enter a value:` for `var.owner`. Answering the prompt
-works for one run, but the value is not recorded anywhere, so the next plan asks again and
-`site_publisher_user_names` stays empty — which leaves the publisher permission set with nobody
-assigned to it (step 7 then fails). Write the files instead of answering the prompt.
+`SSO_USER_NAME` is the Identity Center **user name** you sign in to the access portal with, not
+your email. Check it against the directory rather than guessing:
+
+```bash
+aws identitystore list-users --identity-store-id \
+  $(aws sso-admin list-instances --query 'Instances[0].IdentityStoreId' --output text) \
+  --query 'Users[].UserName' --output text
+```
+
+Skipping this whole block is why an apply stops to ask `Enter a value:` for `var.owner`. Answering
+the prompt works for one run, but the value is not recorded anywhere, so the next plan asks again
+and `site_publisher_user_names` stays empty — which leaves the publisher permission set with
+nobody assigned to it, and step 7 then fails with no obvious cause. Write the files instead of
+answering the prompt.
 
 ## Step 1 — Confirm the hosted zone exists and is delegated
 
@@ -581,15 +597,20 @@ and hosted zone names are fine here; **the account id is not**.
 | | dev | prod |
 |---|---|---|
 | Site bucket | `debate-dev-site-a7508de8` | `debate-prod-site-a7508de8` |
-| Applied on | 2026-09-20 — step 3a (no domain) 14 added; step 3b (preview host) 5 added, 2 changed | _pending_ |
+| Applied on | 2026-09-20 — step 3a (no domain) 14 added; step 3b (preview host) 5 added, 2 changed | 2026-09-20 — step 5, 22 added |
 | Applied as | `debate-admin` (DebateBreakGlassAdmin) | `debate-admin` (DebateBreakGlassAdmin) |
-| Distribution | `doq8i8utzst6e.cloudfront.net` (`E2OSZZB3X6M1T0`) | _pending_ |
-| Site URL | `https://dev.wfbdebate.com/` | `https://wfbdebate.com/` — _pending_ |
-| Certificate | 2026-09-20, `ISSUED` and in use, `CN=dev.wfbdebate.com`, DNS validated in the `.com` zone | _pending_ |
-| TLS floor | `TLSv1.2_2021`, `sni-only` (was AWS's forced `TLSv1` on the default certificate before 3b); negotiates TLS 1.3 | _pending_ |
+| Distribution | `doq8i8utzst6e.cloudfront.net` (`E2OSZZB3X6M1T0`) | `d1s3gyjxv4w20y.cloudfront.net` (`E391JBUSDYT2GL`) |
+| Site URL | `https://dev.wfbdebate.com/` | `https://wfbdebate.com/` |
+| Aliases | `dev.wfbdebate.com` | `wfbdebate.com`, `www.wfbdebate.com` |
+| Certificate | 2026-09-20, `ISSUED` and in use, `CN=dev.wfbdebate.com`, DNS validated in the `.com` zone | 2026-09-20, `ISSUED` and in use, `CN=wfbdebate.com` with `www.wfbdebate.com` as a SAN, both DNS validated in the `.com` zone |
+| TLS floor | `TLSv1.2_2021`, `sni-only` (was AWS's forced `TLSv1` on the default certificate before 3b); negotiates TLS 1.3 | `TLSv1.2_2021`, `sni-only` |
 | Redirect distribution | — | — (no second registrable domain; see `wfbdebate.org` below) |
-| Publisher permission set provisioned | 2026-09-20, `DebateDevSitePublisher`, assigned to `ccl1196` | _pending_ |
-| Publisher profile confirmed | _pending_ (step 7) | _pending_ |
+| Publisher permission set provisioned | 2026-09-20, `DebateDevSitePublisher`, assigned to `ccl1196` | 2026-09-20, `DebateProdSitePublisher`, assigned to `ccl1196` |
+| Publisher profile in `~/.aws/config` | _pending_ (step 7) | _pending_ (step 7) |
+
+Only two CloudFront distributions exist in the account, one per environment: `list-distributions`
+shows `debate-dev-site` with `dev.wfbdebate.com` and `debate-prod-site` with `wfbdebate.com` and
+`www.wfbdebate.com`, and nothing from `domain_redirect`.
 
 | Check | Result | Date |
 |---|---|---|
@@ -597,17 +618,17 @@ and hosted zone names are fine here; **the account id is not**.
 | `wfbdebate.org` | **Registration FAILED three times**, each in under a second, with only the generic "Contact AWS Support" message: `4cb18c5e-dc01-4b99-8cff-b782eecf8cd5` (12:11:28), `f79d71d2-7ce8-47b4-825b-644a83fdc3bc` (13:03:20), `cc87fa96-df2f-4004-8637-67211510a714` (13:04:26), all CDT. `check-domain-availability` → `AVAILABLE`; `Domain not found` at the `.org` registry. AWS Support case filed 2026-09-20; canonical name moved to `.com` rather than waiting on it | 2026-09-20 |
 | Hosted zone delegated (registry `NS`) | `wfbdebate.com` delegated to four `awsdns` servers, visible at the registry and at 1.1.1.1 and 8.8.8.8 | 2026-09-20 |
 | `DebateMaintainer` denied Identity Center writes and `debate-prod-*` | _pending_ | |
-| Four block-public-access flags | dev: all four `true`, `BucketOwnerEnforced`. prod: _pending_ | 2026-09-20 |
-| Direct S3 object URL returns `AccessDenied` | dev: `<Error><Code>AccessDenied</Code>`. prod: _pending_ | 2026-09-20 |
-| `http://` redirects to `https://` | dev: `301` to `https://dev.wfbdebate.com/`. prod: _pending_ | 2026-09-20 |
-| Alias records resolve | dev: `dev.wfbdebate.com` returns four CloudFront A records at 1.1.1.1. prod: _pending_ | 2026-09-20 |
-| TLS 1.2 floor once the certificate is attached | dev: `MinimumProtocolVersion = TLSv1.2_2021`, `CloudFrontDefaultCertificate = false`, certificate `ISSUED`/`InUse`, `Verify return code: 0 (ok)`. prod: _pending_ | 2026-09-20 |
-| Security headers present | dev: all seven — HSTS `max-age=31536000; includesubdomains`, CSP with `frame-ancestors 'none'`, `nosniff`, `x-frame-options: deny`, `referrer-policy`, `permissions-policy`, `x-robots-tag`. prod: _pending_ | 2026-09-20 |
-| CloudFront access logging off | dev: `Logging.Enabled = false`. prod: _pending_ | 2026-09-20 |
-| 403 and 404 both map to `/404.html` | dev: both present in the distribution config | 2026-09-20 |
-| `dev.wfbdebate.com` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.com` does not | dev: `x-robots-tag: noindex, nofollow` confirmed on both the CloudFront domain and `https://dev.wfbdebate.com/`. prod: _pending_ | 2026-09-20 |
-| `www.wfbdebate.com` 301s to `https://wfbdebate.com/`, path preserved | _pending_ (step 6) | |
-| Publishers allowed only their own site bucket and distribution | dev: `allowed` on `debate-dev-site-a7508de8/*`; `implicitDeny` on the prod site bucket, the dev state bucket, `iam:CreateAccessKey`, `cloudfront:CreateDistribution`, `sso:CreatePermissionSet`. prod: _pending_ | 2026-09-20 |
+| Four block-public-access flags | Both: all four `true`, `BucketOwnerEnforced` | 2026-09-20 |
+| Direct S3 object URL returns `AccessDenied` | Both: `<Error><Code>AccessDenied</Code>` | 2026-09-20 |
+| `http://` redirects to `https://` | dev: `301` to `https://dev.wfbdebate.com/`. prod: `301` to `https://wfbdebate.com/` | 2026-09-20 |
+| Alias records resolve | Both: four CloudFront A records at 1.1.1.1 for `dev.wfbdebate.com`, `wfbdebate.com` and `www.wfbdebate.com` | 2026-09-20 |
+| TLS 1.2 floor once the certificate is attached | Both: `MinimumProtocolVersion = TLSv1.2_2021`, `CloudFrontDefaultCertificate = false`, certificate `ISSUED`/`InUse`. dev negotiated TLS 1.3, `Verify return code: 0 (ok)` | 2026-09-20 |
+| Security headers present | dev: all seven. prod: the same six with **no** `x-robots-tag`, which is what prod being indexable means | 2026-09-20 |
+| CloudFront access logging off | Both: `Logging.Enabled = false` | 2026-09-20 |
+| 403 and 404 both map to `/404.html` | Both: present in the distribution config | 2026-09-20 |
+| `dev.wfbdebate.com` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.com` does not | Confirmed on both | 2026-09-20 |
+| `www.wfbdebate.com` 301s to `https://wfbdebate.com/`, path preserved | `https://www.wfbdebate.com/` → `301 https://wfbdebate.com/`; `https://www.wfbdebate.com/parents/faq/?x=1` → `301 https://wfbdebate.com/parents/faq/?x=1`, path **and query** preserved. `http://www.wfbdebate.com/` takes two hops — CloudFront upgrades to HTTPS first, then the function redirects to the apex — which is normal and costs one extra round trip on a spelling nobody types twice | 2026-09-20 |
+| Publishers allowed only their own site bucket and distribution | Both: `allowed` on their own bucket for `ListBucket`, `GetObject`, `PutObject`, `DeleteObject` and on their own distribution for `CreateInvalidation`; `implicitDeny` on the *other* environment's bucket and distribution, on the state bucket, and on `iam:CreateAccessKey`, `cloudfront:CreateDistribution`, `cloudfront:GetInvalidation` and `sso:CreatePermissionSet` | 2026-09-20 |
 
 ## Recurring checks
 

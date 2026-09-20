@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e36-team-website/t02-site-hosting.yaml`](../../plan_specs/v1/e36-team-website/t02-site-hosting.yaml) |
 | Epic / release | `v1-e36-team-website` / `v1.6` |
 | Branch | `task/v1-e36-t02-site-hosting` |
-| Session status | PARTIAL — everything in the repository is done and checked. The two `terraform apply` runs and the live-site checks are operator steps that have not been run yet. The canonical domain changed mid-task from `wfbdebate.org` to `wfbdebate.com` after three failed registrations; see **Deviations** |
+| Session status | COMPLETE — both environments applied and verified live. One operator convenience step remains before `v1-e36-t05-site-deploy` can run: the two SSO profile stanzas in `~/.aws/config` (runbook step 7). The canonical domain changed mid-task from `wfbdebate.org` to `wfbdebate.com` after three failed registrations; see **Deviations** |
 
 ## Summary
 
@@ -47,7 +47,7 @@ runbook says so and proves it with `simulate-principal-policy` before anything i
 | `module-tests` — offline `terraform test` | DONE | 11 runs, `mock_provider "aws"`, no credentials and no network |
 | `domain-redirect-module` — the `.com` names | DONE | Added by the spec amendment. `infrastructure/modules/domain_redirect/`, 5 offline runs |
 | `env-wiring` — dev/prod wiring and `SitePublisher` | DONE | `site.tf` identical in both roots; the redirect module is a `count` driven by tfvars, so dev does not instantiate it |
-| `operator-apply` — applies and the domain steps | **IN PROGRESS — dev complete** | Dev applied twice as designed (3a: 14 resources on the CloudFront domain; 3b: 5 added, 2 changed for `dev.wfbdebate.com`) and verified end to end: bucket private, `AccessDenied` on a direct object URL, `http://` → `301`, all seven security headers, `X-Robots-Tag: noindex, nofollow`, logging off, 403 and 404 both mapped to `/404.html`, certificate `ISSUED` and in use, TLS floor `TLSv1.2_2021` negotiating TLS 1.3, and the dev publisher `allowed` only on its own bucket. Still to run: prod (step 5) and the prod half of the checks |
+| `operator-apply` — applies and the domain steps | DONE | Dev applied twice as designed (3a: 14 resources on the CloudFront domain; 3b: 5 added, 2 changed for `dev.wfbdebate.com`); prod applied once (22 resources). Both verified live — see the criteria table. The runbook's record tables are filled in, with no account ids |
 
 ## Acceptance criteria
 
@@ -59,9 +59,9 @@ Terraform commands were run with every AWS environment variable unset and
 | **ac1** ADR-0012 accepted and indexed | PASS | `grep -m1 '^- Status: Accepted' docs/adr/0012-web-hosting.md` → `- Status: Accepted`; `grep -c '0012-web-hosting.md' docs/adr/README.md` → `1` |
 | **ac2** `static_site` tests pass without credentials and assert the four PAB flags, OAC-only access, redirect-to-https, the headers policy and no logging | PASS | `terraform -chdir=infrastructure/modules/static_site test` → `Success! 11 passed, 0 failed.` Runs: `bucket_is_private_and_encrypted`, `bucket_policy_grants_only_this_distribution`, `viewers_are_on_https_and_nothing_is_logged`, `security_headers_are_sent`, `no_domain_means_the_cloudfront_domain_and_no_certificate`, `the_index_rewrite_is_published_at_the_edge`, `prod_serves_the_team_domain_and_redirects_www`, `an_external_registrar_gets_the_validation_records_as_an_output`, `dev_preview_is_not_indexable`, `publisher_permission_set_can_publish_and_nothing_else`, `no_identity_center_instance_means_no_permission_set` |
 | **ac3** both roots instantiate the module with their own prefix, domains and noindex; the roots stay identical apart from tfvars and backend; both validate and the checks pass | PASS | `diff` of `main.tf`, `providers.tf`, `versions.tf`, `variables.tf`, `outputs.tf`, `site.tf` between `envs/dev` and `envs/prod` → no output; `terraform -chdir=infrastructure/envs/dev validate` and `…/prod validate` → `Success! The configuration is valid.` twice; `bash scripts/terraform_checks.sh` → `All Terraform checks passed.` (fmt, validate on all seven directories, tflint clean) |
-| **ac4** `SitePublisher` allows only ListBucket, GetObject, PutObject, DeleteObject on its bucket and CreateInvalidation on its distribution, with the two SSO profiles | PASS | Test run `publisher_permission_set_can_publish_and_nothing_else` asserts the action set is exactly those five, that every statement is an `Allow`, that every resource is this environment's own bucket or distribution, and that the named publisher is assigned. Profile names come from `publisher_profile_name` (= `name_prefix`), so `debate-dev-site` / `debate-prod-site`; the runbook's step 7 carries the `~/.aws/config` stanzas |
-| **ac5** the operator has applied dev and prod, and the runbook records dates, names, domains, DNS and certificate status, with every permission check via `simulate-principal-policy` | **PARTIAL** — dev applied and recorded, prod pending | `docs/runbooks/team-website.md` exists with eight steps, fifteen paste-ready blocks, and four `simulate-principal-policy` checks and no attempted-action permission tests (`grep -c 'debate-prod-site'` → `8`). Every bash block parses (`bash -n`, 19/19). Dev applied 2026-09-20 (step 3a: 14 resources; distribution `doq8i8utzst6e.cloudfront.net` / `E2OSZZB3X6M1T0`; `DebateDevSitePublisher` provisioned) and its results are in the record tables. The prod column still reads `_pending_` |
-| **ac6** prod on `wfbdebate.com` with `www` redirecting, dev on `dev.wfbdebate.com` with noindex, per-environment ACM certificates in us-east-1, DNS validated | **PARTIAL** — dev PASS live, prod pending | Configured in `envs/*/terraform.tfvars` and asserted offline by `prod_serves_the_team_domain_and_redirects_www` and `dev_preview_is_not_indexable`. `wfbdebate.com` is registered (2026-09-20T17:11:33Z, Amazon Registrar) and delegated to four `awsdns` name servers, confirmed at the `.com` registry and at 1.1.1.1 and 8.8.8.8, so nothing blocks the apply. Dev confirmed live 2026-09-20: `dev.wfbdebate.com` resolves to four CloudFront A records, `http://` 301s to it, all seven headers including `x-robots-tag: noindex, nofollow`, certificate `ISSUED`/`InUse` with `CN=dev.wfbdebate.com` DNS-validated in the `.com` zone, `MinimumProtocolVersion = TLSv1.2_2021`. Prod is the runbook's steps 5 and 6 |
+| **ac4** `SitePublisher` allows only ListBucket, GetObject, PutObject, DeleteObject on its bucket and CreateInvalidation on its distribution, with the two SSO profiles | PASS | Test run `publisher_permission_set_can_publish_and_nothing_else` asserts the action set is exactly those five, that every statement is an `Allow`, that every resource is this environment's own bucket or distribution, and that the named publisher is assigned. Confirmed live against both provisioned roles with `simulate-principal-policy`, 2026-09-20: each publisher is `allowed` `ListBucket` on its own bucket, `GetObject`/`PutObject`/`DeleteObject` on its own objects and `CreateInvalidation` on its own distribution, and `implicitDeny` on the *other* environment's bucket and distribution, the state bucket, `iam:CreateAccessKey`, `cloudfront:CreateDistribution`, `cloudfront:GetInvalidation` and `sso:CreatePermissionSet`. Both are assigned to `ccl1196`, confirmed against the identity store. Profile names come from `publisher_profile_name`, so `debate-dev-site` / `debate-prod-site`; the runbook's step 7 carries the `~/.aws/config` stanzas, which live on the operator's machine |
+| **ac5** the operator has applied dev and prod, and the runbook records dates, names, domains, DNS and certificate status, with every permission check via `simulate-principal-policy` | PASS | `docs/runbooks/team-website.md` exists with eight steps, fifteen paste-ready blocks, and four `simulate-principal-policy` checks and no attempted-action permission tests (`grep -c 'debate-prod-site'` → `8`). Every bash block parses (`bash -n`, 19/19). Both environments applied 2026-09-20 under `debate-admin` and recorded in the runbook's two tables: dev `doq8i8utzst6e.cloudfront.net` / `E2OSZZB3X6M1T0`, prod `d1s3gyjxv4w20y.cloudfront.net` / `E391JBUSDYT2GL`, both certificates `ISSUED`, no account ids. Every permission question was answered with `simulate-principal-policy`; nothing was tested by attempting the action |
+| **ac6** prod on `wfbdebate.com` with `www` redirecting, dev on `dev.wfbdebate.com` with noindex, per-environment ACM certificates in us-east-1, DNS validated | PASS | Configured in `envs/*/terraform.tfvars` and asserted offline by `prod_serves_the_team_domain_and_redirects_www` and `dev_preview_is_not_indexable`. `wfbdebate.com` is registered (2026-09-20T17:11:33Z, Amazon Registrar) and delegated to four `awsdns` name servers, confirmed at the `.com` registry and at 1.1.1.1 and 8.8.8.8, so nothing blocked the apply. Confirmed live 2026-09-20. **Prod**: `https://wfbdebate.com/` and `https://www.wfbdebate.com/` both resolve to four CloudFront A records; `https://www.wfbdebate.com/` → `301 https://wfbdebate.com/`; `https://www.wfbdebate.com/parents/faq/?x=1` → `301 https://wfbdebate.com/parents/faq/?x=1`, path and query preserved; certificate `ISSUED`/`InUse`, `CN=wfbdebate.com` with `www.wfbdebate.com` as a SAN, both DNS-validated; `MinimumProtocolVersion = TLSv1.2_2021`; six headers and **no** `x-robots-tag`. **Dev**: same shape plus `x-robots-tag: noindex, nofollow`, certificate `CN=dev.wfbdebate.com`, negotiated TLS 1.3, `Verify return code: 0 (ok)` |
 | **ac7** `domain_redirect` 301s a second registrable domain to the canonical host, with its own certificate and no S3 website endpoint; tests pass offline | Offline PASS; **not instantiated** | `terraform -chdir=infrastructure/modules/domain_redirect test` → `Success! 5 passed, 0 failed.` including `the_origin_is_never_a_public_bucket_or_a_website_endpoint`. `redirect_domain_names` is empty in both roots while there is only one registrable domain; ac7 as amended says wiring it up when `.org` is issued is a tfvars change and an apply, not new code |
 | Node `adr-0012` — ADR accepted; index lists it | PASS | As ac1 |
 | Node `static-site-module` — `main.tf` contains `aws_cloudfront_origin_access_control` and `aws_cloudfront_response_headers_policy` | PASS | `grep -c` → `2` and `2` |
@@ -69,7 +69,7 @@ Terraform commands were run with every AWS environment variable unset and
 | Node `domain-redirect-module` — tests pass; `main.tf` contains `aws_cloudfront_function` | PASS | `Success! 5 passed, 0 failed.`; `grep -c aws_cloudfront_function` → `2` |
 | Node `env-wiring` — dev validates, prod validates, `scripts/terraform_checks.sh` passes | PASS | As ac3 |
 | Node `operator-apply` — runbook contains `debate-prod-site` | PASS | `grep -c` → `8` |
-| Node `operator-apply` — custom: Charlie confirms private buckets, HTTPS, the `www` 301 and dev's noindex | **PARTIAL** — dev confirmed | Dev, 2026-09-20: four block-public-access flags `true` and `BucketOwnerEnforced`; `<Error><Code>AccessDenied</Code>` from `https://debate-dev-site-a7508de8.s3.us-east-1.amazonaws.com/index.html`; `HTTP/1.1 301` from `http://` to the `https://` CloudFront domain; HSTS, CSP (`frame-ancestors 'none'`), `nosniff`, `x-frame-options: deny`, `referrer-policy`, `permissions-policy` and `x-robots-tag: noindex, nofollow` all present; `Logging.Enabled = false`. Prod pending |
+| Node `operator-apply` — custom: Charlie confirms private buckets, HTTPS, the `www` 301 and dev's noindex | PASS | Both environments, 2026-09-20, checked in session against the operator's own credentials with the results shown to them: four block-public-access flags `true` and `BucketOwnerEnforced` on both buckets; `<Error><Code>AccessDenied</Code>` from both direct S3 object URLs; `301` from `http://` on both; `www.wfbdebate.com` → `301 https://wfbdebate.com/` with path and query preserved; `x-robots-tag: noindex, nofollow` on dev and absent on prod; `Logging.Enabled = false` on both. Recorded in the runbook's checks table |
 
 ## Files changed
 
@@ -190,77 +190,41 @@ a line in the index) and `infrastructure/README.md` (the module index the new mo
 
 ## Operator follow-ups
 
-All of these are in [`docs/runbooks/team-website.md`](../runbooks/team-website.md), which has the
-full block for each with its expected runtime and success criteria. In order:
+All of these are in [`docs/runbooks/team-website.md`](../runbooks/team-website.md). Steps 0–8 were
+run on 2026-09-20 and their results are in that runbook's two record tables. **One thing is left,
+and `v1-e36-t05-site-deploy` cannot deploy without it:**
 
-0. ~~**Register `wfbdebate.org`.**~~ **Done as far as it can be: it cannot be registered, and the
-   canonical name has moved to `wfbdebate.com`.** Nothing below is blocked any more. Checked
-   2026-09-20 from public DNS, whois and `route53domains`:
+1. **Add the two publisher SSO profiles to `~/.aws/config`** (~3 min) — runbook step 7. The
+   permission sets are provisioned and assigned to `ccl1196`; these stanzas are the local alias
+   the deploy script uses. They live on the operator's machine, not in the repository, which is
+   why this is the one step a session cannot finish.
 
-   | Domain | Registry | Registration | Delegation |
-   |---|---|---|---|
-   | `wfbdebate.com` | Registered 2026-09-20T17:11:33Z, Amazon Registrar | `SUCCESSFUL` after 10m 12s | Four `awsdns` name servers, at the registry and at 1.1.1.1 and 8.8.8.8 |
-   | `wfbdebate.org` | `Domain not found` at `whois.publicinterestregistry.org`; `check-domain-availability` → `AVAILABLE` | **`FAILED` three times**, in 0.90 s, 0.89 s and 0.70 s | None |
+   ```ini
+   [profile debate-dev-site]
+   sso_session = debate
+   sso_account_id = <account-id>
+   sso_role_name = DebateDevSitePublisher
+   region = us-east-1
+   output = json
 
-   The three failed operations are `4cb18c5e-dc01-4b99-8cff-b782eecf8cd5` (12:11:28),
-   `f79d71d2-7ce8-47b4-825b-644a83fdc3bc` (13:03:20) and
-   `cc87fa96-df2f-4004-8637-67211510a714` (13:04:26), all CDT, each carrying only the generic
-   "We can't finish registering your domain. Contact AWS Support" message with no reason code.
+   [profile debate-prod-site]
+   sso_session = debate
+   sso_account_id = <account-id>
+   sso_role_name = DebateProdSitePublisher
+   region = us-east-1
+   output = json
+   ```
+   Then `aws sso login --sso-session debate` and
+   `aws sts get-caller-identity --profile debate-dev-site --query Arn --output text`, which should
+   name `AWSReservedSSO_DebateDevSitePublisher`.
 
-   The timings are what identify the problem. A registration that reaches the registry takes
-   minutes on this account — `wfbdebate.com` took 10m 12s and `credencesports.com` took 11m 34s —
-   so a sub-second failure never left Amazon Registrar and was not PIR declining. The contact
-   details, privacy settings and auto-renew were identical to the `.com` that succeeded 1.1
-   seconds earlier in the same request, which rules out the contact data. **An AWS Support case
-   was filed on 2026-09-20.**
+Still open, but not blocking anything:
 
-   **Decision (operator, 2026-09-20): make `wfbdebate.com` the canonical name rather than wait on
-   Support**, because the parent information session is on October 1. Prod now serves
-   `https://wfbdebate.com/` with `www.wfbdebate.com` 301ing to it, and dev serves
-   `https://dev.wfbdebate.com/`. `modules/domain_redirect` is unchanged in substance, built and
-   tested, and instantiated by nothing: if `.org` is ever issued, uncommenting two lines in
-   `envs/prod/terraform.tfvars` points the `.org` names at the `.com` site. The switch cost two
-   `terraform.tfvars` files and prose — nothing in the modules or their 16 tests depends on which
-   name is canonical, which is what the module inputs were for.
-
-1. **Confirm both hosted zones are delegated** (~1 min) — runbook step 1, which now tells an
-   unregistered domain apart from a slow delegation and includes `aws sso login`, because an
-   expired token fails the `aws` calls while `dig` still answers.
-2. **Confirm `debate-admin` can apply and `DebateMaintainer` cannot** (~2 min) — step 2, four
-   `simulate-principal-policy` calls. `explicitDeny` on the Identity Center actions and on
-   `debate-prod-*`; `allowed` on `debate-dev-*`.
-3. **Write the two `owner.auto.tfvars`** (~1 min) — the "Before you start" block, with the email
-   and your Identity Center user name. Without the user name the publisher permission set exists
-   but nobody can assume it.
-4. ~~**Apply dev without the domain**~~ **— done 2026-09-20.** `Apply complete! Resources: 14
-   added`, `site_url = "https://doq8i8utzst6e.cloudfront.net/"`. Step 4's checks all pass against
-   it. Was: step 3a,
-   `terraform -chdir=infrastructure/envs/dev apply -var 'site_domain_names=[]'`. **This one needs
-   no DNS at all**, so it can be run today regardless of step 0, and it proves the bucket, the
-   distribution, the function, the headers and the publisher permission set before a domain is in
-   the picture.
-5. ~~**Apply dev with the preview host**~~ **— done 2026-09-20.** `Apply complete! Resources: 5
-   added, 2 changed`, `site_url = "https://dev.wfbdebate.com/"`. The certificate issued inside the
-   apply, so the 30-minute wait was never approached. Steps 4 and 8's dev half all pass; the TLS
-   floor moved from AWS's forced `TLSv1` to `TLSv1.2_2021` as ADR-0012 said it would.
-6. **Check dev** (~2 min) — step 4: four `True` flags, `AccessDenied` from a direct S3 URL, a 301
-   from `http://`, and `x-robots-tag: noindex, nofollow`.
-7. **Apply prod** (~15 min) — step 5. Two distributions and two certificates. Needs step 0; to
-   bring prod up on its CloudFront domain meanwhile, empty both name lists together —
-   `apply -var 'site_domain_names=[]' -var 'redirect_domain_names=[]'` — because a redirect with
-   no canonical host to point at is refused by a `check` block in `site.tf`.
-8. **Check prod and the three redirects** (~3 min) — step 6. All of `www.wfbdebate.org`,
-   `wfbdebate.com` and `www.wfbdebate.com` must answer 301 with
-   `location: https://wfbdebate.org/`, and a deep link must keep its path.
-9. **Add the two publisher SSO profiles** (~3 min) — step 7, `~/.aws/config` stanzas plus
-   `aws sso login`.
-10. **Confirm the publishers are least-privilege** (~3 min) — step 8,
-    `simulate-principal-policy` per publisher: `allowed` only against its own site bucket,
-    `implicitDeny` against the other environment's bucket, the state bucket, IAM and CloudFront
-    management.
-11. **Fill in the runbook's two record tables** and paste the results back, so ac5, ac6, ac7 and
-    the `operator-apply` node's custom criterion can be marked PASS and the Goal set to
-    `Succeeded`.
+2. **The AWS Support case for `wfbdebate.org`**, filed 2026-09-20. If it is ever registered, add
+   the two commented lines at the bottom of `envs/prod/terraform.tfvars` and re-apply prod; the
+   `.org` names will 301 to their `.com` equivalents through `modules/domain_redirect`, which is
+   already built and tested. The runbook's recurring-checks table carries a reminder to re-check
+   availability while the case is open.
 
 Nothing here may be run from an agent session or from CI.
 

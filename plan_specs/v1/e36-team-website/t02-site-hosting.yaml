@@ -118,7 +118,7 @@ spec:
         wfbdebate.org is unregistered; wiring the .org names to it when the registration succeeds is
         a tfvars change and an operator apply, not new code.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

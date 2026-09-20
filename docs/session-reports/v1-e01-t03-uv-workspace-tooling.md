@@ -131,9 +131,29 @@ None. All commands ran in seconds (full sync about 4 s, test run about 3 s).
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-09-19
 
 **Notes:**
+
+What was checked:
+
+- The branch diff against the spec's package list.
+- The root `pyproject.toml`: workspace members, Python 3.12 pin, dev group, ruff, pyright
+  strict scoped to `debate_core`, and pytest addopts/markers.
+- The per-package `pyproject.toml` files, the smoke tests and `.pre-commit-config.yaml`.
+
+All four Goal criteria are met. Every marker the later specs depend on (`slow`, `live`, `eval`,
+`dev`, `prod`) is registered once, under `--strict-markers`. Routing the pre-commit hooks through
+`uv run --frozen` keeps hook versions on `uv.lock`; I preferred that over the spec's implied
+remote hook revisions.
+
+Accepted deviations:
+
+- **macOS `wc -l` padding.** The session correctly didn't edit the spec. The PM will change the
+  "All project markers are registered" criterion to the `grep -c` form in the next `specs/` PR.
+- **`scripts/` excluded from ruff.** Accepted as a temporary exclusion. Bringing `scripts/` under
+  ruff and removing the exclusion is added to `v1-e01-t05-spec-tooling`.
+- **`README.md` setup section and `.gitignore` entries.** Both are in scope.

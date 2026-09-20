@@ -33,8 +33,18 @@ spec:
     (debate-dev-site-* and debate-prod-site-*) on the remote state from v1-e29-t02, with a least-privilege
     SitePublisher permission set (sync to the env's site bucket, invalidate its distribution) so t05 can
     deploy prod, where the debate-prod profile is read-only. terraform test runs offline with a mocked
-    provider. Applies, domain purchase, certificate validation records and DNS are operator steps
-    recorded in docs/runbooks/team-website.md. Out of scope: the site code (t03), content (t04), the
+    provider. The team domains wfbdebate.org (canonical) and wfbdebate.com were registered on
+    2026-09-20, so the environments are wired to them: prod serves wfbdebate.org with
+    www.wfbdebate.org redirecting to it, dev serves the non-public preview host dev.wfbdebate.org with
+    noindex, and each environment's ACM certificate in us-east-1 covers its own names. wfbdebate.com and
+    www.wfbdebate.com 301 to their .org equivalents from a redirect-only CloudFront distribution with
+    its own certificate (infrastructure/modules/domain_redirect), because the S3 website redirect
+    endpoint this would otherwise use is plain HTTP and public. Route 53 hosted zones come from the
+    registration and are read with data sources, never created or destroyed here; the domain stays a
+    variable so a first apply can go out on the CloudFront domain while validation is pending. Applies,
+    name-server and registrar steps, certificate validation and DNS are operator steps recorded in
+    docs/runbooks/team-website.md, and every permission check there uses iam simulate-principal-policy
+    rather than attempting the action. Out of scope: the site code (t03), content (t04), the
     deploy script and smoke checks (t05), GitHub OIDC deploy roles (v2-e10-t03), V2 app hosting
     (v2-e14-t03).
   priority: 1
@@ -43,6 +53,7 @@ spec:
       - docs/adr
       - docs/runbooks
       - infrastructure/modules/static_site
+      - infrastructure/modules/domain_redirect
       - infrastructure/envs/dev
       - infrastructure/envs/prod
     forbidden:
@@ -53,6 +64,9 @@ spec:
       - A stage environment (ADR-0013) or a second AWS account (ADR-0010)
       - terraform apply, domain purchase or DNS changes from CI or an agent session (operator-run only)
       - Long-lived IAM access keys for deploys (Identity Center SSO profiles only)
+      - Creating, importing or destroying Route 53 hosted zones, or changing registrar settings, from
+        Terraform (the zones exist from the registration and are read with a data source)
+      - Testing a permission by attempting the action instead of iam simulate-principal-policy
   context:
     - kind: TaskRef
       name: v1-e29-t02-terraform-bootstrap
@@ -71,8 +85,9 @@ spec:
     - id: ac3
       description: >-
         envs/dev and envs/prod each instantiate the module with the debate-dev-site / debate-prod-site
-        prefix, an optional domain (null uses the CloudFront domain) and noindex in dev only; both
-        roots validate and scripts/terraform_checks.sh passes.
+        prefix, the environment's domain names (empty uses the CloudFront domain) and noindex in dev
+        only; the two roots stay identical apart from terraform.tfvars and backend.tf; both roots
+        validate and scripts/terraform_checks.sh passes.
     - id: ac4
       description: >-
         A SitePublisher permission set allows only ListBucket, GetObject, PutObject and DeleteObject on
@@ -82,7 +97,20 @@ spec:
       description: >-
         The operator has applied dev and prod, and docs/runbooks/team-website.md records apply dates,
         bucket names and distribution domains (no account ids), the domain and DNS status, and the
-        certificate validation steps.
+        certificate validation steps. Every step is a paste-ready operator block, and every permission
+        check uses `aws iam simulate-principal-policy` rather than attempting the action.
+    - id: ac6
+      description: >-
+        Prod serves https://wfbdebate.org/ with www.wfbdebate.org redirecting to it, dev serves
+        https://dev.wfbdebate.org/ carrying both a noindex robots rule and an `X-Robots-Tag: noindex`
+        response header, and each environment's ACM certificate is requested in us-east-1 and DNS
+        validated in the hosted zone that the registration created.
+    - id: ac7
+      description: >-
+        wfbdebate.com and www.wfbdebate.com answer with a 301 to the same path on their .org
+        equivalent, served by infrastructure/modules/domain_redirect: its own certificate, its own
+        distribution, HTTPS only, and no S3 website endpoint or public bucket anywhere in the path.
+        `terraform -chdir=infrastructure/modules/domain_redirect test` passes offline.
 status:
   phase: InProgress
 ---
@@ -98,9 +126,10 @@ metadata:
     debate/epic: v1-e36-team-website
 spec:
   description: >-
-    Write ADR-0012, build the static_site module and its offline tests, wire both environments and
-    the publisher permission set, then hand the applies and the domain work to the operator and record
-    them in the runbook. About one day of session time plus operator applies.
+    Write ADR-0012, build the static_site module and its offline tests, build the domain_redirect
+    module for the .com names, wire both environments and the publisher permission set, then hand the
+    applies and the domain work to the operator and record them in the runbook. About one day of
+    session time plus operator applies.
   goalRef:
     name: v1-e36-t02-site-hosting
   graph:
@@ -132,8 +161,10 @@ spec:
           Module with the private bucket, OAC, distribution, index-rewrite CloudFront Function, custom
           404, response headers policy (CSP compatible with the Next.js export) and an optional ACM
           certificate with DNS validation when domain_names is non-empty; variables for name prefix,
-          domain_names, route53_zone_id (null for an external registrar), noindex; outputs bucket name,
-          distribution id and domain, and certificate validation records.
+          domain_names, canonical_domain_name (the rest 301 to it), route53_zone_id (null for an
+          external registrar), noindex; alias records for every domain name when a zone id is given;
+          outputs bucket name, distribution id and domain, the site URL, and certificate validation
+          records.
         dependsOn: [adr-0012]
         outputs:
           - infrastructure/modules/static_site/main.tf
@@ -156,7 +187,7 @@ spec:
           terraform test files using mock_provider "aws" assert the public access block, a bucket policy
           granting only the distribution, redirect-to-https and TLS 1.2 minimum, the security headers,
           noindex only when set, no logging_config, and certificate plus aliases only when domain_names
-          is non-empty.
+          is non-empty, and that a non-canonical host is answered with a 301 to the canonical one.
         dependsOn: [static-site-module]
         outputs: [infrastructure/modules/static_site/tests/static_site.tftest.hcl]
         estimatedEffort: 1.5h
@@ -165,14 +196,42 @@ spec:
             name: static_site terraform tests pass offline
             command: terraform
             args: [-chdir=infrastructure/modules/static_site, test]
+      - id: domain-redirect-module
+        kind: Task
+        name: domain_redirect module for the .com names
+        description: >-
+          A second module holding a redirect-only CloudFront distribution: its own ACM certificate for
+          wfbdebate.com and www.wfbdebate.com, a viewer-request CloudFront Function returning a 301 to
+          the same path on the canonical host, HSTS on the redirect response, alias records in the .com
+          zone, and no bucket at all. A CloudFront Function rather than an S3 website redirect bucket,
+          because that endpoint is plain HTTP and public, which the task forbids. Offline
+          terraform test with a mocked provider.
+        dependsOn: [module-tests]
+        outputs:
+          - infrastructure/modules/domain_redirect/main.tf
+          - infrastructure/modules/domain_redirect/tests/domain_redirect.tftest.hcl
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: domain_redirect terraform tests pass offline
+            command: terraform
+            args: [-chdir=infrastructure/modules/domain_redirect, test]
+          - type: artifact_exists
+            name: The redirect is a CloudFront Function, not an S3 website endpoint
+            path: infrastructure/modules/domain_redirect/main.tf
+            contentMatch: "aws_cloudfront_function"
       - id: env-wiring
         kind: Task
         name: dev and prod wiring and SitePublisher permission set
         description: >-
-          Instantiate the module in envs/dev (noindex, CloudFront domain) and envs/prod (team domain once
-          chosen, else null) and define the SitePublisher permission set scoped to each environment's
-          bucket and distribution; both roots validate and the credential-free checks pass.
-        dependsOn: [module-tests]
+          Instantiate the static_site module in envs/dev (dev.wfbdebate.org, noindex) and envs/prod
+          (wfbdebate.org canonical, www.wfbdebate.org redirecting to it) and the domain_redirect module
+          for the .com names in prod, reading both hosted zones with data sources; define the
+          SitePublisher permission set scoped to each environment's bucket and distribution. The two
+          roots hold the same files, differing only in terraform.tfvars and backend.tf, and the domain
+          names stay variables so a first apply can go out on the CloudFront domain. Both roots
+          validate and the credential-free checks pass.
+        dependsOn: [module-tests, domain-redirect-module]
         outputs:
           - infrastructure/envs/dev/site.tf
           - infrastructure/envs/prod/site.tf
@@ -195,10 +254,13 @@ spec:
         kind: Task
         name: Operator applies dev then prod and records the domain steps
         description: >-
-          Operator-run: apply dev and confirm the placeholder page is served over HTTPS and that the bucket
-          URL returns AccessDenied; apply prod; if a domain has been bought, add the ACM validation and
-          alias records (Route 53 or registrar) and re-apply. The runbook records dates, bucket names,
-          distribution domains, domain and DNS status (no account ids) and the steps still pending.
+          Operator-run, as paste-ready blocks in the runbook: confirm the two hosted zones are delegated,
+          apply dev and confirm the preview is served over HTTPS with X-Robots-Tag noindex and that the
+          bucket URL returns AccessDenied; apply prod and confirm wfbdebate.org, the www 301 and the
+          .com 301; check every permission with iam simulate-principal-policy rather than by attempting
+          the action. A first apply may go out with empty domain names if certificate validation is
+          still pending. The runbook records dates, bucket names, distribution domains, domain and DNS
+          status (no account ids) and the steps still pending.
         dependsOn: [env-wiring]
         outputs: [docs/runbooks/team-website.md]
         estimatedEffort: 1h
@@ -208,10 +270,12 @@ spec:
             path: docs/runbooks/team-website.md
             contentMatch: "debate-prod-site"
           - type: custom
-            name: Operator confirms private buckets and HTTPS delivery
+            name: Operator confirms private buckets, HTTPS delivery and the redirects
             description: >-
               Charlie confirms both site buckets show "Block all public access", that direct S3 object
-              URLs return AccessDenied, that http:// redirects to https:// on both distributions, and
-              records whether the team domain is purchased and its DNS status in the runbook.
+              URLs return AccessDenied, that http:// redirects to https:// on both distributions, that
+              www.wfbdebate.org, wfbdebate.com and www.wfbdebate.com each answer 301 to
+              https://wfbdebate.org/, that dev.wfbdebate.org returns X-Robots-Tag: noindex, and records
+              the certificate and DNS status in the runbook.
 status:
   phase: Pending

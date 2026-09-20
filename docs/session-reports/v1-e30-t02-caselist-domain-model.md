@@ -194,9 +194,28 @@ None. Everything in this task runs in well under two minutes (`uv run pytest` ta
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- Conforms to the spec: the seven entities are frozen and round-trip, the validators reject the
+  cases ac2 names, slugs are data rather than an enum, there is no debater-names field anywhere, and
+  nothing in domain or ports imports a provider SDK. Keying the repository naturally is the right
+  call and the reason is worth keeping visible: cumulative weekly archives mean a re-import has to
+  be a no-op.
+- All five deviations are right, and the PM has amended the spec on branch
+  `specs/caselist-model-amendments`:
+  1. lint-imports belongs to v1-e02-t06; the criterion is now the port-conformance test until that
+     task lands, which is what the criterion was actually protecting.
+  2. The fake lives in `debate_core/testing/fakes.py`, the shared module v1-e02-t02 established.
+  3. `Disclosure` carries the event. Enforcing PF as PRO/CON and LD/Policy as AFF/NEG at
+     construction is better than a helper a caller can forget, and t03's manifest rows want the
+     field anyway.
+  4. `CampFile` carries snapshot and parse_warnings, matching every other imported record and what
+     v1-e30-t04 asks for.
+  5. `TeamCodeText` for the constrained string, `TeamCode` for the entity, and re-using `Sha256Hex`
+     rather than defining a second hash scalar.
+- Next in this epic: v1-e30-t03 (the archive importer), which reads this vocabulary and needs the
+  contract tests and local repositories under it.

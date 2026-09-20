@@ -56,7 +56,7 @@ page, which correctly fails a prod build).
 | `smoke-check` — `uv run pytest tests/scripts/test_site_smoke.py` | PASS | `27 passed in 1.20s`. |
 | `smoke-check` — `uv run ruff check scripts/site_smoke.py tests/scripts tests/smoke/test_site.py` | PASS | `All checks passed!` Repo-wide: `uv run ruff check .` → `All checks passed!`, `uv run ruff format --check .` → `125 files already formatted`. |
 | `dev-preview` — `docs/runbooks/team-website.md` contains `site_deploy.sh` | PASS | `grep -c site_deploy.sh docs/runbooks/team-website.md` → `11` matching lines, in the deploy, rollback, takedown and launch sections. |
-| `dev-preview` — custom: Charlie confirms the dev smoke check passed for the commit being promoted, including `noindex`, and the preview looks right on a phone | PARTIAL | The smoke check passed in full for `f15fa16` (28/28), but the phone review **failed** and was worth more than the 28 automated checks: the page rendered unstyled, which is deviation 3. Fixed and to be redeployed. Outstanding: a deploy and smoke check of the styled build, Charlie's second look, and the same run against the commit actually promoted. |
+| `dev-preview` — custom: Charlie confirms the dev smoke check passed for the commit being promoted, including `noindex`, and the preview looks right on a phone | PARTIAL | Round 1: smoke check passed in full for `f15fa16` (28/28), but the phone review **failed** and was worth more than the 28 automated checks — the page rendered unstyled (deviation 3). Round 2, after the stylesheet fix: Charlie confirmed the mobile rendering looks good and found the desktop reading column off centre, fixed in `2dbe4b0`; he redeployed dev and confirmed the centring. Outstanding: the same run against the commit actually promoted, and the polish items under *Site polish before the October 1 parent session*, which he wants addressed before parents see the site. |
 | `prod-launch` — `docs/runbooks/team-website.md` contains `First prod launch` | PASS (placeholder) | The section exists with the right fields; its values are `_pending_` until the launch. Reported as PASS against the literal criterion and as not-yet-true in substance. |
 | `prod-launch` — custom: Charlie confirms, on or before September 30 2026, that the prod site passes the smoke check at the URL he will give parents | NOT RUN | Operator follow-up 5. |
 | Regression — Terraform static checks still pass after the policy change | PASS | Re-run after the rebase onto `dev` at `9a3e86f`: `scripts/terraform_checks.sh` → `ok test infrastructure/modules/static_site`, `All Terraform checks passed.` The script now runs `terraform test` itself (#23), so the module suite is covered rather than hand-run; the direct run earlier in the session gave `Success! 11 passed, 0 failed.` |
@@ -352,6 +352,56 @@ outside `scripts/`, `tests/` and `docs/` are the Terraform policy and `pyproject
 run is a cheap confirmation rather than a suspicion.
 
 ## Follow-up work
+
+### Site polish before the October 1 parent session
+
+Raised by Charlie after reviewing the dev preview on a phone and a laptop. He wants the site
+polished before parents see it, and asked whether that means moving off the static export to a
+server-rendered Next.js app. **It does not**, and the recommendation is not to: see the last item.
+Everything below is a task for the PM to spec; none of it was done in `v1-e36-t05`, whose scope is
+the deploy flow.
+
+1. **The Parent FAQ is sixteen questions in one wall of text** (1,044 words,
+   `site/content/pages/faq.md`). It is the page a parent arrives at with exactly one question, and
+   today they scan past fifteen others to find it. Make each question a disclosure using native
+   `<details>` and `<summary>` rather than a JavaScript component: keyboard operation, screen-reader
+   expand/collapse announcement and focus handling come free and are more reliable than a
+   hand-rolled ARIA widget; Ctrl+F still finds and auto-expands collapsed text in current Chrome,
+   Edge and Safari, which a component that unmounts its content breaks, as it breaks printing; and
+   it degrades to visible text if anything fails. Needs a content convention for question/answer
+   pairs, a 44px tappable summary row, and markup plus axe tests. Roughly half a day.
+
+2. **The Events page is the longest on the site** (1,207 words) and has the same shape: Policy,
+   Lincoln-Douglas and Public Forum explained in undifferentiated prose. Whatever pattern the FAQ
+   gets should be considered here, or at least per-event sections with jump links from the top.
+
+3. **`site/src/components/Card.tsx` is used by zero pages.** The scaffold built a card with a
+   brand-accent rule under its title and nothing ever rendered one, which is a large part of why
+   the pages read flat: every page is `<h1>` plus one undifferentiated prose column. Worth a pass
+   that uses the design system that already exists, starting with the home page's information
+   session block and the Join page's three ways to sign up.
+
+4. **The home page has no visual anchor.** No hero, no photograph, no pull-out for the one thing
+   the page is for, which is the October 1 session. Any photograph is gated on the media-consent
+   process in `docs/policies/website-publishing.md`, so a non-photographic treatment is the fast
+   path.
+
+5. **Do not move to a server-rendered Next.js app for this.** The polish above is all
+   client-side, and a static export already ships client-side React: `site/src/components/SiteNav.tsx`
+   is a `'use client'` component, and the navigation menu that opens with Enter or Space and closes
+   with Escape is running in the browser today. The static-export constraint forbids API routes,
+   middleware, server actions and ISR, none of which an accordion, a tab strip, a filter or an
+   image carousel needs.
+
+   A server would cost three things that matter here. It amends
+   [ADR-0012](../adr/0012-web-hosting.md), which chose S3 and CloudFront. It means new hosting,
+   cost and operational surface for a school team site that is read a few thousand times a year.
+   And it breaks ADR-0012 decision 8 — no CloudFront access logging, so **no per-request record of
+   visitor IP addresses exists** — because a server has request logs by default and turning them
+   off is a thing you have to remember rather than a thing you never built. The audience is
+   schoolchildren and their families; that decision was deliberate and should not be spent on
+   styling. If something genuinely needs a server later, `v2-e14-t03-app-hosting` already exists to
+   mount the authenticated app under the same domain.
 
 * **The env roots are shared and nothing sequences applies across tasks.** Two tasks in flight
   today (`v1-e29-t03-evidence-buckets` and this one) each change `infrastructure/envs/*`, and an

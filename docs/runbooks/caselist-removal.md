@@ -167,16 +167,16 @@ goes through the same importer.
 
 The removal is destructive: noncurrent versions are purged, so there is no S3 version to restore
 from. Recovery means re-importing the file from the original weekly archive — which will be
-refused while its sha256 is on the suppression list. The suppression list is append-only and
-v1-e30-t07 does not yet specify an un-suppress path; until it does, treat an erroneous removal as
-an escalation:
+refused while its sha256 is on the suppression list. The suppression list is append-only, and an
+un-suppress path is being added to v1-e30-t07 by the PM's spec change; until it ships, treat an
+erroneous removal as an escalation:
 
 1. Stop. Do not run more removals.
 2. Keep the original archive; it is the only copy of the bytes.
 3. Record the mistake in the register.
-4. Un-suppressing requires a code change to v1-e30-t07 (a tombstone entry or a documented
-   `--unsuppress`). Raise it as a spec change rather than hand-editing the JSONL, so dev and prod
-   stay consistent.
+4. Wait for v1-e30-t07's un-suppress path (a tombstone entry or a documented `--unsuppress`)
+   rather than hand-editing the JSONL, so dev and prod stay consistent. If the file cannot wait,
+   the edit is made in both places in one sitting and recorded in the register.
 
 This is the strongest argument for always running the dry run and reading it.
 
@@ -196,9 +196,10 @@ operator has downloaded locally, and the procedure is:
    noncurrent versions** with `aws s3api delete-object --version-id` per version, in dev then prod,
    and rewrite the affected manifests.
    > **Permissions note.** The `EvidenceOperator` permission set from v1-e29-t03 deliberately has
-   > **no `s3:DeleteObject`**. A manual deletion needs an administrator profile, and this is the
-   > same gap that `caselist remove` will hit in t07 — see open question 8 in the policy. Resolve it
-   > before promising a 7-day removal window in practice.
+   > **no `s3:DeleteObject`**, and `caselist remove` will hit the same wall in t07. The PM is
+   > amending v1-e29-t03 and v1-e30-t07 to settle it (open question 8 in the policy). Until that
+   > lands, a deletion needs an administrator profile, and the person running it is accountable
+   > for using an elevated profile for exactly this and nothing else.
 4. **Built files.** Same as step 8 above, by hand against the provenance sidecars.
 5. **Backfill the machine log.** When t07 ships, add each sha256 to the suppression list with the
    original request id, date and reason code, and re-run `caselist status` in both environments.

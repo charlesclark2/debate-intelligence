@@ -3,11 +3,11 @@
 | | |
 |---|---|
 | Policy version | 1.0 |
-| Status | **Draft — not yet approved.** Nothing this policy governs may happen until the [Approval](#approval) section is filled in. |
+| Status | **Approved**, version 1.0, 2026-09-19. See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | _pending_ — see [Approval](#approval) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -16,10 +16,12 @@ removes evidence that **other teams disclose publicly** on
 not legal advice. Where a question needs a school, district or lawyer to answer, this policy says
 so in [Open questions](#open-questions) rather than guessing.
 
-It is written to be **more restrictive than any plausible reading of the source terms**, because
-the terms have not been transcribed yet (see [Sources and terms](#sources-and-terms)). Confirming
-them can therefore only relax a rule here. If a confirmed term turns out to be *stricter* than a
-rule below, this policy is revised and re-approved before the affected work continues.
+It is written to be **more restrictive than the source terms require**. The OpenCaselist Terms &
+Conditions were read on 2026-09-19 and are recorded in [Sources and terms](#sources-and-terms);
+no term in them is stricter than a rule below. The OpenCaselist privacy page and OpenEv's
+distribution terms have not been read, and were accepted as known gaps at approval
+([open questions](#open-questions) 1 and 3). If a term read later turns out to be *stricter* than
+a rule here, this policy is revised and re-approved before the affected work continues.
 
 ## Scope
 
@@ -46,61 +48,73 @@ rule below, this policy is revised and re-approved before the affected work cont
 
 ## Sources and terms
 
-> **Transcription status: PENDING — this is the one section of this policy that a session cannot
-> write.** The OpenCaselist terms of use and privacy pages sit behind a Tabroom login and could
-> not be retrieved automatically, and OpenEv camp files carry per-camp licensing notes that only
-> a reader with the files in hand can record. The coach reads them, and the exact clauses, the
-> exact URLs and the date read are transcribed into the tables below before this policy is
-> approved. Nothing below is quoted from a live page yet; the "what we assume" column records the
-> conservative assumption the rest of this policy is built on, and every one of them is also an
-> entry in [Open questions](#open-questions).
+> **Read 2026-09-19; privacy page and OpenEv terms still open.** The OpenCaselist Terms &
+> Conditions at <https://opencaselist.com/terms> are public and were read on 2026-09-19; every
+> clause that bears on this policy is in the [clause register](#clause-register) below, and
+> Charlie confirmed the register at approval. Two sources remain unread: the OpenCaselist privacy
+> page, and OpenEv's distribution terms together with the per-camp licensing notes carried in the
+> files themselves. Both were accepted as known gaps at version 1.0
+> ([open questions](#open-questions) 1 and 3) and are recorded here when read.
 
 ### Source register
 
 | Source | What it is | What we take | How we take it | Terms recorded? |
 |---|---|---|---|---|
-| OpenCaselist — site | `https://opencaselist.com/` — the high-school and college open-source disclosure wikis, signed in with a Tabroom account | Nothing directly; the site is where the archives and the terms live | Browser, operator's own Tabroom login | ☐ Not yet |
-| OpenCaselist — weekly open-source archives | Cumulative per-caselist archives of every open-source document teams have disclosed this season (e.g. `hsld26-0915`) | The archive `.zip`, unpacked into per-school / per-team-code / per-round documents | Manual download today (v1-e30-t03/t06); authenticated API later, gated by this policy (E34) | ☐ Not yet |
-| OpenCaselist — API v1 | `https://api.opencaselist.com/` — documented API for caselists, schools, teams, rounds, cites, downloads and OpenEv (architecture proposal §21, reference 11) | Caselist and download listings, archive bytes, OpenEv listings | Not yet used. E34 only, with the operator's own `caselist_token`, rate limited | ☐ Not yet |
-| OpenEv camp files | Camp-published evidence files distributed through OpenCaselist's OpenEv section | The camp-file archives and their camp / year / event / title metadata | Manual download today (v1-e30-t04); API later (E34) | ☐ Not yet |
+| OpenCaselist — site and terms | `https://opencaselist.com/` — the high-school and college open-source disclosure wikis, browsed with a Tabroom account; Terms & Conditions at `https://opencaselist.com/terms` | Nothing directly; the site is where the archives and the terms live | Browser, operator's own Tabroom login | ☑ Terms & Conditions read 2026-09-19. ☐ Privacy page — [open question 1](#open-questions) |
+| OpenCaselist — weekly open-source archives | Cumulative per-caselist archives of every open-source document teams have disclosed this season (e.g. `hsld26-0915`) | The archive `.zip`, unpacked into per-school / per-team-code / per-round documents | Manual download today (v1-e30-t03/t06); authenticated API later, gated by this policy (E34) | ☑ Covered by the site Terms & Conditions, read 2026-09-19 |
+| OpenCaselist — API v1 | `https://api.opencaselist.com/` — documented API for caselists, schools, teams, rounds, cites, downloads and OpenEv (architecture proposal §21, reference 11) | Caselist and download listings, archive bytes, OpenEv listings | Not yet used. E34 only, with the operator's own `caselist_token`, rate limited | ☑ Covered by the site Terms & Conditions, read 2026-09-19 — but see [open question 2](#open-questions) |
+| OpenEv camp files | Camp-published evidence files distributed through OpenCaselist's OpenEv section | The camp-file archives and their camp / year / event / title metadata | Manual download today (v1-e30-t04); API later (E34) | ☐ Not yet — [open question 3](#open-questions) |
 
-### Clauses to transcribe
+### Clause register
 
-For each source the coach records, verbatim and with the URL and the date read:
+OpenCaselist **Terms & Conditions**, <https://opencaselist.com/terms>, read **2026-09-19**.
+Clauses are paraphrased; phrases in quotation marks are the site's own wording.
 
-**OpenCaselist terms of use / privacy pages**
+| # | Clause | What it says | What it means for us |
+|---|---|---|---|
+| 1 | Your Stuff | Uploaders keep ownership of their files; the site gets rights to store, archive and display them | The disclosing team owns its documents. The site's rights are the site's and are not passed on to us — nothing here licenses us to redistribute anything. This is the written basis for [Removal](#removal) being unconditional |
+| 2 | Your Responsibilities | Don't copy, upload, download or share content unless you have the right to; content may be protected by others' intellectual property rights; the site is not responsible for user content | The clause that matters most to us. Downloading to prepare is the purpose teams disclose for; sharing beyond the team is not ours to do. This is the written backing for [Prohibited uses](#prohibited-uses) 1–3. The "others' intellectual property rights" point also reaches the *publishers* of the evidence inside a disclosed card, which is why [Attribution](#attribution) keeps the original cite intact and never presents a card as ours |
+| 3 | Our Stuff | No rights in the Services, or in other users' content, are granted | There is no implied licence. Our use rests on the disclosure norm and on these terms, not on any grant from the site |
+| 4 | Acceptable Use — rate limits | No downloading beyond set rate limits, "manual or automated" | Rate limits bind a human with a browser exactly as they bind a script. No rate is stated anywhere in the terms ([open question 2](#open-questions)), so E34's limiter must be conservative and configurable, and the operator's manual downloads must stay modest too |
+| 5 | Acceptable Use — security | No circumventing security or authentication; no accessing non-public areas | [Prohibited uses](#prohibited-uses) 4. The operator's own Tabroom login and nothing else |
+| 6 | Acceptable Use — load | No overloading the service | One download at a time, bounded backoff, weekly cadence at most ([E34 gate](#e34--automated-caselist-download-v12) 4) |
+| 7 | Acceptable Use — interfaces | No accessing, searching or creating accounts except through "publicly supported interfaces"; scraping and bulk account creation are the examples given | Settles one question and opens another. Scraping `opencaselist.com` HTML is out, which this policy already prohibited. Whether the documented API at `api.opencaselist.com` counts as a "publicly supported interface" for a *scheduled* job is not stated ([open question 2](#open-questions)) |
+| 8 | Acceptable Use — commercial | No selling the Services | [Prohibited uses](#prohibited-uses) 3 |
+| 9 | Acceptable Use — others' rights | No violating others' privacy or rights | The written backing for [Personal data](#personal-data). Team codes are treated as personal data about people who may be minors |
+| 10 | Termination | Access may be suspended at the site's discretion | Access is a privilege, not an entitlement. A `401`/`403` stops the run and is escalated to Charlie, never worked around ([E34 gate](#e34--automated-caselist-download-v12) 5) |
+| 11 | Modifications | The terms may change, and continued use means acceptance | The terms are re-read at the start of each season and whenever the site announces a change — see [Review and change control](#review-and-change-control) |
 
-1. The exact URLs of the terms of use and privacy pages, and who operates the site.
-2. Any clause about **permitted use of downloaded documents** — is use limited to preparation,
-   and is redistribution addressed?
-3. Any clause about **automated access, scraping, rate limits or API use**, which gates E34.
-4. Any clause about **account sharing** or use of another person's credentials.
-5. Any clause about **removal, takedown or the right of a disclosing team to withdraw** a
-   document, and the channel for it.
-6. Anything the privacy page says about **minors** and about what the site itself publishes
-   (school names, team codes, round reports).
-7. Any clause about **commercial use**.
+**Assessment.** No term read on 2026-09-19 is stricter than a rule in this policy; the
+[Prohibited uses](#prohibited-uses) already cover every relevant Acceptable Use item. Two things
+the terms leave unstated — the download rate and whether the API is a "publicly supported
+interface" for scheduled use — are [open question 2](#open-questions) and gate E34.
 
-**OpenEv**
+### Still to read
+
+Recorded in the clause register above when read, with URL and date.
+
+**OpenCaselist privacy page** ([open question 1](#open-questions), accepted as a known gap at
+version 1.0)
+
+1. What it says about **minors**.
+2. What it says the site itself **publishes** — school names, team codes, round reports.
+3. Any **removal, takedown or withdrawal** channel the site offers a disclosing team, and how it
+   relates to [Removal](#removal).
+
+**OpenEv** ([open question 3](#open-questions), accepted as a known gap at version 1.0)
 
 1. The page or file that states OpenEv's distribution terms, and the date read.
 2. Per-camp licensing notes: camps publish under different conditions, and some state terms on
    the first page of the file or on the camp's own site. Record each camp represented in the
    corpus and what, if anything, it says.
-3. Whether any camp file carries a licence that is *more* permissive (e.g. explicit permission to
-   redistribute) — this policy does not act on that; it only records it.
-
-### Fill-in table (completed at transcription)
-
-| Source | URL read | Date read | Clause (verbatim) | What it means for us |
-|---|---|---|---|---|
-| | | | | |
+3. Whether any camp file carries a licence that is *more* permissive (for example explicit
+   permission to redistribute). This policy does not act on that; it only records it.
 
 ### Community disclosure norms
 
 Separate from any written term, the circuit has norms about disclosure that this policy respects
-whether or not the written terms require them. These are the coach's account of practice, not
-quoted rules, and the coach confirms them at transcription:
+whether or not the written terms require them. These are the coach's account of practice rather
+than quoted rules, and Charlie confirmed them at approval on 2026-09-19:
 
 - **Disclosure is for preparation.** Teams upload round reports, cites and open-source documents
   so opponents can prepare against them. Using a disclosed document to prepare for, or to
@@ -316,9 +330,9 @@ evidence-ethics rule first and a traceability rule second: it is what makes
 
 **How**
 
-By email to the coach at `<removal contact address — filled in at approval>`
-([open question 5](#open-questions)). A request names the school and team code, or the file, or
-the tournament and round — whatever the requester has. No reason is required and none is weighed.
+By email to the coach at **ctcb57@gmail.com**. A request names the school and team code, or the
+file, or the tournament and round — whatever the requester has. No reason is required and none is
+weighed.
 
 **Response times**
 
@@ -422,9 +436,16 @@ Downstream work that cannot start, or cannot run for real, until its conditions 
 first automated pull:
 
 1. This policy is **approved** (the [Approval](#approval) section is filled in).
-2. The OpenCaselist terms are **transcribed and confirmed**, and nothing in them prohibits
-   automated access through the documented API. If they do, E34 is cancelled or narrowed to
-   assisted manual download, whatever the terms allow.
+2. **The maintainer has confirmed scheduled downloads, in writing.** The Terms & Conditions
+   (read 2026-09-19) forbid downloading beyond set rate limits "manual or automated" and forbid
+   access except through "publicly supported interfaces" — but they state no rate, and they do
+   not say whether the documented API counts as such an interface for a scheduled job
+   ([open question 2](#open-questions)). Before E34 is built or run, Charlie contacts the
+   maintainer through the site's Contact link to confirm that scheduled weekly archive downloads
+   through the API are acceptable and what rate to stay under, and records the reply — date, who
+   answered, what they said — in [Sources and terms](#sources-and-terms). **Until that reply is
+   recorded, the weekly pull stays manual.** If the answer is no, E34 is cancelled or narrowed to
+   whatever the maintainer allows.
 3. Access uses the **operator's own** Tabroom account and `caselist_token`. The token is stored in
    the macOS keychain, or a `0600` gitignored file; it is a `SecretStr`, redacted from logs,
    exceptions and event hooks; the password is never stored; the token is never shared.
@@ -474,18 +495,20 @@ first automated pull:
 
 ## Open questions
 
-| # | Question | Who resolves it | What it blocks |
-|---|---|---|---|
-| 1 | The exact OpenCaselist terms-of-use and privacy URLs and their relevant clauses | Charlie, reading the pages signed in | Approval of this policy; [Sources and terms](#sources-and-terms) |
-| 2 | Whether those terms permit automated API access, and at what rate | Charlie | [E34 gate](#e34--automated-caselist-download-v12) |
-| 3 | OpenEv's distribution terms and per-camp licensing notes | Charlie, from the files and camp sites | Approval; camp-file handling |
-| 4 | Written confirmation that the configured model provider does not train on or retain inputs | Charlie / operator, with the AWS account terms | [E32 gate](#e32--model-classification-of-the-corpus); first full-corpus classification run |
-| 5 | The removal contact address to publish in [Removal](#removal) | Charlie | Approval |
-| 6 | Whether school or district review is needed before students (who may be minors) get accounts on the V2 tub. This policy does not answer it and is not legal advice | Charlie, with the school | [v2-e35 gate](#v2-e35--debate-tub-v21) |
-| 7 | Whether a season's corpus may be kept beyond two seasons for year-over-year trend analysis | Charlie | A revision to [Retention](#retention) |
-| 8 | Whether the `EvidenceOperator` permission set needs scoped delete rights for `caselist remove`, or whether removal runs under a separate elevated role | Operator, with v1-e29-t03 and v1-e30-t07 | Executing a real removal — see the runbook |
+Status as recorded at the version 1.0 approval on 2026-09-19. **Accepted** means Charlie
+knowingly approved the policy without the answer; **open** means the answer is still needed
+before the thing it gates.
 
-Every unresolved question is either answered or explicitly accepted as a known gap at approval.
+| # | Question | Status | Who resolves it | What it blocks |
+|---|---|---|---|---|
+| 1 | What the OpenCaselist **privacy page** says about minors, about what the site itself publishes (school names, team codes, round reports), and about a withdrawal channel. The Terms & Conditions were read on 2026-09-19; the privacy page was not | **Accepted as a known gap**, 2026-09-19 | Charlie, when he next reads it | Nothing. Recorded in [Sources and terms](#sources-and-terms) when read |
+| 2 | Two points the Terms & Conditions leave unstated: **(a)** the download rate limit, which is binding "manual or automated" but is never given as a number; **(b)** whether the documented API at `api.opencaselist.com` is a "publicly supported interface" for *scheduled* downloads | **Open** | Charlie, by contacting the maintainer through the site's Contact link and recording the reply | [E34 gate](#e34--automated-caselist-download-v12) item 2. Until the reply is recorded, the weekly pull stays manual |
+| 3 | **OpenEv's distribution terms** and the per-camp licensing notes carried in the files | **Accepted as a known gap**, 2026-09-19 | Charlie, from the files and the camp sites | Nothing today — we redistribute nothing, so the risk is low. Revisit if camp files are ever handled differently from disclosures |
+| 4 | Confirmation that the model provider does not retain or train on our inputs: the **AWS Bedrock data-protection documentation** (Bedrock does not store prompts or completions and does not use them to train models), recorded here by URL and date read, **plus** a check that no model-invocation logging to a third-party destination is enabled in the account | **Open** | Operator, from the AWS documentation and the account's Bedrock settings | [E32 gate](#e32--model-classification-of-the-corpus). Not a blocker for this approval; it blocks the first full-corpus classification run |
+| 5 | The removal contact address to publish in [Removal](#removal) | **Resolved** 2026-09-19 — `ctcb57@gmail.com` | Charlie | — |
+| 6 | Whether school or district review is needed before students (who may be minors) get accounts on the V2 tub. This policy does not answer it and is not legal advice | **Open until V2** | Charlie, with the school | [v2-e35 gate](#v2-e35--debate-tub-v21) item 9 |
+| 7 | Whether a season's corpus may be kept beyond two seasons for year-over-year trend analysis | **Resolved** 2026-09-19 — no; the two-season clock in [Retention](#retention) stands | Charlie | — |
+| 8 | Whether the `EvidenceOperator` permission set needs scoped delete rights for `caselist remove`, or whether removal runs under a separate elevated role | **Resolved by a spec change to v1-e29-t03 / v1-e30-t07 (PM)** | PM, in a separate specs pull request | Executing a real removal — see the [runbook](../runbooks/caselist-removal.md#manual-procedure-until-v1-e30-t07-ships) |
 
 ## Review and change control
 
@@ -499,22 +522,27 @@ Every unresolved question is either answered or explicitly accepted as a known g
 
 ## Approval
 
-**Until this section records an approval, none of the following may happen:** publishing a
-caselist or OpenEv import to any bucket, loading the real corpus into dev, running automated
-download, or running model classification over real disclosed text.
+**Version 1.0 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+real corpus into dev, and model classification over real disclosed text are unblocked, each still
+subject to its own conditions in [Gates](#gates). Automated download (E34) remains blocked by
+[open question 2](#open-questions) and stays manual until the maintainer's reply is recorded.
+
+The standing rule for every future version: until this table records an approval of that version,
+nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
 | Policy version | 1.0 |
-| Approved by | _pending_ (Charlie Clark, product owner and head coach) |
+| Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | _pending_ |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.0 |
-| Open questions resolved or accepted at approval | _pending_ — list the numbers from [Open questions](#open-questions) |
+| Approval date | 2026-09-19 |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.0, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07 |
+| Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
+| Open questions left open | **2** — maintainer confirmation of scheduled API downloads and the rate, before E34. **4** — Bedrock data-protection terms, an E32 gate. **6** — school or district review, before V2 student accounts |
 
-Approval is recorded by editing this table in a pull request, together with the transcribed
-clauses in [Sources and terms](#sources-and-terms) and the removal contact address in
-[Removal](#removal).
+A later version is approved by editing this table in a pull request, with the version bumped in
+the header and in [Review and change control](#review-and-change-control).
 
 ## References
 

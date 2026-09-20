@@ -168,6 +168,19 @@ Run these in order. 1 and 2 are prerequisites for any deploy; 3 to 5 are the dep
 
 ### 1. Apply the widened publisher policy (runbook step 9)
 
+**Ordering: this apply must not run from this task branch as it stands.**
+`v1-e29-t03-evidence-buckets` applied fifteen evidence-store resources to each env root on
+2026-09-20 and has not merged to `dev` yet, so this branch's configuration is behind the state it
+would plan against: a plan from here proposes fifteen destroys and then fails on `prevent_destroy`.
+Merge that task into `dev` first, run `scripts/task sync v1-e36-t05-site-deploy`, and apply from
+the rebased worktree. Deploying is unaffected — `terraform output` reads state, not configuration
+— so only the invalidation wait depends on this.
+
+Once this branch carries `evidence_store.tf`, `owner.auto.tfvars` needs
+`evidence_operator_user_names` and `evidence_removal_user_names` as well, or the evidence
+permission sets are created with nobody assigned to them
+(`infrastructure/envs/<env>/owner.auto.tfvars.example` has the current shape).
+
 **Operator command** (expected runtime ~6 min, mostly two applies)
 Where: your Mac, in a checkout holding this branch — set `WT` to it
 `owner.auto.tfvars` is gitignored, so it does not exist in this worktree and the `t02` worktree
@@ -190,7 +203,7 @@ aws sso login --sso-session debate
 aws sts get-caller-identity --query Arn --output text   # expect AWSReservedSSO_DebateBreakGlassAdmin
 
 for env in dev prod; do
-  terraform -chdir="infrastructure/envs/$env" init -input=false
+  terraform -chdir="infrastructure/envs/$env" init -reconfigure -input=false
   terraform -chdir="infrastructure/envs/$env" apply
 done
 ```
@@ -293,6 +306,12 @@ run is a cheap confirmation rather than a suspicion.
   them in is deleting a line each.
 * **`wfbdebate.org`** remains blocked in an AWS Support case. Nothing here builds for it; if it is
   ever issued it becomes a redirect to `.com`, which is a tfvars change and an apply.
+* **The env roots are shared and nothing sequences applies across tasks.** Two tasks in flight
+  today (`v1-e29-t03-evidence-buckets` and this one) each change `infrastructure/envs/*`, and an
+  apply from whichever branch is behind either destroys the other's resources or reverts its
+  policy. The plan's counts are the only guard, and they are read by a human. Worth a rule in
+  `docs/process/` — apply only from a branch rebased on the latest `dev`, and never from a task
+  branch once another task's resources are live in that root.
 * **Automatic republish on a content change** is `v1-e37-t04`, and **keyless CI deploys** are
   `v2-e10-t03`. When the latter lands, the prod guard in `scripts/site_deploy.sh` has to be
   reproduced in the workflow, or the script has to be what the workflow runs.

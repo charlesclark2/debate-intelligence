@@ -604,6 +604,18 @@ something published about a student comes down **within 24 hours** of a request,
 means gone from the edge caches, not gone from the bucket. So the policy gains one read action,
 on the one distribution the publisher may already invalidate.
 
+**Apply from a checkout whose configuration covers everything already in the root.** Both env
+roots are shared by every task that touches infrastructure, and `terraform` deletes what it has in
+state but not in configuration. A branch cut before another task's resources were applied will
+therefore plan to **destroy** them. `v1-e29-t03-evidence-buckets` applied fifteen evidence-store
+resources to each root on 2026-09-20, so an apply from a branch without `evidence_store.tf` plans
+fifteen destroys (and then fails, because the bucket and the KMS key carry `prevent_destroy`).
+Rebase onto a `dev` that contains the other work before applying, and read the plan's counts
+rather than trusting the branch.
+
+`terraform output` is not affected: it reads state, not configuration, so a deploy works from any
+checkout.
+
 **Recreate `owner.auto.tfvars` first.** It is gitignored, so it exists only in the checkout it
 was written in — a fresh worktree or a fresh clone does not have it. `site_publisher_user_names`
 defaults to `[]`, so an apply without it **destroys the account assignment** that makes
@@ -624,8 +636,10 @@ export AWS_PROFILE=debate-admin
 aws sso login --sso-session debate
 aws sts get-caller-identity --query Arn --output text   # expect AWSReservedSSO_DebateBreakGlassAdmin
 
+# -reconfigure because scripts/terraform_checks.sh inits these roots with -backend=false, and a
+# real plan against that leftover configuration does not reach the remote state.
 for env in dev prod; do
-  terraform -chdir="infrastructure/envs/$env" init -input=false
+  terraform -chdir="infrastructure/envs/$env" init -reconfigure -input=false
   terraform -chdir="infrastructure/envs/$env" apply
 done
 ```
@@ -635,6 +649,12 @@ adds `cloudfront:GetInvalidation` beside `cloudfront:CreateInvalidation`. The pe
 description changes too. **Anything else in the plan, above all a destroy of
 `aws_ssoadmin_account_assignment.site_publishers`, means the tfvars are missing: answer `no` and
 fix them.**
+
+After this, an apply from any branch that predates it **reverts** `cloudfront:GetInvalidation`,
+because that branch's `modules/static_site` still grants five actions. The symptom is a deploy
+that uploads and then fails on the wait with `AccessDenied`. If a later plan shows
+`aws_ssoadmin_permission_set_inline_policy.site_publisher` changing and you did not mean to touch
+it, that is what happened: rebase and re-apply.
 
 Then pick up the new policy in your publisher sessions and prove the widening is exactly one
 action wide:
@@ -698,8 +718,12 @@ keyless deploys of `v2-e10-t03` exist, that is what keeps an unreviewed page abo
 reaching the public through a merge.
 
 The Terraform read needs the root to be initialised in *this* checkout, which a fresh clone or a
-new worktree is not: run `terraform -chdir=infrastructure/envs/<env> init` once there. The deploy
-itself never writes Terraform state, so it does not need `owner.auto.tfvars`; an apply does.
+new worktree is not: run `terraform -chdir=infrastructure/envs/<env> init -reconfigure` once
+there. Use `-reconfigure`: `scripts/terraform_checks.sh` (and pre-commit) init these roots with
+`-backend=false`, and a read against that leftover configuration never reaches the remote state.
+
+A deploy needs neither `owner.auto.tfvars` nor a branch whose configuration matches the root:
+`terraform output` reads state. Only an apply needs both.
 
 Prod is refused unless the checkout is **clean**, on **main**, and **equal to `origin/main`**
 (ADR-0013). `--dry-run` runs that guard and the build, and makes no `aws s3` or `aws cloudfront`

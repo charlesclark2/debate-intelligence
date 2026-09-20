@@ -1,0 +1,3 @@
+# Copy to owner.auto.tfvars, which is gitignored and loaded automatically. It carries the
+# maintainer's email, which the task spec keeps out of the repository.
+owner = "you@example.com"

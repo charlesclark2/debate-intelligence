@@ -8,6 +8,10 @@ requires-python = ">=3.12"
 # No I/O, AWS SDK, HTTP or web-framework dependency belongs here — see docs/process/working-agreements.md.
 dependencies = [
     "pydantic>=2.9",
+    # Configuration only (debate_core.application.settings, v1-e02-t05): environment/.env layering
+    # and the YAML model-routing file. Neither reaches the network or a cloud SDK.
+    "pydantic-settings>=2.6",
+    "pyyaml>=6.0",
     "python-ulid>=3.0",
 ]
 

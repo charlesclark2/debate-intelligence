@@ -1,0 +1,33 @@
+# Environment profile: prod (DEBATE_ENV=prod)
+#
+# Production: the stable build the team installs, working on the real corpus
+# (docs/process/branching-and-environments.md). Nothing reaches this environment that has not been
+# deployed to and validated in dev.
+#
+# Precedence: an explicit --flag, then DEBATE_* in the environment, then .env, then this file.
+# Anything not set here falls back to the built-in prod profile in
+# debate_core.application.settings.
+#
+# NEVER put a secret in this file. It is committed. API keys, the OpenCaselist caselist_token and
+# the polite-pool contact address come from the environment or from an uncommitted .env; see
+# .env.example.
+#
+# The routing file and daily budget are owned by v1-e01-t09-dev-prerelease-channel. The S3 bucket,
+# region and SSO profile are added by v1-e29-t05-evidence-sync-cli from the Terraform outputs
+# evidence_bucket_name and evidence_kms_key_arn, never as constants copied into this file.
+
+allow_network = true
+
+[storage]
+data_dir = "~/.debate-research/prod"
+
+[providers]
+enabled = ["openalex", "crossref", "semantic_scholar", "rss"]
+
+[http]
+per_host_interval_seconds = 1.0
+request_timeout_seconds = 30.0
+
+[models]
+routing_file = "config/model_routing.prod.yaml"
+budget_usd_daily = 20.0

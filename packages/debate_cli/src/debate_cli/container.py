@@ -6,8 +6,8 @@ because the moment a command does any of those the CLI stops being replaceable b
 workers, which wire the same services differently (architecture proposal §6, and
 `docs/architecture/ports-and-adapters.md` for the injection pattern the services themselves use).
 
-Nothing is wired yet: V1's services and their adapters arrive in E02–E08, and the settings they
-need are v1-e02-t05. What exists here is the shape they slot into.
+No service is wired yet: V1's services and their adapters arrive in E02–E08. What exists here is
+the shape they slot into, and — since v1-e02-t05 — the settings they are built from.
 
 ## Adding a service
 
@@ -32,21 +32,21 @@ because there are none.
 
 ## Settings
 
-`settings` is loaded by a callable handed in at construction, not imported here, so that this
-module does not depend on a settings module that does not exist yet. When v1-e02-t05 lands, its
-loader is passed in :func:`debate_cli.app.create_app`'s callback and :data:`Settings` becomes that
-task's real type; nothing else in this module changes.
+`settings` is loaded by a callable handed in at construction rather than by this module, and
+:func:`debate_cli.app.root_callback` hands it
+:func:`~debate_core.application.settings.load_settings`. The indirection is what lets a test build
+a container around settings it made up, and it is why loading is lazy: the callable is not run
+until a command actually asks for `settings`, so `--help` and `--version` read no files.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Final, cast
+from typing import Final, cast
+
+from debate_core.application.settings import Settings
 
 __all__ = ["SERVICE_NAMES", "ServiceContainer", "Settings", "SettingsNotConfigured"]
-
-type Settings = Any
-"""Placeholder for the settings object of v1-e02-t05; `Any` until that task defines the type."""
 
 SERVICE_NAMES: Final[tuple[str, ...]] = ()
 """Names of the services this container can build, for `debate-research doctor` to report."""
@@ -57,7 +57,8 @@ class SettingsNotConfigured(RuntimeError):
 
     def __init__(self) -> None:
         super().__init__(
-            "this ServiceContainer was built without a settings loader; settings loading is task v1-e02-t05"
+            "this ServiceContainer was built without a settings loader; pass "
+            "settings_loader=load_settings, as debate_cli.app.root_callback does"
         )
 
 
@@ -83,7 +84,8 @@ class ServiceContainer:
     def settings(self) -> Settings:
         """The settings for this run, loaded once on first use.
 
-        Raises :class:`SettingsNotConfigured` until v1-e02-t05 supplies the loader.
+        Raises :class:`SettingsNotConfigured` when the container was built without a loader,
+        which only happens in a test that does not need settings; every real run has one.
         """
         if self._settings_loader is None:
             raise SettingsNotConfigured

@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import typer
 
-from debate_cli.commands import doctor
+from debate_cli.commands import config, doctor
 
 __all__ = ["command_group", "register_commands"]
 
@@ -47,6 +47,10 @@ __all__ = ["command_group", "register_commands"]
 def register_commands(app: typer.Typer) -> None:
     """Attach every command and command group to the root application."""
     app.command("doctor")(doctor.doctor)
+
+    configuration = command_group("config", "Inspect the settings this installation runs with.")
+    configuration.command("show")(config.show)
+    app.add_typer(configuration)
 
 
 def command_group(name: str, help_text: str) -> typer.Typer:

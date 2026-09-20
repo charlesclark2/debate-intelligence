@@ -1,0 +1,51 @@
+# Example model-routing file: which model answers each task class.
+#
+# Copy this to the file your environment's profile names (config/model_routing.dev.yaml or
+# config/model_routing.prod.yaml — both written by v1-e01-t09-dev-prerelease-channel) and edit the
+# model ids. The test profile reads this example file directly, because nothing in the test
+# environment ever calls a model.
+#
+# The schema is debate_core.application.routing_config.RoutingConfig. A key under `routes` that is
+# not one of the five task classes below is rejected by name at startup, as is a missing model_id
+# or a temperature outside 0.0-2.0.
+#
+# Task classes are the platform's vocabulary for *what kind of work a call is*, never for a model
+# (architecture proposal §10, ADR-005). Application code asks for `high_volume`; only this file
+# decides what that means, which is what makes a model upgrade a one-file change.
+#
+# Model ids here are Amazon Bedrock ids, which carry an `anthropic.` prefix for Claude models.
+# They are examples: the ids an environment actually uses are chosen when E05 lands the router.
+
+version: 1
+
+routes:
+  # Argument analysis, card tagging, coverage analysis, judge reasoning. The quality of a cut card
+  # is decided here, so this is the class that gets the capable model.
+  complex_reasoning:
+    model_id: anthropic.claude-sonnet-5
+    max_tokens: 8192
+    temperature: 0.2
+
+  # Cheap, frequent classification and extraction: citation metadata cleanup, relevance
+  # classification, card structure detection. High volume is the whole point, so it routes to the
+  # cheapest model whose benchmark quality is sufficient.
+  high_volume:
+    model_id: anthropic.claude-haiku-4-5
+    max_tokens: 2048
+    temperature: 0.0
+
+  # Expensive, low-frequency file and strategy audits. Not on the path of a normal request; run
+  # deliberately, and counted against the daily budget like everything else.
+  deep_audit:
+    model_id: anthropic.claude-opus-5
+    max_tokens: 16384
+    temperature: 0.1
+
+  # Vector embeddings for semantic search over article chunks, cards and file sections. No
+  # temperature and no output cap: an embedding call has neither.
+  embeddings:
+    model_id: amazon.titan-embed-text-v2:0
+
+  # Cross-encoder reranking of retrieved candidates before they are returned or used as context.
+  rerank:
+    model_id: cohere.rerank-v3-5:0

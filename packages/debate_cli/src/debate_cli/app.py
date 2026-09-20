@@ -34,6 +34,7 @@ from debate_cli.context import CliContext, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, OutputMode
 from debate_core.application.errors import DomainError
+from debate_core.application.settings import load_settings
 
 __all__ = ["APP_NAME", "DebateResearchGroup", "app", "create_app", "main"]
 
@@ -150,7 +151,9 @@ def root_callback(
 ) -> None:
     """Runs before every command: turns the global options into this run's CliContext."""
     output = CliOutput(OutputMode.JSON if json_output else OutputMode.RICH, verbose=verbose)
-    ctx.obj = CliContext(output=output, services=ServiceContainer())
+    # The loader is passed, not called: the container runs it the first time a command asks for
+    # settings, so `--help` and `--version` never read a profile file (v1-e02-t05).
+    ctx.obj = CliContext(output=output, services=ServiceContainer(settings_loader=load_settings))
 
     if show_version:
         # Handled here rather than in an option callback so that `--json --version` gets the

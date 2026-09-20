@@ -1,0 +1,39 @@
+# Environment profile: dev (DEBATE_ENV=dev)
+#
+# The development environment: the pre-release channel a tester installs on their own machine, and
+# what a local source checkout resolves to when DEBATE_ENV is unset. It runs against public
+# sources and nothing leaves the machine it runs on
+# (docs/process/branching-and-environments.md).
+#
+# Precedence: an explicit --flag, then DEBATE_* in the environment, then .env, then this file.
+# Anything not set here falls back to the built-in dev profile in
+# debate_core.application.settings.
+#
+# NEVER put a secret in this file. It is committed. API keys, the OpenCaselist caselist_token and
+# the polite-pool contact address come from the environment or from an uncommitted .env; see
+# .env.example.
+#
+# The channel values below — which models dev routes to and the daily budget — are owned by
+# v1-e01-t09-dev-prerelease-channel, which replaces the placeholders with the real dev routing
+# file. The S3 bucket, region and SSO profile for this environment are added by
+# v1-e29-t05-evidence-sync-cli from the Terraform outputs evidence_bucket_name and
+# evidence_kms_key_arn; they are deliberately not written here as constants.
+
+allow_network = true
+
+[storage]
+# Separate from prod, so a dev build can never write to the team's real evidence store.
+data_dir = "~/.debate-research/dev"
+
+[providers]
+enabled = ["openalex", "crossref", "rss"]
+
+[http]
+# Slower than prod on purpose: dev is where a new adapter's first, wrong version runs.
+per_host_interval_seconds = 2.0
+request_timeout_seconds = 30.0
+
+[models]
+routing_file = "config/model_routing.dev.yaml"
+# Low cap; v1-e01-t09 owns the documented dev value and the E05 BudgetGuard enforces it.
+budget_usd_daily = 2.0

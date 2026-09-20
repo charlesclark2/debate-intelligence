@@ -1,0 +1,35 @@
+# Environment profile: test (DEBATE_ENV=test)
+#
+# CI and the unit suite. Unlike dev and prod, these values are final: this task owns them, and a
+# later task that changes them is changing what "offline" means for every test in the project.
+#
+# The contract this profile enforces:
+#   * allow_network = false — no search provider, no fetch, no model call may leave the process.
+#     A test that forgets its fake fails on this rather than quietly reaching the internet
+#     (docs/process/working-agreements.md §1: CI is offline, recorded fixtures and the fake/replay
+#     ModelRouter only).
+#   * providers.enabled = [] — no discovery adapter is switched on at all.
+#   * models.budget_usd_daily = 0.0 — a real model call would be refused by the E05 BudgetGuard
+#     even if one somehow got past allow_network.
+#
+# storage.data_dir is deliberately absent. It has to be a temporary directory on the machine
+# running the tests, and a committed file cannot name one; the built-in test profile in
+# debate_core.application.settings resolves it under the system temp directory instead. A test
+# that needs isolation from other tests passes its own tmp_path as an override.
+#
+# Timeouts are short because nothing here should ever wait on anything.
+
+allow_network = false
+
+[providers]
+enabled = []
+
+[http]
+per_host_interval_seconds = 0.0
+request_timeout_seconds = 5.0
+connect_timeout_seconds = 2.0
+max_retries = 0
+
+[models]
+routing_file = "config/model_routing.example.yaml"
+budget_usd_daily = 0.0

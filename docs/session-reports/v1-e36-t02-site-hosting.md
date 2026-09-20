@@ -47,7 +47,7 @@ runbook says so and proves it with `simulate-principal-policy` before anything i
 | `module-tests` — offline `terraform test` | DONE | 11 runs, `mock_provider "aws"`, no credentials and no network |
 | `domain-redirect-module` — the `.com` names | DONE | Added by the spec amendment. `infrastructure/modules/domain_redirect/`, 5 offline runs |
 | `env-wiring` — dev/prod wiring and `SitePublisher` | DONE | `site.tf` identical in both roots; the redirect module is a `count` driven by tfvars, so dev does not instantiate it |
-| `operator-apply` — applies and the domain steps | **PENDING OPERATOR** | The runbook is written with a paste-ready block per AWS action and its record tables left as `_pending_`. Nothing has been applied |
+| `operator-apply` — applies and the domain steps | **IN PROGRESS** | Dev applied on the CloudFront domain (step 3a, 14 resources) and verified: bucket private, `AccessDenied` on a direct object URL, `http://` → `301`, all seven security headers, `X-Robots-Tag: noindex, nofollow`, logging off, both 403 and 404 mapped to `/404.html`, and the dev publisher `allowed` only on its own bucket. Still to run: dev with the preview host (3b), prod (5), and the prod half of the checks |
 
 ## Acceptance criteria
 
@@ -60,7 +60,7 @@ Terraform commands were run with every AWS environment variable unset and
 | **ac2** `static_site` tests pass without credentials and assert the four PAB flags, OAC-only access, redirect-to-https, the headers policy and no logging | PASS | `terraform -chdir=infrastructure/modules/static_site test` → `Success! 11 passed, 0 failed.` Runs: `bucket_is_private_and_encrypted`, `bucket_policy_grants_only_this_distribution`, `viewers_are_on_https_and_nothing_is_logged`, `security_headers_are_sent`, `no_domain_means_the_cloudfront_domain_and_no_certificate`, `the_index_rewrite_is_published_at_the_edge`, `prod_serves_the_team_domain_and_redirects_www`, `an_external_registrar_gets_the_validation_records_as_an_output`, `dev_preview_is_not_indexable`, `publisher_permission_set_can_publish_and_nothing_else`, `no_identity_center_instance_means_no_permission_set` |
 | **ac3** both roots instantiate the module with their own prefix, domains and noindex; the roots stay identical apart from tfvars and backend; both validate and the checks pass | PASS | `diff` of `main.tf`, `providers.tf`, `versions.tf`, `variables.tf`, `outputs.tf`, `site.tf` between `envs/dev` and `envs/prod` → no output; `terraform -chdir=infrastructure/envs/dev validate` and `…/prod validate` → `Success! The configuration is valid.` twice; `bash scripts/terraform_checks.sh` → `All Terraform checks passed.` (fmt, validate on all seven directories, tflint clean) |
 | **ac4** `SitePublisher` allows only ListBucket, GetObject, PutObject, DeleteObject on its bucket and CreateInvalidation on its distribution, with the two SSO profiles | PASS | Test run `publisher_permission_set_can_publish_and_nothing_else` asserts the action set is exactly those five, that every statement is an `Allow`, that every resource is this environment's own bucket or distribution, and that the named publisher is assigned. Profile names come from `publisher_profile_name` (= `name_prefix`), so `debate-dev-site` / `debate-prod-site`; the runbook's step 7 carries the `~/.aws/config` stanzas |
-| **ac5** the operator has applied dev and prod, and the runbook records dates, names, domains, DNS and certificate status, with every permission check via `simulate-principal-policy` | **NOT RUN** (runbook PASS, applies pending) | `docs/runbooks/team-website.md` exists with eight steps, fifteen paste-ready blocks, and four `simulate-principal-policy` checks and no attempted-action permission tests (`grep -c 'debate-prod-site'` → `8`). Every bash block parses (`bash -n`, 15/15). The record tables read `_pending_`: **no apply has been run** |
+| **ac5** the operator has applied dev and prod, and the runbook records dates, names, domains, DNS and certificate status, with every permission check via `simulate-principal-policy` | **PARTIAL** — dev applied and recorded, prod pending | `docs/runbooks/team-website.md` exists with eight steps, fifteen paste-ready blocks, and four `simulate-principal-policy` checks and no attempted-action permission tests (`grep -c 'debate-prod-site'` → `8`). Every bash block parses (`bash -n`, 19/19). Dev applied 2026-09-20 (step 3a: 14 resources; distribution `doq8i8utzst6e.cloudfront.net` / `E2OSZZB3X6M1T0`; `DebateDevSitePublisher` provisioned) and its results are in the record tables. The prod column still reads `_pending_` |
 | **ac6** prod on `wfbdebate.com` with `www` redirecting, dev on `dev.wfbdebate.com` with noindex, per-environment ACM certificates in us-east-1, DNS validated | **NOT RUN** live; configuration PASS | Configured in `envs/*/terraform.tfvars` and asserted offline by `prod_serves_the_team_domain_and_redirects_www` and `dev_preview_is_not_indexable`. `wfbdebate.com` is registered (2026-09-20T17:11:33Z, Amazon Registrar) and delegated to four `awsdns` name servers, confirmed at the `.com` registry and at 1.1.1.1 and 8.8.8.8, so nothing blocks the apply. The live check is the runbook's steps 4 and 6 |
 | **ac7** `domain_redirect` 301s a second registrable domain to the canonical host, with its own certificate and no S3 website endpoint; tests pass offline | Offline PASS; **not instantiated** | `terraform -chdir=infrastructure/modules/domain_redirect test` → `Success! 5 passed, 0 failed.` including `the_origin_is_never_a_public_bucket_or_a_website_endpoint`. `redirect_domain_names` is empty in both roots while there is only one registrable domain; ac7 as amended says wiring it up when `.org` is issued is a tfvars change and an apply, not new code |
 | Node `adr-0012` — ADR accepted; index lists it | PASS | As ac1 |
@@ -69,7 +69,7 @@ Terraform commands were run with every AWS environment variable unset and
 | Node `domain-redirect-module` — tests pass; `main.tf` contains `aws_cloudfront_function` | PASS | `Success! 5 passed, 0 failed.`; `grep -c aws_cloudfront_function` → `2` |
 | Node `env-wiring` — dev validates, prod validates, `scripts/terraform_checks.sh` passes | PASS | As ac3 |
 | Node `operator-apply` — runbook contains `debate-prod-site` | PASS | `grep -c` → `8` |
-| Node `operator-apply` — custom: Charlie confirms private buckets, HTTPS, the three 301s and dev's noindex | **NOT RUN** | Awaiting the operator; the checks are runbook steps 4, 6 and 8 |
+| Node `operator-apply` — custom: Charlie confirms private buckets, HTTPS, the `www` 301 and dev's noindex | **PARTIAL** — dev confirmed | Dev, 2026-09-20: four block-public-access flags `true` and `BucketOwnerEnforced`; `<Error><Code>AccessDenied</Code>` from `https://debate-dev-site-a7508de8.s3.us-east-1.amazonaws.com/index.html`; `HTTP/1.1 301` from `http://` to the `https://` CloudFront domain; HSTS, CSP (`frame-ancestors 'none'`), `nosniff`, `x-frame-options: deny`, `referrer-policy`, `permissions-policy` and `x-robots-tag: noindex, nofollow` all present; `Logging.Enabled = false`. Prod pending |
 
 ## Files changed
 
@@ -232,12 +232,16 @@ full block for each with its expected runtime and success criteria. In order:
 3. **Write the two `owner.auto.tfvars`** (~1 min) — the "Before you start" block, with the email
    and your Identity Center user name. Without the user name the publisher permission set exists
    but nobody can assume it.
-4. **Apply dev without the domain** (~8 min) — step 3a,
+4. ~~**Apply dev without the domain**~~ **— done 2026-09-20.** `Apply complete! Resources: 14
+   added`, `site_url = "https://doq8i8utzst6e.cloudfront.net/"`. Step 4's checks all pass against
+   it. Was: step 3a,
    `terraform -chdir=infrastructure/envs/dev apply -var 'site_domain_names=[]'`. **This one needs
    no DNS at all**, so it can be run today regardless of step 0, and it proves the bucket, the
    distribution, the function, the headers and the publisher permission set before a domain is in
    the picture.
-5. **Apply dev with the preview host** (~10 min) — step 3b, plain `apply`. Needs step 0.
+5. **Apply dev with the preview host** (~10 min) — step 3b, plain `apply`. `dev.wfbdebate.com`
+   is in the delegated `.com` zone, so the certificate should issue in minutes rather than
+   approaching the 30-minute timeout.
 6. **Check dev** (~2 min) — step 4: four `True` flags, `AccessDenied` from a direct S3 URL, a 301
    from `http://`, and `x-robots-tag: noindex, nofollow`.
 7. **Apply prod** (~15 min) — step 5. Two distributions and two certificates. Needs step 0; to

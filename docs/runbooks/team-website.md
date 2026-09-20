@@ -395,6 +395,23 @@ Success looks like: `True` four times; `<Error><Code>AccessDenied</Code>` from t
 
 A `200` from the direct S3 URL means the bucket is public — stop and do not apply prod.
 
+**Before the first deploy, expect `403` where this says `404`.** The distribution maps both 403 and
+404 to `/404.html`, but until `v1-e36-t05-site-deploy` has put the site in the bucket that page
+does not exist either, so CloudFront cannot serve the custom error page and returns the original
+status. Confirm the mapping is configured rather than inferring it from a response:
+
+```bash
+export AWS_PROFILE=debate-admin
+aws cloudfront get-distribution-config --id <the distribution id> \
+  --query 'DistributionConfig.{Logging:Logging.Enabled,CustomErrors:CustomErrorResponses.Items[].{Code:ErrorCode,Response:ResponseCode,Page:ResponsePagePath},MinTLS:ViewerCertificate.MinimumProtocolVersion,DefaultCert:ViewerCertificate.CloudFrontDefaultCertificate}' \
+  --output json
+```
+Success looks like `"Logging": false`, both error codes mapped to `/404.html`, and — while the
+distribution is still on the CloudFront domain — `"MinTLS": "TLSv1"` with
+`"DefaultCert": true`. That `TLSv1` is AWS's, not ours: it is forced on any distribution using the
+CloudFront default certificate, and it becomes `TLSv1.2_2021` in step 3b when the ACM certificate
+is attached (ADR-0012 consequences).
+
 ## Step 5 — Apply prod
 
 Same shape, one root along. This one also creates the `.com` redirect distribution and its
@@ -564,13 +581,14 @@ and hosted zone names are fine here; **the account id is not**.
 | | dev | prod |
 |---|---|---|
 | Site bucket | `debate-dev-site-a7508de8` | `debate-prod-site-a7508de8` |
-| Applied on | _pending_ | _pending_ |
+| Applied on | 2026-09-20, step 3a (no domain): 14 resources added | _pending_ |
 | Applied as | `debate-admin` (DebateBreakGlassAdmin) | `debate-admin` (DebateBreakGlassAdmin) |
-| Distribution domain | _pending_ | _pending_ |
-| Site URL | `https://dev.wfbdebate.com/` | `https://wfbdebate.com/` |
-| Certificate issued on | _pending_ | _pending_ |
-| Redirect distribution domain | — | _pending_ |
-| Publisher profile confirmed | _pending_ | _pending_ |
+| Distribution | `doq8i8utzst6e.cloudfront.net` (`E2OSZZB3X6M1T0`) | _pending_ |
+| Site URL | `https://dev.wfbdebate.com/` — _pending_, on the CloudFront domain until step 3b | `https://wfbdebate.com/` — _pending_ |
+| Certificate issued on | _pending_ (step 3b) | _pending_ |
+| Redirect distribution | — | — (no second registrable domain; see `wfbdebate.org` below) |
+| Publisher permission set provisioned | 2026-09-20, `DebateDevSitePublisher` | _pending_ |
+| Publisher profile confirmed | _pending_ (step 7) | _pending_ |
 
 | Check | Result | Date |
 |---|---|---|
@@ -578,13 +596,15 @@ and hosted zone names are fine here; **the account id is not**.
 | `wfbdebate.org` | **Registration FAILED three times**, each in under a second, with only the generic "Contact AWS Support" message: `4cb18c5e-dc01-4b99-8cff-b782eecf8cd5` (12:11:28), `f79d71d2-7ce8-47b4-825b-644a83fdc3bc` (13:03:20), `cc87fa96-df2f-4004-8637-67211510a714` (13:04:26), all CDT. `check-domain-availability` → `AVAILABLE`; `Domain not found` at the `.org` registry. AWS Support case filed 2026-09-20; canonical name moved to `.com` rather than waiting on it | 2026-09-20 |
 | Hosted zone delegated (registry `NS`) | `wfbdebate.com` delegated to four `awsdns` servers, visible at the registry and at 1.1.1.1 and 8.8.8.8 | 2026-09-20 |
 | `DebateMaintainer` denied Identity Center writes and `debate-prod-*` | _pending_ | |
-| Four block-public-access flags on both buckets | _pending_ | |
-| Direct S3 object URL returns `AccessDenied` (both) | _pending_ | |
-| `http://` redirects to `https://` (both) | _pending_ | |
-| Security headers present (both) | _pending_ | |
-| `dev.wfbdebate.com` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.com` does not | _pending_ | |
-| `www.wfbdebate.com` 301s to `https://wfbdebate.com/`, path preserved | _pending_ | |
-| Publishers allowed only their own site bucket and distribution | _pending_ | |
+| Four block-public-access flags | dev: all four `true`, `BucketOwnerEnforced`. prod: _pending_ | 2026-09-20 |
+| Direct S3 object URL returns `AccessDenied` | dev: `<Error><Code>AccessDenied</Code>`. prod: _pending_ | 2026-09-20 |
+| `http://` redirects to `https://` | dev: `301` to `https://doq8i8utzst6e.cloudfront.net/`. prod: _pending_ | 2026-09-20 |
+| Security headers present | dev: all seven — HSTS `max-age=31536000; includesubdomains`, CSP with `frame-ancestors 'none'`, `nosniff`, `x-frame-options: deny`, `referrer-policy`, `permissions-policy`, `x-robots-tag`. prod: _pending_ | 2026-09-20 |
+| CloudFront access logging off | dev: `Logging.Enabled = false`. prod: _pending_ | 2026-09-20 |
+| 403 and 404 both map to `/404.html` | dev: both present in the distribution config | 2026-09-20 |
+| `dev.wfbdebate.com` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.com` does not | dev: `x-robots-tag: noindex, nofollow` confirmed on the CloudFront domain. prod: _pending_ | 2026-09-20 |
+| `www.wfbdebate.com` 301s to `https://wfbdebate.com/`, path preserved | _pending_ (step 6) | |
+| Publishers allowed only their own site bucket and distribution | dev: `allowed` on `debate-dev-site-a7508de8/*`; `implicitDeny` on the prod site bucket, the dev state bucket, `iam:CreateAccessKey`, `cloudfront:CreateDistribution`, `sso:CreatePermissionSet`. prod: _pending_ | 2026-09-20 |
 
 ## Recurring checks
 

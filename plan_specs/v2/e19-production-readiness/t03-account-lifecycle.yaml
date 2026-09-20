@@ -24,7 +24,10 @@ spec:
     S3 (exports, private uploads; shared source snapshots referenced by others are retained without owner
     linkage) and OpenSearch (delete-by-owner plus the t06 scoped rebuild as a consistency check), disables
     the Cognito user, and writes a deletion certificate record. Configurable retention jobs purge transient
-    data (job records, search results, exports) on schedule. Coach-shared org folders transfer ownership
+    data (job records, search results, exports) on schedule, and include the annual caselist-season
+    purge required by docs/policies/caselist-data-use.md (Retention: a season's snapshots and derived
+    data deleted by 31 August after the following season; first due 31 Aug 2028), run in dev and prod
+    with counts recorded in docs/data/. Coach-shared org folders transfer ownership
     to the organization rather than disappearing. This task does NOT decide legal retention periods (t04)
     or build the audit log (t02).
   priority: 1

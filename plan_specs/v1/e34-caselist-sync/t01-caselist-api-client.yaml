@@ -30,7 +30,10 @@ spec:
     once, calls /login, stores only the returned token in the macOS keychain (keyring) or, as a
     fallback, a 0600 gitignored local secret file, and never stores the password; `caselist auth
     status|logout` manage it. The token is a SecretStr, redacted from logs, exceptions and httpx
-    event hooks. Requests are rate limited (configurable minimum interval, one download at a time) with
+    event hooks. File downloads are limited to the rate the OpenCaselist maintainer set (10 file
+    downloads per minute, recorded in docs/policies/caselist-data-use.md v1.1): the client defaults to 8
+    per minute, rejects any configuration above 10, and counts archive and OpenEv downloads against one
+    limit. Requests are rate limited (configurable minimum interval, one download at a time) with
     bounded backoff on 429/502/503/504 honoring Retry-After; 401/403 raise CaselistAuthExpired and are
     never retried. Tests use respx with small synthetic, scrubbed JSON fixtures (no real student names or
     team codes). Out of scope: importing archives (v1-e30-t03/t04 own parsing paths and manifests), the
@@ -73,7 +76,9 @@ spec:
         keyring or the 0600 secret file, and the secret file path is covered by .gitignore.
     - id: ac4
       description: >-
-        Consecutive requests are spaced by at least the configured interval; 429 and 503 are retried with
+        File downloads never exceed 10 in any rolling 60-second window (default 8), a configuration above
+        10 per minute fails validation, and consecutive requests are spaced by at least the configured
+        interval; 429 and 503 are retried with
         backoff honoring Retry-After up to a max attempt count; 401/403 raise CaselistAuthExpired after
         exactly one request.
     - id: ac5

@@ -27,7 +27,13 @@ spec:
     in S3; the archive and OpenEv importers and the publisher consult it through a SuppressionList port so
     a cumulative weekly archive can never re-import a removed file. Every removal is logged (request id,
     date, reason code, environment, sha256 values; no school, team code or names). It is a dry run by
-    default; --execute performs it and prod additionally needs --confirm-prod. Content shared with another
+    default; --execute performs it and prod additionally needs --confirm-prod. The S3 deletes run under
+    the EvidenceRemoval SSO profile from v1-e29-t03 (DEBATE_REMOVAL_PROFILE, e.g. debate-prod-removal),
+    never the everyday EvidenceOperator profile, which cannot delete; the dry run needs only the operator
+    profile. A mistaken removal can be reversed with `caselist unsuppress --sha256 <sha> --reason <code>
+    --execute`, which appends an un-suppress entry (the list stays append-only; a sha256 is suppressed while
+    its latest entry is a suppression) and logs it, so the next import or archive can bring the file
+    back; purged data is not restored. Content shared with another
     team or a camp file is only removed with --include-shared. v2-e35-t05 builds the debate-tub takedown
     flow on this suppression list. Boundaries: the policy and runbook are t01, flagging built files that
     quoted a removed card belongs to E33, and automated API download (E34) inherits the importer check.
@@ -37,6 +43,8 @@ spec:
     forbidden:
       - School names, team codes or student names in the removal log or suppression list
       - Deleting anything without --execute, or in prod without --confirm-prod
+      - Adding delete rights to the EvidenceOperator profile, or storing long-lived AWS keys for removal
+      - Rewriting or truncating the suppression list (reversal is an appended un-suppress entry)
       - Removing a source shared with other teams or camp files without --include-shared
       - Leaving noncurrent S3 versions of removed sources or of superseded manifests behind
       - Importing boto3/botocore in debate_core domain/ or application/
@@ -73,6 +81,12 @@ spec:
       description: >-
         Each execution appends one entry to the removal log (local and manifests/_suppression/removal-log.jsonl)
         with no school, team code or names, and prod runs are refused without --confirm-prod.
+    - id: ac6
+      description: >-
+        `caselist remove --execute` uses the profile named by DEBATE_REMOVAL_PROFILE and fails with a clear
+        message (no partial deletes) if it is unset or lacks delete rights; `caselist unsuppress --execute`
+        appends an un-suppress entry and a removal-log entry, after which re-importing the synthetic
+        snapshot stores the file again, and the suppression list file is never rewritten.
 status:
   phase: Pending
 ---
@@ -151,14 +165,29 @@ spec:
             name: Removal executor tests pass against moto
             command: uv
             args: [run, pytest, packages/debate_core/tests/application/caselist/test_removal_service.py]
+      - id: unsuppress
+        kind: Task
+        name: Un-suppress and removal profile
+        description: >-
+          Un-suppress entries in the append-only suppression list (latest entry wins), the
+          CaselistRemovalService.unsuppress path with its removal-log entry, and resolving the S3 client for
+          --execute from DEBATE_REMOVAL_PROFILE with a preflight check that fails before any delete.
+        dependsOn: [removal-executor]
+        outputs: [packages/debate_core/src/debate_core/application/caselist/removal_service.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Un-suppress and removal-profile tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist, -k, "unsuppress or removal_profile"]
       - id: cli-and-smoke
         kind: Task
         name: "`caselist remove` command, smoke check and quality gates"
         description: >-
-          Typer command with --source/--team, --reason, --execute, --include-shared, --confirm-prod and
-          --json; a tests/smoke check that imports, publishes, removes and re-imports the synthetic snapshots
+          Typer commands `caselist remove` (--source/--team, --reason, --execute, --include-shared,
+          --confirm-prod, --json) and `caselist unsuppress`; a tests/smoke check that imports, publishes, removes and re-imports the synthetic snapshots
           against moto; type check and import boundaries.
-        dependsOn: [importer-and-publisher-checks, removal-executor]
+        dependsOn: [importer-and-publisher-checks, removal-executor, unsuppress]
         outputs:
           - packages/debate_cli/src/debate_cli/commands/caselist.py
           - tests/smoke/test_caselist_remove_smoke.py

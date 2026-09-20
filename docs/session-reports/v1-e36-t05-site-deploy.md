@@ -170,8 +170,21 @@ Run these in order. 1 and 2 are prerequisites for any deploy; 3 to 5 are the dep
 
 **Operator command** (expected runtime ~6 min, mostly two applies)
 Where: your Mac, in a checkout holding this branch — set `WT` to it
+`owner.auto.tfvars` is gitignored, so it does not exist in this worktree and the `t02` worktree
+that held it is gone. `site_publisher_user_names` defaults to `[]`, so applying without it
+**destroys the account assignment** that makes the publisher profiles assumable. Write both files
+first (runbook *Before you start*).
+
 ```bash
 cd "$WT"
+for env in dev prod; do
+  cat > "infrastructure/envs/$env/owner.auto.tfvars" <<TFVARS
+owner                     = "$OWNER_EMAIL"
+site_publisher_user_names = ["$SSO_USER_NAME"]
+TFVARS
+done
+terraform fmt infrastructure/envs/dev infrastructure/envs/prod
+
 export AWS_PROFILE=debate-admin
 aws sso login --sso-session debate
 aws sts get-caller-identity --query Arn --output text   # expect AWSReservedSSO_DebateBreakGlassAdmin
@@ -181,10 +194,11 @@ for env in dev prod; do
   terraform -chdir="infrastructure/envs/$env" apply
 done
 ```
-Success looks like: one plan per environment showing **1 to change**, nothing added or destroyed;
-the resource is `module.site.aws_ssoadmin_permission_set_inline_policy.site_publisher[0]` and the
-diff adds `cloudfront:GetInvalidation` beside `cloudfront:CreateInvalidation` (the permission set
-description changes too). If a plan wants to add or destroy anything else, stop and paste it back.
+Success looks like: one plan per environment showing **1 to change, 0 to add, 0 to destroy**; the
+resource is `module.site.aws_ssoadmin_permission_set_inline_policy.site_publisher[0]` and the diff
+adds `cloudfront:GetInvalidation` beside `cloudfront:CreateInvalidation` (the permission set
+description changes too). A planned destroy of `aws_ssoadmin_account_assignment.site_publishers`
+means the tfvars are missing: answer `no`.
 
 ### 2. Refresh the publisher sessions and confirm the widening is one action wide
 

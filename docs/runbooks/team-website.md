@@ -604,10 +604,22 @@ something published about a student comes down **within 24 hours** of a request,
 means gone from the edge caches, not gone from the bucket. So the policy gains one read action,
 on the one distribution the publisher may already invalidate.
 
+**Recreate `owner.auto.tfvars` first.** It is gitignored, so it exists only in the checkout it
+was written in — a fresh worktree or a fresh clone does not have it. `site_publisher_user_names`
+defaults to `[]`, so an apply without it **destroys the account assignment** that makes
+`debate-dev-site` and `debate-prod-site` assumable, and the only visible symptom is a prompt for
+`var.owner`. The *Before you start* block above writes both files; do that now if `ls
+infrastructure/envs/dev/owner.auto.tfvars` says it is missing.
+
 **Operator command** (expected runtime ~6 min, mostly waiting on two applies)
 Where: `$WT`, with `WT` set to the checkout holding this change
 ```bash
 cd "$WT"
+test -f infrastructure/envs/dev/owner.auto.tfvars \
+  && test -f infrastructure/envs/prod/owner.auto.tfvars \
+  && echo "ok: both tfvars present" \
+  || echo "STOP: write owner.auto.tfvars first (see 'Before you start')"
+
 export AWS_PROFILE=debate-admin
 aws sso login --sso-session debate
 aws sts get-caller-identity --query Arn --output text   # expect AWSReservedSSO_DebateBreakGlassAdmin
@@ -617,11 +629,12 @@ for env in dev prod; do
   terraform -chdir="infrastructure/envs/$env" apply
 done
 ```
-Success looks like: one plan per environment showing **1 to change** and nothing added or
-destroyed — the change is
-`module.site.aws_ssoadmin_permission_set_inline_policy.site_publisher[0]`, and the diff adds
-`cloudfront:GetInvalidation` beside `cloudfront:CreateInvalidation`. The permission set's
-description changes too. If a plan wants to add or destroy anything else, stop and say so.
+Success looks like: one plan per environment showing **1 to change, 0 to add, 0 to destroy** — the
+change is `module.site.aws_ssoadmin_permission_set_inline_policy.site_publisher[0]`, and the diff
+adds `cloudfront:GetInvalidation` beside `cloudfront:CreateInvalidation`. The permission set's
+description changes too. **Anything else in the plan, above all a destroy of
+`aws_ssoadmin_account_assignment.site_publishers`, means the tfvars are missing: answer `no` and
+fix them.**
 
 Then pick up the new policy in your publisher sessions and prove the widening is exactly one
 action wide:
@@ -683,6 +696,10 @@ read a root's state, `SITE_TERRAFORM_PROFILE=debate-admin` is the answer.
 **Only a human runs this.** No CI job and no agent session has the credentials, and until the
 keyless deploys of `v2-e10-t03` exist, that is what keeps an unreviewed page about a student from
 reaching the public through a merge.
+
+The Terraform read needs the root to be initialised in *this* checkout, which a fresh clone or a
+new worktree is not: run `terraform -chdir=infrastructure/envs/<env> init` once there. The deploy
+itself never writes Terraform state, so it does not need `owner.auto.tfvars`; an apply does.
 
 Prod is refused unless the checkout is **clean**, on **main**, and **equal to `origin/main`**
 (ADR-0013). `--dry-run` runs that guard and the build, and makes no `aws s3` or `aws cloudfront`

@@ -20,7 +20,7 @@ spec:
     Add `debate-research caselist publish --caselist <slug|openev> [--snapshot <date>] [--dry-run]` and
     `debate-research caselist status` so imported sources and manifests reach the evidence bucket of the
     environment selected by DEBATE_ENV (dev or prod). Sources go to content-addressed keys
-    raw/<caselist>/<sha256>.<ext> (no school or team code in keys, per the data-use policy) and manifests to
+    raw/caselist/<caselist-slug>/sha256/ab/cd/<hash> (content-addressed, no file extension, and no school or team code in keys, per the data-use policy; an extension would make identical bytes two objects) and manifests to
     manifests/<caselist>/<snapshot>.jsonl (manifests/openev/<year>-<event>.jsonl for camp files). Publishing
     is idempotent and resumable: objects already present with a matching sha256 checksum are skipped, all
     sources of a snapshot are uploaded before its manifest, and the manifest is written last so its
@@ -50,7 +50,7 @@ spec:
     - id: ac1
       description: >-
         Publishing the synthetic snapshots against moto writes each distinct source once under
-        raw/<caselist>/<sha256>.<ext> with a SHA-256 checksum and one manifest per snapshot under
+        raw/caselist/<caselist-slug>/sha256/ab/cd/<hash> with a SHA-256 checksum and one manifest per snapshot under
         manifests/<caselist>/.
     - id: ac2
       description: >-

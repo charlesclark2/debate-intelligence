@@ -73,7 +73,8 @@ spec:
     - id: ac4
       description: >-
         scripts/terraform_checks.sh runs fmt -check, validate (-backend=false) for both envs and every
-        bootstrap root, and tflint without AWS credentials in under two minutes, exits non-zero on any
+        bootstrap root, tflint, and `terraform test` for every module that has a tests/ directory, all
+        without AWS credentials in under two minutes, exits non-zero on any
         error, and runs from pre-commit on infrastructure/ changes. If ci.yml exists, a
         `terraform-checks` job gated on the `infrastructure` path filter calls it and is in the aggregate
         `ci` job's needs; otherwise the report hands the wiring to v1-e01-t04.

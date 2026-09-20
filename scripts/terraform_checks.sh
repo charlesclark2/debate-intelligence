@@ -12,7 +12,7 @@
 # reach the account, and every plan and apply is an operator step (docs/process/working-agreements.md,
 # docs/runbooks/terraform-bootstrap.md). These checks are what CI and pre-commit run instead.
 #
-# Usage:  scripts/terraform_checks.sh [--no-lint] [--sync-tflint]
+# Usage:  scripts/terraform_checks.sh [--no-lint] [--no-test] [--sync-tflint]
 #         TERRAFORM_BIN=... TFLINT_BIN=... scripts/terraform_checks.sh
 #
 # --sync-tflint copies infrastructure/.tflint.hcl into every Terraform directory that needs one.
@@ -34,13 +34,15 @@ TFLINT_BIN="${TFLINT_BIN:-tflint}"
 
 run_lint=true
 sync_tflint=false
+run_test=true
 if [ $# -gt 0 ]; then
   for arg in "$@"; do
     case "${arg}" in
       --no-lint) run_lint=false ;;
+      --no-test) run_test=false ;;
       --sync-tflint) sync_tflint=true ;;
       *)
-        echo "usage: $(basename "$0") [--no-lint] [--sync-tflint]" >&2
+        echo "usage: $(basename "$0") [--no-lint] [--no-test] [--sync-tflint]" >&2
         exit 64
         ;;
     esac
@@ -176,6 +178,33 @@ if [ "${run_lint}" = true ]; then
       fail "tflint --recursive infrastructure"
       echo "${lint_output}" | sed 's/^/      /'
     fi
+  fi
+fi
+
+if [ "${run_test}" = true ]; then
+  echo
+  echo "== terraform test =="
+  # Module tests use mocked providers and resolve no credentials, so they belong in the same
+  # credential-free pass as fmt/validate/tflint. Each takes seconds. A module with no tests/
+  # directory is skipped rather than reported, so adding a module never fails this stage.
+  ran_any=false
+  for dir in ${modules}; do
+    [ -d "${dir}/tests" ] || continue
+    ran_any=true
+    rel="${dir#"${REPO_ROOT}/"}"
+    test_output="$(
+      "${TERRAFORM_BIN}" -chdir="${dir}" init -backend=false -input=false -no-color >/dev/null 2>&1 &&
+        "${TERRAFORM_BIN}" -chdir="${dir}" test -no-color 2>&1
+    )"
+    if [ $? -eq 0 ]; then
+      pass "test ${rel}"
+    else
+      fail "test ${rel}"
+      echo "${test_output}" | sed 's/^/      /'
+    fi
+  done
+  if [ "${ran_any}" = false ]; then
+    echo "  (no module tests found)"
   fi
 fi
 

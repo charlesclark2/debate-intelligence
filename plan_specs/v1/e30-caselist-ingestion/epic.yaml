@@ -202,7 +202,7 @@ spec:
       kind: Task
       name: Publish sources and manifests to S3
       description: >-
-        Publish imported sources and manifests to the evidence bucket (raw/<caselist>/..., manifests/<caselist>/<snapshot>.jsonl),
+        Publish imported sources and manifests to the evidence bucket (raw/caselist/<caselist-slug>/sha256/..., manifests/<caselist>/<snapshot>.jsonl),
         idempotently; `debate-research caselist status` compares local and S3.
       inputs:
         specRef: plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml

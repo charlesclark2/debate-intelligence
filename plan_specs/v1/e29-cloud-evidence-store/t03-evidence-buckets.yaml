@@ -36,7 +36,7 @@ spec:
     operator and the `debate-research store` CLI through the SSO profiles from t01, and a separate
     EvidenceRemoval permission set, assigned to Charlie only and used only for takedowns under the
     data-use policy (`caselist remove`, v1-e30-t07), through its own SSO profiles (e.g.
-    debate-dev-removal, debate-prod-removal): s3:ListBucketVersions, GetObjectVersion, DeleteObject and
+    debate-dev-evidence-removal, debate-prod-evidence-removal): s3:ListBucketVersions, GetObjectVersion, DeleteObject and
     DeleteObjectVersion scoped to the raw/, parsed/, files/, manifests/ and quarantine/ prefixes, plus
     PutObject on manifests/_suppression/ and kms Decrypt/GenerateDataKey; still no bucket-policy, KMS-policy
     or bucket-deletion rights. terraform apply is an
@@ -124,7 +124,7 @@ spec:
         name: evidence_bucket module with KMS key, versioning and lifecycle
         description: >-
           Module creating the customer-managed KMS key as its own resource (aws_kms_key.evidence, rotation,
-          alias alias/debate-evidence-<env>) for later adoption by v2-e10-t04 via moved blocks, the bucket
+          alias alias/debate-<env>-evidence, matching the DenyProdKmsKeysByAlias guardrail on alias/debate-prod-*) for later adoption by v2-e10-t04 via moved blocks, the bucket
           with versioning, SSE-KMS + bucket key, public access block, BucketOwnerEnforced, TLS-only policy
           and lifecycle rules (including 1-day expiry on exports/); variables for environment, noncurrent
           retention days and additional_reader_principal_arns (default empty) granted GetObject and
@@ -205,8 +205,9 @@ spec:
         name: Operator applies dev, validates, then applies prod
         description: >-
           Operator-run (terraform plan/apply exceed the session budget and need SSO credentials): apply in
-          dev, check put/get succeed and delete is denied with the debate-dev profile, and that the
-          debate-dev-removal profile can delete a test object's versions under quarantine/ but not under
+          dev, check put/get succeed under the debate-dev-evidence profile and that DeleteObject is denied
+          for it (debate-dev is DebateMaintainer/PowerUser and is not the least-privilege claim), and that the
+          debate-dev-evidence-removal profile can delete a test object's versions under quarantine/ but not under
           reports/, then apply prod and
           repeat with debate-prod. Record results in the runbook.
         dependsOn: [operator-access-and-envs, key-layout-doc]

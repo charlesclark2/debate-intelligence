@@ -77,7 +77,7 @@ spec:
         axe-core reports no WCAG 2.1 AA violations on every built page, and Charlie has approved the copy
         against the publishing policy's pre-publication checklist.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

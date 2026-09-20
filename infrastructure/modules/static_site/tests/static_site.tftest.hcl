@@ -502,8 +502,9 @@ run "publisher_permission_set_can_publish_and_nothing_else" {
       "s3:PutObject",
       "s3:DeleteObject",
       "cloudfront:CreateInvalidation",
+      "cloudfront:GetInvalidation",
     ])
-    error_message = "The publisher may do exactly five things: list, read, write and delete its own site objects, and invalidate its own distribution."
+    error_message = "The publisher may do exactly six things: list, read, write and delete its own site objects, invalidate its own distribution, and read that invalidation's progress."
   }
 
   assert {

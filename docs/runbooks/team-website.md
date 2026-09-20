@@ -1,14 +1,17 @@
 # Runbook: team website hosting
 
-How the public Whitefish Bay debate team website is stood up in AWS, and how the domains are
-wired to it. Spec:
-[`v1-e36-t02-site-hosting`](../../plan_specs/v1/e36-team-website/t02-site-hosting.yaml).
-Decision: [ADR-0012](../adr/0012-web-hosting.md). One account and one region:
+How the public Whitefish Bay debate team website is stood up in AWS, how the domains are wired to
+it, and how the site is published, rolled back and taken down. Specs:
+[`v1-e36-t02-site-hosting`](../../plan_specs/v1/e36-team-website/t02-site-hosting.yaml) (steps 1
+to 8) and
+[`v1-e36-t05-site-deploy`](../../plan_specs/v1/e36-team-website/t05-site-deploy.yaml) (step 9
+onwards). Decision: [ADR-0012](../adr/0012-web-hosting.md). One account and one region:
 [ADR-0010](../adr/0010-primary-aws-region.md). Two environments and no third:
 [ADR-0013](../adr/0013-two-environments-and-dev-main-promotion.md).
 
-Runs after [terraform-bootstrap.md](terraform-bootstrap.md) and before
-`v1-e36-t05-site-deploy`, which puts the built site into the buckets this creates.
+Steps 1 to 9 are the one-time setup, after
+[terraform-bootstrap.md](terraform-bootstrap.md). *Deploying the site* onwards is what happens
+every time the site changes.
 
 Written for an adult engineer with administrator access to the account. **Every step here is run
 by a human operator.** CI has no AWS credentials — the GitHub OIDC plan/apply roles arrive in
@@ -84,6 +87,17 @@ Success looks like: an ARN containing `AWSReservedSSO_DebateBreakGlassAdmin`.
 
 **The operator-local tfvars**, which are gitignored. They carry the maintainer's email and
 Identity Center user name; the second is what makes the publisher permission set usable.
+
+**Use the same `OWNER_EMAIL` as the last apply.** It becomes the `Owner` tag on every taggable
+resource in the root through the provider's `default_tags`, so a different value rewrites all of
+them — eight resources in prod — and the apply reports a change count far larger than whatever
+you actually came to change. The value is not written down in this repository on purpose, so read
+it back from what is deployed rather than retyping it from memory:
+
+```bash
+AWS_PROFILE=debate-admin aws s3api get-bucket-tagging \
+  --bucket debate-prod-site-a7508de8 --query "TagSet[?Key=='Owner'].Value" --output text
+```
 
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`
@@ -500,8 +514,9 @@ finishes rolling the certificate out. Re-run before treating it as a failure.
 ## Step 7 — Add the two publisher SSO profiles
 
 These are what `v1-e36-t05-site-deploy` deploys with. They assume a permission set that can do
-five things: list, read, write and delete objects in its own site bucket, and create an
-invalidation on its own distribution.
+six things: list, read, write and delete objects in its own site bucket, create an invalidation
+on its own distribution, and read that invalidation's progress. The sixth was added in step 9;
+if this runbook was followed before that step existed, do step 9 now.
 
 **Operator command** (expected runtime ~3 min)
 Where: your Mac, in `~/.aws/config`
@@ -578,16 +593,333 @@ everywhere else, including the other environment's bucket, the Terraform state b
 CloudFront management.
 
 `implicitDeny` rather than `explicitDeny` is correct here and is the stronger result to read:
-the policy is a five-action allow-list, so anything not on the list is denied by having never
-been granted.
+the policy is a short allow-list, so anything not on the list is denied by having never been
+granted.
 
-One thing the publisher deliberately **cannot** do: `cloudfront:GetInvalidation`. The task's ac4
-lists five actions and that is not one of them, so `aws cloudfront wait invalidation-completed`
-will be denied. `v1-e36-t05-site-deploy` has to create the invalidation and move on, or ask for
-the policy to be widened in a spec change.
+Run this step again after step 9, which adds `cloudfront:GetInvalidation`. Everything above
+should read the same except that one action on the publisher's own distribution.
 
-The publisher also cannot read Terraform state, so a deploy script that runs `terraform output`
-does that under `debate-admin` and the sync under the publisher profile.
+The publisher cannot read Terraform state, which is why `scripts/site_deploy.sh` uses two
+profiles: `terraform output` runs under `debate-<env>` (or `debate-admin`, via
+`SITE_TERRAFORM_PROFILE`) and everything else under `debate-<env>-site`.
+
+## Step 9 — Let a deploy confirm its invalidation finished
+
+Added by [`v1-e36-t05-site-deploy`](../../plan_specs/v1/e36-team-website/t05-site-deploy.yaml).
+`v1-e36-t02` granted `cloudfront:CreateInvalidation` and not `cloudfront:GetInvalidation`, so
+`aws cloudfront wait invalidation-completed` was an `AccessDenied` and a deploy could start an
+invalidation but never say whether the edge had actually picked the new files up.
+
+That confirmation is not a convenience. `docs/policies/website-publishing.md` promises that
+something published about a student comes down **within 24 hours** of a request, and "down"
+means gone from the edge caches, not gone from the bucket. So the policy gains one read action,
+on the one distribution the publisher may already invalidate.
+
+**Apply from a checkout whose configuration covers everything already in the root.** Both env
+roots are shared by every task that touches infrastructure, and `terraform` deletes what it has in
+state but not in configuration. A branch cut before another task's resources were applied will
+therefore plan to **destroy** them. `v1-e29-t03-evidence-buckets` applied fifteen evidence-store
+resources to each root on 2026-09-20, so an apply from a branch without `evidence_store.tf` plans
+fifteen destroys (and then fails, because the bucket and the KMS key carry `prevent_destroy`).
+Rebase onto a `dev` that contains the other work before applying, and read the plan's counts
+rather than trusting the branch.
+
+`terraform output` is not affected: it reads state, not configuration, so a deploy works from any
+checkout.
+
+**Recreate `owner.auto.tfvars` first.** It is gitignored, so it exists only in the checkout it
+was written in — a fresh worktree or a fresh clone does not have it. `site_publisher_user_names`
+defaults to `[]`, so an apply without it **destroys the account assignment** that makes
+`debate-dev-site` and `debate-prod-site` assumable, and the only visible symptom is a prompt for
+`var.owner`. The *Before you start* block above writes both files; do that now if `ls
+infrastructure/envs/dev/owner.auto.tfvars` says it is missing.
+
+**Operator command** (expected runtime ~6 min, mostly waiting on two applies)
+Where: `$WT`, with `WT` set to the checkout holding this change
+```bash
+cd "$WT"
+test -f infrastructure/envs/dev/owner.auto.tfvars \
+  && test -f infrastructure/envs/prod/owner.auto.tfvars \
+  && echo "ok: both tfvars present" \
+  || echo "STOP: write owner.auto.tfvars first (see 'Before you start')"
+
+export AWS_PROFILE=debate-admin
+aws sso login --sso-session debate
+aws sts get-caller-identity --query Arn --output text   # expect AWSReservedSSO_DebateBreakGlassAdmin
+
+# -reconfigure because scripts/terraform_checks.sh inits these roots with -backend=false, and a
+# real plan against that leftover configuration does not reach the remote state.
+for env in dev prod; do
+  terraform -chdir="infrastructure/envs/$env" init -reconfigure -input=false
+  terraform -chdir="infrastructure/envs/$env" apply
+done
+```
+Success looks like: one plan per environment whose **only** substantive change is
+`module.site.aws_ssoadmin_permission_set_inline_policy.site_publisher[0]`, with the diff adding
+`cloudfront:GetInvalidation` beside `cloudfront:CreateInvalidation`. The permission set's
+description changes too.
+
+The count itself depends on your tfvars. With an unchanged `OWNER_EMAIL` it is `1 to change`; with
+a different one every taggable resource in the root picks up a new `Owner` tag and prod reports
+`9 changed` (eight tag updates plus the policy). Both are benign, but only one of them is what you
+asked for, so read the resource names. **Anything else in the plan, above all a destroy of
+`aws_ssoadmin_account_assignment.site_publishers`, means the tfvars are missing: answer `no` and
+fix them.**
+
+After this, an apply from any branch that predates it **reverts** `cloudfront:GetInvalidation`,
+because that branch's `modules/static_site` still grants five actions. The symptom appears much
+later and nowhere near the cause: a deploy uploads the whole site and then fails on the wait with
+`AccessDenied`, so the files are in the bucket and nobody can confirm the edge is serving them.
+
+**The plan's counts do not catch this.** A revert of a shared module reads as `1 to change` —
+which is exactly what an intended edit reads as. The counts catch a stale branch that is about to
+*destroy* something; only reading the diff body for that one resource catches a stale branch that
+is about to *undo* something. So on any apply that touches
+`aws_ssoadmin_permission_set_inline_policy.site_publisher`, read the JSON in the diff and count
+the actions: six, including `cloudfront:GetInvalidation`. Five means the branch is behind — stop,
+rebase, re-plan.
+
+Then pick up the new policy in your publisher sessions and prove the widening is exactly one
+action wide:
+
+**Operator command** (expected runtime ~2 min)
+Where: your Mac, anywhere
+```bash
+aws sso logout
+aws sso login --sso-session debate
+
+export AWS_PROFILE=debate-admin
+for ENV in dev prod; do
+  case "$ENV" in
+    dev)  PERMISSION_SET=DebateDevSitePublisher;  OTHER=prod ;;
+    prod) PERMISSION_SET=DebateProdSitePublisher; OTHER=dev ;;
+  esac
+  ROLE=$(aws iam list-roles \
+    --query "Roles[?starts_with(RoleName, \`AWSReservedSSO_${PERMISSION_SET}\`)].Arn" --output text)
+  OWN=$(aws cloudfront list-distributions \
+    --query "DistributionList.Items[?Comment starts_with(@, 'debate-${ENV}-site')].ARN | [0]" --output text)
+  OTHER_ARN=$(aws cloudfront list-distributions \
+    --query "DistributionList.Items[?Comment starts_with(@, 'debate-${OTHER}-site')].ARN | [0]" --output text)
+  echo "===== $ENV publisher"
+  aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
+    --action-names cloudfront:CreateInvalidation cloudfront:GetInvalidation \
+    --resource-arns "$OWN" \
+    --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
+  aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
+    --action-names cloudfront:GetInvalidation cloudfront:CreateDistribution cloudfront:UpdateDistribution \
+    --resource-arns "$OTHER_ARN" \
+    --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
+done
+```
+Success looks like: `allowed` for both invalidation actions on the publisher's **own**
+distribution, and `implicitDeny` for everything against the other environment's. `aws sso logout`
+matters: a cached session carries the old policy, and a deploy that skips it fails on the wait
+with an `AccessDenied` that the console will contradict.
+
+## Deploying the site
+
+One script, `scripts/site_deploy.sh`, publishes one environment:
+
+```bash
+scripts/site_deploy.sh dev
+scripts/site_deploy.sh prod
+scripts/site_deploy.sh dev --dry-run
+```
+
+It builds `site/` with that environment's `SITE_ENV` and `SITE_URL`, writes `site/out/version.json`
+with the commit sha, syncs the export into the environment's bucket (a year of cache for the
+hashed `_next/static` assets, `no-cache` for everything else, `--delete` so a removed page leaves
+the bucket), then creates a CloudFront invalidation **and waits for it to finish**.
+
+It uses two profiles per environment, because the publisher cannot read Terraform state:
+`terraform output` runs as `debate-<env>` and everything else as `debate-<env>-site`. Override
+either with `SITE_TERRAFORM_PROFILE` or `SITE_PUBLISHER_PROFILE`; if a maintainer profile cannot
+read a root's state, `SITE_TERRAFORM_PROFILE=debate-admin` is the answer.
+
+**Only a human runs this.** No CI job and no agent session has the credentials, and until the
+keyless deploys of `v2-e10-t03` exist, that is what keeps an unreviewed page about a student from
+reaching the public through a merge.
+
+The Terraform read needs the root to be initialised in *this* checkout, which a fresh clone or a
+new worktree is not: run `terraform -chdir=infrastructure/envs/<env> init -reconfigure` once
+there. Use `-reconfigure`: `scripts/terraform_checks.sh` (and pre-commit) init these roots with
+`-backend=false`, and a read against that leftover configuration never reaches the remote state.
+
+A deploy needs neither `owner.auto.tfvars` nor a branch whose configuration matches the root:
+`terraform output` reads state. Only an apply needs both.
+
+Prod is refused unless the checkout is **clean**, on **main**, and **equal to `origin/main`**
+(ADR-0013). `--dry-run` runs that guard and the build, and makes no `aws s3` or `aws cloudfront`
+call at all — so rehearse on dev, not on prod: a prod dry run from a task branch is refused for
+the same reason a prod deploy is.
+
+### The order, every time
+
+1. deploy dev;
+2. smoke-check dev, and look at it on a phone;
+3. merge the promotion PR (`dev` → `main`);
+4. deploy prod from a clean `main`;
+5. smoke-check prod with `--expect-sha`;
+6. record it below.
+
+### Before a prod deploy: the build has to be clean
+
+A prod build fails on anything the content guard treats as an error — a `[[TBD]]` marker, an
+unreviewed name, an email that is not in the allowlist, an image with no consent entry. A dev
+build prints the same problems and carries on, so the preview can be reviewed with its gaps
+visible.
+
+**That failure is a precondition, not an obstacle.** Fill the fact in and commit it; do not
+deploy prod around it. Check before you start:
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build
+```
+Success looks like: the build completes and writes `site/out/`. A failure names the file and the
+line: fix the copy, commit, and run it again.
+
+### Deploy the dev preview
+
+**Operator command** (expected runtime ~4 min, most of it the invalidation)
+Where: `$WT`
+```bash
+cd "$WT"
+aws sso login --sso-session debate
+pnpm --dir site install        # once per clone
+scripts/site_deploy.sh dev
+```
+Success looks like: the bucket, distribution and URL it read from Terraform; a clean build; the
+`version.json` it wrote; three `aws s3 sync` passes; and `Deployed <sha> to dev:
+https://dev.wfbdebate.com`. Paste the last 20 lines back into the session.
+
+### Smoke-check the dev preview
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+uv run scripts/site_smoke.py --env dev --url https://dev.wfbdebate.com \
+  --expect-sha "$(git rev-parse HEAD)"
+```
+Success looks like: `All N checks passed.` — every page in the sitemap at 200, the `http://`
+redirect, six security headers, `X-Robots-Tag: noindex` on every page, a `robots.txt` that
+disallows everything, and `version.json` naming the commit you just deployed.
+
+Then open `https://dev.wfbdebate.com/` on a phone and read it as a parent would. The smoke check
+cannot tell you whether the copy is right, and that is the part that matters most.
+
+### Deploy prod
+
+After the promotion PR (`dev` → `main`) has merged.
+
+**Operator command** (expected runtime ~5 min)
+Where: your Mac, in the **main clone** on `main` (not a task worktree)
+```bash
+git checkout main
+git pull --ff-only
+git status --porcelain        # must print nothing
+aws sso login --sso-session debate
+scripts/site_deploy.sh prod
+uv run scripts/site_smoke.py --env prod --url https://wfbdebate.com \
+  --expect-sha "$(git rev-parse HEAD)"
+```
+Success looks like: `clean, on main, and equal to origin/main.`, a clean prod build, the three
+syncs, an invalidation that completes, and then `All N checks passed.` — with **no**
+`X-Robots-Tag` on prod and a `robots.txt` that allows crawling.
+
+A refusal here is the guard working. `prod refused: on branch 'dev', not main` means the
+promotion has not merged yet; `HEAD ... is not origin/main` means the local `main` is behind.
+
+## Rolling back a deploy
+
+The site is a static export of a commit, so a rollback is a deploy of a different commit. What
+differs is how that commit is reached.
+
+**dev**: check the commit out and deploy it. There is no guard.
+
+```bash
+git checkout <good-sha>
+scripts/site_deploy.sh dev
+uv run scripts/site_smoke.py --env dev --url https://dev.wfbdebate.com --expect-sha <good-sha>
+```
+
+**prod**: the guard means prod can only ever be what is on `main`, so rolling prod back means
+moving `main` back. Revert on a `hotfix/<slug>` branch, PR to `main`, merge, then deploy `main`
+and back-merge to `dev` the same day (docs/process/branching-and-environments.md).
+
+```bash
+git checkout -b hotfix/<slug> main
+git revert --no-edit <bad-sha>
+# PR into main, merge, then:
+git checkout main && git pull --ff-only
+scripts/site_deploy.sh prod
+```
+
+Deploying an old commit to prod by checking it out is deliberately impossible. A public site that
+matches no branch is how a page nobody reviewed stays up for a month without anyone noticing.
+
+### The emergency lever
+
+If something about a student is live and must be gone in minutes rather than in a PR cycle, the
+publisher profile can delete the object and invalidate it:
+
+```bash
+AWS_PROFILE=debate-prod-site aws s3 rm s3://debate-prod-site-a7508de8/<path>/index.html
+AWS_PROFILE=debate-prod-site aws cloudfront create-invalidation \
+  --distribution-id <prod-distribution-id> --paths '/<path>/*'
+```
+
+This is a stop-gap and leaves the site inconsistent with `main`: the **next deploy puts the page
+back**. Follow it with the takedown below the same day.
+
+## Taking something down on request
+
+The publishing policy gives this a 24-hour clock, and the clock is not met until the edge stops
+serving it. The procedure is: edit the content, get it reviewed, deploy, confirm.
+
+1. Remove or change the content under `site/content/` (and `site/content/media-consent.yaml` if
+   an image is involved). The content guard fails a prod build on a name or an image that is no
+   longer permitted, which is the backstop.
+2. PR into `dev`, merge, deploy dev, smoke-check it, promote to `main`.
+3. `scripts/site_deploy.sh prod`. The deploy waits for the invalidation, so when it returns, the
+   edge is serving the new files.
+4. `uv run scripts/site_smoke.py --env prod --url https://wfbdebate.com --expect-sha $(git rev-parse HEAD)`,
+   and fetch the removed URL yourself:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://wfbdebate.com/<the-removed-path>/
+```
+Success looks like: `404`.
+
+5. Record the request and the date it was completed in the caselist-removal style log the policy
+   points at, with no more identifying detail than the policy allows.
+
+If step 3's wait fails with an `AccessDenied` on `cloudfront:GetInvalidation`, the upload
+succeeded and only the confirmation is missing: do step 9, then re-run the smoke check. Do not
+tell anyone the page is down until something has confirmed it.
+
+## First prod launch
+
+Filled in by the operator when prod is first published, per
+[`v1-e36-t05-site-deploy`](../../plan_specs/v1/e36-team-website/t05-site-deploy.yaml) ac4. No
+account ids here.
+
+| | |
+|---|---|
+| Date | _pending_ |
+| Commit sha | _pending_ |
+| URL given to parents | `https://wfbdebate.com/` |
+| Deploy command | `scripts/site_deploy.sh prod`, run by the operator from a clean `main` |
+| Invalidation | _pending_ (id, and that the wait completed) |
+| Smoke result | _pending_ — `uv run scripts/site_smoke.py --env prod --url https://wfbdebate.com --expect-sha <sha>` |
+| Domain status | `wfbdebate.com` live; `www.wfbdebate.com` 301s to it; `wfbdebate.org` still blocked in an AWS Support case and not used |
+| Dev preview it was promoted from | _pending_ (dev deploy date, sha, and its smoke result) |
+
+Deadline: this has to be true **before the parent information session on October 1, 2026**,
+because that is where the URL is given out.
 
 ## What to record
 
@@ -629,6 +961,9 @@ shows `debate-dev-site` with `dev.wfbdebate.com` and `debate-prod-site` with `wf
 | `dev.wfbdebate.com` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.com` does not | Confirmed on both | 2026-09-20 |
 | `www.wfbdebate.com` 301s to `https://wfbdebate.com/`, path preserved | `https://www.wfbdebate.com/` → `301 https://wfbdebate.com/`; `https://www.wfbdebate.com/parents/faq/?x=1` → `301 https://wfbdebate.com/parents/faq/?x=1`, path **and query** preserved. `http://www.wfbdebate.com/` takes two hops — CloudFront upgrades to HTTPS first, then the function redirects to the apex — which is normal and costs one extra round trip on a spelling nobody types twice | 2026-09-20 |
 | Publishers allowed only their own site bucket and distribution | Both: `allowed` on their own bucket for `ListBucket`, `GetObject`, `PutObject`, `DeleteObject` and on their own distribution for `CreateInvalidation`; `implicitDeny` on the *other* environment's bucket and distribution, on the state bucket, and on `iam:CreateAccessKey`, `cloudfront:CreateDistribution`, `cloudfront:GetInvalidation` and `sso:CreatePermissionSet` | 2026-09-20 |
+| Publishers may read their own invalidation's progress (step 9, `v1-e36-t05`) | Applied 2026-09-20. Both permission sets' inline policies now list six actions ending `cloudfront:CreateInvalidation`, `cloudfront:GetInvalidation`, read back with `aws sso-admin get-inline-policy-for-permission-set`. Proven in use the same day: the dev deploy's `aws cloudfront wait invalidation-completed` returned instead of failing `AccessDenied` | 2026-09-20 |
+| First dev deploy and smoke check | 2026-09-20. `scripts/site_deploy.sh dev` from the task worktree at `f15fa16`: 71 objects uploaded, invalidation `IAM1U04QZPV5D7HUB6CQL4WGCH` created and waited on. `scripts/site_smoke.py --env dev` → **All 28 checks passed** (8 sitemap pages at 200, `301` to HTTPS, six security headers and `X-Robots-Tag: noindex` on every page, `robots.txt` disallowing everything, `version.json` at `f15fa16`) | 2026-09-20 |
+| First prod deploy and smoke check | _pending_ | |
 
 ## Recurring checks
 
@@ -646,10 +981,9 @@ shows `debate-dev-site` with `dev.wfbdebate.com` and `debate-prod-site` with `wf
 
 Owned by later tasks, not here:
 
-- Building and uploading the site, cache headers, invalidation and smoke checks —
-  `v1-e36-t05-site-deploy`.
 - Page content and copy — `v1-e36-t03-site-scaffold` and `v1-e36-t04-core-pages`, under the
-  publishing policy of `v1-e36-t01-publishing-policy`.
+  publishing policy of `v1-e36-t01-publishing-policy`. This runbook only puts the built files in
+  a bucket; what they say is decided elsewhere.
 - Keyless deploys from CI — `v2-e10-t03`. Until they exist, publishing is an operator running
   the deploy script, which is the property that keeps an unreviewed page about a student from
   reaching the public by a merge.

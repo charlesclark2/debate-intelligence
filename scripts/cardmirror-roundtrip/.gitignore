@@ -1,0 +1,5 @@
+# Debate files and round-trip output must never be committed (see this task's spec).
+*.docx
+roundtrip-manifest.json
+summary.json
+out/

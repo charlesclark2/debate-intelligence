@@ -22,6 +22,7 @@ members = [
 [dependency-groups]
 dev = [
     "hypothesis>=6.100",
+    "lxml>=5.3",
     "pre-commit>=4.0",
     "pre-commit-hooks>=5.0",
     "pyright[nodejs]>=1.1.400",
@@ -29,6 +30,7 @@ dev = [
     "pytest-cov>=6.0",
     "pytest-socket>=0.7",
     "pytest-xdist>=3.6",
+    "python-docx>=1.1",
     "respx>=0.22",
     "ruff>=0.11",
 ]
@@ -40,8 +42,9 @@ dev = [
 line-length = 110
 target-version = "py312"
 # scripts/ (spec and task tooling) predates this config and is owned by v1-e01-t05-spec-tooling and
-# v1-e01-t11-task-workflow-cli; it comes under ruff when that tooling is brought into line.
-extend-exclude = ["scripts"]
+# v1-e01-t11-task-workflow-cli; it comes under ruff when that tooling is brought into line. The
+# `./` prefix anchors the pattern to the repository root, so tests/scripts/ is still linted.
+extend-exclude = ["./scripts"]
 force-exclude = true  # honour the excludes when pre-commit passes file names explicitly
 src = [
     "packages/debate_core/src",

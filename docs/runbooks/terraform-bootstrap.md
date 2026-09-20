@@ -413,8 +413,8 @@ account id is not.
 |---|---|---|
 | `DebateMaintainer` denied the prod state bucket (simulate-principal-policy) | `explicitDeny` on `ListBucket`, `GetObject`, `PutObject`, `DeleteObject`, against the bucket ARN and both the `envs/prod/` and `bootstrap/organization/` state keys by name | 2026-09-20 |
 | `DebateMaintainer` allowed the dev state bucket | `allowed` on `ListBucket`, `GetObject`, `PutObject` | 2026-09-20 |
-| `bootstrap/organization` migrated, plan clean, local state removed | | |
-| Dated state backups in `~/aws-backups/debate-terraform-state/` | | |
+| `bootstrap/organization` migrated, plan clean, local state removed | `No changes.` before and after deleting the local file; `bootstrap/organization/terraform.tfstate` present in `debate-prod-tfstate-a7508de8`; no `*.tfstate*` left in the main clone | 2026-09-20 |
+| Dated state backups in `~/aws-backups/debate-terraform-state/` | `bootstrap-state-dev-20260920`, `bootstrap-state-prod-20260920`, `organization-20260920-021156` (86,743 bytes, serial 31) | 2026-09-20 |
 
 ## Recurring checks
 

@@ -83,7 +83,7 @@ spec:
         after `terraform init -migrate-state` a plan reports no changes and no local terraform.tfstate
         remains in the operator's main clone (a dated backup outside the repo is kept).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

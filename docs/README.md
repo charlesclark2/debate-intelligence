@@ -3,6 +3,8 @@
 | Where | What |
 |---|---|
 | [architecture/architecture_proposal.md](architecture/architecture_proposal.md) | V1–V3 system architecture proposal |
+| [architecture/cardmirror-evaluation.md](architecture/cardmirror-evaluation.md) | CardMirror schema, API, license and round-trip evidence behind ADR-0014 |
+| [architecture/cardmirror-upstream-issues.md](architecture/cardmirror-upstream-issues.md) | CardMirror defects found during the evaluation, drafted for upstream and not filed |
 | [adr/](adr/README.md) | Architecture decision records |
 | [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off for long commands, doc locations, naming |
 | [process/branching-and-environments.md](process/branching-and-environments.md) | `main` = prod, `dev` = development; promotion rules |

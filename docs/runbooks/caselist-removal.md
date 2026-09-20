@@ -17,7 +17,9 @@ it back.
 
 - [ ] The data-use policy is approved, or the removal is being run *because* something was
       imported outside the policy.
-- [ ] You can sign in to the dev and prod AWS accounts with the SSO profiles from v1-e29-t01.
+- [ ] You can sign in with the takedown SSO profiles `debate-dev-evidence-removal` and
+      `debate-prod-evidence-removal` (`v1-e29-t03`; set up in
+      [evidence-store.md](evidence-store.md)).
 - [ ] You know which environment each command targets. `DEBATE_ENV` selects it; prod additionally
       requires `--confirm-prod`.
 - [ ] You have the request in writing (email is fine).
@@ -115,8 +117,9 @@ DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld2
 - [ ] The re-import counts the file as `SUPPRESSED`.
 - [ ] No `raw/` or `parsed/` object for those sha256 values remains — **including noncurrent
       versions**. Check with the AWS CLI if you want belt and braces:
-      `aws s3api list-object-versions --bucket <dev-evidence-bucket> --prefix raw/hsld26/<sha256>`
-      returns nothing.
+      `aws s3api list-object-versions --bucket debate-dev-evidence-a7508de8 --prefix raw/caselist/hsld26/sha256/<ab>/<cd>/<sha256>`
+      returns nothing. The key form is
+      [docs/architecture/evidence-store-layout.md](../architecture/evidence-store-layout.md).
 
 ## Step 7 — Prod
 
@@ -195,11 +198,13 @@ operator has downloaded locally, and the procedure is:
 3. **S3.** If anything was already published, delete the `raw/` and `parsed/` objects **and all
    noncurrent versions** with `aws s3api delete-object --version-id` per version, in dev then prod,
    and rewrite the affected manifests.
-   > **Permissions note.** The `EvidenceOperator` permission set from v1-e29-t03 deliberately has
-   > **no `s3:DeleteObject`**, and `caselist remove` will hit the same wall in t07. The PM is
-   > amending v1-e29-t03 and v1-e30-t07 to settle it (open question 8 in the policy). Until that
-   > lands, a deletion needs an administrator profile, and the person running it is accountable
-   > for using an elevated profile for exactly this and nothing else.
+   > **Which profile.** Use `debate-dev-evidence-removal` / `debate-prod-evidence-removal`, the
+   > `EvidenceRemoval` permission set from `v1-e29-t03`. It is the only credential in the account
+   > that may delete evidence, and it is scoped to `raw/`, `parsed/`, `files/`, `manifests/` and
+   > `quarantine/` — a delete under `reports/` is denied, because a report is regenerated rather
+   > than deleted. The everyday `debate-<env>-evidence` profile has **no `s3:DeleteObject` at
+   > all**, deliberately, so a takedown has to be a decision. No administrator profile is needed
+   > any more: [docs/runbooks/evidence-store.md](evidence-store.md) has the profile setup.
 4. **Built files.** Same as step 8 above, by hand against the provenance sidecars.
 5. **Backfill the machine log.** When t07 ships, add each sha256 to the suppression list with the
    original request id, date and reason code, and re-run `caselist status` in both environments.
@@ -211,6 +216,6 @@ operator has downloaded locally, and the procedure is:
 - `plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml` — the `caselist remove` command
   and the suppression list.
 - `plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml` — bucket lifecycle and the
-  `EvidenceOperator` permission set.
+  `EvidenceOperator` and `EvidenceRemoval` permission sets.
 - `plan_specs/v2/e35-debate-tub/t05-tub-access-and-removal.yaml` — the V2 takedown flow built on
   this suppression list.

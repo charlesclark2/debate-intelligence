@@ -159,6 +159,27 @@ boundary ADR-0010 rests on is gone — stop and fix
 The prod bucket does not exist yet, and that does not matter: `simulate-principal-policy`
 evaluates policies against an ARN, not against a resource that has to be there.
 
+## If you are re-running this later
+
+These roots are shared: `envs/dev` and `envs/prod` hold every task's resources, not only this
+one's, and nothing sequences applies across tasks. Both failure modes below show up as a plan that
+looks almost right, so read the resource counts rather than skimming them.
+
+* **Apply from a checkout that has every merged task, not from this task's branch.** A plan from a
+  stale branch proposes destroying what a later task added — and worse, because it does not look
+  like a destroy at all, it silently reverts a later task's change to a *shared module*. A
+  concrete example as this was written: `v1-e36-t05-site-deploy` adds `cloudfront:GetInvalidation`
+  to the `static_site` publisher policy, and an apply from a branch that predates it shows
+  `1 to change` and quietly takes that action back. The symptom lands somewhere else entirely —
+  `scripts/site_deploy.sh` uploads the whole site and then fails waiting on the invalidation. Run
+  `scripts/task sync <task>` first, or apply from `dev`.
+* **Check that `owner.auto.tfvars` exists in the checkout you are applying from.** It is
+  gitignored, so a fresh worktree does not have one, and every user-name variable defaults to
+  `[]`. The plan then proposes destroying **every** `aws_ssoadmin_account_assignment` in the root
+  — the site publisher's as well as both evidence ones — and the only loud symptom is Terraform
+  prompting for `var.owner`. **Before you start** above creates the file; recreate it in any new
+  checkout.
+
 ## Step 3 — Apply dev
 
 **Operator command** (expected runtime ~5 min)

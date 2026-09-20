@@ -246,6 +246,18 @@ module's `terraform test` is still not part of that script — see **Follow-up w
   `infrastructure/modules/*/tests/` belongs in the script and therefore in the `terraform-checks`
   CI job. Left alone here because the script is `v1-e29-t02`'s output and changing it affects
   every task in flight.
+* **Nothing sequences `terraform apply` across tasks, and the shared env roots make that a real
+  hazard.** `envs/dev` and `envs/prod` hold every task's resources, so an apply from a branch that
+  predates another merged task proposes destroying what that task added — and, where the two tasks
+  touch the same shared module, silently reverts it while the plan reads `1 to change`. The
+  `v1-e36-t05-site-deploy` session hit the mirror image of this: it adds
+  `cloudfront:GetInvalidation` to the `static_site` publisher policy, which an apply from *this*
+  branch would take back, with the symptom surfacing later as `site_deploy.sh` failing to confirm
+  an invalidation. Both sessions have raised it; it wants a rule in `docs/process/`, which is the
+  PM's to write since working-agreements changes go through their own PR. This task's applies are
+  done and no further apply is planned from this branch, and
+  [docs/runbooks/evidence-store.md](../runbooks/evidence-store.md) now opens its apply section
+  with both failure modes and the `scripts/task sync` remedy.
 * **`v1-e29-t04` and `v1-e29-t05`** should take the bucket name and key from the roots'
   `evidence_bucket_name` / `evidence_kms_key_arn` outputs, or from the committed constant, rather
   than hard-coding a name a third time.

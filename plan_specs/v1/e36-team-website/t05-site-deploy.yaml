@@ -71,7 +71,7 @@ spec:
         The prod site is live and passes the smoke check before the October 1, 2026 parent information
         session.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

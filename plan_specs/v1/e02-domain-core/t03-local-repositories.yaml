@@ -57,7 +57,7 @@ spec:
         All adapters live under debate_core.integrations.local and are exercised by tests using
         pytest tmp_path only.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

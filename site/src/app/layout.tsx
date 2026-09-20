@@ -7,6 +7,7 @@ import { debaterLoginNavigationItem } from '@/lib/feature-flags'
 import { loadMediaConsent } from '@/lib/media-consent'
 import { enforcePublishingPolicy } from '@/lib/publishing-policy'
 import { isIndexable, readSiteUrl } from '@/lib/site-settings'
+import '@/styles/globals.css'
 
 export function generateMetadata(): Metadata {
   const settings = loadSiteSettings()

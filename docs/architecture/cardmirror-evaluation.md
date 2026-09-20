@@ -232,10 +232,10 @@ Neither blocks the decision, because the recommended option does not embed CardM
    convenience? It is the one export that would matter most to us if we ever did run CardMirror's
    importer in our pipeline.
 
-**Signed off by:** _(Charlie — confirm the team's use is noncommercial and say whether any "needs a
-decision" row must be resolved before ADR-0014 is accepted.)_
-
-**Date:** _(pending)_
+**Signed off by:** Charlie Clark, 2026-09-20. The team's use is noncommercial. The one "needs a
+decision" row — embedding the editor in the V2 web app — needs no decision now, because
+[ADR-0014](../adr/0014-debate-file-editor.md) rules embedding out. If that is ever revisited, the
+license question is revisited with it.
 
 ## Round-trip results
 
@@ -264,6 +264,9 @@ criteria ask for. Run against CardMirror 1.11.0 at `bc92e6b`.
 | `<w:sectPr>` | Replaced with CardMirror's default Letter / 1-inch section. |
 | Tracked changes (`<w:ins>` + `<w:del>`) | Insertion kept, deletion dropped, **no revision markup re-emitted**. Matches the documented rule. |
 | A two-cell table | Survives as `table` / `table_row` / `table_cell`. |
+| An inline image with plain alt text | Survives; the export is well-formed XML. |
+| An inline image whose alt text contains a quotation mark | **Export is invalid XML** — `descr="Emissions chart, &quot;Figure 3&quot;"` comes back as `descr="Emissions chart, "Figure 3""`. This is defect 2 below, reproduced. |
+| A paragraph containing soft hyphens (U+00AD) | Soft hyphens dropped; visible text unchanged. Defect 1 below. |
 
 The two "structure lost" rows are the finding that matters. CardMirror promotes an outline-level
 paragraph to a heading only when it also carries the Verbatim formatting signature — level 0 with
@@ -274,25 +277,94 @@ wall our own parser will hit on non-Verbatim caselist uploads, and CardMirror's 
 a good starting point for t02's heuristic classifier — including the guardrails, which exist to stop
 an ordinary Word document that merely uses outline levels from being mis-structured.
 
-### The 25-file sample (operator-run — NOT RUN)
+### The sample (36 files, operator-run)
 
-The acceptance criterion asks for at least 25 real files (8+ team files across Policy/LD/PF, 12
-caselist files from the hsld26 snapshots including 3+ non-Verbatim and 2+ wiki-converted, and 5 camp
-files), round-tripped, with per-category results and each failure categorized. Those files live only
-on Charlie's machine and must never enter this repository, so this section is filled in from the
-operator run. The command block is in the session report under **Operator follow-ups**.
+Run by Charlie on his own machine against files that never entered this repository, with
+CardMirror 1.11.0 at `bc92e6b`. The sample exceeds what the acceptance criterion asks for: 14 team
+files across Policy, LD and PF, 17 caselist files from the hsld26 snapshots (12 using Verbatim
+styles, 3 not, 2 converted from wiki text) and 5 camp files.
 
-| File category | Files | Clean | With differences | Failed to import | Difference categories |
+| File category | Files | Clean | With differences | Error | What the differences were |
 |---|---|---|---|---|---|
-| Team (Policy / LD / PF) | | | | | |
-| Caselist (Verbatim styles) | | | | | |
-| Caselist (non-Verbatim) | | | | | |
-| Caselist (wiki-converted) | | | | | |
-| Camp / OpenEv | | | | | |
+| Team (Policy / LD / PF) | 14 | 11 | 3 | 0 | Dropped soft hyphens (U+00AD) only. |
+| Caselist (Verbatim styles) | 12 | 12 | 0 | 0 | — |
+| Caselist (non-Verbatim) | 3 | 2 | 0 | 1 | One file (`2fa6c350`) re-exported as invalid XML; see defect 2 below. |
+| Caselist (wiki-converted) | 2 | 2 | 0 | 0 | — |
+| Camp / OpenEv | 5 | 4 | 1 | 0 | Dropped soft hyphens (U+00AD) only. |
+| **Total** | **36** | **31** | **4** | **1** | |
 
-Per-file rows from `summary.json`, keyed by sha256 prefix, go below the table. Three of the results
-also get opened in the CardMirror desktop app and in Word with Verbatim, edited and re-saved, to
-confirm a CardMirror-exported file is still a full participant in a Verbatim team's file ecosystem.
+**Paragraph text, heading levels, cite styling and underline / highlight / bold runs are unchanged
+in every file that imported.** Every text difference in all four flagged files was checked
+individually and is the same thing: a dropped U+00AD soft hyphen, an invisible discretionary
+hyphen. No structural unit changed anywhere in the sample, no cite styling was lost, and no
+underline, highlight or bold span moved.
+
+The comparison script now treats soft-hyphen loss as a known CardMirror normalization, counted
+separately rather than reported as a failure, so those four files have no remaining differences and
+the effective result is 35 clean and 1 error. Underline-encoding normalizations (a direct `<w:u>` or
+a named `StyleUnderline` becoming both) appear throughout and are expected — that is the
+slot-normalization rule described above, not a loss.
+
+The wiki-converted and non-Verbatim caselist files came through clean, which is better than the
+synthetic probes predicted. The probes show what CardMirror *cannot* recover — a heading with no
+style and no formatting signature — and the real files evidently carry enough of a signature to be
+classified. That is a useful signal for t02: the heuristics have more to work with in practice than
+the worst case suggests, but the worst case is real.
+
+### Hand check in Word and CardMirror
+
+Three round-tripped files were opened in the CardMirror desktop app and in Word, edited, and saved.
+**Word opens all of them, and edits saved from Word persist in the file.** The formatting, however,
+is visibly not what a Verbatim-configured Word produces: CardMirror regenerates canonical style
+definitions from its own defaults rather than preserving the team's Verbatim template appearance, so
+a round-tripped file reads as "not cut in Verbatim" even though its structure and styles are
+correct.
+
+That is the real cost of a round-trip, and it is cosmetic rather than structural: the file still
+works, still carries every style id Verbatim's macros key on, and still edits normally. It is worth
+knowing before telling a team to run their files through CardMirror — and it is a constraint on the
+lossless writer (v1-e33-t02), which should emit the team's own style definitions rather than assume
+a CardMirror-normalized file is a faithful template.
+
+## Known CardMirror defects
+
+Found during this evaluation, at 1.11.0 / `bc92e6b`. Drafts of what to send upstream are in
+[cardmirror-upstream-issues.md](cardmirror-upstream-issues.md); nothing has been filed.
+
+### 1. Soft hyphens (U+00AD) are dropped on import
+
+Discretionary hyphens do not survive `fromDocx`. Four files in the sample were affected. The visible
+text is unchanged — a soft hyphen renders as nothing unless a line breaks there — so this is a
+normalization rather than evidence loss, and it may well be deliberate given CardMirror's stated
+"aggressive cleanup on import" contract.
+
+**What it means for us.** Our comparison script counts it separately from real differences. Our own
+parser must *not* copy this behaviour: t03 records U+00AD positions so the lossless writer can put
+them back, and card fingerprints ignore them so the same card does not fingerprint differently
+depending on whether it passed through an editor that strips them.
+
+### 2. Image alt text containing a quotation mark produces an unreadable `.docx`
+
+**This one destroys the file on save.** `buildDrawingXml` in `src/export/exporter.ts` escapes an
+image's alt text with `escText` — which escapes `&`, `<` and `>`, correct for element content — and
+then writes it into the double-quoted `descr` attribute of `<wp:docPr>` and `<pic:cNvPr>`. A `"` in
+the alt text closes the attribute early, and `word/document.xml` is no longer well-formed XML. Word
+reports unreadable content. `escAttr`, the correct function, is defined immediately below `escText`
+in the same file.
+
+It fails silently: `toDocx` returns successfully and the bytes are written. Nothing notices until
+something reads the file back.
+
+This is what the one error in the sample is (`2fa6c350`): the original parses cleanly, the
+round-trip does not. It is CardMirror's output that is broken, not our comparison script. It
+reproduces synthetically — an inline image with `descr="Emissions chart, &quot;Figure 3&quot;"`
+round-trips to `descr="Emissions chart, "Figure 3""`, while an otherwise identical file with no
+quotation mark in its alt text round-trips to well-formed XML.
+
+**What it means for us.** Nobody should re-save a file containing images in CardMirror until this is
+fixed; [ADR-0014](../adr/0014-debate-file-editor.md) says so in the decision. It is also a reason
+for the lossless writer's own checks to parse what they emit rather than trust that a writer
+succeeded.
 
 ## What this means for the rest of the epic
 
@@ -304,11 +376,20 @@ confirm a CardMirror-exported file is still a full participant in a Verbatim tea
 * **[t03, the parser](../../plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml):** the
   card grouping we have to do by hand (tag, then cite and body paragraphs until the next tag) is what
   CardMirror's `card` content expression encodes; its "loose on purpose" ordering is a warning that
-  real files do not follow a strict tag → cite → body sequence.
+  real files do not follow a strict tag → cite → body sequence. The parser **records U+00AD soft
+  hyphen positions** rather than stripping them, so the lossless writer can put them back in a file
+  that came from a Verbatim user who hyphenated.
+* **[t04, card fingerprints](../../plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml):**
+  fingerprints **ignore U+00AD** in the normalized body text. The same card disclosed by two teams
+  must fingerprint identically whether or not one of them passed it through an editor that strips
+  soft hyphens — CardMirror does, and it is not the only one.
 * **[v1-e33-t02, the lossless writer](../../plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml):**
-  its CardMirror checks are conditional on this ADR. If CardMirror is a compatibility target, a
-  built file should survive a `fromDocx`/`toDocx` round-trip with no structural differences — this
-  harness is exactly the check, and it is cheap to run on a generated file.
+  a built file should survive a `fromDocx`/`toDocx` round-trip with no structural differences — this
+  harness is exactly the check, and it is cheap to run on a generated file. Two findings from the
+  sample bear on it directly: the writer should emit the team's own Verbatim style definitions rather
+  than assume a CardMirror-normalized file is a faithful template (see the hand check), and its own
+  verification should **parse what it emits** rather than trust that writing succeeded — CardMirror's
+  alt-text defect is exactly the failure mode that slips past a writer with no read-back check.
 * **[v2-e35-t04, the debate tub](../../plan_specs/v2/e35-debate-tub/t04-tub-ui.yaml):** "Open in
   CardMirror" is a download plus a hand-off hint or a deep link. Both are outside the license's
   reach entirely, so neither needs the author's permission.

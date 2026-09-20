@@ -26,6 +26,12 @@ node_modules/
 *.tfplan
 crash.log
 
+# Debate files at the repository root: real team, caselist and camp files and their
+# round-tripped output must never be committed (v1-e31-t01, ADR-0014). Anchored to the root so
+# scrubbed fixtures under tests/fixtures/ are unaffected.
+/*.docx
+/*.doc
+
 # Local data, secrets, OS
 .env
 .env.*

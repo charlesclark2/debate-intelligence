@@ -94,11 +94,20 @@ body, from the paragraph style id or `w:outlineLvl`), and the underline, highlig
 font-size spans. Spans are character ranges over the paragraph text, not runs, because splitting
 and merging runs changes nothing a debater can see.
 
-Two things are recorded as *normalizations* rather than differences, because the rendered document
-is unchanged: whitespace-only text changes, and a change in how an underline is encoded
-(`StyleUnderline` character style, a direct `<w:u>`, or both) when the underlined range is
-identical. CardMirror deliberately rewrites underline encoding per slot — the named style in body
-text, a direct `<w:u>` in tags and headings — and writes both on body runs on export.
+Three things are recorded as *normalizations* rather than differences, because the rendered
+document is unchanged. They are counted per category in the summary, so a normalization is reported
+rather than merely not-failed.
+
+* **Whitespace-only text changes.**
+* **A change in how an underline is encoded** (`StyleUnderline` character style, a direct `<w:u>`,
+  or both) when the underlined range is identical. CardMirror deliberately rewrites underline
+  encoding per slot — the named style in body text, a direct `<w:u>` in tags and headings — and
+  writes both on body runs on export.
+* **Dropped soft hyphens (U+00AD).** CardMirror strips discretionary hyphens on import. They are
+  invisible, so the comparison strips them from both sides before comparing and reports the change
+  in count as `soft_hyphens_dropped`. Our own parser does the opposite — it records their positions
+  — and card fingerprints ignore them; see
+  [ADR-0014](../../docs/adr/0014-debate-file-editor.md).
 
 Empty unstyled paragraphs are ignored on both sides; empty *headings* are kept, because an empty
 Heading 1 is how debate files separate two documents packed into one.

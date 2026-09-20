@@ -17,6 +17,15 @@ What it compares, per paragraph:
   the paragraph text rather than runs, because any editor is free to split and merge
   runs without changing a document's meaning.
 
+Two CardMirror behaviours are treated as normalizations rather than losses, and counted
+separately in the summary. One is underline re-encoding (below). The other is the soft
+hyphen: CardMirror drops U+00AD on import, so a Verbatim file that carries them comes back
+without them. The characters are invisible discretionary hyphens, the visible text is
+unchanged, and reporting them as text differences would bury every real difference. The
+comparison therefore strips U+00AD from both sides before comparing and reports the change
+in count as a `soft_hyphens_dropped` normalization. Our own parser must not do this: it
+records U+00AD positions, and card fingerprints ignore them.
+
 Underline is deliberately compared by *effect*, not encoding. Verbatim and CardMirror
 both underline body text with the `StyleUnderline` character style and structural text
 (tags, analytics, headings) with a direct `<w:u>`, and CardMirror normalizes a run that
@@ -53,6 +62,9 @@ import docx
 from lxml import etree
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+# Discretionary hyphen. CardMirror drops these on import; see the module docstring.
+SOFT_HYPHEN = "\u00ad"
 
 
 def w(tag: str) -> str:
@@ -142,6 +154,7 @@ class RunFormatting:
 class RunSnapshot:
     text: str
     formatting: RunFormatting
+    soft_hyphens: int = 0
 
 
 @dataclass(frozen=True)
@@ -153,6 +166,11 @@ class ParagraphSnapshot:
     @property
     def text(self) -> str:
         return "".join(run.text for run in self.runs)
+
+    @property
+    def soft_hyphens(self) -> int:
+        """Soft hyphens stripped from this paragraph's runs before comparison."""
+        return sum(run.soft_hyphens for run in self.runs)
 
     def spans(self, dimension: str) -> tuple[tuple[int, int, Any], ...]:
         """Character ranges over `text` carrying one formatting value, adjacent equals merged."""
@@ -321,10 +339,19 @@ def _paragraph_style(paragraph: etree._Element) -> tuple[str | None, int | None]
     return style_id, outline_level
 
 
+def _snapshot_run(run: etree._Element) -> RunSnapshot:
+    raw = _run_text(run)
+    return RunSnapshot(
+        text=raw.replace(SOFT_HYPHEN, ""),
+        formatting=_run_formatting(run),
+        soft_hyphens=raw.count(SOFT_HYPHEN),
+    )
+
+
 def _snapshot_paragraph(paragraph: etree._Element) -> ParagraphSnapshot:
     style_id, outline_level = _paragraph_style(paragraph)
     runs = tuple(
-        RunSnapshot(text=_run_text(run), formatting=_run_formatting(run))
+        _snapshot_run(run)
         for run in paragraph.iter(w("r"))
         if not _is_dropped_revision(run, paragraph)
     )
@@ -402,6 +429,15 @@ def compare_paragraphs(
                 "structural_unit",
                 index,
                 {"original": original.structural_unit, "roundtripped": roundtripped.structural_unit},
+            )
+        )
+
+    if original.soft_hyphens != roundtripped.soft_hyphens:
+        normalizations.append(
+            Difference(
+                "soft_hyphens_dropped",
+                index,
+                {"original": original.soft_hyphens, "roundtripped": roundtripped.soft_hyphens},
             )
         )
 
@@ -530,7 +566,14 @@ def summarize(comparisons: Iterable[FileComparison], *, cardmirror_commit: str |
     for comparison in comparisons:
         bucket = categories.setdefault(
             comparison.file_category,
-            {"files": 0, "clean": 0, "withDifferences": 0, "errors": 0, "differencesByCategory": {}},
+            {
+                "files": 0,
+                "clean": 0,
+                "withDifferences": 0,
+                "errors": 0,
+                "differencesByCategory": {},
+                "normalizationsByCategory": {},
+            },
         )
         bucket["files"] += 1
         if comparison.status == "clean":
@@ -542,6 +585,9 @@ def summarize(comparisons: Iterable[FileComparison], *, cardmirror_commit: str |
         counts: dict[str, int] = bucket["differencesByCategory"]
         for difference in comparison.differences:
             counts[difference.category] = counts.get(difference.category, 0) + 1
+        normalization_counts: dict[str, int] = bucket["normalizationsByCategory"]
+        for note in comparison.normalizations:
+            normalization_counts[note.category] = normalization_counts.get(note.category, 0) + 1
     return {
         "generatedAt": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "cardmirrorCommit": cardmirror_commit,

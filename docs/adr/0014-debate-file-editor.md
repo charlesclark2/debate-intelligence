@@ -1,8 +1,8 @@
 # ADR-0014: Debate file editor and format reference
 
-- Status: Proposed <!-- Proposed | Accepted | Deprecated | Superseded by ADR-NNNN (link to the replacement file) -->
+- Status: Accepted <!-- Proposed | Accepted | Deprecated | Superseded by ADR-NNNN (link to the replacement file) -->
 - Date: 2026-09-20
-- Deciders: Charlie Clark (pending — see [Decision](#decision))
+- Deciders: Charlie Clark, 2026-09-20
 - Architecture references: [§6 Repository and service boundaries](../architecture/architecture_proposal.md#6-repository-and-service-boundaries), [§13 V3 detailed architecture](../architecture/architecture_proposal.md#13-v3-detailed-architecture), [§16 Testing and evaluation strategy](../architecture/architecture_proposal.md#16-testing-and-evaluation-strategy), [§18 Key architecture decisions](../architecture/architecture_proposal.md#18-key-architecture-decisions-adrs)
 
 ## Context
@@ -28,12 +28,21 @@ reviewed at commit `bc92e6bd99cb9b3ce97ddacfa2362100db96360e` (CardMirror 1.11.0
   `cite_paragraph` / `card_body` / `analytic` / `undertag` nodes map onto the `StructuralUnit` enum
   t02 defines, and its `PSTYLE_TO_NODE` and `MARK_TO_RSTYLE` tables are a second, independent
   reading of Verbatim's style ids that we can check ourselves against.
-* **The round-trip holds on styled files.** In synthetic probes, a conventional Verbatim card kept
-  its text, heading levels, cite styling, underline, highlight and bold, and the export carries
-  canonical Verbatim style ids. Underline is dual-encoded by design (named `StyleUnderline` in body
-  slots, direct `<w:u>` in structural slots, both on body runs on export) — a rule our parser has to
-  know. Hard page breaks lose their page type, `<w:sectPr>` is normalized away, and tracked changes
-  are resolved rather than preserved.
+* **The round-trip holds.** Across a 36-file sample of real team, caselist and camp files — 14 team
+  files, 17 caselist files (including 3 non-Verbatim and 2 wiki-converted) and 5 camp files — 31
+  came back clean, 4 differed only by dropped soft hyphens, and 1 failed on the defect below. No
+  structural unit changed, no cite styling was lost, and no underline, highlight or bold span moved
+  anywhere in the sample. Underline is dual-encoded by design (named `StyleUnderline` in body slots,
+  direct `<w:u>` in structural slots, both on body runs on export) — a rule our parser has to know.
+  Hard page breaks lose their page type, `<w:sectPr>` is normalized away, and tracked changes are
+  resolved rather than preserved.
+* **Two defects, one of them serious.** Soft hyphens (U+00AD) are dropped on import, which changes
+  no visible text and may be deliberate. Image alt text containing a quotation mark is written
+  unescaped into an XML attribute, producing a `.docx` Word cannot read — silently, because the save
+  reports success. One sample file hit it.
+* **Word accepts the output, but it does not look Verbatim-cut.** Hand-checked files open in Word and
+  keep edits saved from Word, but CardMirror regenerates style definitions from its own defaults
+  rather than preserving the team's Verbatim template appearance.
 * **Non-Verbatim files stay flat.** A heading expressed only as an outline level, without the
   Verbatim formatting signature, is not promoted to a heading; a file with neither styles nor
   outline levels imports as loose paragraphs. Our parser faces the same wall, and CardMirror's
@@ -55,9 +64,9 @@ Two questions, answered separately.
 
 **1. Is CardMirror a compatibility target for the files we produce?**
 
-> _Charlie's answer:_ ______________________
+> **Yes.** — Charlie Clark, 2026-09-20
 
-**Recommended: yes.** Every file this platform writes — built files from the E33 file builder,
+Every file this platform writes — built files from the E33 file builder,
 exports from the V2 card editor — should survive a CardMirror `fromDocx` / `toDocx` round-trip with
 no structural differences, checked with
 [`scripts/cardmirror-roundtrip/`](../../scripts/cardmirror-roundtrip/README.md). This costs almost
@@ -67,13 +76,23 @@ files rather than something that merely looks right.
 
 **2. Is CardMirror the team's editor this season?**
 
-> _Charlie's answer (mandated / allowed / not this season):_ ______________________
+> **Allowed, not mandated** — with two conditions: keep the Verbatim original of anything you open,
+> and do not re-save a file containing images in CardMirror until the alt-text defect is fixed.
+> — Charlie Clark, 2026-09-20
 
-**Recommended: allowed, not mandated.** Debaters who want it — particularly anyone on a Chromebook,
-a Mac, or a school machine that cannot run Word macros — should be told it exists, told to keep
-backups, and told to use the desktop build rather than the web edition at tournaments. Mandating it
-for the whole team this season bets tournament-day reliability on a five-month-old, one-maintainer
-project with unsigned builds. Nothing in this platform depends on the answer either way.
+Debaters who want it — particularly anyone on a Chromebook, a Mac, or a school machine that cannot
+run Word macros — are told it exists, told to keep the Verbatim original, and told to use the
+desktop build rather than the web edition at tournaments. Mandating it for the whole team this
+season would bet tournament-day reliability on a five-month-old, one-maintainer project with
+unsigned builds. Nothing in this platform depends on the answer either way.
+
+**The image condition is not precautionary.** CardMirror 1.11.0 writes an image's alt text into an
+XML attribute without escaping quotation marks, so a file whose image alt text contains a `"` — which
+Word writes routinely — re-exports as a `.docx` Word cannot read. It fails silently: the save
+appears to succeed. One file in the evaluation sample hit it. Until it is fixed upstream, a file
+with images goes into CardMirror read-only or not at all. The defect and a synthetic reproduction are
+in [the evaluation note](../architecture/cardmirror-evaluation.md#known-cardmirror-defects) and
+[the upstream issue draft](../architecture/cardmirror-upstream-issues.md).
 
 **Scope of what this ADR settles regardless of those answers:**
 
@@ -108,8 +127,15 @@ project with unsigned builds. Nothing in this platform depends on the answer eit
   the harness against a newer release before each major file-format change keeps the compatibility
   claim honest; nothing breaks if we skip it, we just stop knowing.
 * **Tracked changes do not survive CardMirror.** Any debater using it loses revision history on
-  files they open and re-save. Worth saying out loud to the team if the answer to question 2 is
-  "allowed" or "mandated".
+  files they open and re-save. Since the answer to question 2 is "allowed", this goes to the team
+  alongside the two conditions.
+* **The image defect needs watching.** The team instruction — no re-saving files with images —
+  stands until CardMirror fixes it. The draft issue is written and unfiled in
+  [cardmirror-upstream-issues.md](../architecture/cardmirror-upstream-issues.md); filing it, and
+  lifting the condition once a release fixes it, is a follow-up, not a blocker.
+* **Soft hyphens are a parser requirement, not just a CardMirror quirk.** t03 records U+00AD
+  positions and t04's fingerprints ignore them, so the same card fingerprints identically whether or
+  not it passed through an editor that strips them.
 
 ## Alternatives considered
 
@@ -138,8 +164,10 @@ comparison script's synthetic tests give us the regression coverage that matters
 ## References
 
 - [docs/architecture/cardmirror-evaluation.md](../architecture/cardmirror-evaluation.md) — the schema
-  mapping, API notes, plugin-bridge findings, subscription features, license review and round-trip
-  results this decision rests on.
+  mapping, API notes, plugin-bridge findings, subscription features, license review, round-trip
+  results and known defects this decision rests on.
+- [docs/architecture/cardmirror-upstream-issues.md](../architecture/cardmirror-upstream-issues.md) —
+  the drafted, unfiled upstream issue for the alt-text defect.
 - [CardMirror](https://github.com/ant981228/cardmirror) at `bc92e6bd99cb9b3ce97ddacfa2362100db96360e`
   (1.11.0); [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/).
 - [Verbatim](https://github.com/ashtarcommunications/verbatim).

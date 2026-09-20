@@ -469,3 +469,71 @@ def test_named_plus_direct_underline_is_its_own_encoding(tmp_path: Path) -> None
     assert note.category == "underline_encoding_changed"
     assert note.detail["original"] == [[0, 10, "named_style"]]
     assert note.detail["roundtripped"] == [[0, 10, "both"]]
+
+
+def test_dropped_soft_hyphens_are_a_normalization_not_a_text_difference(tmp_path: Path) -> None:
+    """CardMirror drops U+00AD on import. The visible text is unchanged, so this is
+    counted and reported, not treated as evidence loss."""
+    original = write_docx(
+        tmp_path / "original.docx",
+        [Paragraph((Run("Inter­national secur­ity guarantees."),))],
+    )
+    roundtripped = write_docx(
+        tmp_path / "roundtripped.docx",
+        [Paragraph((Run("International security guarantees."),))],
+    )
+
+    result = comparison.compare_file(original, roundtripped, "team")
+
+    assert result.status == "clean"
+    assert [note.category for note in result.normalizations] == ["soft_hyphens_dropped"]
+    assert result.normalizations[0].detail == {"original": 2, "roundtripped": 0}
+
+
+def test_dropped_soft_hyphens_do_not_shift_formatting_spans(tmp_path: Path) -> None:
+    """Stripping U+00AD from both sides keeps character offsets comparable, so an
+    underlined range that contains a soft hyphen still lines up."""
+    original = write_docx(
+        tmp_path / "original.docx",
+        [
+            Paragraph(
+                (
+                    Run("Lead-in. "),
+                    Run("Inter­national law", underline="single"),
+                    Run(" Trailing."),
+                )
+            )
+        ],
+    )
+    roundtripped = write_docx(
+        tmp_path / "roundtripped.docx",
+        [Paragraph((Run("Lead-in. "), Run("International law", underline="single"), Run(" Trailing.")))],
+    )
+
+    result = comparison.compare_file(original, roundtripped, "caselist")
+
+    assert result.differences == []
+    snapshots = comparison.read_paragraphs(original)
+    assert snapshots[0].spans("underline") == ((9, 26, True),)
+
+
+def test_a_soft_hyphen_and_a_real_text_change_are_reported_separately(tmp_path: Path) -> None:
+    original = write_docx(tmp_path / "original.docx", [Paragraph((Run("Inter­national law."),))])
+    roundtripped = write_docx(tmp_path / "roundtripped.docx", [Paragraph((Run("International lw."),))])
+
+    result = comparison.compare_file(original, roundtripped, "camp")
+
+    assert [d.category for d in result.differences] == ["paragraph_text"]
+    assert [n.category for n in result.normalizations] == ["soft_hyphens_dropped"]
+
+
+def test_summary_counts_normalizations_by_category(tmp_path: Path) -> None:
+    original = write_docx(tmp_path / "original.docx", [Paragraph((Run("Inter­national law."),))])
+    roundtripped = write_docx(tmp_path / "roundtripped.docx", [Paragraph((Run("International law."),))])
+
+    result = comparison.compare_file(original, roundtripped, "team")
+    summary = comparison.summarize([result])
+
+    assert summary["totals"]["clean"] == 1
+    assert summary["categories"]["team"]["normalizationsByCategory"] == {"soft_hyphens_dropped": 1}
+    assert summary["categories"]["team"]["differencesByCategory"] == {}

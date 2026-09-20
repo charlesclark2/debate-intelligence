@@ -79,7 +79,7 @@ spec:
         Charlie's decision is recorded in the ADR (who, date, option) and docs/adr/README.md moves 0014 from
         Reserved numbers to the Index table.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

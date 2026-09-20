@@ -7,7 +7,7 @@
 # without this the only way to publish prod would be break-glass administrator access for a
 # routine act.
 #
-# The policy names exactly five actions on exactly two resources, both of them this environment's
+# The policy names exactly six actions on exactly two resources, both of them this environment's
 # own. It is built with jsonencode rather than an aws_iam_policy_document data source so that the
 # module's tests can read it back under a mocked provider — a policy document's rendered JSON is
 # opaque there, and this is precisely the policy worth asserting on.
@@ -44,11 +44,21 @@ locals {
       },
       {
         # A static export behind a CDN serves stale HTML until it is invalidated, so the deploy is
-        # not finished without this. CreateInvalidation only: reading an invalidation's progress
-        # would need GetInvalidation, which the task spec's least-privilege list does not include.
-        Sid      = "InvalidateSiteDistribution"
-        Effect   = "Allow"
-        Action   = "cloudfront:CreateInvalidation"
+        # not finished without this.
+        #
+        # GetInvalidation is here because creating an invalidation is not the same as it having
+        # finished, and the difference matters: docs/policies/website-publishing.md promises that
+        # something published about a student comes down within 24 hours of a request, and "down"
+        # means gone from the edge caches, not gone from the bucket. `aws cloudfront wait
+        # invalidation-completed`, which scripts/site_deploy.sh runs, polls GetInvalidation. It
+        # reads the progress of an invalidation on this distribution and nothing else, so the set
+        # is still an allow-list of exactly what one deploy does (v1-e36-t05).
+        Sid    = "InvalidateSiteDistribution"
+        Effect = "Allow"
+        Action = [
+          "cloudfront:CreateInvalidation",
+          "cloudfront:GetInvalidation",
+        ]
         Resource = aws_cloudfront_distribution.site.arn
       },
     ]
@@ -62,7 +72,7 @@ resource "aws_ssoadmin_permission_set" "site_publisher" {
   count = local.create_publisher_permission_set ? 1 : 0
 
   name             = local.publisher_permission_set_name
-  description      = "Publishes the ${var.environment} team website: sync ${local.bucket_name} and invalidate its distribution. Nothing else (ADR-0012)."
+  description      = "Publishes the ${var.environment} team website: sync ${local.bucket_name}, invalidate its distribution and watch that invalidation finish. Nothing else (ADR-0012)."
   instance_arn     = var.identity_center_instance_arn
   session_duration = "PT1H"
 }

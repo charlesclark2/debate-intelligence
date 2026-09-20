@@ -18,7 +18,7 @@
 | [runbooks/terraform-bootstrap.md](runbooks/terraform-bootstrap.md) | Creating the Terraform state buckets and the dev/prod environment roots |
 | [runbooks/evidence-store.md](runbooks/evidence-store.md) | Applying the dev and prod evidence buckets and checking the operator and takedown credentials |
 | [runbooks/caselist-removal.md](runbooks/caselist-removal.md) | Removing a caselist or OpenEv source on request |
-| [runbooks/team-website.md](runbooks/team-website.md) | Standing up the team website's hosting, domains and publisher credentials |
+| [runbooks/team-website.md](runbooks/team-website.md) | Standing up the team website's hosting, domains and publisher credentials, and deploying, rolling back or taking down the site |
 | [session-reports/](session-reports/README.md) | One report per completed task |
 | [runbooks/](runbooks/) | Operational procedures run by the operator |
 | [../plan_specs/README.md](../plan_specs/README.md) | PlanSpec conventions |

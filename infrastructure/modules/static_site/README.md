@@ -48,25 +48,31 @@ The hosted zones are **inputs, never resources**. They came with the domain regi
 
 [`publisher_access.tf`](publisher_access.tf) defines `DebateDevSitePublisher` /
 `DebateProdSitePublisher`: an Identity Center permission set whose inline policy allows exactly
-five actions — `s3:ListBucket` on the site bucket, `s3:GetObject`, `s3:PutObject` and
-`s3:DeleteObject` on its objects, and `cloudfront:CreateInvalidation` on its distribution — and
-nothing else. The operator's SSO profile for it is named after `name_prefix`
-(`debate-dev-site`, `debate-prod-site`).
+six actions — `s3:ListBucket` on the site bucket, `s3:GetObject`, `s3:PutObject` and
+`s3:DeleteObject` on its objects, and `cloudfront:CreateInvalidation` and
+`cloudfront:GetInvalidation` on its distribution — and nothing else. The operator's SSO profile
+for it is named after `name_prefix` (`debate-dev-site`, `debate-prod-site`).
 
 Prod is why it exists: the everyday `debate-prod` profile is `DebateReadOnly`, and
 `DebateMaintainer` is denied every `debate-prod-*` resource by ADR-0010 rule 4, so without this
 the only way to publish the site would be break-glass administrator access for a routine act.
 
-Two things it deliberately cannot do, both of which
-[`v1-e36-t05-site-deploy`](../../../plan_specs/v1/e36-team-website/t05-site-deploy.yaml) has to
-work around:
+One thing it deliberately cannot do, which
+[`v1-e36-t05-site-deploy`](../../../plan_specs/v1/e36-team-website/t05-site-deploy.yaml) works
+around:
 
 * **Read Terraform state.** `t05` reads the bucket and distribution from Terraform outputs; that
-  read needs a maintainer profile, not this one. Either run `terraform output` under
-  `debate-dev`/`debate-admin` and the sync under the publisher profile, or pass the names in.
-* **Poll an invalidation.** `cloudfront:CreateInvalidation` is granted; `GetInvalidation` is not,
-  so `aws cloudfront wait invalidation-completed` will be denied. Widening the policy is a spec
-  change (the task's ac4 lists the five actions), not an edit here.
+  read needs a maintainer profile, not this one. `scripts/site_deploy.sh` runs `terraform output`
+  under `debate-<env>` (overridable to `debate-admin`) and everything else under the publisher
+  profile.
+
+`cloudfront:GetInvalidation` was added by `v1-e36-t05`. `v1-e36-t02` granted
+`CreateInvalidation` alone, which made `aws cloudfront wait invalidation-completed` an
+`AccessDenied` and left a deploy unable to say whether the edge was actually serving the new
+files. That confirmation is what
+[`docs/policies/website-publishing.md`](../../../docs/policies/website-publishing.md) leans on
+when it promises that something about a student comes down within 24 hours of a request, so the
+policy was widened by one read action on the distribution the publisher may already invalidate.
 
 ## Tests
 

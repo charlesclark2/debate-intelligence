@@ -45,6 +45,37 @@ Things worth knowing before you add a field:
 * **Enum values are a wire format.** State enums are `SCREAMING_SNAKE_CASE`, label enums are
   `lower_snake_case`; both follow the tokens the PlanSpecs use. Changing one is a migration.
 
+### `application/` — ports and errors (v1-e02-t02-ports)
+
+Every boundary the core talks through, as `typing.Protocol` ports, plus the typed errors that
+cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/architecture/ports-and-adapters.md).
+
+| Module | Contents |
+|---|---|
+| `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable`, `ProviderRateLimited`) |
+| `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository`, and the `Page` returned by every listing |
+| `ports/providers.py` | `SearchProvider`, `ArticleFetcher`, `ContentExtractor`, `ModelRouter`, `Clock`, `IdGenerator`, and the value objects they exchange |
+| `services/article_registration.py` | The worked example of the constructor-injection pattern every service follows |
+
+Things worth knowing before you write a service:
+
+* **Ports arrive in `__init__`.** No service locator, no module-level singleton, no settings object
+  inside a service, and no `datetime.now()` or `uuid4()` — time and ids come from the `Clock` and
+  `IdGenerator` ports.
+* **Only `application.errors` crosses a port.** An adapter translates `sqlite3`, `botocore` and
+  `httpx` failures at its own edge.
+* **`CardRepository.save` requires `expected_revision`** and raises `RevisionMismatch`, so model
+  reprocessing cannot overwrite a student's edit. Creating is a separate method.
+* **Async where the work is I/O.** Extraction, the clock and the id generator are synchronous.
+
+### `testing/` — in-memory fakes (v1-e02-t02-ports)
+
+`debate_core.testing.fakes` has a working in-memory implementation of every port, plus `FixedClock`
+and `SequentialIdGenerator`. They enforce what their ports promise — dedupe, blob integrity,
+revision conflicts, listing order — so a test against a fake exercises the same rules as the real
+adapter. `build_fake_ports()` assembles one of each, and is where pyright checks that the fakes
+still conform to the Protocols.
+
 ### `schemas/` — published JSON Schemas
 
 One file per entity, generated and checked in:

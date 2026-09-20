@@ -236,30 +236,34 @@ they are not lost:
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** CHANGES_REQUESTED
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20 (round 2)
 
-**Notes:**
+**Notes (round 2):**
+
+- All three round-1 items are addressed, plus the amended ac3 and Charlie's answer on consent.
+- The consent-conditional reading of the naming rule is correct and stays: the district's rule is
+  "students who have opted into media are listed as FIRST NAME LAST NAME (GRADUATION YEAR)", so a
+  student with no current form is not named at all, not named in a reduced form. Keep the literal
+  render, "Jordan Rivera (2028)"; "Class of 2028" may appear in prose but not in the roster entry.
+- The consent-renewal section, the graduated-students rule and the two-speed removal clock (24 hours
+  for a student's name or image, 7 calendar days otherwise, page deleted and invalidated if a deploy
+  cannot happen in time) are all accepted as written.
+- Follow-up 2 (a build-time warning when a consent check predates the current season) is worth doing
+  and the PM is placing it in v1-e36-t04, where the roster content and its validation live. It is not
+  a condition of this task.
+
+**Round 1 notes, kept for the record:**
 
 The policy itself is strong: the district approval is recorded as given, the "none stated" framing is
 right, the checklist gives later tasks something to cite, and the Domains and continuity section is a
-good catch that no other document covered. Three changes, then this is accepted.
+good catch that no other document covered.
 
-1. **ac3 is amended, not failed.** The spec predated the district's rule. I rewrote ac3 in
-   `plan_specs/v1/e36-team-website/t01-publishing-policy.yaml` in this worktree: it now asks for the
-   district's naming rule, the consent check before publishing and each season, no contact details,
-   photos only with consent confirmed for website use, and a removal procedure with a faster clock for
-   student names and images. Commit that spec change with your fixes and mark ac3 PASS, citing the
-   amended text.
-2. **Faster clock for students.** Keep 3 business days to acknowledge, but remove a student's name or
-   image from prod (content edit, rebuild, deploy, CloudFront invalidation) within **24 hours** of the
-   request, with same-day as the goal. Other content keeps the 7-calendar-day clock. Say in the policy
-   that if a deploy is not possible within 24 hours, the page is taken down rather than left up.
-3. **No student photographs until open question 3 is answered.** State plainly that until Charlie
-   confirms with the activities office that the consent form covers website publication and how often
-   it renews, no student photograph is published, and that v1-e36-t04 ships without student photos.
-   Leave the question open; the gate is what matters.
+1. ac3 amended by the PM in this worktree rather than failed: the spec predated the district's rule.
+2. Faster clock for students: 24 hours for a name or image, 7 calendar days for other content.
+3. No student photographs until open question 3 was answered (since resolved: photos are allowed once
+   the season's consent forms are confirmed).
 
 Fix the count reference as you described (cite "every measured pair", not a number). Then commit the
 policy, the spec change and this report, keep the phase Succeeded, and send it back for a second pass.

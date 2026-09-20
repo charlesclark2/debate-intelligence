@@ -267,6 +267,14 @@ wait
 grep -l "Error acquiring the state lock" /tmp/lock-a.txt /tmp/lock-b.txt
 ```
 
+The loser fails with `api error PreconditionFailed` — HTTP 412 on `PutObject`. That is the
+conditional write behind `use_lockfile`: Terraform creates the lock object only if it does not
+already exist, and S3 refuses the second writer. Seeing 412 rather than a DynamoDB error is the
+confirmation that native S3 locking is what is running. Recorded 2026-09-20 against
+`debate-dev-tfstate-a7508de8/bootstrap/state/dev/terraform.tfstate`, Terraform 1.16.3; the winning
+plan reported `No changes. Your infrastructure matches the configuration.` after refreshing all
+eight resources.
+
 While a lock is held, `envs/dev/terraform.tfstate.tflock` exists in the bucket. If a crashed run
 leaves one behind, `terraform force-unlock <lock-id>` removes it — only after confirming no other
 `terraform` process is running, and never from an agent session.
@@ -380,7 +388,7 @@ account id is not.
 | Applied as | `debate-dev` (DebateMaintainer) | `debate-admin` (DebateBreakGlassAdmin) |
 | State migrated into the bucket | | |
 | `envs/<env>` init against the S3 backend | | |
-| Concurrent-plan lock error observed | | |
+| Concurrent-plan lock error observed | 2026-09-20, `bootstrap/state` race | |
 
 | Check | Result | Date |
 |---|---|---|

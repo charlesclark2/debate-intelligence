@@ -23,6 +23,7 @@ New records use the template in [0000-template.md](0000-template.md).
 | [0008](0008-no-neptune-initially.md) | No Amazon Neptune until DynamoDB adjacency proves insufficient | Accepted 2026-09-17 | Graph storage strategy for V1/V2. |
 | [0009](0009-async-job-architecture.md) | Async job architecture for slow work in V2 and beyond | Accepted 2026-09-17 | Step Functions + SQS + Fargate for slow, retryable work. |
 | [0013](0013-two-environments-and-dev-main-promotion.md) | Two environments (dev, prod) and dev→main promotion | Accepted 2026-09-17 | Supersedes the `stage` environment in proposal [§4](../architecture/architecture_proposal.md#4-technology-stack) and [§5](../architecture/architecture_proposal.md#5-aws-cloud-architecture); operational detail in [docs/process/branching-and-environments.md](../process/branching-and-environments.md). |
+| [0014](0014-debate-file-editor.md) | Debate file editor and format reference (CardMirror) | Proposed 2026-09-20 | Whether CardMirror is the team's editor and a compatibility target for every debate `.docx` we write; evidence in [cardmirror-evaluation.md](../architecture/cardmirror-evaluation.md). |
 
 ## Reserved numbers
 
@@ -35,7 +36,6 @@ decision lands.
 | 0010 | Primary AWS region | [`v1-e29-t01-aws-account-baseline`](../../plan_specs/v1/e29-cloud-evidence-store/t01-aws-account-baseline.yaml) |
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
 | 0012 | Web hosting | [`v2-e14-t03-app-hosting`](../../plan_specs/v2/e14-web-cut-card/t03-app-hosting.yaml) |
-| 0014 | Debate file editor and format reference (CardMirror evaluation) | [`v1-e31-t01-cardmirror-evaluation`](../../plan_specs/v1/e31-debate-file-parsing/t01-cardmirror-evaluation.yaml) |
 
 New ADRs take the next free number after the highest written or reserved one: **0015** is the
 next free number. Do not skip numbers; if a reservation is dropped, note it here rather than silently

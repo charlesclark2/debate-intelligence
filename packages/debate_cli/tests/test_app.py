@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -21,11 +22,12 @@ from typer.testing import CliRunner, Result
 from debate_cli import UNKNOWN_VERSION, __version__, package_version
 from debate_cli.app import create_app, main
 from debate_cli.commands import command_group
-from debate_cli.container import ServiceContainer, SettingsNotConfigured
+from debate_cli.container import ServiceContainer, Settings, SettingsNotConfigured
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, TableSpec
 from debate_core.application.errors import NotFound, ProviderUnavailable
+from debate_core.application.settings import load_settings
 
 runner = CliRunner()
 
@@ -126,7 +128,9 @@ def test_doctor_reports_the_environment_as_json() -> None:
     data = envelope["data"]
     assert data["cli_version"] == __version__
     assert data["python_version"].startswith("3.12")
-    assert data["settings_configured"] is False
+    # Every real run has a settings loader (v1-e02-t05); `doctor` reports that it is wired, not
+    # that it has been run — loading is lazy and `doctor` does not need settings.
+    assert data["settings_configured"] is True
     assert data["services"] == []
 
 
@@ -382,26 +386,26 @@ def test_a_command_outside_the_app_is_a_programming_error() -> None:
     assert isinstance(result.exception, RuntimeError)
 
 
-def test_settings_are_not_configured_until_their_task_lands() -> None:
+def test_a_container_built_without_a_loader_refuses_to_invent_settings() -> None:
     container = ServiceContainer()
 
     assert container.settings_configured is False
-    with pytest.raises(SettingsNotConfigured, match="v1-e02-t05"):
+    with pytest.raises(SettingsNotConfigured, match="settings_loader"):
         _ = container.settings
 
 
-def test_a_settings_loader_is_called_once_and_cached() -> None:
+def test_a_settings_loader_is_called_once_and_cached(tmp_path: Path) -> None:
     calls: list[int] = []
 
-    def load_settings() -> dict[str, str]:
+    def load_once() -> Settings:
         calls.append(1)
-        return {"evidence_dir": "/tmp/evidence"}
+        return load_settings(environment="test", overrides={"storage": {"data_dir": tmp_path}})
 
-    container = ServiceContainer(settings_loader=load_settings)
+    container = ServiceContainer(settings_loader=load_once)
 
     assert container.settings_configured is True
-    assert container.settings == {"evidence_dir": "/tmp/evidence"}
-    assert container.settings == {"evidence_dir": "/tmp/evidence"}
+    assert container.settings.storage.data_dir == tmp_path
+    assert container.settings.storage.data_dir == tmp_path
     assert calls == [1]
 
 

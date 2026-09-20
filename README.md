@@ -43,6 +43,7 @@ tests/                    fixtures, golden cards, integration suites
 plan_specs/               PlanSpecs: releases/, v1/, v2/, v3/
 docs/                     architecture proposal, ADRs
 scripts/                  validate_specs.py, spec_index.py
+config/                   committed configuration: profiles/<env>.toml, model routing
 ```
 
 ## Development setup
@@ -64,6 +65,22 @@ uv run pytest                      # parallel, with coverage, network blocked
 tests; opt in with `uv run pytest -m slow` or `-m live`. The project's markers (`slow`, `live`,
 `eval`, `dev`, `prod`) are all registered in the root `pyproject.toml`; `--strict-markers`
 rejects any other.
+
+## Configuration
+
+`DEBATE_ENV` selects the environment — `dev`, `prod` or `test` — and with it the profile in
+`config/profiles/`. A source checkout with `DEBATE_ENV` unset runs as `dev`, so nothing you run
+by accident writes to the production data directory.
+
+```bash
+cp .env.example .env                  # your own machine's secrets; .env is never committed
+uv run debate-research config show    # every setting, its value and where that value came from
+```
+
+Values are layered, highest first: a command-line flag, `DEBATE_*` variables in your shell,
+`.env`, `config/profiles/<env>.toml`, then the built-in profile for the environment. `config
+show` prints the source of each one, and redacts every secret. API keys and tokens belong in
+`.env` or the environment and never in a `config/` file, which is committed.
 
 ## Branches and environments
 

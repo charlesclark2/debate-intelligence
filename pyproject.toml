@@ -38,6 +38,8 @@ dev = [
     # on a laptop and on a CI runner. scripts/site_deploy.sh (v1-e36-t05) is the first shell script
     # with a lint criterion of its own.
     "shellcheck-py>=0.10",
+    # PyYAML ships no inline types; debate_core.application.routing_config is type-checked strictly.
+    "types-pyyaml>=6.0",
 ]
 
 # ---------------------------------------------------------------------------------------------

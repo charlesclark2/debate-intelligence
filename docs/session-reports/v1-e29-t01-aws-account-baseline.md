@@ -133,6 +133,34 @@ so operator-local account ids and emails cannot be committed.
    `debate-shared-*` alongside `debate-prod-*` so a dev credential cannot reach the audit trail.
    ADR-0010 states this.
 
+8. **Three defects found by planning against the applied state, fixed in a follow-up apply.**
+   `terraform plan` after the operator's apply was not clean, and each difference was a real bug
+   rather than drift:
+
+   - **The dev and prod budgets measured the same thing.** AWS Budgets stores every `TagKeyValue`
+     filter under one key and ORs the values, so two `cost_filter` blocks collapsed into
+     `Environment=dev OR Project=debate-intelligence` — widening each budget to all debate spend
+     instead of narrowing it to one environment. The legacy `CostFilters` API cannot AND two tag
+     filters and the provider exposes no `filter_expression`, so the per-environment budgets now
+     filter on `Environment` alone. If another project in this account ever adopts an `Environment`
+     tag these over-count and alert early, which is the safe direction; the runbook's quarterly
+     tag check is where that surfaces. The Bedrock budget keeps both filters because `Service` and
+     `TagKeyValue` are different keys and those *are* AND'd.
+   - **The cost anomaly monitor was replaced on every plan.** Cost Explorer stores user-defined tag
+     keys as `user:<key>` and returns every unused expression member explicitly, while the config
+     sent a bare `Project` and omitted the nulls. The provider compares the encoded JSON as a
+     string, so it never matched. Replacing the monitor discards the roughly ten days of history
+     Cost Anomaly Detection needs before it can detect anything, so this would have kept the
+     monitor permanently useless.
+   - **`DenyTamperingWithGuardrails` denied reads, not just tampering.** `sso:*`,
+     `organizations:*` and `sso-directory:*` blocked `list-permission-sets`,
+     `describe-organization` and `list-users` from `debate-dev`. Narrowed to mutating actions.
+     The point is not convenience: the denies that matter are the ones separating dev from prod,
+     and `AccessDenied` during ordinary work trains the operator to wave the next one through.
+
+   After the fixes, `terraform plan` is `0 to add, 3 to change, 0 to destroy` — the three intended
+   changes and nothing else.
+
 7. **ac4's test alert cannot use the real budgets yet, so the runbook tests the delivery path
    instead.** All three budgets filter on `Environment` = `dev`/`prod` or on Bedrock usage, and the
    only tagged resources the baseline creates are the trail's bucket and key, tagged
@@ -282,7 +310,20 @@ aws sts get-caller-identity --profile debate-prod
 Success: both return `assumed-role/AWSReservedSSO_DebateMaintainer_...` and
 `.../AWSReservedSSO_DebateReadOnly_...` ARNs — never a `:root` ARN.
 
-**7. Then flip the spec phase.** Once 1–6 pass, the Goal's `status.phase` goes to `Succeeded` and
+**7. Apply the three follow-up fixes** (~2 min)
+
+```bash
+cd infrastructure/bootstrap/organization
+terraform plan -out=fixes.tfplan
+terraform apply fixes.tfplan
+```
+
+Expect `0 to add, 3 to change, 0 to destroy`: the two budget filters and the maintainer policy.
+Afterwards `aws budgets describe-budget --account-id <account-id> --budget-name debate-dev-monthly
+--query 'Budget.CostFilters'` should show only `user:Environment$dev`, and a re-run of `plan`
+should report no changes at all.
+
+**8. Then flip the spec phase.** Once 1–7 pass, the Goal's `status.phase` goes to `Succeeded` and
 this report's criteria table is updated with the real evidence.
 
 ## Follow-up work

@@ -112,6 +112,12 @@ data "aws_iam_policy_document" "maintainer_guardrails" {
   }
 
   # A maintainer must not be able to quietly remove the controls this task exists to install.
+  #
+  # Mutating actions only. An earlier version denied organizations:*, sso:* and sso-directory:*,
+  # which also blocked harmless reads - describe-organization, list-permission-sets, list-users.
+  # That is worse than it sounds: the denies that matter here are the ones separating dev from
+  # prod, and an AccessDenied that shows up during ordinary work teaches the operator to wave the
+  # next one through. Reads stay allowed so a refusal keeps meaning something.
   statement {
     sid    = "DenyTamperingWithGuardrails"
     effect = "Deny"
@@ -124,9 +130,30 @@ data "aws_iam_policy_document" "maintainer_guardrails" {
       "budgets:ModifyBudget",
       "ce:DeleteAnomalyMonitor",
       "ce:DeleteAnomalySubscription",
-      "organizations:*",
-      "sso:*",
-      "sso-directory:*",
+      "ce:UpdateAnomalyMonitor",
+      "ce:UpdateAnomalySubscription",
+      "organizations:LeaveOrganization",
+      "organizations:DeleteOrganization",
+      "organizations:RemoveAccountFromOrganization",
+      "organizations:EnableAWSServiceAccess",
+      "organizations:DisableAWSServiceAccess",
+      "organizations:AttachPolicy",
+      "organizations:DetachPolicy",
+      "organizations:CreatePolicy",
+      "organizations:UpdatePolicy",
+      "organizations:DeletePolicy",
+      "sso:Create*",
+      "sso:Delete*",
+      "sso:Update*",
+      "sso:Put*",
+      "sso:Attach*",
+      "sso:Detach*",
+      "sso:Provision*",
+      "sso:Associate*",
+      "sso:Disassociate*",
+      "sso-directory:Create*",
+      "sso-directory:Delete*",
+      "sso-directory:Update*",
       "identitystore:Create*",
       "identitystore:Delete*",
       "identitystore:Update*",

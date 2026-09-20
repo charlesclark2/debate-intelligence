@@ -23,11 +23,15 @@ resource "aws_budgets_budget" "environment_monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  cost_filter {
-    name   = "TagKeyValue"
-    values = [local.budget_project_filter]
-  }
-
+  # Environment only, deliberately. AWS Budgets stores every TagKeyValue filter under one key and
+  # ORs the values, so adding the Project filter here would widen this budget to "Environment=dev
+  # OR Project=debate-intelligence" - both environments at once - rather than narrowing it. The
+  # legacy CostFilters API has no way to AND two tag filters and the provider exposes no
+  # filter_expression, so the project scope is carried by the Environment values being ours.
+  #
+  # Failure mode if another project in this account ever adopts an Environment tag: this budget
+  # over-counts and alerts early, which is the safe direction. The quarterly check in the runbook
+  # is where that gets caught.
   cost_filter {
     name   = "TagKeyValue"
     values = [format("user:Environment$%s", each.key)]
@@ -72,6 +76,8 @@ resource "aws_budgets_budget" "bedrock_monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
+  # Service and TagKeyValue are different filter keys, and different keys are AND'd, so this one
+  # really does mean "Bedrock spend belonging to this project".
   cost_filter {
     name   = "Service"
     values = ["Amazon Bedrock"]
@@ -116,9 +122,21 @@ resource "aws_ce_anomaly_monitor" "project" {
   name         = "${var.name_prefix}-shared-spend-monitor"
   monitor_type = "CUSTOM"
 
+  # "user:Project", not "Project": Cost Explorer stores user-defined tag keys in their cost
+  # allocation form and returns them that way, so the bare key reads as permanent drift and
+  # Terraform replaces the monitor on every apply - discarding the ~10 days of history it needs
+  # before it can detect anything.
+  # The explicit nulls are not noise: Cost Explorer returns every unused expression member, and
+  # the provider compares the encoded JSON as a string. Omit them and the config never matches
+  # what AWS stores, so every plan wants to replace the monitor.
   monitor_specification = jsonencode({
+    And            = null
+    CostCategories = null
+    Dimensions     = null
+    Not            = null
+    Or             = null
     Tags = {
-      Key          = "Project"
+      Key          = "user:${var.project_tag_key}"
       Values       = [var.project]
       MatchOptions = ["EQUALS"]
     }

@@ -118,3 +118,13 @@ variable "cloudtrail_log_retention_days" {
     error_message = "Keep at least a year of management events: the trail is the only after-the-fact check on the tag boundary."
   }
 }
+
+variable "project_tag_key" {
+  description = <<-EOT
+    Tag key carrying the project name. Cost Explorer and AWS Budgets refer to user-defined tags
+    as `user:<key>`, so this is the bare key and the `user:` prefix is added where those APIs
+    need it.
+  EOT
+  type        = string
+  default     = "Project"
+}

@@ -362,6 +362,8 @@ is sized correctly.
 | Monthly | `aws iam get-account-summary` still shows `AccountAccessKeysPresent = 0` |
 | Quarterly | Identity Center users still match the adult maintainers; remove anyone who left |
 | Quarterly | Every `debate-*` resource still carries `Project` and `Environment` tags — with no account boundary, an untagged resource is outside the environment separation |
+| Quarterly | No non-debate resource in the account carries an `Environment` tag. The per-environment budgets filter on `Environment` alone, because AWS Budgets ORs values within a filter key and cannot AND two tag filters |
+| After any apply | `terraform plan` reports no changes. A resource that always wants replacing (the cost anomaly monitor did) never accumulates the history it needs to work |
 | When E05 lands | Recheck the ADR-0010 Bedrock table against the real ModelRouter routing config |
 | Before outside student data | Revisit the single-account decision ([ADR-0010](../adr/0010-primary-aws-region.md) revisit trigger) |
 

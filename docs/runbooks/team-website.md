@@ -52,11 +52,25 @@ once at setup.
 **Shell variables**, used by every block below. Quote the email — an unquoted `<...>` placeholder
 is a redirection to zsh.
 
+`WT` is the checkout that holds **this task's** Terraform: the task worktree while the task is in
+flight, the main clone once it has merged. It is not the same path as the last task's `WT`, and a
+stale one is the failure this block exists to catch — `cd` to a directory that no longer exists
+leaves you wherever you were, and the next `terraform` command runs against a checkout where
+`site.tf` does not exist yet. That looks like `Error: Value for undeclared variable`, and it
+happens after `init` has already run somewhere it should not have.
+
 ```bash
-WT=/path/to/your/checkout          # the task worktree during the task, the main clone afterwards
+WT=/path/to/your/checkout          # e.g. .../debate-intelligence-worktrees/v1-e36-t02-site-hosting
 OWNER_EMAIL='you@example.com'
 SSO_USER_NAME='your-identity-center-user-name'
+
+cd "$WT" || { echo "WT does not exist: $WT"; }
+test -f infrastructure/envs/dev/site.tf \
+  && echo "ok: $(pwd) on branch $(git branch --show-current)" \
+  || echo "WRONG CHECKOUT: $(pwd) has no infrastructure/envs/dev/site.tf — fix WT before going on"
 ```
+Success looks like: `ok: <the worktree path> on branch task/v1-e36-t02-site-hosting`. Anything
+else, fix `WT` and re-run; do not carry on to the applies.
 
 **Sign in and confirm which identity you are about to apply as.**
 
@@ -85,6 +99,11 @@ cat infrastructure/envs/dev/owner.auto.tfvars
 ```
 Success looks like: two lines, the email and the user name. `git status` still reports a clean
 tree — these files are gitignored.
+
+Skipping this is why an apply stops to ask `Enter a value:` for `var.owner`. Answering the prompt
+works for one run, but the value is not recorded anywhere, so the next plan asks again and
+`site_publisher_user_names` stays empty — which leaves the publisher permission set with nobody
+assigned to it (step 7 then fails). Write the files instead of answering the prompt.
 
 ## Step 1 — Confirm the hosted zone exists and is delegated
 

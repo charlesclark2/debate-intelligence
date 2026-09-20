@@ -581,13 +581,14 @@ and hosted zone names are fine here; **the account id is not**.
 | | dev | prod |
 |---|---|---|
 | Site bucket | `debate-dev-site-a7508de8` | `debate-prod-site-a7508de8` |
-| Applied on | 2026-09-20, step 3a (no domain): 14 resources added | _pending_ |
+| Applied on | 2026-09-20 — step 3a (no domain) 14 added; step 3b (preview host) 5 added, 2 changed | _pending_ |
 | Applied as | `debate-admin` (DebateBreakGlassAdmin) | `debate-admin` (DebateBreakGlassAdmin) |
 | Distribution | `doq8i8utzst6e.cloudfront.net` (`E2OSZZB3X6M1T0`) | _pending_ |
-| Site URL | `https://dev.wfbdebate.com/` — _pending_, on the CloudFront domain until step 3b | `https://wfbdebate.com/` — _pending_ |
-| Certificate issued on | _pending_ (step 3b) | _pending_ |
+| Site URL | `https://dev.wfbdebate.com/` | `https://wfbdebate.com/` — _pending_ |
+| Certificate | 2026-09-20, `ISSUED` and in use, `CN=dev.wfbdebate.com`, DNS validated in the `.com` zone | _pending_ |
+| TLS floor | `TLSv1.2_2021`, `sni-only` (was AWS's forced `TLSv1` on the default certificate before 3b); negotiates TLS 1.3 | _pending_ |
 | Redirect distribution | — | — (no second registrable domain; see `wfbdebate.org` below) |
-| Publisher permission set provisioned | 2026-09-20, `DebateDevSitePublisher` | _pending_ |
+| Publisher permission set provisioned | 2026-09-20, `DebateDevSitePublisher`, assigned to `ccl1196` | _pending_ |
 | Publisher profile confirmed | _pending_ (step 7) | _pending_ |
 
 | Check | Result | Date |
@@ -598,11 +599,13 @@ and hosted zone names are fine here; **the account id is not**.
 | `DebateMaintainer` denied Identity Center writes and `debate-prod-*` | _pending_ | |
 | Four block-public-access flags | dev: all four `true`, `BucketOwnerEnforced`. prod: _pending_ | 2026-09-20 |
 | Direct S3 object URL returns `AccessDenied` | dev: `<Error><Code>AccessDenied</Code>`. prod: _pending_ | 2026-09-20 |
-| `http://` redirects to `https://` | dev: `301` to `https://doq8i8utzst6e.cloudfront.net/`. prod: _pending_ | 2026-09-20 |
+| `http://` redirects to `https://` | dev: `301` to `https://dev.wfbdebate.com/`. prod: _pending_ | 2026-09-20 |
+| Alias records resolve | dev: `dev.wfbdebate.com` returns four CloudFront A records at 1.1.1.1. prod: _pending_ | 2026-09-20 |
+| TLS 1.2 floor once the certificate is attached | dev: `MinimumProtocolVersion = TLSv1.2_2021`, `CloudFrontDefaultCertificate = false`, certificate `ISSUED`/`InUse`, `Verify return code: 0 (ok)`. prod: _pending_ | 2026-09-20 |
 | Security headers present | dev: all seven — HSTS `max-age=31536000; includesubdomains`, CSP with `frame-ancestors 'none'`, `nosniff`, `x-frame-options: deny`, `referrer-policy`, `permissions-policy`, `x-robots-tag`. prod: _pending_ | 2026-09-20 |
 | CloudFront access logging off | dev: `Logging.Enabled = false`. prod: _pending_ | 2026-09-20 |
 | 403 and 404 both map to `/404.html` | dev: both present in the distribution config | 2026-09-20 |
-| `dev.wfbdebate.com` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.com` does not | dev: `x-robots-tag: noindex, nofollow` confirmed on the CloudFront domain. prod: _pending_ | 2026-09-20 |
+| `dev.wfbdebate.com` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.com` does not | dev: `x-robots-tag: noindex, nofollow` confirmed on both the CloudFront domain and `https://dev.wfbdebate.com/`. prod: _pending_ | 2026-09-20 |
 | `www.wfbdebate.com` 301s to `https://wfbdebate.com/`, path preserved | _pending_ (step 6) | |
 | Publishers allowed only their own site bucket and distribution | dev: `allowed` on `debate-dev-site-a7508de8/*`; `implicitDeny` on the prod site bucket, the dev state bucket, `iam:CreateAccessKey`, `cloudfront:CreateDistribution`, `sso:CreatePermissionSet`. prod: _pending_ | 2026-09-20 |
 

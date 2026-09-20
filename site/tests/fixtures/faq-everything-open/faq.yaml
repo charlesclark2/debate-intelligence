@@ -1,0 +1,22 @@
+# Every question marked most-asked, which is the page this task replaced: nothing is collapsed,
+# so nothing is scannable. The loader fails rather than shipping it.
+indexTitle: Jump to a topic
+groups:
+  - id: cost
+    label: Cost
+    questions:
+      - question: What does it cost?
+        answer: Entry fees, travel, food and camp.
+        openByDefault: true
+      - question: What does a tournament cost?
+        answer: Entry fees are paid by the family.
+        openByDefault: true
+  - id: time
+    label: Time
+    questions:
+      - question: How much time does it take?
+        answer: About one to two hours a week at practice.
+        openByDefault: true
+      - question: When does the season start?
+        answer: Early October.
+        openByDefault: true

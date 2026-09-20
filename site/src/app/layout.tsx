@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { SiteFrame } from '@/components/SiteFrame'
-import { homeContentAsPage, loadPages, loadSiteSettings } from '@/lib/content'
+import { loadGuardedContent, loadPages, loadSiteSettings } from '@/lib/content'
 import { debaterLoginNavigationItem } from '@/lib/feature-flags'
 import { loadMediaConsent } from '@/lib/media-consent'
 import { enforcePublishingPolicy } from '@/lib/publishing-policy'
@@ -37,10 +37,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   const settings = loadSiteSettings()
   const pages = loadPages()
 
-  // content/home.yaml carries copy too, so it is guarded alongside the Markdown pages rather
-  // than being the one file on the site where an address or a name is not checked.
+  // content/home.yaml, content/faq.yaml and content/events.yaml carry copy too, so they are
+  // guarded alongside the Markdown pages rather than being the files on the site where an address
+  // or a name is not checked. loadGuardedContent() is that whole list.
   enforcePublishingPolicy({
-    pages: [...pages, homeContentAsPage()],
+    pages: loadGuardedContent(),
     settings,
     consent: loadMediaConsent(),
   })

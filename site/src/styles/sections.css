@@ -267,3 +267,48 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/*
+ * The events comparison: three cards carrying the same four fields in the same order.
+ *
+ * The parallelism is the whole point, so the styling is the same in all three and the only thing
+ * that changes between them is the words. The grid is the existing .card-grid--3-up, which is one
+ * column below 48rem: at 390px a parent gets three stacked cards, each the full width of the
+ * gutter box, and nothing to scroll sideways for.
+ *
+ * NO HORIZONTAL OVERFLOW AT 390px (task v1-e36-t07 acceptance criterion 3). Two rules do that
+ * work, and both matter:
+ *   - the label and the value stack, rather than sitting in a two-column grid whose label column
+ *     would be as wide as the longest label in the set;
+ *   - nothing declares a fixed width or white-space: nowrap, so every value wraps inside its card
+ *     however narrow the card gets. "Four short speeches a side and three crossfires, in about 40
+ *     to 50 minutes" is the longest value on the page and it is the one this is for.
+ * tests/events.test.tsx asserts both from this file. The pixel confirmation is v1-e36-t08.
+ */
+.event-card__summary {
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-lead);
+}
+
+.event-comparison {
+  margin: 0 0 var(--space-5);
+}
+
+/* The field name. Uppercase at the eyebrow tracking, and body grey rather than the muted grey,
+   because at this size the muted grey is large-text only (see the contrast table in tokens.css). */
+.event-comparison__label {
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.event-comparison__value {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-heading);
+}
+
+.event-comparison__value:last-of-type {
+  margin-bottom: 0;
+}

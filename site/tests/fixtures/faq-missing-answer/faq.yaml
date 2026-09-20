@@ -1,0 +1,8 @@
+# A question with no answer. The build has to fail naming this file, because a question that
+# opens onto nothing is worse on the page than a question that is not there.
+indexTitle: Jump to a topic
+groups:
+  - id: cost
+    label: Cost
+    questions:
+      - question: What does it cost?

@@ -22,6 +22,26 @@ import { z } from 'zod'
 /** The page whose copy renders at the site root rather than at /<slug>/. */
 export const HOME_SLUG = 'home'
 
+/** The parent FAQ, composed from content/faq.yaml by src/app/faq/page.tsx. */
+export const FAQ_SLUG = 'faq'
+
+/** The events page, composed from content/events.yaml by src/app/events/page.tsx. */
+export const EVENTS_SLUG = 'events'
+
+/**
+ * Pages that are composed by a route module of their own rather than rendered as one run of
+ * Markdown by src/app/[slug]/page.tsx.
+ *
+ * A composed page still has a file in content/pages/, which is what gives it a title, a
+ * description, a place in the navigation and a lead paragraph; what it does not have is a body
+ * that can simply be poured into a column. Its structure lives in a YAML file beside it and its
+ * route module decides where each field goes.
+ *
+ * The generic [slug] route must not also generate these slugs: a static segment and a dynamic one
+ * claiming the same path is a build error, not a silent preference.
+ */
+export const COMPOSED_SLUGS: readonly string[] = [HOME_SLUG, FAQ_SLUG, EVENTS_SLUG]
+
 /**
  * Acronyms a parent or a new student cannot be expected to know. If a page uses one, the page
  * must also contain the expansion. Checked at build time; see site/README.md.
@@ -320,11 +340,14 @@ export function loadPage(
   return page
 }
 
-/** Pages that get their own route under /<slug>/; the home page renders at the root instead. */
+/**
+ * Pages that src/app/[slug]/page.tsx generates a route for: everything except the pages composed
+ * by a route module of their own. See COMPOSED_SLUGS.
+ */
 export function loadRoutedPages(
   contentDirectory: string = defaultContentDirectory(),
 ): ContentPage[] {
-  return loadPages(contentDirectory).filter((page) => page.slug !== HOME_SLUG)
+  return loadPages(contentDirectory).filter((page) => !COMPOSED_SLUGS.includes(page.slug))
 }
 
 export function loadSiteSettings(
@@ -444,4 +467,357 @@ export function homeContentAsPage(
     html: text,
     placeholders: findPlaceholders(text),
   }
+}
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * The composed pages: content/faq.yaml and content/events.yaml.
+ *
+ * Both follow the pattern content/home.yaml set. The Markdown file in content/pages/ owns the
+ * page's identity (title, description, navigation label and order) and its lead paragraph; the
+ * YAML file beside it owns the structure the route module renders. Splitting them is what lets a
+ * parent scan the FAQ by topic and the events side by side without any page component holding a
+ * word of copy: Charlie edits YAML, not TypeScript.
+ *
+ * Every string in both files goes through the same house-style rules as content/pages/, because
+ * a question inside a <summary> is read by exactly the same people as a sentence in a paragraph.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+/** An anchor target a link in an in-page index can point at. */
+const anchorId = z
+  .string()
+  .min(1)
+  .regex(/^[a-z][a-z0-9-]*$/, 'must be a lower-case anchor id such as "cost-and-travel"')
+
+/** Markdown rendered to HTML at build time, with any placeholder marker made visible. */
+function renderMarkdown(filePath: string, markdown: string): string {
+  const rendered = marked.parse(renderPlaceholders(markdown), { async: false })
+  if (typeof rendered !== 'string') {
+    throw new ContentValidationError(filePath, 'Markdown could not be rendered synchronously')
+  }
+  return rendered
+}
+
+/**
+ * Reads one YAML file from content/ and validates it, naming the file on any failure.
+ *
+ * gray-matter parses a bare YAML document when it is fenced as front matter, so every YAML file
+ * on this site goes through the same parser the Markdown pages use rather than a second
+ * dependency.
+ */
+function loadYamlFile<Schema extends z.ZodType>(
+  fileName: string,
+  schema: Schema,
+  describe: string,
+  contentDirectory: string,
+): z.infer<Schema> {
+  const filePath = `content/${fileName}`
+  const absolutePath = join(contentDirectory, fileName)
+  if (!existsSync(absolutePath)) {
+    throw new ContentValidationError(filePath, 'file is missing')
+  }
+  const parsed = matter(`---\n${readFileSync(absolutePath, 'utf8')}\n---\n`)
+  const result = schema.safeParse(parsed.data)
+  if (!result.success) {
+    throw new ContentValidationError(filePath, `invalid ${describe} (${formatIssues(result.error)})`)
+  }
+  return result.data
+}
+
+/** The house-style rules, applied to every string a YAML content file contributes to a page. */
+function assertYamlHouseStyle(filePath: string, strings: string[]): void {
+  const text = strings.join('\n')
+  if (text.includes(EM_DASH)) {
+    throw new ContentValidationError(filePath, `uses an em dash. ${HOUSE_STYLE_REWRITE}`)
+  }
+  assertAcronymsAreExpanded(filePath, text)
+}
+
+/**
+ * The most-asked questions, which render with the `open` attribute so their answers are visible
+ * without a click.
+ *
+ * The range is the point of the page written as a rule. Below two, a parent who came with the
+ * cost question still has to hunt for it; above three, everything is open again and the page is
+ * the wall of prose this task replaced. A build that breaks the rule fails naming the file.
+ */
+export const MOST_ASKED_QUESTION_RANGE = { minimum: 2, maximum: 3 } as const
+
+export const faqQuestionSchema = z.object({
+  question: z.string().min(1),
+  answer: z.string().min(1),
+  openByDefault: z.boolean().optional(),
+})
+
+export const faqGroupSchema = z.object({
+  id: anchorId,
+  label: z.string().min(1),
+  questions: z.array(faqQuestionSchema).min(1, 'a topic with no questions is not a topic'),
+})
+
+export const faqContentSchema = z
+  .object({
+    indexTitle: z.string().min(1),
+    groups: z
+      .array(faqGroupSchema)
+      .min(2, 'grouping the questions needs at least two topics to group them into'),
+  })
+  .refine(
+    (content) => new Set(content.groups.map((group) => group.id)).size === content.groups.length,
+    'two topics share an id, so the index would link both to the same place',
+  )
+  .refine((content) => {
+    const open = content.groups
+      .flatMap((group) => group.questions)
+      .filter((question) => question.openByDefault).length
+    return open >= MOST_ASKED_QUESTION_RANGE.minimum && open <= MOST_ASKED_QUESTION_RANGE.maximum
+  }, `openByDefault must be set on ${MOST_ASKED_QUESTION_RANGE.minimum} or ${MOST_ASKED_QUESTION_RANGE.maximum} questions: the most-asked ones, which open without a click`)
+
+export interface FaqQuestion {
+  question: string
+  /** The answer as Markdown, exactly as content/faq.yaml holds it. */
+  answer: string
+  /** The answer rendered to HTML at build time. */
+  answerHtml: string
+  /** True for a most-asked question, which renders as <details open>. */
+  openByDefault: boolean
+}
+
+export interface FaqGroup {
+  /** The anchor the in-page topic index links to. */
+  id: string
+  label: string
+  questions: FaqQuestion[]
+}
+
+export interface FaqContent {
+  /** The heading above the in-page topic index, which also names it for a screen reader. */
+  indexTitle: string
+  groups: FaqGroup[]
+}
+
+/** Every string content/faq.yaml puts on the page, in reading order. */
+function faqContentStrings(content: FaqContent): string[] {
+  return [
+    content.indexTitle,
+    ...content.groups.flatMap((group) => [
+      group.label,
+      ...group.questions.flatMap((question) => [question.question, question.answer]),
+    ]),
+  ]
+}
+
+export function loadFaqContent(contentDirectory: string = defaultContentDirectory()): FaqContent {
+  const filePath = 'content/faq.yaml'
+  const parsed = loadYamlFile('faq.yaml', faqContentSchema, 'FAQ content', contentDirectory)
+  const content: FaqContent = {
+    indexTitle: parsed.indexTitle,
+    groups: parsed.groups.map((group) => ({
+      id: group.id,
+      label: group.label,
+      questions: group.questions.map((question) => ({
+        question: question.question,
+        answer: question.answer,
+        answerHtml: renderMarkdown(filePath, question.answer),
+        openByDefault: question.openByDefault ?? false,
+      })),
+    })),
+  }
+  assertYamlHouseStyle(filePath, faqContentStrings(content))
+  return content
+}
+
+export const eventComparisonSchema = z.object({
+  teamSize: z.string().min(1),
+  speechPattern: z.string().min(1),
+  topicCadence: z.string().min(1),
+  bestFor: z.string().min(1),
+})
+
+export const debateEventSchema = z.object({
+  id: anchorId,
+  name: z.string().min(1),
+  summary: z.string().min(1),
+  detailActionLabel: z.string().min(1),
+  comparison: eventComparisonSchema,
+  detail: z.string().min(1),
+})
+
+export const eventsContentSchema = z
+  .object({
+    comparisonLabels: eventComparisonSchema,
+    sharedTruths: z.object({
+      title: z.string().min(1),
+      items: z.array(z.object({ title: z.string().min(1), body: z.string().min(1) })).min(1),
+    }),
+    comparisonTitle: z.string().min(1),
+    comparisonIntro: z.string().min(1),
+    events: z
+      .array(debateEventSchema)
+      .min(3, 'the comparison needs the three events the team competes in'),
+    closingSections: z
+      .array(z.object({ id: anchorId, title: z.string().min(1), body: z.string().min(1) }))
+      .min(1),
+  })
+  .refine(
+    (content) => new Set(content.events.map((event) => event.id)).size === content.events.length,
+    'two events share an id, so the comparison would link both to the same detail section',
+  )
+
+export type EventComparison = z.infer<typeof eventComparisonSchema>
+
+/** The four comparison fields, in the order they are read. The page never invents a fifth. */
+export const EVENT_COMPARISON_FIELDS = [
+  'teamSize',
+  'speechPattern',
+  'topicCadence',
+  'bestFor',
+] as const satisfies ReadonlyArray<keyof EventComparison>
+
+export interface DebateEvent {
+  /** The anchor the comparison card links to, and the id of the detail section below it. */
+  id: string
+  name: string
+  /** One line saying what the event asks, so three cards can be told apart at a glance. */
+  summary: string
+  /** The label on the link from this event's comparison card down to its detail section. */
+  detailActionLabel: string
+  comparison: EventComparison
+  /** The full explanation as Markdown, exactly as content/events.yaml holds it. */
+  detail: string
+  /** The same explanation rendered to HTML at build time. */
+  detailHtml: string
+}
+
+export interface EventsClosingSection {
+  id: string
+  title: string
+  body: string
+  bodyHtml: string
+}
+
+export interface EventsContent {
+  comparisonLabels: EventComparison
+  sharedTruths: { title: string; items: Array<{ title: string; body: string }> }
+  comparisonTitle: string
+  comparisonIntro: string
+  events: DebateEvent[]
+  closingSections: EventsClosingSection[]
+}
+
+/** Every string content/events.yaml puts on the page, in reading order. */
+function eventsContentStrings(content: EventsContent): string[] {
+  return [
+    ...EVENT_COMPARISON_FIELDS.map((field) => content.comparisonLabels[field]),
+    content.sharedTruths.title,
+    ...content.sharedTruths.items.flatMap((item) => [item.title, item.body]),
+    content.comparisonTitle,
+    content.comparisonIntro,
+    ...content.events.flatMap((event) => [
+      event.name,
+      event.summary,
+      event.detailActionLabel,
+      ...EVENT_COMPARISON_FIELDS.map((field) => event.comparison[field]),
+      event.detail,
+    ]),
+    ...content.closingSections.flatMap((section) => [section.title, section.body]),
+  ]
+}
+
+export function loadEventsContent(
+  contentDirectory: string = defaultContentDirectory(),
+): EventsContent {
+  const filePath = 'content/events.yaml'
+  const parsed = loadYamlFile(
+    'events.yaml',
+    eventsContentSchema,
+    'events content',
+    contentDirectory,
+  )
+  const content: EventsContent = {
+    ...parsed,
+    events: parsed.events.map((event) => ({
+      ...event,
+      detailHtml: renderMarkdown(filePath, event.detail),
+    })),
+    closingSections: parsed.closingSections.map((section) => ({
+      ...section,
+      bodyHtml: renderMarkdown(filePath, section.body),
+    })),
+  }
+  assertYamlHouseStyle(filePath, eventsContentStrings(content))
+  return content
+}
+
+/**
+ * content/faq.yaml and content/events.yaml as the publishing-policy guard sees them.
+ *
+ * Same reason homeContentAsPage exists: the guard reads pages, so copy that has moved into a YAML
+ * file would otherwise be the part of the site where an address, a phone number, an unreviewed
+ * name or an unfilled placeholder is never checked. These two files now carry most of the words on
+ * the site, so they are the last place that hole could be allowed to open.
+ */
+function yamlContentAsPage(
+  slug: string,
+  filePath: string,
+  route: string,
+  title: string,
+  strings: string[],
+): ContentPage {
+  const text = strings.join('\n\n')
+  return {
+    slug,
+    route,
+    filePath,
+    title,
+    description: title,
+    navLabel: title,
+    navOrder: Number.MAX_SAFE_INTEGER,
+    draft: false,
+    html: text,
+    placeholders: findPlaceholders(text),
+  }
+}
+
+export function faqContentAsPage(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const content = loadFaqContent(contentDirectory)
+  return yamlContentAsPage(
+    'faq-content',
+    'content/faq.yaml',
+    `/${FAQ_SLUG}/`,
+    content.indexTitle,
+    faqContentStrings(content),
+  )
+}
+
+export function eventsContentAsPage(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const content = loadEventsContent(contentDirectory)
+  return yamlContentAsPage(
+    'events-content',
+    'content/events.yaml',
+    `/${EVENTS_SLUG}/`,
+    content.comparisonTitle,
+    eventsContentStrings(content),
+  )
+}
+
+/**
+ * Every content file that carries copy, as the publishing-policy guard sees it: the Markdown
+ * pages plus the three YAML files that hold the rest of the words. src/app/layout.tsx passes
+ * exactly this at build time, and tests/content-policy.test.ts checks exactly this.
+ */
+export function loadGuardedContent(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage[] {
+  return [
+    ...loadPages(contentDirectory),
+    homeContentAsPage(contentDirectory),
+    faqContentAsPage(contentDirectory),
+    eventsContentAsPage(contentDirectory),
+  ]
 }

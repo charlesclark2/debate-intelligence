@@ -1,0 +1,161 @@
+/*
+ * The FAQ disclosure and the in-page topic index.
+ *
+ * The interaction is entirely the browser's: <details> and <summary> from
+ * src/components/Disclosure.tsx, with no script of any kind. Everything here is presentation, and
+ * it is careful about three things.
+ *
+ * 1. THE TARGET. A summary is the whole row, not just the words: 44px minimum height and padding
+ *    out to the edges of the panel, so a parent tapping near the question on a phone hits it
+ *    (WCAG 2.1 SC 2.5.5). tests/faq.test.tsx asserts the minimum from this file.
+ *
+ * 2. THE MARKER. Drawn from two borders rotated, the same technique .link-cta uses for its
+ *    chevron, so nothing is fetched and no icon font ships. The default triangle is switched off
+ *    with list-style and the -webkit- pseudo-element, which is what older Safari uses.
+ *
+ * 3. PRINTING. See the @media print block at the foot of this file: a closed answer still has to
+ *    come out of the printer, because a parent printing the FAQ to read later gets one page of
+ *    questions and nothing else otherwise.
+ *
+ * The focus ring is the site's one ring, from globals.css. It is not touched here: a summary is
+ * focusable by default, and removing or moving the ring on it is exactly what
+ * tests/design-system.test.tsx forbids.
+ */
+
+/* The topic index: the in-page links at the top of the FAQ, above the first topic. */
+.topic-index__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.topic-index__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background-color: var(--color-surface);
+  color: var(--color-link);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+  transition:
+    background-color var(--duration-transition) var(--easing-standard),
+    border-color var(--duration-transition) var(--easing-standard),
+    color var(--duration-transition) var(--easing-standard);
+}
+
+.topic-index__link:hover {
+  border-color: var(--color-brand-navy);
+  color: var(--color-link-hover);
+}
+
+/* One question. The rule above it is what separates two questions in a topic, so a list of them
+   reads as a list rather than as a box per question. */
+.disclosure {
+  border-top: 1px solid var(--color-border);
+}
+
+.disclosure:last-of-type {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/*
+ * The row a parent taps. The marker is laid out as a fixed-width first column so every question
+ * in a topic starts on the same left edge however long the question runs.
+ */
+.disclosure__summary {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr;
+  align-items: start;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-4) var(--space-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+/* Safari draws its own triangle through this pseudo-element rather than through list-style. */
+.disclosure__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* The marker: a chevron from two borders, pointing right when closed and down when open. */
+.disclosure__summary::before {
+  content: "";
+  width: 0.5em;
+  height: 0.5em;
+  margin-top: 0.35em;
+  margin-left: 0.25em;
+  border-top: 3px solid var(--color-brand-navy);
+  border-right: 3px solid var(--color-brand-navy);
+  transform: rotate(45deg);
+  transition: transform var(--duration-transition) var(--easing-standard);
+}
+
+.disclosure[open] > .disclosure__summary::before {
+  transform: rotate(135deg);
+}
+
+.disclosure__summary:hover {
+  background-color: var(--color-surface-panel);
+}
+
+/* The question itself. It is a heading, so it needs the margins reset rather than the size: a
+   question reads as the row it sits in, not as a section title. */
+.disclosure__question {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+}
+
+/* The answer. Indented to the question's left edge, so an open panel is visibly subordinate to
+   the question above it rather than a new paragraph of the page. */
+.disclosure__panel {
+  padding: 0 var(--space-2) var(--space-5);
+  margin-left: calc(1.25rem + var(--space-3));
+}
+
+.disclosure__panel > :last-child {
+  margin-bottom: 0;
+}
+
+/*
+ * PRINTING (task v1-e36-t07 acceptance criterion 6).
+ *
+ * A closed <details> hides its panel through the user agent, not through anything this stylesheet
+ * set, and browsers do it in two different ways: Firefox and older Safari hide the children,
+ * while Chrome and Edge apply content-visibility to the ::details-content pseudo-element. Both
+ * are overridden here, because a parent who prints this page to read later must get the answers
+ * and not sixteen questions on their own.
+ *
+ * The marker is dropped in print: on paper there is nothing to open.
+ */
+@media print {
+  .disclosure,
+  .disclosure > .disclosure__panel {
+    display: block;
+  }
+
+  .disclosure > *:not(summary) {
+    display: block !important;
+  }
+
+  .disclosure::details-content {
+    display: block !important;
+    content-visibility: visible !important;
+  }
+
+  .disclosure__summary::before {
+    display: none;
+  }
+
+  /* The index is a set of in-page links, which do nothing on paper. */
+  .topic-index {
+    display: none;
+  }
+}

@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ContentValidationError,
+  EVENT_COMPARISON_FIELDS,
   HOME_SLUG,
+  loadEventsContent,
+  loadFaqContent,
   loadNotFoundPage,
   loadPages,
   loadRoutedPages,
@@ -117,5 +120,107 @@ describe('the content this site actually ships', () => {
 
   it('has a home page, which is what the root route renders', () => {
     expect(loadPages(siteContent).map((page) => page.slug)).toContain(HOME_SLUG)
+  })
+})
+
+/**
+ * The two structured content files v1-e36-t07 added (acceptance criterion 5).
+ *
+ * The point of moving the FAQ and the events copy out of one run of Markdown and into YAML is
+ * that the shape of the page becomes something a schema can hold Charlie to: a question always
+ * has an answer, an event always fills all four comparison fields, and a page where everything
+ * is open by default is not a page anyone can scan. So the loader has to fail, and fail naming
+ * the file, rather than let a half-filled file reach a build.
+ */
+describe('the grouped FAQ content', () => {
+  it('reads the topics, their questions and the most-asked ones out of content/faq.yaml', () => {
+    const faq = loadFaqContent(siteContent)
+    expect(faq.groups.length).toBeGreaterThanOrEqual(2)
+    expect(faq.indexTitle.length).toBeGreaterThan(0)
+
+    const questions = faq.groups.flatMap((group) => group.questions)
+    expect(questions.length).toBe(16)
+    for (const question of questions) {
+      expect(question.question.length, 'a question with no text').toBeGreaterThan(0)
+      expect(question.answerHtml, question.question).toContain('<p>')
+    }
+
+    const open = questions.filter((question) => question.openByDefault)
+    expect(open.length).toBeGreaterThanOrEqual(2)
+    expect(open.length).toBeLessThanOrEqual(3)
+  })
+
+  it('gives every topic an anchor id the in-page index can link to, and no two the same', () => {
+    const ids = loadFaqContent(siteContent).groups.map((group) => group.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const id of ids) {
+      expect(id).toMatch(/^[a-z][a-z0-9-]*$/)
+    }
+  })
+
+  it('fails, naming the file, when a question has no answer', () => {
+    expect(() => loadFaqContent(fixture('faq-missing-answer'))).toThrowError(
+      ContentValidationError,
+    )
+    expect(() => loadFaqContent(fixture('faq-missing-answer'))).toThrowError(
+      /content\/faq\.yaml: invalid FAQ content \(.*answer/,
+    )
+  })
+
+  it('fails, naming the file, when every question is marked most-asked', () => {
+    expect(() => loadFaqContent(fixture('faq-everything-open'))).toThrowError(
+      /content\/faq\.yaml: invalid FAQ content \(.*openByDefault/,
+    )
+  })
+
+  it('fails, naming the file, when content/faq.yaml is missing altogether', () => {
+    expect(() => loadFaqContent(fixture('ordering'))).toThrowError(
+      /content\/faq\.yaml: file is missing/,
+    )
+  })
+})
+
+describe('the events comparison content', () => {
+  it('reads the three events and all four comparison fields out of content/events.yaml', () => {
+    const events = loadEventsContent(siteContent)
+    expect(events.events.map((event) => event.id)).toEqual([
+      'public-forum',
+      'lincoln-douglas',
+      'policy',
+    ])
+    for (const event of events.events) {
+      for (const field of EVENT_COMPARISON_FIELDS) {
+        expect(event.comparison[field].length, `${event.name}.${field}`).toBeGreaterThan(0)
+      }
+      expect(event.detailHtml, event.name).toContain('<p>')
+    }
+    for (const section of events.closingSections) {
+      expect(section.bodyHtml, section.title).toContain('<p>')
+    }
+  })
+
+  it('fails, naming the file, when an event is missing a comparison field', () => {
+    expect(() => loadEventsContent(fixture('events-missing-field'))).toThrowError(
+      ContentValidationError,
+    )
+    expect(() => loadEventsContent(fixture('events-missing-field'))).toThrowError(
+      /content\/events\.yaml: invalid events content \(.*topicCadence/,
+    )
+  })
+
+  it('names the offending file on the error object as well as in the message', () => {
+    try {
+      loadEventsContent(fixture('events-missing-field'))
+      expect.unreachable('loadEventsContent should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(ContentValidationError)
+      expect((error as ContentValidationError).filePath).toBe('content/events.yaml')
+    }
+  })
+
+  it('fails, naming the file, when content/events.yaml is missing altogether', () => {
+    expect(() => loadEventsContent(fixture('ordering'))).toThrowError(
+      /content\/events\.yaml: file is missing/,
+    )
   })
 })

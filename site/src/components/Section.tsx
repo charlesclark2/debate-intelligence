@@ -29,7 +29,10 @@ export type SectionContentWidth = 'text' | 'wide'
  * and these are anchor targets on the home page besides.
  *
  * The heading level is the caller's choice for the same reason Card takes one: a page keeps a
- * single unbroken outline rather than every band claiming <h2>.
+ * single unbroken outline rather than every band claiming <h2>. Level 1 is for the band that
+ * opens a composed interior page and carries its <h1>: the FAQ and the events page are built from
+ * bands all the way down rather than from a prose column with bands bolted under it, so the page
+ * title has to be able to live in one. The home page is the exception and hand-writes its hero.
  */
 export function Section({
   children,
@@ -44,7 +47,7 @@ export function Section({
   children: ReactNode
   contentWidth?: SectionContentWidth
   eyebrow?: string
-  headingLevel?: 2 | 3
+  headingLevel?: 1 | 2 | 3
   id?: string
   intro?: string
   title?: string

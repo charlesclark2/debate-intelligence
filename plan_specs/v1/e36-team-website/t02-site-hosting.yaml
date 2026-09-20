@@ -84,7 +84,7 @@ spec:
         bucket names and distribution domains (no account ids), the domain and DNS status, and the
         certificate validation steps.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

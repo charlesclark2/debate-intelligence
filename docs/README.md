@@ -3,6 +3,7 @@
 | Where | What |
 |---|---|
 | [architecture/architecture_proposal.md](architecture/architecture_proposal.md) | V1–V3 system architecture proposal |
+| [architecture/ports-and-adapters.md](architecture/ports-and-adapters.md) | The ten ports, the constructor-injection pattern, and how to add an adapter |
 | [architecture/cardmirror-evaluation.md](architecture/cardmirror-evaluation.md) | CardMirror schema, API, license and round-trip evidence behind ADR-0014 |
 | [architecture/cardmirror-upstream-issues.md](architecture/cardmirror-upstream-issues.md) | CardMirror defects found during the evaluation, drafted for upstream and not filed |
 | [adr/](adr/README.md) | Architecture decision records |

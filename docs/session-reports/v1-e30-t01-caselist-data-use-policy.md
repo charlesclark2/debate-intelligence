@@ -233,7 +233,7 @@ minors — get tub accounts. Gate item 9 on v2-e35 depends on it.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** CHANGES_REQUESTED
+**Verdict:** ACCEPTED
 
 **Reviewed by / date:** PM (Claude, project chat), 2026-09-19
 
@@ -294,3 +294,12 @@ right call. Two gaps block acceptance, both now closable:
 
 After these edits, commit the policy, the runbook and this report together, keep the phase
 Succeeded, and change Session status to COMPLETE.
+
+**Round 2 (2026-09-19): ACCEPTED.** All four items are addressed. The clause register matches the
+terms as the PM read them on 2026-09-19 and follows the paraphrase-with-key-phrases rule. The
+approval table records exactly the dispositions Charlie gave. Open question 4 is reworded as
+requested, and the E34 gate now requires the maintainer's confirmation. The follow-ups carry
+forward as tracked: open question 2 before E34, open question 4 before the first full-corpus E32
+run, open question 6 before V2 student accounts, and the removal-permission and un-suppress spec
+change in PR `specs/evidence-removal-permissions`.
+

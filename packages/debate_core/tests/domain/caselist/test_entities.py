@@ -7,11 +7,13 @@ removal request or a landscape report later depends on.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 
 import pytest
 from pydantic import ValidationError
 
+from debate_core.domain.base import DomainModel
 from debate_core.domain.caselist import (
     CASELIST_MODELS,
     IMPORTED_EVIDENCE_PROVENANCE_MODE,
@@ -109,9 +111,6 @@ def make_camp_file(**overrides: object) -> CampFile:
     return CampFile.model_validate(fields)
 
 
-ALL_BUILDERS = (make_caselist, make_snapshot, make_source, make_disclosure, make_camp_file)
-
-
 def make_school() -> School:
     return School(caselist="hsld26", name="Northside Academy")
 
@@ -125,7 +124,7 @@ def make_team_code() -> TeamCode:
 # --------------------------------------------------------------------------------------------
 
 
-def one_of_each() -> tuple[object, ...]:
+def one_of_each() -> tuple[DomainModel, ...]:
     """One populated instance of each of the seven entities."""
     return (
         make_caselist(),
@@ -151,38 +150,42 @@ def test_the_seven_entities_are_the_ones_the_spec_names() -> None:
 
 
 @pytest.mark.parametrize("model", CASELIST_MODELS, ids=lambda model: model.__name__)
-def test_every_entity_is_frozen_and_forbids_unknown_fields(model: type) -> None:
-    config = model.model_config  # type: ignore[attr-defined]
-    assert config["frozen"] is True
-    assert config["extra"] == "forbid"
+def test_every_entity_is_frozen_and_forbids_unknown_fields(model: type[DomainModel]) -> None:
+    assert model.model_config.get("frozen") is True
+    assert model.model_config.get("extra") == "forbid"
 
 
 @pytest.mark.parametrize("model", CASELIST_MODELS, ids=lambda model: model.__name__)
-def test_every_entity_has_a_docstring(model: type) -> None:
+def test_every_entity_has_a_docstring(model: type[DomainModel]) -> None:
     assert model.__doc__ and len(model.__doc__.strip()) > 40
 
 
 @pytest.mark.parametrize("entity", one_of_each(), ids=lambda entity: type(entity).__name__)
-def test_every_entity_round_trips_through_json(entity: object) -> None:
-    model = type(entity)
-    as_json = entity.model_dump_json()  # type: ignore[attr-defined]
-    restored = model.model_validate_json(as_json)  # type: ignore[attr-defined]
+def test_every_entity_round_trips_through_json(entity: DomainModel) -> None:
+    as_json = entity.model_dump_json()
+    restored = type(entity).model_validate_json(as_json)
     assert restored == entity
     assert restored.model_dump_json() == as_json
 
 
 @pytest.mark.parametrize("entity", one_of_each(), ids=lambda entity: type(entity).__name__)
-def test_an_unknown_field_is_refused(entity: object) -> None:
-    payload = entity.model_dump()  # type: ignore[attr-defined]
+def test_an_unknown_field_is_refused(entity: DomainModel) -> None:
+    payload = entity.model_dump()
     payload["debater_names"] = ["Jane Rivera"]
     with pytest.raises(ValidationError):
-        type(entity).model_validate(payload)  # type: ignore[attr-defined]
+        type(entity).model_validate(payload)
 
 
 @pytest.mark.parametrize("entity", one_of_each(), ids=lambda entity: type(entity).__name__)
-def test_an_entity_cannot_be_mutated_in_place(entity: object) -> None:
+def test_an_entity_cannot_be_mutated_in_place(entity: DomainModel) -> None:
+    """Frozen means frozen at runtime too, not only to the type checker.
+
+    The field is looked up rather than named so that every model is poked in a field it really
+    has; a frozen model rejects the assignment before it looks at the value.
+    """
+    first_field = next(iter(type(entity).model_fields))
     with pytest.raises(ValidationError):
-        entity.caselist = "hspf26"  # type: ignore[attr-defined]
+        setattr(entity, first_field, "changed")
 
 
 # --------------------------------------------------------------------------------------------
@@ -370,26 +373,36 @@ def test_a_camp_file_refuses_an_implausible_year() -> None:
 # --------------------------------------------------------------------------------------------
 
 
+#: The three records an import produces, each of which carries provenance of its own.
+IMPORTED_RECORD_BUILDERS: tuple[Callable[..., DomainModel], ...] = (
+    make_source,
+    make_disclosure,
+    make_camp_file,
+)
+
+
 @pytest.mark.parametrize("entity", [make_source(), make_disclosure(), make_camp_file()])
-def test_imported_evidence_is_always_file_import(entity: object) -> None:
-    assert entity.provenance_mode is IMPORTED_EVIDENCE_PROVENANCE_MODE  # type: ignore[attr-defined]
+def test_imported_evidence_is_always_file_import(entity: SourceDocument | Disclosure | CampFile) -> None:
+    assert entity.provenance_mode is IMPORTED_EVIDENCE_PROVENANCE_MODE
     assert IMPORTED_EVIDENCE_PROVENANCE_MODE is ProvenanceMode.FILE_IMPORT
 
 
-@pytest.mark.parametrize("builder", [make_source, make_disclosure, make_camp_file])
+@pytest.mark.parametrize("builder", IMPORTED_RECORD_BUILDERS, ids=lambda builder: builder.__name__)
 @pytest.mark.parametrize(
     "mode",
     [ProvenanceMode.PUBLISHER_RETRIEVED, ProvenanceMode.USER_SUPPLIED, ProvenanceMode.PASTED],
 )
-def test_no_other_provenance_mode_may_be_claimed(builder: object, mode: ProvenanceMode) -> None:
+def test_no_other_provenance_mode_may_be_claimed(
+    builder: Callable[..., DomainModel], mode: ProvenanceMode
+) -> None:
     with pytest.raises(ValidationError, match="always FILE_IMPORT"):
-        builder(provenance_mode=mode)  # type: ignore[operator]
+        builder(provenance_mode=mode)
 
 
 @pytest.mark.parametrize("entity", [make_source(), make_disclosure(), make_camp_file()])
-def test_every_imported_record_names_its_snapshot_and_its_source_bytes(entity: object) -> None:
-    dumped = entity.model_dump()  # type: ignore[attr-defined]
+def test_every_imported_record_names_its_snapshot_and_its_source_bytes(entity: DomainModel) -> None:
+    dumped = entity.model_dump()
     snapshot_fields = {"snapshot", "first_seen_snapshot"}
     hash_fields = {"sha256", "source_sha256"}
-    assert snapshot_fields & dumped.keys()
-    assert hash_fields & dumped.keys()
+    assert snapshot_fields & set(dumped)
+    assert hash_fields & set(dumped)

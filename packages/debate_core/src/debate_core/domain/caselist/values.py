@@ -136,7 +136,9 @@ def _reject_future_snapshot_date(value: date) -> date:
     """
     today = datetime.now(UTC).date()
     if value > today:
-        raise ValueError(f"snapshot date is in the future: {value.isoformat()} (today is {today.isoformat()})")
+        raise ValueError(
+            f"snapshot date is in the future: {value.isoformat()} (today is {today.isoformat()})"
+        )
     return value
 
 

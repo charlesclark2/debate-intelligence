@@ -1,4 +1,4 @@
-"""The ten boundaries debate_core talks through.
+"""The boundaries debate_core talks through.
 
 Every use case in the platform reaches storage, a search provider, the web and a model through the
 Protocols re-exported here, and through nothing else. That is the rule that lets V1 run on SQLite
@@ -11,6 +11,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `SnapshotStore` | `persistence` | Immutable, content-addressed blobs |
 | `CardRepository` | `persistence` | Card records and their revision checks |
 | `SearchRepository` | `persistence` | Searches and their ranked results |
+| `CaselistRepository` | `caselist` | Imported caselist and camp-file records (E30) |
 | `SearchProvider` | `providers` | One discovery source |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
 | `ContentExtractor` | `providers` | Readable-text extraction |
@@ -29,6 +30,7 @@ How a service takes its ports is written up in `docs/architecture/ports-and-adap
 worked example.
 """
 
+from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.persistence import (
     DEFAULT_PAGE_SIZE,
     ArticleRepository,
@@ -64,6 +66,7 @@ __all__ = [
     "BlobKey",
     "CandidateResult",
     "CardRepository",
+    "CaselistRepository",
     "Clock",
     "ContentExtractor",
     "ExtractedContent",

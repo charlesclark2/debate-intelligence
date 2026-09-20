@@ -266,7 +266,9 @@ class CampFile(DomainModel):
     """
 
     source_sha256: Sha256Hex = Field(description="SHA-256 of the camp file's bytes.")
-    camp: NonEmptyText = Field(description="Camp that released the file, normalized; UNKNOWN when unresolved.")
+    camp: NonEmptyText = Field(
+        description="Camp that released the file, normalized; UNKNOWN when unresolved."
+    )
     year: int = Field(ge=2000, description="Calendar year of the camp release, e.g. 2026.")
     event: Event = Field(description="Event the file was cut for.")
     file_title: NonEmptyText = Field(description="File title: the filename without camp prefix or extension.")

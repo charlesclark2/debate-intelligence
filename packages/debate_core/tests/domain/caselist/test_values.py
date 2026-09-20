@@ -133,7 +133,7 @@ def test_a_snapshot_date_in_the_future_is_rejected() -> None:
 
 
 def test_a_snapshot_date_parses_from_an_iso_string() -> None:
-    assert SnapshotDateHolder(value="2026-09-15").value == date(2026, 9, 15)
+    assert SnapshotDateHolder.model_validate({"value": "2026-09-15"}).value == date(2026, 9, 15)
 
 
 # --------------------------------------------------------------------------------------------

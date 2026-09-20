@@ -19,10 +19,12 @@ from debate_core.testing.fakes import (
     FixedClock,
     InMemoryArticleRepository,
     InMemoryCardRepository,
+    InMemoryCaselistRepository,
     InMemorySearchRepository,
     InMemorySnapshotStore,
     RecordedModelCall,
     SequentialIdGenerator,
+    build_fake_caselist_repository,
     build_fake_ports,
 )
 
@@ -36,9 +38,11 @@ __all__ = [
     "FixedClock",
     "InMemoryArticleRepository",
     "InMemoryCardRepository",
+    "InMemoryCaselistRepository",
     "InMemorySearchRepository",
     "InMemorySnapshotStore",
     "RecordedModelCall",
     "SequentialIdGenerator",
+    "build_fake_caselist_repository",
     "build_fake_ports",
 ]

@@ -75,7 +75,7 @@ def test_every_fake_is_an_instance_of_the_port_it_stands_for() -> None:
 FORBIDDEN_IN_A_PORT_MODULE = ("boto3", "botocore", "httpx", "sqlite3", "typer", "fastapi")
 
 
-@pytest.mark.parametrize("module_name", ["persistence", "providers"])
+@pytest.mark.parametrize("module_name", ["persistence", "providers", "caselist"])
 def test_port_modules_import_nothing_from_a_provider_library(module_name: str) -> None:
     """The rule the ports exist for; v1-e02-t06-import-boundary-guard enforces it repo-wide."""
     source = inspect.getsource(getattr(ports, module_name))

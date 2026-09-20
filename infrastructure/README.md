@@ -20,6 +20,7 @@ that keeps binding.
 | [`modules/tags/`](modules/tags/) | The tagging standard | `v1-e29-t02-terraform-bootstrap` |
 | [`modules/static_site/`](modules/static_site/) | One environment's public website: private bucket, CloudFront with OAC, security headers, the SitePublisher permission set | `v1-e36-t02-site-hosting` |
 | [`modules/domain_redirect/`](modules/domain_redirect/) | The `.com` names, which 301 to the canonical `.org` site and hold no content | `v1-e36-t02-site-hosting` |
+| [`modules/evidence_bucket/`](modules/evidence_bucket/) | One environment's evidence store: private versioned KMS-encrypted bucket, its key, and the EvidenceOperator and EvidenceRemoval permission sets | `v1-e29-t03-evidence-buckets` |
 | [`envs/dev/`](envs/dev/), [`envs/prod/`](envs/prod/) | The two environment roots | `v1-e29-t02-terraform-bootstrap` |
 
 There is no `envs/stage`, and adding one means changing ADR-0013 first.
@@ -78,6 +79,31 @@ would strand the domain. Name-server changes and anything at the registrar are o
 `site_domain_names` is a variable with an empty default in both roots, so
 `terraform apply -var 'site_domain_names=[]'` brings the site up on its `*.cloudfront.net` domain
 with no certificate at all. That is the escape hatch for applying while DNS is still settling.
+
+## The evidence store
+
+Both roots call [`modules/evidence_bucket`](modules/evidence_bucket/) from `evidence_store.tf`,
+which is identical in the two roots; only the retention in `terraform.tfvars` differs. The
+decision is [ADR-0003](../docs/adr/0003-s3-source-of-truth-for-raw-artifacts.md), the key layout
+is [docs/architecture/evidence-store-layout.md](../docs/architecture/evidence-store-layout.md)
+and the operator steps are [docs/runbooks/evidence-store.md](../docs/runbooks/evidence-store.md).
+
+| | dev | prod |
+|---|---|---|
+| Bucket | `debate-dev-evidence-a7508de8` | `debate-prod-evidence-a7508de8` |
+| KMS alias | `alias/debate-dev-evidence` | `alias/debate-prod-evidence` |
+| Superseded versions | 30 days | 365 days, Standard-IA after 30 |
+| Everyday profile | `debate-dev-evidence` | `debate-prod-evidence` |
+| Takedown profile | `debate-dev-evidence-removal` | `debate-prod-evidence-removal` |
+
+The bucket and its key both carry `prevent_destroy`, and the bucket is not `force_destroy`:
+`terraform destroy` in these roots has no legitimate use, and this is the system of record.
+
+The two permission sets are separate on purpose. `EvidenceOperator` — what the operator and
+`debate-research store` (`v1-e29-t05`) run as — has **no `s3:DeleteObject` at all**.
+`EvidenceRemoval` is the only credential that can delete evidence, is scoped to the five prefixes
+that hold disclosed material, and is assigned to one person, because a takedown purges noncurrent
+versions and leaves nothing to restore from.
 
 ## Tagging
 

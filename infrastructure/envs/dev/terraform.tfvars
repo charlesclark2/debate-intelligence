@@ -17,3 +17,10 @@ site_noindex       = true
 
 # No redirected domains in dev: a second registrable domain points at prod, not at the preview.
 redirect_domain_names = []
+
+# The evidence store (v1-e29-t03-evidence-buckets, ADR-0003). dev holds synthetic and sample data
+# only, unless the backfill task (v1-e30-t06) says the operator loads the real corpus here for
+# validation, so a superseded version is worth a month rather than a year. At 30 days the
+# Standard-IA transition drops out on purpose: S3 rejects a version that expires on the day it
+# would move, and Standard-IA bills a 30-day minimum for a version that is about to be deleted.
+evidence_noncurrent_version_retention_days = 30

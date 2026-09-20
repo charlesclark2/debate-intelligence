@@ -113,3 +113,59 @@ variable "site_publisher_user_names" {
   type        = list(string)
   default     = []
 }
+
+# --- The evidence store (v1-e29-t03-evidence-buckets, ADR-0003) -------------------------------
+#
+# Identical in both roots; the values are in each root's terraform.tfvars and, for the user names,
+# in the gitignored owner.auto.tfvars.
+
+variable "evidence_bucket_suffix" {
+  description = <<-EOT
+    Suffix making the evidence bucket name unique in S3's global namespace. The same committed
+    constant the state and site buckets use, so the runbook, a removal and `debate-research store`
+    can name the bucket without reading Terraform state.
+  EOT
+  type        = string
+  default     = "a7508de8"
+}
+
+variable "evidence_noncurrent_version_retention_days" {
+  description = <<-EOT
+    How long a superseded object version is kept in this environment's evidence bucket before it
+    expires: 365 in prod, 30 in dev. Versioning is the recovery path for a bad publish, and this
+    is how long that path stays open. Current versions are never expired (except under exports/).
+  EOT
+  type        = number
+  default     = 365
+}
+
+variable "evidence_additional_reader_principal_arns" {
+  description = <<-EOT
+    Extra IAM principals granted read and presign access to this environment's evidence: the V2
+    worker and API roles, once they exist. Empty in V1. They get GetObject, GetObjectVersion,
+    ListBucket and kms:Decrypt — never write, never delete, never KMS admin.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "evidence_operator_user_names" {
+  description = <<-EOT
+    Identity Center user names assigned this environment's EvidenceOperator permission set, which
+    is what the operator and `debate-research store sync|ls|get` publish evidence with — adult
+    maintainers only, never students. Supplied through the gitignored owner.auto.tfvars, because
+    these are people's names and the repository is public.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "evidence_removal_user_names" {
+  description = <<-EOT
+    Identity Center user names assigned this environment's EvidenceRemoval permission set, the
+    only credential that can delete evidence and its noncurrent versions. One person, enforced by
+    a validation in the module: a takedown is irreversible.
+  EOT
+  type        = list(string)
+  default     = []
+}

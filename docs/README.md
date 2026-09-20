@@ -4,6 +4,7 @@
 |---|---|
 | [architecture/architecture_proposal.md](architecture/architecture_proposal.md) | V1–V3 system architecture proposal |
 | [architecture/ports-and-adapters.md](architecture/ports-and-adapters.md) | The ten ports, the constructor-injection pattern, and how to add an adapter |
+| [architecture/evidence-store-layout.md](architecture/evidence-store-layout.md) | Evidence bucket naming, the `raw/`…`quarantine/` key layout, and which task writes each prefix |
 | [architecture/cardmirror-evaluation.md](architecture/cardmirror-evaluation.md) | CardMirror schema, API, license and round-trip evidence behind ADR-0014 |
 | [architecture/cardmirror-upstream-issues.md](architecture/cardmirror-upstream-issues.md) | CardMirror defects found during the evaluation, drafted for upstream and not filed |
 | [adr/](adr/README.md) | Architecture decision records |
@@ -15,6 +16,7 @@
 | [policies/website-publishing.md](policies/website-publishing.md) | What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request |
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
 | [runbooks/terraform-bootstrap.md](runbooks/terraform-bootstrap.md) | Creating the Terraform state buckets and the dev/prod environment roots |
+| [runbooks/evidence-store.md](runbooks/evidence-store.md) | Applying the dev and prod evidence buckets and checking the operator and takedown credentials |
 | [runbooks/caselist-removal.md](runbooks/caselist-removal.md) | Removing a caselist or OpenEv source on request |
 | [runbooks/team-website.md](runbooks/team-website.md) | Standing up the team website's hosting, domains and publisher credentials |
 | [session-reports/](session-reports/README.md) | One report per completed task |

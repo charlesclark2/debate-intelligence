@@ -25,3 +25,9 @@ site_noindex               = false
 #   redirect_domain_names  = ["wfbdebate.org", "www.wfbdebate.org"]
 #   redirect_dns_zone_name = "wfbdebate.org"
 redirect_domain_names = []
+
+# The evidence store (v1-e29-t03-evidence-buckets, ADR-0003). prod holds the real corpus, and
+# versioning is the only recovery path a single-account setup has (ADR-0010): a superseded version
+# is kept for a year, in Standard-IA after the first 30 days. Current versions are never expired
+# — evidence comes out on request (docs/runbooks/caselist-removal.md) or not at all.
+evidence_noncurrent_version_retention_days = 365

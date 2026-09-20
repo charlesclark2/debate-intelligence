@@ -57,9 +57,13 @@ spec:
         than guessed.
     - id: ac3
       description: >-
-        The student rules state first names or no names, no student contact details, photos only with
-        district media consent, and a removal-on-request procedure naming who acts and the target time
-        to take content down from prod (including a CloudFront invalidation).
+        The student rules follow the district's naming rule for students with media consent on file
+        (FIRST NAME LAST NAME (GRADUATION YEAR)), reducible or withdrawn on request; require a consent
+        check before publishing and at the start of each season; forbid student contact details; allow
+        photos only with district media consent confirmed for website use; and give a
+        removal-on-request procedure naming who acts and the target time to take content down from prod
+        (including a CloudFront invalidation), with a faster clock for student names and images than for
+        other content.
     - id: ac4
       description: >-
         The Analytics and third parties section forbids trackers, ads, pixels and embedded social widgets
@@ -70,7 +74,7 @@ spec:
         The Pre-publication checklist is a numbered list that t04, E37 and E38 can cite item by item,
         and the policy status reads Approved with Charlie's name and date.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

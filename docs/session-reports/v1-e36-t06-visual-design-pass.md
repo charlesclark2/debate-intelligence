@@ -17,6 +17,10 @@ tinted and inverse surfaces) and `CardGrid` sit on top of that, and the reading 
 of `<main>` into `.page-column` so a band can reach the edge of the viewport without every
 Markdown page changing width.
 
+Two defects found by Charlie on the preview were fixed in the same task and are described under
+Decisions: the page hung to the left on a wide screen, and the hero action only scrolled to the
+section below it.
+
 The home page is five bands: a hero with the team name, the one-line description and one primary
 action; the October 1 parent session as the page's only navy band; four entry cards on the tinted
 band; the prose from `home.md`; and "what debate builds". Not a word of that copy is in a
@@ -41,7 +45,8 @@ thing); the direction is recorded under Decisions.
 | `section-and-card` | Done | `Section.tsx`, `CardGrid.tsx`, `sections.css`. Section takes a third tone (`inverse`) beyond the tinted background the spec named; see Decisions. |
 | `action-styles` | Done | Four states per variant, an inverse set for navy surfaces, a `.link-cta` in-text action, `Button` gained a `size` prop for the hero. |
 | `home-page` | Done | `page.tsx` rebuilt from the primitives; `content/home.yaml` added; `home.md` body trimmed to the prose the page still renders (see Deviations). |
-| `motion-and-gates` | Done | One 150ms duration token, no `@keyframes` anywhere, `scroll-behavior: smooth` for the hero anchor, all covered by the existing reduced-motion block. |
+| `motion-and-gates` | Done | One 150ms duration token, no `@keyframes` anywhere, all covered by the existing reduced-motion block. |
+| (revision, after preview review) | Done | One centred text column across every band, the wide band narrowed 68rem → 56rem, and the hero action repointed at `/join/`. |
 
 ## Acceptance criteria
 
@@ -58,7 +63,7 @@ well inside the CI budget in `docs/process/working-agreements.md` §1.
 | ac3 distinct action states, 44px target, white knockout mark, focus ring unchanged | PASS | `pnpm --dir site test design-system` → `22 passed`. Asserts rest/hover/`:active` bodies exist per variant and that hover actually changes the fill, `min-height`/`min-width` of 44px (52px on the hero action), the footer's `wfb-mark-white-knockout.png` with empty alt, `outline: 3px solid var(--color-focus-ring)` / `outline-offset: 2px` byte-identical to t03, and that `outline: none` appears only on the two selectors that re-declare a ring. Ring visibility on white (12.71), panel tint (11.02) and navy (6.51 inverse) asserted in `tokens.test.ts`. |
 | ac4 new colour pairs in the contrast table and recomputed; restricted colours still fail as small text | PASS | `pnpm --dir site test tokens` → `68 passed`. The table is now machine-readable: 18 rows, each parsed and recomputed from the tokens, with the stated ratio checked to two decimals and the AA / AA-large verdict checked against 4.5:1 and 3:1. The restricted-colour scan now runs over **every** `.css` file in `src/styles` (previously a hard-coded three), so `sections.css` could not have escaped it. |
 | ac5 transitions ≤200ms, disabled under prefers-reduced-motion, nothing on load | PASS | `pnpm --dir site test design-system` → `22 passed`. Every `transition`/`transition-duration` across all five stylesheets is resolved through `--duration-transition` (150ms) and asserted ≤200ms; no `@keyframes` and no `animation:` shorthand exists anywhere; the reduced-motion block is asserted to name `*`, `*::before`, `*::after` and to zero transition-duration, animation-duration and scroll-behavior. |
-| ac6 lint/typecheck/test/build pass offline, axe clean, policy guard unchanged | PASS with one caveat | `pnpm --dir site lint` → clean. `pnpm --dir site typecheck` → clean. `pnpm --dir site test` → `13 files, 353 passed`. `pnpm --dir site build` → 14 static pages. axe: `pages-a11y.test.tsx` (42 tests, no skips with `out/` present) runs every page through the frame **and** over the exported HTML, `home.test.tsx` and `layout.test.tsx` add the home page and the kit; zero violations. Policy guard: identical to the baseline, but the baseline is **no findings at all**, not "only the October 1 room placeholder" — see Deviations. |
+| ac6 lint/typecheck/test/build pass offline, axe clean, policy guard unchanged | PASS with one caveat | `pnpm --dir site lint` → clean. `pnpm --dir site typecheck` → clean. `pnpm --dir site test` → `13 files, 356 passed`. `pnpm --dir site build` → 14 static pages. axe: `pages-a11y.test.tsx` (42 tests, no skips with `out/` present) runs every page through the frame **and** over the exported HTML, `home.test.tsx` and `layout.test.tsx` add the home page and the kit; zero violations. Policy guard: identical to the baseline, but the baseline is **no findings at all**, not "only the October 1 room placeholder" — see Deviations. |
 
 ### Plan node criteria
 
@@ -71,7 +76,7 @@ well inside the CI budget in `docs/process/working-agreements.md` §1.
 | `action-styles` / `pnpm --dir site test design-system` | PASS | `Test Files 1 passed (1)`, `Tests 22 passed (22)`. |
 | `home-page` / `pnpm --dir site test home` | PASS | `Test Files 1 passed (1)`, `Tests 64 passed (64)`. |
 | `home-page` / `pnpm --dir site build` | PASS | `✓ Generating static pages (14/14)`; `out/index.html` carries the new bands and links a stylesheet containing the tokens. |
-| `motion-and-gates` / `pnpm --dir site test` | PASS | `Test Files 13 passed (13)`, `Tests 353 passed (353)`, 3.39s. |
+| `motion-and-gates` / `pnpm --dir site test` | PASS | `Test Files 13 passed (13)`, `Tests 356 passed (356)`, 2.90s. |
 | `motion-and-gates` / `pnpm --dir site lint` | PASS | `eslint .` exits clean. |
 | `motion-and-gates` / `pnpm --dir site typecheck` | PASS | `tsc --noEmit` exits clean. |
 
@@ -145,6 +150,25 @@ parses the contrast table and scans every stylesheet; `layout.test.tsx` covers t
 
 ## Decisions and assumptions
 
+**Two defects Charlie found on the preview, fixed in this task:**
+
+* **The page hung to the left on a wide screen.** The bands centred a 68rem container but capped
+  the text inside it at 36rem (body) and 48rem (headings) and left it flush against the left
+  edge, so all the slack fell on the right and the page read as though it had slipped sideways.
+  The fix is structural rather than a nudge: there is now one centred text column
+  (`--layout-prose-width`) that a section's heading and its content share, so they have the same
+  left and right edge; only a card grid breaks out of it, to `--layout-max-width`, narrowed from
+  68rem to 56rem so the two are centred on one axis. `--layout-heading-width` is gone. `Section`
+  gained `contentWidth="wide"` for the two grid bands. Asserted in `layout.test.tsx` (the column
+  wraps a text band's children and a grid band's do not) and in `design-system.test.tsx` (the
+  rule exists, and the wide band is never more than 20rem wider than the text column).
+* **The hero action pointed one screenful down at the October 1 panel**, which asked a visitor to
+  press a button to reach something already in front of them. It now goes to `/join/` ("How to
+  join the team"), which is a real destination and the natural next step; the panel keeps its own
+  action to the parent FAQ, and is still directly below the hero and still the only navy band.
+  `scroll-behavior: smooth` existed only to soften that anchor jump and was removed with it, so
+  the site now has no scroll motion at all.
+
 **The visual direction**, settled with Charlie on the local dev preview against the brief he gave
 mid-session (parents in an affluent suburban district, first impression, generous whitespace,
 clear hierarchy, restrained motion, no stock-template look):
@@ -161,15 +185,13 @@ clear hierarchy, restrained motion, no stock-template look):
   on navy at all, where it measures 3.04:1 and clears the non-text floor by too little to trust.
   `tokens.test.ts` asserts both restrictions.
 * **One hero action, not two.** The spec says "one primary action"; a second button beside it is
-  the most recognisable stock-template tell. The single action points at the October 1 panel,
-  which is also the answer to "what is the most important thing here".
+  the most recognisable stock-template tell.
 * **Fluid type rather than breakpoints.** The display size and hero lead use `clamp()`, so the
   headline grows with the viewport instead of stepping once at 48rem. The floor of each clamp is
   also its floor under zoom, so nothing collapses at 200% (WCAG 2.1 SC 1.4.4).
 * **Motion**: one 150ms duration token, used on button fills and the 3px nudge of the `.link-cta`
-  chevron. No keyframes exist anywhere in the site, so there is nothing that *could* run on load.
-  Smooth scrolling was added for the hero anchor only; the existing reduced-motion block turns it
-  back into a jump.
+  chevron. No keyframes exist anywhere in the site, so there is nothing that *could* run on load,
+  and after the hero-action fix there is no scroll motion either.
 
 **Engineering decisions:**
 
@@ -211,9 +233,20 @@ it is not needed to review the page.
 * **The October 1 room has no build guard.** Deviation 1. Belongs in `v1-e36-t07` or
   `v1-e36-t08`: convert the room value in `content/home.yaml` to a `[[TBD: …]]` marker so a prod
   build cannot ship without it, then fill it as t08's closing step.
-* **The remaining six pages are still single prose columns.** That is `v1-e36-t07` by design; the
-  kit they need (`Section`, `CardGrid`, `.page-column`, the action states) now exists, so t07 is
-  composition rather than new primitives.
+* **The remaining six pages are still single prose columns.** Charlie asked for about, events,
+  join, coaches, parent FAQ and contact to be redesigned too. That is `v1-e36-t07`
+  (`t07-page-structure-pass.yaml`) word for word, and t06's spec puts it out of scope, so it was
+  not done here. The kit those pages need (`Section`, `CardGrid`, `.page-column`, the action
+  states, the centred column) now exists, so t07 is composition rather than new primitives.
+* **The Accessibility page has its own main-navigation item, and probably should not.** Charlie
+  questioned it. It is there by construction, not by decision: t03 builds the navigation from
+  every file in `content/pages/`, so publishing the statement put it in the nav, and t04 gave it
+  `navOrder: 90` to push it to the end. `docs/policies/website-publishing.md` (Accessibility 10)
+  requires the statement to be *published*, not to be in the main navigation, and the usual place
+  for it is the footer. Moving it needs a way to mark a page as footer-only (a `navPlacement`
+  field in the front matter, say) plus footer links, and it touches `routes.test.ts`, which
+  asserts the navigation order. Small, but it is a change to the site frame rather than to the
+  home page, so it belongs in t07 with the rest of the page structure work.
 * **`--color-text-muted` is now referenced by no rule in any stylesheet.** It is still in the
   palette and still asserted as large-text-only. t07 may find a use for it in the FAQ; if it does
   not, the PM may want it dropped from the tokens rather than left as a colour nobody may use.

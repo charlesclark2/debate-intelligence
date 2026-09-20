@@ -69,7 +69,7 @@ spec:
         lists every manual/operator step not in Terraform, and shows how to configure the per-environment
         AWS CLI SSO profiles (e.g. debate-dev, debate-prod) and `aws sso login`.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -59,9 +59,10 @@ page, which correctly fails a prod build).
 | `dev-preview` — custom: Charlie confirms the dev smoke check passed for the commit being promoted, including `noindex`, and the preview looks right on a phone | NOT RUN | Operator follow-ups 3 and 4. |
 | `prod-launch` — `docs/runbooks/team-website.md` contains `First prod launch` | PASS (placeholder) | The section exists with the right fields; its values are `_pending_` until the launch. Reported as PASS against the literal criterion and as not-yet-true in substance. |
 | `prod-launch` — custom: Charlie confirms, on or before September 30 2026, that the prod site passes the smoke check at the URL he will give parents | NOT RUN | Operator follow-up 5. |
-| Regression — Terraform static checks still pass after the policy change | PASS | `scripts/terraform_checks.sh` → `All Terraform checks passed.` `terraform test` in `infrastructure/modules/static_site` → `Success! 11 passed, 0 failed.` |
+| Regression — Terraform static checks still pass after the policy change | PASS | Re-run after the rebase onto `dev` at `9a3e86f`: `scripts/terraform_checks.sh` → `ok test infrastructure/modules/static_site`, `All Terraform checks passed.` The script now runs `terraform test` itself (#23), so the module suite is covered rather than hand-run; the direct run earlier in the session gave `Success! 11 passed, 0 failed.` |
 | Regression — spec validation | PASS | `uv run scripts/validate_specs.py` → `OK: 278 files, 38 epics, 220 tasks, 20 releases`. |
-| Regression — cross-package tests and pre-commit | PASS | `uv run pytest tests` → `78 passed in 14.87s`. `uv run pre-commit run --files <changed>` → every hook Passed or Skipped. |
+| Regression — cross-package tests and pre-commit | PASS | `uv run pytest tests` → `78 passed in 14.39s` after the rebase. `uv run pre-commit run --files <changed>` → every hook Passed or Skipped. |
+| Regression — the branch is current with `dev` | PASS | `scripts/task sync v1-e36-t05-site-deploy` → `Successfully rebased and updated refs/heads/task/v1-e36-t05-site-deploy` onto `9a3e86f`, no conflicts, nothing pushed (the branch is not on origin). `uv run shellcheck scripts/site_deploy.sh`, `uv run ruff check .` and `uv run scripts/validate_specs.py` all clean afterwards. |
 
 ## Files changed
 
@@ -168,18 +169,20 @@ Run these in order. 1 and 2 are prerequisites for any deploy; 3 to 5 are the dep
 
 ### 1. Apply the widened publisher policy (runbook step 9)
 
-**Ordering: this apply must not run from this task branch as it stands.**
+**Ordering: resolved, and this branch is ready to apply from.**
 `v1-e29-t03-evidence-buckets` applied fifteen evidence-store resources to each env root on
-2026-09-20 and has not merged to `dev` yet, so this branch's configuration is behind the state it
-would plan against: a plan from here proposes fifteen destroys and then fails on `prevent_destroy`.
-Merge that task into `dev` first, run `scripts/task sync v1-e36-t05-site-deploy`, and apply from
-the rebased worktree. Deploying is unaffected — `terraform output` reads state, not configuration
-— so only the invalidation wait depends on this.
+2026-09-20, so for a while a plan from this branch would have proposed fifteen destroys and then
+failed on `prevent_destroy`. That task merged to `dev` as #22 (`de1367d`) and this branch has been
+rebased onto `dev` at `9a3e86f`, so its configuration now covers everything in both roots. A plan
+should show one change and no evidence resources; if it shows evidence resources being created,
+the rebase was lost. (Deploying never depended on this: `terraform output` reads state, not
+configuration.)
 
-Once this branch carries `evidence_store.tf`, `owner.auto.tfvars` needs
-`evidence_operator_user_names` and `evidence_removal_user_names` as well, or the evidence
-permission sets are created with nobody assigned to them
-(`infrastructure/envs/<env>/owner.auto.tfvars.example` has the current shape).
+`owner.auto.tfvars` now needs four lines, not two: `site_publisher_user_names`,
+`evidence_operator_user_names` and `evidence_removal_user_names` all default to `[]`, so a fresh
+checkout plans a destroy of all three sets of account assignments with nothing louder than the
+`var.owner` prompt. Names verified against
+`infrastructure/envs/dev/owner.auto.tfvars.example` after the rebase.
 
 **Operator command** (expected runtime ~6 min, mostly two applies)
 Where: your Mac, in a checkout holding this branch — set `WT` to it
@@ -192,8 +195,10 @@ first (runbook *Before you start*).
 cd "$WT"
 for env in dev prod; do
   cat > "infrastructure/envs/$env/owner.auto.tfvars" <<TFVARS
-owner                     = "$OWNER_EMAIL"
-site_publisher_user_names = ["$SSO_USER_NAME"]
+owner                        = "$OWNER_EMAIL"
+site_publisher_user_names    = ["$SSO_USER_NAME"]
+evidence_operator_user_names = ["$SSO_USER_NAME"]
+evidence_removal_user_names  = ["$SSO_USER_NAME"]
 TFVARS
 done
 terraform fmt infrastructure/envs/dev infrastructure/envs/prod
@@ -320,14 +325,13 @@ run is a cheap confirmation rather than a suspicion.
   them in is deleting a line each.
 * **`wfbdebate.org`** remains blocked in an AWS Support case. Nothing here builds for it; if it is
   ever issued it becomes a redirect to `.com`, which is a tfvars change and an apply.
-* **`terraform test` in the checks script: already done, no task needed.** This session ran
+* **`terraform test` in the checks script: closed, no task needed.** This session first ran
   `terraform test` in `infrastructure/modules/static_site` by hand (11 passed) because
-  `scripts/terraform_checks.sh` ran only `fmt`, `validate` and `tflint`. That gap has since been
-  closed by the PM on `specs/evidence-layout-alignment` (`ac888e7`), which makes the script run
-  `terraform test` for every module with a `tests/` directory, with `--no-test` to skip; verified
-  by reading that branch. Once it reaches `dev` and this branch is synced, the by-hand run above
-  becomes a covered one and `scripts/terraform_checks.sh` takes a few seconds longer. Recorded so
-  this is not read as a proposal for work already done.
+  `scripts/terraform_checks.sh` ran only `fmt`, `validate` and `tflint`. The PM closed that gap in
+  `Specs: evidence key/alias/profile alignment; run module tests in the checks script` (#23, on
+  `dev` as `9a3e86f`): the script now runs `terraform test` for every module with a `tests/`
+  directory, with `--no-test` to skip. After the rebase onto that commit the static_site suite runs
+  from the script rather than by hand, so this is recorded as resolved, not proposed.
 * **Automatic republish on a content change** is `v1-e37-t04`, and **keyless CI deploys** are
   `v2-e10-t03`. When the latter lands, the prod guard in `scripts/site_deploy.sh` has to be
   reproduced in the workflow, or the script has to be what the workflow runs.

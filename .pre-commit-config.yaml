@@ -43,3 +43,15 @@ repos:
         files: ^(infrastructure/|scripts/terraform_checks\.sh$)
         pass_filenames: false
         require_serial: true
+      # Node and pnpm are not uv dependencies either: they come from the operator's machine
+      # (`brew install node`, then `npm install -g pnpm@10.15.0`) and from the CI runner's setup
+      # steps, and the script says so if either is missing. It runs only when site/ changed,
+      # because it lints, type-checks, tests and builds the site, which takes about ten seconds.
+      # Everything it runs is offline: see the header of site/scripts/pre-commit-checks.sh.
+      - id: site-checks
+        name: site lint, typecheck, test and build
+        entry: site/scripts/pre-commit-checks.sh
+        language: unsupported
+        files: ^site/
+        pass_filenames: false
+        require_serial: true

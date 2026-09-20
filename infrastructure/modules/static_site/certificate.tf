@@ -5,7 +5,7 @@
 # certificate is still validating. That is the point of keeping the domain a variable: an apply
 # with `-var 'site_domain_names=[]'` always works.
 #
-# The hosted zone is an input, never a resource. The zones for wfbdebate.org and wfbdebate.com
+# The hosted zone is an input, never a resource. The zones for wfbdebate.com and wfbdebate.org
 # came with the registration, and a `terraform destroy` that took a hosted zone with it would
 # strand the domain (task spec: forbidden).
 

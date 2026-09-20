@@ -40,14 +40,14 @@ mock_provider "aws" {
       arn = "arn:aws:acm:us-east-1:111122223333:certificate/mock"
       domain_validation_options = [
         {
-          domain_name           = "wfbdebate.com"
-          resource_record_name  = "_mock1.wfbdebate.com."
+          domain_name           = "wfbdebate.org"
+          resource_record_name  = "_mock1.wfbdebate.org."
           resource_record_type  = "CNAME"
           resource_record_value = "_mock1.acm-validations.aws."
         },
         {
-          domain_name           = "www.wfbdebate.com"
-          resource_record_name  = "_mock2.www.wfbdebate.com."
+          domain_name           = "www.wfbdebate.org"
+          resource_record_name  = "_mock2.www.wfbdebate.org."
           resource_record_type  = "CNAME"
           resource_record_value = "_mock2.acm-validations.aws."
         },
@@ -58,9 +58,9 @@ mock_provider "aws" {
 
 variables {
   name_prefix     = "debate-prod-site-redirect"
-  domain_names    = ["wfbdebate.com", "www.wfbdebate.com"]
-  target_host     = "wfbdebate.org"
-  route53_zone_id = "Z0MOCKCOMZONE"
+  domain_names    = ["wfbdebate.org", "www.wfbdebate.org"]
+  target_host     = "wfbdebate.com"
+  route53_zone_id = "Z0MOCKORGZONE"
 }
 
 run "every_request_is_answered_with_a_permanent_redirect" {
@@ -70,7 +70,7 @@ run "every_request_is_answered_with_a_permanent_redirect" {
   }
 
   assert {
-    condition     = strcontains(aws_cloudfront_function.redirect.code, "var TARGET_HOST = 'wfbdebate.org';")
+    condition     = strcontains(aws_cloudfront_function.redirect.code, "var TARGET_HOST = 'wfbdebate.com';")
     error_message = "The function must know where it is redirecting to."
   }
 
@@ -117,12 +117,12 @@ run "the_redirect_is_https_only_and_has_its_own_certificate" {
   }
 
   assert {
-    condition     = aws_acm_certificate.redirect.domain_name == "wfbdebate.com"
+    condition     = aws_acm_certificate.redirect.domain_name == "wfbdebate.org"
     error_message = "The certificate's common name must be the apex of the redirected domain."
   }
 
   assert {
-    condition     = aws_acm_certificate.redirect.subject_alternative_names == toset(["www.wfbdebate.com"])
+    condition     = aws_acm_certificate.redirect.subject_alternative_names == toset(["www.wfbdebate.org"])
     error_message = "Every other redirected name must be a subject alternative name on the same certificate."
   }
 
@@ -132,7 +132,7 @@ run "the_redirect_is_https_only_and_has_its_own_certificate" {
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.redirect.aliases == toset(["wfbdebate.com", "www.wfbdebate.com"])
+    condition     = aws_cloudfront_distribution.redirect.aliases == toset(["wfbdebate.org", "www.wfbdebate.org"])
     error_message = "The distribution must claim both .com names, or one of them will not resolve to it."
   }
 
@@ -160,7 +160,7 @@ run "the_origin_is_never_a_public_bucket_or_a_website_endpoint" {
   }
 
   assert {
-    condition     = alltrue([for origin in aws_cloudfront_distribution.redirect.origin : origin.domain_name == "wfbdebate.org"])
+    condition     = alltrue([for origin in aws_cloudfront_distribution.redirect.origin : origin.domain_name == "wfbdebate.com"])
     error_message = "If the function ever went missing, the origin should degrade to the real site rather than to an error."
   }
 }
@@ -177,7 +177,7 @@ run "dns_records_are_written_in_the_com_zone" {
   }
 
   assert {
-    condition     = alltrue([for record in aws_route53_record.redirect_alias : record.zone_id == "Z0MOCKCOMZONE"])
+    condition     = alltrue([for record in aws_route53_record.redirect_alias : record.zone_id == "Z0MOCKORGZONE"])
     error_message = "The alias records belong in the .com zone, not the site's zone."
   }
 
@@ -187,7 +187,7 @@ run "dns_records_are_written_in_the_com_zone" {
   }
 
   assert {
-    condition     = output.target_url == "https://wfbdebate.org/"
+    condition     = output.target_url == "https://wfbdebate.com/"
     error_message = "target_url must name the site the .com domain points at."
   }
 }

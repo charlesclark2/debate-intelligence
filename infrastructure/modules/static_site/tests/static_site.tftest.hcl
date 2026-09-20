@@ -76,20 +76,20 @@ mock_provider "aws" {
       arn = "arn:aws:acm:us-east-1:111122223333:certificate/mock"
       domain_validation_options = [
         {
-          domain_name           = "wfbdebate.org"
-          resource_record_name  = "_mock1.wfbdebate.org."
+          domain_name           = "wfbdebate.com"
+          resource_record_name  = "_mock1.wfbdebate.com."
           resource_record_type  = "CNAME"
           resource_record_value = "_mock1.acm-validations.aws."
         },
         {
-          domain_name           = "www.wfbdebate.org"
-          resource_record_name  = "_mock2.www.wfbdebate.org."
+          domain_name           = "www.wfbdebate.com"
+          resource_record_name  = "_mock2.www.wfbdebate.com."
           resource_record_type  = "CNAME"
           resource_record_value = "_mock2.acm-validations.aws."
         },
         {
-          domain_name           = "dev.wfbdebate.org"
-          resource_record_name  = "_mock3.dev.wfbdebate.org."
+          domain_name           = "dev.wfbdebate.com"
+          resource_record_name  = "_mock3.dev.wfbdebate.com."
           resource_record_type  = "CNAME"
           resource_record_value = "_mock3.acm-validations.aws."
         },
@@ -329,23 +329,23 @@ run "prod_serves_the_team_domain_and_redirects_www" {
   variables {
     name_prefix           = "debate-prod-site"
     environment           = "prod"
-    domain_names          = ["wfbdebate.org", "www.wfbdebate.org"]
-    canonical_domain_name = "wfbdebate.org"
-    route53_zone_id       = "Z0MOCKORGZONE"
+    domain_names          = ["wfbdebate.com", "www.wfbdebate.com"]
+    canonical_domain_name = "wfbdebate.com"
+    route53_zone_id       = "Z0MOCKCOMZONE"
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.site.aliases == toset(["wfbdebate.org", "www.wfbdebate.org"])
+    condition     = aws_cloudfront_distribution.site.aliases == toset(["wfbdebate.com", "www.wfbdebate.com"])
     error_message = "The distribution must answer on both the apex and www, or the www redirect can never be served."
   }
 
   assert {
-    condition     = aws_acm_certificate.site[0].domain_name == "wfbdebate.org"
+    condition     = aws_acm_certificate.site[0].domain_name == "wfbdebate.com"
     error_message = "The certificate's common name must be the canonical host."
   }
 
   assert {
-    condition     = aws_acm_certificate.site[0].subject_alternative_names == toset(["www.wfbdebate.org"])
+    condition     = aws_acm_certificate.site[0].subject_alternative_names == toset(["www.wfbdebate.com"])
     error_message = "Every non-canonical name must be a subject alternative name on the same certificate."
   }
 
@@ -370,7 +370,7 @@ run "prod_serves_the_team_domain_and_redirects_www" {
   }
 
   assert {
-    condition     = strcontains(aws_cloudfront_function.site_request.code, "var CANONICAL_HOST = 'wfbdebate.org';")
+    condition     = strcontains(aws_cloudfront_function.site_request.code, "var CANONICAL_HOST = 'wfbdebate.com';")
     error_message = "The viewer function must know the canonical host."
   }
 
@@ -380,7 +380,7 @@ run "prod_serves_the_team_domain_and_redirects_www" {
   }
 
   assert {
-    condition     = output.site_url == "https://wfbdebate.org/"
+    condition     = output.site_url == "https://wfbdebate.com/"
     error_message = "site_url must be the canonical host once a domain is configured."
   }
 
@@ -412,8 +412,8 @@ run "an_external_registrar_gets_the_validation_records_as_an_output" {
   variables {
     name_prefix           = "debate-prod-site"
     environment           = "prod"
-    domain_names          = ["wfbdebate.org", "www.wfbdebate.org"]
-    canonical_domain_name = "wfbdebate.org"
+    domain_names          = ["wfbdebate.com", "www.wfbdebate.com"]
+    canonical_domain_name = "wfbdebate.com"
     route53_zone_id       = null
   }
 
@@ -447,8 +447,8 @@ run "an_external_registrar_gets_the_validation_records_as_an_output" {
 
 run "dev_preview_is_not_indexable" {
   variables {
-    domain_names    = ["dev.wfbdebate.org"]
-    route53_zone_id = "Z0MOCKORGZONE"
+    domain_names    = ["dev.wfbdebate.com"]
+    route53_zone_id = "Z0MOCKCOMZONE"
     noindex         = true
   }
 
@@ -461,7 +461,7 @@ run "dev_preview_is_not_indexable" {
   }
 
   assert {
-    condition     = strcontains(aws_cloudfront_function.site_request.code, "var CANONICAL_HOST = 'dev.wfbdebate.org';")
+    condition     = strcontains(aws_cloudfront_function.site_request.code, "var CANONICAL_HOST = 'dev.wfbdebate.com';")
     error_message = "A single-name environment is its own canonical host, so it must not redirect to itself."
   }
 
@@ -471,7 +471,7 @@ run "dev_preview_is_not_indexable" {
   }
 
   assert {
-    condition     = output.site_url == "https://dev.wfbdebate.org/"
+    condition     = output.site_url == "https://dev.wfbdebate.com/"
     error_message = "The dev preview URL must be the preview host."
   }
 }

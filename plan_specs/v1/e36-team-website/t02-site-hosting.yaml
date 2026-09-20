@@ -33,13 +33,16 @@ spec:
     (debate-dev-site-* and debate-prod-site-*) on the remote state from v1-e29-t02, with a least-privilege
     SitePublisher permission set (sync to the env's site bucket, invalidate its distribution) so t05 can
     deploy prod, where the debate-prod profile is read-only. terraform test runs offline with a mocked
-    provider. The team domains wfbdebate.org (canonical) and wfbdebate.com were registered on
-    2026-09-20, so the environments are wired to them: prod serves wfbdebate.org with
-    www.wfbdebate.org redirecting to it, dev serves the non-public preview host dev.wfbdebate.org with
-    noindex, and each environment's ACM certificate in us-east-1 covers its own names. wfbdebate.com and
-    www.wfbdebate.com 301 to their .org equivalents from a redirect-only CloudFront distribution with
+    provider. wfbdebate.com was registered on 2026-09-20 and is the canonical team domain: prod serves
+    wfbdebate.com with www.wfbdebate.com redirecting to it, dev serves the non-public preview host
+    dev.wfbdebate.com with noindex, and each environment's ACM certificate in us-east-1 covers its own
+    names. wfbdebate.org was the first choice; its registration failed three times that day, each in
+    under a second and with no reason given, and an AWS Support case is open, so the canonical name is
+    the domain that exists rather than the one being waited on. A second registrable domain — .org if
+    it is ever issued — 301s to its .com equivalent from a redirect-only CloudFront distribution with
     its own certificate (infrastructure/modules/domain_redirect), because the S3 website redirect
-    endpoint this would otherwise use is plain HTTP and public. Route 53 hosted zones come from the
+    endpoint this would otherwise use is plain HTTP and public; the module is built and tested and is
+    instantiated by setting redirect_domain_names in envs/prod. Route 53 hosted zones come from the
     registration and are read with data sources, never created or destroyed here; the domain stays a
     variable so a first apply can go out on the CloudFront domain while validation is pending. Applies,
     name-server and registrar steps, certificate validation and DNS are operator steps recorded in
@@ -101,16 +104,19 @@ spec:
         check uses `aws iam simulate-principal-policy` rather than attempting the action.
     - id: ac6
       description: >-
-        Prod serves https://wfbdebate.org/ with www.wfbdebate.org redirecting to it, dev serves
-        https://dev.wfbdebate.org/ carrying both a noindex robots rule and an `X-Robots-Tag: noindex`
+        Prod serves https://wfbdebate.com/ with www.wfbdebate.com redirecting to it, dev serves
+        https://dev.wfbdebate.com/ carrying both a noindex robots rule and an `X-Robots-Tag: noindex`
         response header, and each environment's ACM certificate is requested in us-east-1 and DNS
         validated in the hosted zone that the registration created.
     - id: ac7
       description: >-
-        wfbdebate.com and www.wfbdebate.com answer with a 301 to the same path on their .org
-        equivalent, served by infrastructure/modules/domain_redirect: its own certificate, its own
-        distribution, HTTPS only, and no S3 website endpoint or public bucket anywhere in the path.
-        `terraform -chdir=infrastructure/modules/domain_redirect test` passes offline.
+        infrastructure/modules/domain_redirect answers every request for a second registrable domain
+        with a 301 to the same path on the canonical host: its own certificate, its own distribution,
+        HTTPS only, and no S3 website endpoint or public bucket anywhere in the path.
+        `terraform -chdir=infrastructure/modules/domain_redirect test` passes offline. It is
+        instantiated from envs/prod by setting redirect_domain_names, which stays empty while
+        wfbdebate.org is unregistered; wiring the .org names to it when the registration succeeds is
+        a tfvars change and an operator apply, not new code.
 status:
   phase: InProgress
 ---
@@ -198,11 +204,11 @@ spec:
             args: [-chdir=infrastructure/modules/static_site, test]
       - id: domain-redirect-module
         kind: Task
-        name: domain_redirect module for the .com names
+        name: domain_redirect module for a second registrable domain
         description: >-
           A second module holding a redirect-only CloudFront distribution: its own ACM certificate for
-          wfbdebate.com and www.wfbdebate.com, a viewer-request CloudFront Function returning a 301 to
-          the same path on the canonical host, HSTS on the redirect response, alias records in the .com
+          the redirected names, a viewer-request CloudFront Function returning a 301 to the same path
+          on the canonical host, HSTS on the redirect response, alias records in that domain's own
           zone, and no bucket at all. A CloudFront Function rather than an S3 website redirect bucket,
           because that endpoint is plain HTTP and public, which the task forbids. Offline
           terraform test with a mocked provider.
@@ -224,9 +230,9 @@ spec:
         kind: Task
         name: dev and prod wiring and SitePublisher permission set
         description: >-
-          Instantiate the static_site module in envs/dev (dev.wfbdebate.org, noindex) and envs/prod
-          (wfbdebate.org canonical, www.wfbdebate.org redirecting to it) and the domain_redirect module
-          for the .com names in prod, reading both hosted zones with data sources; define the
+          Instantiate the static_site module in envs/dev (dev.wfbdebate.com, noindex) and envs/prod
+          (wfbdebate.com canonical, www.wfbdebate.com redirecting to it) and the domain_redirect module
+          for any second registrable domain in prod, reading each hosted zone with a data source; define the
           SitePublisher permission set scoped to each environment's bucket and distribution. The two
           roots hold the same files, differing only in terraform.tfvars and backend.tf, and the domain
           names stay variables so a first apply can go out on the CloudFront domain. Both roots
@@ -254,11 +260,10 @@ spec:
         kind: Task
         name: Operator applies dev then prod and records the domain steps
         description: >-
-          Operator-run, as paste-ready blocks in the runbook: confirm the two hosted zones are delegated,
+          Operator-run, as paste-ready blocks in the runbook: confirm the hosted zone is delegated,
           apply dev and confirm the preview is served over HTTPS with X-Robots-Tag noindex and that the
-          bucket URL returns AccessDenied; apply prod and confirm wfbdebate.org, the www 301 and the
-          .com 301; check every permission with iam simulate-principal-policy rather than by attempting
-          the action. A first apply may go out with empty domain names if certificate validation is
+          bucket URL returns AccessDenied; apply prod and confirm wfbdebate.com and the www 301; check
+          every permission with iam simulate-principal-policy rather than by attempting the action. A first apply may go out with empty domain names if certificate validation is
           still pending. The runbook records dates, bucket names, distribution domains, domain and DNS
           status (no account ids) and the steps still pending.
         dependsOn: [env-wiring]
@@ -274,8 +279,7 @@ spec:
             description: >-
               Charlie confirms both site buckets show "Block all public access", that direct S3 object
               URLs return AccessDenied, that http:// redirects to https:// on both distributions, that
-              www.wfbdebate.org, wfbdebate.com and www.wfbdebate.com each answer 301 to
-              https://wfbdebate.org/, that dev.wfbdebate.org returns X-Robots-Tag: noindex, and records
-              the certificate and DNS status in the runbook.
+              www.wfbdebate.com answers 301 to https://wfbdebate.com/, that dev.wfbdebate.com returns
+              X-Robots-Tag: noindex, and records the certificate and DNS status in the runbook.
 status:
   phase: Pending

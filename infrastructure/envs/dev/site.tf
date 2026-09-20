@@ -2,7 +2,7 @@
 #
 # This file is character-for-character the same in envs/dev and envs/prod, like every other file
 # in these roots except terraform.tfvars and backend.tf. dev and prod differ only in what their
-# tfvars say: dev gets the preview host dev.wfbdebate.org and noindex, prod gets wfbdebate.org
+# tfvars say: dev gets the preview host dev.wfbdebate.com and noindex, prod gets wfbdebate.com
 # with www redirecting to it plus the .com redirect. Copying a resource block between the two
 # roots instead of putting it in infrastructure/modules is what this layout exists to prevent —
 # see infrastructure/README.md.

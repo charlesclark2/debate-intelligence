@@ -22,8 +22,8 @@ real call: if the deny has failed, the test itself is the damage.
 
 | | dev | prod |
 |---|---|---|
-| Site | `https://dev.wfbdebate.org/` — the preview | `https://wfbdebate.org/` — what parents see |
-| Also answers | — | `www.wfbdebate.org`, `wfbdebate.com`, `www.wfbdebate.com`, each a 301 to the apex |
+| Site | `https://dev.wfbdebate.com/` — the preview | `https://wfbdebate.com/` — what parents see |
+| Also answers | — | `www.wfbdebate.com`, a 301 to the apex |
 | Bucket | `debate-dev-site-a7508de8` | `debate-prod-site-a7508de8` |
 | Indexable | No — `X-Robots-Tag: noindex, nofollow` from the edge | Yes |
 | Publisher permission set | `DebateDevSitePublisher` | `DebateProdSitePublisher` |
@@ -86,12 +86,18 @@ cat infrastructure/envs/dev/owner.auto.tfvars
 Success looks like: two lines, the email and the user name. `git status` still reports a clean
 tree — these files are gitignored.
 
-## Step 1 — Confirm the two hosted zones exist and are delegated
+## Step 1 — Confirm the hosted zone exists and is delegated
 
-`wfbdebate.org` and `wfbdebate.com` were registered on 2026-09-20. Terraform **reads** their
-hosted zones and never creates or destroys one; a `destroy` that took a zone with it would strand
-the domain. A zone whose name servers have not propagated will make the certificate step in step 3
-sit for its full 30-minute timeout, so check first.
+`wfbdebate.com` is the canonical team domain, registered 2026-09-20. `wfbdebate.org` was the first
+choice and could not be registered — three attempts failed, an AWS Support case is open, and the
+*If a registration failed* section below has the detail. The environments are wired to the domain
+that exists; if `.org` is ever issued it becomes a redirect to `.com`, which is a tfvars change and
+an apply, not new code.
+
+Terraform **reads** the hosted zone and never creates or destroys one; a `destroy` that took a zone
+with it would strand the domain. A zone whose name servers have not propagated will make the
+certificate step in step 3 sit for its full 30-minute timeout, so check first. The loop covers
+`.org` as well, so that the day it resolves is visible here.
 
 The `aws sso login` is part of this block on purpose: an expired token fails the two `aws` calls
 while `dig` still answers, which reads like a DNS result and is not one.
@@ -108,9 +114,13 @@ for DOMAIN in wfbdebate.org wfbdebate.com; do
   echo "-- the hosted zone, and the name servers it expects to be delegated to:"
   ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN" \
     --query "HostedZones[?Name=='${DOMAIN}.'].Id | [0]" --output text)
-  echo "   zone: $ZONE_ID"
-  aws route53 get-hosted-zone --id "$ZONE_ID" \
-    --query 'DelegationSet.NameServers' --output text | tr '\t' '\n' | sed 's/^/   /'
+  if [ "$ZONE_ID" = "None" ] || [ -z "$ZONE_ID" ]; then
+    echo "   no hosted zone (expected while a domain is unregistered)"
+  else
+    echo "   zone: $ZONE_ID"
+    aws route53 get-hosted-zone --id "$ZONE_ID" \
+      --query 'DelegationSet.NameServers' --output text | tr '\t' '\n' | sed 's/^/   /'
+  fi
 
   echo "-- is it registered at all, and with which name servers?"
   whois "$DOMAIN" 2>/dev/null \
@@ -127,10 +137,13 @@ for DOMAIN in wfbdebate.org wfbdebate.com; do
   dig +short NS "$DOMAIN" @1.1.1.1 | sed 's/^/   /'
 done
 ```
-Success looks like: a `whois` block naming a registrar and a creation date, a zone id, and the
-**same four `awsdns` name servers** in the zone, the registry and the public resolver. The
-registry line is the one that matters — a public resolver can lag it by minutes, but it cannot be
-ahead of it.
+Success looks like, **for `wfbdebate.com`**: a `whois` block naming a registrar and a creation
+date, a zone id, and the **same four `awsdns` name servers** in the zone, the registry and the
+public resolver. The registry line is the one that matters — a public resolver can lag it by
+minutes, but it cannot be ahead of it.
+
+`wfbdebate.org` is expected to show no hosted zone, no registrar and no delegation, for as long as
+its registration keeps failing. That row is here so the day it changes is visible.
 
 Three ways this comes back wrong, and what each means:
 
@@ -167,11 +180,11 @@ that appears in neither list was never bought from this account.
 
 ### If a registration failed
 
-`wfbdebate.org` failed this way on 2026-09-20, 0.9 seconds after it was submitted and two seconds
-after `wfbdebate.com` succeeded with the same contacts, with the generic "Contact AWS Support"
-message. A failure that fast, on the same account and contacts that had just worked, is the
-registry declining rather than anything wrong with the data — and those are often transient. Check
-the name is still free and try once more before opening a case.
+`wfbdebate.org` failed this way three times on 2026-09-20, the first of them 0.9 seconds after it
+was submitted and two seconds after `wfbdebate.com` succeeded with the same contacts, with only the
+generic "Contact AWS Support" message. A failure that fast, on an account and contacts that had
+just worked, is not the contact data — check the name is still free and try once more before
+opening a case, which is what happened here.
 
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere
@@ -228,10 +241,15 @@ Success looks like `"Status": "SUCCESSFUL"`, usually within a few minutes. Route
 hosted zone for you; re-run step 1 and the registry line should fill in shortly afterwards.
 
 If it reports `FAILED` a second time, stop retrying: open the AWS Support case the message points
-at, and decide whether to wait for it or to make `wfbdebate.com` the canonical name instead. That
-second choice is a spec change — `envs/prod/terraform.tfvars`, `envs/dev/terraform.tfvars` and
-ADR-0012 all name `wfbdebate.org` — and it is cheap, because nothing but tfvars and prose depends
-on which name is canonical.
+at, and decide whether to wait for it or to make the domain you already have the canonical name.
+
+That is what happened here: `wfbdebate.org` failed three times on 2026-09-20 (`4cb18c5e…` at
+12:11:28, `f79d71d2…` at 13:03:20, `cc87fa96…` at 13:04:26, all CDT, each in under a second). The
+successful `wfbdebate.com` registration took **10 minutes 12 seconds**, and `credencesports.com`
+before it took 11 minutes — a registration that reaches the registry takes minutes, so a
+sub-second failure never left Amazon Registrar. A Support case is open. The canonical name moved
+to `wfbdebate.com`, which cost only two `terraform.tfvars` files and some prose, because nothing in
+the modules or their 16 tests depends on which name is canonical.
 
 Changing name servers at a registrar is a manual step in the registrar's console. It is not
 Terraform's job and never an agent's.
@@ -321,9 +339,9 @@ cd "$WT"
 export AWS_PROFILE=debate-admin
 terraform -chdir=infrastructure/envs/dev apply
 ```
-The plan adds an ACM certificate for `dev.wfbdebate.org`, its validation record, the validation
+The plan adds an ACM certificate for `dev.wfbdebate.com`, its validation record, the validation
 wait, two alias records (A and AAAA) and an update to the distribution's aliases and certificate.
-Success looks like `Apply complete!` and `site_url = "https://dev.wfbdebate.org/"`.
+Success looks like `Apply complete!` and `site_url = "https://dev.wfbdebate.com/"`.
 
 If it fails with a certificate timeout, the zone's name servers have not propagated: go back to
 step 1, wait, and re-run this same command. The apply is idempotent; nothing is lost.
@@ -346,10 +364,10 @@ echo "== a direct S3 object URL (expect AccessDenied)"
 curl -s "https://debate-dev-site-a7508de8.s3.us-east-1.amazonaws.com/index.html" | head -5
 
 echo "== http:// must redirect to https:// (expect 301 and a https:// location)"
-curl -sSI "http://dev.wfbdebate.org/" | sed -n '1p;/^[Ll]ocation:/p'
+curl -sSI "http://dev.wfbdebate.com/" | sed -n '1p;/^[Ll]ocation:/p'
 
 echo "== the preview must not be indexable (expect x-robots-tag: noindex, nofollow)"
-curl -sSI "https://dev.wfbdebate.org/" | tr 'A-Z' 'a-z' \
+curl -sSI "https://dev.wfbdebate.com/" | tr 'A-Z' 'a-z' \
   | grep -E 'strict-transport-security|content-security-policy|x-content-type-options|x-frame-options|referrer-policy|permissions-policy|x-robots-tag'
 ```
 Success looks like: `True` four times; `<Error><Code>AccessDenied</Code>` from the S3 URL; a
@@ -372,13 +390,16 @@ terraform -chdir=infrastructure/envs/prod init
 terraform -chdir=infrastructure/envs/prod apply
 ```
 Read the plan. It should create the prod site bucket and its configuration, the site distribution
-with aliases `wfbdebate.org` and `www.wfbdebate.org`, a certificate covering both, four alias
-records, the `DebateProdSitePublisher` permission set — and, from the `domain_redirect` module, a
-second certificate for `wfbdebate.com` and `www.wfbdebate.com`, a second distribution, and four
-more alias records in the `.com` zone. It must **not** create a hosted zone or an S3 bucket for
-the redirect.
+with aliases `wfbdebate.com` and `www.wfbdebate.com`, a certificate covering both, four alias
+records, and the `DebateProdSitePublisher` permission set. It must **not** create a hosted zone.
 
-Success looks like `Apply complete!` and `site_url = "https://wfbdebate.org/"`.
+It also must **not** create anything from the `domain_redirect` module: `redirect_domain_names` is
+empty while there is only one registrable domain. That module is built and tested and waiting —
+if `wfbdebate.org` is ever issued, uncomment the two lines at the bottom of
+`envs/prod/terraform.tfvars` and re-apply, and the `.org` names will 301 to their `.com`
+equivalents.
+
+Success looks like `Apply complete!` and `site_url = "https://wfbdebate.com/"`.
 
 To go out on the CloudFront domain first, as in 3a:
 
@@ -403,22 +424,22 @@ aws s3api get-public-access-block --bucket debate-prod-site-a7508de8 \
 echo "== a direct S3 object URL (expect AccessDenied)"
 curl -s "https://debate-prod-site-a7508de8.s3.us-east-1.amazonaws.com/index.html" | head -5
 
-echo "== every other name must 301 to https://wfbdebate.org/"
-for URL in http://wfbdebate.org/ https://www.wfbdebate.org/ https://wfbdebate.com/ https://www.wfbdebate.com/; do
+echo "== every other name must 301 to https://wfbdebate.com/"
+for URL in http://wfbdebate.com/ https://www.wfbdebate.com/; do
   printf '%-32s ' "$URL"
   curl -sSI "$URL" | tr 'A-Z' 'a-z' | awk '/^http\//{code=$2} /^location:/{loc=$2} END{print code, loc}'
 done
 
 echo "== the canonical host answers, with the headers, and is indexable"
-curl -sSI "https://wfbdebate.org/" | tr 'A-Z' 'a-z' \
+curl -sSI "https://wfbdebate.com/" | tr 'A-Z' 'a-z' \
   | grep -E 'strict-transport-security|content-security-policy|x-content-type-options|x-frame-options|referrer-policy|permissions-policy|x-robots-tag'
 
-echo "== and that a deep link keeps its path through the .com redirect"
-curl -sSI "https://wfbdebate.com/parents/faq/" | tr 'A-Z' 'a-z' | sed -n '1p;/^location:/p'
+echo "== and that a deep link keeps its path through the www redirect"
+curl -sSI "https://www.wfbdebate.com/parents/faq/" | tr 'A-Z' 'a-z' | sed -n '1p;/^location:/p'
 ```
 Success looks like: `True` four times; `AccessDenied` from the S3 URL; `301` with
-`https://wfbdebate.org/` from all four spellings; six headers on the canonical host with **no**
-`x-robots-tag`; and the deep link redirecting to `https://wfbdebate.org/parents/faq/`, path
+`https://wfbdebate.com/` from both other spellings; six headers on the canonical host with **no**
+`x-robots-tag`; and the deep link redirecting to `https://wfbdebate.com/parents/faq/`, path
 intact.
 
 `curl` may report a TLS error on a name for a minute or two after the apply, while CloudFront
@@ -527,23 +548,23 @@ and hosted zone names are fine here; **the account id is not**.
 | Applied on | _pending_ | _pending_ |
 | Applied as | `debate-admin` (DebateBreakGlassAdmin) | `debate-admin` (DebateBreakGlassAdmin) |
 | Distribution domain | _pending_ | _pending_ |
-| Site URL | `https://dev.wfbdebate.org/` | `https://wfbdebate.org/` |
+| Site URL | `https://dev.wfbdebate.com/` | `https://wfbdebate.com/` |
 | Certificate issued on | _pending_ | _pending_ |
 | Redirect distribution domain | — | _pending_ |
 | Publisher profile confirmed | _pending_ | _pending_ |
 
 | Check | Result | Date |
 |---|---|---|
-| Both domains registered (`whois`) | `wfbdebate.com` registered 2026-09-20T17:11:33Z (Amazon Registrar). **`wfbdebate.org` registration FAILED** 0.9 s after submission (operation `4cb18c5e-dc01-4b99-8cff-b782eecf8cd5`, generic "Contact AWS Support" message); `Domain not found` at the `.org` registry, `check-domain-availability` → `AVAILABLE`. Retry pending | 2026-09-20 |
-| Hosted zones delegated (registry `NS`) | `wfbdebate.com` delegated to four `awsdns` servers, visible at the registry and at 1.1.1.1 and 8.8.8.8. `wfbdebate.org` has no delegation, because it has no registration | 2026-09-20 |
+| Canonical domain registered (`whois`) | `wfbdebate.com` registered 2026-09-20T17:11:33Z (Amazon Registrar), `SUCCESSFUL` after 10m 12s | 2026-09-20 |
+| `wfbdebate.org` | **Registration FAILED three times**, each in under a second, with only the generic "Contact AWS Support" message: `4cb18c5e-dc01-4b99-8cff-b782eecf8cd5` (12:11:28), `f79d71d2-7ce8-47b4-825b-644a83fdc3bc` (13:03:20), `cc87fa96-df2f-4004-8637-67211510a714` (13:04:26), all CDT. `check-domain-availability` → `AVAILABLE`; `Domain not found` at the `.org` registry. AWS Support case filed 2026-09-20; canonical name moved to `.com` rather than waiting on it | 2026-09-20 |
+| Hosted zone delegated (registry `NS`) | `wfbdebate.com` delegated to four `awsdns` servers, visible at the registry and at 1.1.1.1 and 8.8.8.8 | 2026-09-20 |
 | `DebateMaintainer` denied Identity Center writes and `debate-prod-*` | _pending_ | |
 | Four block-public-access flags on both buckets | _pending_ | |
 | Direct S3 object URL returns `AccessDenied` (both) | _pending_ | |
 | `http://` redirects to `https://` (both) | _pending_ | |
 | Security headers present (both) | _pending_ | |
-| `dev.wfbdebate.org` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.org` does not | _pending_ | |
-| `www.wfbdebate.org`, `wfbdebate.com`, `www.wfbdebate.com` each 301 to `https://wfbdebate.org/` | _pending_ | |
-| `.com` redirect preserves the path | _pending_ | |
+| `dev.wfbdebate.com` sends `X-Robots-Tag: noindex, nofollow`; `wfbdebate.com` does not | _pending_ | |
+| `www.wfbdebate.com` 301s to `https://wfbdebate.com/`, path preserved | _pending_ | |
 | Publishers allowed only their own site bucket and distribution | _pending_ | |
 
 ## Recurring checks
@@ -552,8 +573,9 @@ and hosted zone names are fine here; **the account id is not**.
 |---|---|
 | After any apply | `terraform plan` reports no changes in the root you applied |
 | After any deploy | `scripts/site_smoke.py` against the environment you deployed (`v1-e36-t05-site-deploy`) |
-| Monthly | The four spellings still 301 to `https://wfbdebate.org/` |
-| Monthly | `dev.wfbdebate.org` still sends `X-Robots-Tag: noindex`, and a `site:dev.wfbdebate.org` search returns nothing |
+| Monthly | `www.wfbdebate.com` still 301s to `https://wfbdebate.com/` |
+| Monthly | `dev.wfbdebate.com` still sends `X-Robots-Tag: noindex`, and a `site:dev.wfbdebate.com` search returns nothing |
+| While the AWS Support case is open | `aws route53domains check-domain-availability --domain-name wfbdebate.org`. If it is ever registered, add the two `redirect_*` lines to `envs/prod/terraform.tfvars` and re-apply |
 | Yearly, before the registration renews | Both domains are set to auto-renew, and the zones' name servers still match the registrar's |
 | When the certificate approaches expiry | ACM renews DNS-validated certificates automatically **as long as the validation CNAMEs stay in the zone**. Do not delete them |
 

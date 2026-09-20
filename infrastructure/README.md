@@ -66,8 +66,8 @@ Both roots call [`modules/static_site`](modules/static_site/); only prod also ca
 
 | | dev | prod |
 |---|---|---|
-| Site | `https://dev.wfbdebate.org/` — the preview, never indexable | `https://wfbdebate.org/` — what parents see |
-| Other names | — | `www.wfbdebate.org`, `wfbdebate.com`, `www.wfbdebate.com`, all 301 to the apex |
+| Site | `https://dev.wfbdebate.com/` — the preview, never indexable | `https://wfbdebate.com/` — what parents see |
+| Other names | — | `www.wfbdebate.com`, `wfbdebate.org`, `www.wfbdebate.org`, all 301 to the apex |
 | Bucket | `debate-dev-site-a7508de8` | `debate-prod-site-a7508de8` |
 | Publisher profile | `debate-dev-site` | `debate-prod-site` |
 

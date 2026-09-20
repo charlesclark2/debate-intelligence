@@ -65,8 +65,8 @@ variable "site_bucket_suffix" {
 
 variable "site_domain_names" {
   description = <<-EOT
-    The names this environment's site answers on: dev.wfbdebate.org in dev, wfbdebate.org and
-    www.wfbdebate.org in prod. Empty serves the site on its *.cloudfront.net domain and requests
+    The names this environment's site answers on: dev.wfbdebate.com in dev, wfbdebate.com and
+    www.wfbdebate.com in prod. Empty serves the site on its *.cloudfront.net domain and requests
     no certificate, which is the escape hatch for applying while DNS is still settling:
     `terraform apply -var 'site_domain_names=[]'`.
   EOT
@@ -81,7 +81,7 @@ variable "site_canonical_domain_name" {
 }
 
 variable "site_dns_zone_name" {
-  description = "Name of the existing Route 53 hosted zone holding site_domain_names, for example wfbdebate.org. The zone is read, never created. Null leaves the DNS records to the operator."
+  description = "Name of the existing Route 53 hosted zone holding site_domain_names, for example wfbdebate.com. The zone is read, never created. Null leaves the DNS records to the operator."
   type        = string
   default     = null
 }
@@ -93,13 +93,13 @@ variable "site_noindex" {
 }
 
 variable "redirect_domain_names" {
-  description = "Names that exist only to 301 to the canonical site host: wfbdebate.com and www.wfbdebate.com in prod, empty in dev."
+  description = "Names that exist only to 301 to the canonical site host: wfbdebate.org and www.wfbdebate.org in prod, empty in dev."
   type        = list(string)
   default     = []
 }
 
 variable "redirect_dns_zone_name" {
-  description = "Name of the existing Route 53 hosted zone holding redirect_domain_names, for example wfbdebate.com. Read, never created."
+  description = "Name of the existing Route 53 hosted zone holding redirect_domain_names, for example wfbdebate.org. Read, never created."
   type        = string
   default     = null
 }

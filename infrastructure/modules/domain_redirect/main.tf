@@ -1,8 +1,8 @@
 # A domain that exists only to send people somewhere else.
 #
-# wfbdebate.com and www.wfbdebate.com were registered alongside wfbdebate.org so that neither
+# wfbdebate.org and www.wfbdebate.org were registered alongside wfbdebate.com so that neither
 # spelling reaches a stranger's site. They are not a second copy of the website: every request to
-# them is answered with a 301 to the same path on wfbdebate.org, so there is one address in
+# them is answered with a 301 to the same path on wfbdebate.com, so there is one address in
 # search results, one address on a flyer, and one place content actually lives.
 #
 # Decision: ADR-0012. Spec: v1-e36-t02-site-hosting.

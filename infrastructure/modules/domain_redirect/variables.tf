@@ -10,8 +10,8 @@ variable "name_prefix" {
 
 variable "domain_names" {
   description = <<-EOT
-    The names this distribution answers on, only to redirect them: wfbdebate.com and
-    www.wfbdebate.com. They need a certificate of their own, because a certificate covers the
+    The names this distribution answers on, only to redirect them: wfbdebate.org and
+    www.wfbdebate.org. They need a certificate of their own, because a certificate covers the
     names on it and these are a different registrable domain from the site's.
   EOT
   type        = list(string)
@@ -23,13 +23,13 @@ variable "domain_names" {
 
   validation {
     condition     = alltrue([for domain in var.domain_names : can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", domain))])
-    error_message = "Each entry in domain_names must be a lowercase hostname such as wfbdebate.com."
+    error_message = "Each entry in domain_names must be a lowercase hostname such as wfbdebate.org."
   }
 }
 
 variable "target_host" {
   description = <<-EOT
-    Where every request is sent: the canonical host of the real site, for example wfbdebate.org.
+    Where every request is sent: the canonical host of the real site, for example wfbdebate.com.
     The path and query string are preserved, so a bookmarked .com page lands on the same .org
     page rather than on the home page.
   EOT
@@ -37,7 +37,7 @@ variable "target_host" {
 
   validation {
     condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.target_host))
-    error_message = "target_host must be a lowercase hostname such as wfbdebate.org."
+    error_message = "target_host must be a lowercase hostname such as wfbdebate.com."
   }
 
   validation {

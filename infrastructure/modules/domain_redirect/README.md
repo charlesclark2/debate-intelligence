@@ -1,7 +1,7 @@
 # `domain_redirect` module
 
-A domain that exists only to send people somewhere else: `wfbdebate.com` and
-`www.wfbdebate.com` answer every request with a 301 to the same path on `wfbdebate.org`.
+A domain that exists only to send people somewhere else: `wfbdebate.org` and
+`www.wfbdebate.org` answer every request with a 301 to the same path on `wfbdebate.com`.
 Spec: [`v1-e36-t02-site-hosting`](../../../plan_specs/v1/e36-team-website/t02-site-hosting.yaml).
 Decision: [ADR-0012](../../../docs/adr/0012-web-hosting.md).
 Operator steps: [docs/runbooks/team-website.md](../../../docs/runbooks/team-website.md).

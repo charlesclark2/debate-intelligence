@@ -4,7 +4,14 @@ version = "0.1.0"
 description = "debate-research command-line interface (thin surface over debate_core)."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["debate-core"]
+dependencies = [
+    "debate-core",
+    "rich>=13.9",
+    "typer>=0.15",
+]
+
+[project.scripts]
+debate-research = "debate_cli.app:main"
 
 [tool.uv.sources]
 debate-core = { workspace = true }

@@ -60,16 +60,18 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 3 | 147 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | URL → verified card | 3 | 20 | 0 | 171 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 62 |
-| [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 19 | 0 | 180 |
-| [v2.1](plan_specs/releases/v2.1.yaml) | Async jobs & web Cut-a-Card | 2 | 12 | 0 | 124 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 3 | 150 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 3 | 18 | 0 | 194 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 4 | 20 | 0 | 210 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
+| [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
+| [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
+| [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 11 | 0 | 109 |
 | [v2.3](plan_specs/releases/v2.3.yaml) | Card library & extensions | 2 | 11 | 0 | 116 |
 | [v2.4](plan_specs/releases/v2.4.yaml) | Production readiness & school rollout | 1 | 7 | 0 | 79 |
-| [v3.0](plan_specs/releases/v3.0.yaml) | Debate file intelligence & argument graph | 2 | 11 | 0 | 139 |
+| [v3.0](plan_specs/releases/v3.0.yaml) | Debate file intelligence & argument graph | 2 | 9 | 0 | 109 |
 | [v3.1](plan_specs/releases/v3.1.yaml) | Case coverage analysis | 1 | 6 | 0 | 69 |
 | [v3.2](plan_specs/releases/v3.2.yaml) | File auditing | 1 | 6 | 0 | 64 |
 | [v3.3](plan_specs/releases/v3.3.yaml) | Opponent data integrations | 1 | 6 | 0 | 61 |
@@ -82,7 +84,7 @@ v2.3's extension work.
 
 ### v1.0 — Foundation & verified evidence core
 
-Repo, tooling, CI, domain core, and deterministic evidence verification exist; `debate-research verify` works on JSON manifests. No LLM yet.
+Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic evidence verification exist; `debate-research verify` works on JSON manifests.
 
 #### [E01 — Repository & Delivery Foundation](plan_specs/v1/e01-repo-foundation/epic.yaml)
 
@@ -92,7 +94,7 @@ Repo, tooling, CI, domain core, and deterministic evidence verification exist; `
 | [Create GitHub repository, push, and protect main](plan_specs/v1/e01-repo-foundation/t02-github-remote.yaml) `v1-e01-t02-github-remote` | Pending | 1 | 2.5 |
 | [uv workspace, Python 3.12 and quality tooling](plan_specs/v1/e01-repo-foundation/t03-uv-workspace-tooling.yaml) `v1-e01-t03-uv-workspace-tooling` | Pending | 1 | 5.5 |
 | [GitHub Actions CI pipeline](plan_specs/v1/e01-repo-foundation/t04-ci-pipeline.yaml) `v1-e01-t04-ci-pipeline` | Pending | 3 | 4.0 |
-| [PlanSpec validation and index tooling](plan_specs/v1/e01-repo-foundation/t05-spec-tooling.yaml) `v1-e01-t05-spec-tooling` | Pending | 1 | 6.5 |
+| [PlanSpec validation and index tooling](plan_specs/v1/e01-repo-foundation/t05-spec-tooling.yaml) `v1-e01-t05-spec-tooling` | Pending | 2 | 9.5 |
 | [Architecture proposal and ADR records](plan_specs/v1/e01-repo-foundation/t06-adr-docs.yaml) `v1-e01-t06-adr-docs` | Succeeded | 1 | 4.5 |
 | [debate_cli Typer + Rich skeleton](plan_specs/v1/e01-repo-foundation/t07-cli-skeleton.yaml) `v1-e01-t07-cli-skeleton` | Pending | 1 | 6.0 |
 | [dev→main promotion workflow and guards](plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml) `v1-e01-t08-branch-promotion-workflow` | Pending | 2 | 7.5 |
@@ -123,7 +125,90 @@ Repo, tooling, CI, domain core, and deterministic evidence verification exist; `
 | [`debate-research verify` command](plan_specs/v1/e03-evidence-integrity/t06-verify-command.yaml) `v1-e03-t06-verify-command` | Pending | 2 | 5.0 |
 
 
-### v1.1 — URL → verified card
+### v1.1 — Caselist evidence store
+
+Weekly OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are imported, deduplicated, parsed into cards and stored in S3 (dev and prod) with manifests; CardMirror is evaluated and ADR-0014 records the editor decision.
+
+#### [E29 — Cloud Evidence Store (S3)](plan_specs/v1/e29-cloud-evidence-store/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [AWS account baseline](plan_specs/v1/e29-cloud-evidence-store/t01-aws-account-baseline.yaml) `v1-e29-t01-aws-account-baseline` | Pending | 0 | 10.0 |
+| [Terraform bootstrap and environments](plan_specs/v1/e29-cloud-evidence-store/t02-terraform-bootstrap.yaml) `v1-e29-t02-terraform-bootstrap` | Pending | 1 | 7.0 |
+| [Evidence buckets and operator access](plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml) `v1-e29-t03-evidence-buckets` | Pending | 1 | 9.0 |
+| [S3 blob-store adapter](plan_specs/v1/e29-cloud-evidence-store/t04-s3-blob-store.yaml) `v1-e29-t04-s3-blob-store` | Pending | 2 | 11.0 |
+| [`debate-research store` sync commands](plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml) `v1-e29-t05-evidence-sync-cli` | Pending | 3 | 11.5 |
+
+#### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [Caselist and OpenEv data-use policy](plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml) `v1-e30-t01-caselist-data-use-policy` | Pending | 0 | 9.0 |
+| [Caselist domain model](plan_specs/v1/e30-caselist-ingestion/t02-caselist-domain-model.yaml) `v1-e30-t02-caselist-domain-model` | Pending | 2 | 7.0 |
+| [Weekly archive importer](plan_specs/v1/e30-caselist-ingestion/t03-archive-importer.yaml) `v1-e30-t03-archive-importer` | Pending | 5 | 15.0 |
+| [OpenEv camp-file importer](plan_specs/v1/e30-caselist-ingestion/t04-openev-importer.yaml) `v1-e30-t04-openev-importer` | Pending | 1 | 8.0 |
+| [Publish sources and manifests to S3](plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml) `v1-e30-t05-caselist-publish` | Pending | 2 | 9.0 |
+| [Initial caselist and camp-file backfill](plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml) `v1-e30-t06-initial-backfill` | Pending | 3 | 5.0 |
+| [Source removal and suppression list](plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml) `v1-e30-t07-source-removal` | Pending | 2 | 11.0 |
+
+#### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [CardMirror evaluation and editor decision](plan_specs/v1/e31-debate-file-parsing/t01-cardmirror-evaluation.yaml) `v1-e31-t01-cardmirror-evaluation` | Pending | 1 | 11.5 |
+| [Verbatim/CardMirror style profile](plan_specs/v1/e31-debate-file-parsing/t02-verbatim-style-profile.yaml) `v1-e31-t02-verbatim-style-profile` | Pending | 2 | 13.0 |
+| [Debate .docx parser](plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml) `v1-e31-t03-debate-docx-parser` | Pending | 2 | 15.0 |
+| [Card fingerprints and occurrences](plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml) `v1-e31-t04-card-fingerprints` | Pending | 1 | 13.0 |
+| [Parser accuracy evaluation](plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) `v1-e31-t05-parser-eval` | Pending | 1 | 17.0 |
+| [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | Pending | 4 | 12.0 |
+
+
+### v1.2 — Argument landscape & file building
+
+Weekly argument-landscape reports show which positions are being read and with which cards; coaches build Verbatim/CardMirror-compatible files from disclosed cards with provenance; caselist sync can run on a schedule.
+
+#### [E05 — Model Router & Structured LLM Contracts](plan_specs/v1/e05-model-router/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [ModelRouter interface and routing config](plan_specs/v1/e05-model-router/t01-model-router-port.yaml) `v1-e05-t01-model-router-port` | Pending | 1 | 9.0 |
+| [Amazon Bedrock adapter](plan_specs/v1/e05-model-router/t02-bedrock-adapter.yaml) `v1-e05-t02-bedrock-adapter` | Pending | 1 | 10.0 |
+| [Deterministic fake and record/replay models](plan_specs/v1/e05-model-router/t03-fake-replay-models.yaml) `v1-e05-t03-fake-replay-models` | Pending | 1 | 9.0 |
+| [Versioned prompt registry](plan_specs/v1/e05-model-router/t04-prompt-registry.yaml) `v1-e05-t04-prompt-registry` | Pending | 1 | 8.0 |
+| [Structured output validation and repair](plan_specs/v1/e05-model-router/t05-structured-output-validation.yaml) `v1-e05-t05-structured-output-validation` | Pending | 2 | 7.0 |
+| [CardSelection / MarkupSpan contract and prompts](plan_specs/v1/e05-model-router/t06-card-selection-contract.yaml) `v1-e05-t06-card-selection-contract` | Pending | 3 | 12.0 |
+| [Token/cost telemetry and budgets](plan_specs/v1/e05-model-router/t07-usage-telemetry.yaml) `v1-e05-t07-usage-telemetry` | Pending | 1 | 8.0 |
+
+#### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [Topic position taxonomies](plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml) `v1-e32-t01-position-taxonomy` | Pending | 1 | 14.0 |
+| [Position classification](plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml) `v1-e32-t02-position-classification` | Pending | 3 | 15.0 |
+| [Weekly landscape report](plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) `v1-e32-t03-landscape-report` | Pending | 2 | 12.0 |
+| [Trends and per-school views](plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml) `v1-e32-t04-trend-and-school-views` | Pending | 1 | 9.0 |
+| [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | Pending | 3 | 10.0 |
+
+#### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [File recipe format](plan_specs/v1/e33-file-builder/t01-file-recipe-format.yaml) `v1-e33-t01-file-recipe-format` | Pending | 1 | 11.0 |
+| [Lossless card writer](plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml) `v1-e33-t02-lossless-card-writer` | Pending | 3 | 15.0 |
+| [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | Pending | 3 | 10.0 |
+| [Built-file quality checks](plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml) `v1-e33-t04-file-quality-checks` | Pending | 1 | 11.0 |
+| [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | Pending | 3 | 9.0 |
+
+#### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [OpenCaselist API client](plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml) `v1-e34-t01-caselist-api-client` | Pending | 2 | 11.0 |
+| [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Pending | 5 | 11.5 |
+| [Sync run log and staleness warnings](plan_specs/v1/e34-caselist-sync/t03-sync-monitoring.yaml) `v1-e34-t03-sync-monitoring` | Pending | 1 | 9.0 |
+
+
+### v1.3 — URL → verified card
 
 A student can run `debate-research cut <URL>` and receive a verified, tagged, cited, underlined card as DOCX + JSON.
 
@@ -138,32 +223,20 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [ArticleService orchestration](plan_specs/v1/e04-article-retrieval/t05-article-service.yaml) `v1-e04-t05-article-service` | Pending | 3 | 8.5 |
 | [`debate-research fetch` command and recorded fixtures](plan_specs/v1/e04-article-retrieval/t06-fetch-command.yaml) `v1-e04-t06-fetch-command` | Pending | 2 | 7.5 |
 
-#### [E05 — Model Router & Structured LLM Contracts](plan_specs/v1/e05-model-router/epic.yaml)
-
-| Task | Status | Prereqs | Est. hours |
-|---|---|---|---|
-| [ModelRouter interface and routing config](plan_specs/v1/e05-model-router/t01-model-router-port.yaml) `v1-e05-t01-model-router-port` | Pending | 1 | 9.0 |
-| [Amazon Bedrock adapter](plan_specs/v1/e05-model-router/t02-bedrock-adapter.yaml) `v1-e05-t02-bedrock-adapter` | Pending | 1 | 10.0 |
-| [Deterministic fake and record/replay models](plan_specs/v1/e05-model-router/t03-fake-replay-models.yaml) `v1-e05-t03-fake-replay-models` | Pending | 1 | 9.0 |
-| [Versioned prompt registry](plan_specs/v1/e05-model-router/t04-prompt-registry.yaml) `v1-e05-t04-prompt-registry` | Pending | 1 | 8.0 |
-| [Structured output validation and repair](plan_specs/v1/e05-model-router/t05-structured-output-validation.yaml) `v1-e05-t05-structured-output-validation` | Pending | 2 | 7.0 |
-| [CardSelection / MarkupSpan contract and prompts](plan_specs/v1/e05-model-router/t06-card-selection-contract.yaml) `v1-e05-t06-card-selection-contract` | Pending | 3 | 12.0 |
-| [Token/cost telemetry and budgets](plan_specs/v1/e05-model-router/t07-usage-telemetry.yaml) `v1-e05-t07-usage-telemetry` | Pending | 1 | 8.0 |
-
 #### [E06 — Card Cutting, Citation & Export](plan_specs/v1/e06-card-cutting/epic.yaml)
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [CitationService with per-field provenance](plan_specs/v1/e06-card-cutting/t01-citation-service.yaml) `v1-e06-t01-citation-service` | Pending | 1 | 9.0 |
 | [CardService pipeline](plan_specs/v1/e06-card-cutting/t02-card-service.yaml) `v1-e06-t02-card-service` | Pending | 3 | 10.0 |
-| [Card format profiles from team conventions](plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml) `v1-e06-t03-format-profiles` | Pending | 1 | 9.5 |
+| [Card format profiles from team conventions](plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml) `v1-e06-t03-format-profiles` | Pending | 2 | 9.5 |
 | [DOCX renderer](plan_specs/v1/e06-card-cutting/t04-docx-renderer.yaml) `v1-e06-t04-docx-renderer` | Pending | 3 | 11.0 |
 | [JSON manifest export](plan_specs/v1/e06-card-cutting/t05-json-manifest-export.yaml) `v1-e06-t05-json-manifest-export` | Pending | 2 | 6.0 |
 | [`debate-research cut` command](plan_specs/v1/e06-card-cutting/t06-cut-command.yaml) `v1-e06-t06-cut-command` | Pending | 3 | 7.0 |
 | [Verify DOCX files](plan_specs/v1/e06-card-cutting/t07-verify-docx.yaml) `v1-e06-t07-verify-docx` | Pending | 2 | 8.0 |
 
 
-### v1.2 — Federated research from the CLI
+### v1.4 — Federated research from the CLI
 
 `debate-research search` fans out to scholarly/news/government adapters, dedupes and ranks results, supports --argument/--need and --auto-cut, and `daily` digests.
 
@@ -192,7 +265,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`debate-research daily` digests](plan_specs/v1/e08-research-workflows/t07-daily-command.yaml) `v1-e08-t07-daily-command` | Pending | 2 | 7.0 |
 
 
-### v1.3 — V1 quality gate & team pilot
+### v1.5 — V1 quality gate & team pilot
 
 Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged and piloted with the team.
 
@@ -204,7 +277,7 @@ Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged a
 | [Golden DOCX regression tests](plan_specs/v1/e09-v1-quality-pilot/t02-docx-golden-tests.yaml) `v1-e09-t02-docx-golden-tests` | Pending | 1 | 7.0 |
 | [Card selection and underlining eval harness](plan_specs/v1/e09-v1-quality-pilot/t03-span-eval-harness.yaml) `v1-e09-t03-span-eval-harness` | Pending | 2 | 9.0 |
 | [Prompt/model promotion gate](plan_specs/v1/e09-v1-quality-pilot/t04-prompt-promotion-gate.yaml) `v1-e09-t04-prompt-promotion-gate` | Pending | 3 | 5.5 |
-| [End-to-end recorded suite](plan_specs/v1/e09-v1-quality-pilot/t05-e2e-fixture-suite.yaml) `v1-e09-t05-e2e-fixture-suite` | Pending | 1 | 9.0 |
+| [End-to-end recorded suite](plan_specs/v1/e09-v1-quality-pilot/t05-e2e-fixture-suite.yaml) `v1-e09-t05-e2e-fixture-suite` | Pending | 1 | 12.0 |
 | [Packaging and release workflow](plan_specs/v1/e09-v1-quality-pilot/t06-packaging-release.yaml) `v1-e09-t06-packaging-release` | Pending | 2 | 6.0 |
 | [Student/coach guide and team pilot](plan_specs/v1/e09-v1-quality-pilot/t07-team-pilot.yaml) `v1-e09-t07-team-pilot` | Pending | 2 | 14.0 |
 
@@ -213,14 +286,12 @@ Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged a
 
 ### v2.0 — Cloud platform foundation
 
-AWS accounts/Terraform/CI deploy, DynamoDB + S3 repositories passing the same contract tests, Cognito auth and the FastAPI service are live in dev and prod, with every prod deploy promoted from a validated dev deploy.
+Keyless CI deploys, DynamoDB + S3 repositories passing the same contract tests, Cognito auth and the FastAPI service are live in dev and prod, with every prod deploy promoted from a validated dev deploy.
 
 #### [E10 — AWS & Infrastructure-as-Code Foundation](plan_specs/v2/e10-aws-foundation/epic.yaml)
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [AWS account baseline](plan_specs/v2/e10-aws-foundation/t01-aws-account-baseline.yaml) `v2-e10-t01-aws-account-baseline` | Pending | 0 | 10.0 |
-| [Terraform bootstrap and environments](plan_specs/v2/e10-aws-foundation/t02-terraform-bootstrap.yaml) `v2-e10-t02-terraform-bootstrap` | Pending | 1 | 6.0 |
 | [GitHub OIDC deploy roles](plan_specs/v2/e10-aws-foundation/t03-github-oidc-deploy.yaml) `v2-e10-t03-github-oidc-deploy` | Pending | 1 | 8.0 |
 | [KMS keys and Secrets Manager](plan_specs/v2/e10-aws-foundation/t04-kms-secrets.yaml) `v2-e10-t04-kms-secrets` | Pending | 1 | 9.0 |
 | [Networking, ECR and ECS/Fargate cluster](plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) `v2-e10-t05-container-platform` | Pending | 1 | 10.0 |
@@ -233,7 +304,7 @@ AWS accounts/Terraform/CI deploy, DynamoDB + S3 repositories passing the same co
 | [AppTable access-pattern design](plan_specs/v2/e11-cloud-persistence/t01-access-pattern-design.yaml) `v2-e11-t01-access-pattern-design` | Pending | 1 | 8.0 |
 | [DynamoDB tables in Terraform](plan_specs/v2/e11-cloud-persistence/t02-dynamodb-tables.yaml) `v2-e11-t02-dynamodb-tables` | Pending | 2 | 6.0 |
 | [DynamoDB repository implementations](plan_specs/v2/e11-cloud-persistence/t03-dynamodb-repositories.yaml) `v2-e11-t03-dynamodb-repositories` | Pending | 2 | 13.0 |
-| [S3 snapshot and export store](plan_specs/v2/e11-cloud-persistence/t04-s3-snapshot-store.yaml) `v2-e11-t04-s3-snapshot-store` | Pending | 2 | 8.0 |
+| [S3 snapshot and export store](plan_specs/v2/e11-cloud-persistence/t04-s3-snapshot-store.yaml) `v2-e11-t04-s3-snapshot-store` | Pending | 3 | 8.0 |
 | [Optimistic concurrency for cards and files](plan_specs/v2/e11-cloud-persistence/t05-optimistic-concurrency.yaml) `v2-e11-t05-optimistic-concurrency` | Pending | 1 | 10.0 |
 | [V1 local-library migration tool](plan_specs/v2/e11-cloud-persistence/t06-v1-data-migration.yaml) `v2-e11-t06-v1-data-migration` | Pending | 3 | 10.0 |
 
@@ -250,9 +321,9 @@ AWS accounts/Terraform/CI deploy, DynamoDB + S3 repositories passing the same co
 | [Cloud dev→prod promotion pipeline](plan_specs/v2/e12-identity-api/t07-promotion-pipeline.yaml) `v2-e12-t07-promotion-pipeline` | Pending | 3 | 15.5 |
 
 
-### v2.1 — Async jobs & web Cut-a-Card
+### v2.1 — Web app, debate tub & async jobs
 
-Students log in to the web app, paste a URL, watch an async CardJob, edit the verified card within provenance rules, and export it.
+Debaters sign in to the web app and browse, search and download the team's evidence files (the debate tub); students paste a URL and get a verified card through an async job.
 
 #### [E13 — Async Job Orchestration](plan_specs/v2/e13-async-jobs/epic.yaml)
 
@@ -275,6 +346,17 @@ Students log in to the web app, paste a URL, watch an async CardJob, edit the ve
 | [Cut-a-Card flow](plan_specs/v2/e14-web-cut-card/t04-cut-card-flow.yaml) `v2-e14-t04-cut-card-flow` | Pending | 4 | 12.0 |
 | [Provenance-constrained card editor](plan_specs/v2/e14-web-cut-card/t05-card-editor.yaml) `v2-e14-t05-card-editor` | Pending | 3 | 14.0 |
 | [DOCX export and copy-as-rich-text](plan_specs/v2/e14-web-cut-card/t06-export-copy.yaml) `v2-e14-t06-export-copy` | Pending | 2 | 9.0 |
+
+#### [E35 — Debate Tub (Web File Access)](plan_specs/v2/e35-debate-tub/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [Tub data model](plan_specs/v2/e35-debate-tub/t01-tub-data-model.yaml) `v2-e35-t01-tub-data-model` | Pending | 2 | 11.0 |
+| [Index the evidence store](plan_specs/v2/e35-debate-tub/t02-tub-index-sync.yaml) `v2-e35-t02-tub-index-sync` | Pending | 3 | 13.0 |
+| [Tub API](plan_specs/v2/e35-debate-tub/t03-tub-api.yaml) `v2-e35-t03-tub-api` | Pending | 2 | 13.0 |
+| [Tub UI](plan_specs/v2/e35-debate-tub/t04-tub-ui.yaml) `v2-e35-t04-tub-ui` | Pending | 2 | 15.0 |
+| [Access audit and removal](plan_specs/v2/e35-debate-tub/t05-tub-access-and-removal.yaml) `v2-e35-t05-tub-access-and-removal` | Pending | 3 | 12.0 |
+| [Tub smoke checks and debater review](plan_specs/v2/e35-debate-tub/t06-tub-smoke-and-review.yaml) `v2-e35-t06-tub-smoke-and-review` | Pending | 2 | 10.0 |
 
 
 ### v2.2 — Research workspace
@@ -350,7 +432,7 @@ Quotas, audit logs, retention/deletion, backups, cost telemetry and a completed 
 
 ### v3.0 — Debate file intelligence & argument graph
 
-Uploaded debate files are parsed into sections/cards and an explicit, sourced argument graph.
+Uploaded debate files are parsed (with the V1 parser) into sections/cards and an explicit, sourced argument graph.
 
 #### [E20 — Debate File Intelligence](plan_specs/v3/e20-file-intelligence/epic.yaml)
 
@@ -358,9 +440,7 @@ Uploaded debate files are parsed into sections/cards and an explicit, sourced ar
 |---|---|---|---|
 | [DebateFile and FileSection model](plan_specs/v3/e20-file-intelligence/t01-debate-file-model.yaml) `v3-e20-t01-debate-file-model` | Pending | 3 | 10.0 |
 | [Upload pipeline](plan_specs/v3/e20-file-intelligence/t02-upload-pipeline.yaml) `v3-e20-t02-upload-pipeline` | Pending | 3 | 13.0 |
-| [DOCX structure parser](plan_specs/v3/e20-file-intelligence/t03-docx-structure-parser.yaml) `v3-e20-t03-docx-structure-parser` | Pending | 3 | 15.0 |
-| [Parser accuracy evaluation](plan_specs/v3/e20-file-intelligence/t04-parser-eval.yaml) `v3-e20-t04-parser-eval` | Pending | 1 | 15.0 |
-| [File library UI](plan_specs/v3/e20-file-intelligence/t05-file-library-ui.yaml) `v3-e20-t05-file-library-ui` | Pending | 3 | 14.0 |
+| [File library UI](plan_specs/v3/e20-file-intelligence/t05-file-library-ui.yaml) `v3-e20-t05-file-library-ui` | Pending | 4 | 14.0 |
 
 #### [E21 — Argument Graph](plan_specs/v3/e21-argument-graph/epic.yaml)
 
@@ -415,11 +495,11 @@ Public OpenCaselist disclosures and Tabroom results are ingested with provenance
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [OpponentTable design](plan_specs/v3/e24-opponent-data/t01-opponent-table.yaml) `v3-e24-t01-opponent-table` | Pending | 3 | 9.0 |
-| [OpenCaselist adapter](plan_specs/v3/e24-opponent-data/t02-opencaselist-adapter.yaml) `v3-e24-t02-opencaselist-adapter` | Pending | 2 | 12.0 |
+| [OpenCaselist adapter](plan_specs/v3/e24-opponent-data/t02-opencaselist-adapter.yaml) `v3-e24-t02-opencaselist-adapter` | Pending | 3 | 12.0 |
 | [Tabroom public results adapter](plan_specs/v3/e24-opponent-data/t03-tabroom-adapter.yaml) `v3-e24-t03-tabroom-adapter` | Pending | 2 | 10.0 |
 | [Team and debater identity resolution](plan_specs/v3/e24-opponent-data/t04-identity-resolution.yaml) `v3-e24-t04-identity-resolution` | Pending | 2 | 12.0 |
 | [Refresh scheduling and removal](plan_specs/v3/e24-opponent-data/t05-refresh-provenance.yaml) `v3-e24-t05-refresh-provenance` | Pending | 3 | 10.0 |
-| [Opponent data governance review](plan_specs/v3/e24-opponent-data/t06-data-governance.yaml) `v3-e24-t06-data-governance` | Pending | 1 | 8.0 |
+| [Opponent data governance review](plan_specs/v3/e24-opponent-data/t06-data-governance.yaml) `v3-e24-t06-data-governance` | Pending | 2 | 8.0 |
 
 
 ### v3.4 — Scouting reports

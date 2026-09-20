@@ -24,7 +24,9 @@ spec:
     audit trail (who granted/revoked what, when) that E19 t02 later forwards to the central audit log.
     Sharing stays inside one organization; there is no cross-school or public sharing in V2. Contributors
     can add and tag cards but cannot edit another student's card evidence or markup. This task does NOT
-    build the central audit log (E19 t02) or export (t05).
+    build the central audit log (E19 t02) or export (t05). Sharing whole files (built files, caselist and
+    camp sources) is the debate tub's team access (v2-e35-t01/t05); library grants cover folders of Cards
+    and reuse the tub's organization roles rather than defining new ones.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_api, web/src/components/library]

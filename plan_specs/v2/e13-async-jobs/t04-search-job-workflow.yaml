@@ -1,5 +1,5 @@
 # TASK v2-e13-t04-search-job-workflow — SearchJob workflow
-# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §5 Step Functions/SQS, ADR-009, §9 federated search + ranking pipeline, §15
 ---
 apiVersion: planspec.io/v1alpha1

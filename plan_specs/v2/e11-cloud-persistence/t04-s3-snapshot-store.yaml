@@ -18,16 +18,20 @@ metadata:
 spec:
   description: >-
     Make S3 the durable system of record for raw source snapshots (raw response + normalized text),
-    generated DOCX/JSON exports and manifests. Create private, versioned, KMS-encrypted buckets with
-    block public access, TLS-only bucket policies and lifecycle rules (exports expire; snapshots move to
-    infrequent-access but are never auto-deleted while a card references them), then implement the
-    S3SnapshotStore / S3ExportStore adapters behind the existing SnapshotStore port and a presigner that
-    issues short-lived GET URLs. Snapshot objects are content-addressed and write-once so the sha256 on a
-    card can always be re-verified. Out of scope: DynamoDB snapshot metadata (t03), uploaded debate files
-    (V3 file intelligence), bulk export (E17-t05) and backup drills (E19-t05).
+    generated DOCX/JSON exports and manifests. This extends, not duplicates, V1's S3 work: reuse the
+    evidence_bucket Terraform module from v1-e29-t03 (versioned, KMS-encrypted, block public access) to
+    add the snapshots and exports buckets with TLS-only policies and lifecycle rules (exports expire;
+    snapshots move to infrequent-access but are never auto-deleted while a card references them), and
+    build S3SnapshotStore / S3ExportStore as thin wrappers over the V1 S3 blob-store adapter
+    (v1-e29-t04: content-addressed sha256 keys, idempotent put, multipart, credential chain) behind the
+    existing SnapshotStore port, adding article-snapshot metadata and a presigner that issues
+    short-lived GET URLs. No second boto3 S3 client or key scheme is written. Snapshot objects are
+    content-addressed and write-once so the sha256 on a card can always be re-verified. Out of scope:
+    the V1 evidence buckets and caselist objects (E29/E30, left untouched), DynamoDB snapshot metadata
+    (t03), uploaded debate files (V3 file intelligence), bulk export (E17-t05) and backup drills (E19-t05).
   priority: 1
   constraints:
-    packages: [debate_core.integrations.s3, infrastructure/modules/s3]
+    packages: [debate_core.integrations.s3, infrastructure/modules/evidence_bucket, infrastructure/envs]
     forbidden:
       - Public buckets, public ACLs or website hosting
       - Presigned URLs valid longer than 15 minutes
@@ -41,6 +45,9 @@ spec:
     - kind: TaskRef
       name: v1-e02-t04-repo-contract-tests
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e29-t04-s3-blob-store
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -48,7 +55,8 @@ spec:
         all four block-public-access flags, and a policy denying aws:SecureTransport=false.
     - id: ac2
       description: >-
-        S3SnapshotStore passes the shared SnapshotStore contract suite under moto, storing objects at
+        S3SnapshotStore delegates object I/O to the V1 S3 blob-store adapter (no new boto3 S3 client in
+        the module) and passes the shared SnapshotStore contract suite under moto, storing objects at
         snapshots/<sha256-prefix>/<sha256> and verifying the sha256 on read.
     - id: ac3
       description: >-
@@ -87,9 +95,10 @@ spec:
         kind: Task
         name: Private bucket module and lifecycle
         description: >-
-          Reusable private bucket module (versioning, SSE-KMS, block public access, TLS-only policy,
-          ownership controls) instantiated for snapshots and exports with lifecycle rules.
-        outputs: [infrastructure/modules/s3/private_bucket.tf, infrastructure/envs/dev/storage.tf]
+          Reuse the V1 evidence_bucket module (v1-e29-t03: versioning, SSE-KMS, block public access),
+          extending it with a TLS-only policy, ownership controls and lifecycle inputs, and instantiate it
+          for snapshots and exports; the dev plan shows no changes to the existing evidence buckets.
+        outputs: [infrastructure/modules/evidence_bucket/variables.tf, infrastructure/envs/dev/storage.tf]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: command_succeeds
@@ -97,15 +106,16 @@ spec:
             command: terraform
             args: [-chdir=infrastructure/envs/dev, plan, -lock-timeout=60s]
           - type: artifact_exists
-            name: Buckets block public access
-            path: infrastructure/modules/s3/private_bucket.tf
-            contentMatch: "restrict_public_buckets = true"
+            name: Snapshot and export buckets reuse the V1 evidence_bucket module
+            path: infrastructure/envs/dev/storage.tf
+            contentMatch: "modules/evidence_bucket"
       - id: snapshot-store
         kind: Task
         name: S3SnapshotStore adapter
         description: >-
-          Content-addressed put/get with If-None-Match or head-before-put semantics, sha256 verification on
-          read, and object metadata for extractor_version and retrieved_at.
+          Wrap the V1 S3 blob-store adapter for article snapshots: content-addressed put/get with
+          If-None-Match or head-before-put semantics, sha256 verification on read, and object metadata
+          for extractor_version and retrieved_at.
         dependsOn: [bucket-module]
         outputs: [packages/debate_core/src/debate_core/integrations/s3/snapshot_store.py]
         estimatedEffort: 3h

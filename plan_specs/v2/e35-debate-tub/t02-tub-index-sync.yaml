@@ -1,0 +1,182 @@
+# TASK v2-e35-t02-tub-index-sync — Index the evidence store
+# Epic: E35 Debate Tub (Web File Access) | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
+# Architecture refs: §5 SQS / workers, §7 (S3 system of record), §12 Card Library, §14, §15, ADR-0003
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e35-t02-tub-index-sync
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+  annotations:
+    debate/title: Index the evidence store
+    debate/architecture-refs: §5, §7, §12, §14, §15, ADR-0003
+spec:
+  description: >-
+    Keep the tub's DynamoDB index in step with the V1 evidence buckets. S3 ObjectCreated/ObjectRemoved
+    notifications for the raw/, files/, uploads/ and manifests/ prefixes go to a dedicated tub-index SQS
+    queue (with DLQ) consumed by a `tub.index_object` handler on the E13 worker framework, which reads the
+    E33-t05 built-file metadata or the E30-t05 manifest row for the object and upserts a TubFile through
+    the t01 repository, idempotently keyed by S3 key and version id. parsed/ and reports/ objects are
+    ignored. A scheduled reconcile (EventBridge Scheduler, daily) compares manifests and prefix listings
+    with the index, repairs drift and writes a reconcile report to reports/tub/. The indexer never
+    reads card text into DynamoDB, never re-uploads or rewrites S3 objects, and never promotes REMOVED
+    files back to ACTIVE (t05 owns removal). The first full index of existing dev and prod buckets is an
+    operator-run step. Routes (t03) and UI (t04) are out of scope.
+  priority: 1
+  constraints:
+    packages:
+      - debate_core.application
+      - debate_core.integrations
+      - debate_workers
+      - infrastructure/modules/tub_index
+    forbidden:
+      - Writing, deleting or copying objects under raw/, files/, uploads/ or manifests/ (only reports/tub/)
+      - Reactivating a REMOVED TubFile when a later cumulative snapshot re-publishes the same key
+      - Storing card text, file bytes or debater names in index items or log lines
+      - Queues without a DLQ, or unbounded retries
+      - Live S3/SQS/DynamoDB in CI tests (use moto or DynamoDB Local)
+      - Running the full-bucket initial index from CI or the dev session (operator-run only)
+  context:
+    - kind: TaskRef
+      name: v2-e35-t01-tub-data-model
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e11-t03-dynamodb-repositories
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e13-t02-sqs-workers
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Uploading a built file with metadata to files/ in dev produces an ACTIVE TubFile with the correct
+        kind, topic, position, side and provenance within 60 seconds; deleting the object marks it
+        missing rather than silently dropping provenance.
+    - id: ac2
+      description: >-
+        Delivering the same S3 event twice, or events out of order for two versions of one key, leaves
+        exactly one TubFile reflecting the newest version (tested under moto).
+    - id: ac3
+      description: >-
+        Objects without usable metadata are indexed with side/position UNKNOWN and listed in the reconcile
+        report; malformed notifications go to the DLQ after bounded retries.
+    - id: ac4
+      description: >-
+        The daily reconcile reports added, updated, orphaned and missing counts and repairs drift without
+        a Scan of AppTable; a reconcile over an unchanged store writes nothing.
+    - id: ac5
+      description: >-
+        The operator-run initial index of dev and then prod is recorded with counts per kind and caselist
+        in docs/data/tub-initial-index.md.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e35-t02-tub-index-sync-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+spec:
+  description: >-
+    Use case and metadata readers first, then the event-driven handler, then infrastructure and the
+    reconcile schedule, ending with the operator-run initial index.
+  goalRef:
+    name: v2-e35-t02-tub-index-sync
+  graph:
+    nodes:
+      - id: index-use-case
+        kind: Task
+        name: IndexTubObject use case and metadata readers
+        description: >-
+          An application service that, given bucket/key/version/event type, resolves metadata from the
+          built-file metadata JSON or the caselist manifest row (via the blob-store port), builds a TubFile
+          and upserts it with a conditional write on version; REMOVED files stay REMOVED (t05 adds the
+          sha256 takedown suppression check at this seam).
+        outputs: [packages/debate_core/src/debate_core/application/tub/index_object.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Index use case tests pass on synthetic manifests
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/tub/test_index_object.py]
+      - id: index-handler
+        kind: Task
+        name: tub.index_object worker handler
+        description: >-
+          Register the handler on the E13 registry, parse S3 notification envelopes (including test
+          events and URL-encoded keys), classify retryable vs poison errors and bind correlation ids.
+        dependsOn: [index-use-case]
+        outputs: [packages/debate_workers/src/debate_workers/handlers/tub_index.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Handler idempotency and ordering tests pass under moto
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_tub_index.py]
+      - id: index-infra
+        kind: Task
+        name: Bucket notifications, tub-index queue and reconcile schedule
+        description: >-
+          Terraform module wiring prefix-filtered S3 notifications to the tub-index queue and DLQ, a
+          read-only bucket policy grant for the worker task role (GetObject/ListBucket on the allowed
+          prefixes only), and an EventBridge Scheduler rule enqueuing a daily reconcile message.
+        dependsOn: [index-handler]
+        outputs:
+          - infrastructure/modules/tub_index/main.tf
+          - infrastructure/envs/dev/tub.tf
+          - infrastructure/envs/prod/tub.tf
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Notifications are filtered by prefix
+            path: infrastructure/modules/tub_index/main.tf
+            contentMatch: "filter_prefix"
+          - type: command_succeeds
+            name: dev environment validates with tub indexing
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+      - id: reconcile
+        kind: Task
+        name: Scheduled reconcile and drift report
+        description: >-
+          Reconcile handler that walks manifests/ and files/ listings page by page, diffs against the
+          index via Query, repairs drift, and writes a JSON report to reports/tub/<date>.json.
+        dependsOn: [index-handler]
+        outputs: [packages/debate_core/src/debate_core/application/tub/reconcile.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Reconcile tests pass including the no-op run
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/tub/test_reconcile.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+      - id: initial-index
+        kind: Task
+        name: Operator-run initial index in dev, then prod
+        description: >-
+          Operator-run: after terraform apply, enqueue a full reconcile in dev (sample data), verify counts,
+          then repeat in prod after promotion; record counts per kind and caselist, UNKNOWN-metadata rate
+          and duration. Not run by CI or the dev session.
+        dependsOn: [index-infra, reconcile]
+        outputs: [docs/data/tub-initial-index.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Initial index report records dev and prod counts
+            path: docs/data/tub-initial-index.md
+            contentMatch: "prod"
+status:
+  phase: Pending

@@ -154,7 +154,7 @@ spec:
           - type: command_succeeds
             name: All project markers are registered
             command: bash
-            args: [-c, "uv run pytest --markers | grep -E '^@pytest.mark.(slow|live|eval|dev|prod):' | wc -l
+            args: [-c, "uv run pytest --markers | grep -cE '^@pytest.mark.(slow|live|eval|dev|prod):'
                    | grep -qx 5"]
       - id: pre-commit
         kind: Task

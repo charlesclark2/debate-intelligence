@@ -1,5 +1,5 @@
 # TASK v2-e13-t01-job-model — Job entity and repository
-# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §5 Step Functions/SQS/EventBridge, ADR-009 async jobs, §7, §15
 ---
 apiVersion: planspec.io/v1alpha1

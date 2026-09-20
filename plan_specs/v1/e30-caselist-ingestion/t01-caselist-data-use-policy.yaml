@@ -1,0 +1,211 @@
+# TASK v1-e30-t01-caselist-data-use-policy — Caselist and OpenEv data-use policy
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §9 opponent data (OpenCaselist), §13 Opponent intelligence, §14, §19 risks
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t01-caselist-data-use-policy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: Caselist and OpenEv data-use policy
+    debate/architecture-refs: §9, §13, §14, §19
+spec:
+  description: >-
+    Write and get approval for the policy that governs how the platform collects, stores and uses
+    evidence other teams disclose on OpenCaselist (opencaselist.com, weekly open-source archives for the
+    HS LD, Policy and PF caselists) and camp files published on OpenEv. The policy records the terms of
+    use and community disclosure norms as read by the coach (with URLs and the date read, since they could
+    not be retrieved automatically), and decides: permitted uses (team-internal research, argument
+    landscape reports, building and "plussing up" team files from disclosed cards); prohibited uses
+    (public redistribution or re-hosting of archives, sharing outside the team, commercial use, bypassing
+    the caselist_token login or rate limits); whether disclosed card text may be sent to a model provider
+    through the ModelRouter for classification; retention per season; handling of debater names and
+    initials carried in team codes; attribution of disclosed and camp cards in built files; and a
+    takedown/removal process. It records the ADR-0013 exception that lets the public caselist corpus
+    (disclosures whose paths carry debater initials and sometimes names) be loaded into dev for
+    validation, with its justification and limits. It also lists the conditions that automated download
+    (E34) and debate-tub sharing (v2-e35) must meet. Output is docs/policies/caselist-data-use.md plus a
+    removal runbook built around `debate-research caselist remove` (implemented in t07, including the
+    sha256 suppression list), approved by Charlie. Boundaries: no code; the remove command and
+    suppression list are t07, the tub takedown flow is v2-e35-t05, the API client and its rate limits
+    are v1-e34-t01, and this task does not give legal advice — it flags questions for school/district
+    review where they exist.
+  priority: 1
+  constraints:
+    packages: [docs/policies, docs/runbooks]
+    forbidden:
+      - Permitting public redistribution or re-hosting of caselist archives or OpenEv files
+      - Storing or displaying debater full names beyond what the source path itself contains
+      - Copying real caselist files or excerpts containing student names into the repository
+      - Circumventing OpenCaselist authentication, access controls or rate limits
+      - Presenting disclosed or camp cards as platform-verified evidence
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/policies/caselist-data-use.md records the OpenCaselist terms of use and the OpenEv terms/license
+        notes with source URLs and the date read, plus a summary of community disclosure norms, and marks
+        any term the coach could not confirm as an open question.
+    - id: ac2
+      description: >-
+        The policy has explicit Permitted uses and Prohibited uses sections covering team-internal research,
+        landscape reports, file building, no public redistribution, no sharing outside the team, and
+        whether disclosed card text may be sent to a model provider through the ModelRouter.
+    - id: ac3
+      description: >-
+        A Personal data section states that team codes (debater initials) are kept only as disclosed, never
+        expanded or joined to full names in V1, never written to logs, fixtures or S3 object keys, and that
+        landscape reports show school plus team code at most; a Retention section sets a per-season period.
+    - id: ac4
+      description: >-
+        An Attribution section defines how disclosed and camp cards are credited in built files (original
+        cite kept verbatim plus a provenance line naming caselist/snapshot or camp/year), and a Removal
+        section defines who may request removal, the response time, and the steps in
+        docs/runbooks/caselist-removal.md: `debate-research caselist remove` (t07) run against dev then prod,
+        which also suppresses the sha256 against re-import, plus flagging affected built files.
+    - id: ac5
+      description: >-
+        A Dev environment exception section records the ADR-0013 exception: the public caselist corpus may
+        be loaded into dev for validation because it is already public, dev access is limited to the team's
+        operators, no student account data is loaded, and dev copies follow the same retention and removal
+        rules as prod.
+    - id: ac6
+      description: >-
+        A Gates section lists the conditions E34 automated download and the v2-e35 debate tub must satisfy,
+        and Charlie's approval (name, date, policy version) is recorded in the document.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t01-caselist-data-use-policy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Gather the terms first, draft the use and personal-data decisions, then attribution and removal, and
+    finish with the coach's review and approval.
+  goalRef:
+    name: v1-e30-t01-caselist-data-use-policy
+  graph:
+    nodes:
+      - id: terms-review
+        kind: Task
+        name: Record OpenCaselist and OpenEv terms and norms
+        description: >-
+          The coach reads the OpenCaselist terms of use/privacy pages (logged in with Tabroom credentials)
+          and the OpenEv licensing notes; the session transcribes the relevant clauses with URL and date read
+          into a Sources and terms section, summarizes disclosure norms (what teams expect when they upload
+          round reports and open-source docs), and lists unresolved questions.
+        outputs: [docs/policies/caselist-data-use.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy draft has a terms section
+            path: docs/policies/caselist-data-use.md
+            contentMatch: "## Sources and terms"
+          - type: custom
+            name: Coach confirms the transcribed terms
+            description: >-
+              Charlie compares the transcribed clauses against the live OpenCaselist and OpenEv pages and
+              confirms they are accurate and current as of the recorded date.
+      - id: use-decisions
+        kind: Task
+        name: Permitted and prohibited uses, model-provider use and retention
+        description: >-
+          Draft Permitted uses and Prohibited uses, decide whether disclosed card text may be sent to Bedrock
+          through the ModelRouter (E32 classification) and on what terms, and set retention: which snapshots
+          are kept, for how long after the season ends, and how S3 noncurrent versions are purged.
+        dependsOn: [terms-review]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Use sections present
+            path: docs/policies/caselist-data-use.md
+            contentMatch: "## Prohibited uses"
+          - type: artifact_exists
+            name: Retention section present
+            path: docs/policies/caselist-data-use.md
+            contentMatch: "## Retention"
+      - id: personal-data
+        kind: Task
+        name: Debater names and initials handling
+        description: >-
+          Define the Personal data rules: team codes stay as disclosed (initials), no expansion to names or
+          Tabroom joins in V1, content-addressed S3 keys (no school/team in keys), aggregate counts only in
+          operator reports, no student names in fixtures or logs, and synthetic fixtures for tests. Note that
+          users and disclosing debaters may be minors.
+        dependsOn: [terms-review]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Personal data section present
+            path: docs/policies/caselist-data-use.md
+            contentMatch: "## Personal data"
+      - id: attribution-and-removal
+        kind: Task
+        name: Attribution rules and removal runbook
+        description: >-
+          Define the provenance/credit line for disclosed and camp cards in built files, the removal request
+          channel and response time, and write the removal runbook around `debate-research caselist remove
+          --source|--team` (t07): dry run, run in dev, run in prod with --confirm-prod, confirm the sha256 is
+          on the suppression list, flag affected built files, and record the request in the removal log
+          without personal data. Until t07 ships the runbook lists the equivalent manual steps.
+        dependsOn: [use-decisions, personal-data]
+        outputs: [docs/runbooks/caselist-removal.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Removal runbook exists
+            path: docs/runbooks/caselist-removal.md
+            contentMatch: "caselist remove"
+          - type: artifact_exists
+            name: Attribution and removal sections present
+            path: docs/policies/caselist-data-use.md
+            contentMatch: "## Removal"
+      - id: dev-exception
+        kind: Task
+        name: ADR-0013 dev-data exception
+        description: >-
+          Record the exception to ADR-0013's synthetic-data-only rule for dev: the public caselist corpus
+          (including disclosure paths with debater initials or names) may be loaded into dev for validation;
+          justification (public data, parser and landscape checks need real volume); limits (team operators
+          only, no student account data, no copies outside the dev bucket and operator laptop, same
+          retention and removal as prod, removals applied to dev and prod together).
+        dependsOn: [personal-data]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Dev exception section present
+            path: docs/policies/caselist-data-use.md
+            contentMatch: "## Dev environment exception"
+      - id: gates-and-approval
+        kind: Task
+        name: Downstream gates and coach approval
+        description: >-
+          Add the Gates section (conditions for E34 automated download and the v2-e35 debate tub), link the
+          policy from docs/README.md, and record Charlie's approval with name, date and policy version.
+        dependsOn: [attribution-and-removal, dev-exception]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Gates and approval recorded
+            path: docs/policies/caselist-data-use.md
+            contentMatch: "Approved by"
+          - type: custom
+            name: Charlie approves the policy
+            description: >-
+              Charlie reads the full policy and removal runbook, resolves or accepts each open question, and
+              approves the version recorded in the document before any import is published or automated.
+status:
+  phase: Pending

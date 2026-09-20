@@ -1,5 +1,5 @@
 # EPIC E05 — Model Router & Structured LLM Contracts
-# Major version: V1 | Release: v1.1 (URL → verified card)
+# Major version: V1 | Release: v1.2 (Argument landscape & file building)
 # Architecture refs: §10, ADR-005, §15, §20 step 5
 # Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
 ---
@@ -11,7 +11,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.2
     debate/epic: v1-e05-model-router
   annotations:
     debate/title: E05 — Model Router & Structured LLM Contracts
@@ -21,10 +21,10 @@ spec:
     Route every model call through a config-driven ModelRouter with Bedrock and offline implementations,
     versioned prompts, validated structured outputs, and card-selection contracts that return spans —
     never rewritten evidence.
-  priority: 2
+  priority: 3
   constraints:
     majorVersion: v1
-    release: v1.1
+    release: v1.2
     rule: Every task in this epic ships in this release; no task crosses major versions.
   acceptanceCriteria:
   - id: ac1
@@ -53,7 +53,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.2
     debate/epic: v1-e05-model-router
 spec:
   description: >-

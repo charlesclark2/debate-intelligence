@@ -1,5 +1,5 @@
 # TASK v1-e04-t05-article-service — ArticleService orchestration
-# Epic: E04 Article Retrieval & Extraction | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E04 Article Retrieval & Extraction | Release: v1.3 (URL → verified card) | Major: V1
 # Architecture refs: §6 ArticleService, §7, §8 steps 1–2, §14, §19 (manual pasted text), §20 step 3
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e04-article-retrieval
   annotations:
     debate/title: ArticleService orchestration
@@ -78,7 +78,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e04-article-retrieval
 spec:
   description: >-

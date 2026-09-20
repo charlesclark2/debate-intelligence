@@ -1,5 +1,5 @@
 # TASK v1-e06-t04-docx-renderer — DOCX renderer
-# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
 # Architecture refs: §6 ExportService, §8 step 7 (render from CardSpan), §11, §16 golden DOCX, §20 step 7
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
   annotations:
     debate/title: DOCX renderer
@@ -26,7 +26,9 @@ spec:
     (namespace urn:debate-intelligence:manifest:v1) embeds each card's manifest (ids, snapshot sha256,
     span offsets, evidence hash) so `verify` (t07) can check it. Boundaries: the CardManifest model and
     JSON serialization are owned by t05 (the renderer embeds that serialized CardManifest payload as-is);
-    the CLI is t06; golden regression tests are E09 t02.
+    the CLI is t06; golden regression tests are E09 t02. It renders newly cut Cards from CardSpans; copying
+    disclosed cards' original runs into built files is the E33 lossless writer (v1-e33-t02), and both share
+    the style profile (v1-e31-t02) rather than separate style code.
   priority: 1
   constraints:
     packages: [debate_core.evidence, debate_core.application]
@@ -77,7 +79,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
 spec:
   description: >-

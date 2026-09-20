@@ -1,5 +1,5 @@
 # TASK v2-e14-t04-cut-card-flow — Cut-a-Card flow
-# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §12 Cut a Card, §8 hard failure rule, §4 Web frontend, ADR-009
 ---
 apiVersion: planspec.io/v1alpha1

@@ -1,0 +1,179 @@
+# TASK v1-e30-t06-initial-backfill — Initial caselist and camp-file backfill
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §7 S3 system of record, §9, §14 data minimization, §19 opponent data ethics
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t06-initial-backfill
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: Initial caselist and camp-file backfill
+    debate/architecture-refs: §7, §9, §14, §19
+spec:
+  description: >-
+    Operator-run backfill of the downloads already on the coach's Mac into the evidence store: the HS LD
+    weekly archives hsld26-0901 (64 files), hsld26-0908 (745) and hsld26-0915 (1,597), about 300 MB with
+    ~2,342 .docx and 32 .pdf, imported in date order so cumulative dedupe works; the ~106 Policy OpenEv
+    camp files; and any HS Policy or PF archives on hand. The operator imports and publishes to dev
+    first, checks `caselist status` and spot-checks disclosures there, then publishes the same local
+    store to prod. Because the imports and uploads run well past two minutes, no step runs in CI or in an
+    implementation session; the session prepares the runbook and summary template, and the recorded
+    results are committed as aggregate counts only in docs/data/caselist-backfill-2026-09.md (files per
+    snapshot, NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts, dedupe rate, PDFs and unparsed names, bytes
+    stored, dev and prod publish results). Source files are never committed and no school, team code or
+    student name appears in the summary. Boundaries: import/publish code is t03-t05, parsing the
+    backfilled sources is v1-e31-t06, and recurring downloads are E34.
+  priority: 1
+  constraints:
+    packages: [docs/data, docs/runbooks, docs/session-reports]
+    forbidden:
+      - Committing any file from ~/Documents/debate or its contents to the repository
+      - Running the backfill in CI or inside an implementation session (operator-run only)
+      - Publishing to prod before the dev publish shows a clean `caselist status` and passes spot checks
+      - School names, team codes or student names in the committed summary or session report
+      - Proceeding before the data-use policy (t01) is approved
+  context:
+    - kind: TaskRef
+      name: v1-e30-t04-openev-importer
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t05-caselist-publish
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t01-caselist-data-use-policy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/runbooks/caselist-backfill.md gives the exact operator commands (import order 0901 → 0908 →
+        0915, OpenEv import, dev publish, status, prod publish with --confirm-prod) and expected durations.
+    - id: ac2
+      description: >-
+        docs/data/caselist-backfill-2026-09.md records per snapshot the member count and the
+        NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts, the overall dedupe rate, PDF/.doc and
+        unparsed-filename counts, and total bytes stored, with aggregate numbers only.
+    - id: ac3
+      description: >-
+        manifests/hsld26/2026-09-01.jsonl, 2026-09-08.jsonl and 2026-09-15.jsonl and the OpenEv manifest exist
+        in the dev bucket, and `caselist status` against dev reported no drift (recorded in the summary).
+    - id: ac4
+      description: >-
+        The coach spot-checked at least 20 random disclosures in dev (side, tournament and round parsed
+        correctly or flagged) and the results are noted in the summary.
+    - id: ac5
+      description: >-
+        The same manifests exist in the prod bucket and `caselist status` against prod reported no drift,
+        recorded in the summary with the date of the prod publish.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t06-initial-backfill-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    The session writes the runbook and summary template; the operator then runs the local imports, the dev
+    publish and checks, and finally the prod publish, recording results after each stage.
+  goalRef:
+    name: v1-e30-t06-initial-backfill
+  graph:
+    nodes:
+      - id: runbook-and-template
+        kind: Task
+        name: Backfill runbook and summary template
+        description: >-
+          Write docs/runbooks/caselist-backfill.md (preconditions: policy approved, AWS SSO login, data dir
+          on local disk; commands in order; expected durations; how to resume) and the summary skeleton in
+          docs/data/caselist-backfill-2026-09.md with aggregate-only tables.
+        outputs: [docs/runbooks/caselist-backfill.md, docs/data/caselist-backfill-2026-09.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Backfill runbook exists
+            path: docs/runbooks/caselist-backfill.md
+            contentMatch: "--confirm-prod"
+          - type: artifact_exists
+            name: Summary template exists
+            path: docs/data/caselist-backfill-2026-09.md
+            contentMatch: "Dedupe rate"
+      - id: local-import
+        kind: Task
+        name: Operator-run local import of LD snapshots and camp files
+        description: >-
+          Operator-run: `caselist import` for hsld26 2026-09-01, 2026-09-08, 2026-09-15 in order, then
+          `caselist import-openev` for the Policy camp files and any Policy/PF archives; paste the --json
+          summaries' counts into the summary document.
+        dependsOn: [runbook-and-template]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Local import counts recorded
+            path: docs/data/caselist-backfill-2026-09.md
+            contentMatch: "2026-09-15"
+      - id: dev-publish
+        kind: Task
+        name: Operator-run publish to dev and drift check
+        description: >-
+          Operator-run: DEBATE_ENV=dev `caselist publish` for hsld26 and openev, then `caselist status`;
+          record upload counts, bytes and the clean status in the summary.
+        dependsOn: [local-import]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Dev publish recorded
+            path: docs/data/caselist-backfill-2026-09.md
+            contentMatch: "dev status: in sync"
+          - type: command_succeeds
+            name: Latest LD manifest present in the dev bucket
+            command: env
+            args: [DEBATE_ENV=dev, uv, run, debate-research, store, ls, manifests/hsld26/2026-09-15.jsonl]
+      - id: dev-spot-check
+        kind: Task
+        name: Coach spot check in dev
+        description: >-
+          Sample 20 disclosures from the dev manifests and compare side, tournament and round against the
+          original filenames; record pass/flag counts (no names) in the summary.
+        dependsOn: [dev-publish]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Coach accepts the dev spot check
+            description: >-
+              Charlie reviews the 20 sampled disclosures and confirms parsing is acceptable or files the
+              parser issues found before prod is published.
+      - id: prod-publish
+        kind: Task
+        name: Operator-run publish to prod and session report
+        description: >-
+          Operator-run: DEBATE_ENV=prod `caselist publish --confirm-prod` for the same local store, then
+          `caselist status`; record results in the summary and complete the session report.
+        dependsOn: [dev-spot-check]
+        outputs: [docs/session-reports/v1-e30-t06-initial-backfill.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Prod publish recorded
+            path: docs/data/caselist-backfill-2026-09.md
+            contentMatch: "prod status: in sync"
+          - type: command_succeeds
+            name: Latest LD manifest present in the prod bucket
+            command: env
+            args: [DEBATE_ENV=prod, uv, run, debate-research, store, ls, manifests/hsld26/2026-09-15.jsonl]
+          - type: artifact_exists
+            name: Session report committed
+            path: docs/session-reports/v1-e30-t06-initial-backfill.md
+status:
+  phase: Pending

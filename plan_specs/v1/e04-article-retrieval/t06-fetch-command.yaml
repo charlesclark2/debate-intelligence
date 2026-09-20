@@ -1,5 +1,5 @@
 # TASK v1-e04-t06-fetch-command — `debate-research fetch` command and recorded fixtures
-# Epic: E04 Article Retrieval & Extraction | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E04 Article Retrieval & Extraction | Release: v1.3 (URL → verified card) | Major: V1
 # Architecture refs: §6, §11 (CLI; explicit retrieval failures), §14, §16 (recorded fixtures), §20 step 3
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e04-article-retrieval
   annotations:
     debate/title: "`debate-research fetch` command and recorded fixtures"
@@ -67,7 +67,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e04-article-retrieval
 spec:
   description: >-

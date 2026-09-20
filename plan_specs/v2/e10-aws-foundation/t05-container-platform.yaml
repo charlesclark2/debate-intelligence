@@ -24,7 +24,9 @@ spec:
     rules, an ECS cluster with Fargate/Fargate Spot capacity providers, shared task execution roles and
     per-service CloudWatch log groups. Workers must reach arbitrary publisher URLs over HTTPS for article
     retrieval, so egress is required. This task does NOT define services or task definitions for the
-    API or workers, nor dashboards/alarms (t06).
+    API or workers, nor dashboards/alarms (t06). It lands in the dev and prod accounts and Terraform
+    roots created in V1 (v1-e29-t01/v1-e29-t02; no stage, ADR-0013); the S3 gateway endpoint and task
+    roles reach the existing V1 evidence buckets (v1-e29-t03) by reference, never by recreating them.
   priority: 1
   constraints:
     packages: [infrastructure/modules/network, infrastructure/modules/ecr, infrastructure/modules/ecs_cluster]
@@ -35,7 +37,7 @@ spec:
       - Mutable image tags for deploys (use immutable tags / digests)
   context:
     - kind: TaskRef
-      name: v2-e10-t02-terraform-bootstrap
+      name: v1-e29-t02-terraform-bootstrap
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

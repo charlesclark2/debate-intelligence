@@ -1,5 +1,5 @@
 # TASK v2-e14-t03-app-hosting — Web hosting and environments
-# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §4 Next.js, §5, §14 TLS, §15 cost; hosting choice recorded as an ADR
 ---
 apiVersion: planspec.io/v1alpha1
@@ -42,7 +42,7 @@ spec:
       name: v2-e14-t01-nextjs-scaffold
       relation: dependsOn
     - kind: TaskRef
-      name: v2-e10-t02-terraform-bootstrap
+      name: v1-e29-t02-terraform-bootstrap
       relation: dependsOn
     - kind: TaskRef
       name: v2-e12-t01-cognito-user-pool

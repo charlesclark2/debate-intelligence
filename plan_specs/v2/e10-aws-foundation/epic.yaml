@@ -18,9 +18,9 @@ metadata:
     debate/architecture-refs: §4, §5, §14, §15
 spec:
   description: >-
-    Stand up the AWS account baseline, Terraform environments, keyless CI deploys, encryption/secrets,
-    container platform and observability.
-  priority: 5
+    Extend the V1 AWS baseline (E29: account, Terraform state, evidence buckets) into the V2 platform:
+    keyless CI deploys, KMS and secrets, the container platform and observability.
+  priority: 7
   constraints:
     majorVersion: v2
     release: v2.0
@@ -28,14 +28,13 @@ spec:
   acceptanceCriteria:
   - id: ac1
     description: >-
-      dev and prod are reproducible from Terraform with remote state and budgets/alarms (no stage environment;
-      ADR-0013).
+      GitHub Actions deploys via OIDC roles; no long-lived AWS keys exist.
   - id: ac2
     description: >-
-      GitHub Actions deploys via OIDC roles; no long-lived AWS keys exist.
+      KMS keys and Secrets Manager cover every V2 data class and provider secret.
   - id: ac3
     description: >-
-      KMS, Secrets Manager, ECR, ECS/Fargate cluster and CloudWatch/X-Ray baselines are in place.
+      The ECS/Fargate cluster, ECR and CloudWatch/X-Ray baselines are in place in dev and prod.
 status:
   phase: Pending
 ---
@@ -58,44 +57,14 @@ spec:
   version: '1'
   graph:
     nodes:
-    - id: t01
-      kind: Task
-      name: AWS account baseline
+    - id: ext-v1-e29-t02-terraform-bootstrap
+      kind: External
+      name: 'Prerequisite from E29: Terraform bootstrap and environments'
       description: >-
-        Account/Organization setup, IAM Identity Center users, primary region decision (Bedrock model
-        availability), budgets and billing alarms, CloudTrail.
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
       inputs:
-        specRef: plan_specs/v2/e10-aws-foundation/t01-aws-account-baseline.yaml
-        goalRef: v2-e10-t01-aws-account-baseline
-      acceptanceCriteria:
-      - type: command_succeeds
-        name: Task spec v2-e10-t01-aws-account-baseline reports phase Succeeded
-        command: uv
-        args:
-        - run
-        - scripts/validate_specs.py
-        - --require-succeeded
-        - v2-e10-t01-aws-account-baseline
-    - id: t02
-      kind: Task
-      name: Terraform bootstrap and environments
-      description: >-
-        Remote state (S3 + locking), module layout under infrastructure/, dev and prod environments (ADR-0013:
-        no stage), tagging standard, fmt/validate/tflint in CI.
-      inputs:
-        specRef: plan_specs/v2/e10-aws-foundation/t02-terraform-bootstrap.yaml
-        goalRef: v2-e10-t02-terraform-bootstrap
-      dependsOn:
-      - t01
-      acceptanceCriteria:
-      - type: command_succeeds
-        name: Task spec v2-e10-t02-terraform-bootstrap reports phase Succeeded
-        command: uv
-        args:
-        - run
-        - scripts/validate_specs.py
-        - --require-succeeded
-        - v2-e10-t02-terraform-bootstrap
+        goalRef: v1-e29-t02-terraform-bootstrap
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t02-terraform-bootstrap.yaml
     - id: t03
       kind: Task
       name: GitHub OIDC deploy roles
@@ -107,7 +76,7 @@ spec:
         specRef: plan_specs/v2/e10-aws-foundation/t03-github-oidc-deploy.yaml
         goalRef: v2-e10-t03-github-oidc-deploy
       dependsOn:
-      - t02
+      - ext-v1-e29-t02-terraform-bootstrap
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e10-t03-github-oidc-deploy reports phase Succeeded
@@ -127,7 +96,7 @@ spec:
         specRef: plan_specs/v2/e10-aws-foundation/t04-kms-secrets.yaml
         goalRef: v2-e10-t04-kms-secrets
       dependsOn:
-      - t02
+      - ext-v1-e29-t02-terraform-bootstrap
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e10-t04-kms-secrets reports phase Succeeded
@@ -147,7 +116,7 @@ spec:
         specRef: plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml
         goalRef: v2-e10-t05-container-platform
       dependsOn:
-      - t02
+      - ext-v1-e29-t02-terraform-bootstrap
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e10-t05-container-platform reports phase Succeeded

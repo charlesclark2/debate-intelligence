@@ -1,0 +1,194 @@
+# EPIC E29 — Cloud Evidence Store (S3)
+# Major version: V1 | Release: v1.1 (Caselist evidence store)
+# Architecture refs: §5, §7 (S3 system of record), §14, ADR-0003, ADR-0013
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-cloud-evidence-store
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: E29 — Cloud Evidence Store (S3)
+    debate/architecture-refs: §5, §7 (S3 system of record), §14, ADR-0003, ADR-0013
+spec:
+  description: >-
+    Bring the minimum of AWS forward into V1: the account baseline, Terraform state, private versioned
+    evidence buckets in dev and prod, an S3 adapter behind the blob-store port, and CLI commands to sync
+    local evidence to the environment's bucket.
+  priority: 2
+  constraints:
+    majorVersion: v1
+    release: v1.1
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      dev and prod evidence buckets exist from Terraform: private, versioned, KMS-encrypted, public access
+      blocked.
+  - id: ac2
+    description: >-
+      An S3 adapter implements the blob-store port and passes the E02 contract suite (moto), with no AWS
+      imports in debate_core.
+  - id: ac3
+    description: >-
+      `debate-research store sync|ls|get` moves evidence between the local store and the bucket selected
+      by DEBATE_ENV, verifying checksums.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-cloud-evidence-store-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Task graph for epic E29 (Cloud Evidence Store (S3)). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v1-e29-cloud-evidence-store
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e01-t07-cli-skeleton
+      kind: External
+      name: 'Prerequisite from E01: debate_cli Typer + Rich skeleton'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t07-cli-skeleton
+        specRef: plan_specs/v1/e01-repo-foundation/t07-cli-skeleton.yaml
+    - id: ext-v1-e02-t04-repo-contract-tests
+      kind: External
+      name: 'Prerequisite from E02: Reusable repository contract test suite'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t04-repo-contract-tests
+        specRef: plan_specs/v1/e02-domain-core/t04-repo-contract-tests.yaml
+    - id: ext-v1-e02-t05-settings-config
+      kind: External
+      name: 'Prerequisite from E02: Settings and configuration'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t05-settings-config
+        specRef: plan_specs/v1/e02-domain-core/t05-settings-config.yaml
+    - id: t01
+      kind: Task
+      name: AWS account baseline
+      description: >-
+        Moved from V2 (was v2-e10-t01). Account/Organization setup, IAM Identity Center users, primary
+        region decision (Bedrock model availability), budgets and billing alarms, CloudTrail. Includes
+        ADR-0010 (primary region).
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t01-aws-account-baseline.yaml
+        goalRef: v1-e29-t01-aws-account-baseline
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t01-aws-account-baseline reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t01-aws-account-baseline
+    - id: t02
+      kind: Task
+      name: Terraform bootstrap and environments
+      description: >-
+        Moved from V2 (was v2-e10-t02). Remote state (S3 + locking), module layout under infrastructure/,
+        dev and prod environments (ADR-0013: no stage), tagging standard, fmt/validate/tflint in CI.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t02-terraform-bootstrap.yaml
+        goalRef: v1-e29-t02-terraform-bootstrap
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t02-terraform-bootstrap reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t02-terraform-bootstrap
+    - id: t03
+      kind: Task
+      name: Evidence buckets and operator access
+      description: >-
+        Terraform module for the evidence buckets in dev and prod: private, versioned, KMS-encrypted,
+        public access blocked, lifecycle for noncurrent versions, prefixes raw/ (caselist and camp sources),
+        parsed/, files/, manifests/ and reports/; least-privilege operator/CLI role or SSO permission
+        set. Applied by the operator.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml
+        goalRef: v1-e29-t03-evidence-buckets
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t03-evidence-buckets reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t03-evidence-buckets
+    - id: t04
+      kind: Task
+      name: S3 blob-store adapter
+      description: >-
+        S3 implementation of the blob-store/snapshot-store port in an infrastructure adapter (boto3 stays
+        out of debate_core domain/application): content-addressed keys by sha256, idempotent put, multipart
+        upload for large files, standard AWS credential chain / SSO profile; passes the E02 repository
+        contract suite against moto.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t04-s3-blob-store.yaml
+        goalRef: v1-e29-t04-s3-blob-store
+      dependsOn:
+      - t03
+      - ext-v1-e02-t04-repo-contract-tests
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t04-s3-blob-store reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t04-s3-blob-store
+    - id: t05
+      kind: Task
+      name: '`debate-research store` sync commands'
+      description: >-
+        `debate-research store sync|ls|get`: sync the local evidence store to the bucket for DEBATE_ENV
+        (dev or prod), dry-run, checksum verification, resumable, summary of new/changed/skipped objects.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml
+        goalRef: v1-e29-t05-evidence-sync-cli
+      dependsOn:
+      - t04
+      - ext-v1-e01-t07-cli-skeleton
+      - ext-v1-e02-t05-settings-config
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t05-evidence-sync-cli reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t05-evidence-sync-cli
+status:
+  phase: Pending

@@ -1,5 +1,5 @@
 # TASK v1-e09-t06-packaging-release — Packaging and release workflow
-# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.5 (V1 quality gate & team pilot) | Major: V1
 # Architecture refs: §4 (uv packaging, GitHub Actions), §17 (V1 MVP deliverable), §14 (no secrets in artifacts)
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
   annotations:
     debate/title: Packaging and release workflow
@@ -18,7 +18,7 @@ metadata:
 spec:
   description: >-
     Make the CLI installable by students with one command and releases reproducible. Versions follow semver
-    tied to the plan's release labels (v1.3.0 for release v1.3, patch bumps for fixes), sourced from a single
+    tied to the plan's release labels (v1.5.0 for release v1.5, patch bumps for fixes), sourced from a single
     version file shared by debate_core and debate_cli. CHANGELOG.md follows Keep a Changelog with a section
     per release linking the release spec. Stable releases are tagged only from main, and only after a
     validated promotion (docs/process/branching-and-environments.md): a release GitHub Action triggers on
@@ -28,7 +28,7 @@ spec:
     Succeeded (validate_specs.py --require-succeeded), runs the full test suite, builds wheels/sdists with
     `uv build` (reusing t09's build-info stamping with channel "stable"), and publishes a GitHub Release
     (not a pre-release) with artifacts and changelog notes. Install path: scripts/install_channel.sh
-    v1.3.0 (from t09) or `uv tool install` from the stable tag's wheels, with the bedrock extra optional.
+    v1.5.0 (from t09) or `uv tool install` from the stable tag's wheels, with the bedrock extra optional.
     Boundaries: no PyPI publishing, no Docker images (V2), dev pre-releases are v1-e01-t09.
   priority: 2
   constraints:
@@ -61,7 +61,7 @@ spec:
         stable GitHub Release with changelog notes and built artifacts; -dev.N tags never trigger it.
     - id: ac4
       description: >-
-        CHANGELOG.md has entries for v1.0 through v1.3 referencing their release specs.
+        CHANGELOG.md has entries for v1.0 through v1.5 referencing their release specs.
 status:
   phase: Pending
 ---
@@ -73,7 +73,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
 spec:
   description: >-
@@ -102,14 +102,14 @@ spec:
         kind: Task
         name: CHANGELOG with release sections
         description: >-
-          Create CHANGELOG.md with v1.0-v1.3 sections linked to plan_specs/releases.
+          Create CHANGELOG.md with v1.0-v1.5 sections linked to plan_specs/releases.
         outputs: [CHANGELOG.md]
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: artifact_exists
-            name: Changelog has v1.3 section
+            name: Changelog has v1.5 section
             path: CHANGELOG.md
-            contentMatch: "v1.3"
+            contentMatch: "v1.5"
       - id: release-workflow
         kind: Task
         name: Tag-triggered release workflow

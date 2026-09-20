@@ -1,5 +1,5 @@
 # TASK v1-e09-t03-span-eval-harness — Card selection and underlining eval harness
-# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.5 (V1 quality gate & team pilot) | Major: V1
 # Architecture refs: §16 LLM evaluations, §10 Prompt governance, §8, ADR-006
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
   annotations:
     debate/title: Card selection and underlining eval harness
@@ -68,7 +68,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
 spec:
   description: >-

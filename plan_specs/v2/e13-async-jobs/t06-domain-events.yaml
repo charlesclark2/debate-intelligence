@@ -1,5 +1,5 @@
 # TASK v2-e13-t06-domain-events — EventBridge domain events and schedules
-# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §5 EventBridge (domain events, scheduled research), ADR-009, §11 daily command, §15
 ---
 apiVersion: planspec.io/v1alpha1

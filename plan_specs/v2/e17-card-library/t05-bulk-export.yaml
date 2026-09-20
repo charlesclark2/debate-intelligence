@@ -23,7 +23,9 @@ spec:
     embedded manifest covers every card so `debate-research verify` can re-check the file. Runs as an
     ExportJob on the SQS worker framework, writes to the private export bucket and returns a short-lived
     presigned URL. UNVERIFIED cards are excluded by default; if included they carry the unverified banner.
-    This task does NOT change the single-card renderer (v1-e06-t04) or add PDF export.
+    This task does NOT change the single-card renderer (v1-e06-t04) or add PDF export, and it is not the
+    E33 file builder: building files from disclosed cards with their original formatting stays in the V1
+    lossless writer (v1-e33-t02), and exports are private to the requester, not published to the debate tub.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_workers, debate_api, web/src/components/library]

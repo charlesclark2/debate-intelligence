@@ -15,7 +15,7 @@ metadata:
 spec:
   description: >-
     A DA (or other) file can be audited for 1NC shell coherence with explained card-by-card alternatives.
-  priority: 12
+  priority: 14
   acceptanceCriteria:
   - id: epic-e23
     description: >-

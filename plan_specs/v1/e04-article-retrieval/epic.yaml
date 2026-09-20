@@ -1,5 +1,5 @@
 # EPIC E04 — Article Retrieval & Extraction
-# Major version: V1 | Release: v1.1 (URL → verified card)
+# Major version: V1 | Release: v1.3 (URL → verified card)
 # Architecture refs: §6 ArticleService, §9, §14, §19, §20 step 3
 # Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
 ---
@@ -11,7 +11,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e04-article-retrieval
   annotations:
     debate/title: E04 — Article Retrieval & Extraction
@@ -20,10 +20,10 @@ spec:
   description: >-
     Fetch accessible sources politely, detect paywalls and failures explicitly, extract readable text,
     and persist verified snapshots through ArticleService.
-  priority: 2
+  priority: 4
   constraints:
     majorVersion: v1
-    release: v1.1
+    release: v1.3
     rule: Every task in this epic ships in this release; no task crosses major versions.
   acceptanceCriteria:
   - id: ac1
@@ -48,7 +48,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e04-article-retrieval
 spec:
   description: >-

@@ -1,5 +1,5 @@
 # TASK v1-e08-t02-normalize-dedupe — Normalization and deduplication
-# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
 # Architecture refs: §9 Ranking pipeline (normalize / dedupe), §6 SearchService, §16 (unit tests)
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e08-research-workflows
   annotations:
     debate/title: Normalization and deduplication
@@ -64,7 +64,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e08-research-workflows
 spec:
   description: >-

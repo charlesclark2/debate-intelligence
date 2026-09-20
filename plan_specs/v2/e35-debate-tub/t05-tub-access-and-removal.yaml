@@ -1,0 +1,197 @@
+# TASK v2-e35-t05-tub-access-and-removal — Access audit and removal
+# Epic: E35 Debate Tub (Web File Access) | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
+# Architecture refs: §14 (private files, signed URLs, audit logs, minimization), §12 AuthZ, §8 provenance
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e35-t05-tub-access-and-removal
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+  annotations:
+    debate/title: Access audit and removal
+    debate/architecture-refs: §8, §12, §14
+spec:
+  description: >-
+    Make the tub safe to hold other teams' disclosed evidence. Three parts. (1) Team-only access proof:
+    an authorization matrix over every /v1/tub route (student, coach, administrator x same organization,
+    other organization, unauthenticated x ACTIVE and REMOVED files) plus an exposure check over the
+    Terraform plan showing the evidence buckets keep Block Public Access, have no public or CloudFront
+    origin access, and that only the API role may presign reads. (2) A tub access audit: every download
+    URL issued, bulk zip, upload, removal and restore writes an append-only TubAccessRecord (actor_id,
+    organization_id, action, tub_file_id, sha256, outcome, correlation_id, timestamp; no URLs, names or
+    IPs) with a TTL from docs/policies/caselist-data-use.md, and coaches can list it; E19-t02 later
+    forwards these records to the central audit log and does not replace them here. (3) A takedown flow
+    per the policy: a coach or administrator records a removal request (requesting school/team code,
+    reason category, scope), matching files become REMOVED immediately and stop listing and presigning,
+    and their sha256 is appended to the V1 suppression list (v1-e30-t07:
+    manifests/_suppression/suppression-list.jsonl behind the SuppressionList port) that the V1 importers,
+    the publisher and the t02 indexer all honor, so the next cumulative weekly snapshot cannot resurrect
+    them; no tub-specific blocklist is defined. Built files containing cards from a removed source are
+    flagged for rebuild, and deleting the sources and purging their S3 object versions is the
+    operator-run V1 `debate-research caselist remove --execute` command, referenced in the runbook.
+  priority: 1
+  constraints:
+    packages:
+      - debate_core.domain
+      - debate_core.application
+      - debate_core.integrations
+      - debate_api.routes
+      - web/src/features/tub
+      - docs/runbooks
+    forbidden:
+      - Any route, bucket policy or CDN path that makes caselist-derived files publicly reachable
+      - Audit records containing presigned URLs, tokens, evidence text, debater names or IP addresses
+      - Update or delete permissions on tub audit items for application roles
+      - Removal that only hides a file in the UI while the API can still presign it
+      - Automated deletion of S3 object versions from the app (purge is operator-run)
+      - A second suppression list or blocklist alongside the V1 one (reuse v1-e30-t07's SuppressionList)
+      - Taking down or restoring files on a student's request alone (coach or administrator only)
+  context:
+    - kind: TaskRef
+      name: v2-e35-t03-tub-api
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t01-caselist-data-use-policy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The tub authorization matrix test passes for every cell; other-organization and REMOVED-file
+        requests get 404, unauthenticated requests 401, and no response body contains an S3 URL except
+        the download endpoint's presigned URL for an allowed caller.
+    - id: ac2
+      description: >-
+        scripts/check_tub_exposure.py passes on the dev and prod Terraform plan JSON, failing if Block
+        Public Access is off, a bucket policy grants a wildcard principal, or a CloudFront origin targets
+        an evidence bucket.
+    - id: ac3
+      description: >-
+        Each issued download URL, bulk zip, upload, removal and restore produces exactly one
+        TubAccessRecord, and a failed audit write fails the request rather than issuing an unaudited URL.
+    - id: ac4
+      description: >-
+        After a removal is recorded, the file disappears from list and search, download returns 404, a
+        re-published copy with the same sha256 is indexed as REMOVED, its sha256 appears in the V1
+        suppression list (so `caselist import`/`publish` skip it), and affected built files are flagged.
+    - id: ac5
+      description: >-
+        docs/runbooks/tub-takedown.md walks the operator through intake, removal, the S3 version purge and
+        the reply to the requesting team, and Charlie confirms it matches the data-use policy.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e35-t05-tub-access-and-removal-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+spec:
+  description: >-
+    Prove team-only access first, then add the audit trail, then the takedown flow with indexer
+    suppression, and finish with the runbook and a policy review.
+  goalRef:
+    name: v2-e35-t05-tub-access-and-removal
+  graph:
+    nodes:
+      - id: access-matrix
+        kind: Task
+        name: Tub authorization matrix and exposure check
+        description: >-
+          A parametrized matrix test across all tub routes and a script that inspects `terraform show -json`
+          output for public access, wildcard principals and CloudFront origins on the evidence buckets.
+        outputs:
+          - packages/debate_api/tests/routes/test_tub_authorization_matrix.py
+          - scripts/check_tub_exposure.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tub authorization matrix passes
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_tub_authorization_matrix.py]
+          - type: test_passes
+            name: Exposure check tests pass on fixture plans
+            command: uv
+            args: [run, pytest, tests/scripts/test_check_tub_exposure.py]
+      - id: access-audit
+        kind: Task
+        name: TubAccessRecord audit trail
+        description: >-
+          TubAccessRecord entity and TubAuditLog port, an AppTable adapter using conditional puts only (no
+          update/delete in the IAM policy), TTL from settings, wiring into the t03 download, bulk and upload
+          use cases, and a coach-only GET /v1/tub/audit route with cursor pagination.
+        dependsOn: [access-matrix]
+        outputs:
+          - packages/debate_core/src/debate_core/application/tub/audit.py
+          - packages/debate_core/src/debate_core/integrations/dynamodb/tub_audit.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Audit trail tests pass, including fail-closed on write errors
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/tub/test_audit.py]
+      - id: takedown-flow
+        kind: Task
+        name: Removal requests, suppression list and rebuild flags
+        description: >-
+          RemovalRequest use case (match by file id, sha256 or disclosed school/team code), status change to
+          REMOVED, appending sha256 values through the V1 SuppressionList port (checked by the t02
+          indexer and the V1 importers/publisher), built-file flagging via per-card
+          provenance, restore for mistaken removals, and coach API routes plus a small removal screen.
+        dependsOn: [access-audit]
+        outputs:
+          - packages/debate_core/src/debate_core/application/tub/removal.py
+          - packages/debate_api/src/debate_api/routes/tub_removals.py
+          - web/src/features/tub/RemovalDialog.tsx
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal and suppression tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/tub/test_removal.py]
+          - type: test_passes
+            name: Removal dialog tests pass
+            command: pnpm
+            args: [--dir, web, test, --, src/features/tub/RemovalDialog]
+      - id: runbook-and-review
+        kind: Task
+        name: Takedown runbook, quality gates and policy review
+        description: >-
+          Write the takedown runbook (intake, removal, operator-run source deletion and S3 version purge
+          with `debate-research caselist remove`, response template, audit evidence), run type and import
+          checks, and review with Charlie.
+        dependsOn: [takedown-flow]
+        outputs: [docs/runbooks/tub-takedown.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Takedown runbook references the data-use policy
+            path: docs/runbooks/tub-takedown.md
+            contentMatch: "caselist-data-use.md"
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+          - type: custom
+            name: Charlie confirms removal flow matches the data-use policy
+            description: >-
+              Charlie walks through a synthetic takedown in dev (record request, verify 404 and suppression,
+              review the audit records) and confirms it satisfies docs/policies/caselist-data-use.md.
+status:
+  phase: Pending

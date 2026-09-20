@@ -38,7 +38,7 @@ spec:
       - Google OAuth client secret in Terraform variables or state as plaintext (read from Secrets Manager)
   context:
     - kind: TaskRef
-      name: v2-e10-t02-terraform-bootstrap
+      name: v1-e29-t02-terraform-bootstrap
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

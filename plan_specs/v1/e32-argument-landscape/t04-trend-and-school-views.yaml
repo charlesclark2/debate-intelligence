@@ -1,0 +1,148 @@
+# TASK v1-e32-t04-trend-and-school-views — Trends and per-school views
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §13 Coverage analysis / Opponent intelligence, §14 (minimize student data)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t04-trend-and-school-views
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: Trends and per-school views
+    debate/architecture-refs: §8, §13, §14, §16
+spec:
+  description: >-
+    Extend the landscape bundle with two deterministic views. Trends compare consecutive snapshots of the
+    same caselist and topic: because weekly archives are cumulative, week-over-week change is computed
+    from disclosures first seen in each snapshot (the rounds disclosed that week), not from cumulative
+    totals, and each position is labeled NEW, RISING, FALLING or STEADY by its change in share of the
+    week's disclosing teams, with a minimum-teams floor so one team does not make a trend. Trends never
+    compare across a topic change (the LD and PF topics rotate). The per-school view lists, for each
+    school and team code as disclosed, the positions read on aff and on neg with round counts and the
+    last tournament seen, to seed later scouting. Boundaries: base counts and top cards are t03; the CLI
+    and publishing are t05; opponent prediction, Tabroom results and debater-level profiles belong to V3
+    opponent intelligence and are out of scope.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain]
+    forbidden:
+      - Debater names; the school view uses the TeamCode entity as disclosed, never parsed personal names
+      - Joining Tabroom results, ratings or any data beyond the caselist disclosures
+      - Model-generated summaries or predictions of what a school will run
+      - Trend comparisons across different topic ids
+      - Model calls anywhere in trend or school-view computation
+  context:
+    - kind: TaskRef
+      name: v1-e32-t03-landscape-report
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On a three-snapshot synthetic fixture, trends.csv gives per position the weekly teams, weekly
+        share, previous share, delta in percentage points and a label, and matches a hand-computed
+        expected file.
+    - id: ac2
+      description: >-
+        A position reaches RISING or FALLING only when the share changes by at least the configured
+        threshold (default 5 points) and at least the configured minimum of teams (default 3) read it in
+        one of the two weeks; a caselist's first snapshot yields all NEW labels and no deltas.
+    - id: ac3
+      description: >-
+        When topics.yaml maps two snapshots to different topic ids, no trend rows are emitted across them
+        and the report states that the topic changed.
+    - id: ac4
+      description: >-
+        schools.csv and the schools section of the Markdown list school, team code, side, position_id,
+        rounds and last tournament, contain no debater names from the fixture, and sort
+        deterministically.
+    - id: ac5
+      description: >-
+        The trend and school sections are appended to the t03 bundle without changing positions.csv or
+        top_cards.csv (t03 golden files still pass).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t04-trend-and-school-views-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Add a third synthetic snapshot and a topic change, compute weekly deltas and labels, build the
+    per-school view, then render both into the existing bundle with golden files.
+  goalRef:
+    name: v1-e32-t04-trend-and-school-views
+  graph:
+    nodes:
+      - id: fixture-extension
+        kind: Task
+        name: Third snapshot and topic-change fixture
+        description: >-
+          Extend the t03 fixture generator with a third snapshot (a rising and a falling position) and a
+          separate two-snapshot caselist whose topic changes between snapshots.
+        outputs: [tests/fixtures/landscape/synthetic_caselist/expected_trends.csv]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Expected trends file exists
+            path: tests/fixtures/landscape/synthetic_caselist/expected_trends.csv
+            contentMatch: "RISING"
+      - id: trend-computation
+        kind: Task
+        name: Weekly delta and trend labels
+        description: >-
+          Compute weekly disclosing teams from first-seen disclosures, per-position weekly share and delta,
+          apply threshold and minimum-teams rules, and refuse cross-topic comparisons.
+        dependsOn: [fixture-extension]
+        outputs: [packages/debate_core/src/debate_core/application/landscape_trends.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Trend computation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_trends.py]
+      - id: school-view
+        kind: Task
+        name: Per-school disclosed-positions view
+        description: >-
+          Group READS by school, team code and side into position rows with round counts and last
+          tournament; exclude ANSWERS items and unclassified items.
+        dependsOn: [fixture-extension]
+        outputs: [packages/debate_core/src/debate_core/application/landscape_schools.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: School view tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_schools.py]
+      - id: render-and-gates
+        kind: Task
+        name: Render trends and schools into the bundle
+        description: >-
+          Add trends.csv, schools.csv and the Markdown sections ("New this week", "Rising", "Falling",
+          "By school"); update golden files; confirm t03 goldens unchanged; type check.
+        dependsOn: [trend-computation, school-view]
+        outputs: [tests/fixtures/landscape/golden/trends.csv, tests/fixtures/landscape/golden/schools.csv]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: All landscape render golden tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape/test_render.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

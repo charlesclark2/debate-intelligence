@@ -1,5 +1,5 @@
 # TASK v1-e09-t02-docx-golden-tests — Golden DOCX regression tests
-# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.5 (V1 quality gate & team pilot) | Major: V1
 # Architecture refs: §16 Deterministic tests (golden DOCX), §11 V1 acceptance criteria
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
   annotations:
     debate/title: Golden DOCX regression tests
@@ -62,7 +62,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
 spec:
   description: >-

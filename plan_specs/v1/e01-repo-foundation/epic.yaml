@@ -173,6 +173,7 @@ spec:
         goalRef: v1-e01-t05-spec-tooling
       dependsOn:
       - t01
+      - t03
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e01-t05-spec-tooling reports phase Succeeded

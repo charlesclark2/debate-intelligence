@@ -1,0 +1,178 @@
+# TASK v1-e29-t02-terraform-bootstrap — Terraform bootstrap and environments
+# Epic: E29 Cloud Evidence Store (S3) | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §4 Terraform, §5, §7, §14, §15 (infrastructure-as-code), ADR-0003, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t02-terraform-bootstrap
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: Terraform bootstrap and environments
+    debate/architecture-refs: §4, §5, §7, §14, §15, ADR-0003, ADR-0013
+    debate/moved-from: v2-e10-t02-terraform-bootstrap
+spec:
+  description: >-
+    Create the Terraform foundation the V1 evidence buckets (t03) and every later V2 infrastructure task
+    build on. Moved forward from V2 (was v2-e10-t02). Deliverables: a bootstrap root module, applied once
+    per account by the operator, that creates a private, versioned, encrypted remote-state bucket with
+    native S3 state locking (use_lockfile; a DynamoDB lock table only if the pinned Terraform version
+    requires it); the layout infrastructure/{bootstrap,modules,envs/dev,envs/prod} with exactly two
+    environment roots (ADR-0013 — no stage) that differ only by tfvars and backend config; pinned
+    Terraform and hashicorp/aws versions; a default_tags tagging standard; and a credential-free
+    `terraform-checks` CI job (fmt, validate with -backend=false, tflint) that keeps PR CI light.
+    This task owns layout and conventions only; it creates no application resources. Out of scope:
+    evidence buckets, evidence KMS key and operator permission set (t03), GitHub OIDC plan/apply roles
+    (v2-e10-t03), V2 KMS/Secrets (v2-e10-t04), networking/ECS (v2-e10-t05). Until OIDC roles exist, CI
+    never runs plan or apply; every apply is an operator step recorded in a runbook.
+  priority: 1
+  constraints:
+    packages: [infrastructure/bootstrap/state, infrastructure/envs, infrastructure/modules, .github/workflows]
+    forbidden:
+      - Local or unencrypted Terraform state for the dev or prod environment roots
+      - A stage environment root (ADR-0013)
+      - Unpinned Terraform, provider or module versions
+      - Hard-coded account ids, regions or credentials inside reusable modules
+      - terraform plan/apply in CI before OIDC roles exist (v2-e10-t03), or any apply from an agent session
+  context:
+    - kind: TaskRef
+      name: v1-e29-t01-aws-account-baseline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        dev and prod state each live in a private, versioned, encrypted S3 bucket with block public
+        access, a deny-insecure-transport policy and state locking; a second concurrent plan against the
+        same environment fails to acquire the lock.
+    - id: ac2
+      description: >-
+        infrastructure/ contains bootstrap/, modules/ and envs/{dev,prod}/ only, with a README describing
+        how to add a module, how environments differ (tfvars/backend only, never copied code) and that
+        applies are operator-run.
+    - id: ac3
+      description: >-
+        Every resource inherits default_tags project, environment (dev|prod), owner, cost-center and
+        managed-by=terraform, and a tflint rule fails when a module drops them.
+    - id: ac4
+      description: >-
+        A `terraform-checks` job in .github/workflows/ci.yml, gated on the `infrastructure` path filter
+        and listed in the aggregate `ci` job's needs, runs fmt -check, validate for both envs and tflint
+        without AWS credentials in under two minutes, and fails `ci` on any error.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t02-terraform-bootstrap-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Write the state bootstrap, have the operator apply it once per account and migrate state, lay out
+    the two environment roots, apply the tagging standard, then add credential-free static checks to CI.
+  goalRef:
+    name: v1-e29-t02-terraform-bootstrap
+  graph:
+    nodes:
+      - id: state-bootstrap
+        kind: Task
+        name: Remote state bucket and locking module
+        description: >-
+          A bootstrap root module (local state on first apply, then migrated into the bucket it creates)
+          defines the versioned, encrypted, private state bucket with lockfile support and a
+          deny-insecure-transport bucket policy, parameterized by environment.
+        outputs: [infrastructure/bootstrap/state/main.tf, infrastructure/bootstrap/state/README.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: State bootstrap module validates
+            command: terraform
+            args: [-chdir=infrastructure/bootstrap/state, validate]
+      - id: env-layout
+        kind: Task
+        name: dev and prod environment roots
+        description: >-
+          Create envs/dev and envs/prod with backend.tf, versions.tf (pinned Terraform and
+          hashicorp/aws), providers.tf (region from ADR-0010) and terraform.tfvars; add
+          infrastructure/README.md with the module/env conventions.
+        dependsOn: [state-bootstrap]
+        outputs:
+          - infrastructure/envs/dev/backend.tf
+          - infrastructure/envs/prod/backend.tf
+          - infrastructure/README.md
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev environment validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: command_succeeds
+            name: prod environment validates
+            command: terraform
+            args: [-chdir=infrastructure/envs/prod, validate]
+      - id: tagging-standard
+        kind: Task
+        name: Tagging standard via default_tags
+        description: >-
+          Configure provider default_tags from a shared tags module and document the required keys; add
+          a tflint config enforcing them.
+        dependsOn: [env-layout]
+        outputs: [infrastructure/.tflint.hcl, infrastructure/modules/tags/main.tf]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: tflint passes with tagging rules
+            command: tflint
+            args: [--chdir=infrastructure, --recursive]
+      - id: ci-static-checks
+        kind: Task
+        name: CI fmt/validate/tflint job
+        description: >-
+          Add a `terraform-checks` job to .github/workflows/ci.yml (not a separate workflow), gated on
+          `needs.changes.outputs.infrastructure` and appended to the aggregate `ci` job's needs, running
+          fmt -check, init -backend=false + validate per env, and tflint, with no AWS credentials and
+          timeout-minutes 10.
+        dependsOn: [tagging-standard]
+        outputs: [.github/workflows/ci.yml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ci.yml runs the terraform checks
+            path: .github/workflows/ci.yml
+            contentMatch: "terraform fmt -check"
+          - type: command_succeeds
+            name: Formatting is clean
+            command: terraform
+            args: [fmt, -check, -recursive, infrastructure]
+      - id: operator-apply-state
+        kind: Task
+        name: Operator applies the state bootstrap in dev and prod
+        description: >-
+          Operator-run: apply the bootstrap in the dev account, migrate its state, then prod; run
+          `terraform init` in each env root against the remote backend and confirm locking with two
+          concurrent plans. Record dates, bucket names (no account ids) and the lock test in the runbook.
+        dependsOn: [env-layout]
+        outputs: [docs/runbooks/terraform-bootstrap.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Runbook records the dev and prod bootstrap applies
+            path: docs/runbooks/terraform-bootstrap.md
+            contentMatch: "prod"
+          - type: custom
+            name: Operator confirms remote state and locking
+            description: >-
+              Charlie confirms `terraform -chdir=infrastructure/envs/<env> init` uses the S3 backend for
+              dev and prod and that a second concurrent plan reports a state lock error.
+status:
+  phase: Pending

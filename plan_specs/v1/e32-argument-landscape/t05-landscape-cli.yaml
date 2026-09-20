@@ -1,0 +1,192 @@
+# TASK v1-e32-t05-landscape-cli — `debate-research landscape` command
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §11 CLI commands, §6 (CLI has no business logic), §13, §14 (private buckets)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t05-landscape-cli
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "`debate-research landscape` command"
+    debate/architecture-refs: §6, §10, §11, §13, §14
+spec:
+  description: >-
+    Add the Typer command `debate-research landscape report --caselist <slug> [--snapshot <YYYY-MM-DD>]`
+    with --out, --publish/--no-publish, --dry-run, --json and the shared --model-mode option. It resolves
+    the snapshot (default: newest imported), resolves the topic and taxonomy from topics.yaml, runs
+    position classification incrementally (t02, cached, bounded by max_model_items), builds the report
+    bundle (t03, plus the t04 sections when present), writes it to
+    <data_dir>/reports/landscape/<caselist>/<snapshot>/ and, with --publish, uploads it to
+    reports/landscape/<caselist>/<snapshot>/ in the evidence bucket for DEBATE_ENV through the E29 blob
+    store, skipping unchanged objects by checksum. The command is a thin adapter over a
+    LandscapeRunService in debate_core.application so the E34 scheduled sync can call the same use case.
+    It exits non-zero on an unknown caselist or snapshot, a missing taxonomy mapping, or an exceeded model
+    budget. The first real runs over the corpus are operator-run in dev. Boundaries: the scheduled weekly
+    run and staleness banner are E34; S3 bucket and sync mechanics are E29; review-queue editing stays the
+    t02 decisions-CSV workflow.
+  priority: 1
+  constraints:
+    packages: [debate_cli, debate_core.application, debate_core.integrations, tests/smoke]
+    forbidden:
+      - Business logic in debate_cli (classification, aggregation and upload planning live in debate_core)
+      - boto3 imports outside the E29 S3 adapter; the CLI uses the blob-store port
+      - Publishing to a public or unencrypted location, or generating presigned URLs in reports
+      - Defaulting DEBATE_ENV to prod; prod publishing only after dev validation and promotion
+      - Live model or network calls in CI and smoke tests (replay mode, no-publish or moto only)
+      - Real caselist data in smoke fixtures (synthetic fixture only)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t03-landscape-report
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e29-t05-evidence-sync-cli
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t04-trend-and-school-views
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On the synthetic fixture in replay mode, `landscape report --caselist <fixture> --no-publish`
+        writes report.md, positions.csv and top_cards.csv under the snapshot directory and exits 0;
+        --json prints paths, counts, classification method totals and model calls made.
+    - id: ac2
+      description: >-
+        An unknown caselist or snapshot exits 2 with the list of known values; a caselist/date without a
+        topics.yaml mapping exits 2 naming the file to edit; exceeding max_model_items exits 1 after
+        writing the review queue, without publishing.
+    - id: ac3
+      description: >-
+        With --publish against moto, objects land under reports/landscape/<caselist>/<snapshot>/; a second
+        identical run uploads nothing, and --dry-run lists planned uploads without writing.
+    - id: ac4
+      description: >-
+        A smoke check in tests/smoke/ runs the installed CLI on the synthetic fixture in replay mode with
+        --no-publish and passes in the validate-dev recorded tier.
+    - id: ac5
+      description: >-
+        Operator-run in dev: reports for the newest hsld26 snapshot (and any imported Policy/PF caselist)
+        are generated with live models and published to the dev bucket; counts, classification coverage,
+        review-queue size, model calls and cost are recorded in docs/data/landscape/first-run-2026-09.md,
+        and the coach has reviewed the hsld26 report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t05-landscape-cli-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Build the orchestration use case, wire the Typer command, add publishing through the blob-store port,
+    add the smoke check, then do the operator-run first report in dev.
+  goalRef:
+    name: v1-e32-t05-landscape-cli
+  graph:
+    nodes:
+      - id: run-service
+        kind: Task
+        name: LandscapeRunService use case
+        description: >-
+          Resolve caselist, snapshot and topic; run incremental classification; build the bundle; write
+          it to the local data dir; return a typed LandscapeRunResult with counts, paths and model usage;
+          typed errors for unknown caselist/snapshot, missing mapping and budget exceeded.
+        outputs: [packages/debate_core/src/debate_core/application/landscape_run.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run service tests pass with fake router and synthetic fixture
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_run.py]
+      - id: cli-command
+        kind: Task
+        name: Typer `landscape report` command
+        description: >-
+          Register the `landscape` command group and `report` subcommand with options, human and --json
+          output, and exit codes 0/1/2 (shared exit_codes module) mapped from typed errors.
+        dependsOn: [run-service]
+        outputs: [packages/debate_cli/src/debate_cli/commands/landscape.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_landscape_command.py]
+          - type: command_succeeds
+            name: Command runs on the synthetic fixture offline
+            command: uv
+            args:
+              - run
+              - debate-research
+              - landscape
+              - report
+              - --caselist
+              - synthetic26
+              - --no-publish
+              - --model-mode
+              - replay
+      - id: publish
+        kind: Task
+        name: Publish bundle to the reports/ prefix
+        description: >-
+          Upload the snapshot directory through the blob-store port for DEBATE_ENV, skip unchanged objects
+          by checksum, support --dry-run, and record the published keys in the run result; tests use moto.
+        dependsOn: [cli-command]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Publish tests pass against moto
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_landscape_command.py, -k, publish]
+      - id: smoke-check
+        kind: Task
+        name: Smoke check for the landscape command
+        description: >-
+          Add a recorded-tier smoke test that runs the installed binary on the synthetic fixture in replay
+          mode with --no-publish and asserts the three bundle files and exit code 0.
+        dependsOn: [publish]
+        outputs: [tests/smoke/test_landscape_smoke.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Landscape smoke test exists
+            path: tests/smoke/test_landscape_smoke.py
+            contentMatch: "landscape"
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+      - id: first-dev-run
+        kind: Task
+        name: First real landscape reports in dev
+        description: >-
+          Operator-run on the coach's Mac with DEBATE_ENV=dev and --model-mode live (longer than CI allows):
+          generate and publish reports for the newest hsld26 snapshot and any imported Policy/PF caselists,
+          then record aggregate numbers only (no school or team data) in the run note.
+        dependsOn: [smoke-check]
+        outputs: [docs/data/landscape/first-run-2026-09.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: First-run note records classification coverage
+            path: docs/data/landscape/first-run-2026-09.md
+            contentMatch: "classification coverage"
+          - type: custom
+            name: Coach reviews the first hsld26 landscape report
+            description: >-
+              Coach reads the dev hsld26 report and confirms the most-read positions match what the team has
+              seen at tournaments so far, and lists taxonomy or override fixes for the next run.
+status:
+  phase: Pending

@@ -1,0 +1,193 @@
+# TASK v1-e33-t03-file-build-cli — `debate-research files` commands
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §6 ExportService, §8 provenance, §11 CLI commands, ADR-0006
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t03-file-build-cli
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "`debate-research files` commands"
+    debate/architecture-refs: §6, §8, §11, ADR-0006
+spec:
+  description: >-
+    Give the coach three commands. `debate-research files build <recipe>` loads and resolves a recipe
+    (t01), fetches each occurrence's source .docx from the local evidence store by sha256, runs the
+    lossless writer (t02), writes <name>.docx plus <name>.provenance.json under settings.files_dir
+    (built/<topic>/), and then runs the t04 FileQualityService on the output, writing .quality.json and
+    .quality.md and exiting non-zero on FAIL (the files are kept for inspection but flagged). `debate-research
+    files check <file>` runs the same t04 checks on an existing built file and prints the report.
+    `debate-research files suggest --caselist <slug> --position <p> [--side]
+    [--snapshot] [--top N]` writes a draft recipe from the E32 landscape's most-read cards for a position:
+    one pocket for the position, blocks grouped by the most common original block heading, cards pinned to
+    their most recent occurrence, read counts as YAML comments, and status: draft. Suggest is
+    deterministic (no model calls) and never writes tags; the coach edits the draft and plusses it up
+    with the team's own parsed files before building. All three commands are thin Typer wrappers over
+    FileBuildService, FileSuggestService and the t04 FileQualityService in debate_core.application.
+    Boundaries: the check library and report format are owned by t04 (not re-implemented here);
+    `files publish` and its quality gate are t05; this task does not upload anything to S3.
+  priority: 1
+  constraints:
+    packages: [debate_cli, debate_core.application, tests/smoke]
+    forbidden:
+      - Business logic in debate_cli (commands only parse options, call a service and render output)
+      - Model calls in build or suggest
+      - Network or S3 access from `files build`/`files suggest` (local evidence store only)
+      - Logging student names or full team rosters; team codes appear only as disclosed
+  context:
+    - kind: TaskRef
+      name: v1-e33-t02-lossless-card-writer
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t03-landscape-report
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e33-t04-file-quality-checks
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `files build tests/fixtures/file_builder/recipes/<example>.yaml` against the synthetic fixture
+        corpus writes a .docx, a .provenance.json and a PASS .quality.json, and prints cards placed,
+        sources used, tag overrides and warnings; exit code is non-zero with every RecipeError listed when
+        resolution fails.
+    - id: ac2
+      description: >-
+        A recipe with status: draft is refused unless --allow-draft is passed, in which case the built
+        file's header analytic says DRAFT.
+    - id: ac3
+      description: >-
+        `files suggest --caselist <slug> --position <p> --top 10` emits a recipe that validates against
+        docs/data/file-recipe.schema.json, pins every card to an existing occurrence, orders cards by read
+        count, and contains no tag overrides or evidence text.
+    - id: ac4
+      description: >-
+        A missing source blob in the local store fails that card with SOURCE_MISSING and a hint to run
+        `debate-research store get`, without building a partial file.
+    - id: ac5
+      description: >-
+        `files build` exits non-zero and names the failing checks when the t04 checks FAIL on its output,
+        and `files check <file>` on a tampered built file reports the same FAIL without rebuilding.
+    - id: ac6
+      description: >-
+        tests/smoke/test_files_cli.py covers build, check and suggest on synthetic data and runs in
+        validate-dev.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t03-file-build-cli-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Build the build service (with the t04 checks as its final step) and the suggest service, then the
+    thin Typer command group (build, check, suggest) and presenter, then smoke checks and quality gates.
+  goalRef:
+    name: v1-e33-t03-file-build-cli
+  graph:
+    nodes:
+      - id: build-service
+        kind: Task
+        name: FileBuildService
+        description: >-
+          Orchestrate load → resolve → fetch source blobs by sha256 from the blob-store port → writer →
+          write outputs → FileQualityService (t04) on the written file; returns a BuildResult (paths,
+          counts, warnings, errors, quality status) and refuses drafts unless allowed. Uses the in-memory
+          repositories and a synthetic fixture corpus in tests.
+        outputs: [packages/debate_core/src/debate_core/application/file_build_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Build service tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_build_service.py]
+      - id: suggest-service
+        kind: Task
+        name: FileSuggestService (draft recipe from the landscape)
+        description: >-
+          Read the E32 landscape data for a caselist, snapshot and position, take the top-N cards by read
+          count (distinct fingerprints), pin each to its latest occurrence, group by most common original
+          block heading, and serialize a draft FileRecipe YAML with read counts as comments.
+        dependsOn: [build-service]
+        outputs: [packages/debate_core/src/debate_core/application/file_suggest_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Suggest service tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_suggest_service.py]
+      - id: cli-commands
+        kind: Task
+        name: Typer `files` command group and Rich presenter
+        description: >-
+          `files build <recipe> [--out DIR] [--allow-draft]`, `files check <file>` and `files suggest
+          --caselist --position [--side] [--snapshot] [--top] [--out FILE]`, registered on the root app; a
+          presenter renders the build summary, the per-check PASS/WARN/FAIL table and errors; exit codes
+          documented in --help.
+        dependsOn: [suggest-service]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/files.py
+          - packages/debate_cli/src/debate_cli/presenters/files_presenter.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI tests pass with CliRunner
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_files.py]
+          - type: command_succeeds
+            name: files build help renders
+            command: uv
+            args: [run, debate-research, files, build, --help]
+          - type: test_passes
+            name: files check reports PASS and FAIL correctly
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_files.py, -k, check]
+      - id: smoke-checks
+        kind: Task
+        name: Smoke checks for files build, check and suggest
+        description: >-
+          Add tests/smoke/test_files_cli.py running build, check and suggest against the synthetic corpus
+          so validate-dev exercises the user-facing surface.
+        dependsOn: [cli-commands]
+        outputs: [tests/smoke/test_files_cli.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Files smoke checks pass
+            command: uv
+            args: [run, pytest, tests/smoke/test_files_cli.py]
+      - id: quality-gates
+        kind: Task
+        name: Quality gates
+        description: >-
+          Type check both packages, lint, and confirm debate_cli imports only application services.
+        dependsOn: [smoke-checks]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Type check passes for debate_cli
+            command: uv
+            args: [run, pyright, packages/debate_cli]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

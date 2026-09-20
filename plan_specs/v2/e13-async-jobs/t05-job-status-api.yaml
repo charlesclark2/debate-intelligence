@@ -1,5 +1,5 @@
 # TASK v2-e13-t05-job-status-api — Job status API (polling + SSE)
-# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §5, ADR-009, §15 (client polls or receives SSE status), §12 authorization
 ---
 apiVersion: planspec.io/v1alpha1

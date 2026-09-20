@@ -23,7 +23,8 @@ spec:
     underline/highlight rendered from spans, and bulk select for move/tag (bulk export is triggered here but
     implemented in t05). Opening a card uses the E14 provenance-constrained editor. UNVERIFIED cards carry a
     prominent badge and are visually distinct everywhere they appear. This task does NOT build revision
-    diff/restore (t04), the export job (t05) or sharing management (t06).
+    diff/restore (t04), the export job (t05) or sharing management (t06), and it does not browse or
+    download whole files: that is the debate tub (v2-e35-t04), which the library links to.
   priority: 1
   constraints:
     packages: [web/src/app/library, web/src/components/library]

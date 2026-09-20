@@ -16,7 +16,7 @@ spec:
   description: >-
     Students practice CX against a simulated opponent grounded in the argument graph, with concessions
     recorded to the flow.
-  priority: 16
+  priority: 18
   acceptanceCriteria:
   - id: epic-e27
     description: >-

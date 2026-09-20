@@ -32,15 +32,16 @@ decision lands.
 
 | ADR | Topic | Owning spec |
 |---|---|---|
-| 0010 | Primary AWS region | [`v2-e10-t01-aws-account-baseline`](../../plan_specs/v2/e10-aws-foundation/t01-aws-account-baseline.yaml) |
+| 0010 | Primary AWS region | [`v1-e29-t01-aws-account-baseline`](../../plan_specs/v1/e29-cloud-evidence-store/t01-aws-account-baseline.yaml) |
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
 | 0012 | Web hosting | [`v2-e14-t03-app-hosting`](../../plan_specs/v2/e14-web-cut-card/t03-app-hosting.yaml) |
+| 0014 | Debate file editor and format reference (CardMirror evaluation) | [`v1-e31-t01-cardmirror-evaluation`](../../plan_specs/v1/e31-debate-file-parsing/t01-cardmirror-evaluation.yaml) |
 
-New ADRs take the next free number after the highest written or reserved one: **0014** is the
+New ADRs take the next free number after the highest written or reserved one: **0015** is the
 next free number. Do not skip numbers; if a reservation is dropped, note it here rather than silently
 reusing the number.
 
-## Proposing a new ADR (ADR-0014+)
+## Proposing a new ADR (ADR-0015+)
 
 1. **Confirm this needs an ADR.** ADRs record decisions that shape the architecture and
    would be expensive to reverse. Configuration choices, feature toggles, and everyday

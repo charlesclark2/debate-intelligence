@@ -20,7 +20,7 @@ spec:
   description: >-
     Persist typed argument nodes and edges with source references and confidence behind a GraphRepository,
     extract them from parsed files, and provide coverage/coherence queries.
-  priority: 10
+  priority: 12
   constraints:
     majorVersion: v3
     release: v3.0
@@ -65,6 +65,14 @@ spec:
       inputs:
         goalRef: v1-e02-t04-repo-contract-tests
         specRef: plan_specs/v1/e02-domain-core/t04-repo-contract-tests.yaml
+    - id: ext-v1-e31-t03-debate-docx-parser
+      kind: External
+      name: 'Prerequisite from E31: Debate .docx parser'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t03-debate-docx-parser
+        specRef: plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml
     - id: ext-v2-e11-t03-dynamodb-repositories
       kind: External
       name: 'Prerequisite from E11: DynamoDB repository implementations'
@@ -105,14 +113,6 @@ spec:
       inputs:
         goalRef: v3-e20-t02-upload-pipeline
         specRef: plan_specs/v3/e20-file-intelligence/t02-upload-pipeline.yaml
-    - id: ext-v3-e20-t03-docx-structure-parser
-      kind: External
-      name: 'Prerequisite from E20: DOCX structure parser'
-      description: >-
-        Cross-epic prerequisite owned by v3-e20-file-intelligence (release v3.0).
-      inputs:
-        goalRef: v3-e20-t03-docx-structure-parser
-        specRef: plan_specs/v3/e20-file-intelligence/t03-docx-structure-parser.yaml
     - id: t01
       kind: Task
       name: ArgumentTable and GraphRepository
@@ -144,7 +144,7 @@ spec:
         goalRef: v3-e21-t02-node-extraction
       dependsOn:
       - t01
-      - ext-v3-e20-t03-docx-structure-parser
+      - ext-v1-e31-t03-debate-docx-parser
       - ext-v3-e20-t02-upload-pipeline
       - ext-v2-e13-t02-sqs-workers
       acceptanceCriteria:

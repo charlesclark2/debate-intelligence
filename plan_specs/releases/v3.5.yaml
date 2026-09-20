@@ -15,7 +15,7 @@ metadata:
 spec:
   description: >-
     A persisted, replayable round state machine models Policy/LD/PF formats, judge profiles and the flow.
-  priority: 15
+  priority: 17
   acceptanceCriteria:
   - id: epic-e26
     description: >-

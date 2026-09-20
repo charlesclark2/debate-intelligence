@@ -1,0 +1,224 @@
+# TASK v1-e32-t02-position-classification — Position classification
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §13 Coverage analysis (archetypes), §10 structured outputs, §8 (no model evidence)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t02-position-classification
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: Position classification
+    debate/architecture-refs: §2, §8, §10, §13, §16
+spec:
+  description: >-
+    Implement PositionClassificationService, which assigns each parsed section (pocket/hat/block) and card
+    in a disclosed round document to a taxonomy position with a role (READS the position, or ANSWERS it
+    under an AT:/A2 heading), confidence, rationale and method. Stage one is deterministic: normalized
+    heading paths and tags are matched against the t01 aliases and tag keywords, and cards inherit their
+    enclosing block's position. Stage two sends only the still-unmatched items through the ModelRouter
+    (high-volume classification route, prompt landscape.classify_position with a semver version) with the
+    heading path, tag, short cite and a bounded excerpt as input, validated by the E05
+    StructuredOutputGuard into a PositionClassification schema whose position_id must be in the resolved
+    taxonomy. The model returns ids, confidence and a short rationale only; it never writes tags, cites or
+    evidence text. Results are cached by (item fingerprint, taxonomy_version, prompt version) so weekly
+    reruns on cumulative archives only classify new items, and low-confidence or unmatched items go to a
+    review queue whose coach decisions become deterministic overrides. Boundaries: taxonomy content is
+    t01; aggregation and reports are t03/t04; the CLI entry point and the first full-corpus run are t05.
+  priority: 1
+  constraints:
+    packages:
+      - debate_core.domain
+      - debate_core.application
+      - debate_core.arguments
+      - debate_core.integrations
+      - prompts/landscape
+      - tests/fixtures/landscape
+    forbidden:
+      - Model output that contains or replaces tag, cite or evidence text (ids, confidence, rationale only)
+      - Sending documents to the model whole; only unmatched items with a bounded excerpt are sent
+      - Calling the model for items the deterministic stage already matched
+      - Accepting a position_id that is not in the resolved taxonomy version
+      - Live model calls in CI (fake/replay ModelRouter and committed cassettes only)
+      - Team codes, school names or debater names in the prompt input or in cassettes
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/
+  context:
+    - kind: TaskRef
+      name: v1-e32-t01-position-taxonomy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t05-structured-output-validation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t01-caselist-data-use-policy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On the synthetic labeled fixture set (at least 20 items per format) the deterministic stage alone
+        reaches 100% accuracy on items that carry a taxonomy alias, AT:/A2 headings yield role ANSWERS,
+        and the fake router records zero model calls for those items.
+    - id: ac2
+      description: >-
+        Each PositionClassification records item id, position_id or null, role, confidence (0-1),
+        rationale (<= 280 chars), method (ALIAS, TAG_KEYWORD, INHERITED, OVERRIDE, MODEL), taxonomy_version,
+        and for MODEL results prompt_id, prompt_version and model_id.
+    - id: ac3
+      description: >-
+        A post-validation check rejects a model result whose rationale repeats 12 or more consecutive words
+        of the card's evidence text or whose position_id is unknown, and the item goes to the review queue
+        instead of being accepted.
+    - id: ac4
+      description: >-
+        Items with no match or confidence below the configurable threshold (default 0.6) are written to the
+        review queue with their heading path and candidate positions; applying a coach decision file adds
+        an OVERRIDE rule so the same normalized heading is classified deterministically next run.
+    - id: ac5
+      description: >-
+        A second run over an unchanged snapshot makes zero model calls (cache hit rate 100%), and a
+        taxonomy_version or prompt version bump invalidates only the affected cached results.
+    - id: ac6
+      description: >-
+        Replay-mode evaluation against a coach-labeled 60-item set (20 per format, cassettes recorded once
+        by the operator) reports per-format accuracy of at least 85% for classified items.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t02-position-classification-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Build the output contract, the deterministic matcher, the model stage with its prompt and guard, then
+    the cache and review queue, and finish with a replay-backed labeled evaluation.
+  goalRef:
+    name: v1-e32-t02-position-classification
+  graph:
+    nodes:
+      - id: classification-contract
+        kind: Task
+        name: PositionClassification contract
+        description: >-
+          Pydantic PositionClassification, ClassificationMethod and PositionRole (READS, ANSWERS) models
+          with extra=forbid, plus a builder that constrains position_id to the resolved taxonomy's active
+          ids (a Literal/enum generated per taxonomy version for the model schema).
+        outputs: [packages/debate_core/src/debate_core/domain/landscape_classification.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Classification contract exists
+            path: packages/debate_core/src/debate_core/domain/landscape_classification.py
+            contentMatch: "class PositionClassification"
+          - type: test_passes
+            name: Contract schema tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_landscape_classification.py]
+      - id: deterministic-matcher
+        kind: Task
+        name: Deterministic heading and tag matcher
+        description: >-
+          Match normalized heading paths (t01 normalizer) against aliases and overrides, fall back to tag
+          keywords, propagate block positions to child cards (INHERITED), and set role ANSWERS under
+          AT:/A2 headings; operates on synthetic parsed-store fixtures.
+        dependsOn: [classification-contract]
+        outputs:
+          - packages/debate_core/src/debate_core/arguments/landscape/matcher.py
+          - tests/fixtures/landscape/labeled_items.yaml
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Deterministic matcher tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape/test_matcher.py]
+      - id: model-stage
+        kind: Task
+        name: Model classification stage and prompt
+        description: >-
+          Register prompts/landscape/classify_position.md (v1.0.0, classification task class) and call it
+          through StructuredOutputGuard for unmatched items in batches; post-validate unknown ids and
+          evidence n-gram echoes in the rationale; enforce a per-run max_model_items setting.
+        dependsOn: [deterministic-matcher]
+        outputs:
+          - prompts/landscape/classify_position.md
+          - packages/debate_core/src/debate_core/application/position_classification.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Classification prompt is registered with an id and version
+            path: prompts/landscape/classify_position.md
+            contentMatch: "prompt_id: landscape.classify_position"
+          - type: test_passes
+            name: Model stage tests pass with the fake router
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_position_classification.py
+              - -k
+              - model
+      - id: cache-and-review-queue
+        kind: Task
+        name: Result cache and review queue
+        description: >-
+          Persist classifications per caselist in the local data dir keyed by item fingerprint,
+          taxonomy_version and prompt version; write review-queue items as CSV and ingest a coach decisions
+          CSV into config/landscape/overrides/<topic_id>.yaml.
+        dependsOn: [model-stage]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/landscape/classification_store.py
+          - packages/debate_core/src/debate_core/arguments/landscape/review_queue.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cache and review-queue tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_position_classification.py
+              - -k
+              - "cache or review"
+      - id: labeled-eval
+        kind: Task
+        name: Labeled replay evaluation and quality gates
+        description: >-
+          Coach labels 60 scrubbed items (headings, tags, short cites only); the operator records cassettes
+          once in record mode against dev Bedrock and commits them; a replay eval test reports per-format
+          accuracy and runs offline in CI.
+        dependsOn: [cache-and-review-queue]
+        outputs:
+          - tests/fixtures/landscape/eval_labeled_60.yaml
+          - tests/fixtures/model_cassettes/landscape/
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Replay evaluation meets the accuracy threshold offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape/test_classification_eval.py]
+          - type: custom
+            name: Coach confirms the labeled set
+            description: >-
+              Coach confirms the 60 labels reflect how the team would name each position and that the set
+              contains no team codes, school names or debater names.
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

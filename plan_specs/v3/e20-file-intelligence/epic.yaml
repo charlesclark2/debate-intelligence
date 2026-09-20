@@ -18,9 +18,9 @@ metadata:
     debate/architecture-refs: §6 FileIntelligenceService, §13 Argument graph (file parsing)
 spec:
   description: >-
-    Upload debate files and parse them into structural units — pockets/hats/blocks/tags, citations, evidence
-    and analytics — preserving formatting metadata.
-  priority: 10
+    Upload debate files through the web app and parse them with the V1 debate-docx parser (E31) into pockets/hats/blocks/tags,
+    cites, evidence and analytics, preserving formatting metadata.
+  priority: 12
   constraints:
     majorVersion: v3
     release: v3.0
@@ -28,14 +28,14 @@ spec:
   acceptanceCriteria:
   - id: ac1
     description: >-
-      Uploaded DOCX files are stored privately with hashes and parsed asynchronously.
+      Uploaded DOCX files are stored privately with hashes and parsed asynchronously by the shared V1
+      parser.
   - id: ac2
     description: >-
-      The parser identifies headings, tags, cites, evidence and analytics with measured accuracy on the
-      team's own files.
+      Parsed sections keep underline/highlight metadata and link to Card records.
   - id: ac3
     description: >-
-      Parsed sections keep underline/highlight metadata and link to Card records.
+      Parser accuracy on uploaded files is tracked against the V1 parser evaluation set.
 status:
   phase: Pending
 ---
@@ -65,14 +65,14 @@ spec:
       inputs:
         goalRef: v1-e02-t04-repo-contract-tests
         specRef: plan_specs/v1/e02-domain-core/t04-repo-contract-tests.yaml
-    - id: ext-v1-e06-t03-format-profiles
+    - id: ext-v1-e31-t03-debate-docx-parser
       kind: External
-      name: 'Prerequisite from E06: Card format profiles from team conventions'
+      name: 'Prerequisite from E31: Debate .docx parser'
       description: >-
-        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
       inputs:
-        goalRef: v1-e06-t03-format-profiles
-        specRef: plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml
+        goalRef: v1-e31-t03-debate-docx-parser
+        specRef: plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml
     - id: ext-v2-e11-t01-access-pattern-design
       kind: External
       name: 'Prerequisite from E11: AppTable access-pattern design'
@@ -113,14 +113,14 @@ spec:
       inputs:
         goalRef: v2-e17-t03-library-ui
         specRef: plan_specs/v2/e17-card-library/t03-library-ui.yaml
-    - id: ext-v2-e18-t01-card-parser
+    - id: ext-v2-e35-t04-tub-ui
       kind: External
-      name: 'Prerequisite from E18: Pasted-card parser'
+      name: 'Prerequisite from E35: Tub UI'
       description: >-
-        Cross-epic prerequisite owned by v2-e18-card-extensions (release v2.3).
+        Cross-epic prerequisite owned by v2-e35-debate-tub (release v2.1).
       inputs:
-        goalRef: v2-e18-t01-card-parser
-        specRef: plan_specs/v2/e18-card-extensions/t01-card-parser.yaml
+        goalRef: v2-e35-t04-tub-ui
+        specRef: plan_specs/v2/e35-debate-tub/t04-tub-ui.yaml
     - id: t01
       kind: Task
       name: DebateFile and FileSection model
@@ -164,47 +164,6 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v3-e20-t02-upload-pipeline
-    - id: t03
-      kind: Task
-      name: DOCX structure parser
-      description: >-
-        Detect Verbatim-style heading levels (pocket/hat/block/tag), cites, evidence, analytics, underline/highlight/bold
-        runs into FileSections and ParsedCards.
-      inputs:
-        specRef: plan_specs/v3/e20-file-intelligence/t03-docx-structure-parser.yaml
-        goalRef: v3-e20-t03-docx-structure-parser
-      dependsOn:
-      - t01
-      - ext-v1-e06-t03-format-profiles
-      - ext-v2-e18-t01-card-parser
-      acceptanceCriteria:
-      - type: command_succeeds
-        name: Task spec v3-e20-t03-docx-structure-parser reports phase Succeeded
-        command: uv
-        args:
-        - run
-        - scripts/validate_specs.py
-        - --require-succeeded
-        - v3-e20-t03-docx-structure-parser
-    - id: t04
-      kind: Task
-      name: Parser accuracy evaluation
-      description: >-
-        Labeled set from 2024–2026 team files; per-unit precision/recall report and regression gate.
-      inputs:
-        specRef: plan_specs/v3/e20-file-intelligence/t04-parser-eval.yaml
-        goalRef: v3-e20-t04-parser-eval
-      dependsOn:
-      - t03
-      acceptanceCriteria:
-      - type: command_succeeds
-        name: Task spec v3-e20-t04-parser-eval reports phase Succeeded
-        command: uv
-        args:
-        - run
-        - scripts/validate_specs.py
-        - --require-succeeded
-        - v3-e20-t04-parser-eval
     - id: t05
       kind: Task
       name: File library UI
@@ -215,8 +174,9 @@ spec:
         goalRef: v3-e20-t05-file-library-ui
       dependsOn:
       - t02
-      - t03
+      - ext-v1-e31-t03-debate-docx-parser
       - ext-v2-e17-t03-library-ui
+      - ext-v2-e35-t04-tub-ui
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v3-e20-t05-file-library-ui reports phase Succeeded

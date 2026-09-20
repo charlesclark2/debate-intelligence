@@ -14,10 +14,9 @@ metadata:
     debate/title: v2.0 — Cloud platform foundation
 spec:
   description: >-
-    AWS accounts/Terraform/CI deploy, DynamoDB + S3 repositories passing the same contract tests, Cognito
-    auth and the FastAPI service are live in dev and prod, with every prod deploy promoted from a validated
-    dev deploy.
-  priority: 5
+    Keyless CI deploys, DynamoDB + S3 repositories passing the same contract tests, Cognito auth and the
+    FastAPI service are live in dev and prod, with every prod deploy promoted from a validated dev deploy.
+  priority: 7
   acceptanceCriteria:
   - id: epic-e10
     description: >-

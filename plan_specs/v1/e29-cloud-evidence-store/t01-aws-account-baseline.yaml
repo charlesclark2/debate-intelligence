@@ -1,0 +1,183 @@
+# TASK v1-e29-t01-aws-account-baseline — AWS account baseline
+# Epic: E29 Cloud Evidence Store (S3) | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §4, §5, §7 (S3 system of record), §14 least privilege, §15 cost, ADR-0003, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t01-aws-account-baseline
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: AWS account baseline
+    debate/architecture-refs: §4, §5, §7, §14, §15, ADR-0003, ADR-0013
+    debate/moved-from: v2-e10-t01-aws-account-baseline
+spec:
+  description: >-
+    Stand up the AWS account structure the V1 evidence store (and later every V2 resource) lands in.
+    Moved forward from V2 (was v2-e10-t01) because disclosed caselist evidence lives in S3 from v1.1.
+    Deliverables: an AWS Organization with separate dev and prod member accounts (exactly two
+    environments per ADR-0013 — no stage; a single-account fallback is allowed only if recorded in
+    ADR-0010 with strict environment tagging), IAM Identity Center users for Charlie and any adult
+    maintainers, root-user lockdown, an organization CloudTrail, per-account budgets with billing
+    alarms, and ADR-0010 recording the primary region. The region decision weighs Bedrock
+    availability of the models the ModelRouter routes to (E05, v1.2) and, for V2, OpenSearch Serverless,
+    because the evidence buckets created in t03 should not need to move later. The runbook also
+    documents the named AWS CLI SSO profiles (one per environment) that the operator and the
+    `debate-research store` commands (t05) use. This is a small, largely manual bootstrap: manual
+    console steps and operator-run Terraform applies are recorded in a runbook; CI never applies
+    anything. Out of scope: remote Terraform state and env roots (t02), evidence buckets, the evidence
+    KMS key and the least-privilege operator permission set (t03), GitHub OIDC deploy roles
+    (v2-e10-t03), V2 KMS/Secrets (v2-e10-t04) and networking (v2-e10-t05). Students (who may be
+    minors) never receive AWS console or IAM access.
+  priority: 1
+  constraints:
+    packages: [infrastructure/bootstrap/organization, docs/adr, docs/runbooks]
+    forbidden:
+      - Long-lived IAM user access keys for humans or CI
+      - Root-user access keys or day-to-day use of the root user
+      - Granting AWS console/IAM access to students (who may be minors)
+      - A stage environment or account (ADR-0013 allows dev and prod only)
+      - Committing account ids, emails or credentials beyond what the runbook needs (use placeholders)
+      - terraform apply from CI or from an agent session (operator step only)
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/adr/0010-primary-aws-region.md is Accepted and records the primary region with a table of
+        Bedrock on-demand or inference-profile availability for every model id in the ModelRouter
+        routing config, plus S3 and OpenSearch Serverless availability and price notes.
+    - id: ac2
+      description: >-
+        dev and prod member accounts (or the ADR-approved single-account alternative) exist under an
+        Organization; root users have MFA and no access keys; humans sign in only through IAM Identity
+        Center with named permission sets.
+    - id: ac3
+      description: >-
+        An organization-wide, multi-region CloudTrail writes to a dedicated private, versioned,
+        encrypted S3 bucket with log-file validation enabled.
+    - id: ac4
+      description: >-
+        AWS Budgets exist per account with 50/80/100% alerts against a documented V1 monthly cap, plus a
+        Cost Anomaly Detection monitor, all notifying Charlie's email; a test alert was received.
+    - id: ac5
+      description: >-
+        docs/runbooks/aws-account-baseline.md lets another adult engineer reproduce the baseline,
+        lists every manual/operator step not in Terraform, and shows how to configure the per-environment
+        AWS CLI SSO profiles (e.g. debate-dev, debate-prod) and `aws sso login`.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t01-aws-account-baseline-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Decide the region first (it pins where the evidence buckets live), then create the organization and
+    identity baseline, turn on audit and cost guardrails with operator-run applies, and finish with a
+    reproducible runbook including the SSO CLI profiles later tasks rely on.
+  goalRef:
+    name: v1-e29-t01-aws-account-baseline
+  graph:
+    nodes:
+      - id: region-adr
+        kind: Task
+        name: ADR-0010 primary region from Bedrock availability
+        description: >-
+          Check Bedrock model access and cross-region inference profiles for every model id in the
+          ModelRouter routing config (config/model-routing), compare candidate regions (e.g. us-east-1,
+          us-west-2) on availability, price and OpenSearch Serverless support, and record the decision
+          and the single-account fallback rule in ADR-0010 using the ADR template.
+        outputs: [docs/adr/0010-primary-aws-region.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ADR-0010 exists with a Bedrock availability table
+            path: docs/adr/0010-primary-aws-region.md
+            contentMatch: "Bedrock"
+      - id: org-and-identity
+        kind: Task
+        name: Organization, dev/prod accounts and IAM Identity Center
+        description: >-
+          Create the Organization and the dev and prod member accounts, enable IAM Identity Center with
+          permission sets (AdministratorAccess break-glass, PowerUser for maintainers, ReadOnly), enforce
+          MFA, and lock down root users. Organization creation and root MFA are manual console steps;
+          the permission-set Terraform is applied by the operator from infrastructure/bootstrap.
+        dependsOn: [region-adr]
+        outputs:
+          - infrastructure/bootstrap/organization/main.tf
+          - infrastructure/bootstrap/organization/identity.tf
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Organization bootstrap Terraform validates
+            command: terraform
+            args: [-chdir=infrastructure/bootstrap/organization, validate]
+          - type: custom
+            name: Root MFA and no root access keys confirmed
+            description: >-
+              Charlie confirms in the IAM credential report for each account that root has MFA enabled
+              and no active access keys, and that no IAM users with access keys exist.
+      - id: cloudtrail
+        kind: Task
+        name: Organization CloudTrail
+        description: >-
+          Define an organization trail (all regions, management events, log-file validation) into a
+          private, versioned, SSE-encrypted log bucket with block public access and a TLS-only policy;
+          operator-run apply.
+        dependsOn: [org-and-identity]
+        outputs: [infrastructure/bootstrap/organization/cloudtrail.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CloudTrail definition enables log-file validation
+            path: infrastructure/bootstrap/organization/cloudtrail.tf
+            contentMatch: "enable_log_file_validation = true"
+      - id: budgets
+        kind: Task
+        name: Budgets, billing alarms and anomaly detection
+        description: >-
+          Per-account monthly budgets sized for V1 (S3 storage plus light Bedrock use) with 50/80/100%
+          alerts, a Cost Anomaly Detection monitor and subscription, and a Bedrock-specific usage budget
+          for early warning on model spend; operator-run apply.
+        dependsOn: [org-and-identity]
+        outputs: [infrastructure/bootstrap/organization/budgets.tf]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Budgets are defined in Terraform
+            path: infrastructure/bootstrap/organization/budgets.tf
+            contentMatch: "aws_budgets_budget"
+      - id: runbook
+        kind: Task
+        name: Account baseline runbook and SSO CLI profiles
+        description: >-
+          Write the runbook: manual steps (Organization creation, root MFA, Identity Center invites),
+          operator-run apply order, region rationale, where budget alerts route, and the
+          `aws configure sso` profile setup for debate-dev and debate-prod used by t03-t05.
+        dependsOn: [cloudtrail, budgets]
+        outputs: [docs/runbooks/aws-account-baseline.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Runbook exists and documents SSO profiles
+            path: docs/runbooks/aws-account-baseline.md
+            contentMatch: "aws configure sso"
+          - type: custom
+            name: Operator walkthrough of the baseline
+            description: >-
+              Charlie signs in through Identity Center to the dev and prod accounts with the documented
+              SSO profiles (`aws sts get-caller-identity --profile debate-dev|debate-prod`) and confirms a
+              test budget alert email was received.
+status:
+  phase: Pending

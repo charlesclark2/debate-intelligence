@@ -13,5 +13,7 @@
 | [../ROADMAP.md](../ROADMAP.md) | Releases, epics and tasks with status |
 
 Directories added later as they are needed: `runbooks/` (operations), `guides/` (student and
-coach guides), `data/` (data models and access patterns). See the directory table in
+coach guides), `data/` (data models, access patterns, and recorded results of operator-run data jobs
+such as the caselist backfill), `policies/` (data-use policies, starting with the caselist and
+OpenEv policy). See the directory table in
 [working-agreements.md](process/working-agreements.md#3-documentation-lives-in-predictable-places).

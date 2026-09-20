@@ -1,5 +1,5 @@
 # TASK v1-e06-t05-json-manifest-export — JSON manifest export
-# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
 # Architecture refs: §6 ExportService, §8 step 6 (persist provenance), §10 prompt governance, §11, §20 step 7
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
   annotations:
     debate/title: JSON manifest export
@@ -68,7 +68,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
 spec:
   description: >-

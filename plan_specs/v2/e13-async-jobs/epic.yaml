@@ -1,5 +1,5 @@
 # EPIC E13 — Async Job Orchestration
-# Major version: V2 | Release: v2.1 (Async jobs & web Cut-a-Card)
+# Major version: V2 | Release: v2.1 (Web app, debate tub & async jobs)
 # Architecture refs: §5 Step Functions/SQS/EventBridge, ADR-009, §15
 # Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
 ---
@@ -20,7 +20,7 @@ spec:
   description: >-
     Represent slow work as durable jobs: SQS-backed workers, Step Functions workflows for card and search
     jobs, status APIs and domain events.
-  priority: 6
+  priority: 8
   constraints:
     majorVersion: v2
     release: v2.1
@@ -60,7 +60,7 @@ spec:
       kind: External
       name: 'Prerequisite from E06: CardService pipeline'
       description: >-
-        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.3).
       inputs:
         goalRef: v1-e06-t02-card-service
         specRef: plan_specs/v1/e06-card-cutting/t02-card-service.yaml
@@ -68,7 +68,7 @@ spec:
       kind: External
       name: 'Prerequisite from E08: SearchService fan-out'
       description: >-
-        Cross-epic prerequisite owned by v1-e08-research-workflows (release v1.2).
+        Cross-epic prerequisite owned by v1-e08-research-workflows (release v1.4).
       inputs:
         goalRef: v1-e08-t01-federated-search-service
         specRef: plan_specs/v1/e08-research-workflows/t01-federated-search-service.yaml
@@ -76,7 +76,7 @@ spec:
       kind: External
       name: 'Prerequisite from E08: `debate-research daily` digests'
       description: >-
-        Cross-epic prerequisite owned by v1-e08-research-workflows (release v1.2).
+        Cross-epic prerequisite owned by v1-e08-research-workflows (release v1.4).
       inputs:
         goalRef: v1-e08-t07-daily-command
         specRef: plan_specs/v1/e08-research-workflows/t07-daily-command.yaml

@@ -1,0 +1,208 @@
+# TASK v1-e33-t05-file-publish — Publish built files to S3
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §6 ExportService, §7 S3 system of record, §8 provenance, §14, ADR-0003, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t05-file-publish
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: Publish built files to S3
+    debate/architecture-refs: §6, §7, §8, §14, ADR-0003, ADR-0013
+spec:
+  description: >-
+    Add `debate-research files publish <built.docx|dir> [--dry-run]` which runs the t04 quality checks
+    and refuses any file that does not PASS, then uploads the .docx, its .provenance.json, .quality.json
+    and the recipe to the files/ prefix of the evidence bucket for DEBATE_ENV (dev or prod) through the
+    blob-store port and the E29 store mechanics. A metadata.json per file (the contract the V2 debate tub
+    indexes in v2-e35-t02) carries title, topic, event format, caselist slugs, position, side, card count,
+    recipe_hash, builder/style-profile/checker versions, quality status and built_at, plus explicit source
+    reverse-lookup fields: a sources[] list of {caselist, school, team_code, snapshot, source_sha256} and
+    flattened lookup arrays (caselists, schools, team_codes, source_sha256s) so the takedown flows
+    (v1-e30-t07, v2-e35-t05) can find every published file built from a given source, school or team.
+    Keys are deterministic from topic, position, side, file slug
+    and recipe hash, so republishing an unchanged file is a no-op. Dev holds synthetic sample files only;
+    publishing the coach's first real files to prod is an operator step. Boundaries: indexing, browsing,
+    access audit and executing takedowns are v1-e30-t07 and E35 (this task only makes files findable
+    by source); bucket, encryption and IAM are E29 t03; building and checking
+    are t03/t04.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_cli, docs/data, tests/smoke]
+    forbidden:
+      - Uploading a file without a PASS quality report for the exact bytes being uploaded
+      - Importing boto3/botocore in debate_core domain/ or application/ (S3 only via the blob-store port)
+      - Public ACLs, public bucket policies or long-lived presigned URLs
+      - Real caselist-derived files in the dev bucket (synthetic samples only)
+      - Student names in metadata, S3 object metadata or logs (team codes only as disclosed)
+  context:
+    - kind: TaskRef
+      name: v1-e33-t03-file-build-cli
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e33-t04-file-quality-checks
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e29-t05-evidence-sync-cli
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A file whose quality report is missing, stale (sha256 differs from the .docx) or FAIL is not
+        uploaded and the command exits non-zero naming the failing checks.
+    - id: ac2
+      description: >-
+        Published objects land at files/<topic>/<side>/<position>/<slug>/<recipe-hash-12>/ with .docx,
+        .provenance.json, .quality.json, recipe.yaml and metadata.json, and metadata.json validates against
+        docs/data/built-file-metadata.schema.json.
+    - id: ac3
+      description: >-
+        Publishing is idempotent (unchanged files report SKIPPED), verifies checksums after upload, and
+        --dry-run lists the keys that would be written without calling S3 (moto-backed tests).
+    - id: ac4
+      description: >-
+        docs/data/built-file-metadata.md documents the files/ layout and metadata contract for E35, and
+        tests/smoke/test_files_publish.py exercises a dry-run publish in validate-dev.
+    - id: ac5
+      description: >-
+        The operator publishes synthetic samples to dev and the first coach-approved real files to prod,
+        and records the result (keys, counts, statuses; no team codes) in docs/data/file-publish-log.md.
+    - id: ac6
+      description: >-
+        Given a source sha256, school or team code, a lookup over published metadata.json objects returns
+        exactly the built files containing cards from that source (tested with moto), and every source in
+        a file's provenance sidecar appears in its metadata sources[].
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t05-file-publish-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Define the metadata contract first, build the quality-gated publish service and command against
+    moto, add smoke checks, then the operator publishes to dev and prod and records the result.
+  goalRef:
+    name: v1-e33-t05-file-publish
+  graph:
+    nodes:
+      - id: metadata-contract
+        kind: Task
+        name: Built-file metadata contract and key layout
+        description: >-
+          BuiltFileMetadata Pydantic model including the source reverse-lookup fields (sources[] of
+          caselist, school, team_code, snapshot, source_sha256, and flattened caselists, schools,
+          team_codes, source_sha256s arrays derived from the provenance sidecar), deterministic key builder
+          for the files/ prefix, generated docs/data/built-file-metadata.schema.json, and
+          docs/data/built-file-metadata.md describing the layout and takedown lookup for E35 and
+          v1-e30-t07.
+        outputs:
+          - packages/debate_core/src/debate_core/domain/built_file_metadata.py
+          - docs/data/built-file-metadata.schema.json
+          - docs/data/built-file-metadata.md
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Metadata contract documented
+            path: docs/data/built-file-metadata.md
+            contentMatch: "source_sha256s"
+          - type: test_passes
+            name: Metadata model and key builder tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_built_file_metadata.py]
+      - id: publish-service
+        kind: Task
+        name: Quality-gated FilePublishService
+        description: >-
+          Run FileQualityService (t04) on the exact bytes, refuse non-PASS or stale reports, build
+          metadata, upload the object set via the blob-store port with checksum verification, skip
+          unchanged objects, and support dry-run; also find_by_source(source_sha256 | school | team_code)
+          over published metadata for takedowns; tested with moto through the E29 S3 adapter.
+        dependsOn: [metadata-contract]
+        outputs: [packages/debate_core/src/debate_core/application/file_publish_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Publish service tests pass (moto)
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_publish_service.py]
+          - type: test_passes
+            name: Source reverse lookup finds every affected published file (moto)
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_file_publish_service.py
+              - -k
+              - find_by_source
+      - id: publish-command
+        kind: Task
+        name: "`files publish` command"
+        description: >-
+          `debate-research files publish <path> [--dry-run]` added to the files command group, showing
+          the target environment and bucket, per-file PUBLISHED/SKIPPED/REFUSED and refused checks.
+        dependsOn: [publish-service]
+        outputs: [packages/debate_cli/src/debate_cli/commands/files.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Publish command tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_files.py, -k, publish]
+          - type: command_succeeds
+            name: Type check passes for debate_cli
+            command: uv
+            args: [run, pyright, packages/debate_cli]
+      - id: smoke-checks
+        kind: Task
+        name: Smoke check for publish
+        description: >-
+          tests/smoke/test_files_publish.py builds a synthetic recipe and runs a dry-run publish against
+          the dev configuration so validate-dev covers the command.
+        dependsOn: [publish-command]
+        outputs: [tests/smoke/test_files_publish.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Publish smoke check passes
+            command: uv
+            args: [run, pytest, tests/smoke/test_files_publish.py]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+      - id: operator-publish
+        kind: Task
+        name: Operator publish to dev then prod
+        description: >-
+          Operator-run: publish the synthetic sample files to dev and confirm with `debate-research store
+          ls files/`; after the coach approves two or three real built files (quality PASS), publish them
+          to prod and record keys, counts and statuses (no team codes) in docs/data/file-publish-log.md.
+        dependsOn: [smoke-checks]
+        outputs: [docs/data/file-publish-log.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Publish log records the prod publish
+            path: docs/data/file-publish-log.md
+            contentMatch: "prod"
+          - type: custom
+            name: Coach approves the first published real files
+            description: >-
+              Coach reviews the built files, their provenance sidecars and quality reports before the
+              prod publish and confirms the published object set in the bucket matches the log.
+status:
+  phase: Pending

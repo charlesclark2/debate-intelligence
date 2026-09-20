@@ -14,8 +14,9 @@ metadata:
     debate/title: v3.0 — Debate file intelligence & argument graph
 spec:
   description: >-
-    Uploaded debate files are parsed into sections/cards and an explicit, sourced argument graph.
-  priority: 10
+    Uploaded debate files are parsed (with the V1 parser) into sections/cards and an explicit, sourced
+    argument graph.
+  priority: 12
   acceptanceCriteria:
   - id: epic-e20
     description: >-

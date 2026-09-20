@@ -34,7 +34,7 @@ spec:
     install pnpm the way site/README.md records and keep that note current.
   priority: 1
   constraints:
-    packages: [site/content, site/src/app, site/tests]
+    packages: [site/content, site/src/app, site/src/lib, site/tests]
     forbidden:
       - Student surnames, contact details, ages, or photos without district media consent
       - Invented facts (fees, practice times, travel policy, coach credentials, results) not supplied by Charlie
@@ -63,7 +63,11 @@ spec:
       description: >-
         A content-policy test fails the build if content contains an email address outside the allowlist
         of coach/team addresses, a phone number, an image without an entry in the media-consent manifest,
-        a placeholder marker, or a script or iframe from another origin.
+        a placeholder marker, or a script or iframe from another origin. Named students and consented
+        images carry a consent entry with the season and the date checked (docs/policies/website-publishing.md:
+        consent renews annually at the start of the season); the build fails in prod when any entry is
+        missing and warns when one predates the current season, so a lapsed start-of-season check is
+        visible without anyone remembering to look.
     - id: ac4
       description: >-
         The Debater login link is absent from the built HTML when the feature flag is off (the default)
@@ -155,7 +159,9 @@ spec:
         description: >-
           A vitest suite over site/content/ and site/out/ that rejects non-allowlisted emails, phone
           numbers, images missing from site/content/media-consent.yaml, placeholder markers in a prod
-          build, and cross-origin scripts or iframes; axe-core runs over every built page.
+          build, and cross-origin scripts or iframes; the same manifest carries season and
+          date-checked per named student and per image, failing a prod build on a missing entry and
+          warning on one older than the current season; axe-core runs over every built page.
         dependsOn: [contact-and-login-flag]
         outputs: [site/tests/content-policy.test.ts, site/tests/pages-a11y.test.ts]
         estimatedEffort: 1.5h

@@ -66,7 +66,8 @@ infers, extends or softens it.
 | What was approved | A public website for the debate team |
 | Conditions attached | **None stated.** The activities director attached no conditions to the approval |
 | How the site must describe itself | **"A team-run site for Whitefish Bay debate."** The site presents itself as the team's, not as an official district communication |
-| Media consent | **The team has students sign consent forms, which are maintained by the activities office.** Photographs publish only against a form on file there; see [Photos and media consent](#photos-and-media-consent) |
+| Media consent | **The team has students sign consent forms, which are maintained by the activities office.** Names and photographs publish only against a form on file there; see [Photos and media consent](#photos-and-media-consent) |
+| Media consent covers a team website | **Confirmed by Randee Drew, Athletics and Activities Director, on 2026-09-20**: the district's media-consent form covers publication on a team website, **and it renews annually at the start of each season.** This resolved [open question 3](#open-questions) and is what makes [Consent renewal and the start-of-season check](#consent-renewal-and-the-start-of-season-check) a rule rather than a precaution |
 | Where the written record is kept | Charlie's record of the approval. **Not committed to this repository** |
 
 **"None stated" is recorded as a fact, not read as permission.** The district attaching no
@@ -123,47 +124,101 @@ in every announcement, in every calendar entry, in every image caption and in ev
 
 ### What may be published about a student
 
-| | Default | Requires | Never |
-|---|---|---|---|
-| **Name** | **First name, last name and graduation year** | Nothing beyond the student being a team member | Any name at all, once the student or their family has asked for less; see rule 2 |
-| **Photograph or video** | Not published | **A district media-consent form on file with the activities office**, covering that student, not withdrawn | A student with no form on file, or whose family opted out |
-| **Contact details** | Not published | — | **Always never. No consent makes these publishable** |
+**Consent is the gate for everything.** Nothing about a student publishes because the student is
+on the team. It publishes because a district media-consent form covering that student is on file
+with the activities office **for the current season** and has not been withdrawn.
 
-1. **Full name and graduation year is the published form.** A student name appears as first name,
-   last name and class year, for example "Jordan Rivera, Class of 2028". The graduation year is
-   written as a class year and travels only beside a name; **age, date of birth, grade level and
-   birthday are never published at all**, with or without a name.
-2. **Any student, parent or guardian may ask for less, at any time, without giving a reason, and
-   it is honored.** The choices are first name only, or no name at all. The request is recorded in
-   the [published-names allowlist](#the-published-names-allowlist) and takes effect on the next
-   deploy under [Removal on request](#removal-on-request). Nobody is asked to justify the request
-   and nobody is talked out of it.
-3. **No student contact details, ever.** No student email address, phone number, social media
+| | Published only when | Published as | Never |
+|---|---|---|---|
+| **Name** | A **district media-consent form for the current season is on file** with the activities office, covering that student, not withdrawn | `FIRST NAME LAST NAME (GRADUATION YEAR)`, for example "Jordan Rivera (2028)" | Any name at all for a student with no current form, with unknown status, or who has asked for less than the full form |
+| **Photograph or video** | The same current-season form is on file. The district confirmed on 2026-09-20 that its form covers publication on a team website ([District approval and conditions](#district-approval-and-conditions)) | See [Photos and media consent](#photos-and-media-consent) | A student with no current form, whose family opted out, or who appears in a group shot where anyone lacks consent |
+| **Contact details** | — | — | **Always. No form and no consent makes these publishable** |
+
+1. **The published form of a student's name is `FIRST NAME LAST NAME (GRADUATION YEAR)`** — for
+   example "Jordan Rivera (2028)" — and only for a student with a current-season media-consent
+   form on file. The graduation year travels only beside a name it is attached to; **age, date of
+   birth, grade level and birthday are never published at all**, with or without a name.
+2. **No current form means no name.** A student whose consent cannot be confirmed with the
+   activities office is treated as having no consent and appears only inside a statement that
+   names nobody. **Unknown is no.** The site never publishes on the assumption that a form
+   probably exists, or that last season's form is still good.
+3. **Consent is checked before publishing and again at the start of every season.** See
+   [Consent renewal and the start-of-season check](#consent-renewal-and-the-start-of-season-check),
+   which is a required step, not a reminder.
+4. **Any student, parent or guardian may reduce or withdraw consent at any time, without giving a
+   reason, and it is honored.** The choices are first name only, or no name at all. The request is
+   recorded in the [published-names allowlist](#the-published-names-allowlist) and acted on under
+   [Removal on request](#removal-on-request), which for a student's name or image means **within
+   24 hours**. Nobody is asked to justify the request and nobody is talked out of it.
+5. **Photographs follow the same consent, plus the rules in
+   [Photos and media consent](#photos-and-media-consent)**, which add group shots, metadata,
+   captions and screenshots. A photograph is never published on a form whose season has lapsed.
+6. **No student contact details, ever.** No student email address, phone number, social media
    handle, messaging username, home address, home town beyond "Whitefish Bay", bus route or
-   personal website. This rule has no exception: consent to publish a name is not consent to
-   publish a way to reach a child.
-4. **No photograph without a form on file.** A student photograph publishes only under the
-   district's media-consent process; see [Photos and media consent](#photos-and-media-consent).
-   Unknown consent status is treated as no consent.
-5. **No routine location or schedule that places a named student at a time and place.** The site
+   personal website. This rule has no exception: **consent to publish a name is not consent to
+   publish a way to reach a child.**
+7. **No routine location or schedule that places a named student at a time and place.** The site
    may say when and where the team practices and which tournaments the team attends. It may not
    pair a named student with a specific room, ride, hotel, arrival time or solo travel plan.
-6. **A quote is a publication about the student who said it**, and follows the same name rule as
-   anything else.
-7. **Nothing sensitive, ever.** No disciplinary matter, no grade or academic record, no
+8. **A quote is a publication about the student who said it**, and follows the same consent and
+   name rules as anything else.
+9. **Nothing sensitive, ever.** No disciplinary matter, no grade or academic record, no
    Individualized Education Program or Section 504 information, no health or disability
    information, no family circumstance, no immigration status, no free-or-reduced-lunch status, and
    no team-selection or cut decision about a named student. Where the line is unclear, the content
    does not publish and Charlie decides.
-8. **Former students are not automatically free.** An alum's name stays as it was published, and
-   an alum who asks to be removed is removed exactly as a current student is.
-9. **No student names in the site's machinery.** Image file names, file paths, commit messages,
-   build logs and continuous-integration output carry no student name; photographs are referenced
-   by an opaque consent reference instead.
-10. **No student names in this repository outside published content.** Test fixtures, examples and
+10. **No student names in the site's machinery.** Image file names, file paths, commit messages,
+    build logs and continuous-integration output carry no student name; photographs are referenced
+    by an opaque consent reference instead.
+11. **No student names in this repository outside published content.** Test fixtures, examples and
     documentation, including this policy, use invented names. A student name reaches the
     repository only inside `site/content/` or the allowlist below, which is to say only where it
     is already public on the site.
+
+### Consent renewal and the start-of-season check
+
+The district's media-consent form **renews annually, at the start of each season** (confirmed by
+Randee Drew on 2026-09-20). That makes consent a thing that expires, not a thing that is obtained
+once, and this policy treats it that way.
+
+| | |
+|---|---|
+| Where consent is tracked | **The activities office**, which holds the signed forms. Not this repository, not a coach's files |
+| Who confirms it | **Charlie**, before a student's first appearance and at the start of every season |
+| What is recorded here | Only the opaque consent reference and the date last checked. No form, no signature, no student record |
+
+1. **Consent expires at the end of each season.** Nothing is published about a student whose
+   consent **for the current season** is not on file, **including content that was fine last
+   season**. A name or photograph that was correctly published in 2026-27 is not thereby
+   publishable in 2027-28.
+2. **The start-of-season check is a required step before the first publish of a new season.**
+   Charlie verifies **every named or pictured student** on the live site against the current
+   season's forms, and updates the date checked on each allowlist and media-consent manifest
+   entry. This is checklist item 17 and it gates the season's first deploy.
+3. **Anyone not yet renewed comes off the site until their form arrives**, and goes back on when
+   it does. A lapsed form is an administrative gap, not a judgement about the student: the removal
+   is quiet, is not announced, is not explained to anyone who did not ask, and carries no
+   implication that the student did anything.
+4. **Removal for a lapsed consent runs on the student clock** in
+   [Removal on request](#removal-on-request): name or image off prod within 24 hours of the check
+   finding the gap.
+5. **A season is 1 August to 31 July**, labelled like `2026-27`, matching
+   [caselist-data-use.md](caselist-data-use.md#retention).
+
+### Graduated students
+
+A graduating student's consent does not renew, because they are no longer on the team to renew it.
+The site does not treat that as either blanket permission or blanket erasure.
+
+| Content | What happens at graduation | Why |
+|---|---|---|
+| **Results and rosters** | **Stay, as published.** A season's results and roster are the record of that season and are not rewritten as students leave | They were published under a consent that was in force at the time, and a team record that deletes its own history serves nobody |
+| **Photographs** | **Removed at the end of the following season.** A photograph including a graduated student comes down within that window, whether or not anyone asks | A photograph is a likeness with no expiry date on the internet, and the consent behind it has lapsed |
+| **Announcements and news items naming them** | Stay, as published, and expire on their own schedule | Same reasoning as results |
+| **Anything, on request** | **Removed at any time, regardless of the above, from the student, a parent or the school.** An alum needs no reason and no standing beyond being the person named | [Removal on request](#removal-on-request) applies to alumni exactly as it applies to current students |
+
+**The photograph sweep is checklist item 18**, run as part of the start-of-season check in the
+season after a class graduates.
 
 ### The published-names allowlist
 
@@ -191,9 +246,13 @@ permitted to print live in one reviewed list instead of being spread through the
 ## Photos and media consent
 
 1. **A student photograph publishes only against a district media-consent form on file with the
-   activities office**, covering that student and not withdrawn. No other basis counts: not a
-   parent's verbal "sure", not a photo the student posted themselves, not a photo a tournament
-   published, not a photo already on the district's own site.
+   activities office for the current season**, covering that student and not withdrawn. Randee
+   Drew confirmed on 2026-09-20 that the district's form covers publication on a team website and
+   that it renews annually
+   ([District approval and conditions](#district-approval-and-conditions)), so a form from a
+   previous season is not a basis to publish. No other basis counts either: not a parent's verbal
+   "sure", not a photo the student posted themselves, not a photo a tournament published, not a
+   photo already on the district's own site.
 2. **Unknown is no.** A student whose consent status cannot be confirmed with the activities
    office is treated as having no consent.
 3. **A family that has opted out is never depicted**, including in a group shot they happen to
@@ -227,20 +286,24 @@ permitted to print live in one reviewed list instead of being spread through the
 10. **Screenshots count.** A ballot, a Tabroom bracket, a pairing sheet or a group-chat screenshot
     publishes every name on it and is subject to every rule above. In practice these do not
     publish.
-11. **Consent is re-confirmed each season.** Before the first publication of each school year, a
-    coach confirms with the activities office that each referenced form is still on file and not
-    withdrawn, and updates the "date checked" field. A reference that cannot be re-confirmed means
-    the image comes down.
+11. **Consent is re-confirmed each season**, as part of the required
+    [start-of-season check](#consent-renewal-and-the-start-of-season-check). Charlie confirms with
+    the activities office that each referenced form has been renewed for the current season and
+    not withdrawn, and updates the "date checked" field. **A reference that cannot be
+    re-confirmed means the image comes down within 24 hours**, and goes back up if the form
+    arrives later.
+12. **Photographs of graduated students come down at the end of the following season**, whether
+    or not anyone asks; see [Graduated students](#graduated-students).
 
 ## Results and awards
 
 Results are what most families come to the site for, and they are also the content most likely to
 name a child. Both facts are respected here.
 
-1. **The published form, for a student whose name may be published:**
+1. **The published form, for a student with a current-season media-consent form on file:**
    - **Individual events** (Lincoln-Douglas debate, and any speech event the team enters) are
      published as full name, graduation year, event, tournament and placing, for example
-     "Jordan Rivera, Class of 2028, Lincoln-Douglas debate, quarterfinalist".
+     "Jordan Rivera (2028), Lincoln-Douglas debate, quarterfinalist".
    - **Partner events** (Policy debate, Public Forum debate) name **both** partners with both
      graduation years. A partnership is never published with one half named.
 2. **Otherwise the result publishes in team-level form**, which is always available and is never
@@ -248,9 +311,9 @@ name a child. Both facts are respected here.
 
    > "A Whitefish Bay Public Forum team reached quarterfinals at the Marquette tournament."
 
-   This is the form used whenever a student in the result has asked for a reduced name, is not on
-   the [allowlist](#the-published-names-allowlist), or where either partner's name may not be
-   published.
+   This is the form used whenever a student in the result has asked for a reduced name, has no
+   current-season consent on file, is not on the [allowlist](#the-published-names-allowlist), or
+   where either partner's name may not be published.
 3. **No record, ranking or rating of a student over time.** No win-loss record, no season points
    total, no speaker-point average, no bid count, no leaderboard, no "most improved" table, and no
    ranking of team members against one another. A single tournament placing is a result; an
@@ -264,9 +327,11 @@ name a child. Both facts are respected here.
    performance.** Adults acting in a public judging capacity may be named as such.
 7. **Results are facts Charlie supplies**, taken from the tournament's own published results. An
    implementation session never invents, estimates or reconstructs a result.
-8. **A result comes down on request like anything else**, and a student who asks for a reduced
-   name has their name taken out of every past result, which reverts to team-level form rather
-   than being deleted outright.
+8. **A result comes down on request like anything else**, within 24 hours, and a student who asks
+   for a reduced name has their name taken out of every past result, which reverts to team-level
+   form rather than being deleted outright.
+9. **Past seasons' results stay as published when a student graduates**, as the record of that
+   season; photographs attached to them do not. See [Graduated students](#graduated-students).
 
 ## Branding
 
@@ -466,18 +531,33 @@ published on the site's Contact page (`v1-e36-t04`). The request names the page,
 the person; **no reason is required and none is weighed.** Charlie confirms the requester's
 standing only where the request concerns someone other than the requester.
 
-**Response times.** These match [caselist-data-use.md](caselist-data-use.md#removal), so there is
-one clock across the project.
+**Response times.** Acknowledgement matches
+[caselist-data-use.md](caselist-data-use.md#removal), so there is one clock across the project.
+**Taking a student's name or image down is faster than anything else**, because it is the request
+that cannot wait a week.
 
 | Step | Within | Who |
 |---|---|---|
 | Acknowledge the request | **3 business days** | Charlie, or the coach who received it |
-| Content removed from prod: content or allowlist entry edited, `site/` rebuilt, deployed, **and a CloudFront invalidation issued for the affected paths** (`/*` when in doubt) | **7 calendar days of the request** | Charlie, or a coach with deploy access, running `scripts/site_deploy.sh` (`v1-e36-t05`) |
+| **A student's name or image** removed from prod: content or allowlist entry edited, `site/` rebuilt, deployed, **and a CloudFront invalidation issued for the affected paths** (`/*` when in doubt) | **24 hours of the request, same day the goal** | Charlie, or a coach with deploy access, running `scripts/site_deploy.sh` (`v1-e36-t05`) |
+| Any other content removed from prod, by the same route | **7 calendar days of the request** | The same person |
 | Content removed from the dev preview and from the content source, so the next build cannot restore it | The same run, before prod is redeployed | The same person |
-| Written confirmation to the requester, naming what was removed and when | With the removal, inside the same 7 days | Charlie |
+| Written confirmation to the requester, naming what was removed and when | With the removal, inside the same clock | Charlie |
 
-These are the maximum times the team commits to, not a target to fill. In practice a removal is a
-content edit and a deploy, and it is done as soon as a coach can run it.
+**If a deploy is not possible within 24 hours, the page comes down rather than staying up.**
+Nobody available to rebuild, a broken build, a tournament weekend, a laptop in a hotel: none of
+these extend the clock. The fallback is to delete the affected objects from the prod bucket and
+invalidate, leaving a 404 until a proper rebuild can be deployed. **A missing page is an
+acceptable outcome; a child's name or photograph left up after a family asked for it to come down
+is not.**
+
+The 24-hour and 7-day figures are the maximum times the team commits to, not targets to fill. In
+practice a removal is a content edit and a deploy, and it is done as soon as a coach can run it.
+
+The same 24-hour student clock applies where **no one has asked**: a consent that lapses or cannot
+be re-confirmed at the
+[start-of-season check](#consent-renewal-and-the-start-of-season-check) takes the name or image
+down on the same timetable.
 
 **The invalidation is not optional.** A CloudFront edge cache keeps serving a removed page or
 image after the bucket has been updated. A removal is not complete until the invalidation has
@@ -517,27 +597,30 @@ an announcement or calendar entry (E37), or a donation or donor-recognition chan
 in those tasks cite these items **by number**. A "no" on any item stops the publication until it
 is fixed; there is no "publish and fix it after".
 
-1. **Names.** Every person named in the change is in the
-   [published-names allowlist](#the-published-names-allowlist), in the form the list permits.
-   No surname appears for a student who has asked for a reduced name. No opponent student is
-   named. ([Students](#students) 1, 2; [Results and awards](#results-and-awards) 5)
+1. **Names and consent.** Every student named in the change has a **current-season media-consent
+   form confirmed with the activities office**, is in the
+   [published-names allowlist](#the-published-names-allowlist), and appears as
+   `FIRST NAME LAST NAME (GRADUATION YEAR)` or in the reduced form they asked for. No student with
+   no current form, or with unknown status, is named. No opponent student is named.
+   ([Students](#students) 1, 2, 4; [Results and awards](#results-and-awards) 5)
 2. **Ages and grades.** No age, date of birth, grade level or birthday appears anywhere. A
-   graduation year appears only as a class year beside a name that may be published.
-   ([Students](#students) 1)
+   graduation year appears only beside a name that may be published. ([Students](#students) 1)
 3. **Contact details.** No student email address, phone number, social handle, messaging username,
    home address, home town or personal website appears, in body copy, alt text, an image, a link
    or a file name. The only addresses in the change are coach or team addresses.
    ([Students](#students) 3)
 4. **Photographs and consent.** Every image of an identifiable person has a media-consent manifest
-   entry with a reference confirmed against the activities office, every person in the frame is
-   covered, and EXIF metadata has been stripped. Alt text and captions follow the name rules.
-   ([Photos and media consent](#photos-and-media-consent) 1, 3, 4, 6, 7)
+   entry whose reference was confirmed against the activities office **for the current season**,
+   every person in the frame is covered, no graduated student is in a photograph past the sweep
+   window, and EXIF metadata has been stripped. Alt text and captions follow the name rules.
+   ([Photos and media consent](#photos-and-media-consent) 1, 3, 4, 6, 7, 11, 12)
 5. **Sensitive content.** Nothing in the change touches discipline, grades, health, disability,
    family circumstance, immigration status or team-selection decisions about a named student.
    ([Students](#students) 7)
 6. **Results.** Every named result uses the published form, names both partners in a partner
-   event, and reports only a placing or advancement. No cumulative record, ranking, rating,
-   leaderboard or loss by name. ([Results and awards](#results-and-awards) 1-4)
+   event, has current-season consent for every student named, and reports only a placing or
+   advancement. No cumulative record, ranking, rating, leaderboard or loss by name.
+   ([Results and awards](#results-and-awards) 1-4)
 7. **Location and schedule.** No named student is paired with a specific room, ride, hotel,
    arrival time or solo travel plan. ([Students](#students) 5)
 8. **Third-party content.** The change adds no script, iframe, embed, pixel, tracker, advertisement,
@@ -569,6 +652,19 @@ is fixed; there is no "publish and fix it after".
     content that will publish** and approved it. A coach may publish an item naming nobody without
     a second pair of eyes; an item naming or depicting a student needs Charlie.
 
+**Two further items run once a season rather than once a change**, and gate the season's first
+deploy:
+
+17. **Start-of-season consent check.** Before the first publish of a new season, **every student
+    named or pictured anywhere on the live site** has been verified against the **current
+    season's** forms with the activities office, and each allowlist and media-consent manifest
+    entry carries an updated date checked. Anyone not yet renewed has been taken down, on the
+    24-hour student clock, until their form arrives.
+    ([Consent renewal and the start-of-season check](#consent-renewal-and-the-start-of-season-check))
+18. **Graduated-student photograph sweep.** In the season after a class graduates, every
+    photograph including a student from that class has been removed, while their results and
+    roster entries stay as the record of their season. ([Graduated students](#graduated-students))
+
 ## Open questions
 
 Status as recorded at the version 1.0 approval. **Accepted** means Charlie knowingly approved the
@@ -578,7 +674,7 @@ policy without the answer; **open** means the answer is still needed before the 
 |---|---|---|---|---|
 | 1 | The district's **official brand colors**. None are published, so the palette in `site/src/styles/tokens.css` was sampled from the team's own deck template and is the team's working reference | Open | Charlie, with the district communications office | Nothing today. If official colors appear, the tokens file is corrected within the contrast limits in [Accessibility](#accessibility) |
 | 2 | **Whether a second person should hold real access** (registrar and AWS) to take the site down. Today nobody does; the activities office holds a way to reach Charlie, which is the interim answer recorded in [Domains and continuity](#domains-and-continuity) 5 | **Accepted as a known gap**, 2026-09-20 | Charlie | Nothing today. Revisit at the next review, or sooner once the site carries student names and photographs |
-| 3 | Whether the activities office's **media-consent form covers website publication specifically**, and how often it is renewed or re-signed | Open | Charlie, with the activities office | Publishing the first student photograph. Until answered, photographs publish only where Charlie has confirmed the individual form with the office |
+| 3 | Whether the activities office's **media-consent form covers website publication specifically**, and how often it is renewed or re-signed | **Resolved** 2026-09-20 — Randee Drew, Athletics and Activities Director, confirmed the form covers publication on a team website and that it **renews annually at the start of each season**. Recorded in [District approval and conditions](#district-approval-and-conditions); the renewal is implemented by [Consent renewal and the start-of-season check](#consent-renewal-and-the-start-of-season-check) | Charlie, with the activities office | — |
 | 4 | Whether the district or the high school wants a **review of the site before it goes live to prod** | **Resolved** 2026-09-20 — no pre-launch review is wanted. The activities director attached no conditions and asked for no review, so the first prod launch (`v1-e36-t05`) is not gated on one | Charlie, with Randee Drew | — |
 | 5 | Whether the district would prefer the site under a **district-owned domain or district hosting** rather than domains registered to a coach personally | Open | Charlie, with the district | Nothing today. [Domains and continuity](#domains-and-continuity) records the risk in the meantime |
 | 6 | A **brand asset set that survives the sizes the site needs**: the lockup and mark as SVG or transparent PNG, plus square icon artwork cropped to the W. Today's assets are opaque, recovered from a JPEG, and blur at icon sizes | Open | Charlie | Nothing. Recorded in the `v1-e36-t03` session report as follow-up work |
@@ -601,9 +697,10 @@ policy without the answer; **open** means the answer is still needed before the 
 
 **Version 1.0 of this policy is approved.** The core pages (`v1-e36-t04`), the first prod deploy
 (`v1-e36-t05`), announcements and the calendar (E37) and the donation page (E38) may proceed, each
-still subject to the [Pre-publication checklist](#pre-publication-checklist) and to the open
-questions that gate them: **no student photograph publishes until
-[open question 3](#open-questions) is answered for that student's form.**
+still subject to the [Pre-publication checklist](#pre-publication-checklist). **`v1-e36-t04` may
+include student photographs**, now that the district has confirmed its form covers website
+publication, **once the current season's forms have been confirmed for every student named or
+pictured**. No open question gates publication; what gates it is the consent check.
 
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may be published under it.
@@ -615,9 +712,9 @@ nothing this policy governs may be published under it.
 | Role | Product owner and head coach |
 | Approval date | **2026-09-20** |
 | Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.0, including the district approval recorded from Randee Drew on 2026-09-18 and the [Pre-publication checklist](#pre-publication-checklist) |
-| Open questions resolved at approval | **4** — no district pre-launch review is wanted, so `v1-e36-t05` is not gated on one |
+| Open questions resolved at approval | **3** — the district's media-consent form covers website publication and renews annually at the start of each season (Randee Drew, 2026-09-20), which is why consent expires and the start-of-season check exists. **4** — no district pre-launch review is wanted, so `v1-e36-t05` is not gated on one |
 | Open questions accepted as known gaps | **2** — no second holder of the registrar and AWS access; the activities office holds a route to Charlie instead |
-| Open questions left open | **1** — official district brand colors. **3** — whether the media-consent form covers website publication specifically, and how often it renews; this one gates the first student photograph. **5** — whether the district would prefer a district-owned domain. **6** — a brand asset set that survives icon sizes |
+| Open questions left open | **1** — official district brand colors. **5** — whether the district would prefer a district-owned domain. **6** — a brand asset set that survives icon sizes. **None of the three gates publication** |
 
 A later version is approved by editing this table in a pull request, with the version bumped in
 the header and in [Review and change control](#review-and-change-control).

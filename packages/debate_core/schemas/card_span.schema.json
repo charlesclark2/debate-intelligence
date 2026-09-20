@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "SpanPurpose": {
+      "description": "What argumentative work a marked region of evidence does.",
+      "enum": [
+        "claim",
+        "warrant",
+        "internal_link",
+        "impact"
+      ],
+      "title": "SpanPurpose",
+      "type": "string"
+    },
+    "SpanStyle": {
+      "description": "How a marked region of a card's evidence is rendered on export.",
+      "enum": [
+        "underline",
+        "highlight"
+      ],
+      "title": "SpanStyle",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A marked region of a card's evidence.\n\nOffsets are character positions **into the card's `evidence_text`**, half-open (`start`\ninclusive, `end` exclusive) — not into the snapshot. The renderer marks up the quotation it is\ngiven, so spans stay correct no matter where in the source the quotation was taken from.",
+  "properties": {
+    "span_id": {
+      "description": "ULID identifying this span.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Span Id",
+      "type": "string"
+    },
+    "start_offset": {
+      "description": "Inclusive start character offset into evidence_text.",
+      "minimum": 0,
+      "title": "Start Offset",
+      "type": "integer"
+    },
+    "end_offset": {
+      "description": "Exclusive end character offset into evidence_text.",
+      "exclusiveMinimum": 0,
+      "title": "End Offset",
+      "type": "integer"
+    },
+    "style": {
+      "$ref": "#/$defs/SpanStyle",
+      "description": "How the region is rendered: underlined or highlighted."
+    },
+    "purpose": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SpanPurpose"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What argumentative work the region does, when known."
+    }
+  },
+  "required": [
+    "start_offset",
+    "end_offset",
+    "style"
+  ],
+  "title": "CardSpan",
+  "type": "object"
+}

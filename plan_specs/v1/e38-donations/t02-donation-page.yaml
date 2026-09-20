@@ -151,7 +151,7 @@ spec:
           - type: test_passes
             name: Guard rejects every forbidden fixture and accepts the real page
             command: pnpm
-            args: [--dir, site, test, --, tests/donate-page-guard.test.ts]
+            args: [--dir, site, test, tests/donate-page-guard.test.ts]
           - type: command_succeeds
             name: Build runs the donate guard and passes
             command: pnpm
@@ -169,7 +169,7 @@ spec:
           - type: test_passes
             name: Home and footer link to the donate page
             command: pnpm
-            args: [--dir, site, test, --, tests/donate-links.test.ts]
+            args: [--dir, site, test, tests/donate-links.test.ts]
       - id: quality-and-review
         kind: Task
         name: Lint, accessibility and coach review

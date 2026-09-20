@@ -128,7 +128,7 @@ spec:
           - type: test_passes
             name: Parsing and normalization tests pass
             command: pnpm
-            args: [--dir, site, test, --, tests/calendar/parse.test.ts]
+            args: [--dir, site, test, tests/calendar/parse.test.ts]
       - id: fetch-with-fallback
         kind: Task
         name: Build-time fetch with last-good fallback
@@ -148,7 +148,7 @@ spec:
           - type: test_passes
             name: Fetch success, timeout, bad feed and no-snapshot cases pass offline
             command: pnpm
-            args: [--dir, site, test, --, tests/calendar/fetch.test.ts]
+            args: [--dir, site, test, tests/calendar/fetch.test.ts]
           - type: artifact_exists
             name: Calendar variables documented with placeholders
             path: site/.env.example
@@ -172,7 +172,7 @@ spec:
           - type: test_passes
             name: Events page rendering tests pass
             command: pnpm
-            args: [--dir, site, test, --, tests/calendar/pages.test.tsx]
+            args: [--dir, site, test, tests/calendar/pages.test.tsx]
           - type: command_succeeds
             name: Static export builds from fixture data
             command: pnpm

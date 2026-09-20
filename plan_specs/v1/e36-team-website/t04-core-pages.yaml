@@ -30,6 +30,8 @@ spec:
     address (no form, nothing stored). A Debater login link is built but hidden behind a feature flag that
     stays off until V2 (Cognito, web/). Out of scope: layout, tokens and content loader (t03), hosting and
     deploys (t02, t05), the events calendar and announcements (E37), the donation page (E38).
+    Setup note: `corepack enable pnpm` fails on the operator's corepack (expired npm signing key);
+    install pnpm the way site/README.md records and keep that note current.
   priority: 1
   constraints:
     packages: [site/content, site/src/app, site/tests]
@@ -131,7 +133,7 @@ spec:
           - type: test_passes
             name: Route tests find every core page in the export and sitemap
             command: pnpm
-            args: [--dir, site, test, --, routes]
+            args: [--dir, site, test, routes]
       - id: contact-and-login-flag
         kind: Task
         name: Mailto contact and hidden Debater login link
@@ -146,7 +148,7 @@ spec:
           - type: test_passes
             name: Login link hidden by default and contact uses mailto only
             command: pnpm
-            args: [--dir, site, test, --, contact, login-flag]
+            args: [--dir, site, test, contact, login-flag]
       - id: policy-and-a11y-checks
         kind: Task
         name: Content-policy guard and page accessibility tests
@@ -161,11 +163,11 @@ spec:
           - type: test_passes
             name: Content-policy guard passes
             command: pnpm
-            args: [--dir, site, test, --, content-policy]
+            args: [--dir, site, test, content-policy]
           - type: test_passes
             name: Every built page passes axe WCAG 2.1 AA checks
             command: pnpm
-            args: [--dir, site, test, --, pages-a11y]
+            args: [--dir, site, test, pages-a11y]
           - type: command_succeeds
             name: Site lint passes
             command: pnpm

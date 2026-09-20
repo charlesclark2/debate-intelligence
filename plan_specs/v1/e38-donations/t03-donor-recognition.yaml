@@ -109,7 +109,7 @@ spec:
           - type: test_passes
             name: Donor validation accepts valid entries and rejects each invalid fixture
             command: pnpm
-            args: [--dir, site, test, --, tests/donors.test.ts]
+            args: [--dir, site, test, tests/donors.test.ts]
       - id: cms-content-type
         kind: Task
         name: CMS content type for donor recognition
@@ -140,7 +140,7 @@ spec:
           - type: test_passes
             name: Section renders names only and is absent when empty
             command: pnpm
-            args: [--dir, site, test, --, tests/donor-thanks.test.ts]
+            args: [--dir, site, test, tests/donor-thanks.test.ts]
           - type: command_succeeds
             name: Build validates donor content and exports the donate page
             command: pnpm

@@ -48,7 +48,7 @@ page, which correctly fails a prod build).
 |---|---|---|
 | Goal ac1 — deploy script passes shellcheck; offline tests show prod refused from a non-main branch, a dirty tree or a commit ≠ `origin/main`, and `--dry-run` makes no `aws s3`/`cloudfront` write | PASS | `uv run shellcheck scripts/site_deploy.sh` → no output, exit 0. `uv run pytest tests/scripts/test_site_deploy.py` → `21 passed in 14.17s`, including `test_prod_is_refused_from_a_branch_other_than_main`, `..._when_the_tree_is_dirty`, `..._when_head_has_drifted_from_origin_main`, `..._when_origin_cannot_be_fetched` and `test_dry_run_makes_no_aws_call_at_all`. |
 | Goal ac2 — smoke checker fails on a non-200 page, a missing HSTS/CSP/`X-Content-Type-Options` header, a missing http→https redirect, `noindex` on prod, or a `version.json` sha mismatch, with no live call | PASS | `uv run pytest tests/scripts/test_site_smoke.py` → `27 passed in 1.20s`. One test per failure, all respx-mocked; the default pytest run also has `--disable-socket`. |
-| Goal ac3 — the dev preview has been deployed, passes the smoke check with its `noindex` header, and the same commit reached `main` through a validated promotion | PARTIAL | Deployed and checked: `scripts/site_deploy.sh dev` at `f15fa16` on 2026-09-20, invalidation `IAM1U04QZPV5D7HUB6CQL4WGCH` created and waited on; `scripts/site_smoke.py --env dev --url https://dev.wfbdebate.com --expect-sha f15fa16…` → **All 28 checks passed**, including `X-Robots-Tag: noindex` on all eight pages. Not yet satisfied: that was the task branch, and a squash merge gives the work a new sha on `dev`, so the commit actually promoted is re-deployed and re-checked before the promotion PR. |
+| Goal ac3 — the dev preview has been deployed, passes the smoke check with its `noindex` header, and the same commit reached `main` through a validated promotion | PARTIAL, redeploy needed | Deployed and checked: `scripts/site_deploy.sh dev` at `f15fa16` on 2026-09-20, invalidation `IAM1U04QZPV5D7HUB6CQL4WGCH` created and waited on; `scripts/site_smoke.py --env dev --url https://dev.wfbdebate.com --expect-sha f15fa16…` → **All 28 checks passed**, including `X-Robots-Tag: noindex` on all eight pages. Not yet satisfied: that was the task branch, and a squash merge gives the work a new sha on `dev`, so the commit actually promoted is re-deployed and re-checked before the promotion PR. |
 | Goal ac4 — runbook has a deploy and rollback procedure and a *First prod launch* entry (date, sha, URL, smoke result, no account ids) | PARTIAL | Procedures: `docs/runbooks/team-website.md` §*Deploying the site*, §*Rolling back a deploy*, §*Taking something down on request*. Entry: §*First prod launch* exists with its fields `_pending_`; the launch has not happened, so there is nothing truthful to put in them yet. Operator follow-up 5 fills it. |
 | Goal ac5 — the prod site is live and passes the smoke check before the October 1, 2026 parent session | NOT RUN | Operator follow-up 5. Blocked behind follow-ups 1 to 4 and the room fact. |
 | `deploy-script` — `shellcheck scripts/site_deploy.sh` | PASS | `uv run shellcheck scripts/site_deploy.sh` → exit 0. (Run through `uv run`: ShellCheck is now a dev dependency, see Deviations.) |
@@ -56,7 +56,7 @@ page, which correctly fails a prod build).
 | `smoke-check` — `uv run pytest tests/scripts/test_site_smoke.py` | PASS | `27 passed in 1.20s`. |
 | `smoke-check` — `uv run ruff check scripts/site_smoke.py tests/scripts tests/smoke/test_site.py` | PASS | `All checks passed!` Repo-wide: `uv run ruff check .` → `All checks passed!`, `uv run ruff format --check .` → `125 files already formatted`. |
 | `dev-preview` — `docs/runbooks/team-website.md` contains `site_deploy.sh` | PASS | `grep -c site_deploy.sh docs/runbooks/team-website.md` → `11` matching lines, in the deploy, rollback, takedown and launch sections. |
-| `dev-preview` — custom: Charlie confirms the dev smoke check passed for the commit being promoted, including `noindex`, and the preview looks right on a phone | PARTIAL | The smoke check passed in full for `f15fa16` (28/28). Outstanding: the same run against the promoted commit, and Charlie's read of the preview on a phone, which no check covers. |
+| `dev-preview` — custom: Charlie confirms the dev smoke check passed for the commit being promoted, including `noindex`, and the preview looks right on a phone | PARTIAL | The smoke check passed in full for `f15fa16` (28/28), but the phone review **failed** and was worth more than the 28 automated checks: the page rendered unstyled, which is deviation 3. Fixed and to be redeployed. Outstanding: a deploy and smoke check of the styled build, Charlie's second look, and the same run against the commit actually promoted. |
 | `prod-launch` — `docs/runbooks/team-website.md` contains `First prod launch` | PASS (placeholder) | The section exists with the right fields; its values are `_pending_` until the launch. Reported as PASS against the literal criterion and as not-yet-true in substance. |
 | `prod-launch` — custom: Charlie confirms, on or before September 30 2026, that the prod site passes the smoke check at the URL he will give parents | NOT RUN | Operator follow-up 5. |
 | Regression — Terraform static checks still pass after the policy change | PASS | Re-run after the rebase onto `dev` at `9a3e86f`: `scripts/terraform_checks.sh` → `ok test infrastructure/modules/static_site`, `All Terraform checks passed.` The script now runs `terraform test` itself (#23), so the module suite is covered rather than hand-run; the direct run earlier in the session gave `Success! 11 passed, 0 failed.` |
@@ -116,7 +116,33 @@ rather than five; `README.md` records why. See Deviations.
    criterion would have passed vacuously — ruff would have reported "No Python files found" and
    exited 0.
 
-3. **The home page copy was changed, which is `v1-e36-t04`'s file, not this task's.**
+3. **The site shipped with no CSS, and this task fixed it. `v1-e36-t04` caused it.**
+   `v1-e36-t03-site-scaffold` imported `@/styles/globals.css` from `site/src/app/layout.tsx`
+   (`fa480cd`), which is the one line that makes Next emit a stylesheet and link it from every
+   page. `v1-e36-t04-core-pages` removed it (`cdd8203`). Every build since exported markup with
+   **no CSS at all**: correct content, headings and landmarks, rendered in the browser's default
+   styling. That is what this task deployed to the dev preview, and Charlie looking at it on a
+   phone is what caught it, which is exactly what the `dev-preview` node's human criterion is for.
+
+   The fix is the one line restored. The build now emits `_next/static/chunks/*.css` and
+   `index.html` links it; 211 site tests pass and both builds are clean.
+
+   **Nothing in the suite could have caught this**, which is the more important half.
+   `tokens.test.ts` reads the stylesheets from disk and verifies their contrast ratios, which says
+   nothing about whether they ship. `layout.test.tsx` and `pages-a11y.test.tsx` run axe under
+   jsdom, which has no layout engine and therefore skips colour contrast, so unstyled HTML passes
+   them cleanly. So `site/tests/stylesheet-ships.test.ts` is new: it asserts the layout keeps the
+   side-effect import, that `globals.css` still `@import`s the other three, and, whenever a build
+   has produced `site/out/`, that every exported page links a stylesheet which exists in the
+   export and contains the design tokens. Verified that it fails when the import is removed.
+
+   This is `v1-e36-t03`/`t04` code, outside this task's `constraints.packages`. Fixed here rather
+   than deferred because it blocked the launch outright: an unstyled site is not something to put
+   in front of parents on October 1, and the deploy flow this task exists to deliver had already
+   published it once. **The PM should decide whether `v1-e36-t04`'s Goal should go back from
+   `Succeeded`**, since its acceptance criteria were met by a build that shipped no styling.
+
+4. **The home page copy was changed, which is `v1-e36-t04`'s file, not this task's.**
    `site/content/pages/home.md` carried `[[TBD: room for the October 1 parent information
    session]]`, and the content guard fails a prod build on a placeholder, so `ac5` could not be met
    while it stood. The room is still undecided, so there was no fact to fill in. Rather than
@@ -132,7 +158,7 @@ rather than five; `README.md` records why. See Deviations.
    build) passes. When the room is decided it is a one-line content change and a redeploy, which
    is what the deploy flow is for. The PM should confirm the wording; it is copy for parents.
 
-4. **The `Owner` tag on eight prod resources was rewritten as a side effect.** The step 3 operator
+5. **The `Owner` tag on eight prod resources was rewritten as a side effect.** The step 3 operator
    block in this report gave `OWNER_EMAIL` a concrete value, where the runbook's own *Before you
    start* block deliberately carries a placeholder and the variable's description says it is kept
    out of the repository. The value that reached the apply differed from the one the previous
@@ -143,11 +169,11 @@ rather than five; `README.md` records why. See Deviations.
    across both roots and every resource in them, so it is now the canonical `owner` and the one a
    future apply must match.
 
-5. **`prod-launch`'s `artifact_exists` criterion passes on a placeholder.** The runbook has the
+6. **`prod-launch`'s `artifact_exists` criterion passes on a placeholder.** The runbook has the
    *First prod launch* section and the string the criterion matches, but its fields are `_pending_`
    because the launch has not happened. Flagged rather than left to look like a pass.
 
-6. **Prod is not deployed yet.** The dev preview is live and passes its smoke check, but the
+7. **Prod is not deployed yet.** The dev preview is live and passes its smoke check, but the
    `prod-launch` node needs the promotion first, so the task Goal stays `InProgress` until the
    prod deploy and its runbook entry.
 

@@ -79,7 +79,7 @@ spec:
         A Gates section lists the conditions E34 automated download and the v2-e35 debate tub must satisfy,
         and Charlie's approval (name, date, policy version) is recorded in the document.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

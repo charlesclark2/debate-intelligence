@@ -63,7 +63,7 @@ spec:
         dirs; the test profile disables all network providers, uses only fakes and points data_dir at a
         temp directory.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

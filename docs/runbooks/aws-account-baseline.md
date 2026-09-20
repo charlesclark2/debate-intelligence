@@ -107,19 +107,7 @@ IAM Identity Center → Settings → Authentication → Multi-factor authenticat
   at sign-in**.
 - Who can manage MFA devices: users can add and manage their own.
 
-## Step 4 — Activate cost allocation tags (manual, console)
-
-Every budget and the anomaly monitor filter on the `Project` and `Environment` tags. Until those
-tags are activated for billing they report **$0**, and a budget that always reads zero never
-alerts. No API call can activate them.
-
-Billing and Cost Management → Cost allocation tags → User-defined cost allocation tags → select
-`Project` and `Environment` → **Activate**.
-
-Activation is not retroactive and takes up to 24 hours to appear in cost data. Do this step
-before or immediately after the first apply, not later.
-
-## Step 5 — Apply the baseline Terraform (operator)
+## Step 4 — Apply the baseline Terraform (operator)
 
 ```bash
 cd infrastructure/bootstrap/organization
@@ -147,6 +135,37 @@ Notes on the apply:
   `terraform destroy` of this root will fail on the bucket while logs are in it. That is
   intentional. To genuinely retire the trail, remove the `DenyLogDeletion` statement in a
   reviewed change first.
+
+## Step 5 — Activate the cost allocation tags (after the apply)
+
+Every budget and the anomaly monitor filters on the `Project` and `Environment` tags. Until those
+tags are activated for billing they report **$0**, and a budget that always reads zero never
+alerts.
+
+**This step cannot come earlier.** A tag key only becomes activatable once AWS has seen a
+resource carrying it, so the keys do not exist until step 4 has created the tagged resources, and
+they can take up to 24 hours to appear afterwards.
+
+Check whether the keys have surfaced yet:
+
+```bash
+aws ce list-cost-allocation-tags \
+  --query 'CostAllocationTags[?TagKey==`Project` || TagKey==`Environment`].[TagKey,Status]' \
+  --output text
+```
+
+Empty output means AWS has not surfaced them yet - wait and retry. Once both appear, activate them:
+
+```bash
+aws ce update-cost-allocation-tags-status --cost-allocation-tags-status \
+  TagKey=Project,Status=Active TagKey=Environment,Status=Active
+```
+
+Or in the console: Billing and Cost Management -> Cost allocation tags -> User-defined cost
+allocation tags -> select `Project` and `Environment` -> **Activate**.
+
+Activation is not retroactive: spend from before activation is never attributed to these tags, so
+the first days of budget figures will read low. Do not treat that as the budgets being broken.
 
 ## Step 6 — Configure the CLI SSO profiles
 

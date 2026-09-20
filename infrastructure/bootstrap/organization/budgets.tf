@@ -2,8 +2,9 @@
 #
 # The account also carries unrelated personal projects, so every budget here filters on the
 # Project cost allocation tag: without that filter these numbers would report someone else's
-# spend. Those tags must be activated in Billing first - see the runbook. Until they are, these
-# budgets report zero, which is the failure mode the test alert in the runbook catches.
+# spend. Those tags must be activated in Billing, which can only happen after this applies (a tag
+# key is activatable only once AWS has seen a resource carrying it) - see the runbook. Until they
+# are, these budgets report zero, which is the failure mode the test alert in the runbook catches.
 #
 # AWS Budgets notifies; it never stops spend. Hard model quotas arrive with E19.
 

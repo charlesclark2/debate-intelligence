@@ -54,14 +54,14 @@ Nothing was applied to AWS. Every AWS call this session made was read-only (`des
 | ac1 — ADR-0010 Accepted, Bedrock availability table for every §10 model, S3 + OpenSearch Serverless availability and price notes | PASS | `docs/adr/0010-primary-aws-region.md`, Status `Accepted`. Availability from `aws bedrock list-foundation-models` and `list-inference-profiles` across us-east-1/us-east-2/us-west-2. Prices from `aws pricing get-products` (`AmazonS3`: $0.023/GB-mo both regions; `AmazonES`: $0.24/OCU-hour both regions). Bedrock per-token rates could not be retrieved — see Deviations. |
 | ac2 — dev/prod accounts (or ADR-approved alternative) exist; root has MFA and no access keys; humans sign in only through Identity Center | **FAIL** | Single-account alternative is ADR-approved (ADR-0010). Root MFA is on: `aws iam get-account-summary` → `AccountMFAEnabled: 1`. But `AccountAccessKeysPresent: 1` — **root access keys exist and are in use as the `default` CLI profile**. Also one IAM user (`baseball-access-user`) holds an active key. Operator follow-up 1. |
 | ac3 — organization-wide, multi-region CloudTrail into a private, versioned, encrypted bucket with log-file validation | NOT RUN | Defined and plan-verified (`aws_cloudtrail.organization`: `is_organization_trail`, `is_multi_region_trail`, `enable_log_file_validation` all `true`), but no trail exists yet: `aws cloudtrail describe-trails` → `trailList: []`. Needs operator follow-ups 2 and 3. |
-| ac4 — per-account budgets with 50/80/100% alerts against a documented cap, a Cost Anomaly Detection monitor, notifying Charlie; a test alert was received | NOT RUN | Three budgets and the monitor are defined and plan-verified. None exist yet, and no test alert has been received. Needs operator follow-ups 3 and 4. |
-| ac5 — runbook reproduces the baseline, lists every manual step, shows the SSO CLI profile setup | PASS (document) / pending walkthrough | [`docs/runbooks/aws-account-baseline.md`](../runbooks/aws-account-baseline.md) covers root lockdown, CloudTrail trusted access, Identity Center MFA, cost allocation tags, the apply, `aws configure sso` for `debate-dev`/`debate-prod`, verification commands and Bedrock model access. The operator walkthrough itself is follow-up 5. |
+| ac4 — per-account budgets with 50/80/100% alerts against a documented cap, a Cost Anomaly Detection monitor, notifying Charlie; a test alert was received | NOT RUN | Three budgets and the monitor are defined and plan-verified. None exist yet, and no test alert has been received. Needs operator follow-ups 3, 4 and 5. |
+| ac5 — runbook reproduces the baseline, lists every manual step, shows the SSO CLI profile setup | PASS (document) / pending walkthrough | [`docs/runbooks/aws-account-baseline.md`](../runbooks/aws-account-baseline.md) covers root lockdown, CloudTrail trusted access, Identity Center MFA, cost allocation tags, the apply, `aws configure sso` for `debate-dev`/`debate-prod`, verification commands and Bedrock model access. The operator walkthrough itself is follow-up 6. |
 | node `org-and-identity` — Organization bootstrap Terraform validates | PASS | `terraform -chdir=infrastructure/bootstrap/organization validate` → `Success! The configuration is valid.` |
 | node `org-and-identity` — Root MFA and no root access keys confirmed | **FAIL** | As ac2. |
 | node `cloudtrail` — CloudTrail definition enables log-file validation | PASS | `grep -n "enable_log_file_validation = true" infrastructure/bootstrap/organization/cloudtrail.tf` → line 300. See the note in Decisions about `terraform fmt`. |
 | node `budgets` — Budgets are defined in Terraform | PASS | `grep -c "aws_budgets_budget" infrastructure/bootstrap/organization/budgets.tf` → 2 resources (`environment_monthly` for_each over dev/prod, `bedrock_monthly`). |
 | node `runbook` — Runbook exists and documents SSO profiles | PASS | `grep -n "aws configure sso" docs/runbooks/aws-account-baseline.md` → line 158. |
-| node `runbook` — Operator walkthrough of the baseline | NOT RUN | Follow-up 5. |
+| node `runbook` — Operator walkthrough of the baseline | NOT RUN | Follow-up 6. |
 | Spec validation | PASS | `uv run scripts/validate_specs.py` → `OK: 261 files, 35 epics, 207 tasks, 19 releases`. |
 
 Beyond the required criteria, a read-only `terraform plan` against the live account returned
@@ -152,9 +152,10 @@ so operator-local account ids and emails cannot be committed.
   `terraform destroy` of this root fails while logs exist — intentional for an audit bucket, and
   called out in both READMEs with how to retire it deliberately.
 - **Budgets filter on the `Project` tag**, because the account carries unrelated spend. This makes
-  activating the `Project` and `Environment` cost allocation tags a hard prerequisite: until then
-  the budgets read $0 and never alert. It is a runbook step, and the test alert in follow-up 4 is
-  what catches it if missed.
+  activating the `Project` and `Environment` cost allocation tags mandatory: until then the budgets
+  read $0 and never alert. It cannot be done up front — a tag key is only activatable once AWS has
+  seen a resource carrying it — so it is a post-apply runbook step, and the test alert in follow-up
+  5 is what catches it if missed.
 - **Budget sizes are guesses** — dev $25, prod $50, Bedrock $40/month — sized for S3 storage plus
   light Bedrock use. They are alert thresholds, not caps; AWS Budgets notifies and never stops
   spend. Adjust once t05 has synced real evidence volume.
@@ -207,12 +208,9 @@ aws organizations list-aws-service-access-for-organization \
 Success: `cloudtrail.amazonaws.com` appears in the list. Without this the apply in step 3 fails,
 and `terraform plan` already warns about it by name.
 
-**3. Activate cost allocation tags, then apply the baseline** (~5 min, blocks ac3 and ac4)
+**3. Apply the baseline** (~5 min, blocks ac3 and ac4)
 
-First, console → Billing and Cost Management → Cost allocation tags → activate the user-defined
-tags `Project` and `Environment`. No API can do this, and the budgets read $0 until it is done.
-
-Then, in the task worktree:
+In the task worktree:
 
 ```bash
 cd infrastructure/bootstrap/organization
@@ -229,13 +227,31 @@ Expected runtime ~2–4 minutes. Success looks like `Apply complete! Resources: 
 Keep the resulting `terraform.tfstate` — it is local (remote state is t02's job) and losing it
 means re-importing everything by hand. `terraform.tfvars` is gitignored; do not commit it.
 
-**4. Confirm a budget alert actually arrives** (~24 h elapsed, blocks ac4)
+**4. Activate the `Project` and `Environment` cost allocation tags** (~1 min, up to 24 h wait,
+blocks ac4)
+
+This has to come *after* the apply: a tag key is only activatable once AWS has seen a resource
+carrying it, and `aws ce list-cost-allocation-tags` confirms neither key exists in the account
+today. Once they surface:
+
+```bash
+aws ce list-cost-allocation-tags \
+  --query 'CostAllocationTags[?TagKey==`Project` || TagKey==`Environment`].[TagKey,Status]' \
+  --output text
+aws ce update-cost-allocation-tags-status --cost-allocation-tags-status \
+  TagKey=Project,Status=Active TagKey=Environment,Status=Active
+```
+
+Until both read `Active`, every budget here reports $0 and none of them will ever alert.
+Activation is not retroactive, so the first days of figures read low; that is expected.
+
+**5. Confirm a budget alert actually arrives** (~24 h elapsed, blocks ac4)
 
 Set `monthly_budget_usd = { dev = 1, prod = 50 }` in `terraform.tfvars`, `terraform apply`, wait
 for the email (AWS evaluates several times a day; check spam), then restore the real value and
 apply again. Tell me which budget the email came from and I will record it against ac4.
 
-**5. Walk through the baseline** (~10 min, blocks ac5's custom criterion)
+**6. Walk through the baseline** (~10 min, blocks ac5's custom criterion)
 
 Follow runbook steps 3 (Identity Center MFA), 6 (`aws configure sso` for `debate-dev` and
 `debate-prod`), 7 (verification commands) and 8 (Bedrock model access).
@@ -249,7 +265,7 @@ aws sts get-caller-identity --profile debate-prod
 Success: both return `assumed-role/AWSReservedSSO_DebateMaintainer_...` and
 `.../AWSReservedSSO_DebateReadOnly_...` ARNs — never a `:root` ARN.
 
-**6. Then flip the spec phase.** Once 1–5 pass, the Goal's `status.phase` goes to `Succeeded` and
+**7. Then flip the spec phase.** Once 1–6 pass, the Goal's `status.phase` goes to `Succeeded` and
 this report's criteria table is updated with the real evidence.
 
 ## Follow-up work

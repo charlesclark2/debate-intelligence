@@ -120,6 +120,15 @@ class ArticleRepository(Protocol):
         The canonical URL is the platform's deduplication key for a source, so this lookup is how
         a service decides whether a search result or a fetch is a source it already knows. The URL
         is matched byte for byte: canonicalization happens before the call (E04-t01), never here.
+
+        Nothing makes the URL unique, so several articles may match. When they do, **the most
+        recently created one wins** — `created_at` descending, `article_id` descending to break a
+        tie — which is the same total order every `list_*` method uses. The rule is here rather
+        than left to each implementation because "whichever row the database visited first" is not
+        an answer a caller can depend on, and a deduplication key whose lookup is not reproducible
+        deduplicates nothing. Whether a canonical URL *should* be unique per owner is an
+        article-service question and belongs to v1-e04-t05; this port only promises that the
+        answer is deterministic and the same everywhere.
         """
         ...
 
@@ -307,8 +316,13 @@ class SearchRepository(Protocol):
         """Replace the stored ranking for one search.
 
         Raises `NotFound` when the search does not exist, and `ValueError` when a result's
-        `search_id` does not match `search_id` or two results claim the same rank — both are
-        caller bugs, not storage conditions.
+        `search_id` does not match `search_id`, when two results claim the same rank, or when two
+        results name the same article. All three are caller bugs, not storage conditions: a
+        ranking is a total order over *distinct* articles, so one article holding two places is as
+        meaningless as one rank holding two articles.
+
+        A rejected call writes nothing. The checks run before the replacement starts, so a caller
+        that hands over a malformed ranking still has the previous one stored.
         """
         ...
 

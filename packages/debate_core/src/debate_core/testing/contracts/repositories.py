@@ -184,6 +184,35 @@ class ArticleRepositoryContract(AdapterContract):
 
         assert await repository.find_by_canonical_url(f"{DEFAULT_CANONICAL_URL}/") is None
 
+    async def test_find_by_canonical_url_returns_the_most_recently_created_match(
+        self, repository: ArticleRepository
+    ) -> None:
+        """Nothing makes the URL unique, so the port names the winner rather than leaving it open.
+
+        An implementation that returned whichever row it reached first would make the platform's
+        deduplication key answer differently on SQLite and on DynamoDB, which is exactly the drift
+        this suite exists to catch.
+        """
+        await repository.save(
+            build_article(article_id=readable_id("ART", 1), created_at=_minutes_after_epoch(1))
+        )
+        newest = await repository.save(
+            build_article(article_id=readable_id("ART", 2), created_at=_minutes_after_epoch(2))
+        )
+
+        assert await repository.find_by_canonical_url(DEFAULT_CANONICAL_URL) == newest
+
+    async def test_find_by_canonical_url_breaks_ties_on_the_id_descending(
+        self, repository: ArticleRepository
+    ) -> None:
+        """Same tie-break as every listing, so two articles stored in one millisecond still order."""
+        await repository.save(build_article(article_id=readable_id("ART", 1), created_at=FAKE_EPOCH))
+        highest_id = await repository.save(
+            build_article(article_id=readable_id("ART", 2), created_at=FAKE_EPOCH)
+        )
+
+        assert await repository.find_by_canonical_url(DEFAULT_CANONICAL_URL) == highest_id
+
     # ----------------------------------------------------------------------------------------
     # Deleting
     # ----------------------------------------------------------------------------------------
@@ -859,6 +888,19 @@ class SearchRepositoryContract(AdapterContract):
 
         with pytest.raises(ValueError):
             await repository.save_results(search.search_id, collision)
+
+    async def test_saving_two_results_naming_the_same_article_is_rejected(
+        self, repository: SearchRepository
+    ) -> None:
+        """A ranking is a total order over distinct articles: one source cannot hold two places."""
+        search = await repository.save(build_search())
+        duplicate = [
+            build_search_result(search_id=search.search_id, rank=1, article_id=readable_id("ART", 1)),
+            build_search_result(search_id=search.search_id, rank=2, article_id=readable_id("ART", 1)),
+        ]
+
+        with pytest.raises(ValueError):
+            await repository.save_results(search.search_id, duplicate)
 
     async def test_a_rejected_ranking_leaves_the_stored_one_intact(
         self, repository: SearchRepository

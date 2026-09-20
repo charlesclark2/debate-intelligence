@@ -107,15 +107,21 @@ directory a record lands in, what a file looks like on disk, whether a write is 
 two. Those belong in the adapter's own test module beside it — see
 `packages/debate_core/tests/integrations/local/`, which keeps exactly that half.
 
-Two behaviours are adapter-specific today and are *not* asserted here, because
-`ports/persistence.py` does not promise them:
+Two rules were added to the ports in the course of writing these contracts, because the two V1
+implementations answered differently and the ports had been silent. Both are now stated in
+`ports/persistence.py`, implemented by both, and asserted here — which is the shape a
+contract-suite finding should take. A new adapter has to satisfy them:
 
-* `SqliteSearchRepository.save_results` rejects a ranking that names one article twice; the
-  in-memory fake stores it. The port documents only the two rejections both implement (a result
-  whose `search_id` does not match, and two results sharing a rank).
-* `SqliteArticleRepository.find_by_canonical_url` returns the oldest match when several articles
-  share a canonical URL. The port does not make that URL unique, so it says nothing about which
-  one comes back; the contracts only store one article per URL.
+* **`save_results` rejects a ranking that names one article twice.** A ranking is a total order
+  over distinct articles, so a repeated article is as meaningless as a repeated rank. SQLite
+  already refused it — its primary key would anyway — and the in-memory fake used to store it,
+  which meant a caller's bug survived every fake-backed test and only surfaced against real
+  storage.
+* **`find_by_canonical_url` returns the most recently created match**, `article_id` descending to
+  break a tie — the same total order the `list_*` methods page in. Nothing makes a canonical URL
+  unique, so without a stated rule the platform's deduplication key would answer differently per
+  implementation. Whether the URL *should* be unique per owner is an article-service question and
+  belongs to `v1-e04-t05`; the port only promises that the answer is deterministic.
 
 ## Building entities for a contract
 

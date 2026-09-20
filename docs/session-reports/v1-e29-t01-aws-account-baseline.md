@@ -312,9 +312,33 @@ stay silent indefinitely.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- All five Goal criteria pass, and the evidence comes from the live account rather than from
+  reading the configuration. The single-account fallback follows the rule the spec sets for it:
+  it is recorded in ADR-0010 with binding rules and a revisit trigger, and the prod boundary is
+  enforced by explicit denies and verified by simulation. Planning against the applied state
+  caught the budget OR-filter bug and the anomaly-monitor churn; both were caught before they cost
+  anything.
+- Security check passed. Nothing committed on the branch contains an account id, org id,
+  Identity Center instance or email: `terraform.tfstate*`, `*.tfplan` and `terraform.tfvars` are
+  all ignored and untracked.
+- **Operator step before `scripts/task finish`.** The only copy of this root's Terraform state
+  lives in this worktree, and `finish` deletes the worktree along with its ignored files. Copy the
+  state and tfvars into the main clone's `infrastructure/bootstrap/organization/`, where they stay
+  ignored, and keep a second copy outside the repo. v1-e29-t02 migrates this root to the remote
+  backend; the PM is adding that to the t02 spec.
+- Accepted as-is: the `shared` environment value, the separate CloudTrail KMS key,
+  `debate-prod` → DebateReadOnly until t03, and the node criterion left PARTIAL for
+  `baseball-access-user`. Charlie decides whether that key is migrated to a role or recorded as
+  an ADR-0010 exception, and the PM tracks it.
+- Carried forward:
+  - Activating the cost allocation tags (operator follow-up 1).
+  - The root-account email is an institutional address. Charlie should change it to an address
+    he controls before any prod student data exists; this is a manual console step.
+  - t03 adds the prod operator permission set and repoints `debate-prod` to it.
+  - t02 takes over remote state and the `terraform-checks` CI job.

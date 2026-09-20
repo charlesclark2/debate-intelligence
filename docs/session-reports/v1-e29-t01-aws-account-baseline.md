@@ -158,8 +158,16 @@ so operator-local account ids and emails cannot be committed.
      The point is not convenience: the denies that matter are the ones separating dev from prod,
      and `AccessDenied` during ordinary work trains the operator to wave the next one through.
 
-   After the fixes, `terraform plan` is `0 to add, 3 to change, 0 to destroy` — the three intended
-   changes and nothing else.
+   Applied by the operator on 2026-09-20: `0 added, 3 changed, 0 destroyed`, after which
+   `terraform plan` reports **no changes** — the first point at which the configuration and the
+   account actually agree. `debate-dev-monthly` now filters on `user:Environment$dev` alone.
+
+   Re-verified after the policy change, with `iam simulate-principal-policy` so nothing is
+   actually attempted: `s3:ListBucket`, `s3:GetObject`, `s3:PutObject` on the shared bucket,
+   `cloudtrail:StopLogging`, `cloudtrail:DeleteTrail`, `sso:CreateAccountAssignment`,
+   `iam:CreateAccessKey`, `budgets:DeleteBudget` and `budgets:ModifyBudget` all return
+   `explicitDeny` for `DebateMaintainer`, while `describe-organization`, `list-permission-sets`
+   and `list-users` now succeed. The boundary held; only the reads widened.
 
 7. **ac4's test alert cannot use the real budgets yet, so the runbook tests the delivery path
    instead.** All three budgets filter on `Environment` = `dev`/`prod` or on Bedrock usage, and the
@@ -196,6 +204,12 @@ so operator-local account ids and emails cannot be committed.
 - **Budget sizes are guesses** — dev $25, prod $50, Bedrock $40/month — sized for S3 storage plus
   light Bedrock use. They are alert thresholds, not caps; AWS Budgets notifies and never stops
   spend. Adjust once t05 has synced real evidence volume.
+- **Deny checks use `iam simulate-principal-policy`, not real calls.** I first verified the
+  tampering denies by actually invoking `cloudtrail:StopLogging` and `budgets:DeleteBudget` from
+  `debate-dev`. They were refused, so nothing happened — but had the deny been broken, the test
+  would have stopped the audit trail or deleted a budget. The simulator evaluates the same
+  policies with no side effects, and that is what the runbook now specifies. Budgets actions need
+  their own simulate call; the API refuses to mix authorization contexts.
 - **Verification commands have to pick the right profile, and my first draft did not.** Step 7
   originally ran the audit-bucket checks under `debate-dev`, which `DebateMaintainer` denies by
   design; the operator hit three `AccessDenied` errors. They now run under `debate-prod`

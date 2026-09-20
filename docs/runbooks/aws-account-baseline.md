@@ -268,17 +268,43 @@ Seeing that the trail exists and is logging is not a privilege worth withholding
 ### Verify the environment boundary actually holds
 
 ADR-0010's single-account fallback rests on `DebateMaintainer` being unable to reach prod and
-shared resources. Confirm the deny is real rather than assumed - **both of these must fail**:
+shared resources, and on it being unable to remove the guardrails. Both are worth checking on
+purpose rather than assuming.
+
+Use `iam simulate-principal-policy`, which evaluates the policies **without performing the
+actions**. Do not test a deny by attempting the real call: if the deny has failed, the test
+itself stops the trail or deletes the budget. Find the role, then simulate:
 
 ```bash
-aws s3 ls s3://debate-shared-cloudtrail-<account-id>/ --profile debate-dev
-aws s3api get-bucket-versioning --bucket debate-shared-cloudtrail-<account-id> --profile debate-dev
+ROLE=$(aws iam list-roles \
+  --query 'Roles[?starts_with(RoleName, `AWSReservedSSO_DebateMaintainer`)].Arn' --output text)
+
+aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
+  --action-names s3:ListBucket s3:GetObject s3:PutObject \
+  --resource-arns "arn:aws:s3:::debate-shared-cloudtrail-<account-id>" \
+  --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
+
+aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
+  --action-names cloudtrail:StopLogging cloudtrail:DeleteTrail sso:CreateAccountAssignment iam:CreateAccessKey \
+  --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
+
+aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
+  --action-names budgets:DeleteBudget budgets:ModifyBudget \
+  --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
 ```
 
-Each must return `AccessDenied ... with an explicit deny in an identity-based policy`. A success
-here means the boundary is gone and the fallback's premise no longer holds: stop and fix the
-permission set before putting evidence in the account. Re-run this check after
-`v1-e29-t03-evidence-buckets` lands, against the prod evidence bucket.
+Every row must read `explicitDeny`. Budgets actions go in their own call - the simulator refuses
+to mix them with the others, because they use a different authorization context.
+
+Anything reading `allowed` means the boundary is gone and the single-account fallback's premise
+no longer holds: stop and fix the permission set before putting evidence in the account. Re-run
+this after `v1-e29-t03-evidence-buckets` lands, against the prod evidence bucket, and after any
+change to `identity.tf`.
+
+Ordinary reads should *not* be denied. `aws organizations describe-organization`,
+`aws sso-admin list-permission-sets` and `aws identitystore list-users` all work from
+`debate-dev`, deliberately: a deny that shows up during routine work is one the operator learns
+to ignore, and these denies need to keep meaning something.
 
 ### Confirm a budget alert actually arrives
 

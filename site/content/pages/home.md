@@ -12,8 +12,9 @@ purpose through rigorous research, strategic argumentation, and a strong team cu
 
 ## Parent information session
 
-**Wednesday, October 1, 2026, 6:00 PM, Whitefish Bay High School,
-room [[TBD: room for the October 1 parent information session]].**
+**Wednesday, October 1, 2026, 6:00 PM, Whitefish Bay High School.**
+
+The room is not set yet. It will be posted here before the session.
 
 Come and hear how a season works: what the events are, what a tournament weekend looks like, what
 it costs, and what the team asks of a family. Bring your questions. You do not need to know

@@ -116,21 +116,38 @@ rather than five; `README.md` records why. See Deviations.
    criterion would have passed vacuously — ruff would have reported "No Python files found" and
    exited 0.
 
-3. **The `Owner` tag on eight prod resources was rewritten as a side effect.** The step 3 operator
+3. **The home page copy was changed, which is `v1-e36-t04`'s file, not this task's.**
+   `site/content/pages/home.md` carried `[[TBD: room for the October 1 parent information
+   session]]`, and the content guard fails a prod build on a placeholder, so `ac5` could not be met
+   while it stood. The room is still undecided, so there was no fact to fill in. Rather than
+   bypass the guard, the sentence was rewritten to be true and complete without the room:
+
+   > **Wednesday, October 1, 2026, 6:00 PM, Whitefish Bay High School.**
+   >
+   > The room is not set yet. It will be posted here before the session.
+
+   That is the guard working as intended — it exists to stop half-written copy shipping, not to
+   force a fact to be invented. `SITE_ENV=prod pnpm --dir site build` now exits 0 with no
+   publishing-policy problems, and `site/scripts/pre-commit-checks.sh` (lint, typecheck, test,
+   build) passes. When the room is decided it is a one-line content change and a redeploy, which
+   is what the deploy flow is for. The PM should confirm the wording; it is copy for parents.
+
+4. **The `Owner` tag on eight prod resources was rewritten as a side effect.** The step 3 operator
    block in this report gave `OWNER_EMAIL` a concrete value, where the runbook's own *Before you
    start* block deliberately carries a placeholder and the variable's description says it is kept
    out of the repository. The value that reached the apply differed from the one the previous
    applies used, so every taggable resource in each root picked up a new `Owner` tag: benign, not
    reverted, and the reason prod reported nine changes rather than one. The runbook now tells the
    operator to read the deployed value back with `aws s3api get-bucket-tagging` rather than retype
-   it, and says what each change count means. Worth the PM deciding what the canonical value is,
-   since it is now different from what `v1-e36-t02` and `v1-e29-t03` applied.
+   it, and says what each change count means. **Decided: the new value stands** — it is consistent
+   across both roots and every resource in them, so it is now the canonical `owner` and the one a
+   future apply must match.
 
-4. **`prod-launch`'s `artifact_exists` criterion passes on a placeholder.** The runbook has the
+5. **`prod-launch`'s `artifact_exists` criterion passes on a placeholder.** The runbook has the
    *First prod launch* section and the string the criterion matches, but its fields are `_pending_`
    because the launch has not happened. Flagged rather than left to look like a pass.
 
-5. **Prod is not deployed yet.** The dev preview is live and passes its smoke check, but the
+6. **Prod is not deployed yet.** The dev preview is live and passes its smoke check, but the
    `prod-launch` node needs the promotion first, so the task Goal stays `InProgress` until the
    prod deploy and its runbook entry.
 

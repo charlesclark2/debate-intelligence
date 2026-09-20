@@ -35,7 +35,11 @@ scripts/task ready
 ```
 
 Lists every `Pending` task on `origin/dev` whose prerequisites are all `Succeeded`, ordered by
-release. Pick from the lowest release first.
+release. Pick from the lowest release first. Tasks that are already started are hidden, because
+`origin/dev` still records them as `Pending` until their PR merges. A task counts as started when a
+local `task/<name>` branch exists or `origin/task/<name>` has been pushed. The footer shows how
+many were hidden. `scripts/task ready --all` lists them too, marked `[started]`, and
+`scripts/task list` shows the ones with a worktree on this machine.
 
 ### 2. Start it
 

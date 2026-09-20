@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Task lifecycle CLI for the Debate Intelligence Platform.
 #
-#   scripts/task ready                      list tasks whose prerequisites are all Succeeded (on origin/dev)
+#   scripts/task ready [--all]              list tasks whose prerequisites are all Succeeded (on origin/dev),
+#                                           hiding ones already started (a task/<name> branch exists)
 #   scripts/task start  <task> [--launch vscode|terminal|none] [--no-launch] [--force]
 #                                           worktree + task/<task> branch off origin/dev, mark InProgress,
 #                                           create the session report, open the Claude session with the
@@ -144,13 +145,36 @@ pr_state() { # <task> -> MERGED|OPEN|CLOSED|NONE|UNKNOWN
 # ---------------------------------------------------------------------------------------------
 
 cmd_ready() {
+  local all=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --all) all=1 ;;
+      *) die "unknown option $1 (ready takes only --all)" ;;
+    esac; shift
+  done
   info "Fetching origin/dev"
-  git_root fetch --quiet origin dev
+  git_root fetch --quiet --prune origin
   local tmp; tmp="$(mktemp -d)"
   git_root archive origin/dev plan_specs docs/process | tar -x -C "$tmp"
-  printf 'Tasks on origin/dev whose prerequisites are all Succeeded:\n\n'
-  helper "$tmp" ready | awk -F '\t' '{ printf "  %-5s %-48s %s\n", $1, $2, $3 }'
+  # Tasks already started: a local task/<name> branch (with or without a worktree) or a pushed
+  # origin/task/<name> branch (PR open, not merged yet). origin/dev still says Pending for these.
+  local started
+  started="$( { git_root for-each-ref --format='%(refname:strip=2)' refs/heads/task/
+                git_root for-each-ref --format='%(refname:strip=3)' refs/remotes/origin/task/; } \
+              | sed 's#^task/##' | sort -u | tr '\n' ' ' )"
+  local rows; rows="$(helper "$tmp" ready)"
   rm -rf "$tmp"
+  printf 'Tasks on origin/dev whose prerequisites are all Succeeded'
+  [ "$all" -eq 1 ] && printf ' (including started ones)'
+  printf ':\n\n'
+  printf '%s\n' "$rows" | awk -F '\t' -v started="$started" -v all="$all" '
+    BEGIN { n = split(started, s, " "); for (i = 1; i <= n; i++) if (s[i] != "") busy[s[i]] = 1 }
+    NF == 0 { next }
+    busy[$2] && !all { hidden++; next }
+    { printf "  %-5s %-48s %s%s\n", $1, $2, $3, (busy[$2] ? "  [started]" : "") }
+    END {
+      if (hidden) printf "\n(%d already started, hidden: see scripts/task list, or scripts/task ready --all)\n", hidden
+    }'
   printf '\nStart one with: scripts/task start <task>\n'
 }
 
@@ -420,7 +444,7 @@ Refusing to delete them; commit/discard or pass --force."
   info "Done: $task closed out"
 }
 
-usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-help}"; [ $# -gt 0 ] && shift
 case "$cmd" in

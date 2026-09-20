@@ -235,9 +235,11 @@ it is not needed to review the page.
   build cannot ship without it, then fill it as t08's closing step.
 * **The remaining six pages are still single prose columns.** Charlie asked for about, events,
   join, coaches, parent FAQ and contact to be redesigned too. That is `v1-e36-t07`
-  (`t07-page-structure-pass.yaml`) word for word, and t06's spec puts it out of scope, so it was
-  not done here. The kit those pages need (`Section`, `CardGrid`, `.page-column`, the action
-  states, the centred column) now exists, so t07 is composition rather than new primitives.
+  (`t07-page-structure-pass.yaml`) word for word, and t06's spec puts it out of scope.
+  **Decided with Charlie during this session: finish t06 as specified and do that work in t07**,
+  in its own worktree, once this merges. The kit those pages need (`Section`, `CardGrid`,
+  `.page-column`, the action states, the centred column) now exists, so t07 is composition rather
+  than new primitives.
 * **The Accessibility page has its own main-navigation item, and probably should not.** Charlie
   questioned it. It is there by construction, not by decision: t03 builds the navigation from
   every file in `content/pages/`, so publishing the statement put it in the nav, and t04 gave it
@@ -246,7 +248,11 @@ it is not needed to review the page.
   for it is the footer. Moving it needs a way to mark a page as footer-only (a `navPlacement`
   field in the front matter, say) plus footer links, and it touches `routes.test.ts`, which
   asserts the navigation order. Small, but it is a change to the site frame rather than to the
-  home page, so it belongs in t07 with the rest of the page structure work.
+  home page. **Decided with Charlie during this session: move it to the footer, in t07.**
+
+  **PM action needed:** t07's spec does not currently mention navigation placement at all, so
+  this needs adding to `t07-page-structure-pass.yaml` before that task starts, otherwise the t07
+  session will correctly refuse it as out of scope.
 * **`--color-text-muted` is now referenced by no rule in any stylesheet.** It is still in the
   palette and still asserted as large-text-only. t07 may find a use for it in the FAQ; if it does
   not, the PM may want it dropped from the tokens rather than left as a colour nobody may use.

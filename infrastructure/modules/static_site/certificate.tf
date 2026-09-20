@@ -25,6 +25,9 @@ check "certificate_region_supports_cloudfront" {
   }
 }
 
+# Tagged through the calling root's provider `default_tags`, which tflint cannot see from here;
+# README.md explains the annotation.
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_acm_certificate" "site" {
   count = local.has_custom_domain ? 1 : 0
 

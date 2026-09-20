@@ -55,6 +55,9 @@ locals {
   })
 }
 
+# Tagged through the calling root's provider `default_tags`, which tflint cannot see from here;
+# README.md explains the annotation.
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_ssoadmin_permission_set" "site_publisher" {
   count = local.create_publisher_permission_set ? 1 : 0
 

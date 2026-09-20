@@ -253,9 +253,35 @@ Nothing here may be run from an agent session or from CI.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- Both environments are live and verified against the real account, not just planned: certificates
+  ISSUED, buckets private on all four flags with direct object URLs denied, TLSv1.2_2021, dev
+  noindex and prod indexable, apex/www redirect preserving path and query, and per-environment
+  publisher isolation confirmed with `simulate-principal-policy` rather than by attempting actions.
+  The PM's own fetch of https://wfbdebate.com/ returns 403, which is correct for an empty bucket
+  before t05 deploys anything.
+- Catching the `owner.auto.tfvars` formatting defect, which would have failed pre-commit on files
+  the operator never edited, is exactly the kind of thing that is cheap now and baffling later.
+- **Canonical host is wfbdebate.com, not .org.** The .org registration is stuck in an AWS Support
+  case, so the session built prod on .com. That is the right call and the PM is keeping it: .com is
+  live, parents type .com by habit, and switching canonical hosts after the October 1 session would
+  break links parents were given. When the .org case resolves it redirects to .com, which is the
+  reverse of the original plan; the ADR and the publishing policy's Domains section should say so.
+- Carried forward to v1-e36-t05 (all three from Follow-up work):
+  - The deploy script needs a maintainer profile for `terraform output`; the publisher cannot read
+    state. Keep that split.
+  - The publisher permission set lacks `cloudfront:GetInvalidation`, so the script cannot wait on an
+    invalidation. Add that one action to the publisher policy in t05 (Terraform change plus an
+    operator apply) rather than dropping the wait: a deploy that cannot confirm the invalidation is
+    a deploy that cannot confirm a student removal took effect, which the publishing policy's
+    24-hour clock depends on.
+  - The dev preview is unindexed but unauthenticated. Acceptable while nothing about students is
+    staged there ahead of prod; the policy already requires that, and t05's smoke checks should
+    assert the dev noindex header on every run.
+- Operator step still open: the two publisher SSO profile stanzas in ~/.aws/config (runbook step 7).
+  They are local aliases, so no session can write them. t05 cannot deploy until they exist.

@@ -227,7 +227,22 @@ were resolved in this second pass under **Deviations 2** and are no longer open.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** CHANGES_REQUESTED
+**Verdict:** ACCEPTED
+
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20 (round 2)
+
+**Notes (round 2):**
+
+- Both decisions are implemented where they belong, in the contracts, with the port docstrings now
+  stating the rules and the reasons. Mutation-checking each one — reverting the fake and confirming
+  exactly those three tests fail — is the evidence that makes the contracts worth having.
+- Removing t03's `test_find_by_canonical_url_returns_the_oldest_of_several` rather than inverting it
+  is right. Shared behaviour belongs to the contract; an adapter-side copy is the duplication these
+  two test layers exist to avoid.
+- The spec amendment travels on the PM's `specs/port-contract-rules` branch, so this worktree's spec
+  file staying untouched is correct.
+
+**Round 1 verdict (for the record):** CHANGES_REQUESTED
 
 **Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 

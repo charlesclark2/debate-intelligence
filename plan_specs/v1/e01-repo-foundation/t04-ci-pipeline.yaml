@@ -26,7 +26,9 @@ spec:
     job (dorny/paths-filter) computes path filters (python: packages/, tests/, pyproject.toml, uv.lock;
     web: web/ or clients/; infrastructure: infrastructure/; api: packages/debate_api/, openapi/,
     clients/) so each job runs only when its area changed. Every PR check lives as a job in this one
-    ci.yml, including the ones later tasks add (web in v2-e14-t01, terraform-checks in v1-e29-t02,
+    ci.yml, including the ones later tasks add (web in v2-e14-t01, terraform-checks in v1-e29-t02 —
+    if v1-e29-t02 merged first, this task adds the `terraform-checks` job that calls
+    scripts/terraform_checks.sh,
     api-contract in v2-e12-t06), and each new job is appended to the aggregate `ci` job's needs, so
     path-filtered checks still gate merges; separate workflows are only for non-PR work. The test job
     runs the default pytest selection that excludes `slow` and `live` markers, and heavy suites (LLM

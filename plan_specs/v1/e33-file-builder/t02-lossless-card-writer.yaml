@@ -21,6 +21,10 @@ spec:
     each card's occurrence, produce a Verbatim-compatible .docx in which every card's cite and evidence
     paragraphs are copied as OOXML runs from the source document (w:t text byte-for-byte, and rPr
     formatting: underline, emphasis, bold, highlight, font size), never retyped, re-flowed or generated.
+    The output's style definitions (styles.xml) come from the team's own Verbatim template, via the
+    v1-e31-t02 style profile, never from a source document: a file CardMirror has saved regenerates
+    style definitions from its own defaults (ADR-0014, cardmirror-evaluation.md hand check), so a
+    CardMirror-normalized file is never used as a template.
     Source character styles are mapped to the target styles through the E31 style profile; the same
     tracked-change rules as the E31 parser apply (insertions accepted, deletions, comments and proofing
     marks dropped). Pocket, hat, block headings, coach-written tag overrides and analytics are the only
@@ -40,6 +44,7 @@ spec:
     forbidden:
       - Any writer input that carries evidence or cite text as a string (runs come only from source bytes)
       - Model calls anywhere in the writer
+      - Taking styles.xml or style definitions from a source or CardMirror-saved document
       - Normalizing, correcting, re-flowing or re-casing copied evidence or cite text
       - Importing or depending on the E06 DOCX renderer (debate_core.evidence.docx_renderer)
       - Presenting FILE_IMPORT cards as platform-verified (no VERIFIED status or badge in output)

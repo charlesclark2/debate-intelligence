@@ -33,7 +33,13 @@ spec:
     least-privilege
     EvidenceOperator Identity Center permission set (list/get/put on the environment's bucket and
     encrypt/decrypt with its key; no DeleteObject, no bucket-policy or KMS-policy changes) used by the
-    operator and the `debate-research store` CLI through the SSO profiles from t01. terraform apply is an
+    operator and the `debate-research store` CLI through the SSO profiles from t01, and a separate
+    EvidenceRemoval permission set, assigned to Charlie only and used only for takedowns under the
+    data-use policy (`caselist remove`, v1-e30-t07), through its own SSO profiles (e.g.
+    debate-dev-removal, debate-prod-removal): s3:ListBucketVersions, GetObjectVersion, DeleteObject and
+    DeleteObjectVersion scoped to the raw/, parsed/, files/, manifests/ and quarantine/ prefixes, plus
+    PutObject on manifests/_suppression/ and kms Decrypt/GenerateDataKey; still no bucket-policy, KMS-policy
+    or bucket-deletion rights. terraform apply is an
     operator step (dev first, validated, then prod); CI only validates and runs offline `terraform test`
     with a mocked provider. dev holds synthetic/sample data only unless the backfill task
     (v1-e30-t06) says the operator loads the real corpus for validation. Out of scope: remote state
@@ -48,6 +54,9 @@ spec:
       - Lifecycle rules that delete current object versions outside exports/
       - Granting the additional-principal list write, delete or KMS encrypt/admin permissions
       - s3:DeleteObject, s3:PutBucketPolicy or kms:* for the EvidenceOperator permission set
+      - >-
+        Delete rights for EvidenceRemoval outside raw/, parsed/, files/, manifests/ and quarantine/, or any
+        s3:DeleteBucket, s3:PutBucketPolicy, s3:PutLifecycleConfiguration or kms:* admin action for it
       - Long-lived IAM access keys (operators use Identity Center SSO profiles)
       - terraform apply from CI or an agent session (operator-run only)
       - Real caselist data or student names in Terraform test fixtures
@@ -70,7 +79,10 @@ spec:
       description: >-
         The EvidenceOperator permission set grants only ListBucket (scoped to the documented prefixes),
         GetObject, PutObject, GetObjectVersion and kms Encrypt/Decrypt/GenerateDataKey on the
-        environment's key; a DeleteObject attempt with the operator profile returns AccessDenied.
+        environment's key; a DeleteObject attempt with the operator profile returns AccessDenied. The
+        EvidenceRemoval permission set can delete objects and noncurrent versions under raw/, parsed/,
+        files/, manifests/ and quarantine/ only (a delete under reports/ is denied), and is assigned to
+        Charlie alone.
     - id: ac4
       description: >-
         docs/architecture/evidence-store-layout.md documents bucket naming, the raw/, parsed/, files/,
@@ -170,7 +182,8 @@ spec:
         name: EvidenceOperator permission set and env wiring
         description: >-
           Define the EvidenceOperator permission set (inline policy scoped to the env bucket and key, no
-          delete) and instantiate the module in envs/dev and envs/prod with environment-specific retention;
+          delete) and the EvidenceRemoval permission set (prefix-scoped object and version delete for
+          takedowns only), and instantiate the module in envs/dev and envs/prod with environment-specific retention;
           both roots validate.
         dependsOn: [module-tests]
         outputs:
@@ -192,7 +205,9 @@ spec:
         name: Operator applies dev, validates, then applies prod
         description: >-
           Operator-run (terraform plan/apply exceed the session budget and need SSO credentials): apply in
-          dev, check put/get succeed and delete is denied with the debate-dev profile, then apply prod and
+          dev, check put/get succeed and delete is denied with the debate-dev profile, and that the
+          debate-dev-removal profile can delete a test object's versions under quarantine/ but not under
+          reports/, then apply prod and
           repeat with debate-prod. Record results in the runbook.
         dependsOn: [operator-access-and-envs, key-layout-doc]
         outputs: [docs/runbooks/evidence-store.md]

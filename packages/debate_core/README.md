@@ -76,6 +76,47 @@ revision conflicts, listing order — so a test against a fake exercises the sam
 adapter. `build_fake_ports()` assembles one of each, and is where pyright checks that the fakes
 still conform to the Protocols.
 
+### `integrations/local/` — the filesystem and SQLite adapters (v1-e02-t03-local-repositories)
+
+V1's implementations of the four persistence ports, so the CLI runs with no cloud account.
+Everything lives under one data directory, which each adapter takes as a constructor argument —
+they never read settings:
+
+```
+<data_dir>/
+  blobs/sha256/ab/cd/abcd1234…def0   immutable snapshot bytes, by digest (FsSnapshotStore)
+  debate.sqlite3                     articles, snapshots, cards, searches (SqliteDatabase)
+```
+
+| Module | Contents |
+|---|---|
+| `fs_blob_store.py` | `FsSnapshotStore`: content-addressed blobs, atomic temp+rename writes, read-only once written, `BlobIntegrityError` on a read whose bytes no longer hash to their key |
+| `sqlite_db.py` | `SqliteDatabase.open(data_dir)`: the shared connection, its pragmas, and the migration runner |
+| `migrations/` | Numbered `.sql` files, applied in order and exactly once each |
+| `sqlite_repos.py` | `SqliteArticleRepository`, `SqliteCardRepository`, `SqliteSearchRepository` |
+
+```python
+database = SqliteDatabase.open(settings.storage.data_dir)
+service = ArticleRegistrationService(
+    articles=SqliteArticleRepository(database),
+    clock=SystemClock(),
+    id_generator=UlidGenerator(),
+)
+```
+
+Things worth knowing before you add an adapter or a field:
+
+* **The four repositories share one `SqliteDatabase`.** One connection, one set of pragmas, one
+  migration run, and a write spanning two tables is one transaction.
+* **An entity is stored as its own JSON, plus key columns for indexing.** Nothing reads a value
+  out of a key column, so adding a field to a model needs no migration here — only a new *way of
+  finding* records does.
+* **These adapters do their I/O synchronously inside `async def`.** On a local disk a read is tens
+  of microseconds, and a thread hop per call would cost more than it saved. The port is what makes
+  that reversible without a caller changing.
+* **Migrations are append-only.** A released migration is never edited; databases already record
+  its version. Add the next one.
+
 ### `schemas/` — published JSON Schemas
 
 One file per entity, generated and checked in:

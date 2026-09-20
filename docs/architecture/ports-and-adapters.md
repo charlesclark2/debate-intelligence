@@ -27,8 +27,11 @@ and nothing in `domain/` or `application/` imports `boto3`, `httpx`, `sqlite3`, 
 | `Clock` | `ports.providers` | The current time | system clock | system clock |
 | `IdGenerator` | `ports.providers` | New entity ids | ULID | ULID |
 
-Concrete adapters land in `debate_core.integrations.<technology>`; `v1-e02-t03-local-repositories`
-brings the first of them.
+Concrete adapters land in `debate_core.integrations.<technology>`. `v1-e02-t03-local-repositories`
+brought the first of them, in
+[`debate_core.integrations.local`](../../packages/debate_core/src/debate_core/integrations/local/):
+`FsSnapshotStore` on the filesystem, and the three repositories on one shared `SqliteDatabase`,
+which is opened from the data directory and passed to each of them.
 
 ## Protocols, not base classes
 
@@ -83,8 +86,9 @@ service. `debate_cli`, `debate_api` and `debate_workers` contain no business log
 
 ```python
 # In a CLI command (V1)
+database = SqliteDatabase.open(settings.storage.data_dir)
 service = ArticleRegistrationService(
-    articles=SqliteArticleRepository(settings.data_dir),
+    articles=SqliteArticleRepository(database),
     clock=SystemClock(),
     id_generator=UlidGenerator(),
 )

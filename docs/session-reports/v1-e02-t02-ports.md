@@ -204,9 +204,19 @@ None. Every command in this session ran in seconds; the longest was the full tes
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- All criteria pass. The two epic invariants are enforced by the signatures themselves:
+  - Card overwrites are impossible without `expected_revision`.
+  - `ModelRouter.invoke` returns a validated Pydantic model with provenance, never free text.
+- `build_fake_ports()` makes pyright strict fail if any fake drifts from its Protocol.
+- No boto3, httpx, typer or fastapi imports appear in debate_core.
+- Both decisions are resolved in favour of this branch, so no code change is needed here:
+  1. `BlobIntegrityError` stays. The PM changed v1-e02-t03's spec to match (branch
+     `specs/ports-alignment`); v1-e29-t04 already uses this name.
+  2. SourceSnapshot metadata goes through ArticleRepository's snapshot methods, with no eleventh
+     port. The same spec change tells v1-e02-t03 to store it in its own SQLite table.

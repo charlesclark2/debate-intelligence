@@ -84,7 +84,7 @@ spec:
         WCAG 2.1 AA violations on any page through the site frame, and the publishing-policy guard
         reports the same findings as before the pass (only the October 1 room placeholder).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -170,12 +170,18 @@ Where: your Mac, anywhere.
 terraform version                     # currently 1.7.3
 brew trust hashicorp/tap              # brew refused the formula as untrusted when I checked
 brew upgrade hashicorp/tap/terraform
-brew install tflint
+
+# tflint is not in homebrew-core; the formula was removed. `brew install tflint` fails.
+brew tap terraform-linters/tap
+brew trust terraform-linters/tap      # only if brew refuses the tap as untrusted
+brew install terraform-linters/tap/tflint
+
 terraform version && tflint --version
 ```
 
 Success: Terraform reports 1.10 or newer (1.16.3 is what this task was tested on and what
-`.terraform-version` pins) and tflint reports a version. Until this is done,
+`.terraform-version` pins) and tflint reports 0.64.0 or newer. The runbook has a
+release-binary alternative if you would rather not add the tap. Until this is done,
 `scripts/terraform_checks.sh` and the new pre-commit hook fail on every root with
 "Unsupported Terraform Core version".
 

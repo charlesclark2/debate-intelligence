@@ -153,7 +153,7 @@ done
 if [ "${run_lint}" = true ]; then
   echo
   echo "== tflint =="
-  require_tool "${TFLINT_BIN}" tflint "brew install tflint"
+  require_tool "${TFLINT_BIN}" tflint "brew install terraform-linters/tap/tflint"
 
   # tflint reads the .tflint.hcl of the directory it is linting and inherits nothing from the
   # parent, so `--recursive` only enforces the tagging standard in directories that hold a copy

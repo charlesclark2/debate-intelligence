@@ -43,11 +43,24 @@ brew trust hashicorp/tap          # only if brew refuses the formula as untruste
 brew upgrade hashicorp/tap/terraform
 ```
 
-**tflint**, for `scripts/terraform_checks.sh`:
+**tflint**, for `scripts/terraform_checks.sh`. It is not in homebrew-core — the formula was
+removed — so it comes from the project's own tap:
 
 ```bash
-brew install tflint
+brew tap terraform-linters/tap
+brew trust terraform-linters/tap        # only if brew refuses the tap as untrusted
+brew install terraform-linters/tap/tflint
 tflint --version
+```
+
+`brew install tflint` fails with "No available formula". If you would rather not add a tap, the
+release binary works just as well — the AWS ruleset still comes from `tflint --init`, which
+`scripts/terraform_checks.sh` runs for you:
+
+```bash
+curl -sSL -o /tmp/tflint.zip \
+  https://github.com/terraform-linters/tflint/releases/download/v0.64.0/tflint_darwin_arm64.zip
+unzip -o /tmp/tflint.zip -d /usr/local/bin && tflint --version
 ```
 
 **Three SSO profiles.** `debate-dev` and `debate-prod` come from

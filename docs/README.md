@@ -12,6 +12,7 @@
 | [process/branching-and-environments.md](process/branching-and-environments.md) | `main` = prod, `dev` = development; promotion rules |
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → session → PM review → PR → finish |
 | [process/session-report-template.md](process/session-report-template.md) | Template for session reports |
+| [data/debate-file-style-survey.md](data/debate-file-style-survey.md) | Which Word styles real team, caselist and camp `.docx` files use, and the share of files per template family |
 | [policies/caselist-data-use.md](policies/caselist-data-use.md) | Data-use policy for OpenCaselist disclosures and OpenEv camp files |
 | [policies/website-publishing.md](policies/website-publishing.md) | What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request |
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
@@ -24,8 +25,7 @@
 | [../plan_specs/README.md](../plan_specs/README.md) | PlanSpec conventions |
 | [../ROADMAP.md](../ROADMAP.md) | Releases, epics and tasks with status |
 
-`policies/` and `runbooks/` were added by the caselist data-use policy task and will grow with
-the epics that need them. Directories still to come as they are needed: `guides/` (student and
-coach guides) and `data/` (data models, access patterns, and recorded results of operator-run data
-jobs such as the caselist backfill and the removal register). See the directory table in
+`policies/` and `runbooks/` were added by the caselist data-use policy task, and `data/` by the
+style survey; all three grow with the epics that need them. Still to come as it is needed:
+`guides/` (student and coach guides). See the directory table in
 [working-agreements.md](process/working-agreements.md#3-documentation-lives-in-predictable-places).

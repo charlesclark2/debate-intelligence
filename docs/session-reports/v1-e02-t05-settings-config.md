@@ -235,9 +235,30 @@ Success looks like: `pnpm` finishes without error and
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- Checked against the spec: precedence and fail-fast naming the field (ac1), routing schema with
+  unknown task classes rejected (ac2), `config show --json` with redaction and per-field sources
+  (ac3), and the DEBATE_ENV rules including the unset-to-dev default and the offline test profile
+  (ac4). `settings.py` is the only module reading os.environ, which is what the forbidden list asks
+  for, and recording the source per field is more than the spec required and worth having.
+- **The deviation is right and the spec is wrong.** `card_selection`, `citation_cleanup` and
+  `relevance_classification` are uses, not task classes; `ModelTaskClass` shipped in v1-e02-t02 with
+  complex_reasoning / high_volume / deep_audit / embeddings / rerank, and v1-e05-t01 requires
+  config/model_routing.yaml to map those. Keying on the shipped enum was the only choice that leaves
+  E05 able to load the file. The PM is amending the `routing-config` node text in a separate specs
+  PR; annotating which of the three uses falls into which class was the right call.
+- Keeping bucket, KMS key, region and SSO profile out of StorageSettings is correct: they come from
+  the Terraform outputs in v1-e29-t05, and both starter profiles and the module docstring say so.
+  `caselist_token` as a SecretStr from env or .env only, with a test asserting no committed profile
+  sets a secret, is the behaviour the caselist data-use policy depends on.
+- No new exit codes: ConfigurationError derives from DomainError, so a bad DEBATE_ENV renders a
+  failure panel and exits 1 rather than looking like an internal bug. That is the contract from
+  v1-e01-t07 working as intended.
+- Operator note carried forward: the failing `site-checks` pre-commit hook is unrelated to this task
+  (`pnpm --dir site install` fixes it) and is worth folding into the site README's setup section in
+  one of the E36 polish tasks.

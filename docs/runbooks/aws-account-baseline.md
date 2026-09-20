@@ -264,17 +264,54 @@ The trail's first log delivery can take up to 15 minutes. `IsLogging` should be 
 
 ### Confirm a budget alert actually arrives
 
-A budget nobody receives is not a control, and email subscriptions fail silently. Test it once:
+A budget nobody receives is not a control, and email subscriptions fail silently, so prove the
+delivery path once.
 
-1. Temporarily set the dev budget very low so current spend exceeds 50%: in `terraform.tfvars`,
-   `monthly_budget_usd = { dev = 1, prod = 50 }`, then `terraform apply`.
-2. AWS Budgets evaluates several times a day; the email arrives within about 24 hours. Check spam.
-3. Restore the real value and `terraform apply` again.
+**Lowering one of the three real budgets does not test anything until the evidence buckets
+exist.** All three filter on `Environment` = `dev` or `prod`, or on Bedrock usage. Until
+`v1-e29-t03-evidence-buckets` creates dev and prod resources, those budgets correctly measure $0
+and no threshold can be crossed no matter how low the limit is set. The only tagged resources the
+baseline itself creates are the trail's bucket and key, both `Environment = shared`.
 
-Record in the session report or your notes that the alert was received, and from which budget.
+So test the delivery path with a throwaway budget that has no cost filters and therefore measures
+total account spend. Create it outside Terraform so it never enters state:
 
-Do the same sanity check on the anomaly subscription: Billing → Cost Anomaly Detection →
-`debate-shared-spend-alerts` shows the subscriber as confirmed.
+```bash
+aws budgets create-budget --account-id <account-id> --budget '{
+  "BudgetName": "debate-alert-delivery-test",
+  "BudgetLimit": {"Amount": "1", "Unit": "USD"},
+  "TimeUnit": "MONTHLY",
+  "BudgetType": "COST"
+}' --notifications-with-subscribers '[{
+  "Notification": {
+    "NotificationType": "ACTUAL",
+    "ComparisonOperator": "GREATER_THAN",
+    "Threshold": 50,
+    "ThresholdType": "PERCENTAGE"
+  },
+  "Subscribers": [{"SubscriptionType": "EMAIL", "Address": "<your-email>"}]
+}]'
+```
+
+Budgets evaluate roughly three times a day, so the email lands within about 8-24 hours. Check
+spam. Then remove it:
+
+```bash
+aws budgets delete-budget --account-id <account-id> --budget-name debate-alert-delivery-test
+```
+
+Record that the alert was received. Re-test the real budgets against live spend once t03 and t05
+have put evidence in the dev bucket - that is the first point at which they measure anything.
+
+The anomaly subscription confirms itself:
+
+```bash
+aws ce get-anomaly-subscriptions \
+  --query 'AnomalySubscriptions[?SubscriptionName==`debate-shared-spend-alerts`].Subscribers'
+```
+
+`Status` must read `CONFIRMED`. Cost Anomaly Detection needs about 10 days of history before it
+starts reporting, and it only sees spend once the cost allocation tags from step 5 are active.
 
 ## Step 8 — Confirm Bedrock model access
 

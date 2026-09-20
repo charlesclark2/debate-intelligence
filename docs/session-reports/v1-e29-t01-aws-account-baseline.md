@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e29-cloud-evidence-store/t01-aws-account-baseline.yaml`](../../plan_specs/v1/e29-cloud-evidence-store/t01-aws-account-baseline.yaml) |
 | Epic / release | `v1-e29-cloud-evidence-store` / `v1.1` |
 | Branch | `task/v1-e29-t01-aws-account-baseline` |
-| Session status | PARTIAL — code, ADR and runbook complete; the operator apply and its verifications have not run |
+| Session status | PARTIAL — applied and verified on 2026-09-20; ac4's alert test and ac5's walkthrough outstanding |
 
 ## Summary
 
@@ -52,9 +52,9 @@ Nothing was applied to AWS. Every AWS call this session made was read-only (`des
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1 — ADR-0010 Accepted, Bedrock availability table for every §10 model, S3 + OpenSearch Serverless availability and price notes | PASS | `docs/adr/0010-primary-aws-region.md`, Status `Accepted`. Availability from `aws bedrock list-foundation-models` and `list-inference-profiles` across us-east-1/us-east-2/us-west-2. Prices from `aws pricing get-products` (`AmazonS3`: $0.023/GB-mo both regions; `AmazonES`: $0.24/OCU-hour both regions). Bedrock per-token rates could not be retrieved — see Deviations. |
-| ac2 — dev/prod accounts (or ADR-approved alternative) exist; root has MFA and no access keys; humans sign in only through Identity Center | **FAIL** | Single-account alternative is ADR-approved (ADR-0010). Root MFA is on: `aws iam get-account-summary` → `AccountMFAEnabled: 1`. But `AccountAccessKeysPresent: 1` — **root access keys exist and are in use as the `default` CLI profile**. Also one IAM user (`baseball-access-user`) holds an active key. Operator follow-up 1. |
-| ac3 — organization-wide, multi-region CloudTrail into a private, versioned, encrypted bucket with log-file validation | NOT RUN | Defined and plan-verified (`aws_cloudtrail.organization`: `is_organization_trail`, `is_multi_region_trail`, `enable_log_file_validation` all `true`), but no trail exists yet: `aws cloudtrail describe-trails` → `trailList: []`. Needs operator follow-ups 2 and 3. |
-| ac4 — per-account budgets with 50/80/100% alerts against a documented cap, a Cost Anomaly Detection monitor, notifying Charlie; a test alert was received | NOT RUN | Three budgets and the monitor are defined and plan-verified. None exist yet, and no test alert has been received. Needs operator follow-ups 3, 4 and 5. |
+| ac2 — dev/prod accounts (or ADR-approved alternative) exist; root has MFA and no access keys; humans sign in only through Identity Center | PASS | Single-account alternative is ADR-approved (ADR-0010). `aws iam get-account-summary` → `{"MFA": 1, "RootKeys": 0}` (2026-09-20, after the operator deleted the root keys and removed the local `[default]` credentials). Permission sets `DebateBreakGlassAdmin` (PT1H), `DebateMaintainer` (PT8H), `DebateReadOnly` (PT4H) exist beside the pre-existing `AdministratorAccess`. Caveat: IAM user `baseball-access-user` still holds an active key — another project's, tracked under Follow-up work. |
+| ac3 — organization-wide, multi-region CloudTrail into a private, versioned, encrypted bucket with log-file validation | PASS | `aws cloudtrail describe-trails` → `{Org: true, Multi: true, Validation: true, Kms: arn:...key/c274276f...}`. `get-trail-status` → `{Logging: true, LastDelivery: 2026-09-20T00:11:34, LastError: null}`. Bucket `debate-shared-cloudtrail-<account-id>`: versioning `Enabled`, all four public-access blocks `true`, SSE-KMS with `BucketKeyEnabled`. |
+| ac4 — per-account budgets with 50/80/100% alerts against a documented cap, a Cost Anomaly Detection monitor, notifying Charlie; a test alert was received | PARTIAL | Budgets `debate-dev-monthly` ($25), `debate-prod-monthly` ($50), `debate-shared-bedrock-monthly` ($40) exist. Monitor `debate-shared-spend-monitor` (CUSTOM) and subscription `debate-shared-spend-alerts` (DAILY) exist with the subscriber `CONFIRMED`. **No test alert received yet** — and the budgets read $0 until the cost allocation tags are active and t03 creates dev/prod resources. See Deviations 7. Follow-ups 4 and 5. |
 | ac5 — runbook reproduces the baseline, lists every manual step, shows the SSO CLI profile setup | PASS (document) / pending walkthrough | [`docs/runbooks/aws-account-baseline.md`](../runbooks/aws-account-baseline.md) covers root lockdown, CloudTrail trusted access, Identity Center MFA, cost allocation tags, the apply, `aws configure sso` for `debate-dev`/`debate-prod`, verification commands and Bedrock model access. The operator walkthrough itself is follow-up 6. |
 | node `org-and-identity` — Organization bootstrap Terraform validates | PASS | `terraform -chdir=infrastructure/bootstrap/organization validate` → `Success! The configuration is valid.` |
 | node `org-and-identity` — Root MFA and no root access keys confirmed | **FAIL** | As ac2. |
@@ -132,6 +132,15 @@ so operator-local account ids and emails cannot be committed.
    `Environment = shared` and named `debate-shared-*`, and `DebateMaintainer` denies
    `debate-shared-*` alongside `debate-prod-*` so a dev credential cannot reach the audit trail.
    ADR-0010 states this.
+
+7. **ac4's test alert cannot use the real budgets yet, so the runbook tests the delivery path
+   instead.** All three budgets filter on `Environment` = `dev`/`prod` or on Bedrock usage, and the
+   only tagged resources the baseline creates are the trail's bucket and key, tagged
+   `Environment = shared`. Until `v1-e29-t03-evidence-buckets` creates dev and prod resources the
+   budgets correctly measure $0, so lowering a threshold fires nothing — my first version of this
+   step would not have worked. The runbook now proves email delivery with a throwaway unfiltered
+   budget created outside Terraform, and says to re-test the real budgets against live spend once
+   t03/t05 have put evidence in the dev bucket.
 
 ## Decisions and assumptions
 
@@ -245,11 +254,13 @@ aws ce update-cost-allocation-tags-status --cost-allocation-tags-status \
 Until both read `Active`, every budget here reports $0 and none of them will ever alert.
 Activation is not retroactive, so the first days of figures read low; that is expected.
 
-**5. Confirm a budget alert actually arrives** (~24 h elapsed, blocks ac4)
+**5. Confirm a budget alert actually arrives** (~8-24 h elapsed, blocks ac4)
 
-Set `monthly_budget_usd = { dev = 1, prod = 50 }` in `terraform.tfvars`, `terraform apply`, wait
-for the email (AWS evaluates several times a day; check spam), then restore the real value and
-apply again. Tell me which budget the email came from and I will record it against ac4.
+Not by lowering a real budget: all three filter on `Environment` = `dev`/`prod` or Bedrock usage,
+and none of those exist yet, so they measure $0 and no threshold can trip. Use a throwaway
+unfiltered budget instead, created outside Terraform so it never enters state - the exact commands
+are in the runbook's "Confirm a budget alert actually arrives". Delete it once the email lands, and
+tell me it arrived so I can record it against ac4.
 
 **6. Walk through the baseline** (~10 min, blocks ac5's custom criterion)
 

@@ -269,6 +269,42 @@ describe('the layout kit', () => {
     }
   })
 
+  /**
+   * The left-offset defect: a 36rem paragraph sitting against the left edge of a much wider band
+   * with all the empty space on its right. The fix is one centred text column that the heading
+   * and the content share, which a card grid opts out of.
+   */
+  it('puts a text band in one centred column, and lets a grid break out of it', () => {
+    const { container } = render(
+      <main>
+        <Section id="text-band" intro="An intro." title="A text band">
+          <p>Body copy.</p>
+        </Section>
+        <Section contentWidth="wide" id="grid-band" title="A grid band">
+          <CardGrid>
+            <Card headingLevel={3} title="A card">
+              <p>Body copy.</p>
+            </Card>
+          </CardGrid>
+        </Section>
+      </main>,
+    )
+
+    const textBand = container.querySelector('#text-band .section__inner')
+    expect(textBand?.querySelector(':scope > .section__column')).not.toBeNull()
+    expect(textBand?.querySelector('.section__column > p')?.textContent).toBe('Body copy.')
+
+    // The header always sits in the column, in both kinds of band, so every page is centred on
+    // one axis.
+    expect(container.querySelector('#text-band .section__header')).not.toBeNull()
+    expect(container.querySelector('#grid-band .section__header')).not.toBeNull()
+
+    // A grid is the one thing allowed out of the column.
+    const gridBand = container.querySelector('#grid-band .section__inner')
+    expect(gridBand?.querySelector(':scope > .section__column')).toBeNull()
+    expect(gridBand?.querySelector(':scope > .card-grid')).not.toBeNull()
+  })
+
   it('renders a band with no heading at all, for a hero', () => {
     const { container } = render(
       <main>

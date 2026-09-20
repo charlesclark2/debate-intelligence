@@ -16,9 +16,12 @@ hero:
   lead: >-
     Whitefish Bay Debate empowers students to think critically, speak confidently, and compete
     with purpose through rigorous research, strategic argumentation, and a strong team culture.
+  # The hero action goes to a page. An earlier revision pointed it at the October 1 panel
+  # directly below, which asked a visitor to press a button to reach something already on their
+  # screen; the panel speaks for itself and carries its own action.
   action:
-    label: Come to the parent session on October 1
-    href: '#parent-session'
+    label: How to join the team
+    href: /join/
 
 # The single most important thing on this page. It renders as the one navy panel, directly under
 # the hero. The room is the fact nobody has yet; v1-e36-t08 fills it in before launch.

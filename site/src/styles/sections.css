@@ -4,7 +4,7 @@
  * Before v1-e36-t06 every page was one prose column inside <main>. The kit splits that into two
  * shapes. A Markdown page still renders one .page-column, exactly the measure it had. A composed
  * page such as the home page renders a stack of .section bands instead: each one is full bleed,
- * carries its own background, and centres its content at --layout-max-width. <main> itself no
+ * carries its own background, and centres its content on one axis. <main> itself no
  * longer sets a width or padding, because a band has to be able to reach the edge of the
  * viewport for its background to read as a band at all.
  *
@@ -30,12 +30,22 @@
 }
 
 /*
- * A section heading and its intro are set wider than body copy. At heading sizes the same 36rem
- * holds far fewer characters, and a two-word heading wrapped onto three lines is the single
- * clearest sign of a page laid out by nobody.
+ * The text column, centred in its band.
+ *
+ * Everything on a page that is read rather than scanned goes in here: section headers, the hero,
+ * the parent session panel, prose. Because it is one column rather than a cap per element, a
+ * heading, the paragraph under it and the list under that all share a left edge and a right edge,
+ * and the block as a whole sits on the middle of the page. Only a card grid breaks out of it, to
+ * the wider .section__inner, and it is centred on the same axis.
  */
+.section__column,
+.section__header,
+.hero__content {
+  max-width: var(--layout-prose-width);
+  margin-inline: auto;
+}
+
 .section__header {
-  max-width: var(--layout-heading-width);
   margin-bottom: var(--space-section-gap);
 }
 
@@ -53,7 +63,6 @@
 }
 
 .section__intro {
-  max-width: var(--layout-prose-width);
   margin: 0;
   font-size: var(--font-size-lead);
 }
@@ -119,7 +128,6 @@
 }
 
 .hero__title {
-  max-width: var(--layout-heading-width);
   margin-bottom: var(--space-5);
   font-size: var(--font-size-display);
   line-height: var(--line-height-display);
@@ -128,7 +136,6 @@
 }
 
 .hero__lead {
-  max-width: var(--layout-prose-width);
   margin-bottom: var(--space-6);
   font-size: var(--font-size-lead-hero);
 }
@@ -168,7 +175,6 @@
 }
 
 .parent-session__expect li {
-  max-width: var(--layout-prose-width);
   margin-bottom: var(--space-3);
   padding-left: var(--space-5);
   position: relative;
@@ -254,7 +260,6 @@
 
 .claim-list__body {
   margin: 0;
-  max-width: var(--layout-prose-width);
 }
 
 @media (min-width: 48rem) {

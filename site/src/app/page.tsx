@@ -10,7 +10,7 @@ import { Section } from '@/components/Section'
 import { HOME_SLUG, loadHomeContent, loadPage } from '@/lib/content'
 import { buildPageMetadata } from '@/lib/page-metadata'
 
-/** The anchor the hero action points at, and the id that names the panel for a screen reader. */
+/** Names the October 1 panel for a screen reader moving by region. */
 const PARENT_SESSION_ID = 'parent-session'
 
 export function generateMetadata(): Metadata {
@@ -37,12 +37,14 @@ export default function HomePage() {
     <>
       <section className="section hero">
         <div className="section__inner">
-          <hr className="hero__rule" />
-          <h1 className="hero__title">{page.title}</h1>
-          <p className="hero__lead">{hero.lead}</p>
-          <Button href={hero.action.href} size="large">
-            {hero.action.label}
-          </Button>
+          <div className="hero__content">
+            <hr className="hero__rule" />
+            <h1 className="hero__title">{page.title}</h1>
+            <p className="hero__lead">{hero.lead}</p>
+            <Button href={hero.action.href} size="large">
+              {hero.action.label}
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -73,6 +75,7 @@ export default function HomePage() {
       </Section>
 
       <Section
+        contentWidth="wide"
         eyebrow={entryPoints.eyebrow}
         id="start-here"
         intro={entryPoints.intro}
@@ -96,6 +99,7 @@ export default function HomePage() {
       </Section>
 
       <Section
+        contentWidth="wide"
         eyebrow={whatDebateBuilds.eyebrow}
         id="what-debate-builds"
         intro={whatDebateBuilds.intro}

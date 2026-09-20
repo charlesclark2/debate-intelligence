@@ -50,7 +50,10 @@ describe('the hero', () => {
 
     const action = screen.getByRole('link', { name: content.hero.action.label })
     expect(action.className).toContain('button--primary')
-    expect(action.getAttribute('href')).toBe(content.hero.action.href)
+    // next/link normalises the trailing slash outside a Next build.
+    expect(action.getAttribute('href')?.replace(/\/$/, '')).toBe(
+      content.hero.action.href.replace(/\/$/, ''),
+    )
   })
 
   it('has exactly one action, so there is nothing to choose between', () => {
@@ -71,10 +74,23 @@ describe('the October 1 parent session panel', () => {
     }
   })
 
-  it('is what the hero action points at', () => {
+  /**
+   * The hero action used to point here, one screenful above, which asked a visitor to press a
+   * button to reach something already in front of them. It now goes to a page, and the panel
+   * carries its own action.
+   */
+  it('is not what the hero action points at, and carries an action of its own', () => {
     renderHome()
-    expect(content.hero.action.href).toBe('#parent-session')
-    expect(document.getElementById('parent-session')).not.toBeNull()
+    expect(content.hero.action.href).not.toMatch(/^#/)
+    const routes = new Set(loadPages().map((item) => item.route))
+    expect(routes, `the hero action ${content.hero.action.href} is not a route`).toContain(
+      content.hero.action.href,
+    )
+
+    const panel = document.getElementById('parent-session') as HTMLElement
+    expect(
+      within(panel).getByRole('link', { name: content.parentSession.action.label }),
+    ).toBeDefined()
   })
 
   it('is the most prominent thing on the page after the hero', () => {

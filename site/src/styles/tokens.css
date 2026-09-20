@@ -170,15 +170,24 @@
   --duration-transition: 150ms;
   --easing-standard: ease-out;
 
-  --layout-max-width: 68rem;
   /*
-   * The measure: the width body copy is set to. Arial averages about half its point size per
-   * character in English prose, so at the 16px body size 36rem (576px) works out at roughly 72
-   * characters, inside the 60 to 75 that reads comfortably. Headings and hero copy are set
-   * wider, because at their size the same width holds far fewer characters.
+   * Two widths, and everything on a page is centred on the same axis.
+   *
+   * --layout-prose-width is the text column: the measure body copy is set to, and also the width
+   * every heading, intro, list and panel sits in, so a heading and the paragraph under it share a
+   * left edge rather than starting at two different places. Arial averages about half its point
+   * size per character in English prose, so at the 16px body size 36rem (576px) works out at
+   * roughly 72 characters, inside the 60 to 75 that reads comfortably.
+   *
+   * --layout-max-width is the wide band: the header, the footer and the one kind of content that
+   * is allowed to break out of the text column, a grid of cards. It is deliberately not much
+   * wider. An earlier revision of this pass set it to 68rem, which left a 36rem paragraph sitting
+   * against the left edge of a 68rem band with 32rem of empty space to its right; the page read
+   * as though it had slipped sideways. A band only needs to be wide enough for the widest thing
+   * in it.
    */
   --layout-prose-width: 36rem;
-  --layout-heading-width: 48rem;
+  --layout-max-width: 56rem;
   --layout-gutter: var(--space-4);
 }
 

@@ -204,6 +204,30 @@ describe('motion is restrained', () => {
   })
 })
 
+/**
+ * The page is centred on one axis (the defect this replaced: a text column pinned to the left of
+ * a much wider band, with every pixel of slack on its right).
+ */
+describe('the text column is centred, not pinned left', () => {
+  const sections = readStylesheet('sections.css')
+
+  it('centres the text column, the section header and the hero on the same measure', () => {
+    const body = ruleBody(sections, '.section__column,\n.section__header,\n.hero__content')
+    expect(body, 'the centred text column rule is missing from sections.css').not.toBeNull()
+    expect(declaration(body!, 'max-width')).toBe('var(--layout-prose-width)')
+    expect(declaration(body!, 'margin-inline')).toBe('auto')
+  })
+
+  it('keeps the wide band close enough to the text column to look deliberate', () => {
+    const wide = Number.parseFloat(/--layout-max-width:\s*([\d.]+)rem/.exec(tokens)?.[1] ?? 'NaN')
+    const text = Number.parseFloat(/--layout-prose-width:\s*([\d.]+)rem/.exec(tokens)?.[1] ?? 'NaN')
+    expect(wide).toBeGreaterThan(text)
+    // The band a card grid breaks out to is at most 20rem wider than the text column. At 68rem
+    // against a 36rem column the page read as though it had slipped sideways.
+    expect(wide - text).toBeLessThanOrEqual(20)
+  })
+})
+
 describe('the footer carries the white knockout mark', () => {
   it('renders the knockout artwork on navy, decoratively', async () => {
     const { container } = render(

@@ -293,6 +293,20 @@ run is a cheap confirmation rather than a suspicion.
 
 ## Follow-up work
 
+* **The env roots are shared and nothing sequences applies across tasks.** Two tasks in flight
+  today (`v1-e29-t03-evidence-buckets` and this one) each change `infrastructure/envs/*`, and an
+  apply from whichever branch is behind either destroys the other's resources or silently reverts
+  its policy. **A revert is invisible in the plan's counts**: undoing a shared module's change
+  reads as `1 to change`, indistinguishable from an intended edit, so only reading the diff body
+  for that resource catches it. Counts catch the destroy case and nothing else. Raised from both
+  sides — `v1-e29-t03`'s report carries the same item — and it wants a rule in `docs/process/`
+  (apply only from a branch rebased on the latest `dev`; never from a task branch once another
+  task's resources are live in that root). Neither session wrote that rule: `working-agreements.md`
+  says changes to it go through their own PR, so it is the PM's to make rather than something to
+  slip into a task branch.
+  **This one has not reached the PM yet**: `v1-e29-t03`'s PM review was written before that
+  session recorded it, so this copy may be the first one read.
+
 * **`validate-dev` does not exist yet** (`v1-e01-t10-validate-dev-gate`). `tests/smoke/test_site.py`
   is written to be invoked by it, and until that task lands the dev smoke check is a manual step in
   the runbook. Worth confirming that `v1-e01-t10` knows to pass `SITE_SMOKE_URL`, `SITE_SMOKE_ENV`
@@ -306,23 +320,14 @@ run is a cheap confirmation rather than a suspicion.
   them in is deleting a line each.
 * **`wfbdebate.org`** remains blocked in an AWS Support case. Nothing here builds for it; if it is
   ever issued it becomes a redirect to `.com`, which is a tfvars change and an apply.
-* **The env roots are shared and nothing sequences applies across tasks.** Two tasks in flight
-  today (`v1-e29-t03-evidence-buckets` and this one) each change `infrastructure/envs/*`, and an
-  apply from whichever branch is behind either destroys the other's resources or silently reverts
-  its policy. **A revert is invisible in the plan's counts**: undoing a shared module's change
-  reads as `1 to change`, indistinguishable from an intended edit, so only reading the diff body
-  for that resource catches it. Counts catch the destroy case and nothing else. Raised from both
-  sides — `v1-e29-t03`'s report carries the same item — and it wants a rule in `docs/process/`
-  (apply only from a branch rebased on the latest `dev`; never from a task branch once another
-  task's resources are live in that root). Neither session wrote that rule: `working-agreements.md`
-  says changes to it go through their own PR, so it is the PM's to make rather than something to
-  slip into a task branch.
-* **`scripts/terraform_checks.sh` does not run `terraform test`** — it runs `fmt`, `validate` and
-  `tflint` only, so module test suites are run by hand and nothing fails a PR when one breaks.
-  This session ran `terraform test` in `infrastructure/modules/static_site` manually (11 passed);
-  `v1-e29-t03-evidence-buckets` reports the same for its own module. Seconding their
-  recommendation that this wants its own small task: the script is `v1-e29-t02`'s output and
-  editing it touches every task in flight, so it should not be amended from either of ours.
+* **`terraform test` in the checks script: already done, no task needed.** This session ran
+  `terraform test` in `infrastructure/modules/static_site` by hand (11 passed) because
+  `scripts/terraform_checks.sh` ran only `fmt`, `validate` and `tflint`. That gap has since been
+  closed by the PM on `specs/evidence-layout-alignment` (`ac888e7`), which makes the script run
+  `terraform test` for every module with a `tests/` directory, with `--no-test` to skip; verified
+  by reading that branch. Once it reaches `dev` and this branch is synced, the by-hand run above
+  becomes a covered one and `scripts/terraform_checks.sh` takes a few seconds longer. Recorded so
+  this is not read as a proposal for work already done.
 * **Automatic republish on a content change** is `v1-e37-t04`, and **keyless CI deploys** are
   `v2-e10-t03`. When the latter lands, the prod guard in `scripts/site_deploy.sh` has to be
   reproduced in the workflow, or the script has to be what the workflow runs.

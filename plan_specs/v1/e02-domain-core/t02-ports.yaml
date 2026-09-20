@@ -54,7 +54,7 @@ spec:
         In-memory fakes for every port live in debate_core.testing and are checked against the
         Protocols by pyright strict.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -1,0 +1,29 @@
+terraform {
+  # The bootstrap root runs before remote state exists (v1-e29-t02-terraform-bootstrap), so it
+  # keeps local state. See README.md in this directory for how that state is handled.
+  required_version = ">= 1.7.0, < 2.0.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.70"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+
+  # The tagging standard of ADR-0010: nothing in this account is separated by an account
+  # boundary, so every resource must be identifiable by tag. v1-e29-t02-terraform-bootstrap
+  # makes this the standard for the environment roots as well.
+  default_tags {
+    tags = {
+      Project    = var.project
+      Owner      = var.owner
+      CostCenter = var.cost_center
+      ManagedBy  = "terraform"
+      SpecRef    = "v1-e29-t01-aws-account-baseline"
+    }
+  }
+}

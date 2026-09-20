@@ -18,11 +18,13 @@ import pytest
 from debate_core.integrations.local import sqlite_db
 from debate_core.integrations.local.sqlite_db import (
     DATABASE_FILENAME,
+    MINIMUM_SQLITE_VERSION,
     SCHEMA_VERSION_TABLE,
     Migration,
     MigrationError,
     SqliteDatabase,
     apply_migrations,
+    build_migrations,
     load_migrations,
     pragma_values,
     read_schema_version,
@@ -284,3 +286,65 @@ def test_a_migration_that_fails_halfway_is_rolled_back_and_the_run_resumes(
         assert read_schema_version(connection) == 1
     finally:
         connection.close()
+
+
+def test_a_migration_filename_must_say_its_version_and_what_it_does() -> None:
+    with pytest.raises(MigrationError, match="is not named"):
+        build_migrations({"add_an_index.sql": "CREATE INDEX i ON articles (owner_id)"})
+
+
+def test_two_migrations_may_not_claim_one_version() -> None:
+    with pytest.raises(MigrationError, match="claim version 1"):
+        build_migrations(
+            {
+                "0001_initial_schema.sql": "CREATE TABLE a (id TEXT PRIMARY KEY NOT NULL) STRICT",
+                "1_initial_schema.sql": "CREATE TABLE b (id TEXT PRIMARY KEY NOT NULL) STRICT",
+            }
+        )
+
+
+def test_a_gap_in_the_numbering_means_a_migration_was_lost() -> None:
+    with pytest.raises(MigrationError, match="contiguously from 1"):
+        build_migrations(
+            {
+                "0001_initial_schema.sql": "CREATE TABLE a (id TEXT PRIMARY KEY NOT NULL) STRICT",
+                "0003_much_later.sql": "CREATE TABLE c (id TEXT PRIMARY KEY NOT NULL) STRICT",
+            }
+        )
+
+
+def test_a_migration_may_not_manage_its_own_transaction() -> None:
+    """The runner wraps each migration, so an inner COMMIT would publish half of one."""
+    with pytest.raises(MigrationError, match="manages its own transaction"):
+        build_migrations(
+            {
+                "0001_initial_schema.sql": (
+                    "BEGIN;\nCREATE TABLE a (id TEXT PRIMARY KEY NOT NULL) STRICT;\nCOMMIT;"
+                )
+            }
+        )
+
+
+def test_a_migration_that_is_only_comments_is_rejected() -> None:
+    with pytest.raises(MigrationError, match="contains no statements"):
+        build_migrations({"0001_initial_schema.sql": "-- planned, but never written\n"})
+
+
+def test_the_shipped_migrations_are_what_build_migrations_makes_of_them() -> None:
+    assert load_migrations() == build_migrations(
+        {
+            "0001_initial_schema.sql": (
+                Path(sqlite_db.__file__).parent / "migrations" / "0001_initial_schema.sql"
+            ).read_text(encoding="utf-8")
+        }
+    )
+
+
+def test_a_sqlite_too_old_for_the_schema_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """STRICT tables arrived in 3.37; on anything older the schema would not even be created."""
+    too_old = (MINIMUM_SQLITE_VERSION[0], MINIMUM_SQLITE_VERSION[1] - 1, 0)
+    monkeypatch.setattr(sqlite3, "sqlite_version_info", too_old)
+    monkeypatch.setattr(sqlite3, "sqlite_version", ".".join(str(part) for part in too_old))
+
+    with pytest.raises(MigrationError, match="needs SQLite"):
+        SqliteDatabase.open(tmp_path)

@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -70,6 +70,7 @@ __all__ = [
     "MigrationError",
     "SqliteDatabase",
     "apply_migrations",
+    "build_migrations",
     "load_migrations",
     "pragma_values",
     "read_schema_version",
@@ -131,29 +132,46 @@ class Migration:
 
 
 def load_migrations() -> tuple[Migration, ...]:
-    """Read every migration file, in version order, and check the sequence is intact.
+    """Read every migration file shipped in this build, in version order.
+
+    Reads through `importlib.resources`, so it behaves the same in a source checkout and in an
+    installed wheel. The validation itself is :func:`build_migrations`.
+    """
+    files = {
+        entry.name: entry.read_text(encoding="utf-8")
+        for entry in resources.files(MIGRATIONS_PACKAGE).iterdir()
+        if entry.name.endswith(".sql")
+    }
+    return build_migrations(files)
+
+
+def build_migrations(files: Mapping[str, str]) -> tuple[Migration, ...]:
+    """Parse and check a set of migration files, keyed by filename, into an ordered sequence.
+
+    Separate from :func:`load_migrations` because this is where every rule the migrations package
+    documents is enforced, and a rule is only worth stating if a test can watch it fire.
 
     Raises :class:`MigrationError` when a filename does not parse, two files claim one version, the
-    numbering does not run contiguously from 1, or a file tries to manage its own transaction.
+    numbering does not run contiguously from 1, a file manages its own transaction, or a file is
+    empty.
     """
     found: dict[int, Migration] = {}
-    for entry in resources.files(MIGRATIONS_PACKAGE).iterdir():
-        if not entry.name.endswith(".sql"):
-            continue
-        matched = _MIGRATION_FILENAME.match(entry.name)
+    for filename in sorted(files):
+        matched = _MIGRATION_FILENAME.match(filename)
         if matched is None:
             raise MigrationError(
-                f"migration file {entry.name!r} is not named <version>_<description>.sql, "
+                f"migration file {filename!r} is not named <version>_<description>.sql, "
                 "for example 0002_add_card_tag_index.sql"
             )
         version = int(matched.group("version"))
         if version in found:
             raise MigrationError(
-                f"two migration files claim version {version}: {found[version].filename} and {entry.name}"
+                f"two migration files claim version {version}: {found[version].filename} and {filename}"
             )
-        statements = _split_statements(entry.read_text(encoding="utf-8"), entry.name)
         found[version] = Migration(
-            version=version, name=matched.group("name").replace("_", " "), statements=statements
+            version=version,
+            name=matched.group("name").replace("_", " "),
+            statements=_split_statements(files[filename], filename),
         )
 
     ordered = tuple(found[version] for version in sorted(found))
@@ -315,7 +333,7 @@ class SqliteDatabase:
         return read_schema_version(self._connection)
 
     @contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
+    def transaction(self) -> Generator[sqlite3.Connection]:
         """Run a block inside one `BEGIN IMMEDIATE` transaction, committing or rolling back.
 
         `IMMEDIATE` takes the write lock up front rather than on the first write. A read-then-write

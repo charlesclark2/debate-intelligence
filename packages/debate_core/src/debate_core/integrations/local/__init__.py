@@ -46,9 +46,29 @@ from debate_core.integrations.local.fs_blob_store import (
     BLOB_FILE_MODE,
     FsSnapshotStore,
 )
+from debate_core.integrations.local.sqlite_db import (
+    DATABASE_FILENAME,
+    Migration,
+    MigrationError,
+    SqliteDatabase,
+)
+from debate_core.integrations.local.sqlite_repos import (
+    CorruptRecordError,
+    SqliteArticleRepository,
+    SqliteCardRepository,
+    SqliteSearchRepository,
+)
 
 __all__ = [
     "BLOB_DIRECTORY",
     "BLOB_FILE_MODE",
+    "DATABASE_FILENAME",
+    "CorruptRecordError",
     "FsSnapshotStore",
+    "Migration",
+    "MigrationError",
+    "SqliteArticleRepository",
+    "SqliteCardRepository",
+    "SqliteDatabase",
+    "SqliteSearchRepository",
 ]

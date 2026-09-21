@@ -997,17 +997,36 @@ account ids here.
 
 | | |
 |---|---|
-| Date | _pending_ |
-| Commit sha | _pending_ |
+| Date | 2026-09-21 |
+| Commit sha | `113c722bdf51a0d4426b48552f4b0c5b75f9fe7d` — the merge of promotion pull request #66, `dev` into `main`, as a merge commit rather than a squash so `main` keeps dev's history |
 | URL given to parents | `https://wfbdebate.com/` |
 | Deploy command | `scripts/site_deploy.sh prod`, run by the operator from a clean `main` |
-| Invalidation | _pending_ (id, and that the wait completed) |
-| Smoke result | _pending_ — `uv run scripts/site_smoke.py --env prod --url https://wfbdebate.com --expect-sha <sha>` |
+| Invalidation | `I60MW4UQNCGPHVSRXUEM2VZM89` on `E391JBUSDYT2GL`; the deploy waited for it and printed `Deployed 113c722… to prod` |
+| Smoke result | **All 31 checks passed.** Every page 200 with all six security headers, every page `indexable` (the inverse of dev), `robots.txt` allows crawling, the October 1 panel is on the home page, 17 FAQ questions open individually, no unfilled fact on any page, `version.json` matches the sha |
 | Domain status | `wfbdebate.com` live; `www.wfbdebate.com` 301s to it; `wfbdebate.org` still blocked in an AWS Support case and not used |
-| Dev preview it was promoted from | _pending_ (dev deploy date, sha, and its smoke result) |
+| Dev preview it was promoted from | 2026-09-21, `9e9dc1374f74d44272361613f5815010e4718c81`, **All 31 checks passed** with `noindex` on every page and `unfilled facts: 0 page(s)`, which is what guaranteed the same commit could build for prod. The difference between that sha and the promoted one is documentation only: the v1-e36-t08 ac4 and ac6 records |
 
-Deadline: this has to be true **before the parent information session on October 1, 2026**,
-because that is where the URL is given out.
+Deadline: this had to be true **before the parent information session on October 1, 2026**, because
+that is where the URL is given out. Met on 2026-09-21, ten days early.
+
+Preconditions as they stood at promotion, per the
+[Promotion checklist](#promotion-checklist): the prod build exited 0 with the publishing-policy
+guard silent; lint, typecheck and 706 site tests passed against an export built from the promoted
+commit, in that order; the browser QA sweep put all eight pages at 100 on accessibility and best
+practices with axe clean at 390, 768 and 1280px and no horizontal overflow; the keyboard walk, the
+FAQ print check and an iPhone were done by the operator and recorded under v1-e36-t08 ac4; and all
+eighteen pre-publication checklist items were ticked against the promoted commit and recorded under
+ac6.
+
+One thing to know about what launched: **the site names no student, depicts no student and
+publishes no student's contact details.** Ten of the eighteen checklist items are satisfied by that
+single fact rather than by review. The first announcement naming a debater and the first photograph
+re-open all ten, and the publishing-policy guard does not yet read image alt text
+(v1-e37-t03 ac6), which has to close before a photograph is published.
+
+The October 1 room reads "To be announced". Replacing it is one line in `site/content/home.yaml`
+and a redeploy; the guard accepts a chosen value and refuses an unset one, so the field cannot go
+silently empty.
 
 ## What to record
 

@@ -12,14 +12,23 @@
 # the polite-pool contact address come from the environment or from an uncommitted .env; see
 # .env.example.
 #
-# The routing file and daily budget are owned by v1-e01-t09-dev-prerelease-channel. The S3 bucket,
-# region and SSO profile are added by v1-e29-t05-evidence-sync-cli from the Terraform outputs
-# evidence_bucket_name and evidence_kms_key_arn, never as constants copied into this file.
+# The routing file and daily budget are owned by v1-e01-t09-dev-prerelease-channel.
 
 allow_network = true
 
 [storage]
 data_dir = "~/.debate-research/prod"
+
+[storage.s3]
+# The prod evidence bucket — the real corpus. Same three Terraform outputs as dev, from
+# `terraform -chdir=infrastructure/envs/prod output`, and the same reason they are written here.
+#
+# `debate-research store sync --apply` into this bucket also requires --confirm-prod, because the
+# difference between these four lines and dev's is the whole difference between a rehearsal and
+# the team's evidence (docs/guides/evidence-store-cli.md).
+bucket = "debate-prod-evidence-a7508de8"
+region = "us-east-1"
+aws_profile = "debate-prod-evidence"
 
 [providers]
 enabled = ["openalex", "crossref", "semantic_scholar", "rss"]

@@ -567,3 +567,134 @@ def test_the_provider_names_configuration_accepts_are_the_ones_e07_builds() -> N
         "rss",
         "gdelt",
     }
+
+
+# ---------------------------------------------------------------------------------------------
+# The S3 evidence bucket per environment (v1-e29-t05-evidence-sync-cli)
+# ---------------------------------------------------------------------------------------------
+
+
+def test_s3_defaults_to_no_bucket_so_an_unconfigured_environment_refuses_rather_than_guesses(
+    tmp_path: Path,
+) -> None:
+    empty = tmp_path / "no-profiles"
+    empty.mkdir()
+
+    settings = load_settings(
+        environment="test", profile_dir=empty, overrides={"storage": {"data_dir": tmp_path}}
+    )
+
+    assert settings.storage.s3.bucket is None
+    assert settings.storage.s3.aws_profile is None
+
+
+def test_s3_dev_and_prod_resolve_to_different_buckets_and_sso_profiles(profiles: Path) -> None:
+    """Acceptance criterion 4: the environment is what decides which store is reachable."""
+    development = load_settings(environment="dev", profile_dir=profiles)
+    production = load_settings(environment="prod", profile_dir=profiles)
+
+    assert development.storage.s3.bucket == "debate-dev-evidence-a7508de8"
+    assert production.storage.s3.bucket == "debate-prod-evidence-a7508de8"
+    assert development.storage.s3.aws_profile == "debate-dev-evidence"
+    assert production.storage.s3.aws_profile == "debate-prod-evidence"
+    assert development.storage.s3.bucket != production.storage.s3.bucket
+    assert development.storage.s3.aws_profile != production.storage.s3.aws_profile
+
+
+def test_the_test_environment_names_no_s3_bucket_at_all(profiles: Path) -> None:
+    """A test that reaches for a bucket must get nothing, not somebody's real evidence store."""
+    settings = load_settings(environment="test", profile_dir=profiles)
+
+    assert settings.storage.s3.bucket is None
+
+
+def test_s3_settings_can_be_overridden_by_the_environment(
+    profiles: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """How a test or a one-off run points the CLI at a different bucket."""
+    monkeypatch.setenv("DEBATE_STORAGE__S3__BUCKET", "debate-test-evidence-moto")
+
+    settings = load_settings(environment="dev", profile_dir=profiles)
+
+    assert settings.storage.s3.bucket == "debate-test-evidence-moto"
+    assert settings.field_sources["storage.s3.bucket"] == "env:DEBATE_STORAGE__S3__BUCKET"
+    # Overriding one field of the group leaves the rest of it alone.
+    assert settings.storage.s3.aws_profile == "debate-dev-evidence"
+
+
+def test_s3_multipart_threshold_is_reported_in_bytes_for_the_adapters(profiles: Path) -> None:
+    settings = load_settings(
+        environment="dev", profile_dir=profiles, overrides={"storage": {"s3": {"multipart_threshold_mb": 8}}}
+    )
+
+    assert settings.storage.s3.multipart_threshold_mb == 8
+    assert settings.storage.s3.multipart_threshold_bytes == 8 * 1024 * 1024
+
+
+def test_an_s3_multipart_threshold_below_s3s_own_minimum_part_size_is_rejected(profiles: Path) -> None:
+    with pytest.raises(ConfigurationError, match="storage.s3.multipart_threshold_mb"):
+        load_settings(
+            environment="dev",
+            profile_dir=profiles,
+            overrides={"storage": {"s3": {"multipart_threshold_mb": 1}}},
+        )
+
+
+def test_a_misspelled_key_under_storage_s3_is_rejected_by_name(tmp_path: Path) -> None:
+    directory = tmp_path / "profiles"
+    directory.mkdir()
+    (directory / "dev.toml").write_text(
+        '[storage]\ndata_dir = "~/x"\n[storage.s3]\nbuckett = "typo"\n'
+        '[models]\nrouting_file = "config/r.yaml"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError, match="buckett"):
+        load_settings(environment="dev", profile_dir=directory)
+
+
+def test_every_s3_field_is_reported_by_config_show(profiles: Path) -> None:
+    """`config show` renders `redacted_dict`, so a new nested group has to reach it."""
+    rendered = load_settings(environment="dev", profile_dir=profiles).redacted_dict()
+
+    assert rendered["storage.s3.bucket"] == "debate-dev-evidence-a7508de8"
+    assert rendered["storage.s3.region"] == "us-east-1"
+    assert rendered["storage.s3.aws_profile"] == "debate-dev-evidence"
+    assert rendered["storage.s3.multipart_threshold_mb"] == 64
+
+
+@pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")
+def test_the_committed_profiles_name_the_buckets_terraform_builds() -> None:
+    """The profile files and `infrastructure/envs/<env>` must not be able to drift apart.
+
+    The bucket name is `${name_prefix}-${environment}-evidence-${evidence_bucket_suffix}` in
+    `infrastructure/modules/evidence_bucket/main.tf`, and the suffix is a committed default in
+    each root's `variables.tf`. This reads that default back out of the Terraform rather than
+    repeating it, so recreating the buckets under a new suffix fails here instead of in a sync.
+    """
+    assert REPOSITORY_ROOT is not None
+    committed = REPOSITORY_ROOT / "config" / "profiles"
+    for environment in ("dev", "prod"):
+        variables = (REPOSITORY_ROOT / "infrastructure" / "envs" / environment / "variables.tf").read_text(
+            encoding="utf-8"
+        )
+        suffix_block = variables.split('variable "evidence_bucket_suffix"', 1)[1]
+        suffix = suffix_block.split("default", 1)[1].split('"')[1]
+
+        settings = load_settings(environment=environment, profile_dir=committed)
+
+        assert settings.storage.s3.bucket == f"debate-{environment}-evidence-{suffix}"
+        assert settings.storage.s3.aws_profile == f"debate-{environment}-evidence"
+        assert settings.storage.s3.region == "us-east-1"
+
+
+@pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")
+def test_no_committed_profile_names_a_kms_key_or_an_account_id() -> None:
+    """A key ARN carries the account id, and a committed file is a published file."""
+    assert REPOSITORY_ROOT is not None
+    for path in sorted((REPOSITORY_ROOT / "config" / "profiles").glob("*.toml")):
+        body = "\n".join(
+            line for line in path.read_text(encoding="utf-8").splitlines() if not line.startswith("#")
+        )
+        assert "arn:aws" not in body, f"{path.name} contains an ARN"
+        assert "kms" not in body.lower(), f"{path.name} names a KMS key"

@@ -12,6 +12,12 @@
 #   * models.budget_usd_daily = 0.0 — a real model call would be refused by the E05 BudgetGuard
 #     even if one somehow got past allow_network.
 #
+# storage.s3 is absent for the same reason allow_network is false: the test environment names no
+# evidence bucket, so `store sync` and `store ls` refuse to run under it rather than resolving to
+# somebody's real bucket. The S3 tests build their adapters against a moto bucket directly, and
+# the CLI's own tests write a profile directory of their own whose dev.toml names that moto
+# bucket — which is also how they exercise the dev/prod split without an AWS account.
+#
 # storage.data_dir is deliberately absent. It has to be a temporary directory on the machine
 # running the tests, and a committed file cannot name one; the built-in test profile in
 # debate_core.application.settings resolves it under the system temp directory instead. A test

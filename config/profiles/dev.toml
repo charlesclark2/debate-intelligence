@@ -15,15 +15,29 @@
 #
 # The channel values below — which models dev routes to and the daily budget — are owned by
 # v1-e01-t09-dev-prerelease-channel, which replaces the placeholders with the real dev routing
-# file. The S3 bucket, region and SSO profile for this environment are added by
-# v1-e29-t05-evidence-sync-cli from the Terraform outputs evidence_bucket_name and
-# evidence_kms_key_arn; they are deliberately not written here as constants.
+# file.
 
 allow_network = true
 
 [storage]
 # Separate from prod, so a dev build can never write to the team's real evidence store.
 data_dir = "~/.debate-research/dev"
+
+[storage.s3]
+# The dev evidence bucket, as `terraform -chdir=infrastructure/envs/dev output` reports it:
+# bucket = evidence_bucket_name, aws_profile = evidence_operator_profile_name, region =
+# aws_region. They are written here rather than read from Terraform state because the bucket
+# suffix is a committed constant chosen for exactly that
+# (docs/architecture/evidence-store-layout.md) — but if an apply ever reports different values,
+# these are wrong and the apply is right.
+#
+# None of this is a secret. The credential is the SSO session `aws sso login --profile
+# debate-dev-evidence` puts in the operator's own ~/.aws, which this platform never reads.
+# No KMS key: the bucket's default encryption is the environment's customer-managed key, and a
+# key ARN would put the account id in a committed file.
+bucket = "debate-dev-evidence-a7508de8"
+region = "us-east-1"
+aws_profile = "debate-dev-evidence"
 
 [providers]
 enabled = ["openalex", "crossref", "rss"]

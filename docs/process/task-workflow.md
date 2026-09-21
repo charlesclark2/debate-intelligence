@@ -134,6 +134,30 @@ unless you pass `--force`. To throw a task away without merging: `scripts/task f
 `scripts/task list` shows every open task worktree with its phase, PM verdict and PR state, so
 nothing is left hanging.
 
+## When a task is reviewed but not finished
+
+Some tasks end with criteria no session can close: a keyboard walk, a sign-off, a run that needs
+credentials or a device. The session's work is done and reviewed, the Goal is honestly
+`InProgress`, and the branch still needs to merge - holding a reviewed branch in a worktree until a
+human finds a free evening is how good work goes stale and how a worktree collects edits nobody
+tracked.
+
+`scripts/task pr <task> --partial` and `scripts/task finish <task> --partial` are for that case.
+`--partial` relaxes only the `status.phase` check, and only from `Succeeded` to `InProgress`. It
+does **not** relax the PM verdict, which must still be `ACCEPTED`, so it is never a way to merge an
+unreviewed branch - only an unfinished one. It also refuses unless the report records what is still
+open (`NOT RUN`, `PARTIAL`, `FAIL` or `NOT APPLICABLE` against a criterion), because a partially
+merged task whose report does not say which criteria remain is indistinguishable from a finished
+one six weeks later.
+
+Because a partially merged task stays `InProgress` on `dev`, the phase cannot confirm the merge and
+the squash commit breaks ancestry, so `finish --partial` confirms it by checking that `origin/dev`
+carries the accepted session report instead.
+
+The verdict and the phase answer different questions, which is why they can disagree: the verdict
+is the PM's review of the session's work, the phase is the Goal's completion. When the remaining
+criteria are closed, set the phase to `Succeeded` in a small spec PR of its own.
+
 ## Keep your main checkout on `dev`
 
 The main clone (`debate-intelligence-tool/debate-intelligence`) should stay on `dev` with no

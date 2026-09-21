@@ -14,8 +14,12 @@
 #   scripts/task report <task>              print the session report (and copy it to the clipboard)
 #   scripts/task review <task>              commits, diffstat and verdict vs origin/dev (for PM review)
 #   scripts/task sync   <task>              rebase the task branch onto the latest origin/dev
-#   scripts/task pr     <task> [--force]    after PM verdict ACCEPTED: checks, push, open PR into dev
-#   scripts/task finish <task> [--abandon] [--force]
+#   scripts/task pr     <task> [--partial] [--force]
+#                                           after PM verdict ACCEPTED: checks, push, open PR into dev
+#                                           --partial: the session's work is done and reviewed, but the
+#                                           Goal stays InProgress because criteria that only the operator
+#                                           can close are still open. Verdict must still be ACCEPTED.
+#   scripts/task finish <task> [--partial] [--abandon] [--force]
 #                                           after the PR is merged: remove worktree + local/remote branch
 #
 # Full workflow: docs/process/task-workflow.md
@@ -325,9 +329,9 @@ cmd_sync() {
 }
 
 cmd_pr() {
-  local task="" force=0
+  local task="" force=0 partial=0
   while [ $# -gt 0 ]; do
-    case "$1" in --force) force=1 ;; -*) die "unknown option $1" ;; *) task="$1" ;; esac; shift
+    case "$1" in --force) force=1 ;; --partial) partial=1 ;; -*) die "unknown option $1" ;; *) task="$1" ;; esac; shift
   done
   validate_name "$task"; need_wt "$task"
   local wt br verdict phase
@@ -349,7 +353,17 @@ cmd_pr() {
     warn "opening PR with PM verdict $verdict (--force)"
   fi
   phase="$(helper "$wt" info "$task" | cut -f5)"
-  [ "$phase" = "Succeeded" ] || [ "$force" -eq 1 ] || die "spec status.phase is $phase, expected Succeeded"
+  if [ "$phase" != "Succeeded" ] && [ "$partial" -eq 1 ]; then
+    # A partial merge: reviewed work ships now, the Goal stays open on criteria only the operator
+    # can close (a keyboard walk, a sign-off, a run that needs credentials). The verdict check above
+    # still applies, so this is never a way past an unreviewed branch - only past an unfinished one.
+    [ "$phase" = "InProgress" ] || die "--partial expects status.phase InProgress, found $phase"
+    warn "partial merge: $task stays InProgress; the report must name the criteria left open"
+    grep -q 'NOT RUN\|NOT APPLICABLE\|PARTIAL\|FAIL' "$wt/$report_path" \
+      || die "--partial needs the report to record which criteria are still open in $report_path"
+  else
+    [ "$phase" = "Succeeded" ] || [ "$force" -eq 1 ] || die "spec status.phase is $phase, expected Succeeded (if operator-only criteria are what remain, use --partial)"
+  fi
 
   git_root fetch --quiet origin dev
   if ! git -C "$wt" merge-base --is-ancestor origin/dev HEAD; then
@@ -381,9 +395,9 @@ cmd_pr() {
 }
 
 cmd_finish() {
-  local task="" abandon=0 force=0
+  local task="" abandon=0 force=0 partial=0
   while [ $# -gt 0 ]; do
-    case "$1" in --abandon) abandon=1 ;; --force) force=1 ;; -*) die "unknown option $1" ;; *) task="$1" ;; esac; shift
+    case "$1" in --abandon) abandon=1 ;; --force) force=1 ;; --partial) partial=1 ;; -*) die "unknown option $1" ;; *) task="$1" ;; esac; shift
   done
   validate_name "$task"
   local wt br; wt="$(wt_path "$task")"; br="$(branch "$task")"
@@ -399,6 +413,16 @@ cmd_finish() {
       [ -n "$spec" ] && phase="$(spec_phase_on_dev "$spec")"
       if [ "$phase" = "Succeeded" ]; then
         info "origin/dev records $task as Succeeded (merge confirmed via the spec)"
+      elif [ "$partial" -eq 1 ] && [ "$phase" = "InProgress" ]; then
+        # A partially merged task stays InProgress on dev, so the phase cannot confirm the merge.
+        # The squash commit also breaks ancestry, so the branch tip is no ancestor of dev either.
+        # What does land on dev is the reviewed report, so that is what is checked.
+        if git_root cat-file -e "origin/dev:docs/session-reports/$task.md" 2>/dev/null \
+           && git_root show "origin/dev:docs/session-reports/$task.md" | grep -q '^\*\*Verdict:\*\* ACCEPTED'; then
+          info "origin/dev carries the accepted report for $task; partial merge confirmed, operator criteria remain"
+        else
+          die "--partial could not confirm the merge: origin/dev has no accepted report at docs/session-reports/$task.md"
+        fi
       elif [ "$force" -eq 1 ]; then
         warn "could not confirm the merge (PR state $state, dev phase ${phase:-unknown}); continuing (--force)"
       else

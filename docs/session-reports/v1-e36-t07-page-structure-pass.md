@@ -254,9 +254,45 @@ about 10s, both well inside the CI budget in `docs/process/working-agreements.md
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
-**Notes:**
+**Rulings on the three that needed one:**
+
+1. **Current topic on each event card: keep it, spec amended.** Parents want to know what is being
+   argued now, and keeping it a content field means Charlie updates it when topics roll over without
+   a session. It sits outside the four comparison fields, so ac3 is untouched.
+2. **Seventeen questions: accepted.** Replacing a count with an explicit roster of the approved
+   sixteen is strictly better — a deliberate addition passes, a silent drop still fails. That is the
+   test doing its actual job rather than counting.
+3. **Contact in the footer: accepted, spec amended.** Charlie asked for it and the reasoning holds:
+   the page is four ways to send one email and the coaches page carries the address. My one
+   reservation is that "Contact" in a nav is a convention parents expect, so if anyone reports
+   hunting for it, moving it back is one line in site.yaml.
+
+**On the four for information:**
+
+- **The room marker is the important one.** t06 replaced `[[TBD]]` with a sentence, so nothing now
+  reminds anyone the room is unset, and the guard being silent is worse than it being strict. t08's
+  spec now requires a check that fails a prod build while a required announcement field is empty: a
+  room of "TBA" is a decision, an empty one is an oversight.
+- **Component-boundary call: accepted.** An h1 level on Section and an events-only grid override are
+  structural; t06's shared rules and the home page are untouched.
+- **Copy changing on every page: accepted, and the spec now says so.** Four rounds of preview review
+  with Charlie supplying or approving each change is the process working, not scope creep. Waiting
+  for another task would have shipped copy he had already rejected.
+- **The contact test reading the Markdown body: good catch, and the pattern matters more than the
+  fix.** A test that asserts on a source the content has moved away from passes for the wrong reason.
+  Asserting on rendered output is the right default for content tests.
+
+**The allowlist expansion is the one thing I would not leave as it is.** Sixteen words, with North,
+West, Blue and Valley among them, turns a name guard into something closer to a suggestion for future
+prose. t08's spec now makes it a phrase allowlist ("North Shore", "Blue Dukes") rather than bare
+words. Rewording two findings instead of allowlisting them was the right instinct.
+
+**Carried to t08:** real-width checks at 390px, the keyboard walk over the disclosures, and the first
+tests/smoke/ entries for the site, which no task had picked up. **New task v1-e36-t09** covers the
+academic case for debate on the home page from the intro-deck material, sourced and approved by
+Charlie; it runs after this and can go alongside t08. All amendments are on branch
+`specs/site-structure-rulings`.

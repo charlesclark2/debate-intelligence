@@ -16,9 +16,9 @@ from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrig
 from debate_core.domain.debate_files import (
     CardCompleteness,
     FileImportProvenance,
-    ParseFailureReason,
     ParsedCard,
     ParsedDocument,
+    ParseFailureReason,
 )
 from debate_core.domain.style_profile import StyleMatchSource
 from debate_core.testing import FakeDebateFileParser, build_fake_debate_file_parser

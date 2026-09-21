@@ -76,7 +76,7 @@ spec:
         tests/smoke/ covers `store ls` and `store sync --dry-run` so validate-dev exercises the commands,
         and docs/guides/evidence-store-cli.md documents usage, environments and resume behaviour.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

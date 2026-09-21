@@ -1,4 +1,8 @@
-"""`debate-research caselist import`: one weekly archive into the local evidence store.
+"""`debate-research caselist import | publish | status`: archives in, the bucket out, and the check.
+
+`import` turns one downloaded archive into the local evidence store (`v1-e30-t03`). `publish` puts
+what was imported into the environment's evidence bucket and `status` says whether the two agree
+(`v1-e30-t05`); both are described under their own headings below, after `import`.
 
 Every decision about what an archive member *is* — new, carried forward, revised, a duplicate,
 taken down, suppressed — belongs to
@@ -42,6 +46,36 @@ deterministic refusals an operator has to act on: an archive over the size ceili
 path, a slug whose event cannot be inferred, or an archive older than one already imported
 without `--allow-out-of-order`. All four arrive as
 :class:`~debate_core.application.errors.DomainError`s and are rendered by the root group.
+
+## `caselist publish`
+
+::
+
+    debate-research caselist publish --caselist hsld26                  # every local snapshot, dev
+    debate-research caselist publish --caselist hsld26 --snapshot 2026-09-15 --dry-run
+    DEBATE_ENV=prod debate-research caselist publish --caselist hsld26 --confirm-prod
+
+Every decision — what to upload, what to skip, when a manifest may be written — is
+:class:`~debate_core.application.caselist.publish_service.CaselistPublishService`'s. Unlike
+`store sync`, this command **applies by default**: it moves exactly the sources a manifest names,
+never overwrites a content-addressed key, and writes each manifest only once all of its sources are
+confirmed, so there is nothing destructive for a plan-first default to protect against. `--dry-run`
+plans and uploads nothing. Writing to prod still needs `--confirm-prod`.
+
+`DEBATE_ENV` chooses the bucket and nothing else does, exactly as for `store`; `test` names no
+bucket and is refused.
+
+Exit codes: `0` when every requested snapshot is complete in the bucket; `1` when any is not —
+with the failed sha256 values in the message and every count in `error.details` — or when a guard
+refused to start. An expired SSO session ends the run at once, before any further manifest, and is
+reported with the `aws sso login --profile …` line the adapter built.
+
+## `caselist status`
+
+Compares this machine's snapshots with the bucket's
+(:class:`~debate_core.application.caselist.status_service.CaselistStatusService`) and writes
+nothing. `0` only when every snapshot agrees; `1` on any drift, with the per-snapshot report in
+`error.details`. With no `--caselist` it compares every caselist either side holds a manifest for.
 """
 
 from __future__ import annotations
@@ -54,11 +88,16 @@ from typing import Annotated, Any, Final
 
 import typer
 
-from debate_cli.context import cli_context, command_name
-from debate_cli.output import JsonValue, TableSpec
+from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
+from debate_cli.context import CliContext, cli_context, command_name
+from debate_cli.exit_codes import ExitCode
+from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist.import_service import Classification, ImportReport
 from debate_core.application.caselist.manifest import manifest_key, write_manifest
-from debate_core.application.settings import ConfigurationError
+from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
+from debate_core.application.caselist.publish_service import PublishReport, SourceResult
+from debate_core.application.caselist.status_service import CaselistStatusReport, SnapshotStatus
+from debate_core.application.settings import ConfigurationError, Environment, Settings
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.local.fs_object_store import FsEvidenceObjectStore
@@ -70,6 +109,10 @@ __all__ = [
     "event_for_caselist",
     "import_archive",
     "import_summary",
+    "publish",
+    "publish_summary",
+    "status",
+    "status_summary",
 ]
 
 EVENTS_BY_SLUG_PREFIX: Final[dict[str, Event]] = {
@@ -167,6 +210,348 @@ def import_archive(
         command_name(ctx),
         import_summary(report, manifest),
         display=_summary_table(report, manifest),
+    )
+
+
+def publish(
+    ctx: typer.Context,
+    caselist: Annotated[
+        str,
+        typer.Option("--caselist", help="Caselist slug to publish, e.g. hsld26, or openev for camp files."),
+    ],
+    snapshot: Annotated[
+        str | None,
+        typer.Option(
+            "--snapshot",
+            help="Publish only this snapshot: YYYY-MM-DD, or <year>-<event> for openev. Default: all.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="List the planned uploads and upload nothing."),
+    ] = False,
+    confirm_prod: Annotated[
+        bool,
+        typer.Option(CONFIRM_PROD_FLAG, help="Required to write to the production evidence bucket."),
+    ] = False,
+) -> None:
+    """Publish imported snapshots and their sources to this environment's evidence bucket."""
+    cli = cli_context(ctx)
+    settings = cli.services.settings
+    validate_publish_target(caselist, snapshot)
+    _refuse(
+        cli,
+        ctx,
+        _no_bucket(settings, writing=not dry_run)
+        or _unconfirmed_production_write(settings, writing=not dry_run, confirmed=confirm_prod),
+    )
+
+    service = cli.services.caselist_publish()
+    cli.output.detail(f"planning {caselist} against {settings.storage.s3.bucket}")
+    plan = _run(service.plan(caselist, snapshot))
+    if dry_run:
+        report = PublishReport(plan=plan, applied=False)
+    else:
+        cli.output.detail(f"uploading {len(plan.uploads)} source(s)")
+        report = _run(service.execute(plan))
+
+    payload = publish_summary(report, settings)
+    display = _publish_table(report, settings)
+    if report.succeeded:
+        cli.output.success(command_name(ctx), payload, display=display)
+        return
+    if not cli.output.is_json:
+        cli.output.success(command_name(ctx), payload, display=display)
+    cli.output.failure(_publish_failure(report, payload), command=command_name(ctx))
+    raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)
+
+
+def status(
+    ctx: typer.Context,
+    caselist: Annotated[
+        str | None,
+        typer.Option("--caselist", help="Only this caselist. Default: every caselist either side holds."),
+    ] = None,
+    snapshot: Annotated[
+        str | None,
+        typer.Option("--snapshot", help="Only this snapshot of --caselist."),
+    ] = None,
+) -> None:
+    """Compare local caselist snapshots with this environment's bucket; exit 0 only if they agree."""
+    cli = cli_context(ctx)
+    settings = cli.services.settings
+    if snapshot is not None and caselist is None:
+        raise InvalidStatusRequest
+    if caselist is not None:
+        validate_publish_target(caselist, snapshot)
+    _refuse(cli, ctx, _no_bucket(settings, writing=False))
+
+    report = _run(cli.services.caselist_status().status(caselist, snapshot))
+    payload = status_summary(report, settings)
+    display = _status_table(report, settings)
+    if report.in_sync:
+        cli.output.success(command_name(ctx), payload, display=display)
+        return
+    if not cli.output.is_json:
+        cli.output.success(command_name(ctx), payload, display=display)
+    drifted = report.drifted
+    cli.output.failure(
+        CommandFailure(
+            code="CASELIST_DRIFT",
+            message=(
+                f"{len(drifted)} snapshot(s) differ between this machine and the bucket: "
+                + ", ".join(f"{entry.caselist} {entry.snapshot}" for entry in drifted)
+            ),
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details=payload,
+            hint="`caselist publish` completes what is missing here; a checksum mismatch needs a person.",
+        ),
+        command=command_name(ctx),
+    )
+    raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)
+
+
+class InvalidStatusRequest(ConfigurationError):
+    """`--snapshot` was given without `--caselist`, which it is a snapshot of."""
+
+    def __init__(self) -> None:
+        super().__init__("--snapshot needs --caselist", field="--snapshot", source="cli")
+
+
+# ------------------------------------------------------------------------------------------------
+# Publish and status guards
+# ------------------------------------------------------------------------------------------------
+
+
+def _refuse(cli: CliContext, ctx: typer.Context, refusal: CommandFailure | None) -> None:
+    """Report `refusal` and end the run, or return so the command can continue.
+
+    The same outcome-not-exception pattern as `store` (see :mod:`debate_cli.commands.store`).
+    """
+    if refusal is None:
+        return
+    cli.output.failure(refusal, command=command_name(ctx))
+    raise typer.Exit(code=refusal.exit_code)
+
+
+def _no_bucket(settings: Settings, *, writing: bool) -> CommandFailure | None:
+    """A publish needs dev or prod; even a dry run or a status needs a bucket to read."""
+    if writing and settings.environment not in SYNCABLE_ENVIRONMENTS:
+        return CommandFailure(
+            code="ENVIRONMENT_NOT_SYNCABLE",
+            message=f"`caselist publish` writes to dev or prod, not {settings.environment.value}",
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details={"environment": settings.environment.value},
+            hint="Set DEBATE_ENV=dev (or prod) and try again.",
+        )
+    if not settings.storage.s3.bucket:
+        return CommandFailure(
+            code="EVIDENCE_STORE_NOT_CONFIGURED",
+            message=f"the {settings.environment.value} environment names no evidence bucket",
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details={"environment": settings.environment.value},
+            hint="Set DEBATE_ENV to dev or prod, or set storage.s3.bucket for this environment.",
+        )
+    return None
+
+
+def _unconfirmed_production_write(
+    settings: Settings, *, writing: bool, confirmed: bool
+) -> CommandFailure | None:
+    """Publishing to the production bucket needs `--confirm-prod`; a dry run writes nothing."""
+    if not writing or settings.environment is not Environment.PROD or confirmed:
+        return None
+    return CommandFailure(
+        code="CONFIRMATION_REQUIRED",
+        message=(
+            "refusing to publish to the production evidence bucket without "
+            f"{CONFIRM_PROD_FLAG}: {settings.storage.s3.bucket}"
+        ),
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details={"environment": settings.environment.value, "bucket": settings.storage.s3.bucket},
+        hint=f"Run it with --dry-run first, then again with {CONFIRM_PROD_FLAG}.",
+    )
+
+
+# ------------------------------------------------------------------------------------------------
+# Publish and status rendering
+# ------------------------------------------------------------------------------------------------
+
+
+def publish_summary(report: PublishReport, settings: Settings) -> dict[str, JsonValue]:
+    """The `--json` envelope's `data` for `caselist publish`.
+
+    For a program first — the scheduled sync (`v1-e34-t02`) reads it. `applied` says whether
+    anything was uploaded; per snapshot, a dry run carries its `planned` action counts and an
+    applied run its `results`; `failed_sha256` is the list a retry would be about. Digests and keys
+    only: nothing from inside a manifest.
+    """
+    outcomes = report.snapshots if report.applied else (None,) * len(report.plan.snapshots)
+    snapshots: list[JsonValue] = []
+    for plan, outcome in zip(report.plan.snapshots, outcomes, strict=True):
+        entry: dict[str, JsonValue] = {
+            "snapshot": plan.snapshot,
+            "manifest_key": plan.manifest_key,
+            "planned": dict(plan.counts),
+        }
+        if outcome is None:
+            entry["manifest"] = "blocked" if plan.blocked else plan.manifest_action.value
+        else:
+            entry["results"] = {result.value: len(outcome.of(result)) for result in SourceResult}
+            entry["manifest"] = outcome.manifest.value
+            entry["failed"] = [
+                {"sha256": failure.sha256, "code": failure.error_code, "message": failure.error_message}
+                for failure in outcome.failed
+            ]
+            entry["manifest_error"] = outcome.manifest_error
+        snapshots.append(entry)
+    return {
+        "environment": settings.environment.value,
+        "bucket": settings.storage.s3.bucket,
+        "caselist": report.plan.caselist,
+        "applied": report.applied,
+        "planned_uploads": len(report.plan.uploads),
+        "bytes_to_upload": report.plan.bytes_to_upload,
+        "counts": ({result.value: report.count(result) for result in SourceResult} if report.applied else {}),
+        "snapshots": snapshots,
+        "failed_sha256": list(report.failed_sha256),
+    }
+
+
+def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str, JsonValue]:
+    """The `--json` envelope's `data` for `caselist status`: one object per snapshot."""
+    return {
+        "environment": settings.environment.value,
+        "bucket": settings.storage.s3.bucket,
+        "in_sync": report.in_sync,
+        "snapshots": [_status_entry(entry) for entry in report.snapshots],
+    }
+
+
+def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
+    return {
+        "caselist": entry.caselist,
+        "snapshot": entry.snapshot,
+        "manifest_key": entry.manifest_key,
+        "in_sync": entry.in_sync,
+        "local_manifest": entry.local_manifest,
+        "manifest_present": entry.manifest_present,
+        "sources": entry.sources,
+        "local_files": entry.local_files,
+        "published_sources": entry.published_sources,
+        "missing_sources": list(entry.missing_sources),
+        "missing_local": list(entry.missing_local),
+        "checksum_mismatches": list(entry.checksum_mismatches),
+        "suppressed": entry.suppressed,
+    }
+
+
+def _publish_table(report: PublishReport, settings: Settings) -> TableSpec:
+    title = f"{report.plan.caselist} -> {settings.storage.s3.bucket} ({settings.environment.value})"
+    if not report.applied:
+        rows = [
+            [
+                plan.snapshot,
+                str(len(plan.of(SourceAction.UPLOAD))),
+                str(len(plan.of(SourceAction.VERIFY, SourceAction.UPLOADED_EARLIER))),
+                str(len(plan.blocked)),
+                "blocked" if plan.blocked else plan.manifest_action.value,
+            ]
+            for plan in report.plan.snapshots
+        ]
+        return TableSpec(
+            columns=("Snapshot", "Upload", "Present or earlier", "Blocked", "Manifest"),
+            rows=rows,
+            title=f"{title}, dry run",
+            caption=(
+                f"{len(report.plan.uploads)} upload(s) planned; nothing was uploaded. "
+                "Re-run without --dry-run to publish."
+            ),
+        )
+    rows = [
+        [
+            outcome.snapshot,
+            str(len(outcome.of(SourceResult.UPLOADED))),
+            str(len(outcome.of(SourceResult.SKIPPED))),
+            str(len(outcome.failed)),
+            outcome.manifest.value,
+        ]
+        for outcome in report.snapshots
+    ]
+    complete = sum(1 for outcome in report.snapshots if outcome.complete)
+    return TableSpec(
+        columns=("Snapshot", "Uploaded", "Skipped", "Failed", "Manifest"),
+        rows=rows,
+        title=title,
+        caption=(
+            f"{complete} of {len(report.snapshots)} snapshot(s) complete in the bucket; "
+            f"{report.count(SourceResult.UPLOADED)} source(s) uploaded and verified."
+        ),
+    )
+
+
+def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec:
+    rows = [
+        [
+            entry.caselist,
+            entry.snapshot,
+            f"{entry.local_files}/{entry.sources}" if entry.local_manifest else "no manifest",
+            str(entry.published_sources),
+            str(len(entry.missing_sources)),
+            "yes" if entry.manifest_present else "no",
+            str(len(entry.checksum_mismatches)),
+            "yes" if entry.in_sync else "NO",
+        ]
+        for entry in report.snapshots
+    ]
+    drifted = len(report.drifted)
+    return TableSpec(
+        columns=(
+            "Caselist",
+            "Snapshot",
+            "Local files",
+            "Published",
+            "Missing",
+            "Manifest",
+            "Mismatches",
+            "In sync",
+        ),
+        rows=rows,
+        title=f"{settings.storage.s3.bucket} ({settings.environment.value}) against this machine",
+        caption=(
+            "Every snapshot agrees."
+            if not drifted
+            else f"{drifted} snapshot(s) differ; see --json for digests."
+        ),
+    )
+
+
+def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> CommandFailure:
+    """What an incomplete publish exits `1` with: the failed digests, and every count in details."""
+    failed = report.failed_sha256
+    if not report.applied:
+        return CommandFailure(
+            code="PUBLISH_BLOCKED",
+            message=(
+                f"{len(failed)} source(s) cannot be published as planned (a checksum mismatch in the "
+                f"bucket, or missing from this machine): {', '.join(failed)}"
+            ),
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details=payload,
+            hint=(
+                "Nothing was uploaded. A mismatch in the bucket needs a person; a missing file needs "
+                "a re-import."
+            ),
+        )
+    incomplete = [outcome for outcome in report.snapshots if not outcome.complete]
+    withheld = ", ".join(f"{outcome.snapshot} ({outcome.manifest.value})" for outcome in incomplete)
+    named = f"; failed sha256: {', '.join(failed)}" if failed else ""
+    return CommandFailure(
+        code="PUBLISH_INCOMPLETE",
+        message=f"{len(incomplete)} snapshot(s) not complete in the bucket, manifest {withheld}{named}",
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details=payload,
+        hint="Re-run the same command: every confirmed source is skipped and the manifests follow.",
     )
 
 

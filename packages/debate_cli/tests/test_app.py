@@ -132,11 +132,14 @@ def test_doctor_reports_the_environment_as_json() -> None:
     # that it has been run — loading is lazy and `doctor` does not need settings.
     assert data["settings_configured"] is True
     # The services the container can build, which `evidence_sync` (v1-e29-t05) was the first of,
-    # `caselist_import` (v1-e30-t03) the second, and the OpenCaselist token store and client
-    # (v1-e34-t01) the next two. A later epic adding one adds it here too: this is the list an
-    # operator reads to find out what this installation is wired for.
+    # `caselist_import` (v1-e30-t03) the second, the publisher and the status comparison
+    # (v1-e30-t05) the next, and the OpenCaselist token store and client (v1-e34-t01) the last.
+    # A later epic adding one adds it here too: this is the list an operator reads to find out
+    # what this installation is wired for.
     assert data["services"] == [
         "caselist_import",
+        "caselist_publish",
+        "caselist_status",
         "caselist_token_store",
         "evidence_sync",
         "opencaselist_client",

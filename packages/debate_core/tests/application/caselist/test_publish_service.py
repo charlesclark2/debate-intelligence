@@ -8,11 +8,11 @@ tables — never from a run of this service (working agreements §6).
 `PutObject` calls are counted at botocore's own event hook, so "uploads nothing" means no request
 was built for AWS, not that a counter this code keeps about itself stayed at zero.
 
-The interrupted cases use `ScriptedBucket` (`tests/fixtures/caselist/interruptible_bucket.py`), a wrapper that passes every call through to the
-real S3 adapter and raises when told to. `SimulatedKill` is a `BaseException`, like the
-`KeyboardInterrupt` or `SystemExit` an operator's Ctrl-C or a killed job produces: the service does
-not catch it, so the run stops where it stands, and what the bucket holds afterwards is exactly what
-a real interruption would leave.
+The interrupted cases use `ScriptedBucket` (`tests/fixtures/caselist/interruptible_bucket.py`), a
+wrapper that passes every call through to the real S3 adapter and raises when told to.
+`SimulatedKill` is a `BaseException`, like the `KeyboardInterrupt` or `SystemExit` an operator's
+Ctrl-C or a killed job produces: the service does not catch it, so the run stops where it stands,
+and what the bucket holds afterwards is exactly what a real interruption would leave.
 
 Nothing here reaches AWS; `packages/debate_core/tests/conftest.py` builds the bucket in moto.
 """
@@ -432,7 +432,9 @@ class TestFailedSourcesWithholdTheManifest:
 
         assert report.failed_sha256 == (digest,)
         assert report.snapshots[0].failed[0].error_code == "MISSING_LOCALLY"
-        assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" not in bucket_keys(s3_client, evidence_bucket)
+        assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" not in bucket_keys(
+            s3_client, evidence_bucket
+        )
 
     async def test_an_expired_session_ends_the_run_with_no_manifest_written(
         self,

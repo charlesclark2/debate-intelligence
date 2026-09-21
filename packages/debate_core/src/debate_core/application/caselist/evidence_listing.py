@@ -17,7 +17,7 @@ snapshot's manifest can say which blobs are that snapshot's.
 from __future__ import annotations
 
 import tempfile
-from collections.abc import AsyncIterator, Callable, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +45,7 @@ __all__ = [
     "local_file",
     "read_local_snapshots",
 ]
+
 
 @dataclass(frozen=True, slots=True)
 class LocalEvidence:
@@ -151,7 +152,7 @@ def _caselists_in(keys: Iterable[ObjectKey]) -> tuple[str, ...]:
 @asynccontextmanager
 async def local_file(
     store: EvidenceObjectStore, path_for: Callable[[ObjectKey], Path] | None, key: ObjectKey
-) -> AsyncIterator[Path]:
+) -> AsyncGenerator[Path]:
     """The file holding one local object: the store's own, or a staged copy that is cleaned up."""
     if path_for is not None:
         yield path_for(key)

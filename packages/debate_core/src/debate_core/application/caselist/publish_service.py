@@ -290,7 +290,10 @@ class CaselistPublishService:
         self, plan: SnapshotPlan, confirmed: set[ObjectKey], failed: dict[ObjectKey, SourceOutcome]
     ) -> SnapshotOutcome:
         sources = await _bounded(
-            [lambda planned=planned: self._publish_source(planned, confirmed, failed) for planned in plan.sources],
+            [
+                lambda planned=planned: self._publish_source(planned, confirmed, failed)
+                for planned in plan.sources
+            ],
             limit=self._concurrency,
         )
 
@@ -309,7 +312,8 @@ class CaselistPublishService:
                 sources=tuple(sources),
                 manifest=ManifestOutcome.WITHHELD,
                 manifest_error=(
-                    f"{len(unconfirmed)} source(s) not confirmed in the bucket: {', '.join(sorted(unconfirmed))}"
+                    f"{len(unconfirmed)} source(s) not confirmed in the bucket: "
+                    + ", ".join(sorted(unconfirmed))
                 ),
             )
 

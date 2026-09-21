@@ -119,9 +119,7 @@ class TestKeyLayout:
             ("openev", "2026-NDI"),
         ],
     )
-    def test_names_with_no_place_in_the_layout_are_refused(
-        self, caselist: str, snapshot: str | None
-    ) -> None:
+    def test_names_with_no_place_in_the_layout_are_refused(self, caselist: str, snapshot: str | None) -> None:
         with pytest.raises(InvalidPublishTarget):
             validate_publish_target(caselist, snapshot)
 
@@ -133,7 +131,13 @@ class TestKeyLayout:
 
 def _row(classification: str | None, digest: str | None, size: int | None = 10, kind: str = "member") -> str:
     return json.dumps(
-        {"kind": kind, "classification": classification, "sha256": digest, "byte_size": size, "school": "Maple Grove"}
+        {
+            "kind": kind,
+            "classification": classification,
+            "sha256": digest,
+            "byte_size": size,
+            "school": "Maple Grove",
+        }
     )
 
 

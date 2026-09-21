@@ -41,13 +41,18 @@ EXPECTED = expected_publish()
 WEEKS = {week["snapshot"]: week for week in EXPECTED["snapshots"]}
 
 
-async def publish(local: LocalEvidence, remote: EvidenceObjectStore, snapshot: str | None = None) -> PublishReport:
+async def publish(
+    local: LocalEvidence, remote: EvidenceObjectStore, snapshot: str | None = None
+) -> PublishReport:
     service = CaselistPublishService(local=local, remote=remote)
     return await service.execute(await service.plan(SYNTHETIC_CASELIST, snapshot))
 
 
 async def status(
-    local: LocalEvidence, remote: EvidenceObjectStore, caselist: str | None = SYNTHETIC_CASELIST, snapshot: str | None = None
+    local: LocalEvidence,
+    remote: EvidenceObjectStore,
+    caselist: str | None = SYNTHETIC_CASELIST,
+    snapshot: str | None = None,
 ) -> CaselistStatusReport:
     return await CaselistStatusService(local=local, remote=remote).status(caselist, snapshot)
 
@@ -105,7 +110,9 @@ class TestBeforeAndAfterAPublish:
             assert entry.missing_sources == entry.missing_local == entry.checksum_mismatches == ()
         # One head per distinct key, however many snapshots name it: 14 sources and 3 manifests.
         assert sorted(head_calls) == sorted(set(head_calls))
-        assert len(head_calls) == EXPECTED["totals"]["source_objects"] + EXPECTED["totals"]["manifest_objects"]
+        assert (
+            len(head_calls) == EXPECTED["totals"]["source_objects"] + EXPECTED["totals"]["manifest_objects"]
+        )
 
     async def test_one_snapshot_can_be_asked_about_alone(
         self, local: LocalEvidence, bucket: S3EvidenceObjectStore

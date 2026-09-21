@@ -145,9 +145,50 @@ performance. Performance has no floor, it scored 88 in the same run, and this ta
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-21
 
 **Notes:**
+
+All three deviations upheld and amended on `specs/t09-rulings`: ac6 no longer expects the October 1
+room placeholder that t08 filled, `permittedNameWords` becomes `permittedNamePhrases` per the
+v1-e36-t07 ruling, and ac2 now states that a source is a source object *or* the single string
+`[[TBD: source]]`, which ac3 requires to be writable. The third is a real tension in the spec rather
+than a liberty taken, and the session read it correctly.
+
+**The content discipline is what matters here and it held.** The page quotes 0.096 SD for
+top-quartile students rather than the 0.13 headline, gives no months-of-learning conversion because
+that figure attaches to the average and not to the quartile, and carries the
+association-not-causation caveat in the claim body rather than a footnote. Nothing from the excluded
+list appears, including the admissions statistic that was the most tempting thing available. The
+`whatDebateBuilds` band gained no citations, as specified.
+
+**Verifying the TBD path with real builds rather than unit tests alone** was the right instinct:
+prod exiting 1 with the claim named, dev exiting 0 with the badge in `out/index.html`, then the
+content restored. A guard that only unit tests have exercised is a guard nobody has seen fire.
+
+**Scanning comments for the excluded evidence categories is correct**, for the reason given: a
+comment is where a sentence sits before someone moves it into copy. Not matching the verb "drop
+out" keeps it from blocking honest FAQ copy.
+
+**One decision I want to record rather than wave through.** "109 points" is the sum of two
+separately reported section effects (52.43 + 57.05 = 109.48), and I refused a months-of-learning
+conversion elsewhere on the principle that a derived figure is not a read figure. The distinction
+that makes this one defensible: an SAT total *is* defined as Math plus Reading and Writing, so the
+sum is a definitional identity, while a standard-deviation-to-months conversion needs an external
+factor the paper does not supply. It stands. If Charlie ever wants the most conservative version,
+the two section figures reported separately are available and cost the sentence very little. No
+confidence interval may be quoted for the sum, and none is.
+
+**Two things for Charlie, neither blocking.** The sign-off is recorded as given on 2026-09-20 for
+copy whose source file was merged on 2026-09-21; the approval is almost certainly real and the date
+almost certainly wrong, but it backs pre-publication checklist item 16 and a compliance record
+should not carry an impossible date. Confirm and correct it. Separately, `/contact/` scored 88 on
+performance in this run; there is no floor on performance and this task did not touch that page, so
+it goes to the next QA pass rather than here.
+
+Follow-ups accepted as filed. The missing `pnpm --dir site/scripts/visual-qa-tools install` in the
+hand-off template is a real gap and belongs in `scripts/task`'s worktree setup rather than in prose
+nobody rereads. `ROADMAP.md` is the PM's refresh, as the spec requires.

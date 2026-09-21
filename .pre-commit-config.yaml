@@ -31,6 +31,14 @@ repos:
         name: check for added large files
         entry: uv run --frozen check-added-large-files --maxkb=500
         language: unsupported
+      # Markers reached dev once, in a Markdown table inside a module docstring: Python parsed the
+      # file, 1,788 tests passed over it, and nothing noticed. `git add` during a rebase does not
+      # check, so this is the only thing between a hurried `rebase --continue` and the main branch.
+      - id: check-merge-conflict
+        name: check for merge conflict markers
+        entry: uv run --frozen check-merge-conflict --assume-in-merge
+        language: unsupported
+        types: [text]
       # Terraform is not a uv dependency: it and tflint come from the operator's machine
       # (`brew install hashicorp/tap/terraform tflint`) and from the CI runner's setup steps, and
       # the script says so if either is missing. It runs only when infrastructure/ or the script

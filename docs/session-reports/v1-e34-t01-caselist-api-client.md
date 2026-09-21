@@ -293,9 +293,35 @@ To keep the API on for your machine afterwards, put `DEBATE_CASELIST__API_ENABLE
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-21
 
 **Notes:**
+
+Deviations 1 and 2 upheld: the spec described endpoints the deployed site does not have, and it now
+says what is true (95d7524, `specs/api-client-rulings`). The client fetching an archive from the
+file-storage URL without sending the token to that host is the right call and better than what the
+spec asked for.
+
+Deviation 3 is the most valuable finding in this report and is not really a deviation. Together with
+the policy conflict raised under Follow-up work, it puts two of ADR-0016's decisions under review,
+one of which was the PM's error: the daily cadence in that ADR contradicts
+`docs/policies/caselist-data-use.md` E34 gate 4, "weekly cadence at most - no polling faster than
+archives are published", which was approved with the maintainer and whose clause 12 confirmation is
+scoped to the weekly archives. The ADR does not override the policy; the cadence stays weekly, and
+`v1-e34-t02` does not start until the listing call settles what the site publishes. The ADR now
+carries an under-review block naming all three questions.
+
+The client is correct either way, because it lists both archive kinds and leaves the choice to t02.
+That is why this task is accepted now rather than held: nothing in it depends on the answer.
+
+Safety posture is right throughout. The leak test capturing httpx's own log records and every
+exception, the rate-limit test running 40 downloads over a simulated clock and checking every
+rolling window, and the refusal to leave a short or interrupted download in the inbox under its
+final name are all stronger than the spec required. The 5-bulk-downloads-per-day limit found in the
+upstream source is recorded against t02, where it has to be budgeted across three caselists.
+
+Follow-ups accepted as filed. The four t02 items are noted in the ADR's review block; the
+import-boundary contracts go to `v1-e02-t06`, which is the fourth task now to carry one.

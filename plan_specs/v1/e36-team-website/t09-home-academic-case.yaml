@@ -75,8 +75,11 @@ spec:
     - id: ac2
       description: >-
         Every claim in the band carries a visible source line naming the publication or organisation,
-        the year, and what was measured; homeContentSchema requires a source object on every claim,
-        so a claim added without one fails the build naming site/content/home.yaml.
+        the year, and what was measured; homeContentSchema requires a source on every claim, so a
+        claim added without one fails the build naming site/content/home.yaml. The source is a source
+        object, or the single string `[[TBD: source]]` and nothing else, because ac3 needs that marker
+        to be writable: it shows as a badge in dev and fails a prod build. Any other string, and a
+        missing source key, fail the loader.
     - id: ac3
       description: >-
         A claim whose source Charlie has not yet supplied carries a `[[TBD: source]]` marker, which
@@ -97,8 +100,11 @@ spec:
         `pnpm --dir site lint`, `typecheck`, `test` and `build` pass offline; axe-core reports no
         WCAG 2.1 AA violations on the home page; the source lines are painted with body grey rather
         than either restricted colour and tests/tokens.test.ts still recomputes every pair; and the
-        publishing-policy guard reports only the October 1 room placeholder, with any organisation
-        named in a source added to permittedNameWords in site/content/media-consent.yaml.
+        publishing-policy guard reports no errors (t08 filled the October 1 room with a chosen value,
+        so this task adds none to an already clean guard), with any organisation or publication named
+        in a source added to permittedNamePhrases in site/content/media-consent.yaml - phrases, not
+        single words, per the v1-e36-t07 ruling, and split at a lower-case "and" the way the existing
+        National Speech / Debate Association entries are.
 status:
   phase: Pending
 ---
@@ -216,8 +222,8 @@ spec:
         description: >-
           Run axe-core over the home page through the site frame, confirm the source-line colour pair
           is in the tokens contrast table and that no transition the band adds escapes the
-          prefers-reduced-motion block, add any organisation named in a source to permittedNameWords
-          so the content guard still reports only the October 1 room placeholder, then run the full
+          prefers-reduced-motion block, add any organisation named in a source to permittedNamePhrases
+          so the content guard still reports no errors, then run the full
           offline gate set and take Charlie's approval of the exact copy and source list.
         dependsOn: [academic-case-band, entry-card-labels]
         outputs:
@@ -226,7 +232,7 @@ spec:
         estimatedEffort: 0.75h
         acceptanceCriteria:
           - type: test_passes
-            name: Home page has no WCAG 2.1 AA violations and the content guard finds only the room placeholder
+            name: Home page has no WCAG 2.1 AA violations and the content guard reports no errors
             command: pnpm
             args: [--dir, site, test, pages-a11y]
           - type: test_passes

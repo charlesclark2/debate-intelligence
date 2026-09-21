@@ -90,3 +90,21 @@ descriptive name.
   **Deviations** instead of improvising.
 * Every task that changes a user-facing surface adds or updates its smoke checks for
   `validate-dev`.
+
+## 6. Expected output is written by hand, not generated
+
+A test whose expected value came out of the code under test cannot contradict that code. It
+pins the behaviour that exists rather than the behaviour that was asked for, and it goes green
+through the bug it was meant to catch.
+
+* Where a task's acceptance rests on a fixture's expected output — a parsed document, an import
+  summary, a rendered file — that expectation is **written by hand from the fixture** and
+  committed, never produced by running the implementation and saving the result.
+* Snapshot tooling that regenerates expectations on demand is fine for churn-heavy detail, but
+  not for the criterion a task is accepted on.
+* This is not theoretical. `v1-e30-t03` hand-wrote `expected_summary.json` and it held the
+  cumulative dedupe honest. `v1-e31-t03` hand-wrote its parser expectations and they caught two
+  bugs that every test the session had written itself passed: a second tag nested under the first
+  instead of beside it, and a tag demoted to an analytic that went on occupying tag level.
+* The same reasoning applies to a number quoted in a report. A count is recorded from a run that
+  happened, and a criterion that could not be exercised is `NOT RUN`, never a plausible value.

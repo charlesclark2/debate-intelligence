@@ -31,6 +31,16 @@ indexability   dev must send ``X-Robots-Tag: noindex`` and disallow everything i
 version        ``/version.json`` parses and, with ``--expect-sha``, names the commit that was
                meant to be deployed. This is what distinguishes "the deploy worked" from "the old
                build is still being served".
+panel          the home page carries the parent-session panel, and on prod no page carries a gap
+               badge. A gap badge on prod means a page went out with a fact nobody supplied, which
+               a prod build refuses (``site/src/lib/publishing-policy.ts``); seeing one live means
+               the build guard was bypassed, so this is the check that notices. On the preview a
+               gap is ordinary and is reported as a count, because that is how Charlie reviews the
+               copy with the holes visible.
+faq            the parent FAQ serves native ``<details>``/``<summary>`` disclosures. The page is
+               the one parents are sent to most, and its answers being reachable is a property of
+               the built HTML rather than of the deploy, so it is cheap to confirm it survived
+               one (v1-e36-t07).
 
 Exit status is 0 when every check passed and 1 otherwise.
 """
@@ -217,6 +227,69 @@ def check_robots(client: httpx.Client, site_url: str, environment: str) -> Check
     )
 
 
+#: The badge a page renders where a fact nobody has supplied would go (``.placeholder`` in
+#: site/src/styles/components.css). A prod build refuses to export one.
+GAP_BADGE = 'class="placeholder"'
+
+#: The home page's October 1 parent-session panel (``PARENT_SESSION_ID`` in site/src/app/page.tsx).
+PARENT_SESSION_ANCHOR = 'id="parent-session"'
+
+
+def check_launch_content(
+    client: httpx.Client, site_url: str, environment: str, paths: list[str]
+) -> Iterator[CheckResult]:
+    """The two content properties that are worth confirming on a deployed site.
+
+    Everything else about the copy is checked offline, in ``site/tests/``, against the same files
+    the build reads. These two are here because they are about what a visitor is actually served:
+    the panel a parent came for, and a gap badge that should never have left a build at all.
+    """
+    # A page that did not answer 200 has already failed its own check. Saying so again here, in
+    # three more ways, would bury the one finding that matters under its own consequences, so
+    # every check below reads only pages that were served.
+    home = _get(client, f"{site_url}/")
+    if home.status_code == 200:
+        yield CheckResult(
+            "parent session panel",
+            PARENT_SESSION_ANCHOR in home.text,
+            "on the home page" if PARENT_SESSION_ANCHOR in home.text else "missing from the home page",
+        )
+
+    gaps = {path: _get(client, urljoin(f"{site_url}/", path.lstrip("/"))) for path in paths}
+    pages_with_gaps = [
+        path for path, response in gaps.items() if response.status_code == 200 and GAP_BADGE in response.text
+    ]
+    if environment == "prod":
+        yield CheckResult(
+            "unfilled facts",
+            not pages_with_gaps,
+            "none"
+            if not pages_with_gaps
+            else (
+                f"{', '.join(pages_with_gaps)} still show a gap badge. A prod build refuses one, "
+                "so this build did not come through the guard."
+            ),
+        )
+    else:
+        yield CheckResult(
+            "unfilled facts",
+            True,
+            f"{len(pages_with_gaps)} page(s) on the preview: {', '.join(pages_with_gaps) or 'none'}. "
+            "A prod build would refuse them.",
+        )
+
+    faq = gaps.get("/faq/")
+    if faq is not None and faq.status_code == 200:
+        disclosures = faq.text.count("<summary")
+        yield CheckResult(
+            "faq disclosures",
+            disclosures > 0,
+            f"{disclosures} questions open individually"
+            if disclosures
+            else "the parent FAQ serves no <summary> disclosure",
+        )
+
+
 def check_version(client: httpx.Client, site_url: str, expected_sha: str | None) -> CheckResult:
     response = _get(client, f"{site_url}/version.json")
     if response.status_code != 200:
@@ -258,6 +331,7 @@ def check_site(
         results.append(sitemap_result)
         for path in paths:
             results.extend(check_page(client, site_url, path, environment))
+        results.extend(check_launch_content(client, site_url, environment, paths))
         results.append(check_robots(client, site_url, environment))
         results.append(check_version(client, site_url, expected_sha))
         return results

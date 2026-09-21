@@ -50,6 +50,25 @@ SECURITY_HEADERS = {
 
 PAGE_PATHS = ("/", "/about/", "/faq/")
 
+#: A home page as the export actually serves it: the October 1 panel with every fact filled in.
+HOME_BODY = (
+    "<!doctype html><title>/</title>"
+    '<section id="parent-session"><dl><dt>Room</dt><dd>Room 214</dd></dl></section>'
+)
+
+#: The parent FAQ as v1-e36-t07 built it: native disclosures, one per question.
+FAQ_BODY = (
+    "<!doctype html><title>/faq/</title>"
+    "<details><summary>What does a season cost?</summary><p>Answer.</p></details>"
+    "<details><summary>How much travel is there?</summary><p>Answer.</p></details>"
+)
+
+#: What a page renders where a fact nobody has supplied would go. A prod build refuses to export
+#: one, so seeing it on prod means the build guard was bypassed.
+HOME_BODY_WITH_A_GAP = HOME_BODY.replace(
+    "<dd>Room 214</dd>", '<dd><span class="placeholder">TBD</span></dd>'
+)
+
 
 class DeployedSite:
     """A site that answers correctly, until a test tells it not to."""
@@ -60,6 +79,7 @@ class DeployedSite:
         self.environment = environment
         self.page_headers: dict[str, dict[str, str]] = {}
         self.page_status: dict[str, int] = {}
+        self.page_bodies: dict[str, str] = {"/": HOME_BODY, "/faq/": FAQ_BODY}
         self.sitemap_body = SITEMAP.format(origin=origin)
         self.sitemap_status = 200
         self.robots_body = (
@@ -99,7 +119,7 @@ class DeployedSite:
                 return_value=httpx.Response(
                     self.page_status.get(path, 200),
                     headers=self.page_headers.get(path, self.default_headers()),
-                    text=f"<!doctype html><title>{path}</title>",
+                    text=self.page_bodies.get(path, f"<!doctype html><title>{path}</title>"),
                 )
             )
 
@@ -304,6 +324,66 @@ def test_a_prod_robots_txt_that_disallows_everything_fails(prod_site: DeployedSi
     results = prod_site.run()
 
     assert [result.name for result in failures(results)] == ["robots.txt"]
+
+
+# --------------------------------------------------------------------------------------
+# What the pages actually say: the launch surfaces of v1-e36-t06, t07 and t08
+# --------------------------------------------------------------------------------------
+
+
+def test_a_home_page_without_the_parent_session_panel_fails(dev_site: DeployedSite) -> None:
+    """The panel is the reason most parents open the site at all."""
+    dev_site.page_bodies["/"] = "<!doctype html><title>/</title><p>Welcome.</p>"
+
+    results = dev_site.run()
+
+    assert [result.name for result in failures(results)] == ["parent session panel"]
+    assert "missing from the home page" in failure_text(results)
+
+
+def test_a_gap_badge_on_prod_fails(prod_site: DeployedSite) -> None:
+    """A fact nobody supplied cannot reach prod through the build, so finding one live means the
+    guard in site/src/lib/publishing-policy.ts was gone round rather than satisfied."""
+    prod_site.page_bodies["/"] = HOME_BODY_WITH_A_GAP
+
+    results = prod_site.run()
+
+    assert [result.name for result in failures(results)] == ["unfilled facts"]
+    assert "did not come through the guard" in failure_text(results)
+
+
+def test_a_gap_badge_on_the_preview_is_reported_rather_than_failed(dev_site: DeployedSite) -> None:
+    """A dev build prints its gaps and carries on: that is how Charlie reviews copy with the holes
+    visible. The count is still worth saying out loud before a promotion."""
+    dev_site.page_bodies["/"] = HOME_BODY_WITH_A_GAP
+
+    results = dev_site.run()
+
+    assert failures(results) == []
+    gaps = next(result for result in results if result.name == "unfilled facts")
+    assert "1 page(s) on the preview" in gaps.detail
+    assert "/" in gaps.detail
+
+
+def test_a_parent_faq_without_disclosures_fails(dev_site: DeployedSite) -> None:
+    dev_site.page_bodies["/faq/"] = "<!doctype html><title>/faq/</title><p>Questions.</p>"
+
+    results = dev_site.run()
+
+    assert [result.name for result in failures(results)] == ["faq disclosures"]
+
+
+def test_the_faq_check_is_skipped_when_the_sitemap_has_no_faq(dev_site: DeployedSite) -> None:
+    """The checks read the sitemap rather than a list of paths written here, so a site without a
+    parent FAQ is checked for what it has rather than failed for what it does not."""
+    dev_site.sitemap_body = SITEMAP.format(origin=DEV_URL).replace(
+        f"  <url><loc>{DEV_URL}/faq/</loc></url>\n", ""
+    )
+
+    results = dev_site.run()
+
+    assert failures(results) == []
+    assert "faq disclosures" not in {result.name for result in results}
 
 
 # --------------------------------------------------------------------------------------

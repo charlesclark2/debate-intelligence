@@ -266,11 +266,15 @@ class DownloadIntegrityError(DomainError):
 class DownloadConflict(DomainError):
     """The inbox already holds a *different* file under the same name. Neither is touched."""
 
-    def __init__(self, destination: Path) -> None:
+    def __init__(self, source_name: str, destination: Path) -> None:
+        self.source_name = source_name
         self.destination = destination
+        """The file already in the inbox. An attribute, never part of the message (it can be a
+        camp's file name)."""
         super().__init__(
-            f"{destination.name} is already in the inbox with different contents; the download "
-            "was discarded and the existing file left as it was. Import or move it, then pull again."
+            f"the inbox already holds a different file under the name {source_name} downloads to; "
+            "the download was discarded and the existing file left as it was. Import or move it, "
+            "then pull again."
         )
 
 

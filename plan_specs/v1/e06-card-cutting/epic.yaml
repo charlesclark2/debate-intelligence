@@ -1,5 +1,5 @@
 # EPIC E06 — Card Cutting, Citation & Export
-# Major version: V1 | Release: v1.1 (URL → verified card)
+# Major version: V1 | Release: v1.3 (URL → verified card)
 # Architecture refs: §6 CardService/CitationService/ExportService, §8, §11, §20 steps 6-7
 # Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
 ---
@@ -11,7 +11,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
   annotations:
     debate/title: E06 — Card Cutting, Citation & Export
@@ -20,10 +20,10 @@ spec:
   description: >-
     Compose retrieval, model selection and verification into CardService; resolve verifiable citations;
     render DOCX and JSON manifests in the team's card conventions; ship `debate-research cut`.
-  priority: 2
+  priority: 4
   constraints:
     majorVersion: v1
-    release: v1.1
+    release: v1.3
     rule: Every task in this epic ships in this release; no task crosses major versions.
   acceptanceCriteria:
   - id: ac1
@@ -48,7 +48,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
 spec:
   description: >-
@@ -87,7 +87,7 @@ spec:
       kind: External
       name: 'Prerequisite from E04: ArticleService orchestration'
       description: >-
-        Cross-epic prerequisite owned by v1-e04-article-retrieval (release v1.1).
+        Cross-epic prerequisite owned by v1-e04-article-retrieval (release v1.3).
       inputs:
         goalRef: v1-e04-t05-article-service
         specRef: plan_specs/v1/e04-article-retrieval/t05-article-service.yaml
@@ -95,7 +95,7 @@ spec:
       kind: External
       name: 'Prerequisite from E05: CardSelection / MarkupSpan contract and prompts'
       description: >-
-        Cross-epic prerequisite owned by v1-e05-model-router (release v1.1).
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.2).
       inputs:
         goalRef: v1-e05-t06-card-selection-contract
         specRef: plan_specs/v1/e05-model-router/t06-card-selection-contract.yaml
@@ -103,10 +103,18 @@ spec:
       kind: External
       name: 'Prerequisite from E05: Token/cost telemetry and budgets'
       description: >-
-        Cross-epic prerequisite owned by v1-e05-model-router (release v1.1).
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.2).
       inputs:
         goalRef: v1-e05-t07-usage-telemetry
         specRef: plan_specs/v1/e05-model-router/t07-usage-telemetry.yaml
+    - id: ext-v1-e31-t02-verbatim-style-profile
+      kind: External
+      name: 'Prerequisite from E31: Verbatim/CardMirror style profile'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t02-verbatim-style-profile
+        specRef: plan_specs/v1/e31-debate-file-parsing/t02-verbatim-style-profile.yaml
     - id: t01
       kind: Task
       name: CitationService with per-field provenance
@@ -161,6 +169,7 @@ spec:
         goalRef: v1-e06-t03-format-profiles
       dependsOn:
       - ext-v1-e02-t01-domain-entities
+      - ext-v1-e31-t02-verbatim-style-profile
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e06-t03-format-profiles reports phase Succeeded

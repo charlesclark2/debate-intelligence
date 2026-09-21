@@ -17,13 +17,18 @@ metadata:
     debate/architecture-refs: §9, §13, §14, §19
 spec:
   description: >-
-    Implement the OpponentDataSource port for OpenCaselist using its documented v1 API (caselists, schools,
-    teams, rounds, cites) with the team's authorized account, and an IngestDisclosures use case that maps
-    rounds and cites into Disclosure records with provenance. Credentials come from settings/Secrets Manager
-    and are never logged. The adapter honors rate limits, retries only idempotent GETs, records open-source
-    documents as links without downloading them, drops fields the governance policy excludes, and refuses to
-    run unless the t06 approval gate is satisfied. Tests use sanitized recorded fixtures with synthetic
-    names. Boundaries: identity resolution is t04 and scheduling/removal is t05.
+    Implement the OpponentDataSource port for OpenCaselist on top of V1: it reuses the V1 OpenCaselist API
+    client (v1-e34-t01: caselist_token auth, rate limiting, backoff, recorded fixtures); this task owns
+    extending that client with the schools/teams/rounds/cites endpoints (V1 covers only caselists,
+    archive downloads and OpenEv) rather than writing a second client, and the V1 caselist domain
+    model and importer (v1-e30-t02/t03: Caselist, School, TeamCode, Disclosure, SourceDocument). V3 adds
+    per-team round/cite ingestion via an IngestDisclosures use case that maps rounds and cites into
+    Disclosure records with provenance for opponent scouting. Credentials come from settings/Secrets Manager
+    and are never logged. The adapter honors rate limits, retries only idempotent GETs, links open-source
+    documents to the SourceDocuments already imported from weekly archives (E30/E34) instead of downloading
+    them again, drops fields the governance policy excludes, and refuses to run unless the t06 approval
+    gate is satisfied. Tests use sanitized recorded fixtures with synthetic names. Boundaries: opponent
+    identity resolution is t04, scheduling/removal is t05, and archive download/import stays in V1 E30/E34.
   priority: 1
   constraints:
     packages: [debate_core.integrations, debate_core.application]
@@ -35,7 +40,8 @@ spec:
       - >-
         Storing student contact details, ages, grades, speaker points or judge names in opponent records
         (unless the governance policy explicitly allows it)
-      - Downloading or storing open-source disclosure documents
+      - Downloading open-source disclosure documents outside the V1 archive import pipeline (E30/E34)
+      - A second OpenCaselist HTTP client or duplicate caselist entities (reuse v1-e34-t01 and v1-e30-t02)
       - Logging credentials or session cookies
       - >-
         Live network or real model calls in unit/CI tests (use respx/vcr fixtures and the fake/replay
@@ -47,11 +53,15 @@ spec:
     - kind: TaskRef
       name: v3-e24-t06-data-governance
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t01-caselist-api-client
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
         OpenCaselistAdapter implements OpponentDataSource for caselists, schools, teams, rounds and cites
-        using documented endpoints only, authenticating with the configured authorized account.
+        using documented endpoints only through the V1 client (v1-e34-t01), authenticating with the
+        configured authorized account, and maps to the V1 caselist entities (v1-e30-t02).
     - id: ac2
       description: >-
         Rounds and cites map to Disclosure records with season/caselist, tournament, round, side, positions,
@@ -91,10 +101,10 @@ spec:
     nodes:
       - id: client
         kind: Task
-        name: OpenCaselist API client
+        name: Extend the V1 OpenCaselist client
         description: >-
-          httpx client for documented endpoints with authorized-account login, session handling and typed
-          errors.
+          Add schools/teams/rounds/cites calls to the V1 client (v1-e34-t01), reusing its authorized-account
+          login, session handling, rate limiter and typed errors, and wrap it as the OpponentDataSource.
         outputs: [packages/debate_core/src/debate_core/integrations/opponent/opencaselist.py]
         estimatedEffort: 3h
         acceptanceCriteria:
@@ -111,7 +121,8 @@ spec:
         kind: Task
         name: Disclosure mapping and minimization
         description: >-
-          Map rounds/cites to Disclosure with provenance; apply the policy field allowlist.
+          Map rounds/cites to the V1 Disclosure entity (v1-e30-t02) with provenance, linking round documents
+          to already-imported SourceDocuments by path; apply the policy field allowlist.
         dependsOn: [client]
         estimatedEffort: 3h
         acceptanceCriteria:
@@ -128,7 +139,8 @@ spec:
         kind: Task
         name: Rate limiting and approval gate
         description: >-
-          Per-source limiter, backoff, idempotent-only retries, and the governance gate check at start.
+          Reuse the V1 client's limiter and backoff, confirm idempotent-only retries, and add the governance
+          gate check at start.
         dependsOn: [client]
         estimatedEffort: 2h
         acceptanceCriteria:

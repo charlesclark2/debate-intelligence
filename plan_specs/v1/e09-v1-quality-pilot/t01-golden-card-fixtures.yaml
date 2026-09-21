@@ -1,5 +1,5 @@
 # TASK v1-e09-t01-golden-card-fixtures — Golden card fixtures from team files
-# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.5 (V1 quality gate & team pilot) | Major: V1
 # Architecture refs: §16 (golden DOCX fixtures), §11 V1 acceptance criteria, §14 (minors' data), §6 layout
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
   annotations:
     debate/title: Golden card fixtures from team files
@@ -70,7 +70,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
 spec:
   description: >-

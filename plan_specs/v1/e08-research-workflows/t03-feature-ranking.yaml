@@ -1,5 +1,5 @@
 # TASK v1-e08-t03-feature-ranking — Explainable feature ranking
-# Epic: E08 Federated Research Workflows | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
 # Architecture refs: §9 Ranking pipeline (features, not a truth score), §6 SearchService, §11
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e08-research-workflows
   annotations:
     debate/title: Explainable feature ranking
@@ -63,7 +63,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e08-research-workflows
 spec:
   description: >-

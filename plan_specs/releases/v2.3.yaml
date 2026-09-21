@@ -16,7 +16,7 @@ spec:
   description: >-
     Saved card library with revisions, folders, sharing and bulk export; pasted cards produce labeled
     extension bullets and CX questions.
-  priority: 8
+  priority: 11
   acceptanceCriteria:
   - id: epic-e17
     description: >-

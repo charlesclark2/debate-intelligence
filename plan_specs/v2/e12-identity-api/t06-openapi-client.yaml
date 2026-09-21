@@ -19,15 +19,15 @@ spec:
   description: >-
     Keep the web app's types in lockstep with the Python API. Export the FastAPI OpenAPI document to a
     committed openapi/openapi.json via a script (no running server), generate a typed TypeScript client
-    (openapi-typescript types + openapi-fetch) into a standalone package at clients/ts-api-client/ (its
-    own package.json, built with `pnpm --dir clients/ts-api-client`; the web/ workspace does not exist
-    until v2.1, where v2-e14-t01-nextjs-scaffold consumes this package as a workspace/file dependency),
-    and add a CI drift check that regenerates both and fails if the committed artifacts differ. Stable
-    operationIds are enforced so generated function names do not churn. This task only sets up generation and the drift gate; it
-    does not build any web pages (E14) and it versions the client alongside the API /v1 prefix.
+    (openapi-typescript types + openapi-fetch) into a standalone package at clients/ts-api-client/ (its own
+    package.json, built with `pnpm --dir clients/ts-api-client`; the web/ workspace does not exist until v2.1,
+    where v2-e14-t01-nextjs-scaffold consumes this package as a workspace/file dependency), and add a CI drift
+    check that regenerates both and fails if the committed artifacts differ. Stable operationIds are enforced
+    so generated function names do not churn. This task only sets up generation and the drift gate; it does
+    not build any web pages (E14) and it versions the client alongside the API /v1 prefix.
   priority: 1
   constraints:
-    packages: [debate_api, openapi, clients/ts-api-client, scripts]
+    packages: [debate_api, openapi, clients/ts-api-client, scripts, .github/workflows/ci.yml]
     forbidden:
       - Hand-edited generated files
       - Starting a live server or calling AWS to produce the schema
@@ -54,7 +54,9 @@ spec:
     - id: ac4
       description: >-
         A CI job regenerates the schema and client and fails with a readable diff when committed files are
-        stale.
+        stale; it is an `api-contract` job in .github/workflows/ci.yml gated on the `api` path filter
+        (packages/debate_api/, openapi/, clients/) and listed in the aggregate `ci` job's needs, and it
+        finishes in under a minute with no running server or network, so it fits the PR `ci` budget.
 status:
   phase: Pending
 ---
@@ -122,15 +124,17 @@ spec:
         kind: Task
         name: CI drift check
         description: >-
-          CI step regenerating schema and client, then git diff --exit-code on openapi/ and
-          clients/ts-api-client/src with a helpful failure message.
+          `api-contract` job in .github/workflows/ci.yml (not a separate workflow), gated on
+          `needs.changes.outputs.api` and appended to the aggregate `ci` job's needs, regenerating schema
+          and client offline, then git diff --exit-code on openapi/ and clients/ts-api-client/src with a
+          helpful failure message.
         dependsOn: [ts-client]
-        outputs: [.github/workflows/api-contract.yml]
+        outputs: [.github/workflows/ci.yml]
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: artifact_exists
-            name: Drift workflow exists
-            path: .github/workflows/api-contract.yml
+            name: ci.yml runs the drift check
+            path: .github/workflows/ci.yml
             contentMatch: "git diff --exit-code"
 status:
   phase: Pending

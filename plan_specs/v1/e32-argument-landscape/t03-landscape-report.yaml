@@ -1,0 +1,191 @@
+# TASK v1-e32-t03-landscape-report — Weekly landscape report
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §13 Coverage analysis (archetypes), §10, §8 provenance, §14 minimization
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t03-landscape-report
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: Weekly landscape report
+    debate/architecture-refs: §8, §10, §13, §14, §16
+spec:
+  description: >-
+    Implement LandscapeReportService, a pure aggregation over classified items (t02), E30 Disclosures
+    (school, team code, side, tournament, round) and E31 card fingerprints/occurrences, producing one
+    report bundle per caselist and snapshot. For each position it reports the rounds and distinct teams
+    that READ it, the aff/neg split (PF pro/con normalized to aff/neg), the snapshot in which it was first
+    seen, whether it is new in this snapshot (archives are cumulative, so "new" means first disclosed
+    since the previous snapshot), and the most-read cards: card fingerprints ranked by distinct teams
+    reading them within the position, shown with the tag and short cite exactly as parsed and a source
+    reference (content-addressed raw/ object key, element index, snapshot) rather than a team-code path.
+    Output is a Markdown report plus positions.csv and top_cards.csv with a header block recording
+    caselist, snapshot, topic id, taxonomy_version, parser_version, prompt version and classification
+    coverage. Every card is labeled FILE_IMPORT (disclosed, not platform-verified). Boundaries:
+    week-over-week trends and per-school views are t04; the CLI, local output paths and S3 publishing are
+    t05; "files suggest" drafting from top cards is v1-e33-t03.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape]
+    forbidden:
+      - Model calls during aggregation or rendering (report numbers are deterministic)
+      - Card body text in the report; only tag, short cite and source reference
+      - Team codes, debater names or initials in this report (per-school views are t04)
+      - Presenting disclosed cards as verified; every card row carries provenance_mode FILE_IMPORT
+      - Counting ANSWERS-role items as reads of a position
+      - Non-deterministic ordering (ties broken by position id and fingerprint)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t02-position-classification
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t04-card-fingerprints
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        For the two-snapshot synthetic caselist fixture, positions.csv has one row per position read with
+        columns position_id, label, kind, rounds, teams, aff_rounds, neg_rounds, first_seen_snapshot,
+        is_new, share_of_teams, and every value matches a hand-computed expected file.
+    - id: ac2
+      description: >-
+        top_cards.csv lists up to N (default 5) fingerprints per position with teams_reading, tag, short
+        cite, source object key, element index and provenance_mode FILE_IMPORT; near-duplicate cards from
+        the same fingerprint bucket are counted once.
+    - id: ac3
+      description: >-
+        Items classified with confidence below the report threshold, or waiting in the review queue, are
+        excluded from counts and reported as an "Unclassified" line with their count and share.
+    - id: ac4
+      description: >-
+        Rendering the same inputs twice produces byte-identical Markdown and CSV (golden-file test), and
+        a scan of the output finds no team code from the fixture disclosures.
+    - id: ac5
+      description: >-
+        The coach reviews the fixture report and confirms the sections and column names are usable for
+        weekly prep meetings.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t03-landscape-report-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Build a synthetic multi-snapshot fixture first, then the report model, the aggregation, top-card
+    ranking and the Markdown/CSV renderers with golden files.
+  goalRef:
+    name: v1-e32-t03-landscape-report
+  graph:
+    nodes:
+      - id: synthetic-caselist-fixture
+        kind: Task
+        name: Synthetic two-snapshot caselist fixture
+        description: >-
+          Generate a small synthetic caselist (fictional schools, team codes like "XX", 2 snapshots,
+          about 15 disclosures across aff/neg, parsed sections, fingerprints and t02 classifications
+          including ANSWERS and low-confidence items) with a generator script so it can be regenerated.
+        outputs:
+          - tests/fixtures/landscape/synthetic_caselist/
+          - scripts/make_landscape_fixture.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Fixture README describes the synthetic caselist
+            path: tests/fixtures/landscape/synthetic_caselist/README.md
+            contentMatch: "synthetic"
+      - id: report-model
+        kind: Task
+        name: Landscape report model
+        description: >-
+          Pydantic LandscapeReport, PositionStats, TopCard and ReportHeader models, including the
+          provenance header fields and the unclassified summary.
+        outputs: [packages/debate_core/src/debate_core/domain/landscape_report.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Report model exists
+            path: packages/debate_core/src/debate_core/domain/landscape_report.py
+            contentMatch: "class PositionStats"
+      - id: aggregation
+        kind: Task
+        name: Position aggregation per snapshot
+        description: >-
+          Join classifications to disclosures, count READS by rounds and distinct teams, split by side,
+          compute first_seen_snapshot and is_new against the accumulated store rather than against one
+          archive (ADR-0016: an archive is a seven-day window, so a team absent from it has not stopped
+          disclosing), share_of_teams against
+          all teams that disclosed, and the unclassified line.
+        dependsOn: [synthetic-caselist-fixture, report-model]
+        outputs: [packages/debate_core/src/debate_core/application/landscape_report.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Aggregation tests pass against expected counts
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_landscape_report.py
+              - -k
+              - aggregate
+      - id: top-cards
+        kind: Task
+        name: Most-read cards per position
+        description: >-
+          Rank fingerprints (collapsing near-duplicate buckets) by distinct teams reading them within each
+          position; attach tag, short cite, content-addressed source key and element index from the
+          occurrence table.
+        dependsOn: [aggregation]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Top-card ranking tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_landscape_report.py
+              - -k
+              - top_cards
+      - id: renderers
+        kind: Task
+        name: Markdown and CSV renderers with golden files
+        description: >-
+          Render report.md (header, positions by kind, new this week, top cards, unclassified),
+          positions.csv and top_cards.csv with stable ordering; golden-file and team-code scan tests;
+          type check.
+        dependsOn: [top-cards]
+        outputs:
+          - packages/debate_core/src/debate_core/arguments/landscape/render.py
+          - tests/fixtures/landscape/golden/report.md
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Golden report tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape/test_render.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: custom
+            name: Coach reviews the fixture report layout
+            description: >-
+              Coach reads the golden report.md and both CSVs and confirms the sections, column names and
+              top-card presentation fit the team's weekly prep meeting.
+status:
+  phase: Pending

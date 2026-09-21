@@ -1,0 +1,190 @@
+# TASK v1-e31-t02-verbatim-style-profile — Verbatim/CardMirror style profile
+# Epic: E31 Debate File Parsing | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §6 FileIntelligenceService, §8 spans, §13 file parsing, §14, §16 golden DOCX
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t02-verbatim-style-profile
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: Verbatim/CardMirror style profile
+    debate/architecture-refs: §6, §8, §13, §14, §16
+spec:
+  description: >-
+    Define the one canonical style profile that every reader and writer of debate .docx files shares, so the
+    parser (t03), the lossless file writer (v1-e33-t02), card format profiles (v1-e06-t03) and later exports
+    agree on what a pocket, hat, block, tag, cite, analytic and undertag look like. The profile is a Pydantic
+    StyleProfile model in debate_core.domain plus a versioned YAML data file: the StructuralUnit enum, Verbatim
+    paragraph styles (Heading 1-4 as Pocket/Hat/Block/Tag and their named aliases across Verbatim versions),
+    the Cite character style and short-cite convention, StyleUnderline/Underline/Emphasis character styles,
+    w:highlight colors, shrunk non-underlined text, analytic and undertag styles, the CardMirror schema
+    names from ADR-0014's mapping, and the canonical style definitions a writer must emit. A second part is a
+    deterministic classifier for paragraphs and runs in files that don't use Verbatim styles (common in
+    caselist uploads): outline level, bold/size thresholds, cite-line patterns such as "Smith 26" and
+    wiki-converted cite entries, each result carrying the rule that fired and a match source (VERBATIM,
+    VERBATIM_ALIAS, HEURISTIC). The scrub script for turning real files into safe fixtures lands here because
+    this is the first task that curates fixtures from team and caselist files; t03 and t05 reuse it. A style
+    survey of the downloaded corpus grounds the aliases in what teams actually use; it reads style
+    information only, emits aggregates only, leaves the files where they are, and takes well under a minute,
+    so it is not an operator hand-off. It writes the full unredacted aggregate to a gitignored path on every
+    run, because the committed report names only published style vocabulary.
+    Boundaries: walking document.xml and assembling cards is t03; per-team card cutting conventions for
+    generated cards are v1-e06-t03, which consumes this profile; writing documents is v1-e33-t02.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.evidence, scripts, tests/fixtures]
+    forbidden:
+      - >-
+        Committing unscrubbed team, caselist or camp files to tests/fixtures (student or debater names,
+        team codes, docProps author/lastModifiedBy, comments, tracked-change authors, custom XML)
+      - Importing python-docx, lxml or any I/O library in debate_core.domain
+      - Hardcoding style names in parser or writer code instead of reading them from the profile
+      - Model calls anywhere in style classification
+  context:
+    - kind: TaskRef
+      name: v1-e31-t01-cardmirror-evaluation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t01-domain-entities
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        StyleProfile loads from verbatim.yaml with a profile_version, defines StructuralUnit (POCKET, HAT,
+        BLOCK, TAG, CITE, EVIDENCE, ANALYTIC, UNDERTAG, OTHER), and resolves every Verbatim style id/name and
+        alias seen in the style survey, including basedOn inheritance, to a unit or run emphasis.
+    - id: ac2
+      description: >-
+        The profile records the CardMirror node/mark name for each unit per ADR-0014, and a test asserts the
+        mapping covers every unit and every CardMirror type listed in docs/architecture/cardmirror-evaluation.md.
+    - id: ac3
+      description: >-
+        The non-Verbatim classifier labels headings, cite lines and evidence paragraphs in the heuristic
+        fixtures with the expected unit, rule id and match source HEURISTIC, and is deterministic (same input,
+        same output, no model calls).
+    - id: ac4
+      description: >-
+        scripts/scrub_docx_fixture.py removes docProps author fields, comments, people.xml, custom XML and
+        tracked-change authors and replaces names/team codes from a coach-supplied list (kept outside the
+        repo); its tests prove a seeded name no longer appears anywhere in the output package.
+    - id: ac5
+      description: >-
+        docs/data/debate-file-style-survey.md records aggregate style-name frequencies and the share of files
+        per template family (Verbatim, CardMirror, other/heuristic, wiki-converted) across the hsld26
+        snapshots and camp files, with no file names, schools or team codes.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t02-verbatim-style-profile-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Build the scrub script and style survey first so the profile rests on real usage, then the profile model
+    and data file, the non-Verbatim classifier, and curated fixtures with quality gates.
+  goalRef:
+    name: v1-e31-t02-verbatim-style-profile
+  graph:
+    nodes:
+      - id: scrub-script
+        kind: Task
+        name: Fixture scrub script
+        description: >-
+          scripts/scrub_docx_fixture.py rewrites a .docx package: strips docProps core/app authorship,
+          comments, people.xml, custom XML and w:ins/w:del author attributes, and replaces names and team codes
+          from a local replacement list, failing loudly if any listed string survives.
+        outputs: [scripts/scrub_docx_fixture.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Scrub script tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_scrub_docx_fixture.py]
+      - id: style-survey
+        kind: Task
+        name: Style survey of the downloaded corpus (read-only, run in session)
+        description: >-
+          scripts/survey_docx_styles.py reads only styles.xml and style references from each .docx and emits
+          aggregate counts. Operator-run on Charlie's Mac over the hsld26 snapshots and camp files (several
+          minutes); the aggregate Markdown report is committed.
+        outputs: [scripts/survey_docx_styles.py, docs/data/debate-file-style-survey.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Style survey report committed
+            path: docs/data/debate-file-style-survey.md
+            contentMatch: "template family"
+      - id: profile-model
+        kind: Task
+        name: StyleProfile model and verbatim.yaml
+        description: >-
+          StructuralUnit and RunEmphasis enums and the StyleProfile model in debate_core.domain; verbatim.yaml
+          with paragraph and character styles, aliases, highlight colors, shrink rules, CardMirror names and
+          writer style definitions; a loader with basedOn resolution in debate_core.evidence.
+        dependsOn: [style-survey]
+        outputs:
+          - packages/debate_core/src/debate_core/domain/style_profile.py
+          - packages/debate_core/src/debate_core/evidence/style_profiles/verbatim.yaml
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Style profile model and alias resolution tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_style_profile.py]
+      - id: heuristic-classifier
+        kind: Task
+        name: Non-Verbatim paragraph and run classifier
+        description: >-
+          Deterministic rules over a neutral paragraph description (style name, outline level, bold, size,
+          all-caps, text pattern) returning unit, rule id, match source and confidence; covers direct-formatted
+          team files, other templates and wiki-converted cite documents.
+        dependsOn: [profile-model]
+        outputs: [packages/debate_core/src/debate_core/evidence/style_classifier.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Classifier tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_style_classifier.py]
+      - id: fixtures-and-gates
+        kind: Task
+        name: Style fixtures, coach review and quality gates
+        description: >-
+          tests/fixtures/debate_files/style_profile/ holds synthetic documents generated from the profile,
+          one per template family, with a MANIFEST.md recording what each represents. No real file or excerpt
+          is committed, scrubbed or otherwise: cards travel between programs, so a team file can carry another
+          school's disclosed evidence, and docs/policies/caselist-data-use.md prohibitions 1, 9 and 10 forbid
+          it in this repository. Real-file coverage happens in place in v1-e31-t05 over the whole corpus,
+          which is stronger evidence than a handful of excerpts. The scrub script still ships for operator-side
+          use. Type check and import boundaries.
+        dependsOn: [scrub-script, heuristic-classifier]
+        outputs: [tests/fixtures/debate_files/style_profile/MANIFEST.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Style fixture manifest exists
+            path: tests/fixtures/debate_files/style_profile/MANIFEST.md
+            contentMatch: "synthetic"
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

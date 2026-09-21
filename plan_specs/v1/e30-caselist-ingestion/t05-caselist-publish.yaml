@@ -1,0 +1,161 @@
+# TASK v1-e30-t05-caselist-publish — Publish sources and manifests to S3
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §7 S3 system of record, §8 provenance, §14 private buckets, §15 data loss
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t05-caselist-publish
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: Publish sources and manifests to S3
+    debate/architecture-refs: §7, §8, §14, §15
+spec:
+  description: >-
+    Add `debate-research caselist publish --caselist <slug|openev> [--snapshot <date>] [--dry-run]` and
+    `debate-research caselist status` so imported sources and manifests reach the evidence bucket of the
+    environment selected by DEBATE_ENV (dev or prod). Sources go to content-addressed keys
+    raw/caselist/<caselist-slug>/sha256/ab/cd/<hash> (content-addressed, no file extension, and no school or team code in keys, per the data-use policy; an extension would make identical bytes two objects) and manifests to
+    manifests/<caselist>/<snapshot>.jsonl (manifests/openev/<year>-<event>.jsonl for camp files). OpenEv
+    camp files are the one exception to the raw/caselist/<slug>/ pattern: they are not a caselist, and
+    docs/architecture/evidence-store-layout.md, v1-e29-t03 and the store CLI guide all file them under
+    raw/openev/<year>/sha256/ab/cd/<hash>. Publishing
+    is idempotent and resumable: objects already present with a matching sha256 checksum are skipped, all
+    sources of a snapshot are uploaded before its manifest, and the manifest is written last so its
+    presence means the snapshot is complete. `caselist status` compares local manifests with S3 and
+    reports missing sources, missing manifests and checksum mismatches, exiting non-zero on drift. It
+    builds on the S3 blob store and `store` sync plumbing from E29 through the application-layer port.
+    Boundaries: bucket infrastructure and IAM are E29, the parsed/ prefix is v1-e31-t06, the real backfill
+    run is t06, scheduled publishing is E34, and removal is t07; the publisher never uploads a sha256 on
+    the t07 suppression list (the check is implemented in t07).
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, tests/smoke]
+    forbidden:
+      - Importing boto3/botocore in debate_core domain/ or application/
+      - School names, team codes or original filenames in S3 object keys or object metadata
+      - Public ACLs, public bucket policies or presigned URLs in this task
+      - Writing a snapshot manifest before all of its sources are confirmed uploaded
+      - Live AWS calls in CI tests (moto or the in-memory fake only)
+  context:
+    - kind: TaskRef
+      name: v1-e30-t03-archive-importer
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e29-t05-evidence-sync-cli
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Publishing the synthetic snapshots against moto writes each distinct source once under
+        raw/caselist/<caselist-slug>/sha256/ab/cd/<hash> with a SHA-256 checksum and one manifest per snapshot under
+        manifests/<caselist>/.
+    - id: ac2
+      description: >-
+        A second publish uploads nothing and reports every object as skipped; a publish interrupted after
+        some uploads resumes and completes without re-uploading finished objects.
+    - id: ac3
+      description: >-
+        When any source upload fails, the snapshot manifest is not written and the command exits non-zero
+        naming the failed sha256 values.
+    - id: ac4
+      description: >-
+        `caselist status` reports per snapshot: local files, published sources, missing sources, manifest
+        present yes/no and checksum mismatches; it exits 0 only when local and S3 agree, and supports --json.
+    - id: ac5
+      description: >-
+        DEBATE_ENV selects the bucket; publishing to prod requires --confirm-prod, and --dry-run lists the
+        planned uploads without writing.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t05-caselist-publish-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Compute a publish plan from local manifests and remote state, execute it sources-first with the
+    manifest last, add the status comparison, then wire the CLI and smoke checks.
+  goalRef:
+    name: v1-e30-t05-caselist-publish
+  graph:
+    nodes:
+      - id: key-layout-and-plan
+        kind: Task
+        name: Key layout and publish plan
+        description: >-
+          Pure functions for the raw/ and manifests/ key layout and a PublishPlan built from local manifests
+          and a remote listing (to-upload, to-skip, manifest pending).
+        outputs: [packages/debate_core/src/debate_core/application/caselist/publish_plan.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Key layout and plan tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist/test_publish_plan.py]
+      - id: publisher
+        kind: Task
+        name: Idempotent sources-first publisher
+        description: >-
+          CaselistPublishService executes the plan through the blob-store port with checksum verification,
+          bounded concurrency and resume, writing the manifest only after all sources succeed.
+        dependsOn: [key-layout-and-plan]
+        outputs: [packages/debate_core/src/debate_core/application/caselist/publish_service.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Publisher tests pass against moto
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist/test_publish_service.py]
+      - id: status-compare
+        kind: Task
+        name: Local vs S3 status comparison
+        description: >-
+          CaselistStatusService comparing local manifests and blobs with the remote listing and checksums,
+          producing a per-snapshot drift report.
+        dependsOn: [key-layout-and-plan]
+        outputs: [packages/debate_core/src/debate_core/application/caselist/status_service.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Status comparison tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist/test_status_service.py]
+      - id: cli-and-smoke
+        kind: Task
+        name: "`caselist publish` and `caselist status` commands with smoke checks"
+        description: >-
+          Typer commands with --dry-run, --json and --confirm-prod; a tests/smoke check that imports and
+          publishes the synthetic snapshots to moto and expects a clean status; quality gates.
+        dependsOn: [publisher, status-compare]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/caselist.py
+          - tests/smoke/test_caselist_publish_smoke.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Publish smoke check passes
+            command: uv
+            args: [run, pytest, tests/smoke/test_caselist_publish_smoke.py]
+          - type: command_succeeds
+            name: Type check passes
+            command: uv
+            args: [run, pyright, packages/debate_core, packages/debate_cli]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

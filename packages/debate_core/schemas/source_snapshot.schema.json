@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "AccessStatus": {
+      "description": "Whether a source's full text could legitimately be retrieved.\n\nThe retrieval layer (E04) classifies every fetch into exactly one of these. There is no\n\"partially readable\" state: a metered or truncated page is `PAYWALLED`, never `ACCESSIBLE`,\nand nothing in the platform attempts to work around an access control.",
+      "enum": [
+        "UNKNOWN",
+        "ACCESSIBLE",
+        "PAYWALLED",
+        "BLOCKED",
+        "ROBOTS_DISALLOWED",
+        "NOT_FOUND",
+        "UNSUPPORTED_TYPE",
+        "ERROR"
+      ],
+      "title": "AccessStatus",
+      "type": "string"
+    },
+    "ProvenanceMode": {
+      "description": "Where a snapshot's or card's text came from.\n\nThis travels from the snapshot onto every card cut from it, so a reader can always tell\npublisher-retrieved evidence from text a person supplied.",
+      "enum": [
+        "PUBLISHER_RETRIEVED",
+        "USER_SUPPLIED",
+        "PASTED",
+        "FILE_IMPORT"
+      ],
+      "title": "ProvenanceMode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "An immutable record of one retrieval of one source.\n\nA snapshot is the anchor of evidence integrity. It records the SHA-256 of the exact bytes that\ncame back, the SHA-256 of the deterministically normalized text derived from them, and the\nversions of the code that produced each, so a card's evidence can be reconstructed and\nre-checked later (architecture proposal §8, steps 1-2 and 5).\n\nBlob keys are storage-neutral strings resolved by the `SnapshotStore` port, not S3 keys: V1\nstores blobs on the local filesystem and V2 stores them in S3 without the entity changing.\n\nSnapshots are never rewritten. `revision` therefore stays at 1; re-retrieving a source produces\na new snapshot rather than mutating this one.",
+  "properties": {
+    "created_at": {
+      "description": "When this record was first created, in UTC.",
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "When this record was last written, in UTC.",
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "revision": {
+      "default": 1,
+      "description": "Optimistic-concurrency counter; incremented by the repository on every write.",
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "snapshot_id": {
+      "description": "ULID primary key.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Snapshot Id",
+      "type": "string"
+    },
+    "owner_id": {
+      "anyOf": [
+        {
+          "maxLength": 26,
+          "minLength": 26,
+          "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ULID of the user who owns this record.",
+      "title": "Owner Id"
+    },
+    "organization_id": {
+      "anyOf": [
+        {
+          "maxLength": 26,
+          "minLength": 26,
+          "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ULID of the owning organization (school or team); None outside a tenant.",
+      "title": "Organization Id"
+    },
+    "article_id": {
+      "description": "The article this snapshot was taken of.",
+      "maxLength": 26,
+      "minLength": 26,
+      "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+      "title": "Article Id",
+      "type": "string"
+    },
+    "canonical_url": {
+      "description": "The URL actually retrieved, after redirects.",
+      "title": "Canonical Url",
+      "type": "string"
+    },
+    "retrieved_at": {
+      "description": "When the retrieval happened, in UTC.",
+      "format": "date-time",
+      "title": "Retrieved At",
+      "type": "string"
+    },
+    "access_status": {
+      "$ref": "#/$defs/AccessStatus",
+      "description": "How the retrieval was classified."
+    },
+    "provenance_mode": {
+      "$ref": "#/$defs/ProvenanceMode",
+      "description": "Whether the platform or a user supplied this text."
+    },
+    "raw_blob_key": {
+      "description": "SnapshotStore key of the exact bytes received.",
+      "minLength": 1,
+      "title": "Raw Blob Key",
+      "type": "string"
+    },
+    "normalized_blob_key": {
+      "description": "SnapshotStore key of the normalized text and its paragraph map.",
+      "minLength": 1,
+      "title": "Normalized Blob Key",
+      "type": "string"
+    },
+    "sha256": {
+      "description": "SHA-256 of the raw bytes, as stored.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    },
+    "normalized_text_hash": {
+      "description": "SHA-256 of the normalized text, UTF-8, no BOM.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Normalized Text Hash",
+      "type": "string"
+    },
+    "extractor_version": {
+      "description": "Version of the extractor that produced the text.",
+      "minLength": 1,
+      "title": "Extractor Version",
+      "type": "string"
+    },
+    "normalizer_version": {
+      "description": "Version of the normalizer; re-verification must use this same version.",
+      "minLength": 1,
+      "title": "Normalizer Version",
+      "type": "string"
+    },
+    "content_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Content type reported by the source, if any.",
+      "title": "Content Type"
+    },
+    "byte_size": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Size of the raw blob in bytes.",
+      "title": "Byte Size"
+    }
+  },
+  "required": [
+    "article_id",
+    "canonical_url",
+    "retrieved_at",
+    "access_status",
+    "provenance_mode",
+    "raw_blob_key",
+    "normalized_blob_key",
+    "sha256",
+    "normalized_text_hash",
+    "extractor_version",
+    "normalizer_version"
+  ],
+  "title": "SourceSnapshot",
+  "type": "object"
+}

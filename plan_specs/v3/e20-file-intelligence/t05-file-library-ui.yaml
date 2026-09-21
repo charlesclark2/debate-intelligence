@@ -21,9 +21,12 @@ spec:
     parse status live, browse a parsed file as a collapsible pocket/hat/block/tag outline, preview cards
     with their underline/highlight rendered from spans, and open a parsed card in the Card Library. Opening
     a card imports it idempotently as a library Card with provenance_mode FILE_IMPORT and a visible
-    "imported, source not verified" badge; it is never shown as verified. This task owns the
-    list/outline/import endpoints and use case plus the UI; upload/scan/parse mechanics are t02/t03 and the
-    argument graph view is E21-t06.
+    "imported, source not verified" badge; it is never shown as verified. The file list builds on the debate
+    tub UI (v2-e35-t04, a prerequisite) and its API (v2-e35-t03): it reuses the tub's list, filter,
+    file-detail and presigned-download components for the user's own uploads rather than a second file
+    browser, and adds upload, parse status, outline and import. This task owns the list/outline/import
+    endpoints and use case plus the UI; upload/scan/parse mechanics are t02 and the V1 parser (v1-e31-t03),
+    and the argument graph view is E21-t06.
   priority: 2
   constraints:
     packages: [debate_api, debate_core.application, web]
@@ -39,10 +42,13 @@ spec:
       name: v3-e20-t02-upload-pipeline
       relation: dependsOn
     - kind: TaskRef
-      name: v3-e20-t03-docx-structure-parser
+      name: v1-e31-t03-debate-docx-parser
       relation: dependsOn
     - kind: TaskRef
       name: v2-e17-t03-library-ui
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e35-t04-tub-ui
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -122,8 +128,8 @@ spec:
         kind: Task
         name: Files page with upload and live status
         description: >-
-          Files list, drag-and-drop upload using the presigned POST, client-side type/size checks, and
-          status badges driven by the job SSE stream.
+          Files list reusing the debate tub's list/filter components, drag-and-drop upload using the
+          presigned POST, client-side type/size checks, and status badges driven by the job SSE stream.
         dependsOn: [files-api]
         outputs: [web/app/(app)/files/page.tsx, web/components/files/UploadDropzone.tsx]
         estimatedEffort: 3h

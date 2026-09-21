@@ -1,0 +1,198 @@
+# TASK v1-e29-t05-evidence-sync-cli — `debate-research store` sync commands
+# Epic: E29 Cloud Evidence Store (S3) | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §6 (thin CLI over application services), §7, §11 CLI, §14, §15, ADR-0003, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t05-evidence-sync-cli
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: "`debate-research store` sync commands"
+    debate/architecture-refs: §6, §7, §11, §14, §15, ADR-0003, ADR-0013
+spec:
+  description: >-
+    Give the operator one way to move evidence between the local evidence store and the S3 bucket of
+    the active environment. An EvidenceSyncService in debate_core.application plans and executes a
+    sync between two EvidenceObjectStore adapters (local filesystem and S3 from t04): it diffs by key
+    and sha256, classifies each object as new, changed (named objects such as manifests/reports only;
+    content-addressed blobs never change), skipped (identical) or failed, uploads or downloads with
+    checksum verification, and writes a per-environment journal so an interrupted run resumes without
+    re-transferring verified objects. The thin Typer commands `debate-research store sync [--prefix]
+    [--pull] [--dry-run]`, `store ls [prefix]` and `store get <key> [-o path]` resolve the bucket,
+    region and AWS SSO profile from Settings for DEBATE_ENV=dev|prod (config/profiles/<env>.toml; the
+    test profile uses moto/fakes and never the network), print a Rich summary of
+    new/changed/skipped/failed counts and bytes, and require an explicit --yes to push to prod. V1 sync
+    never deletes remote objects. Out of scope: bucket creation (t03), the adapters (t04), caselist-
+    specific publish logic and `caselist status` (v1-e30-t05), and bulk initial uploads, which are
+    operator-run by the backfill task (v1-e30-t06).
+    Two keyspaces, not one: named objects keep their own path, while a content-addressed blob key records
+    no corpus, so `store sync` takes `--blob-prefix` (for example raw/caselist/hsld26) to say where a blob
+    belongs in the bucket, and refuses a run that has blobs and no prefix rather than filing a season's
+    disclosures under a guess. Posture: dry run by default with `--apply` to transfer, `--confirm-prod`
+    for production, `would_delete` reported and never acted on (the everyday evidence profiles cannot
+    delete; removal is v1-e30-t07). Each verified transfer is journalled, so an interrupted run resumes
+    without re-transferring what it already confirmed, and a repeat sync of an unchanged corpus issues no
+    HeadObject calls at all.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_cli.commands, config/profiles, tests/smoke]
+    forbidden:
+      - Business logic in debate_cli (diffing, verification and journaling live in debate_core.application)
+      - boto3 imports outside debate_core.integrations.s3
+      - Deleting remote objects or overwriting content-addressed blobs
+      - Pushing to prod without --yes, or when DEBATE_ENV is unset or not in {dev, prod}
+      - Live AWS calls in CI tests (moto and fakes only); bulk uploads run by an agent session
+      - Printing or logging credentials, SSO tokens or object contents
+  context:
+    - kind: TaskRef
+      name: v1-e29-t04-s3-blob-store
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t07-cli-skeleton
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t05-settings-config
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `store sync --dry-run` against a moto bucket prints the planned new/changed/skipped counts and
+        bytes and performs no PutObject/GetObject calls; a real sync then uploads exactly the planned
+        objects and a repeat sync reports 0 new, 0 changed.
+    - id: ac2
+      description: >-
+        Every uploaded object's sha256 is verified against the S3 head metadata after upload and every
+        downloaded file is re-hashed before its atomic rename; a mismatch marks the object failed and the
+        command exits non-zero.
+    - id: ac3
+      description: >-
+        A sync interrupted after N objects resumes from its journal and transfers only the remaining
+        objects, verified by a test that injects a failure mid-run.
+    - id: ac4
+      description: >-
+        DEBATE_ENV=dev and DEBATE_ENV=prod resolve different buckets and SSO profiles from their profile
+        files; pushing to prod without --yes is refused; an expired SSO session produces a one-line
+        `aws sso login --profile <profile>` hint instead of a traceback.
+    - id: ac5
+      description: >-
+        tests/smoke/ covers `store ls` and `store sync --dry-run` so validate-dev exercises the commands,
+        and docs/guides/evidence-store-cli.md documents usage, environments and resume behaviour.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t05-evidence-sync-cli-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Add the storage settings per environment, build the sync service (plan, execute, verify, resume)
+    against fakes and moto, then the thin commands, smoke checks and the guide.
+  goalRef:
+    name: v1-e29-t05-evidence-sync-cli
+  graph:
+    nodes:
+      - id: storage-settings
+        kind: Task
+        name: Per-environment S3 storage settings
+        description: >-
+          Add a storage.s3 settings group (bucket, region, aws_profile, multipart_threshold_mb) to the
+          Settings model with dev and prod values in their profile files (bucket names from the t03
+          runbook, no account ids) and a test profile pointing at a moto bucket.
+        outputs:
+          - packages/debate_core/src/debate_core/application/settings.py
+          - config/profiles/dev.toml
+          - config/profiles/prod.toml
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Storage settings resolve per DEBATE_ENV
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_settings.py, -k, s3]
+      - id: sync-service
+        kind: Task
+        name: EvidenceSyncService plan and execute with verification
+        description: >-
+          Plan a diff between two EvidenceObjectStores by key and sha256 into a SyncPlan
+          (new/changed/skipped), execute it with post-transfer checksum verification, and return a
+          SyncReport; tested with the filesystem adapter against moto.
+        dependsOn: [storage-settings]
+        outputs:
+          - packages/debate_core/src/debate_core/application/evidence_sync.py
+          - packages/debate_core/tests/application/test_evidence_sync.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sync planning, execution and checksum verification tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_evidence_sync.py]
+      - id: resume-journal
+        kind: Task
+        name: Resumable journal
+        description: >-
+          Append-only JSONL journal per environment under the data dir recording verified transfers;
+          a re-run skips journaled objects whose sha256 still matches; a failure-injection test proves
+          resume.
+        dependsOn: [sync-service]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Interrupted sync resumes from the journal
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_evidence_sync.py, -k, resume]
+      - id: cli-commands
+        kind: Task
+        name: store sync, ls and get commands
+        description: >-
+          Thin Typer sub-app wired through the CLI container: dry-run table, Rich summary, --yes guard for
+          prod, --pull direction, exit codes from debate_cli.exit_codes, SSO-expiry hint.
+        dependsOn: [resume-journal]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/store.py
+          - packages/debate_cli/tests/commands/test_store.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: store command tests pass under moto
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_store.py]
+          - type: command_succeeds
+            name: store sync help renders
+            command: uv
+            args: [run, debate-research, store, sync, --help]
+      - id: smoke-and-docs
+        kind: Task
+        name: Smoke checks and operator guide
+        description: >-
+          Add tests/smoke/test_store_cli.py (store ls and store sync --dry-run against the dev
+          environment during validate-dev) and write the guide; run the quality gates.
+        dependsOn: [cli-commands]
+        outputs: [tests/smoke/test_store_cli.py, docs/guides/evidence-store-cli.md]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Smoke check covers store sync dry-run
+            path: tests/smoke/test_store_cli.py
+            contentMatch: "--dry-run"
+          - type: artifact_exists
+            name: Guide documents DEBATE_ENV usage
+            path: docs/guides/evidence-store-cli.md
+            contentMatch: "DEBATE_ENV"
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

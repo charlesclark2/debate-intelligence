@@ -1,0 +1,1350 @@
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+
+import matter from 'gray-matter'
+import { marked } from 'marked'
+import { z } from 'zod'
+
+/**
+ * The typed content loader.
+ *
+ * Every word of copy on this site lives in site/content/ as Markdown with YAML front matter (or,
+ * for site-wide strings, as YAML); no page component holds copy of its own. The loader runs at
+ * build time only, validates each file against a schema, and throws with the offending file name
+ * so `pnpm --dir site build` fails loudly rather than shipping a page with a missing title.
+ *
+ * It also enforces the two house-style rules the team writes by, because the audience is parents
+ * and students new to debate:
+ *   - no em dashes in body copy;
+ *   - every acronym in ACRONYM_EXPANSIONS is spelled out somewhere on the page that uses it.
+ */
+
+/** The page whose copy renders at the site root rather than at /<slug>/. */
+export const HOME_SLUG = 'home'
+
+/** The parent FAQ, composed from content/faq.yaml by src/app/faq/page.tsx. */
+export const FAQ_SLUG = 'faq'
+
+/** The events page, composed from content/events.yaml by src/app/events/page.tsx. */
+export const EVENTS_SLUG = 'events'
+
+/**
+ * Pages that are composed by a route module of their own rather than rendered as one run of
+ * Markdown by src/app/[slug]/page.tsx.
+ *
+ * A composed page still has a file in content/pages/, which is what gives it a title, a
+ * description, a place in the navigation and a lead paragraph; what it does not have is a body
+ * that can simply be poured into a column. Its structure lives in a YAML file beside it and its
+ * route module decides where each field goes.
+ *
+ * The generic [slug] route must not also generate these slugs: a static segment and a dynamic one
+ * claiming the same path is a build error, not a silent preference.
+ */
+export const COMPOSED_SLUGS: readonly string[] = [HOME_SLUG, FAQ_SLUG, EVENTS_SLUG]
+
+/**
+ * Acronyms a parent or a new student cannot be expected to know. If a page uses one, the page
+ * must also contain the expansion. Checked at build time; see site/README.md.
+ */
+export const ACRONYM_EXPANSIONS: ReadonlyMap<string, string> = new Map([
+  ['NSDA', 'National Speech and Debate Association'],
+  ['NCFL', 'National Catholic Forensic League'],
+  ['TOC', 'Tournament of Champions'],
+  ['LD', 'Lincoln-Douglas'],
+  ['PF', 'Public Forum'],
+  ['WDCA', 'Wisconsin Debate Coaches Association'],
+])
+
+/**
+ * A fact only Charlie can supply, written into the copy as `[[TBD]]` or `[[TBD: what is needed]]`.
+ *
+ * The marker renders as a visible "TBD" so a dev preview shows exactly where the gaps are, and
+ * `src/lib/publishing-policy.ts` fails a prod build while any of them remain. That is the build
+ * guard the task spec asks for: nobody has to remember that the room number was never filled in.
+ */
+export const PLACEHOLDER_PATTERN = /\[\[TBD(?::\s*([^\]]*))?\]\]/g
+
+/** The notes attached to every placeholder marker in a string, in the order they appear. */
+export function findPlaceholders(text: string): string[] {
+  return [...text.matchAll(PLACEHOLDER_PATTERN)].map((match) => match[1]?.trim() ?? '')
+}
+
+function renderPlaceholders(text: string): string {
+  return text.replace(PLACEHOLDER_PATTERN, '<span class="placeholder">TBD</span>')
+}
+
+/**
+ * The at-a-glance block: the handful of facts a visitor came for, as labels and values, before
+ * any of the prose that explains them.
+ *
+ * Two to six items. Below two it is not a summary of anything, and past six a reader is back to
+ * reading rather than glancing, which is the failure this whole task exists to fix. The loader
+ * enforces the range so the rule lives with the content rather than in a reviewer's head.
+ *
+ * Values are inline Markdown, so an email address or a link inside one behaves as it does
+ * anywhere else in content/, and an unfilled [[TBD]] shows as the placeholder badge.
+ */
+export const atAGlanceSchema = z.object({
+  title: z.string().min(1),
+  items: z
+    .array(z.object({ label: z.string().min(1), value: z.string().min(1) }))
+    .min(2, 'an at-a-glance block with one item is not a summary')
+    .max(6, 'past six items a reader is reading again rather than glancing'),
+})
+
+export const pageFrontMatterSchema = z.object({
+  title: z.string().min(1, 'title must not be empty'),
+  description: z.string().min(1, 'description must not be empty'),
+  /** The one paragraph under the page title, before the at-a-glance block. */
+  lead: z.string().min(1).optional(),
+  atAGlance: atAGlanceSchema.optional(),
+  navLabel: z.string().min(1).optional(),
+  navOrder: z.number().int().nonnegative().optional(),
+  /**
+   * Keeps a page out of the primary navigation whatever content/site.yaml says. The list in
+   * site.yaml decides what is in the nav; this is the page's own veto, for a page that should
+   * never be put there by a later edit. Listing an opted-out page in primaryNavigation fails the
+   * build rather than quietly picking a winner.
+   */
+  excludeFromNavigation: z.boolean().optional(),
+  openGraphImage: z.string().min(1).optional(),
+  draft: z.boolean().optional(),
+})
+
+/** One coach or team address. The site publishes no other kind of address. */
+export const contactEmailSchema = z.object({
+  address: z.string().min(1).regex(/^[^@\s]+@[^@\s]+\.[^@\s]+$/, 'must be an email address'),
+  name: z.string().min(1),
+  role: z.string().min(1),
+})
+
+export const siteSettingsSchema = z.object({
+  name: z.string().min(1),
+  shortName: z.string().min(1),
+  tagline: z.string().min(1),
+  footerNote: z.string().min(1),
+  logoAlternativeText: z.string().min(1),
+  navigationLabel: z.string().min(1),
+  /** Names the footer's list of utility links for a screen reader moving between landmarks. */
+  footerNavigationLabel: z.string().min(1),
+  /** The ordered slugs in the header navigation. See the comment in content/site.yaml. */
+  primaryNavigation: z
+    .array(z.string().min(1))
+    .min(1, 'the site needs at least one page in its navigation'),
+  skipLinkLabel: z.string().min(1),
+  contactEmails: z.array(contactEmailSchema).min(1),
+  debaterLoginLabel: z.string().min(1),
+})
+
+/**
+ * The structured parts of the home page, in content/home.yaml.
+ *
+ * The home page is the one page that is laid out rather than read straight through, so its
+ * headings, panel facts, card labels and links are data rather than Markdown. The prose on it is
+ * still content/pages/home.md; this schema covers everything around that prose.
+ *
+ * `.min(3).max(5)` on the entry-point cards is the acceptance criterion for v1-e36-t06 written
+ * as a schema: a sixth card fails the build rather than quietly making the row unscannable.
+ */
+
+/** A link out of a panel or a card. Internal only: see `internalHref`. */
+const internalHref = z
+  .string()
+  .min(1)
+  .refine(
+    (value) => value.startsWith('/') || value.startsWith('#'),
+    'must point inside this site, so start with "/" or "#"',
+  )
+
+/**
+ * A link out of this site, which only a source citation may carry. https only: a parent following
+ * a citation should never be sent to a page that can be read or rewritten on the way.
+ */
+const externalHttpsHref = z
+  .string()
+  .min(1)
+  .refine((value) => /^https:\/\/[^\s/]+/.test(value), 'an external source link must start with "https://"')
+
+/** A string that is nothing but a placeholder marker, such as `[[TBD: source]]`. */
+const PLACEHOLDER_ONLY_PATTERN = /^\[\[TBD(?::\s*[^\]]*)?\]\]$/
+
+/**
+ * The source behind one academic-case claim: who published it, where, when, and what they
+ * measured. Every field is shown on the page in the claim's source line, so a parent can see what
+ * a figure rests on without leaving the page, and look it up if they want to.
+ */
+export const claimSourceSchema = z.object({
+  authors: z.string().min(1),
+  publication: z.string().min(1),
+  year: z.number().int().min(1900).max(2100),
+  measured: z.string().min(1),
+  href: externalHttpsHref.optional(),
+})
+
+/**
+ * A claim's source, or, while Charlie has not supplied one, the `[[TBD: source]]` marker in its
+ * place. The key itself is never optional: a claim with no `source` at all fails the build, and
+ * a claim still waiting on one says so out loud, shows as a TBD badge in a dev preview and fails
+ * a prod build naming the claim (src/lib/publishing-policy.ts). There is no third state in which
+ * a research claim reaches the page with nothing under it.
+ */
+export const claimSourceOrMarkerSchema = z.union(
+  [
+    z
+      .string()
+      .regex(
+        PLACEHOLDER_ONLY_PATTERN,
+        'a source written as text must be the [[TBD: source]] marker; a real source is an object',
+      ),
+    claimSourceSchema,
+  ],
+  {
+    error: (issue) => {
+      if (issue.input === undefined) {
+        return 'every claim needs a source (authors, publication, year, measured), or [[TBD: source]] until one is supplied'
+      }
+      // An object that is not a whole source: say which fields it is missing, rather than the
+      // union's "Invalid input", which would leave Charlie to guess.
+      const attempt = claimSourceSchema.safeParse(issue.input)
+      const detail = attempt.success ? '' : ` (${formatIssues(attempt.error)})`
+      return `a source needs authors, publication, year and measured${detail}`
+    },
+  },
+)
+
+export const academicCaseClaimSchema = z.object({
+  title: z.string().min(1),
+  body: z.string().min(1),
+  source: claimSourceOrMarkerSchema,
+})
+
+export const homeActionSchema = z.object({
+  label: z.string().min(1),
+  href: internalHref,
+})
+
+/**
+ * One fact in the October 1 parent-session panel: a label, and either the value or, while nobody
+ * has supplied it yet, the note the preview shows in its place.
+ *
+ * Exactly one of the two, which is the point of the shape. A published announcement that gives a
+ * date, a time and a place, and simply says nothing about the room, reads as though a room were
+ * never needed: the gap is invisible precisely because it is a gap. `unsetNote` makes it say so
+ * out loud, src/lib/publishing-policy.ts fails a prod build while one remains, and a decision not
+ * to name a room yet is written as a value ("To be announced") rather than as silence. A room of
+ * "To be announced" is a decision; an empty one is an oversight.
+ */
+export const parentSessionFactSchema = z
+  .object({
+    label: z.string().min(1),
+    value: z.string().min(1).optional(),
+    unsetNote: z.string().min(1).optional(),
+  })
+  .refine(
+    (fact) => (fact.value === undefined) !== (fact.unsetNote === undefined),
+    'needs exactly one of value (the fact) and unsetNote (why it is still missing)',
+  )
+
+export const homeContentSchema = z.object({
+  hero: z.object({
+    lead: z.string().min(1),
+    action: homeActionSchema,
+  }),
+  parentSession: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    facts: z.array(parentSessionFactSchema).min(1),
+    whatToExpect: z.array(z.string().min(1)).min(1),
+    note: z.string().min(1),
+    action: homeActionSchema,
+  }),
+  entryPoints: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    cards: z
+      .array(
+        z.object({
+          title: z.string().min(1),
+          body: z.string().min(1),
+          actionLabel: z.string().min(1),
+          href: internalHref,
+        }),
+      )
+      .min(3, 'the home page needs at least three entry points')
+      .max(5, 'more than five entry points stops being scannable'),
+  }),
+  prose: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+  }),
+  whatDebateBuilds: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    claims: z.array(z.object({ title: z.string().min(1), body: z.string().min(1) })).min(1),
+  }),
+  /**
+   * What published research found, for the parent who asks whether a season is good for a
+   * student academically (v1-e36-t09). Three to five claims at most on the page; the approved
+   * set is in docs/data/academic-case-sources.md. `externalLinkNote` is required as soon as one
+   * source links out, because a link that leaves the team site has to say so.
+   */
+  academicCase: z
+    .object({
+      eyebrow: z.string().min(1),
+      title: z.string().min(1),
+      intro: z.string().min(1),
+      sourceLabel: z.string().min(1),
+      externalLinkNote: z.string().min(1).optional(),
+      claims: z
+        .array(academicCaseClaimSchema)
+        .min(1, 'the academic case needs at least one claim')
+        .max(5, 'more than five claims stops being scannable'),
+    })
+    .refine(
+      (section) =>
+        section.externalLinkNote !== undefined ||
+        section.claims.every((claim) => typeof claim.source === 'string' || !claim.source.href),
+      'a source links to another site, so externalLinkNote must say that the link leaves the team site',
+    ),
+})
+
+export type HomeAction = z.infer<typeof homeActionSchema>
+export type ClaimSource = z.infer<typeof claimSourceSchema>
+export type AcademicCaseClaim = z.infer<typeof academicCaseClaimSchema>
+export type ParentSessionFact = z.infer<typeof parentSessionFactSchema>
+export type HomeContent = z.infer<typeof homeContentSchema>
+
+export type PageFrontMatter = z.infer<typeof pageFrontMatterSchema>
+export type ContactEmail = z.infer<typeof contactEmailSchema>
+export type SiteSettings = z.infer<typeof siteSettingsSchema>
+
+export interface AtAGlanceItem {
+  label: string
+  /** The value as written in the front matter. */
+  value: string
+  /** The same value as inline HTML, so a link or an address inside it works. */
+  valueHtml: string
+}
+
+export interface AtAGlance {
+  title: string
+  items: AtAGlanceItem[]
+}
+
+export interface ContentPage {
+  /** File stem, e.g. `join` for content/pages/join.md. */
+  slug: string
+  /** The exported route, always with a trailing slash: `/` for home, `/join/` otherwise. */
+  route: string
+  /** Path relative to site/, used in error messages. */
+  filePath: string
+  title: string
+  description: string
+  /** The paragraph under the title, when the page opens with one. */
+  lead?: string
+  /** The summary block between the lead and the detail, when the page has one. */
+  atAGlance?: AtAGlance
+  navLabel: string
+  navOrder: number
+  /** True when the page's own front matter keeps it out of the primary navigation. */
+  excludeFromNavigation: boolean
+  openGraphImage?: string
+  draft: boolean
+  /** Markdown body rendered to HTML at build time. */
+  html: string
+  /**
+   * Everything published on the page, as HTML: the body plus the lead and the at-a-glance values
+   * that live in the front matter and are rendered by the route module rather than by Prose.
+   *
+   * src/lib/publishing-policy.ts reads this rather than `html`. A value in a summary block is
+   * published copy exactly as a paragraph is, and the guard cannot have a blind spot wherever a
+   * page happens to keep its most important facts.
+   */
+  guardedHtml: string
+  /**
+   * One entry per `[[TBD]]` marker left in the file, holding the note written beside it. Empty on
+   * a page that is ready to publish.
+   */
+  placeholders: string[]
+}
+
+/** Thrown when a content file is missing a required field or breaks a house-style rule. */
+export class ContentValidationError extends Error {
+  readonly filePath: string
+
+  constructor(filePath: string, detail: string) {
+    super(`${filePath}: ${detail}`)
+    this.name = 'ContentValidationError'
+    this.filePath = filePath
+  }
+}
+
+/**
+ * One value from the front matter, rendered as inline HTML: links and emphasis work, and a
+ * placeholder marker becomes the visible badge, but nothing is wrapped in a paragraph, because
+ * these land inside a <dd> or a <p> the page has already written.
+ */
+function renderInlineMarkdown(filePath: string, markdown: string): string {
+  const rendered = marked.parseInline(renderPlaceholders(markdown), { async: false })
+  if (typeof rendered !== 'string') {
+    throw new ContentValidationError(filePath, 'Markdown could not be rendered synchronously')
+  }
+  return rendered
+}
+
+export function defaultContentDirectory(): string {
+  return join(process.cwd(), 'content')
+}
+
+function pagesDirectory(contentDirectory: string): string {
+  return join(contentDirectory, 'pages')
+}
+
+function formatIssues(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => {
+      const field = issue.path.join('.')
+      return field.length > 0 ? `${field}: ${issue.message}` : issue.message
+    })
+    .join('; ')
+}
+
+const EM_DASH = '—'
+const HOUSE_STYLE_REWRITE = 'House style: rewrite with a comma, a colon or two sentences.'
+
+/**
+ * `lineOffset` is the number of lines the front matter occupies, so the line number in the error
+ * is the one the author sees in their editor rather than an offset into the Markdown body.
+ */
+function assertNoEmDashesInBody(filePath: string, body: string, lineOffset: number): void {
+  const offendingIndex = body.split('\n').findIndex((line) => line.includes(EM_DASH))
+  if (offendingIndex >= 0) {
+    throw new ContentValidationError(
+      filePath,
+      `line ${offendingIndex + 1 + lineOffset} uses an em dash. ${HOUSE_STYLE_REWRITE}`,
+    )
+  }
+}
+
+function assertNoEmDashesInFrontMatter(filePath: string, frontMatter: PageFrontMatter): void {
+  for (const field of ['title', 'description'] as const) {
+    if (frontMatter[field].includes(EM_DASH)) {
+      throw new ContentValidationError(
+        filePath,
+        `the ${field} in the front matter uses an em dash. ${HOUSE_STYLE_REWRITE}`,
+      )
+    }
+  }
+}
+
+function assertAcronymsAreExpanded(filePath: string, text: string): void {
+  for (const [acronym, expansion] of ACRONYM_EXPANSIONS) {
+    const usesAcronym = new RegExp(`\\b${acronym}\\b`).test(text)
+    if (usesAcronym && !text.includes(expansion)) {
+      throw new ContentValidationError(
+        filePath,
+        `uses "${acronym}" without spelling it out. Write "${expansion} (${acronym})" the first ` +
+          'time it appears.',
+      )
+    }
+  }
+}
+
+/**
+ * The evidence category the team brand guide rules out for this audience, by name: graduation
+ * rates, dropout rates and "at risk" framing. In an affluent district those findings answer a
+ * question nobody here is asking, and quoting them reads as condescending, as though these
+ * students would otherwise fail. Test scores, grade point average, college readiness and skill
+ * acquisition are the categories that are in.
+ *
+ * Checked over every file in content/, comments included, because a comment is where a sentence
+ * waits before somebody promotes it into copy. The error names the file, the line and the words.
+ */
+export const EXCLUDED_EVIDENCE_PATTERNS: readonly RegExp[] = [
+  /\bgraduation[\s-]+rates?\b/i,
+  /\bdrop-?outs?\b/i,
+  /\bat[\s-]+risk\b/i,
+]
+
+function contentFiles(directory: string, relativeTo: string): string[] {
+  return readdirSync(directory, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .flatMap((entry) => {
+      const path = join(directory, entry.name)
+      const relative = `${relativeTo}/${entry.name}`
+      if (entry.isDirectory()) {
+        return contentFiles(path, relative)
+      }
+      return /\.(md|ya?ml)$/.test(entry.name) ? [relative] : []
+    })
+}
+
+/** Fails, naming the file, the line and the offending words, on excluded-evidence wording. */
+export function assertNoExcludedEvidence(
+  contentDirectory: string = defaultContentDirectory(),
+): void {
+  for (const filePath of contentFiles(contentDirectory, 'content')) {
+    const lines = readFileSync(join(contentDirectory, filePath.slice('content/'.length)), 'utf8')
+      .split('\n')
+    for (const [index, line] of lines.entries()) {
+      for (const pattern of EXCLUDED_EVIDENCE_PATTERNS) {
+        const match = pattern.exec(line)
+        if (match) {
+          throw new ContentValidationError(
+            filePath,
+            `line ${index + 1} uses "${match[0]}". House style: graduation-rate, dropout and ` +
+              '"at risk" research is not used on this site. Use test scores, grade point ' +
+              'average, college readiness or skill acquisition, from an approved source.',
+          )
+        }
+      }
+    }
+  }
+}
+
+/** Reads and validates one Markdown page. `filePath` is only used for error messages. */
+export function parsePage(slug: string, filePath: string, source: string): ContentPage {
+  const parsed = matter(source)
+  const result = pageFrontMatterSchema.safeParse(parsed.data)
+  if (!result.success) {
+    throw new ContentValidationError(filePath, `invalid front matter (${formatIssues(result.error)})`)
+  }
+
+  const frontMatter = result.data
+  const body = parsed.content
+  // gray-matter strips the front matter, so the body starts this many lines into the file.
+  const lineOffset = source.split('\n').length - body.split('\n').length
+
+  // The lead and the at-a-glance values are copy like any other, so they go through the house
+  // style, the acronym rule, the placeholder scan and the publishing guard with the body.
+  const frontMatterCopy = [
+    frontMatter.lead ?? '',
+    frontMatter.atAGlance?.title ?? '',
+    ...(frontMatter.atAGlance?.items.flatMap((item) => [item.label, item.value]) ?? []),
+  ].filter((text) => text.length > 0)
+
+  assertNoEmDashesInFrontMatter(filePath, frontMatter)
+  for (const text of frontMatterCopy) {
+    if (text.includes(EM_DASH)) {
+      throw new ContentValidationError(
+        filePath,
+        `the front matter uses an em dash in "${text}". ${HOUSE_STYLE_REWRITE}`,
+      )
+    }
+  }
+  assertNoEmDashesInBody(filePath, body, lineOffset)
+
+  const allCopy = [frontMatter.title, frontMatter.description, ...frontMatterCopy, body].join('\n')
+  assertAcronymsAreExpanded(filePath, allCopy)
+
+  const rendered = marked.parse(renderPlaceholders(body), { async: false })
+  if (typeof rendered !== 'string') {
+    throw new ContentValidationError(filePath, 'Markdown could not be rendered synchronously')
+  }
+
+  const atAGlance = frontMatter.atAGlance
+    ? {
+        title: frontMatter.atAGlance.title,
+        items: frontMatter.atAGlance.items.map((item) => ({
+          label: item.label,
+          value: item.value,
+          valueHtml: renderInlineMarkdown(filePath, item.value),
+        })),
+      }
+    : undefined
+
+  return {
+    slug,
+    route: slug === HOME_SLUG ? '/' : `/${slug}/`,
+    filePath,
+    title: frontMatter.title,
+    description: frontMatter.description,
+    ...(frontMatter.lead ? { lead: frontMatter.lead } : {}),
+    ...(atAGlance ? { atAGlance } : {}),
+    navLabel: frontMatter.navLabel ?? frontMatter.title,
+    navOrder: frontMatter.navOrder ?? Number.MAX_SAFE_INTEGER,
+    excludeFromNavigation: frontMatter.excludeFromNavigation ?? false,
+    ...(frontMatter.openGraphImage ? { openGraphImage: frontMatter.openGraphImage } : {}),
+    draft: frontMatter.draft ?? false,
+    html: rendered,
+    // What the page publishes, as the page publishes it: the lead and the labels as the plain
+    // text the route module prints, each at-a-glance value as the HTML it renders to, and the
+    // body. The values go in rendered rather than raw so that an address inside one is the
+    // mailto link a visitor actually gets, which is what the guard and tests/contact.test.ts are
+    // really asking about.
+    guardedHtml: [
+      ...(frontMatter.lead ? [`<p>${frontMatter.lead}</p>`] : []),
+      ...(atAGlance
+        ? [
+            `<p>${atAGlance.title}</p>`,
+            ...atAGlance.items.flatMap((item) => [
+              `<p>${item.label}</p>`,
+              `<p>${item.valueHtml}</p>`,
+            ]),
+          ]
+        : []),
+      rendered,
+    ].join('\n'),
+    placeholders: findPlaceholders(allCopy),
+  }
+}
+
+/**
+ * Every published page, ordered by navOrder and then by title. Draft pages are left out of the
+ * export entirely, so they never reach the sitemap or the navigation.
+ */
+export function loadPages(contentDirectory: string = defaultContentDirectory()): ContentPage[] {
+  const directory = pagesDirectory(contentDirectory)
+  if (!existsSync(directory)) {
+    throw new Error(`Content directory not found: ${directory}`)
+  }
+
+  const pages = readdirSync(directory)
+    .filter((entry) => entry.endsWith('.md'))
+    .sort()
+    .map((entry) => {
+      const slug = entry.replace(/\.md$/, '')
+      const filePath = `content/pages/${entry}`
+      return parsePage(slug, filePath, readFileSync(join(directory, entry), 'utf8'))
+    })
+    .filter((page) => !page.draft)
+
+  return pages.sort((left, right) =>
+    left.navOrder === right.navOrder
+      ? left.title.localeCompare(right.title)
+      : left.navOrder - right.navOrder,
+  )
+}
+
+export function loadPage(
+  slug: string,
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const page = loadPages(contentDirectory).find((candidate) => candidate.slug === slug)
+  if (!page) {
+    throw new Error(`No content page for slug "${slug}" in ${pagesDirectory(contentDirectory)}`)
+  }
+  return page
+}
+
+/**
+ * Pages that src/app/[slug]/page.tsx generates a route for: everything except the pages composed
+ * by a route module of their own. See COMPOSED_SLUGS.
+ */
+export function loadRoutedPages(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage[] {
+  return loadPages(contentDirectory).filter((page) => !COMPOSED_SLUGS.includes(page.slug))
+}
+
+export function loadSiteSettings(
+  contentDirectory: string = defaultContentDirectory(),
+): SiteSettings {
+  const filePath = 'content/site.yaml'
+  const absolutePath = join(contentDirectory, 'site.yaml')
+  if (!existsSync(absolutePath)) {
+    throw new ContentValidationError(filePath, 'file is missing')
+  }
+
+  // gray-matter parses a bare YAML document when it is fenced as front matter, so the settings
+  // file is read through the same YAML parser the pages use rather than a second dependency.
+  const parsed = matter(`---\n${readFileSync(absolutePath, 'utf8')}\n---\n`)
+  const result = siteSettingsSchema.safeParse(parsed.data)
+  if (!result.success) {
+    throw new ContentValidationError(filePath, `invalid settings (${formatIssues(result.error)})`)
+  }
+  return result.data
+}
+
+/**
+ * The copy for the 404 page. It lives outside content/pages/ so it never appears in the
+ * navigation or the sitemap, but it is validated by exactly the same schema.
+ */
+export function loadNotFoundPage(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const filePath = 'content/not-found.md'
+  const absolutePath = join(contentDirectory, 'not-found.md')
+  if (!existsSync(absolutePath)) {
+    throw new ContentValidationError(filePath, 'file is missing')
+  }
+  return parsePage('not-found', filePath, readFileSync(absolutePath, 'utf8'))
+}
+
+/** Every string in the home content, in reading order, for the checks that scan copy. */
+function homeContentStrings(content: HomeContent): string[] {
+  const { hero, parentSession, entryPoints, prose, whatDebateBuilds } = content
+  return [
+    hero.lead,
+    hero.action.label,
+    parentSession.eyebrow,
+    parentSession.title,
+    parentSession.intro,
+    ...parentSession.facts.flatMap((fact) => [fact.label, fact.value ?? fact.unsetNote ?? '']),
+    ...parentSession.whatToExpect,
+    parentSession.note,
+    parentSession.action.label,
+    entryPoints.eyebrow,
+    entryPoints.title,
+    entryPoints.intro,
+    ...entryPoints.cards.flatMap((card) => [card.title, card.body, card.actionLabel]),
+    prose.eyebrow,
+    prose.title,
+    whatDebateBuilds.eyebrow,
+    whatDebateBuilds.title,
+    whatDebateBuilds.intro,
+    ...whatDebateBuilds.claims.flatMap((claim) => [claim.title, claim.body]),
+    ...academicCaseSectionStrings(content.academicCase),
+    ...content.academicCase.claims.flatMap(academicCaseClaimStrings),
+  ]
+}
+
+function academicCaseSectionStrings(section: HomeContent['academicCase']): string[] {
+  return [
+    section.eyebrow,
+    section.title,
+    section.intro,
+    section.sourceLabel,
+    ...(section.externalLinkNote ? [section.externalLinkNote] : []),
+  ]
+}
+
+/** Every string one academic-case claim puts on the page, its source line included. */
+function academicCaseClaimStrings(claim: AcademicCaseClaim): string[] {
+  const { source } = claim
+  return [
+    claim.title,
+    claim.body,
+    ...(typeof source === 'string'
+      ? [source]
+      : [source.authors, source.publication, String(source.year), source.measured]),
+  ]
+}
+
+/**
+ * The placeholder notes left in content/home.yaml, each one saying where it is.
+ *
+ * A marker in a claim's source is named by the claim it belongs to, because "still has an
+ * unfilled placeholder: source" on a file with several claims in it leaves Charlie to work out
+ * which one. Every other marker in the file is reported with its own note, as on any page.
+ */
+function homeContentPlaceholders(content: HomeContent): string[] {
+  const { academicCase } = content
+  const elsewhere = homeContentStrings({
+    ...content,
+    academicCase: { ...academicCase, claims: [] },
+  })
+  return [
+    ...findPlaceholders(elsewhere.join('\n')),
+    ...academicCase.claims.flatMap((claim) =>
+      findPlaceholders(academicCaseClaimStrings(claim).join('\n')).map(
+        (note) => `${note || 'TBD'} for the academic-case claim "${claim.title}"`,
+      ),
+    ),
+  ]
+}
+
+/**
+ * Each entry-point card is labelled with the title of the page it opens, and opens a page that
+ * exists (v1-e36-t09 acceptance criterion 5). A parent who presses "Coaches" should land on a
+ * heading that says Coaches; a card whose label had drifted from its destination, or whose page
+ * had been renamed or unpublished, fails the build naming the card.
+ */
+function assertEntryPointsMatchPages(
+  filePath: string,
+  cards: HomeContent['entryPoints']['cards'],
+  pages: ContentPage[],
+): void {
+  const byRoute = new Map(pages.map((page) => [page.route, page]))
+  for (const card of cards) {
+    const page = byRoute.get(card.href)
+    if (!page) {
+      throw new ContentValidationError(
+        filePath,
+        `the entry-point card "${card.title}" links to ${card.href}, which is not a published ` +
+          'page in content/pages/. Point it at a page, with the trailing slash, such as "/join/".',
+      )
+    }
+    if (card.title !== page.title) {
+      throw new ContentValidationError(
+        filePath,
+        `the entry-point card "${card.title}" links to ${card.href}, whose title is ` +
+          `"${page.title}" (${page.filePath}). Label the card with the title of the page it opens.`,
+      )
+    }
+  }
+}
+
+/**
+ * The structured home-page content, validated and held to the same house style as the Markdown
+ * pages: no em dashes, and no acronym left unexpanded. Both rules exist because the audience is
+ * parents and students new to debate, and a heading in a panel is read by exactly the same people
+ * as a sentence in a paragraph.
+ */
+export function loadHomeContent(
+  contentDirectory: string = defaultContentDirectory(),
+): HomeContent {
+  const filePath = 'content/home.yaml'
+  const absolutePath = join(contentDirectory, 'home.yaml')
+  if (!existsSync(absolutePath)) {
+    throw new ContentValidationError(filePath, 'file is missing')
+  }
+
+  // Read through gray-matter, the same YAML parser the pages and site.yaml use.
+  const parsed = matter(`---\n${readFileSync(absolutePath, 'utf8')}\n---\n`)
+  const result = homeContentSchema.safeParse(parsed.data)
+  if (!result.success) {
+    throw new ContentValidationError(filePath, `invalid home content (${formatIssues(result.error)})`)
+  }
+
+  const content = result.data
+  const text = homeContentStrings(content).join('\n')
+  if (text.includes(EM_DASH)) {
+    throw new ContentValidationError(filePath, `uses an em dash. ${HOUSE_STYLE_REWRITE}`)
+  }
+  assertAcronymsAreExpanded(filePath, text)
+  assertEntryPointsMatchPages(filePath, content.entryPoints.cards, loadPages(contentDirectory))
+  return content
+}
+
+/**
+ * A fact a published announcement promises its readers, and whether anyone has supplied it yet.
+ *
+ * The guard reads copy, and copy cannot tell it that a fact is missing: the October 1 panel with
+ * no room in it is a perfectly well-formed panel. This is the shape that can, one entry per fact
+ * in the announcement, carrying the note the preview shows while the fact is still owed.
+ * src/lib/publishing-policy.ts turns every one of those notes into an error, so a prod build
+ * fails while a required announcement field is unset.
+ */
+export interface AnnouncementField {
+  /** The content file the fact lives in. */
+  location: string
+  /** The announcement it belongs to, worded as the page heads it. */
+  announcement: string
+  /** The fact's label in the panel: Date, Time, Place, Room. */
+  label: string
+  /** Why it is still unset, as the preview shows it, or null once it carries a value. */
+  unsetNote: string | null
+}
+
+/**
+ * Every fact the site's announcements promise. Today that is the October 1 parent session in
+ * content/home.yaml; E37's announcements and calendar entries join it here rather than growing a
+ * second guard of their own.
+ */
+export function announcementFields(
+  contentDirectory: string = defaultContentDirectory(),
+): AnnouncementField[] {
+  const { parentSession } = loadHomeContent(contentDirectory)
+  return parentSession.facts.map((fact) => ({
+    location: 'content/home.yaml',
+    announcement: parentSession.title,
+    label: fact.label,
+    unsetNote: fact.unsetNote ?? null,
+  }))
+}
+
+/**
+ * content/home.yaml as the publishing-policy guard sees it.
+ *
+ * The guard reads pages, so copy that lives in a YAML file would otherwise be the one place on
+ * the site where an email address, a phone number, an unreviewed name or an unfilled placeholder
+ * is not checked. Giving it a ContentPage shape costs one function and closes that hole: the
+ * root layout passes this alongside loadPages(), and tests/content-policy.test.ts checks it with
+ * the rest of the content.
+ */
+export function homeContentAsPage(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const content = loadHomeContent(contentDirectory)
+  const text = homeContentStrings(content).join('\n\n')
+  return {
+    slug: 'home-content',
+    route: '/',
+    filePath: 'content/home.yaml',
+    title: content.parentSession.title,
+    description: content.hero.lead,
+    navLabel: content.parentSession.title,
+    navOrder: Number.MAX_SAFE_INTEGER,
+    excludeFromNavigation: true,
+    draft: false,
+    html: text,
+    guardedHtml: text,
+    placeholders: homeContentPlaceholders(content),
+  }
+}
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * The composed pages: content/faq.yaml and content/events.yaml.
+ *
+ * Both follow the pattern content/home.yaml set. The Markdown file in content/pages/ owns the
+ * page's identity (title, description, navigation label and order) and its lead paragraph; the
+ * YAML file beside it owns the structure the route module renders. Splitting them is what lets a
+ * parent scan the FAQ by topic and the events side by side without any page component holding a
+ * word of copy: Charlie edits YAML, not TypeScript.
+ *
+ * Every string in both files goes through the same house-style rules as content/pages/, because
+ * a question inside a <summary> is read by exactly the same people as a sentence in a paragraph.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+/** An anchor target a link in an in-page index can point at. */
+const anchorId = z
+  .string()
+  .min(1)
+  .regex(/^[a-z][a-z0-9-]*$/, 'must be a lower-case anchor id such as "cost-and-travel"')
+
+/** Markdown rendered to HTML at build time, with any placeholder marker made visible. */
+function renderMarkdown(filePath: string, markdown: string): string {
+  const rendered = marked.parse(renderPlaceholders(markdown), { async: false })
+  if (typeof rendered !== 'string') {
+    throw new ContentValidationError(filePath, 'Markdown could not be rendered synchronously')
+  }
+  return rendered
+}
+
+/**
+ * Reads one YAML file from content/ and validates it, naming the file on any failure.
+ *
+ * gray-matter parses a bare YAML document when it is fenced as front matter, so every YAML file
+ * on this site goes through the same parser the Markdown pages use rather than a second
+ * dependency.
+ */
+function loadYamlFile<Schema extends z.ZodType>(
+  fileName: string,
+  schema: Schema,
+  describe: string,
+  contentDirectory: string,
+): z.infer<Schema> {
+  const filePath = `content/${fileName}`
+  const absolutePath = join(contentDirectory, fileName)
+  if (!existsSync(absolutePath)) {
+    throw new ContentValidationError(filePath, 'file is missing')
+  }
+  const parsed = matter(`---\n${readFileSync(absolutePath, 'utf8')}\n---\n`)
+  const result = schema.safeParse(parsed.data)
+  if (!result.success) {
+    throw new ContentValidationError(filePath, `invalid ${describe} (${formatIssues(result.error)})`)
+  }
+  return result.data
+}
+
+/** The house-style rules, applied to every string a YAML content file contributes to a page. */
+function assertYamlHouseStyle(filePath: string, strings: string[]): void {
+  const text = strings.join('\n')
+  if (text.includes(EM_DASH)) {
+    throw new ContentValidationError(filePath, `uses an em dash. ${HOUSE_STYLE_REWRITE}`)
+  }
+  assertAcronymsAreExpanded(filePath, text)
+}
+
+/**
+ * The most-asked questions, which render with the `open` attribute so their answers are visible
+ * without a click.
+ *
+ * The range is the point of the page written as a rule. Below two, a parent who came with the
+ * cost question still has to hunt for it; above three, everything is open again and the page is
+ * the wall of prose this task replaced. A build that breaks the rule fails naming the file.
+ */
+export const MOST_ASKED_QUESTION_RANGE = { minimum: 2, maximum: 3 } as const
+
+export const faqQuestionSchema = z.object({
+  question: z.string().min(1),
+  answer: z.string().min(1),
+  openByDefault: z.boolean().optional(),
+})
+
+export const faqGroupSchema = z.object({
+  id: anchorId,
+  label: z.string().min(1),
+  questions: z.array(faqQuestionSchema).min(1, 'a topic with no questions is not a topic'),
+})
+
+export const faqContentSchema = z
+  .object({
+    indexTitle: z.string().min(1),
+    /** The block that closes the page: how to ask a question the page does not answer. */
+    closing: z.object({ title: z.string().min(1), body: z.string().min(1) }),
+    groups: z
+      .array(faqGroupSchema)
+      .min(2, 'grouping the questions needs at least two topics to group them into'),
+  })
+  .refine(
+    (content) => new Set(content.groups.map((group) => group.id)).size === content.groups.length,
+    'two topics share an id, so the index would link both to the same place',
+  )
+  .refine((content) => {
+    const open = content.groups
+      .flatMap((group) => group.questions)
+      .filter((question) => question.openByDefault).length
+    return open >= MOST_ASKED_QUESTION_RANGE.minimum && open <= MOST_ASKED_QUESTION_RANGE.maximum
+  }, `openByDefault must be set on ${MOST_ASKED_QUESTION_RANGE.minimum} or ${MOST_ASKED_QUESTION_RANGE.maximum} questions: the most-asked ones, which open without a click`)
+
+export interface FaqQuestion {
+  question: string
+  /** The answer as Markdown, exactly as content/faq.yaml holds it. */
+  answer: string
+  /** The answer rendered to HTML at build time. */
+  answerHtml: string
+  /** True for a most-asked question, which renders as <details open>. */
+  openByDefault: boolean
+}
+
+export interface FaqGroup {
+  /** The anchor the in-page topic index links to. */
+  id: string
+  label: string
+  questions: FaqQuestion[]
+}
+
+export interface FaqClosing {
+  title: string
+  body: string
+  bodyHtml: string
+}
+
+export interface FaqContent {
+  /** The heading above the in-page topic index, which also names it for a screen reader. */
+  indexTitle: string
+  groups: FaqGroup[]
+  /** The block at the foot of the page, for a question none of the topics answered. */
+  closing: FaqClosing
+}
+
+/** Every string content/faq.yaml puts on the page, in reading order. */
+function faqContentStrings(content: FaqContent): string[] {
+  return [
+    content.indexTitle,
+    ...content.groups.flatMap((group) => [
+      group.label,
+      ...group.questions.flatMap((question) => [question.question, question.answer]),
+    ]),
+    content.closing.title,
+    content.closing.body,
+  ]
+}
+
+export function loadFaqContent(contentDirectory: string = defaultContentDirectory()): FaqContent {
+  const filePath = 'content/faq.yaml'
+  const parsed = loadYamlFile('faq.yaml', faqContentSchema, 'FAQ content', contentDirectory)
+  const content: FaqContent = {
+    indexTitle: parsed.indexTitle,
+    groups: parsed.groups.map((group) => ({
+      id: group.id,
+      label: group.label,
+      questions: group.questions.map((question) => ({
+        question: question.question,
+        answer: question.answer,
+        answerHtml: renderMarkdown(filePath, question.answer),
+        openByDefault: question.openByDefault ?? false,
+      })),
+    })),
+    closing: {
+      ...parsed.closing,
+      bodyHtml: renderMarkdown(filePath, parsed.closing.body),
+    },
+  }
+  assertYamlHouseStyle(filePath, faqContentStrings(content))
+  return content
+}
+
+export const eventComparisonSchema = z.object({
+  teamSize: z.string().min(1),
+  speechPattern: z.string().min(1),
+  topicCadence: z.string().min(1),
+  bestFor: z.string().min(1),
+})
+
+export const debateEventSchema = z.object({
+  id: anchorId,
+  name: z.string().min(1),
+  summary: z.string().min(1),
+  detailActionLabel: z.string().min(1),
+  /**
+   * What this event is arguing right now. Every event has to declare one, because a comparison
+   * with a hole in it is what this page replaced; an event whose topic nobody has supplied yet
+   * says so with a [[TBD]] marker, which the publishing-policy guard turns into a failed prod
+   * build rather than a blank space on the page.
+   */
+  currentTopic: z.string().min(1),
+  comparison: eventComparisonSchema,
+  detail: z.string().min(1),
+})
+
+export const eventsContentSchema = z
+  .object({
+    comparisonLabels: eventComparisonSchema,
+    currentTopicLabel: z.string().min(1),
+    sharedTruths: z.object({
+      title: z.string().min(1),
+      items: z.array(z.object({ title: z.string().min(1), body: z.string().min(1) })).min(1),
+    }),
+    comparisonTitle: z.string().min(1),
+    comparisonIntro: z.string().min(1),
+    events: z
+      .array(debateEventSchema)
+      .min(3, 'the comparison needs the three events the team competes in'),
+    closingSections: z
+      .array(z.object({ id: anchorId, title: z.string().min(1), body: z.string().min(1) }))
+      .min(1),
+  })
+  .refine(
+    (content) => new Set(content.events.map((event) => event.id)).size === content.events.length,
+    'two events share an id, so the comparison would link both to the same detail section',
+  )
+
+export type EventComparison = z.infer<typeof eventComparisonSchema>
+
+/** The four comparison fields, in the order they are read. The page never invents a fifth. */
+export const EVENT_COMPARISON_FIELDS = [
+  'teamSize',
+  'speechPattern',
+  'topicCadence',
+  'bestFor',
+] as const satisfies ReadonlyArray<keyof EventComparison>
+
+export interface DebateEvent {
+  /** The anchor the comparison card links to, and the id of the detail section below it. */
+  id: string
+  name: string
+  /** One line saying what the event asks, so three cards can be told apart at a glance. */
+  summary: string
+  /** The label on the link from this event's comparison card down to its detail section. */
+  detailActionLabel: string
+  /** The topic this event is arguing right now, as Markdown. */
+  currentTopic: string
+  /** The same topic rendered to HTML, so an unfilled [[TBD]] shows as the placeholder badge. */
+  currentTopicHtml: string
+  comparison: EventComparison
+  /** The full explanation as Markdown, exactly as content/events.yaml holds it. */
+  detail: string
+  /** The same explanation rendered to HTML at build time. */
+  detailHtml: string
+}
+
+export interface EventsClosingSection {
+  id: string
+  title: string
+  body: string
+  bodyHtml: string
+}
+
+export interface EventsContent {
+  comparisonLabels: EventComparison
+  /** The label above each card's current topic. Shared, so the three read as one row. */
+  currentTopicLabel: string
+  sharedTruths: { title: string; items: Array<{ title: string; body: string }> }
+  comparisonTitle: string
+  comparisonIntro: string
+  events: DebateEvent[]
+  closingSections: EventsClosingSection[]
+}
+
+/** Every string content/events.yaml puts on the page, in reading order. */
+function eventsContentStrings(content: EventsContent): string[] {
+  return [
+    ...EVENT_COMPARISON_FIELDS.map((field) => content.comparisonLabels[field]),
+    content.currentTopicLabel,
+    content.sharedTruths.title,
+    ...content.sharedTruths.items.flatMap((item) => [item.title, item.body]),
+    content.comparisonTitle,
+    content.comparisonIntro,
+    ...content.events.flatMap((event) => [
+      event.name,
+      event.summary,
+      event.detailActionLabel,
+      event.currentTopic,
+      ...EVENT_COMPARISON_FIELDS.map((field) => event.comparison[field]),
+      event.detail,
+    ]),
+    ...content.closingSections.flatMap((section) => [section.title, section.body]),
+  ]
+}
+
+export function loadEventsContent(
+  contentDirectory: string = defaultContentDirectory(),
+): EventsContent {
+  const filePath = 'content/events.yaml'
+  const parsed = loadYamlFile(
+    'events.yaml',
+    eventsContentSchema,
+    'events content',
+    contentDirectory,
+  )
+  const content: EventsContent = {
+    ...parsed,
+    events: parsed.events.map((event) => ({
+      ...event,
+      currentTopicHtml: renderMarkdown(filePath, event.currentTopic),
+      detailHtml: renderMarkdown(filePath, event.detail),
+    })),
+    closingSections: parsed.closingSections.map((section) => ({
+      ...section,
+      bodyHtml: renderMarkdown(filePath, section.body),
+    })),
+  }
+  assertYamlHouseStyle(filePath, eventsContentStrings(content))
+  return content
+}
+
+/**
+ * content/faq.yaml and content/events.yaml as the publishing-policy guard sees them.
+ *
+ * Same reason homeContentAsPage exists: the guard reads pages, so copy that has moved into a YAML
+ * file would otherwise be the part of the site where an address, a phone number, an unreviewed
+ * name or an unfilled placeholder is never checked. These two files now carry most of the words on
+ * the site, so they are the last place that hole could be allowed to open.
+ */
+function yamlContentAsPage(
+  slug: string,
+  filePath: string,
+  route: string,
+  title: string,
+  strings: string[],
+): ContentPage {
+  const text = strings.join('\n\n')
+  return {
+    slug,
+    route,
+    filePath,
+    title,
+    description: title,
+    navLabel: title,
+    navOrder: Number.MAX_SAFE_INTEGER,
+    excludeFromNavigation: true,
+    draft: false,
+    html: text,
+    guardedHtml: text,
+    placeholders: findPlaceholders(text),
+  }
+}
+
+export function faqContentAsPage(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const content = loadFaqContent(contentDirectory)
+  return yamlContentAsPage(
+    'faq-content',
+    'content/faq.yaml',
+    `/${FAQ_SLUG}/`,
+    content.indexTitle,
+    faqContentStrings(content),
+  )
+}
+
+export function eventsContentAsPage(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const content = loadEventsContent(contentDirectory)
+  return yamlContentAsPage(
+    'events-content',
+    'content/events.yaml',
+    `/${EVENTS_SLUG}/`,
+    content.comparisonTitle,
+    eventsContentStrings(content),
+  )
+}
+
+/**
+ * Every content file that carries copy, as the publishing-policy guard sees it: the Markdown
+ * pages plus the three YAML files that hold the rest of the words. src/app/layout.tsx passes
+ * exactly this at build time, and tests/content-policy.test.ts checks exactly this.
+ */
+export function loadGuardedContent(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage[] {
+  assertNoExcludedEvidence(contentDirectory)
+  return [
+    ...loadPages(contentDirectory),
+    homeContentAsPage(contentDirectory),
+    faqContentAsPage(contentDirectory),
+    eventsContentAsPage(contentDirectory),
+  ]
+}
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * NAVIGATION
+ *
+ * The header nav used to be every file in content/pages/, ordered by navOrder. That is how the
+ * accessibility statement came to sit in the nav beside Contact: not because a parent needs it
+ * there, but because it was a file. The rule is now the other way round. content/site.yaml names
+ * the pages a parent goes looking for, in the order they need them, and everything else
+ * published is a utility page linked from the footer.
+ *
+ * Nothing published can fall out of both lists, which is the property that makes an explicit nav
+ * safe: a page left off primaryNavigation moves to the footer rather than becoming unreachable.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+export interface NavigationLink {
+  href: string
+  label: string
+}
+
+export interface SiteNavigation {
+  /** The header navigation, in the order content/site.yaml lists it. */
+  primary: NavigationLink[]
+  /** Everything else published, for the footer, in navOrder then title order. */
+  utility: NavigationLink[]
+}
+
+function toLink(page: ContentPage): NavigationLink {
+  return { href: page.route, label: page.navLabel }
+}
+
+/**
+ * The two navigation lists, built from content/site.yaml and the published pages.
+ *
+ * Three ways this fails the build rather than shipping a broken nav, each naming the offender:
+ *   - a slug in primaryNavigation that is not a published page, which is what a rename or an
+ *     unpublished draft would otherwise turn into a nav item leading nowhere;
+ *   - the same slug listed twice, which would render the same link twice;
+ *   - a page whose front matter opts it out of the nav being listed anyway, because a page and
+ *     the site config disagreeing is a question nobody should have to answer by reading code.
+ */
+export function buildNavigation(
+  contentDirectory: string = defaultContentDirectory(),
+): SiteNavigation {
+  const filePath = 'content/site.yaml'
+  const settings = loadSiteSettings(contentDirectory)
+  const pages = loadPages(contentDirectory)
+  const bySlug = new Map(pages.map((page) => [page.slug, page]))
+
+  const seen = new Set<string>()
+  const primary = settings.primaryNavigation.map((slug) => {
+    if (seen.has(slug)) {
+      throw new ContentValidationError(
+        filePath,
+        `primaryNavigation lists "${slug}" twice, so the navigation would show it twice.`,
+      )
+    }
+    seen.add(slug)
+
+    const page = bySlug.get(slug)
+    if (!page) {
+      throw new ContentValidationError(
+        filePath,
+        `primaryNavigation lists "${slug}", which is not a published page in content/pages/. ` +
+          'Add the page, publish it, or take the slug out of the list.',
+      )
+    }
+    if (page.excludeFromNavigation) {
+      throw new ContentValidationError(
+        filePath,
+        `primaryNavigation lists "${slug}", but ${page.filePath} sets excludeFromNavigation. ` +
+          'Remove one of the two: a page and the site config must not disagree.',
+      )
+    }
+    return toLink(page)
+  })
+
+  // Everything published that the nav does not carry. Nothing published is left off both lists.
+  const utility = pages.filter((page) => !seen.has(page.slug)).map(toLink)
+
+  return { primary, utility }
+}

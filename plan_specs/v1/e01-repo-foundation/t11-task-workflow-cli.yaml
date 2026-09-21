@@ -1,0 +1,149 @@
+# TASK v1-e01-t11-task-workflow-cli — Task lifecycle CLI and session workflow
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §6 (repository boundaries), §16 (testing), §17 (evolution plan)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t11-task-workflow-cli
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: Task lifecycle CLI and session workflow
+    debate/architecture-refs: §6, §16, §17
+spec:
+  description: >-
+    Completed during project setup on 2026-09-18 by the PM session, outside the scripts/task flow
+    it creates (bootstrap). Provides scripts/task and scripts/task_helper.py so every PlanSpec task
+    runs the same way: `ready` lists startable tasks on origin/dev; `start` creates a git worktree
+    and task/<task> branch off origin/dev, refuses unmet prerequisites, marks the Goal InProgress,
+    creates the session report and launches Claude with a kickoff prompt naming the spec; `report`
+    and `review` hand the work to the PM; `pr` opens a PR into dev only when the report's PM verdict
+    is ACCEPTED, the phase is Succeeded and the branch is current with dev; `finish` confirms the
+    merge and removes the worktree plus local and remote branches. Also adds the working agreements
+    (light CI, operator hand-off for commands over ~2 minutes, documentation locations, descriptive
+    naming), the session report template and the documentation index. It does not own GitHub
+    settings (t02), CI workflows (t04) or promotion guards (t08).
+  priority: 1
+  constraints:
+    packages: [scripts, docs/process, docs/session-reports, docs/README.md, CLAUDE.md]
+    forbidden:
+      - Bash features unavailable in macOS bash 3.2 (associative arrays, mapfile, case modification)
+      - Deleting a worktree with uncommitted changes without an explicit --force
+      - Pushing to or merging into dev or main from the task tooling
+  context:
+    - kind: TaskRef
+      name: v1-e01-t01-init-local-repo
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `scripts/task start <task>` creates ../debate-intelligence-worktrees/<task> on task/<task> from
+        origin/dev, refuses and cleans up when a prerequisite is not Succeeded, commits the
+        InProgress phase plus a session report, and writes the kickoff prompt to .task/prompt.md.
+    - id: ac2
+      description: >-
+        `scripts/task pr <task>` refuses unless the worktree is clean, the PM verdict is ACCEPTED, the
+        phase is Succeeded and origin/dev is an ancestor; otherwise it validates specs, pushes the
+        branch and opens a PR into dev (gh, or the compare page with the body on the clipboard).
+    - id: ac3
+      description: >-
+        `scripts/task finish <task>` confirms the merge through gh or the spec phase on origin/dev,
+        refuses to discard uncommitted work, and removes the worktree and local and remote branches;
+        `--abandon` discards an unmerged task.
+    - id: ac4
+      description: >-
+        docs/process/task-workflow.md, working-agreements.md and session-report-template.md exist and
+        are linked from docs/README.md, CLAUDE.md and CONTRIBUTING.md.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t11-task-workflow-cli-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Helper for spec-aware operations, the shell CLI on top, documentation, then an end-to-end run
+    against a throwaway bare remote (start, PR gating, squash merge, finish, abandon).
+  goalRef:
+    name: v1-e01-t11-task-workflow-cli
+  graph:
+    nodes:
+      - id: spec-helper
+        kind: Task
+        name: Spec-aware helper
+        description: >-
+          scripts/task_helper.py with info, prereqs, ready, set-phase, prompt, new-report, verdict and
+          pr-body subcommands, run through `uv run` with inline dependencies.
+        outputs: [scripts/task_helper.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Ready list renders from the specs
+            command: uv
+            args: [run, scripts/task_helper.py, ready]
+      - id: lifecycle-cli
+        kind: Task
+        name: scripts/task lifecycle commands
+        description: >-
+          Bash 3.2-compatible CLI implementing ready, start, resume, prompt, list, report, review,
+          sync, pr and finish with the refusals described in the Goal.
+        dependsOn: [spec-helper]
+        outputs: [scripts/task]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Script parses
+            command: bash
+            args: [-n, scripts/task]
+          - type: command_succeeds
+            name: Help text renders
+            command: scripts/task
+            args: [help]
+      - id: process-docs
+        kind: Task
+        name: Workflow, working agreements and report template
+        description: >-
+          docs/process/task-workflow.md, working-agreements.md, session-report-template.md,
+          docs/README.md and docs/session-reports/README.md; CLAUDE.md, CONTRIBUTING.md and README.md
+          point at them.
+        dependsOn: [lifecycle-cli]
+        outputs: [docs/process/task-workflow.md, docs/process/working-agreements.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Working agreements define the CI budget
+            path: docs/process/working-agreements.md
+            contentMatch: "under 5 minutes"
+          - type: artifact_exists
+            name: Report template carries the PM verdict
+            path: docs/process/session-report-template.md
+            contentMatch: "**Verdict:** PENDING"
+      - id: end-to-end-run
+        kind: Task
+        name: End-to-end run against a throwaway remote
+        description: >-
+          Clone a bare copy of the repo, then run ready, start (blocked and unblocked), pr before and
+          after the PM verdict, a squash merge on the remote, finish (refusing on uncommitted work,
+          then succeeding), sync and finish --abandon.
+        dependsOn: [process-docs]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Lifecycle verified end to end
+            description: >-
+              Recorded in the PM session on 2026-09-18: every command behaved as specified, and no
+              worktree or task branch remained afterwards.
+status:
+  phase: Succeeded

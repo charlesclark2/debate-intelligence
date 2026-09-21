@@ -1,5 +1,5 @@
-# RELEASE v2.1 — Async jobs & web Cut-a-Card
-# Major version: V2. Epics: E13, E14
+# RELEASE v2.1 — Web app, debate tub & async jobs
+# Major version: V2. Epics: E13, E14, E35
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -11,12 +11,12 @@ metadata:
     debate/major-version: v2
     debate/release: v2.1
   annotations:
-    debate/title: v2.1 — Async jobs & web Cut-a-Card
+    debate/title: v2.1 — Web app, debate tub & async jobs
 spec:
   description: >-
-    Students log in to the web app, paste a URL, watch an async CardJob, edit the verified card within
-    provenance rules, and export it.
-  priority: 6
+    Debaters sign in to the web app and browse, search and download the team's evidence files (the debate
+    tub); students paste a URL and get a verified card through an async job.
+  priority: 9
   acceptanceCriteria:
   - id: epic-e13
     description: >-
@@ -24,6 +24,9 @@ spec:
   - id: epic-e14
     description: >-
       Epic E14 (Web App Shell & Cut-a-Card) goal is Succeeded.
+  - id: epic-e35
+    description: >-
+      Epic E35 (Debate Tub (Web File Access)) goal is Succeeded.
   - id: tagged
     description: >-
       Release tag v2.1.0 is pushed and CHANGELOG.md has a v2.1 section.
@@ -45,8 +48,8 @@ metadata:
 spec:
   gateType: review
   description: >-
-    Release review for v2.1 (Async jobs & web Cut-a-Card): demo the release goal end to end, confirm CI
-    green on the release tag, and confirm no evidence-integrity regressions.
+    Release review for v2.1 (Web app, debate tub & async jobs): demo the release goal end to end, confirm
+    CI green on the release tag, and confirm no evidence-integrity regressions.
   reviewers:
   - user:charlie
   - role:coach
@@ -81,6 +84,12 @@ spec:
       inputs:
         goalRef: v2-e14-web-cut-card
         specRef: plan_specs/v2/e14-web-cut-card/epic.yaml
+    - id: e35
+      kind: External
+      name: Epic E35 — Debate Tub (Web File Access)
+      inputs:
+        goalRef: v2-e35-debate-tub
+        specRef: plan_specs/v2/e35-debate-tub/epic.yaml
     - id: tag-release
       kind: Task
       name: Tag and publish v2.1.0
@@ -89,6 +98,7 @@ spec:
       dependsOn:
       - e13
       - e14
+      - e35
       acceptanceCriteria:
       - type: command_succeeds
         name: Release tag exists

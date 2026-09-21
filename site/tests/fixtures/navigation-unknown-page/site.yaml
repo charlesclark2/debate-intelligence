@@ -1,0 +1,17 @@
+name: Fixture Site
+shortName: Fixture
+tagline: A fixture.
+footerNote: A fixture footer.
+logoAlternativeText: Fixture logo
+navigationLabel: Main
+footerNavigationLabel: About this site
+skipLinkLabel: Skip to main content
+contactEmails:
+  - address: fixture.coach@example.invalid
+    name: Fixture Coach
+    role: Head Coach
+debaterLoginLabel: Debater login
+# A slug that is not a published page: what a rename leaves behind.
+primaryNavigation:
+  - alpha
+  - ghost

@@ -16,7 +16,7 @@ spec:
   description: >-
     Hybrid BM25/vector search with reranking returns ten strong, explained results in the web UI with
     open/cut actions.
-  priority: 7
+  priority: 10
   acceptanceCriteria:
   - id: epic-e15
     description: >-

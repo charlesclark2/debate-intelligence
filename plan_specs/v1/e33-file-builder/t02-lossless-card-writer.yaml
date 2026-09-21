@@ -1,0 +1,237 @@
+# TASK v1-e33-t02-lossless-card-writer — Lossless card writer
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §6 ExportService, §8 provenance, ADR-0006, ADR-0014
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t02-lossless-card-writer
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: Lossless card writer
+    debate/architecture-refs: §6, §8, §16, ADR-0006, ADR-0014
+spec:
+  description: >-
+    Implement the EvidenceFileWriter port: given a resolved recipe (t01) and the source .docx bytes for
+    each card's occurrence, produce a Verbatim-compatible .docx in which every card's cite and evidence
+    paragraphs are copied as OOXML runs from the source document (w:t text byte-for-byte, and rPr
+    formatting: underline, emphasis, bold, highlight, font size), never retyped, re-flowed or generated.
+    The output's style definitions (styles.xml) come from the team's own Verbatim template, via the
+    v1-e31-t02 style profile, never from a source document: a file CardMirror has saved regenerates
+    style definitions from its own defaults (ADR-0014, cardmirror-evaluation.md hand check), so a
+    CardMirror-normalized file is never used as a template.
+    Source character styles are mapped to the target styles through the E31 style profile; the same
+    tracked-change rules as the E31 parser apply (insertions accepted, deletions, comments and proofing
+    marks dropped). Pocket, hat, block headings, coach-written tag overrides and analytics are the only
+    new text; an un-overridden tag is copied from its source runs too. Each built file gets a sidecar
+    provenance manifest (JSON) listing every card's position, fingerprint, caselist, snapshot, team code,
+    round, source sha256, element index and evidence/formatting hashes, with provenance_mode FILE_IMPORT.
+    Output must open in Word with Verbatim. CardMirror checks are conditional on ADR-0014 (decided in
+    v1-e31-t01, reached via v1-e31-t02): only if it adopts CardMirror must output survive a CardMirror
+    fromDocx/toDocx round-trip. Fidelity is proven by re-parsing with the E31 DebateFileParser
+    (v1-e31-t03, a direct prerequisite), whose tracked-change and span rules the copier mirrors.
+    Boundary: this writer does NOT use the E06 DOCX renderer (v1.3), which
+    renders newly cut cards from CardSpan offsets; the two share only the style profile. Checks on built
+    files are t04, CLI is t03, publishing is t05.
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations, debate_core.domain, debate_core.application, scripts, tests/fixtures]
+    forbidden:
+      - Any writer input that carries evidence or cite text as a string (runs come only from source bytes)
+      - Model calls anywhere in the writer
+      - Taking styles.xml or style definitions from a source or CardMirror-saved document
+      - Normalizing, correcting, re-flowing or re-casing copied evidence or cite text
+      - Importing or depending on the E06 DOCX renderer (debate_core.evidence.docx_renderer)
+      - Presenting FILE_IMPORT cards as platform-verified (no VERIFIED status or badge in output)
+      - Writing author/lastModifiedBy, comments or source docProps into built files
+      - Committing unscrubbed caselist or team files as fixtures
+  context:
+    - kind: TaskRef
+      name: v1-e33-t01-file-recipe-format
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t02-verbatim-style-profile
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t03-debate-docx-parser
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        For every card in a built fixture file, re-parsing the output with the E31 DebateFileParser yields
+        evidence text, cite text and formatting spans (underline, emphasis, bold, highlight color, font size)
+        identical to parsing the card in its source document.
+    - id: ac2
+      description: >-
+        The writer API has no parameter that accepts card text; tag overrides and analytics are the only
+        strings written, and the provenance manifest marks each overridden tag as coach-authored with the
+        original tag's hash.
+    - id: ac3
+      description: >-
+        Headings use the style profile's pocket/hat/block/tag styles and source character styles are
+        remapped to profile styles; an unmapped source style keeps its direct rPr formatting and is
+        listed as a warning, never silently dropped.
+    - id: ac4
+      description: >-
+        Cards whose evidence contains content the writer cannot copy losslessly (images, text boxes,
+        embedded objects, footnotes) are refused with UNSUPPORTED_CONTENT and listed; the file is not
+        built with a partial card.
+    - id: ac5
+      description: >-
+        <file>.provenance.json validates against docs/data/file-provenance.schema.json with one entry per
+        card, and the same recipe and sources produce byte-identical .docx and manifest (fixed timestamps,
+        no author metadata).
+    - id: ac6
+      description: >-
+        The coach opens built fixture files for each format in Word with Verbatim without repair prompts;
+        conditional on ADR-0014 (v1-e31-t01, via v1-e31-t02) adopting CardMirror, a CardMirror
+        fromDocx/toDocx round-trip leaves card text and formatting unchanged.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t02-lossless-card-writer-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Generate the target base document from the style profile, build the run copier, assemble whole
+    files, emit the provenance sidecar, then prove fidelity by re-parsing and a manual Word/CardMirror
+    check.
+  goalRef:
+    name: v1-e33-t02-lossless-card-writer
+  graph:
+    nodes:
+      - id: base-template
+        kind: Task
+        name: Base document generated from the style profile
+        description: >-
+          scripts/build_file_base_template.py generates base.docx (styles.xml with pocket/hat/block/tag,
+          cite, underline/emphasis, analytic and undertag styles, empty body, neutral docProps) from the
+          E31 style profile, so the writer never hard-codes style ids; a test checks the base's style ids
+          match the profile.
+        outputs:
+          - scripts/build_file_base_template.py
+          - packages/debate_core/src/debate_core/integrations/docx_file_writer/templates/base.docx
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Base template matches the style profile
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_file_writer/test_base_template.py]
+      - id: run-copier
+        kind: Task
+        name: OOXML run copier with style remapping
+        description: >-
+          lxml deep-copy of the source w:p elements for a card's tag, cite and evidence (located by the
+          occurrence's element index and verified against its evidence hash before copying): unwrap w:ins,
+          drop w:del, comment ranges, bookmarks and proofErr, remap w:rStyle/w:pStyle through the profile,
+          re-create hyperlink relationships in the target part, and refuse drawings, text boxes, objects
+          and footnote references with UNSUPPORTED_CONTENT.
+        dependsOn: [base-template]
+        outputs: [packages/debate_core/src/debate_core/integrations/docx_file_writer/run_copier.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run copier tests pass on synthetic OOXML
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_file_writer/test_run_copier.py]
+      - id: file-assembly
+        kind: Task
+        name: Evidence file assembly behind the EvidenceFileWriter port
+        description: >-
+          Implement the port in debate_core.application terms: walk the resolved recipe, write
+          pocket/hat/block headings and coach tag overrides or analytics as new paragraphs, insert copied
+          tag/cite/evidence paragraphs, add a one-line analytic header naming the source caselists and
+          stating cards are disclosed (FILE_IMPORT) and not platform-verified, and write deterministic
+          docProps and zip entry timestamps.
+        dependsOn: [run-copier]
+        outputs:
+          - packages/debate_core/src/debate_core/application/ports/evidence_file_writer.py
+          - packages/debate_core/src/debate_core/integrations/docx_file_writer/writer.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Assembly and determinism tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/docx_file_writer/test_writer.py
+              - -k
+              - "assembly or deterministic"
+      - id: provenance-sidecar
+        kind: Task
+        name: Provenance sidecar manifest
+        description: >-
+          FileProvenanceManifest model (schema_version, recipe_hash, builder_version, style_profile_version,
+          built_at from the build request) with one entry per card: section_path, fingerprint, caselist,
+          snapshot, team_code as disclosed (never expanded to names), round, side, source sha256, element
+          index range, evidence_sha256, formatting_sha256, resolution, tag_overridden and original tag hash;
+          written as <file>.provenance.json with a generated JSON Schema.
+        dependsOn: [file-assembly]
+        outputs:
+          - packages/debate_core/src/debate_core/domain/file_provenance.py
+          - docs/data/file-provenance.schema.json
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Provenance schema exists
+            path: docs/data/file-provenance.schema.json
+            contentMatch: "source_sha256"
+          - type: test_passes
+            name: Provenance manifest tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/docx_file_writer/test_writer.py
+              - -k
+              - provenance
+      - id: fidelity-and-compat
+        kind: Task
+        name: Fidelity suite, Word/Verbatim and CardMirror compatibility
+        description: >-
+          Build files from the scrubbed E31 structural fixtures and assert cards re-parsed with the
+          v1-e31-t03 DebateFileParser equal source cards (text, cite, spans). Conditional on ADR-0014
+          (v1-e31-t01, via v1-e31-t02) adopting CardMirror, add a round-trip test via a small Node
+          script around its fromDocx/toDocx, marked `slow` (validate-dev slow tier, not PR CI) and skipped
+          when Node is absent. Type check and import boundaries.
+        dependsOn: [provenance-sidecar]
+        outputs:
+          - packages/debate_core/tests/integrations/docx_file_writer/test_fidelity.py
+          - tests/compat/cardmirror/roundtrip.mjs
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Re-parse fidelity suite passes offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_file_writer/test_fidelity.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold (no E06 renderer import)
+            command: uv
+            args: [run, lint-imports]
+          - type: custom
+            name: Coach opens built files in Word with Verbatim (CardMirror if ADR-0014 adopts it)
+            description: >-
+              Coach opens one built fixture file per format (Policy, LD, PF) in Word with Verbatim,
+              confirms no repair prompt, that navigation pane shows pocket/hat/block/tag levels, and that
+              underline/emphasis/highlight look identical to the source files; repeats in CardMirror only
+              if ADR-0014 (v1-e31-t01, via v1-e31-t02) adopts it.
+status:
+  phase: Pending

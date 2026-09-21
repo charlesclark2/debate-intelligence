@@ -1,0 +1,189 @@
+# TASK v1-e38-t01-district-donation-process — District donation process
+# Epic: E38 Team Donations | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §14 (security, privacy, student safety), ADR-0012 (site hosting)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e38-t01-district-donation-process
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e38-donations
+  annotations:
+    debate/title: District donation process
+    debate/architecture-refs: §14, ADR-0012
+spec:
+  description: >-
+    Document, with the school district business office and the activities director, exactly how a gift
+    reaches the debate team's district activity account, and turn it into docs/policies/donations.md,
+    approved by Charlie. This is mostly a recorded conversation, not code: Charlie asks the district a
+    prepared list of questions (online payment portal link and/or check payee, designation and mailing or
+    drop-off instructions; who issues receipts and tax acknowledgments; required or prohibited wording;
+    restrictions such as earmarking for an individual student, gift-acceptance thresholds, in-kind gifts,
+    employer matching, and how district gifts relate to any parent booster group) and the session writes
+    the answers up in the style of docs/policies/caselist-data-use.md (status table, scope, registers,
+    open questions, approval table). The policy states that the platform only links out: it never
+    handles money, never hosts payment forms or card fields, and stores no donor personal data; that
+    receipts and tax acknowledgments come from the district, never from the team or the platform; and
+    that it is not legal or tax advice. It records the single approved payment URL (or check instructions)
+    that the donate page must use, and the opt-in rules for donor recognition. Boundaries: no site code;
+    the donate page and its build-time link check are v1-e38-t02, the recognition section and its opt-in
+    validation are v1-e38-t03, and student-publishing rules stay in the website publishing policy
+    (v1-e36-t01), which this policy cites rather than copies.
+  priority: 1
+  constraints:
+    packages: [docs/policies]
+    forbidden:
+      - Giving legal or tax advice, or stating a gift's tax treatment on the district's behalf
+      - Any team- or platform-issued receipt or tax acknowledgment
+      - Accepting money, card data or donor personal data anywhere in the platform or repository
+      - Recording a payment URL or wording the district has not confirmed in writing
+      - Committing district emails, donor names or account numbers to the repository
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/policies/donations.md records the district's answers with the role of each person consulted
+        (business office, activities director), the date and the channel, and states that the written
+        confirmation is kept by Charlie outside the repository; any answer not yet confirmed is an open
+        question, not a rule.
+    - id: ac2
+      description: >-
+        A District process section gives the approved payment method exactly as confirmed: the single
+        approved online payment URL and/or check payee, designation (memo line) and delivery instructions,
+        and the name of the activity account as the district wants it shown.
+    - id: ac3
+      description: >-
+        A Receipts and tax acknowledgments section says the district issues them, how a donor requests
+        one, and that coaches and the platform never issue receipts; the document states near its top
+        that it is not legal or tax advice.
+    - id: ac4
+      description: >-
+        Required wording and Restrictions sections capture the district's mandatory language and limits
+        (earmarking, thresholds, in-kind gifts, matching, booster relationship), and a Platform boundaries
+        section states link-out only, no payment forms or card fields, no donor personal data stored.
+    - id: ac5
+      description: >-
+        A Donor recognition section sets the rules t03 implements: written opt-in, display name in the form
+        the donor chooses, no gift amounts unless the policy allows, withdrawal on request, and the opt-in
+        record kept outside the platform and referenced only by an opaque id.
+    - id: ac6
+      description: >-
+        Charlie's approval (name, role, date, policy version) is recorded, the policy is linked from
+        docs/README.md, and changing the approved payment URL requires a version bump and re-approval.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e38-t01-district-donation-process-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e38-donations
+spec:
+  description: >-
+    Prepare the questions and a policy skeleton, hold the district conversation and record the confirmed
+    answers, write the remaining sections, then close open questions and record Charlie's approval.
+    Calendar time is dominated by the district's reply; the writing itself is about half a day.
+  goalRef:
+    name: v1-e38-t01-district-donation-process
+  graph:
+    nodes:
+      - id: questions-and-skeleton
+        kind: Task
+        name: District question list and policy skeleton
+        description: >-
+          Draft the question list for the business office and activities director and create
+          docs/policies/donations.md with the status table, the not-legal-or-tax-advice statement, Scope
+          (the district activity account and the public site only; booster-club fundraising out of scope
+          unless the district says otherwise) and empty sections for each answer.
+        outputs: [docs/policies/donations.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy skeleton states it is not legal or tax advice
+            path: docs/policies/donations.md
+            contentMatch: "not legal or tax advice"
+      - id: district-conversation
+        kind: Task
+        name: District conversation and confirmation register
+        description: >-
+          Charlie meets or emails the district business office and activities director with the question
+          list. The session records each answer in a confirmation register (question, answer, role of the
+          person who answered, date, channel) and fills District process with the exact payment URL or
+          check payee, designation and delivery instructions. Unconfirmed answers go to Open questions.
+        dependsOn: [questions-and-skeleton]
+        outputs: [docs/policies/donations.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: District process section present
+            path: docs/policies/donations.md
+            contentMatch: "## District process"
+          - type: custom
+            name: District confirmation recorded
+            description: >-
+              Charlie confirms the district business office and activities director answered in writing,
+              that the confirmation register matches their replies (roles, dates, channel), that the
+              recorded payment URL or check instructions are exactly what the district sent, and that the
+              written confirmation is filed outside the repository.
+      - id: policy-sections
+        kind: Task
+        name: Receipts, wording, restrictions, platform boundaries and recognition rules
+        description: >-
+          Write Receipts and tax acknowledgments (district-issued only, how a donor requests one), Required
+          wording (the district's mandatory text, verbatim), Restrictions, Platform boundaries (link-out
+          only; no forms, card fields, payment scripts or iframes; no donor personal data; the approved URL
+          here is the source for site/config in t02) and Donor recognition (written opt-in, chosen display
+          name, no amounts unless allowed, withdrawal, opaque opt-in reference, records kept outside the
+          platform, and cross-reference to the website publishing policy for anything touching students).
+        dependsOn: [district-conversation]
+        outputs: [docs/policies/donations.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Receipts section present
+            path: docs/policies/donations.md
+            contentMatch: "## Receipts and tax acknowledgments"
+          - type: artifact_exists
+            name: Platform boundaries section present
+            path: docs/policies/donations.md
+            contentMatch: "## Platform boundaries"
+          - type: artifact_exists
+            name: Donor recognition section present
+            path: docs/policies/donations.md
+            contentMatch: "## Donor recognition"
+      - id: approval
+        kind: Task
+        name: Open questions, change control and Charlie's approval
+        description: >-
+          Add Open questions (status, who resolves, what each blocks), Review and change control (a new
+          payment URL or wording is a version bump plus re-approval, and t02's config is updated in the
+          same pull request), the Approval table, and a row in docs/README.md; then Charlie reviews and
+          approves.
+        dependsOn: [policy-sections]
+        outputs: [docs/policies/donations.md, docs/README.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy linked from docs index
+            path: docs/README.md
+            contentMatch: "policies/donations.md"
+          - type: artifact_exists
+            name: Approval section present
+            path: docs/policies/donations.md
+            contentMatch: "## Approval"
+          - type: custom
+            name: Charlie approves the donations policy
+            description: >-
+              Charlie reads the full policy, resolves or accepts each open question, confirms the approved
+              payment URL and wording, and records his approval (name, role, date, version) before the
+              donate page links to anything.
+status:
+  phase: Pending

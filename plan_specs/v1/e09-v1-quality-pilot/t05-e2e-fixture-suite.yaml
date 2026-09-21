@@ -1,5 +1,5 @@
 # TASK v1-e09-t05-e2e-fixture-suite — End-to-end recorded suite
-# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.5 (V1 quality gate & team pilot) | Major: V1
 # Architecture refs: §16 (integration tests on recorded fixtures), §11 V1 acceptance criteria, §8
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
   annotations:
     debate/title: End-to-end recorded suite
@@ -23,8 +23,11 @@ spec:
     `verify bundle.docx` exits 0; (2) `cut <URL>` on a news, a think-tank, a government PDF and an
     open-access journal source; (3) a paywalled and a robots-disallowed URL fail explicitly with the right
     exit codes; (4) a provider outage yields PARTIAL search results; (5) a hand-edited evidence word in the
-    exported DOCX makes verify fail with MANUAL_EDIT. Each V1 acceptance criterion from §11 maps to at least
-    one named test. Boundaries: does not re-test unit behaviour, golden formatting (t02) or span quality (t03).
+    exported DOCX makes verify fail with MANUAL_EDIT; (6) the V1 caselist workflow on a tiny synthetic
+    weekly archive (no real team files): `caselist import` → `caselist parse` → `landscape report` (replay
+    models) → `files build` from a recipe → `store sync` to an in-process moto bucket. Each V1 acceptance
+    criterion from §11 maps to at least one named test. Boundaries: does not re-test unit behaviour, golden
+    formatting (t02) or span quality (t03).
   priority: 1
   constraints:
     packages: [tests/integration, tests/fixtures]
@@ -47,8 +50,15 @@ spec:
         reasons in CLI output.
     - id: ac3
       description: >-
-        The suite runs with network sockets disabled (pytest-socket) and completes in under 3 minutes in CI.
+        The suite runs with network sockets disabled (pytest-socket), completes in under 3 minutes, and is
+        marked `slow` so it runs in the validate-dev slow tier (post-merge, pre-promotion) and nightly,
+        not in the PR `ci` check into dev.
     - id: ac4
+      description: >-
+        The caselist scenario imports and deduplicates the synthetic archive, parses its cards, writes a
+        landscape report, builds a file whose card text hashes match the sources, and syncs it with matching
+        checksums to the moto bucket.
+    - id: ac5
       description: >-
         tests/integration/ACCEPTANCE.md maps each §11 V1 acceptance criterion to the test ids covering it.
 status:
@@ -62,7 +72,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
 spec:
   description: >-
@@ -76,7 +86,8 @@ spec:
         name: E2E harness with sockets disabled
         description: >-
           Fixtures for tmp data dir, replay model router, recorded HTTP cassettes and a CliRunner wrapper;
-          pytest-socket blocks network.
+          pytest-socket blocks network; every test under tests/integration is marked `slow` (module-level
+          pytestmark) so the default PR run deselects it.
         outputs: [tests/integration/conftest.py]
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -96,7 +107,7 @@ spec:
           - type: test_passes
             name: Happy-path e2e passes
             command: uv
-            args: [run, pytest, tests/integration/test_e2e_research.py]
+            args: [run, pytest, -m, slow, tests/integration/test_e2e_research.py]
       - id: failure-scenarios
         kind: Task
         name: Cut sources and failure scenarios
@@ -109,19 +120,36 @@ spec:
           - type: test_passes
             name: Failure scenarios pass
             command: uv
-            args: [run, pytest, tests/integration/test_e2e_failures.py]
+            args: [run, pytest, -m, slow, tests/integration/test_e2e_failures.py]
+      - id: caselist-workflow
+        kind: Task
+        name: caselist import → parse → landscape → files build → store sync scenario
+        description: >-
+          A synthetic two-team weekly archive fixture (fake school/team codes) run through the CLI with
+          replay models and moto S3; asserts dedupe counts, parsed cards, the landscape report, the built
+          file's card hashes and the sync summary.
+        dependsOn: [e2e-harness]
+        outputs: [tests/integration/test_e2e_caselist.py, tests/fixtures/caselist/synthetic_archive/]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist workflow e2e passes
+            command: uv
+            args: [run, pytest, -m, slow, tests/integration/test_e2e_caselist.py]
       - id: acceptance-map
         kind: Task
         name: Acceptance criteria map
         description: >-
           Write ACCEPTANCE.md mapping §11 criteria to tests and run the whole integration directory.
-        dependsOn: [happy-path, failure-scenarios]
+        dependsOn: [happy-path, failure-scenarios, caselist-workflow]
         outputs: [tests/integration/ACCEPTANCE.md]
         estimatedEffort: 1h
         acceptanceCriteria:
-          - type: test_passes
+          - type: custom
             name: Full integration suite passes offline
-            command: uv
-            args: [run, pytest, tests/integration]
+            description: >-
+              Operator-run (expected > 2 min): `uv run pytest -m slow tests/integration`; success = every
+              test passes with none skipped and the run reports sockets disabled; paste the summary line
+              into the session report.
 status:
   phase: Pending

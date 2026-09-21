@@ -1,0 +1,217 @@
+# TASK v1-e31-t03-debate-docx-parser — Debate .docx parser
+# Epic: E31 Debate File Parsing | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §6 FileIntelligenceService, §8 provenance, §13 file parsing, §14, §16 golden DOCX
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t03-debate-docx-parser
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: Debate .docx parser
+    debate/architecture-refs: §6, §8, §13, §14, §16
+spec:
+  description: >-
+    Implement the deterministic DOCX adapter behind a new DebateFileParser port. Moved from V3 (was
+    v3-e20-t03) because the caselist evidence store needs it now; v3-e20 reuses it for web uploads. The
+    parser reads word/document.xml with lxml alone - not python-docx, which builds its parser with
+    remove_blank_text=True and can therefore drop a whitespace-only run in exactly the converted files
+    this parser exists for, against ac3's requirement that evidence text be copied exactly; lxml with
+    entity resolution, DTD loading and network access all off does the job and is the safer parse besides.
+    No task may read evidence text with python-docx; an import-linter contract keeps both libraries out of
+    domain/ and application/. The parser uses the t02 StyleProfile and non-Verbatim
+    classifier to turn a SourceDocument (E30-t02 caselist domain model: caselist, snapshot, sha256, source
+    path, CampFile metadata) into a ParsedDocument of FileSections (pocket, hat, block, tag, cite, evidence,
+    analytic, undertag, other) with section paths, and ParsedCards grouping tag + cite + evidence. Evidence
+    text is copied exactly as it appears in the runs, with underline, emphasis, bold, highlight color and font
+    size as character-offset FormattingSpans; nothing is normalized, retyped or produced by a model. Caselist
+    uploads differ from team files: many do not use the Verbatim template, some are wiki-converted cite
+    entries with tag, cite and first/last words only, and they come from strangers, so the loader is hardened
+    against zip bombs and XML entity tricks. Each ParsedCard records its completeness (FULL, ABBREVIATED for
+    first-and-last-words cites, CITE_ONLY), the profile match source, and FILE_IMPORT provenance: caselist,
+    snapshot, source sha256, source path, body element index range, parser_version and profile_version. It is
+    never marked verified. Boundaries: the style profile and classifier are t02 (used, not forked);
+    fingerprints are t04; the labeled accuracy set and regression gate are t05; the incremental pipeline, the
+    parsed store and the CLI are t06; persistence with revisions is v3-e20-t01; argument typing is v3-e21-t02;
+    pasted-card parsing is v2-e18-t01 (which reuses the span helpers here). PDFs and legacy .doc stay unparsed.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, tests/fixtures]
+    forbidden:
+      - >-
+        Committing unscrubbed team, caselist or camp files to tests/fixtures (student or debater names, team
+        codes, docProps author/lastModifiedBy, comments, tracked-change authors)
+      - Model calls anywhere in the parser
+      - Normalizing, correcting or re-flowing evidence text (offsets refer to the run text as-is)
+      - Presenting imported or UNVERIFIED cards as platform-verified finished evidence
+      - Resolving external entities, DTDs or remote references while reading XML
+      - Logging document text, file paths or team codes at INFO or above
+      - Importing boto3/botocore, fastapi, typer, python-docx or lxml in debate_core domain/ or application/
+  context:
+    - kind: TaskRef
+      name: v1-e31-t02-verbatim-style-profile
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t02-caselist-domain-model
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Pocket/Hat/Block/Tag/Cite/Analytic/Undertag are resolved only through the t02 StyleProfile (Verbatim
+        styles and aliases first, heuristic classifier second); every FileSection has a section_path of its
+        heading ancestors and records its match source.
+    - id: ac2
+      description: >-
+        Tag + cite + evidence are grouped into ParsedCards with the short cite ("Smith 26") split from the full
+        cite; a tag with no following cite or evidence is an ANALYTIC; wiki-converted and first/last-words
+        cards are flagged ABBREVIATED or CITE_ONLY instead of being padded or dropped.
+    - id: ac3
+      description: >-
+        A fidelity test re-reads the XML and proves each card's evidence text equals the concatenated w:t text
+        of its source runs, and that underline, emphasis, bold, highlight color and font-size spans land on the
+        correct character offsets.
+    - id: ac4
+      description: >-
+        Every ParsedCard carries provenance_mode FILE_IMPORT with caselist, snapshot, source sha256, source
+        path, element index range, parser_version and profile_version, and has no verified status.
+    - id: ac5
+      description: >-
+        Tracked insertions are kept and deletions dropped, comments and docProps are never read into output,
+        tables/text boxes become OTHER, and malformed, oversized (uncompressed size or entry count over limits),
+        macro-enabled, .doc or .pdf inputs yield a typed ParseFailure with a reason instead of partial output.
+    - id: ac6
+      description: >-
+        8-10 synthetic structural fixtures modelled on the template families the v1-e31-t02 survey measured
+        (team Verbatim, Verbatim and non-Verbatim caselist uploads, wiki-converted cites, camp files,
+        pre-2026 direct formatting) have snapshot expectations, and a 300-page (about 5 MB) synthetic file
+        parses in under 20 s in a `slow` test. No real file or excerpt is committed: accuracy against real
+        files is measured in place by v1-e31-t05.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t03-debate-docx-parser-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Define the parse output model and port, harden loading, extract run text and formatting spans, assemble
+    sections and cards with provenance, then lock behavior down with scrubbed structural fixtures.
+  goalRef:
+    name: v1-e31-t03-debate-docx-parser
+  graph:
+    nodes:
+      - id: parse-model-and-port
+        kind: Task
+        name: Parse output model and DebateFileParser port
+        description: >-
+          Pydantic ParsedDocument, FileSection, ParsedCard, FormattingSpan, CardCompleteness,
+          FileImportProvenance and ParseFailure in debate_core.domain.debate_files (V1 value objects that
+          v3-e20-t01 later persists with revisions), and the DebateFileParser Protocol plus an in-memory fake.
+        outputs:
+          - packages/debate_core/src/debate_core/domain/debate_files.py
+          - packages/debate_core/src/debate_core/application/ports/debate_files.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ParsedCard model exists
+            path: packages/debate_core/src/debate_core/domain/debate_files.py
+            contentMatch: "class ParsedCard"
+          - type: test_passes
+            name: Parse model invariants and JSON round-trip tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_debate_files.py]
+      - id: safe-loading
+        kind: Task
+        name: Hardened package loading
+        description: >-
+          Open .docx packages with limits on uncompressed size, entry count and compression ratio; parse XML
+          with lxml resolve_entities=False, no network and huge_tree off; reject .docm macros, legacy .doc and
+          PDFs with typed reasons; accept w:ins, drop w:del, never read comments or docProps.
+        dependsOn: [parse-model-and-port]
+        outputs: [packages/debate_core/src/debate_core/integrations/docx_parser/package.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Loader safety tests pass (zip bomb, entity expansion, macro, wrong format)
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_parser/test_package.py]
+      - id: run-formatting
+        kind: Task
+        name: Run text and formatting spans
+        description: >-
+          Walk w:r/w:t (tabs, breaks, hyperlinks, w:ins) to build paragraph text and FormattingSpans for
+          underline, emphasis, bold, highlight color and font size, resolving character styles through the
+          StyleProfile and merging adjacent identical spans.
+        dependsOn: [safe-loading]
+        outputs: [packages/debate_core/src/debate_core/integrations/docx_parser/runs.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run formatting and fidelity tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_parser/test_runs.py]
+      - id: section-and-card-assembly
+        kind: Task
+        name: Section, card and provenance assembly
+        description: >-
+          Classify paragraphs through the StyleProfile and classifier, build FileSections with section paths,
+          group tag/cite/evidence into ParsedCards with short cite, completeness and match source, detect
+          analytics and undertags, emit OTHER for tables/text boxes, and attach FILE_IMPORT provenance from
+          the SourceDocument; implements DebateFileParser.
+        dependsOn: [run-formatting]
+        outputs: [packages/debate_core/src/debate_core/integrations/docx_parser/parser.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Assembly and provenance tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_parser/test_parser.py]
+      - id: structural-fixtures
+        kind: Task
+        name: Structural fixture suite and quality gates
+        description: >-
+          Write 8-10 synthetic fixtures into tests/fixtures/debate_files/structural/ with a MANIFEST.md
+          recording what template family each one represents. No real file or excerpt is committed,
+          scrubbed or otherwise: cards travel between programs, so a team file can carry another
+          program's cutter marks, and ac6 and v1-e31-t02 both settle this. Snapshot expectations are
+          hand-written from the fixture, never generated from the parser's own output, because an
+          expectation derived from the implementation cannot contradict it. Add a synthetic large-file
+          timing test marked `slow` (validate-dev slow tier, not the PR `ci` check), then type check and
+          import boundaries.
+        dependsOn: [section-and-card-assembly]
+        outputs: [tests/fixtures/debate_files/structural/MANIFEST.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Structural fixture manifest exists
+            path: tests/fixtures/debate_files/structural/MANIFEST.md
+            contentMatch: "wiki-converted"
+          - type: test_passes
+            name: Structural fixture tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/docx_parser/test_structural_fixtures.py
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

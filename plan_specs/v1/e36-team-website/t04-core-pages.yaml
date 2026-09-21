@@ -1,0 +1,202 @@
+# TASK v1-e36-t04-core-pages — Core pages for parents and students
+# Epic: E36 Team Website Foundation | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t04-core-pages
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: Core pages for parents and students
+    debate/architecture-refs: §4, §5, §14, ADR-0010, ADR-0012, ADR-0013
+spec:
+  description: >-
+    Write and build the pages parents need before the October 1, 2026 information session: Home, About
+    the team, Debate events explained (Policy, Lincoln-Douglas and Public Forum in plain language: what a
+    round looks like, speeches and cross-examination, prep time, what a judge does, how long a tournament
+    day runs), How to join, Coaches, Parent FAQ (travel, costs, time commitment, parent judging and what
+    a ballot and RFD are) and Contact. Copy lives in site/content/ and is drafted by the session from the
+    project's intro decks for LD, PF and Policy and the topic launch materials, then reviewed and edited
+    by Charlie; facts only Charlie knows (practice times, fees, travel, coach bios) are asked for, never
+    invented, and a build guard blocks a prod build that still contains a placeholder. Everything follows
+    the approved publishing policy (t01): no student surnames or contact details, no student photos
+    without district media consent, no third-party embeds. Contact is a mailto link to a coach or team
+    address (no form, nothing stored). A Debater login link is built but hidden behind a feature flag that
+    stays off until V2 (Cognito, web/). Out of scope: layout, tokens and content loader (t03), hosting and
+    deploys (t02, t05), the events calendar and announcements (E37), the donation page (E38).
+    Setup note: `corepack enable pnpm` fails on the operator's corepack (expired npm signing key);
+    install pnpm the way site/README.md records and keep that note current.
+  priority: 1
+  constraints:
+    packages: [site/content, site/src/app, site/src/lib, site/tests]
+    forbidden:
+      - Student surnames, contact details, ages, or photos without district media consent
+      - Invented facts (fees, practice times, travel policy, coach credentials, results) not supplied by Charlie
+      - Contact forms, form services or anything that stores visitor or parent PII
+      - Third-party embeds, trackers, social widgets or remote assets
+      - An active Debater login link before the V2 app exists
+      - Donation or payment content (E38) or calendar embeds (E37)
+  context:
+    - kind: TaskRef
+      name: v1-e36-t01-publishing-policy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t03-site-scaffold
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The static export contains home, about, events, join, coaches, faq and contact pages, each with
+        its own title and description, reachable from the navigation and listed in sitemap.xml.
+    - id: ac2
+      description: >-
+        The events page explains Policy, LD and PF for a parent with no debate background (format,
+        speech order, CX, prep time, judging) and the FAQ answers travel, costs, time commitment and
+        parent judging using only facts Charlie supplied.
+    - id: ac3
+      description: >-
+        A content-policy test fails the build if content contains an email address outside the allowlist
+        of coach/team addresses, a phone number, an image without an entry in the media-consent manifest,
+        a placeholder marker, or a script or iframe from another origin. Named students and consented
+        images carry a consent entry with the season and the date checked (docs/policies/website-publishing.md:
+        consent renews annually at the start of the season); the build fails in prod when any entry is
+        missing and warns when one predates the current season, so a lapsed start-of-season check is
+        visible without anyone remembering to look.
+    - id: ac4
+      description: >-
+        The Debater login link is absent from the built HTML when the feature flag is off (the default)
+        and present when it is on, and the contact page uses only a mailto link.
+    - id: ac5
+      description: >-
+        axe-core reports no WCAG 2.1 AA violations on every built page, and Charlie has approved the copy
+        against the publishing policy's pre-publication checklist.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t04-core-pages-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Draft the copy as content files, build the page routes, add the contact page and the hidden login
+    flag, add automated policy and accessibility checks, then get Charlie's review. About one day of
+    session time plus Charlie's review.
+  goalRef:
+    name: v1-e36-t04-core-pages
+  graph:
+    nodes:
+      - id: draft-copy
+        kind: Task
+        name: Draft page copy in site/content/
+        description: >-
+          Draft home, about, events, join, coaches, faq and contact content from the intro decks (LD, PF,
+          Policy) and topic launch materials, written for parents; mark every fact Charlie must supply
+          (practice schedule, fees, travel, coach bios, contact addresses) with a placeholder marker and
+          list the questions for Charlie in the PR.
+        outputs:
+          - site/content/pages/home.md
+          - site/content/pages/events.md
+          - site/content/pages/faq.md
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Events page explains all three events
+            path: site/content/pages/events.md
+            contentMatch: "Lincoln-Douglas"
+          - type: artifact_exists
+            name: FAQ covers parent judging
+            path: site/content/pages/faq.md
+            contentMatch: "judg"
+      - id: page-routes
+        kind: Task
+        name: Page routes and navigation
+        description: >-
+          Add App Router pages that render the content files through the t03 loader and components, with
+          navigation order and per-page metadata from front matter.
+        dependsOn: [draft-copy]
+        outputs: [site/src/app/about/page.tsx, site/src/app/events/page.tsx, site/src/app/faq/page.tsx]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Static export builds with all core pages
+            command: pnpm
+            args: [--dir, site, build]
+          - type: test_passes
+            name: Route tests find every core page in the export and sitemap
+            command: pnpm
+            args: [--dir, site, test, routes]
+      - id: contact-and-login-flag
+        kind: Task
+        name: Mailto contact and hidden Debater login link
+        description: >-
+          Contact page with mailto links to the coach/team addresses in site/content/site.yaml (the
+          email allowlist) and no form; a debaterLogin feature flag (default off) that renders a nav link
+          to the V2 app URL only when on.
+        dependsOn: [page-routes]
+        outputs: [site/content/site.yaml, site/src/app/contact/page.tsx]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Login link hidden by default and contact uses mailto only
+            command: pnpm
+            args: [--dir, site, test, contact, login-flag]
+      - id: policy-and-a11y-checks
+        kind: Task
+        name: Content-policy guard and page accessibility tests
+        description: >-
+          A vitest suite over site/content/ and site/out/ that rejects non-allowlisted emails, phone
+          numbers, images missing from site/content/media-consent.yaml, placeholder markers in a prod
+          build, and cross-origin scripts or iframes; the same manifest carries season and
+          date-checked per named student and per image, failing a prod build on a missing entry and
+          warning on one older than the current season; axe-core runs over every built page.
+        dependsOn: [contact-and-login-flag]
+        outputs: [site/tests/content-policy.test.ts, site/tests/pages-a11y.test.ts]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Content-policy guard passes
+            command: pnpm
+            args: [--dir, site, test, content-policy]
+          - type: test_passes
+            name: Every built page passes axe WCAG 2.1 AA checks
+            command: pnpm
+            args: [--dir, site, test, pages-a11y]
+          - type: command_succeeds
+            name: Site lint passes
+            command: pnpm
+            args: [--dir, site, lint]
+      - id: charlie-review
+        kind: Task
+        name: Charlie reviews and approves the copy
+        description: >-
+          Charlie answers the open questions, edits the copy, and walks the publishing policy's
+          pre-publication checklist; the session applies the edits and removes every placeholder.
+        dependsOn: [policy-and-a11y-checks]
+        outputs: [site/content/pages/faq.md, site/content/pages/coaches.md]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full site suite passes with no placeholders left
+            command: pnpm
+            args: [--dir, site, test]
+          - type: custom
+            name: Charlie approves the core page copy
+            description: >-
+              Charlie reads every core page on a phone-width preview (local `pnpm --dir site build` output
+              or the dev preview), confirms the facts are correct, and ticks each item of the publishing
+              policy's pre-publication checklist in the PR.
+status:
+  phase: Pending

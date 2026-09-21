@@ -1,0 +1,192 @@
+# TASK v1-e33-t01-file-recipe-format — File recipe format
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Architecture refs: §6 ExportService, §8 provenance, ADR-0006
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t01-file-recipe-format
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: File recipe format
+    debate/architecture-refs: §6, §8, ADR-0006
+spec:
+  description: >-
+    Define the YAML file recipe that describes an evidence file to build from parsed cards: file title,
+    topic, format (Policy/LD/PF), caselist slug, position and side; an ordered structure of pockets, hats
+    and blocks; and items that are either card references (by E31 card fingerprint, with an optional
+    coach-written replacement tag) or coach-written analytics. Each card reference may pin the exact
+    occurrence it comes from (caselist, snapshot, team code, round, source sha256, element index); the
+    resolver checks pins against the occurrence store and picks unpinned occurrences by a documented
+    deterministic rule. A recipe never contains evidence text or cites: those are copied from the source
+    document by the writer (t02). Recipes live in the evidence workspace (settings.files_dir, e.g.
+    files/recipes/<topic>/<name>.yaml), not in the repo; the repo commits only the Pydantic models, a
+    generated JSON Schema, a guide and synthetic example recipes. Boundaries: writing the .docx and the
+    provenance sidecar is t02, `files build`/`files suggest` are t03, built-file checks are t04,
+    publishing is t05. Only disclosed/imported cards (FILE_IMPORT) are referenceable in v1.2; newly cut
+    cards from E06 (v1.3) are out of scope.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application, scripts, docs/data, docs/guides, tests/fixtures]
+    forbidden:
+      - Any recipe field that carries quoted evidence text or cite text
+      - Model calls while loading, validating or resolving a recipe
+      - Committing real team recipes, team codes or student names to the repo (synthetic examples only)
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/ or application/
+  context:
+    - kind: TaskRef
+      name: v1-e31-t04-card-fingerprints
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        FileRecipe Pydantic models (schema_version 1) model title, topic, format, caselist, position, side,
+        and a pocket > hat > block > item tree whose items are CardRef (fingerprint, optional tag override,
+        optional occurrence pin) or Analytic (coach text); unknown keys and skipped heading levels are
+        rejected.
+    - id: ac2
+      description: >-
+        Loading an invalid recipe reports every error with its YAML line number and path (e.g.
+        structure[0].hats[1].blocks[2].items[3].fingerprint) instead of the first error only.
+    - id: ac3
+      description: >-
+        recipe_hash is the sha256 of a canonical JSON form, so reordering YAML keys or changing comments
+        leaves it unchanged while changing any card, tag, analytic or order changes it.
+    - id: ac4
+      description: >-
+        The resolver maps each CardRef to exactly one occurrence from the E31 occurrence store: a pin that
+        matches no occurrence fails with PIN_MISMATCH, an unknown fingerprint fails with UNKNOWN_CARD, and
+        unpinned refs pick the latest snapshot then lowest source sha256, recorded as resolution=AUTO.
+    - id: ac5
+      description: >-
+        docs/data/file-recipe.schema.json is generated from the models and checked for drift in CI, and
+        docs/guides/file-recipes.md walks through a synthetic example recipe for each of Policy, LD and PF.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t01-file-recipe-format-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Model the recipe first, then strict YAML loading and canonical hashing, occurrence resolution against
+    the fingerprint store, and finally the published schema, guide and synthetic examples.
+  goalRef:
+    name: v1-e33-t01-file-recipe-format
+  graph:
+    nodes:
+      - id: recipe-models
+        kind: Task
+        name: FileRecipe domain models
+        description: >-
+          Pydantic models FileRecipe, Pocket, Hat, Block, CardRef, Analytic and OccurrencePin in
+          debate_core.domain with extra="forbid", a fingerprint format validator matching E31 t04, a
+          heading-nesting validator (no block outside a hat when the recipe declares hats, no empty
+          sections) and a TagOverride that is labeled coach-authored.
+        outputs: [packages/debate_core/src/debate_core/domain/file_recipe.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Recipe models module exists
+            path: packages/debate_core/src/debate_core/domain/file_recipe.py
+            contentMatch: "class FileRecipe"
+          - type: test_passes
+            name: Recipe model validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/test_file_recipe.py]
+      - id: loader-and-hash
+        kind: Task
+        name: Strict YAML loader and canonical recipe hash
+        description: >-
+          yaml.safe_load with a line-tracking loader, aggregation of Pydantic errors into RecipeError
+          entries with YAML line and dotted path, and recipe_hash over sorted-key canonical JSON of the
+          validated model.
+        dependsOn: [recipe-models]
+        outputs: [packages/debate_core/src/debate_core/application/file_recipes.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Loader error reporting and hash stability tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_recipes.py, -k, "load or hash"]
+      - id: occurrence-resolver
+        kind: Task
+        name: Resolve card refs against the occurrence store
+        description: >-
+          RecipeResolver reads the card fingerprint/occurrence repository port from E31 t04 and returns
+          ResolvedCard records (fingerprint, occurrence, resolution PINNED or AUTO); PIN_MISMATCH and
+          UNKNOWN_CARD are collected for the whole recipe, and the same fingerprint twice in one recipe is
+          reported as DUPLICATE_REF.
+        dependsOn: [loader-and-hash]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Resolver tests pass against the in-memory occurrence repository
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_recipes.py, -k, resolve]
+      - id: schema-docs-examples
+        kind: Task
+        name: JSON Schema, guide and synthetic example recipes
+        description: >-
+          scripts/export_recipe_schema.py writes docs/data/file-recipe.schema.json (with --check for
+          drift); docs/guides/file-recipes.md explains fields, pins and the auto-resolution rule; three
+          synthetic recipes (NHI politics DA answers, LD space colonization NC, PF data-center moratorium
+          con blocks) use synthetic fingerprints and team codes only.
+        dependsOn: [occurrence-resolver]
+        outputs:
+          - scripts/export_recipe_schema.py
+          - docs/data/file-recipe.schema.json
+          - docs/guides/file-recipes.md
+          - tests/fixtures/file_builder/recipes/
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Recipe schema is in sync with the models
+            command: uv
+            args: [run, scripts/export_recipe_schema.py, --check]
+          - type: artifact_exists
+            name: Recipe guide exists
+            path: docs/guides/file-recipes.md
+            contentMatch: "fingerprint"
+          - type: test_passes
+            name: Example recipes load and validate
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_recipes.py, -k, examples]
+      - id: quality-gates
+        kind: Task
+        name: Quality gates
+        description: >-
+          Full recipe test modules pass offline, type check and import-boundary contracts hold.
+        dependsOn: [schema-docs-examples]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Recipe test modules pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/domain/test_file_recipe.py
+              - packages/debate_core/tests/application/test_file_recipes.py
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

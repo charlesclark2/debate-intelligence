@@ -20,7 +20,7 @@ spec:
   description: >-
     Build the stateful, persisted, replayable round engine: format rules, judge profiles and flow tracking
     — not a chat thread.
-  priority: 15
+  priority: 18
   constraints:
     majorVersion: v3
     release: v3.5

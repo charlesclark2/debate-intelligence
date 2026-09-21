@@ -6,6 +6,9 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .coverage
+.coverage.*
+coverage.xml
+.hypothesis/
 htmlcov/
 dist/
 build/
@@ -23,6 +26,12 @@ node_modules/
 *.tfplan
 crash.log
 
+# Debate files at the repository root: real team, caselist and camp files and their
+# round-tripped output must never be committed (v1-e31-t01, ADR-0014). Anchored to the root so
+# scrubbed fixtures under tests/fixtures/ are unaffected.
+/*.docx
+/*.doc
+
 # Local data, secrets, OS
 .env
 .env.*
@@ -33,3 +42,30 @@ crash.log
 .DS_Store
 .idea/
 .vscode/
+
+# Task workflow scratch (kickoff prompt, PR body)
+.task/
+
+# Operator-local Terraform inputs (account ids, emails); never committed. The committed
+# per-environment inputs are infrastructure/bootstrap/state/<env>.tfvars and
+# infrastructure/envs/<env>/terraform.tfvars, which carry no operator-specific values.
+infrastructure/bootstrap/**/terraform.tfvars
+infrastructure/**/*.auto.tfvars
+!infrastructure/**/*.auto.tfvars.example
+
+# The temporary local backend used for the first apply of infrastructure/bootstrap/state, before
+# the bucket it creates exists (docs/runbooks/terraform-bootstrap.md). Never committed: it would
+# override the real backend for everyone.
+infrastructure/**/backend_override.tf
+
+# The style survey's full aggregate (v1-e31-t02). scripts/survey_docx_styles.py writes it on every
+# run, beside the committed report, so whoever refreshes one reads the other. Never committed: it
+# names every style id in the corpus, including ones a team named after a person, which is exactly
+# what the committed report withholds.
+docs/data/debate-file-style-survey.full.json
+
+# The operator's OpenCaselist caselist_token (v1-e34-t01-caselist-api-client). Its file fallback
+# lives at <storage.data_dir>/secrets/caselist_token, normally outside any checkout; these two
+# patterns keep it out of the repository even when a data directory is pointed inside one.
+secrets/
+caselist_token

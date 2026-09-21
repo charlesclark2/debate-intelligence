@@ -21,11 +21,16 @@ spec:
     rule it enforces (schema shape, unique names, label/folder agreement, graph acyclicity, typed
     criteria fields, TaskRef resolution, no later-release prerequisites, epic-in-one-release), a
     `--status` roll-up per release/epic, and a new scripts/spec_index.py that regenerates the
-    ROADMAP.md tables from the specs. Wire both into pre-commit; the CI job that runs them is t04.
-    This task does not author or change any epic/task spec content.
+    ROADMAP.md tables from the specs. Also add scripts/check_links.py, an offline Markdown link
+    and anchor checker for the whole repo; it replaces the ad-hoc linkcheckmd usage found
+    insufficient in v1-e01-t06 (no recursion, no anchor checks). Wire all three into pre-commit;
+    the CI job that runs them is t04. The validator derives release order from
+    plan_specs/releases/*.yaml instead of its hardcoded RELEASE_ORDER list. Bring scripts/ under
+    ruff: remove the temporary `scripts/` exclusion that v1-e01-t03 added to the ruff config and
+    fix what it reports. This task does not author or change any epic/task spec content.
   priority: 2
   constraints:
-    packages: [scripts, tests/specs, ROADMAP.md, .pre-commit-config.yaml]
+    packages: [scripts, tests/specs, tests/docs, ROADMAP.md, .pre-commit-config.yaml, pyproject.toml]
     forbidden:
       - Editing epic or task spec content to make the validator pass
       - Network access from the validator or index generator
@@ -33,6 +38,9 @@ spec:
   context:
     - kind: TaskRef
       name: v1-e01-t01-init-local-repo
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t03-uv-workspace-tooling
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -49,7 +57,19 @@ spec:
         run) and `--check` exits non-zero when ROADMAP.md is stale.
     - id: ac4
       description: >-
-        pre-commit runs the validator and the ROADMAP staleness check whenever plan_specs/ changes.
+        pre-commit runs the validator whenever plan_specs/ changes. The ROADMAP staleness check is
+        deliberately not a hook or CI gate: ROADMAP.md is refreshed by the PM in separate PRs so
+        parallel task PRs don't conflict on it.
+    - id: ac5
+      description: >-
+        `uv run scripts/check_links.py` walks every tracked Markdown file, verifies that each relative
+        link target exists and each `#anchor` matches a GitHub-style heading slug in its target, skips
+        links inside code spans and template placeholders, needs no network, and exits non-zero
+        listing every broken link. It passes on the current repository.
+    - id: ac6
+      description: >-
+        Release order comes from plan_specs/releases/*.yaml (no hardcoded list in the validator), and
+        `uv run ruff check scripts` passes with no `scripts/` exclusion left in the ruff config.
 status:
   phase: Pending
 ---
@@ -114,13 +134,50 @@ spec:
             name: ROADMAP.md is up to date
             command: uv
             args: [run, scripts/spec_index.py, --check]
+      - id: link-checker
+        kind: Task
+        name: Offline Markdown link and anchor checker
+        description: >-
+          scripts/check_links.py (PEP 723, standard library only) with fixture tests for a missing file,
+          a missing anchor, links in code spans, `{{PLACEHOLDER}}` links and external URLs (ignored).
+        dependsOn: [validator-tests]
+        outputs: [scripts/check_links.py, tests/docs/test_check_links.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Link checker tests pass
+            command: uv
+            args: [run, pytest, tests/docs/test_check_links.py]
+          - type: command_succeeds
+            name: Repository links resolve
+            command: uv
+            args: [run, scripts/check_links.py]
+      - id: scripts-lint
+        kind: Task
+        name: Release order from specs and scripts/ under ruff
+        description: >-
+          Replace the validator's hardcoded RELEASE_ORDER with the order read from
+          plan_specs/releases/*.yaml (sorted by version), then remove the temporary `scripts/`
+          exclusion added to the ruff config in v1-e01-t03 and fix what ruff reports in scripts/.
+        dependsOn: [validator-tests]
+        outputs: [scripts/validate_specs.py, pyproject.toml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: scripts/ passes ruff
+            command: uv
+            args: [run, ruff, check, scripts]
+          - type: test_passes
+            name: Release-order tests pass
+            command: uv
+            args: [run, pytest, tests/specs/test_validate_specs.py, -k, release_order]
       - id: pre-commit-hooks
         kind: Task
         name: pre-commit wiring
         description: >-
-          Add local pre-commit hooks running the validator and `spec_index.py --check` on changes under
-          plan_specs/.
-        dependsOn: [status-report, spec-index]
+          Add local pre-commit hooks running the validator on changes under plan_specs/ and
+          `check_links.py` on changes to any Markdown file. Do not hook `spec_index.py --check`.
+        dependsOn: [status-report, spec-index, link-checker, scripts-lint]
         outputs: [.pre-commit-config.yaml]
         estimatedEffort: 0.5h
         acceptanceCriteria:

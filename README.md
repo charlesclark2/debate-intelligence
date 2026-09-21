@@ -43,15 +43,59 @@ tests/                    fixtures, golden cards, integration suites
 plan_specs/               PlanSpecs: releases/, v1/, v2/, v3/
 docs/                     architecture proposal, ADRs
 scripts/                  validate_specs.py, spec_index.py
+config/                   committed configuration: profiles/<env>.toml, model routing
 ```
+
+## Development setup
+
+Python 3.12 (pinned in `.python-version`) and [uv](https://docs.astral.sh/uv/). The root
+`pyproject.toml` is a uv workspace whose members are the four packages under `packages/`; it also
+holds the configuration for every quality tool.
+
+```bash
+uv sync --all-packages             # create .venv with all packages + dev tools from uv.lock
+uv run pre-commit install          # once per clone: ruff, formatting, whitespace, large-file guard
+uv run ruff check                  # lint
+uv run ruff format --check         # formatting
+uv run pyright packages/debate_core   # strict type check of the domain core
+uv run pytest                      # parallel, with coverage, network blocked
+```
+
+`pytest` runs with `-n auto`, coverage and sockets disabled, and deselects `slow` and `live`
+tests; opt in with `uv run pytest -m slow` or `-m live`. The project's markers (`slow`, `live`,
+`eval`, `dev`, `prod`) are all registered in the root `pyproject.toml`; `--strict-markers`
+rejects any other.
+
+## Configuration
+
+`DEBATE_ENV` selects the environment — `dev`, `prod` or `test` — and with it the profile in
+`config/profiles/`. A source checkout with `DEBATE_ENV` unset runs as `dev`, so nothing you run
+by accident writes to the production data directory.
+
+```bash
+cp .env.example .env                  # your own machine's secrets; .env is never committed
+uv run debate-research config show    # every setting, its value and where that value came from
+```
+
+Values are layered, highest first: a command-line flag, `DEBATE_*` variables in your shell,
+`.env`, `config/profiles/<env>.toml`, then the built-in profile for the environment. `config
+show` prints the source of each one, and redacts every secret. API keys and tokens belong in
+`.env` or the environment and never in a `config/` file, which is committed.
+
+## Branches and environments
+
+`main` is production and `dev` is the development environment; every change is deployed to
+and validated in dev before a `dev` → `main` promotion. Details:
+[docs/process/branching-and-environments.md](docs/process/branching-and-environments.md).
 
 ## Working on a task
 
 ```bash
-uv run scripts/validate_specs.py --status   # validate specs + progress roll-up
-uv run scripts/spec_index.py                # refresh ROADMAP.md after changing a spec's status
+scripts/task ready                 # what can start now
+scripts/task start <task>          # worktree + branch off dev, launches Claude with the spec
+scripts/task pr <task>             # after PM review: PR into dev
+scripts/task finish <task>         # after merge: clean up worktree and branches
 ```
 
-Pick a task whose prerequisites are `Succeeded`, branch `task/<task-name>`, implement its
-plan nodes in order until each node's acceptance criteria pass, set the task Goal's
-`status.phase` to `Succeeded`, and open a PR that references the spec path.
+See [docs/process/task-workflow.md](docs/process/task-workflow.md) and the
+[documentation index](docs/README.md).

@@ -1,0 +1,65 @@
+# pre-commit hooks. Every hook runs through `uv run --frozen`, so tool versions come from uv.lock
+# (no separate hook revisions to keep in step) and nothing is fetched from the network.
+# Install once per clone:  uv run pre-commit install
+# Run by hand:             uv run pre-commit run --all-files
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen ruff check --fix
+        language: unsupported
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen ruff format
+        language: unsupported
+        types_or: [python, pyi]
+        require_serial: true
+      - id: trailing-whitespace
+        name: trim trailing whitespace
+        entry: uv run --frozen trailing-whitespace-fixer --markdown-linebreak-ext=md
+        language: unsupported
+        types: [text]
+      - id: end-of-file-fixer
+        name: fix end of files
+        entry: uv run --frozen end-of-file-fixer
+        language: unsupported
+        types: [text]
+      - id: check-added-large-files
+        name: check for added large files
+        entry: uv run --frozen check-added-large-files --maxkb=500
+        language: unsupported
+      # Markers reached dev once, in a Markdown table inside a module docstring: Python parsed the
+      # file, 1,788 tests passed over it, and nothing noticed. `git add` during a rebase does not
+      # check, so this is the only thing between a hurried `rebase --continue` and the main branch.
+      - id: check-merge-conflict
+        name: check for merge conflict markers
+        entry: uv run --frozen check-merge-conflict --assume-in-merge
+        language: unsupported
+        types: [text]
+      # Terraform is not a uv dependency: it and tflint come from the operator's machine
+      # (`brew install hashicorp/tap/terraform tflint`) and from the CI runner's setup steps, and
+      # the script says so if either is missing. It runs only when infrastructure/ or the script
+      # itself changed, because it takes a few seconds and downloads the AWS provider the first
+      # time. It needs no AWS credentials: see the header of scripts/terraform_checks.sh.
+      - id: terraform-checks
+        name: terraform fmt, validate and tflint
+        entry: scripts/terraform_checks.sh
+        language: unsupported
+        files: ^(infrastructure/|scripts/terraform_checks\.sh$)
+        pass_filenames: false
+        require_serial: true
+      # Node and pnpm are not uv dependencies either: they come from the operator's machine
+      # (`brew install node`, then `npm install -g pnpm@10.15.0`) and from the CI runner's setup
+      # steps, and the script says so if either is missing. It runs only when site/ changed,
+      # because it lints, type-checks, tests and builds the site, which takes about ten seconds.
+      # Everything it runs is offline: see the header of site/scripts/pre-commit-checks.sh.
+      - id: site-checks
+        name: site lint, typecheck, test and build
+        entry: site/scripts/pre-commit-checks.sh
+        language: unsupported
+        files: ^site/
+        pass_filenames: false
+        require_serial: true

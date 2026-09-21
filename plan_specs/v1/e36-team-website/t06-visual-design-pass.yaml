@@ -1,0 +1,213 @@
+# TASK v1-e36-t06-visual-design-pass — Visual design pass: layout system and home page
+# Epic: E36 Team Website Foundation | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t06-visual-design-pass
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: 'Visual design pass: layout system and home page'
+    debate/architecture-refs: §4, §5, §14, ADR-0010, ADR-0012, ADR-0013
+spec:
+  description: >-
+    The site is live on the dev preview and reads as unfinished: every page is one prose column of
+    body text, the Card component shipped in t03 is imported only by its own test, and the home page
+    gives a parent no visual anchor for the October 1, 2026 information session. This task turns the
+    existing pages into a designed site for an affluent suburban school community, entirely inside the
+    static export (ADR-0012 stands: no server, no API routes, middleware or ISR, no new hosting).
+    It delivers a reusable layout kit on top of site/src/styles/tokens.css — a typographic scale with a
+    measured line length, vertical rhythm and section spacing, a Section component with an optional
+    tinted background, the existing Card put to work, primary and secondary actions with hover,
+    focus-visible and active states, and a footer that carries the white knockout mark — and rebuilds
+    the home page on it: a real hero (team name, one-line description, primary action), a prominent
+    October 1 parent-session panel, three to five scannable entry points into the site, and a short
+    "what debate builds" section. Every string still comes from site/content/, so the page holds no copy.
+    Motion stays restrained and honours prefers-reduced-motion. The contrast rules set in t03 do not
+    move: muted grey #74798E and warm accent #B36B00 remain large-text and non-text only, small
+    secondary copy stays on body grey #55596B, and tests/tokens.test.ts recomputes every pair.
+    Out of scope: restructuring the FAQ, events and the remaining long pages (t07), the pre-launch
+    screenshot, Lighthouse and keyboard sweep (t08), hosting and deploys (t02, t05), the events
+    calendar and announcements (E37) and the donation page (E38). Filling the October 1 room
+    placeholder is t08's, not this task's.
+  priority: 1
+  constraints:
+    packages: [site/src/components, site/src/styles, site/src/app, site/content, site/tests]
+    forbidden:
+      - Server-only Next.js features that break static export (API routes, middleware, server actions, ISR)
+      - Third-party UI or CSS frameworks, remote fonts, CDN assets, trackers or analytics tags
+      - Colours, gradients or logos outside site/src/styles/tokens.css and the team brand guidelines
+      - Muted grey #74798E or warm accent #B36B00 as small text; they stay large-text and non-text only
+      - Page copy, headings or link labels hard-coded in components instead of site/content/
+      - Motion that ignores prefers-reduced-motion, and any parallax, autoplay or scroll-jacking
+      - Student photos or names; the publishing-policy guard must keep passing unchanged
+      - Network access during lint, test or build
+  context:
+    - kind: TaskRef
+      name: v1-e36-t04-core-pages
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A layout kit exists and is used: a Section component with an optional tinted background, the
+        typographic scale and section-spacing tokens in tokens.css, a measured prose width, and the
+        Card component rendered by at least the home page rather than only by its own test.
+    - id: ac2
+      description: >-
+        The home page renders a hero (team name, one-line description, one primary action), an October 1
+        parent-session panel that is the most prominent element after the hero, three to five entry-point
+        cards linking into the site, and a "what debate builds" section; every string in them is read
+        from site/content/ and a test fails if any of that copy appears in a component.
+    - id: ac3
+      description: >-
+        Primary and secondary actions carry distinct hover, :focus-visible and :active styles, keep a
+        44px minimum target, and the footer shows the white knockout mark; the focus ring is unchanged
+        from t03 and visible on white, on the panel tint and on navy.
+    - id: ac4
+      description: >-
+        Every colour pair the design pass introduces is added to the contrast table in tokens.css and
+        recomputed by tests/tokens.test.ts, and the test still fails if #74798E or #B36B00 is used below
+        the large-text threshold or as small copy.
+    - id: ac5
+      description: >-
+        Any transition the pass adds lasts 200ms or less and is disabled under prefers-reduced-motion,
+        shown by a test over the stylesheets; no animation runs on page load.
+    - id: ac6
+      description: >-
+        `pnpm --dir site lint`, `typecheck`, `test` and `build` all pass offline, axe-core reports no
+        WCAG 2.1 AA violations on any page through the site frame, and the publishing-policy guard
+        reports the same findings as before the pass (only the October 1 room placeholder).
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t06-visual-design-pass-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Extend the tokens, add the section and action primitives, rebuild the home page on them from
+    content data, then close with the motion, contrast and accessibility gates. About one day.
+  goalRef:
+    name: v1-e36-t06-visual-design-pass
+  graph:
+    nodes:
+      - id: scale-and-rhythm
+        kind: Task
+        name: Typographic scale, rhythm and section-spacing tokens
+        description: >-
+          Extend site/src/styles/tokens.css with a display size above --font-size-heading-1, a lead
+          size for intros, section padding tokens for phone and desktop, and a measure token for body
+          text (about 60 to 75 characters); keep the header comment's provenance and contrast table as
+          the single source of truth and add any new pair to it.
+        outputs: [site/src/styles/tokens.css]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Tokens carry a measured line length
+            path: site/src/styles/tokens.css
+            contentMatch: "--layout-prose-width"
+          - type: test_passes
+            name: Token and contrast tests still pass
+            command: pnpm
+            args: [--dir, site, test, tokens]
+      - id: section-and-card
+        kind: Task
+        name: Section primitive and the Card component in real use
+        description: >-
+          Add a Section component (optional tinted background from --color-surface-panel, optional
+          eyebrow and heading, consistent vertical rhythm, content constrained to the measure) and a
+          CardGrid that lays Cards out one-up on a phone and two or three-up above 48rem; render both
+          through the existing SiteFrame so the landmark structure is untouched.
+        dependsOn: [scale-and-rhythm]
+        outputs:
+          - site/src/components/Section.tsx
+          - site/src/components/CardGrid.tsx
+          - site/src/styles/sections.css
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Section component exists
+            path: site/src/components/Section.tsx
+            contentMatch: "export function Section"
+          - type: test_passes
+            name: Section, CardGrid and the frame have no axe violations
+            command: pnpm
+            args: [--dir, site, test, layout]
+      - id: action-styles
+        kind: Task
+        name: Action states and the footer mark
+        description: >-
+          Give .button--primary and .button--secondary distinct hover, :focus-visible and :active
+          treatments and an in-text link style for calls to action, all drawn from tokens; confirm the
+          44px target survives the new padding and that the footer keeps the white knockout mark on navy.
+        dependsOn: [section-and-card]
+        outputs: [site/src/styles/components.css, site/src/components/Button.tsx]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Action and focus-state tests pass
+            command: pnpm
+            args: [--dir, site, test, design-system]
+      - id: home-page
+        kind: Task
+        name: Home page hero, October 1 panel and entry points
+        description: >-
+          Compose site/src/app/page.tsx from the new primitives: hero, a parent-session panel built
+          from the October 1 fields (date, time, place, what to expect) in content, three to five entry
+          cards, and a short "what debate builds" section. The hero line, panel fields, card labels and
+          hrefs all come from a validated site/content/home.yaml read through src/lib/content.ts; the
+          existing home.md body stays the source of the prose.
+        dependsOn: [section-and-card]
+        outputs:
+          - site/src/app/page.tsx
+          - site/content/home.yaml
+          - site/tests/home.test.tsx
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Home page renders hero, October 1 panel and entry cards from content
+            command: pnpm
+            args: [--dir, site, test, home]
+          - type: command_succeeds
+            name: Static export builds with the new home page
+            command: pnpm
+            args: [--dir, site, build]
+      - id: motion-and-gates
+        kind: Task
+        name: Restrained motion and the full quality gates
+        description: >-
+          Cap every new transition at 200ms, assert in a test that each one is covered by the
+          prefers-reduced-motion block in globals.css and that no animation runs on load, then run the
+          whole gate set offline and confirm the publishing-policy guard still reports only the
+          October 1 room placeholder.
+        dependsOn: [action-styles, home-page]
+        outputs: [site/tests/design-system.test.tsx, site/src/styles/globals.css]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Full site suite passes offline
+            command: pnpm
+            args: [--dir, site, test]
+          - type: command_succeeds
+            name: Lint passes
+            command: pnpm
+            args: [--dir, site, lint]
+          - type: command_succeeds
+            name: Type check passes
+            command: pnpm
+            args: [--dir, site, typecheck]
+status:
+  phase: Pending

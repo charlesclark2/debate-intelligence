@@ -1,0 +1,182 @@
+# The structured parts of the home page: the hero line, the October 1 parent session panel, the
+# entry-point cards, the "what debate builds" claims and the academic case. Validated by homeContentSchema in
+# src/lib/content.ts at build time, and read by src/app/page.tsx, which holds no copy of its own.
+#
+# The prose on the home page is still content/pages/home.md. This file holds only the parts that
+# are laid out rather than read straight through: a field here becomes a heading, a fact in the
+# panel, a card label or a link, and the page decides where it goes.
+#
+# House style, enforced by the loader: no em dashes, and no acronym that content/pages/ would
+# have to spell out. Every href points inside this site.
+#
+# The wording is Charlie's, carried over from the v1-e36-t04 draft of home.md rather than
+# rewritten: the design pass moved these lines, it did not reword them.
+
+hero:
+  lead: >-
+    Whitefish Bay Debate empowers students to think critically, speak confidently, and compete
+    with purpose through rigorous research, strategic argumentation, and a strong team culture.
+  # The hero action goes to a page. An earlier revision pointed it at the October 1 panel
+  # directly below, which asked a visitor to press a button to reach something already on their
+  # screen; the panel speaks for itself and carries its own action.
+  action:
+    label: How to join the team
+    href: /join/
+
+# The single most important thing on this page. It renders as the one navy panel, directly under
+# the hero.
+#
+# Each fact carries either a `value`, or an `unsetNote` saying why it is still missing. The room
+# is the one nobody has yet: while it has an `unsetNote`, a dev preview shows that note in the
+# gap badge and a prod build fails naming the field (src/lib/publishing-policy.ts). Replace the
+# `unsetNote` with a `value` to fill it in. If the answer turns out to be that there is no room
+# to give yet, that is a `value` too: "To be announced" is a decision, an empty field is an
+# oversight.
+parentSession:
+  eyebrow: For parents
+  title: Parent information session
+  intro: >-
+    Come and hear how a season works: what the events are, what a tournament weekend looks like,
+    what it costs, and what the team asks of a family.
+  facts:
+    - label: Date
+      value: Wednesday, October 1, 2026
+    - label: Time
+      value: 6:00 PM
+    - label: Place
+      value: Whitefish Bay High School
+    - label: Room
+      value: To be announced
+  whatToExpect:
+    - The three events the team competes in, explained in plain language.
+    - What a tournament weekend actually looks like, from Friday to Sunday.
+    - What a season costs, and what help is available.
+    - What the team asks of a family, and what it does not.
+  note: >-
+    Bring your questions. You do not need to know anything about debate to come, and your student
+    does not have to have decided anything yet.
+  action:
+    label: Read the questions parents ask
+    href: /faq/
+
+entryPoints:
+  eyebrow: Start here
+  title: Four things worth knowing first
+  intro: >-
+    Each one is a short page. Read the one that matches the question you came with.
+  # Each card's title is the title of the page its href opens, word for word, so a parent who
+  # presses a card lands on the heading they pressed. The loader fails the build on a card whose
+  # href is not a page in content/pages/ or whose title differs from that page's title.
+  cards:
+    - title: Debate Events Offered
+      body: >-
+        Policy, Lincoln-Douglas and Public Forum, explained for someone who has never seen a
+        round, with what makes each one different.
+      actionLabel: Read what the events are
+      href: /events/
+    - title: How to join
+      body: >-
+        Open to every student in grades 9 through 12, with no experience required and no tryout.
+        Practice times and the three ways to sign up.
+      actionLabel: Read how to join
+      href: /join/
+    - title: Parent questions
+      body: >-
+        Travel, costs, time commitment, judging, and what the team asks of a family over a
+        season.
+      actionLabel: Read the parent questions
+      href: /faq/
+    - title: Coaches
+      body: >-
+        The coaching staff, how to reach them, and who to write to with a question about your
+        student.
+      actionLabel: Meet the coaches
+      href: /coaches/
+
+# The prose section, whose body is content/pages/home.md. Only its heading lives here.
+prose:
+  eyebrow: New to this
+  title: What debate actually is
+
+whatDebateBuilds:
+  eyebrow: Why it is worth the weekends
+  title: What debate builds
+  intro: >-
+    A season of debate asks a student to do four hard things well, over and over, in front of
+    someone keeping score.
+  claims:
+    - title: Research that holds up
+      body: >-
+        Students find the evidence, read the whole source, and learn quickly what happens to an
+        argument built on a sentence taken out of context.
+    - title: Speaking under pressure
+      body: >-
+        Six minutes, a clock, and a judge. By the end of a season a student can stand up with
+        four minutes of preparation and be worth listening to.
+    - title: Thinking on both sides
+      body: >-
+        Every student argues both sides of the same question across a season, which is the
+        fastest way there is to stop arguing against a caricature.
+    - title: A team that travels together
+      body: >-
+        Long bus rides, early mornings, and a room full of people who take your ideas seriously.
+        The team culture is the part students come back for.
+
+# The academic case: what published research found, for a parent who wants to know whether a
+# season of this is good for a student academically.
+#
+# Every claim here is a research claim about other people's children, so each one carries its
+# source, and the loader refuses a claim without one. The approved claims and the reasons behind
+# every figure are in docs/data/academic-case-sources.md; a claim comes from that file's
+# Recommended section or it does not go here. Figures are copied from that file as written,
+# never estimated, rounded or converted into something friendlier.
+#
+# A claim whose source Charlie has not supplied yet is written with `source: '[[TBD: source]]'`.
+# A dev preview shows it as a TBD badge and a prod build fails naming the claim.
+#
+# The evidence categories that are in: test scores, grade point average, college readiness and
+# skill acquisition. The category the build rejects anywhere in content/ is listed in
+# site/README.md under House style.
+#
+# `externalLinkNote` is read out beside any source that links to another site. No source links
+# out today, because no link was in the approved source list.
+academicCase:
+  eyebrow: What the research says
+  title: The academic case for debate
+  intro: >-
+    Parents often ask whether a season of debate is good for a student academically. Two studies
+    are worth knowing about. Both looked at large city school districts, so the figures describe
+    those students, not a promise about any one student here.
+  sourceLabel: Source
+  externalLinkNote: opens a site outside the team's
+  claims:
+    - title: Students already doing well still gain
+      body: >-
+        A study of Boston public school students compared each student with themselves in the
+        years they did and did not debate. Taking part in policy debate raised English Language
+        Arts achievement, and the gains were concentrated in reading that asks for analysis and
+        argument. The gains were largest for students who had been behind, and students already in
+        the highest-performing quarter of their year group still gained, by 0.096 standard
+        deviations.
+      source:
+        authors: Schueler and Larned
+        publication: Educational Evaluation and Policy Analysis
+        year: 2025
+        measured: >-
+          English Language Arts achievement of 3,515 debate participants in Boston Public
+          Schools, 2007-08 to 2016-17, reported by how well students were already doing.
+    - title: Higher test scores and grades
+      body: >-
+        In a study of 35,788 Houston high school students, those who debated scored 109 points
+        higher on the SAT and had a grade point average 0.66 points higher than comparable
+        students who did not. The researchers compared debaters with statistically similar
+        students; they did not assign anyone to debate. So this shows that debating and doing well
+        go together, not proof that debate caused the difference.
+      source:
+        authors: Ko and Mezuk
+        publication: Educational Research and Reviews
+        year: 2021
+        measured: >-
+          SAT scores and grade point average of 35,788 students in the Houston Independent School
+          District, 1,145 of whom debated, 2012 to 2015, matched with similar students on
+          sociodemographic characteristics and 8th-grade standardized test scores.

@@ -19,11 +19,14 @@ spec:
   description: >-
     Run the FastAPI image in AWS behind a managed public boundary. Define an ECS service and task
     definition for debate-api in private subnets, an internal ALB (or Cloud Map) reached from an API
-    Gateway HTTP API via VPC link, a Cognito JWT authorizer on all /v1 routes except health, stage-level
-    throttling, CORS limited to the web origins, access logs, and a least-privilege task role (DynamoDB
-    and S3 policies from E11, Bedrock invoke via ModelRouter, Secrets read). A GitHub Actions workflow
-    builds the image, pushes an immutable tag to ECR using the OIDC deploy role, and performs an ECS
-    rolling deploy with the deployment circuit breaker and automatic rollback. Per-user quotas are
+    Gateway HTTP API via VPC link, a Cognito JWT authorizer on all /v1 routes except health, API Gateway
+    stage ($default) throttling, CORS limited to the web origins, access logs, and a least-privilege task
+    role (DynamoDB and S3 policies from E11, Bedrock invoke via ModelRouter, Secrets read). This task owns
+    deploy mechanics only: a reusable GitHub Actions workflow (workflow_call) that builds the image,
+    pushes an immutable SHA tag to ECR using the OIDC deploy role, and performs an ECS rolling deploy of a
+    given image digest to a given environment (dev or prod) with the deployment circuit breaker and
+    automatic rollback, plus a push-to-dev trigger that deploys dev. Promotion orchestration (build once,
+    dev validation, production approval, digest promotion to prod) is v2-e12-t07. Per-user quotas are
     E19-t01; custom domain for the web app is E14-t03.
   priority: 1
   constraints:
@@ -57,12 +60,14 @@ spec:
         documented per environment.
     - id: ac4
       description: >-
-        A merge to main deploys dev automatically via OIDC; a failing health check triggers the ECS
-        deployment circuit breaker and rolls back to the previous task definition.
+        A merge to dev deploys dev automatically via OIDC; a failing health check triggers the ECS
+        deployment circuit breaker and rolls back to the previous task definition. The workflow never
+        deploys prod on its own (prod deploys only via v2-e12-t07 from main).
     - id: ac5
       description: >-
         The task role grants only the actions/resources enumerated in the module, verified by an IAM
-        Access Analyzer policy validation step in CI.
+        Access Analyzer policy validation step in the post-merge dev deploy workflow (it needs AWS
+        credentials, so it never runs on PRs into dev).
 status:
   phase: Pending
 ---
@@ -114,8 +119,10 @@ spec:
         kind: Task
         name: Build, push and deploy workflow
         description: >-
-          GitHub Actions workflow on main - build image, tag with git SHA, push to ECR via OIDC deploy
-          role, render task definition and update the service; manual promotion to stage/prod.
+          Reusable deploy-api.yml (workflow_call inputs: environment, image digest) plus a push-to-dev
+          trigger - build image, tag with git SHA, push to ECR via OIDC deploy role, render task
+          definition pinned by digest and update the service. Deploy mechanics only; promotion
+          orchestration to prod is v2-e12-t07.
         dependsOn: [api-gateway]
         outputs: [.github/workflows/deploy-api.yml]
         estimatedEffort: 3h

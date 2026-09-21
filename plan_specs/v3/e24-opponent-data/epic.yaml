@@ -20,7 +20,7 @@ spec:
   description: >-
     Ingest public OpenCaselist disclosures and Tabroom results through documented interfaces with provenance,
     resolve team identities, and govern data use.
-  priority: 13
+  priority: 16
   constraints:
     majorVersion: v3
     release: v3.3
@@ -66,6 +66,22 @@ spec:
       inputs:
         goalRef: v1-e02-t04-repo-contract-tests
         specRef: plan_specs/v1/e02-domain-core/t04-repo-contract-tests.yaml
+    - id: ext-v1-e30-t01-caselist-data-use-policy
+      kind: External
+      name: 'Prerequisite from E30: Caselist and OpenEv data-use policy'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t01-caselist-data-use-policy
+        specRef: plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml
+    - id: ext-v1-e34-t01-caselist-api-client
+      kind: External
+      name: 'Prerequisite from E34: OpenCaselist API client'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.2).
+      inputs:
+        goalRef: v1-e34-t01-caselist-api-client
+        specRef: plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml
     - id: ext-v2-e11-t01-access-pattern-design
       kind: External
       name: 'Prerequisite from E11: AppTable access-pattern design'
@@ -139,6 +155,7 @@ spec:
       dependsOn:
       - t01
       - t06
+      - ext-v1-e34-t01-caselist-api-client
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v3-e24-t02-opencaselist-adapter reports phase Succeeded
@@ -220,6 +237,7 @@ spec:
         goalRef: v3-e24-t06-data-governance
       dependsOn:
       - ext-v2-e19-t04-privacy-legal-review
+      - ext-v1-e30-t01-caselist-data-use-policy
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v3-e24-t06-data-governance reports phase Succeeded

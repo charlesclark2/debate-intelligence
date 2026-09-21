@@ -1,0 +1,260 @@
+# Workspace root for the Debate Intelligence Platform. Not a distributable package itself: it holds
+# the uv workspace definition, the shared dev tooling and every tool's configuration.
+[project]
+name = "debate-intelligence"
+version = "0.1.0"
+description = "Workspace root for the Debate Intelligence Platform."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+    "packages/debate_core",
+    "packages/debate_cli",
+    "packages/debate_api",
+    "packages/debate_workers",
+]
+
+[dependency-groups]
+dev = [
+    "anyio>=4.4",
+    # The S3 adapters (v1-e29-t04) are dev-tested against moto, never an AWS account, so the dev
+    # environment carries what debate-core's `aws` extra declares plus the stubs: boto3 to import
+    # the adapter, and boto3-stubs because pyright runs strict over debate_core and boto3 itself
+    # ships no inline types. moto, below, is what answers the adapter in place of AWS.
+    "boto3>=1.35",
+    "boto3-stubs[s3]>=1.35",
+    "httpx>=0.28",
+    "hypothesis>=6.100",
+    # `uv run lint-imports` checks the ports-and-adapters boundaries. v1-e29-t04 adds the first
+    # contract (no AWS SDK outside debate_core.integrations.s3); v1-e02-t06-import-boundary-guard
+    # owns the full set and the CI job.
+    "import-linter>=2.0",
+    # The caselist_token store (v1-e34-t01) talks to the OS keychain through keyring. Tests never
+    # reach the real keychain: they hand the store an in-memory backend.
+    "keyring>=25",
+    "lxml>=5.3",
+    # The debate .docx parser (v1-e31-t03) reads WordprocessingML with lxml, and lxml ships no
+    # inline types; pyright runs strict over debate_core, so the stubs are what let the adapter be
+    # type-checked at all. Same reason as boto3-stubs above.
+    "lxml-stubs>=0.5",
+    # Answers the S3 adapters in-process (v1-e29-t04). The PR test suite reaches no AWS account.
+    "moto[s3]>=5.0",
+    "pre-commit>=4.0",
+    "pre-commit-hooks>=5.0",
+    "pyright[nodejs]>=1.1.400",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-socket>=0.7",
+    "pytest-xdist>=3.6",
+    "python-docx>=1.1",
+    "respx>=0.22",
+    "ruff>=0.11",
+    # ShellCheck as a wheel rather than a brew install, so `uv run shellcheck` works the same way
+    # on a laptop and on a CI runner. scripts/site_deploy.sh (v1-e36-t05) is the first shell script
+    # with a lint criterion of its own.
+    "shellcheck-py>=0.10",
+    # PyYAML ships no inline types; debate_core.application.routing_config is type-checked strictly.
+    "types-pyyaml>=6.0",
+]
+
+# ---------------------------------------------------------------------------------------------
+# ruff: lint + format
+# ---------------------------------------------------------------------------------------------
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+# The spec and task tooling in scripts/ predates this config and is owned by v1-e01-t05-spec-tooling
+# and v1-e01-t11-task-workflow-cli; it comes under ruff when that tooling is brought into line, and
+# is named file by file rather than by directory so that scripts written since then are linted.
+# The `./` prefix anchors each pattern to the repository root, so tests/scripts/ is still linted.
+extend-exclude = [
+    "./scripts/compare_docx_roundtrip.py",
+    "./scripts/export_schemas.py",
+    "./scripts/spec_index.py",
+    "./scripts/task_helper.py",
+    "./scripts/validate_specs.py",
+]
+force-exclude = true  # honour the excludes when pre-commit passes file names explicitly
+src = [
+    "packages/debate_core/src",
+    "packages/debate_cli/src",
+    "packages/debate_api/src",
+    "packages/debate_workers/src",
+]
+
+[tool.ruff.lint]
+select = [
+    "F",   # pyflakes
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["debate_core", "debate_cli", "debate_api", "debate_workers"]
+
+# ---------------------------------------------------------------------------------------------
+# pyright: strict for the domain core, standard for the delivery packages
+# ---------------------------------------------------------------------------------------------
+[tool.pyright]
+include = ["packages"]
+exclude = ["**/__pycache__", "**/.*"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+strict = ["packages/debate_core"]
+
+# ---------------------------------------------------------------------------------------------
+# import-linter: the ports-and-adapters boundaries, checked by `uv run lint-imports`
+# ---------------------------------------------------------------------------------------------
+# v1-e02-t06-import-boundary-guard owns this section and the full set of contracts (no httpx, typer
+# or fastapi in the domain and application layers; a layers contract for domain < application <
+# integrations; the CI job that runs them). It has not run yet, and v1-e29-t04-s3-blob-store is the
+# task that first brings an AWS SDK into the repository, so it adds the one contract its own
+# acceptance criterion names and leaves the rest to t06, which extends this section rather than
+# replacing it.
+[tool.importlinter]
+root_packages = ["debate_core", "debate_cli", "debate_api", "debate_workers"]
+# Required for a contract that forbids a module from outside the repository, such as boto3.
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "The AWS SDK never reaches the domain, the application layer or the other adapters"
+type = "forbidden"
+# Not even indirectly: nothing in this list may so much as depend on a module that imports boto3,
+# which is what keeps `debate-core` installable and usable with no AWS SDK present at all.
+# `debate_core.integrations` is named by its subpackages rather than whole, because listing the
+# parent would include `integrations.s3` itself; a new adapter subpackage is added to this list in
+# the PR that creates it.
+source_modules = [
+    "debate_core.domain",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.docx_parser",
+    "debate_core.integrations.file_streaming",
+    "debate_core.integrations.opencaselist",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["boto3", "botocore"]
+
+[[tool.importlinter.contracts]]
+name = "The HTTP client and the keychain library stay inside debate_core.integrations.opencaselist"
+type = "forbidden"
+# v1-e34-t01-caselist-api-client brings httpx and keyring in as the `opencaselist` extra. Like
+# boto3, neither may reach the domain, the application layer, the shared test fakes or another
+# adapter, even indirectly. The article fetcher (v1-e04-t02) adds its own adapter to the allowed
+# side when it arrives, by leaving it off this list.
+source_modules = [
+    "debate_core.domain",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.file_streaming",
+    "debate_core.integrations.s3",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["httpx", "keyring"]
+
+[[tool.importlinter.contracts]]
+name = "The CLI reaches httpx and keyring only through debate_core.integrations.opencaselist"
+type = "forbidden"
+# The composition root builds the OpenCaselist client, so the chain to httpx is by design; what is
+# forbidden is a command importing httpx or keyring itself.
+allow_indirect_imports = true
+source_modules = ["debate_cli"]
+forbidden_modules = ["httpx", "keyring"]
+
+[[tool.importlinter.contracts]]
+name = "The CLI reaches the AWS SDK only through debate_core.integrations.s3"
+type = "forbidden"
+# The delivery packages are held to the *direct* form of the same rule, because a composition root
+# has to be able to construct an adapter: `debate_cli.container` imports
+# `debate_core.integrations.s3` to build the store `debate-research store` syncs with
+# (v1-e29-t05-evidence-sync-cli), and that import is a chain to boto3 by design. What stays
+# forbidden is the CLI reaching for the SDK itself — a `boto3.client(...)` in a command, a
+# `botocore` exception caught outside the adapter that is supposed to translate it — which is the
+# part that would put AWS back into code that is meant not to know about it (ADR-0003, §6).
+#
+# v1-e02-t06-import-boundary-guard owns this section and extends it with the layers contract that
+# also forbids debate_core.application from importing debate_core.integrations at all.
+allow_indirect_imports = true
+source_modules = ["debate_cli"]
+forbidden_modules = ["boto3", "botocore"]
+
+# v1-e31-t03-debate-docx-parser. A document library is an adapter's business: the parse output
+# model and the DebateFileParser port are plain values and Protocols, so nothing above the
+# adapter has a reason to know that OOXML exists. python-docx is named alongside lxml because it
+# is in the dev environment and is the other library that could drift across this boundary.
+[[tool.importlinter.contracts]]
+name = "Document libraries stay inside debate_core.integrations.docx_parser"
+type = "forbidden"
+source_modules = [
+    "debate_core.domain",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.s3",
+    "debate_core.integrations.file_streaming",
+    "debate_cli",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["lxml", "docx"]
+
+# ---------------------------------------------------------------------------------------------
+# pytest: every project marker is registered here, once. Later tasks use them, never add their own.
+# ---------------------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = [
+    "packages/debate_core/tests",
+    "packages/debate_cli/tests",
+    "packages/debate_api/tests",
+    "packages/debate_workers/tests",
+    "tests",
+]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--import-mode=importlib",
+    "--numprocesses=auto",
+    "--cov",
+    "--cov-report=term-missing",
+    "--disable-socket",
+    # The repository contract suite (v1-e02-t04) runs its `async def` tests on a real asyncio
+    # loop, and a loop builds its self-pipe from `socket.socketpair()`. AF_UNIX sockets cannot
+    # reach a network, so allowing them keeps the suite offline while letting the loop start;
+    # AF_INET and AF_INET6 stay blocked by `--disable-socket`.
+    "--allow-unix-socket",
+    "-m", "not slow and not live",
+]
+markers = [
+    "slow: takes more than a few seconds; excluded by default, opt in with -m slow",
+    "live: needs the network or a real model/provider; excluded by default, opt in with -m live",
+    "eval: LLM evaluation suite, run outside the PR CI path",
+    "dev: cloud smoke check targeting the dev environment",
+    "prod: cloud smoke check targeting the prod environment",
+]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["debate_core", "debate_cli", "debate_api", "debate_workers"]
+# xdist workers that receive no tests collect nothing; that is expected, not a problem.
+disable_warnings = ["no-data-collected"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

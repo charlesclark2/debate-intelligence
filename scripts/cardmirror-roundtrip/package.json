@@ -1,0 +1,14 @@
+{
+  "name": "cardmirror-roundtrip-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Operator-only harness that round-trips debate .docx files through CardMirror's fromDocx/toDocx. Not part of CI, the uv workspace or any Python package.",
+  "scripts": {
+    "roundtrip": "tsx roundtrip.mjs"
+  },
+  "dependencies": {
+    "cardmirror": "github:ant981228/cardmirror#bc92e6bd99cb9b3ce97ddacfa2362100db96360e",
+    "tsx": "4.21.0"
+  }
+}

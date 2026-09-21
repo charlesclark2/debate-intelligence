@@ -1,5 +1,5 @@
 # TASK v1-e06-t01-citation-service — CitationService with per-field provenance
-# Epic: E06 Card Cutting, Citation & Export | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
 # Architecture refs: §6 CitationService, §8 (metadata hard-failure rule), §19 (hallucinated cites), §20 step 6
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
   annotations:
     debate/title: CitationService with per-field provenance
@@ -25,7 +25,7 @@ spec:
     CitationField(value, source, verified) so the renderer can show what is unverified. Credentials are
     included only when stated on the source page or in Crossref/ORCID-linked metadata — never inferred by a
     model. Also owns cite formatting rules (short cite "Lastname YY" plus full cite line). Boundaries:
-    Crossref search/discovery is v1-e07-t03 (v1.2); this task only does DOI lookups for citation.
+    Crossref search/discovery is v1-e07-t03 (v1.4); this task only does DOI lookups for citation.
   priority: 1
   constraints:
     packages: [debate_core.application, debate_core.evidence, debate_core.integrations]
@@ -66,7 +66,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e06-card-cutting
 spec:
   description: >-

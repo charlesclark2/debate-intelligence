@@ -1,5 +1,5 @@
 # TASK v2-e14-t03-app-hosting — Web hosting and environments
-# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §4 Next.js, §5, §14 TLS, §15 cost; hosting choice recorded as an ADR
 ---
 apiVersion: planspec.io/v1alpha1
@@ -17,19 +17,27 @@ metadata:
     debate/architecture-refs: §4, §12
 spec:
   description: >-
-    Host the Next.js app in dev/stage/prod with per-environment configuration and preview deploys for
-    pull requests. Decide between Amplify Hosting (managed SSR, built-in previews, lowest effort) and
-    CloudFront + ECS Fargate (reuses E10 platform, more control) in an ADR weighing cost at team scale,
-    SSR/middleware support, preview environments and operational burden, then implement the choice in
-    Terraform with a custom domain, ACM certificate, HTTPS-only, security headers (CSP, HSTS,
-    frame-ancestors none) and environment variables sourced per environment. Cognito callback URLs and
-    API CORS origins are updated to match. This task owns hosting only; API deployment is E12-t04.
+    Host the Next.js app in two environments, dev and prod (ADR-0013,
+    docs/process/branching-and-environments.md), with per-environment configuration and preview deploys
+    for pull requests, under the team domain that v1-e36-t02 already set up for the public team site
+    (ADR-0012 records the domain, CloudFront and certificate approach; this task adds the app's hosting
+    decision to it as a dated amendment or a superseding ADR, and mounts the app at a subdomain or path
+    without disturbing the public site). The dev web environment deploys from the dev branch; prod hosting deploys only from
+    main, through the `production` GitHub Environment approval and the promotion pipeline of v2-e12-t07;
+    PR preview deploys always point at the DEV API and dev Cognito. Decide between Amplify Hosting
+    (managed SSR, built-in previews, lowest effort) and CloudFront + ECS Fargate (reuses E10 platform,
+    more control), recorded against ADR-0012, weighing cost at team scale, SSR/middleware support, preview environments and
+    operational burden, then implement the choice in Terraform with a custom domain, ACM certificate,
+    HTTPS-only, security headers (CSP, HSTS, frame-ancestors none) and environment variables sourced per
+    environment. Cognito callback URLs and API CORS origins are updated to match. This task owns hosting
+    only; API deployment is E12-t04 and promotion orchestration is v2-e12-t07.
   priority: 1
   constraints:
     packages: [infrastructure/modules/web_hosting, web, .github/workflows]
     forbidden:
       - Plain HTTP or missing HSTS on any environment
       - Preview deploys pointed at prod API or prod Cognito
+      - Deploying prod web hosting from any branch other than main or outside the production environment
       - Secrets baked into client bundles or build logs
       - Publicly indexable non-prod environments (require auth or noindex)
   context:
@@ -37,7 +45,7 @@ spec:
       name: v2-e14-t01-nextjs-scaffold
       relation: dependsOn
     - kind: TaskRef
-      name: v2-e10-t02-terraform-bootstrap
+      name: v1-e29-t02-terraform-bootstrap
       relation: dependsOn
     - kind: TaskRef
       name: v2-e12-t01-cognito-user-pool
@@ -45,14 +53,21 @@ spec:
     - kind: TaskRef
       name: v2-e12-t04-api-deploy
       relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t07-promotion-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t02-site-hosting
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
         An ADR records the hosting choice with a monthly cost estimate and trade-offs for both options.
     - id: ac2
       description: >-
-        dev, stage and prod web environments are defined in Terraform with custom domains, ACM
-        certificates and HTTPS redirects; https://app.dev.<domain>/ returns 200.
+        dev and prod web environments are defined in Terraform with custom domains, ACM certificates and
+        HTTPS redirects; dev deploys from the dev branch, prod only from main behind production approval;
+        https://app.dev.<domain>/ returns 200.
     - id: ac3
       description: >-
         Responses carry CSP, Strict-Transport-Security, X-Content-Type-Options and a frame-ancestors none
@@ -102,8 +117,9 @@ spec:
         kind: Task
         name: Hosting infrastructure and domains
         description: >-
-          Terraform module for the chosen option with per-env branches/services, Route 53 records, ACM
-          certificates and environment variables.
+          Terraform module for the chosen option with dev (tracks the dev branch) and prod (deployed only
+          from main via the production environment) services, Route 53 records, ACM certificates and
+          environment variables.
         dependsOn: [hosting-adr]
         outputs: [infrastructure/modules/web_hosting/main.tf, infrastructure/envs/dev/web.tf]
         estimatedEffort: 4h
@@ -135,7 +151,8 @@ spec:
         kind: Task
         name: PR previews and origin wiring
         description: >-
-          Preview deploy per PR against dev backends with noindex, teardown on close; update Cognito
+          Preview deploy per PR (task PRs into dev) against the DEV API and dev Cognito with noindex, teardown
+          on close, in its own non-required workflow that the `ci` check never waits on; update Cognito
           callback URLs and API CORS origins from Terraform outputs.
         dependsOn: [security-headers]
         outputs: [.github/workflows/web-preview.yml]

@@ -81,12 +81,20 @@ one typed, machine-checkable criterion:
 * CI never makes live network or model calls; use recorded fixtures and the fake/replay
   ModelRouter.
 
+## Smoke checks
+
+Every task that adds or changes a user-facing surface (a CLI command, an API route, a web page,
+a job type) includes a plan node that adds/updates its checks in `tests/smoke/` (V1) or
+`tests/smoke/cloud/` (V2+). Those suites are what `validate-dev` runs before a promotion to
+`main` — see [docs/process/branching-and-environments.md](../docs/process/branching-and-environments.md).
+
 ## Workflow
 
 1. Pick a `Ready` task whose prerequisites are `Succeeded`.
-2. Branch `task/<task-name>`, set the Goal to `InProgress`.
+2. Branch `task/<task-name>` from `dev`, set the Goal to `InProgress`.
 3. Implement node by node; each node's criteria must pass before the next.
-4. Open a PR referencing the spec path; set the Goal to `Succeeded` in the PR.
+4. Open a PR **into `dev`** referencing the spec path; set the Goal to `Succeeded` in the PR.
+   Work reaches `main` only through a validated `dev` → `main` promotion.
 5. Scope changes are made by editing the spec in a PR — never silently.
 
 Run `uv run scripts/validate_specs.py` (add `--status` for a roll-up) before pushing.

@@ -1,0 +1,23 @@
+[
+  {
+    "openev_id": 7001,
+    "title": "Synthetic Topicality File",
+    "path": "/openev/2026/SyntheticCampA/ZZ/Synthetic-Topicality.docx",
+    "name": "Synthetic-Topicality.docx",
+    "filename": "Synthetic-Topicality.docx",
+    "year": 2026,
+    "camp": "SyntheticCampA",
+    "lab": "ZZ",
+    "tags": {"t": true, "neg": true}
+  },
+  {
+    "openev_id": 7002,
+    "path": "/openev/2026/SyntheticCampB/YY/Synthetic-Kritik.docx",
+    "name": "Synthetic-Kritik.docx",
+    "year": 2026,
+    "camp": "SyntheticCampB",
+    "lab": "YY",
+    "tags": "{\"k\":true}",
+    "field_added_by_a_later_api_version": null
+  }
+]

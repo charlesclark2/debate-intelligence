@@ -1,0 +1,206 @@
+# TASK v1-e01-t09-dev-prerelease-channel — Dev pre-release channel and environment profiles for the CLI
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §4 (uv packaging, GitHub Actions), §6, §14 (no real student data in dev), §15, §17
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t09-dev-prerelease-channel
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: Dev pre-release channel and environment profiles for the CLI
+    debate/architecture-refs: §4, §6, §14, §15, §17
+spec:
+  description: >-
+    Give V1 a real "dev environment": every green merge to dev produces an installable pre-release so
+    what gets promoted to main is a build that already ran, not a source tree. A dev-prerelease workflow
+    (triggered when `ci` succeeds on a dev push, or by manual workflow_dispatch for a hotfix/* head,
+    which gets a pre-release tagged with its patch target, e.g. v1.1.1-dev.1, and is validated like any
+    dev build) computes the next version with scripts/release_version.py
+    (git tag vX.Y.Z-dev.N where X.Y.Z is the next stable target and N increments per dev build; the
+    wheel carries the PEP 440 form X.Y.Z.devN), stamps a build-info module (version, channel=dev, commit
+    SHA, build time, workflow run id), builds debate_core and debate_cli wheels with `uv build`, tags the
+    exact commit and publishes a GitHub pre-release with the wheels, SHA256SUMS and build-info.json.
+    scripts/install_channel.sh installs a given tag with `uv tool install --find-links`. The DEBATE_ENV
+    profile mechanism (dev/prod/test, per-profile data dirs, local checkout defaults to dev) is
+    v1-e02-t05; this task supplies the channel values on top of it: the dev and prod model-routing files
+    (dev routes to cheaper models), the low dev daily model budget in config/profiles/dev.toml consumed
+    by the E05 BudgetGuard, and the build-channel default for installed builds (a dev pre-release
+    defaults to DEBATE_ENV=dev, a stable build to prod; explicit DEBATE_ENV wins).
+    `debate-research --version` (and --json) reports version, channel, environment and commit. The V1
+    dev channel runs on the tester's own machine against public sources only and nothing leaves that
+    machine (cloud dev with synthetic-only data starts in V2). Boundaries: stable tags from main and the
+    release workflow/CHANGELOG are v1-e09-t06; the smoke suite and `validate-dev` status are t10; branch
+    guards are t08.
+  priority: 1
+  constraints:
+    packages: [.github/workflows, scripts, debate_core.application.settings, debate_cli]
+    forbidden:
+      - Publishing dev builds as non-pre-release GitHub Releases or to PyPI
+      - Rebuilding or re-tagging an existing vX.Y.Z-dev.N (tags are immutable once published)
+      - Dev and prod profiles sharing a data dir, model-routing file or budget
+      - Real student names, emails or scouting data in pre-release assets, test fixtures or build logs
+      - Secrets, .env files or local data dirs inside built wheels
+  context:
+    - kind: TaskRef
+      name: v1-e01-t08-branch-promotion-workflow
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t07-cli-skeleton
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t05-settings-config
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        After a PR merges to dev and `ci` is green, a GitHub pre-release vX.Y.Z-dev.N exists whose tag
+        points at that merge commit and whose assets include both wheels, SHA256SUMS and build-info.json.
+    - id: ac2
+      description: >-
+        Two consecutive dev merges produce dev.N and dev.N+1 (never a reused number, even when runs
+        overlap), and the wheel version is the PEP 440 X.Y.Z.devN that sorts before X.Y.Z.
+    - id: ac3
+      description: >-
+        On a clean machine, scripts/install_channel.sh <tag> installs `debate-research`, and
+        `debate-research --version --json` reports that version, channel "dev", env "dev" and the tagged
+        commit SHA.
+    - id: ac4
+      description: >-
+        With DEBATE_ENV=dev and DEBATE_ENV=prod, `debate-research config show --json` reports different
+        data_dir, model-routing file and daily model budget, and the dev budget is at most the documented
+        dev cap (default $2/day).
+    - id: ac5
+      description: >-
+        A manual workflow_dispatch for a hotfix/* head publishes a pre-release for exactly that head's
+        SHA (patch-target version, channel dev) that t10 can install and validate.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t09-dev-prerelease-channel-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Channel values first (they are testable offline), then version computation and build-info,
+    then the pre-release workflow and install script, finishing with a clean-machine install.
+  goalRef:
+    name: v1-e01-t09-dev-prerelease-channel
+  graph:
+    nodes:
+      - id: env-profiles
+        kind: Task
+        name: Dev and prod channel values
+        description: >-
+          On top of the E02-t05 profile mechanism: write config/model_routing.dev.yaml (cheaper models)
+          and model_routing.prod.yaml, set model_budget_usd_daily in config/profiles/dev.toml (default
+          2.00) and prod.toml, and make installed builds default DEBATE_ENV from their build channel
+          (dev pre-release → dev, stable → prod); explicit DEBATE_ENV still wins.
+        outputs:
+          - config/model_routing.dev.yaml
+          - config/model_routing.prod.yaml
+          - config/profiles/dev.toml
+          - config/profiles/prod.toml
+          - packages/debate_core/tests/application/test_settings_environments.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Channel default and dev budget tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_settings_environments.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+      - id: versioning
+        kind: Task
+        name: Dev version computation and build info
+        description: >-
+          scripts/release_version.py reads the next stable target from the debate_cli pyproject version
+          (the single version source that v1-e09-t06 later shares with debate_core), lists
+          existing vX.Y.Z-dev.* tags and emits the next tag plus its PEP 440 form; a build step writes
+          debate_cli/_build_info.py (version, channel, commit, built_at, run_id) that --version reads,
+          falling back to channel "local" and `git rev-parse` output for source checkouts.
+        outputs:
+          - scripts/release_version.py
+          - packages/debate_cli/src/debate_cli/build_info.py
+          - tests/scripts/test_release_version.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Version computation tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_release_version.py]
+          - type: test_passes
+            name: --version reports channel and commit
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_version.py]
+      - id: prerelease-workflow
+        kind: Task
+        name: dev-prerelease workflow
+        description: >-
+          dev-prerelease.yml on workflow_run of `ci` (conclusion success, head_branch dev) and on
+          workflow_dispatch restricted to hotfix/* refs (patch-target version), with a concurrency group
+          so N is allocated serially: compute version, stamp build info for the triggering head SHA, `uv
+          build --all-packages`, write SHA256SUMS and build-info.json, create the tag at that SHA and `gh
+          release create --prerelease`. contents: write only in this job; prune dev pre-releases beyond
+          the newest 30.
+        dependsOn: [versioning]
+        outputs: [.github/workflows/dev-prerelease.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Workflow publishes a pre-release
+            path: .github/workflows/dev-prerelease.yml
+            contentMatch: "--prerelease"
+          - type: command_succeeds
+            name: Workflow passes actionlint
+            command: actionlint
+            args: [.github/workflows/dev-prerelease.yml]
+      - id: install-script
+        kind: Task
+        name: Channel install script and docs
+        description: >-
+          scripts/install_channel.sh <tag> downloads the release assets with gh, verifies SHA256SUMS and
+          runs `uv tool install --force --find-links <dir> debate-cli==<pep440>`; document dev vs stable
+          channels and DEBATE_ENV in docs/process/branching-and-environments.md and the CLI README.
+        dependsOn: [prerelease-workflow, env-profiles]
+        outputs: [scripts/install_channel.sh, packages/debate_cli/README.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Install script verifies checksums
+            path: scripts/install_channel.sh
+            contentMatch: "SHA256SUMS"
+      - id: first-prerelease
+        kind: Task
+        name: First dev pre-release installed cleanly
+        description: >-
+          Merge a trivial task PR to dev, confirm the pre-release appears, install it in a clean
+          container and on the coach's laptop, and check --version and config show for both envs.
+        dependsOn: [install-script]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Latest dev pre-release exists
+            command: bash
+            args: [-c, "gh release list --limit 1 --json isPrerelease | jq -e '.[0].isPrerelease == true'"]
+          - type: custom
+            name: Clean install reports the dev channel
+            description: >-
+              Charlie installs the pre-release via scripts/install_channel.sh on a clean machine and
+              confirms `debate-research --version` shows channel dev and the merge commit SHA.
+status:
+  phase: Pending

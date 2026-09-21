@@ -16,7 +16,7 @@ spec:
   description: >-
     Public OpenCaselist disclosures and Tabroom results are ingested with provenance and resolved to team
     identities.
-  priority: 13
+  priority: 16
   acceptanceCriteria:
   - id: epic-e24
     description: >-

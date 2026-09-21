@@ -61,6 +61,22 @@ spec:
   version: '1'
   graph:
     nodes:
+    - id: ext-v1-e02-t05-settings-config
+      kind: External
+      name: 'Prerequisite from E02: Settings and configuration'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t05-settings-config
+        specRef: plan_specs/v1/e02-domain-core/t05-settings-config.yaml
+    - id: ext-v1-e03-t06-verify-command
+      kind: External
+      name: 'Prerequisite from E03: `debate-research verify` command'
+      description: >-
+        Cross-epic prerequisite owned by v1-e03-evidence-integrity (release v1.0).
+      inputs:
+        goalRef: v1-e03-t06-verify-command
+        specRef: plan_specs/v1/e03-evidence-integrity/t06-verify-command.yaml
     - id: t01
       kind: Task
       name: Initialize local git repository and monorepo skeleton
@@ -86,7 +102,8 @@ spec:
       description: >-
         Create the private GitHub repo, add remote, push history, enable branch protection on main (PR
         required, required status checks, no force-push), add CODEOWNERS, PR and issue templates, and
-        a dev→main or trunk-based branching convention documented in CONTRIBUTING.md.
+        set dev as the default branch with protect-main / protect-dev rulesets per docs/process/branching-and-environments.md
+        (main = prod, dev = development environment).
       inputs:
         specRef: plan_specs/v1/e01-repo-foundation/t02-github-remote.yaml
         goalRef: v1-e01-t02-github-remote
@@ -127,7 +144,7 @@ spec:
       description: >-
         Workflow running lint, type check, unit tests, import-boundary checks and PlanSpec validation
         on PRs and pushes; caching for uv; status check names stable so they can be required in branch
-        protection.
+        protection. Runs on PRs into dev and main and on pushes to both.
       inputs:
         specRef: plan_specs/v1/e01-repo-foundation/t04-ci-pipeline.yaml
         goalRef: v1-e01-t04-ci-pipeline
@@ -156,6 +173,7 @@ spec:
         goalRef: v1-e01-t05-spec-tooling
       dependsOn:
       - t01
+      - t03
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e01-t05-spec-tooling reports phase Succeeded
@@ -207,5 +225,96 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t07-cli-skeleton
+    - id: t08
+      kind: Task
+      name: dev→main promotion workflow and guards
+      description: >-
+        Implement docs/process/branching-and-environments.md in GitHub: promotion-source check (PRs to
+        main only from dev or hotfix/*), promotion PR template (included tasks, dev build id, validate-dev
+        link, manual checks), merge-commit-only promotion, hotfix back-merge check that fails when main
+        has commits dev lacks, and required-check wiring for ci on dev and main.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml
+        goalRef: v1-e01-t08-branch-promotion-workflow
+      dependsOn:
+      - t02
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t08-branch-promotion-workflow reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t08-branch-promotion-workflow
+    - id: t09
+      kind: Task
+      name: Dev pre-release channel and environment profiles for the CLI
+      description: >-
+        On every merge to dev, build and publish a GitHub pre-release vX.Y.Z-dev.N of the CLI installable
+        with uv tool install; DEBATE_ENV=dev|prod settings profiles with separate data dirs, provider/model
+        config and a low dev model budget; `debate-research --version` reports the channel and commit.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t09-dev-prerelease-channel.yaml
+        goalRef: v1-e01-t09-dev-prerelease-channel
+      dependsOn:
+      - t08
+      - t07
+      - ext-v1-e02-t05-settings-config
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t09-dev-prerelease-channel reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t09-dev-prerelease-channel
+    - id: t10
+      kind: Task
+      name: validate-dev smoke gate for promotions
+      description: >-
+        A validate-dev workflow that installs the exact dev pre-release, runs the smoke suite (tests/smoke/,
+        recorded fixtures plus a small opt-in live canary) with DEBATE_ENV=dev, and posts a validate-dev
+        commit status; required on promotion PRs to main. Documents how later tasks add smoke checks.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t10-validate-dev-gate.yaml
+        goalRef: v1-e01-t10-validate-dev-gate
+      dependsOn:
+      - t09
+      - ext-v1-e03-t06-verify-command
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t10-validate-dev-gate reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t10-validate-dev-gate
+    - id: t11
+      kind: Task
+      name: Task lifecycle CLI and session workflow
+      description: >-
+        scripts/task (ready, start, resume, prompt, list, report, review, sync, pr, finish) and scripts/task_helper.py:
+        one git worktree and task/<task> branch per task off origin/dev, prerequisite check, kickoff prompt
+        for the Claude session, session report template with PM verdict, PR into dev gated on PM acceptance,
+        and clean-up of worktree plus local/remote branch after merge. Documented in docs/process/task-workflow.md
+        and working-agreements.md. Completed during project setup (2026-09-18).
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t11-task-workflow-cli.yaml
+        goalRef: v1-e01-t11-task-workflow-cli
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t11-task-workflow-cli reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t11-task-workflow-cli
 status:
   phase: Pending

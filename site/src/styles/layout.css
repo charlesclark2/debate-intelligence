@@ -1,0 +1,228 @@
+/* Mobile-first page frame: skip link, header, main, footer. */
+
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  z-index: 10;
+  transform: translateY(-200%);
+  background-color: var(--color-surface);
+  color: var(--color-link);
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--color-focus-ring);
+  border-radius: var(--radius-small);
+  font-weight: var(--font-weight-bold);
+  text-decoration: underline;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+.site-header {
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.site-header__inner {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding: var(--space-3) var(--layout-gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.site-header__brand {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/*
+ * The lockup is an opaque white-background PNG, so it may only sit on the white header. Its
+ * intrinsic size is 476x384; it is displayed at a height that keeps the "Blue Dukes" script
+ * legible on a phone.
+ */
+.site-header__logo {
+  width: auto;
+  height: 56px;
+}
+
+.site-nav__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface);
+  color: var(--color-brand-navy);
+  border: 2px solid var(--color-brand-navy);
+  border-radius: var(--radius-small);
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.site-nav__toggle-icon {
+  width: 18px;
+  height: 2px;
+  background-color: currentColor;
+  box-shadow:
+    0 -6px 0 currentColor,
+    0 6px 0 currentColor;
+}
+
+.site-nav__list {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-nav__list--open {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-2) var(--layout-gutter) var(--space-4);
+}
+
+.site-nav__link {
+  display: block;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-2);
+  color: var(--color-link);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
+.site-nav__link:hover,
+.site-nav__link:focus-visible {
+  color: var(--color-link-hover);
+  text-decoration: underline;
+}
+
+/*
+ * The page you are on. aria-current tells a screen reader; this tells everyone else, and it says
+ * it twice on purpose: the label goes navy and a rule appears under it. Colour alone would carry
+ * the whole message in one channel, which WCAG 2.1 SC 1.4.1 asks us not to do.
+ */
+.site-nav__link--current {
+  color: var(--color-brand-navy);
+  border-bottom: 3px solid var(--color-brand-warm);
+}
+
+@media (min-width: 48rem) {
+  .site-nav__toggle {
+    display: none;
+  }
+
+  .site-nav__list,
+  .site-nav__list--open {
+    display: flex;
+    position: static;
+    gap: var(--space-4);
+    border-bottom: none;
+    padding: 0;
+  }
+}
+
+/*
+ * <main> is a plain wrapper now.
+ *
+ * Until v1-e36-t06 it was the reading column itself: it capped its own width at the measure and
+ * carried the page's vertical padding. A designed page needs bands that reach the edge of the
+ * viewport, so the width moved out into .page-column and .section in sections.css. A Markdown
+ * page renders one .page-column and is exactly as wide as it was before; a composed page such as
+ * the home page renders a stack of .section bands instead.
+ */
+.site-main {
+  display: block;
+}
+
+/* <main> carries tabIndex={-1} so the skip link moves focus there; it must not draw a ring
+   when the page is merely clicked. */
+.site-main:focus {
+  outline: none;
+}
+
+.site-main:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 4px;
+}
+
+.site-footer {
+  background-color: var(--color-surface-inverse);
+  color: var(--color-text-inverse);
+}
+
+.site-footer__inner {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding: var(--space-6) var(--layout-gutter);
+}
+
+/* The white knockout mark, on brand navy. It is decorative (empty alt), so the team name is
+   still spelled out in the wordmark below it. */
+.site-footer__mark {
+  width: auto;
+  height: 44px;
+  margin-bottom: var(--space-3);
+}
+
+/* The wordmark carries the team name as text beside the mark. 24px bold clears the WCAG
+   large-text threshold. */
+.site-footer__wordmark {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-large);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.site-footer__note {
+  margin: 0;
+  color: var(--color-text-inverse);
+}
+
+/*
+ * The utility links: the accessibility statement and anything else published that the header
+ * navigation does not carry. They sit below the note, set apart by a rule, because they are the
+ * small print of the site rather than a second navigation competing with the first.
+ */
+.site-footer__nav {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-link-inverse);
+}
+
+.site-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 44px on both axes, the same target the header links and the buttons keep. */
+.site-footer__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-link-inverse);
+  font-weight: var(--font-weight-bold);
+}
+
+.site-footer a {
+  color: var(--color-link-inverse);
+}
+
+.site-footer :focus-visible {
+  outline-color: var(--color-focus-ring-inverse);
+}

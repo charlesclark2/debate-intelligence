@@ -63,7 +63,9 @@ spec:
         attempt to target a different owner is rejected.
     - id: ac5
       description: >-
-        At least one pilot debater's real V1 library migrates successfully with a coach-reviewed report.
+        A rehearsal in dev on a synthetic V1 library passes first, then at least one pilot debater's real
+        V1 library migrates into prod successfully with a coach-reviewed report (real libraries never go
+        to dev).
 status:
   phase: Pending
 ---
@@ -142,8 +144,9 @@ spec:
         kind: Task
         name: Pilot migration
         description: >-
-          Migrate one consenting pilot debater's V1 library into their own Cognito account and
-          organization in dev/stage and review the report.
+          Rehearse the full run in dev against a synthetic V1 library and a synthetic dev Cognito user
+          (dev never holds real student data), then migrate one consenting pilot debater's V1 library into
+          their own prod Cognito account and organization and review the report.
         dependsOn: [cloud-integration-test]
         estimatedEffort: 1h
         acceptanceCriteria:

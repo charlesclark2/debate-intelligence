@@ -1,0 +1,153 @@
+# Media-consent manifest.
+#
+# This file is the build's record of who the site is allowed to name and which images it is
+# allowed to publish. It is checked by src/lib/publishing-policy.ts and by
+# tests/content-policy.test.ts, and it implements these parts of
+# docs/policies/website-publishing.md:
+#
+#   Students 1-2               a student is named only with a current-season consent form on file
+#   Students 10-11             no student name in a file name, a path or anywhere outside content/
+#   Photos and media consent 4 every image of an identifiable person carries an entry here
+#   Consent renewal            consent expires; the check is repeated at the start of every season
+#
+# It holds no form, no signature, no student record and no contact detail. `consentReference` is
+# opaque: the mapping from a reference to a person is Charlie's, kept with the activities office,
+# and is never committed. Everything here is public by construction, because an entry exists only
+# so that the same name or image may appear on a public page.
+#
+# A season runs 1 August to 31 July and is labelled like `2026-27`.
+#
+# What the build does with it:
+#   - a named student or an image of a person with no entry here FAILS a prod build;
+#   - an entry whose `dateChecked` predates the start of `season` WARNS, so a lapsed
+#     start-of-season check is visible without anyone remembering to look.
+
+season: '2026-27'
+
+# Students the site may name, in the form it may name them. Empty: the team has not had its first
+# practice of the season, and no page names a student.
+students: []
+# Example of the shape, for when the first entry is added:
+#   - publishedName: Jordan Rivera
+#     publishedForm: full-name-and-class-year
+#     graduationYear: 2028
+#     consentReference: MC-2026-014
+#     season: '2026-27'
+#     dateChecked: 2026-09-18
+
+# Images of identifiable people. Empty: the site publishes no photograph of any person.
+images: []
+# Example of the shape:
+#   - path: /photos/novice-orientation.jpg
+#     consentReference: MC-2026-014
+#     depicts: 2 team members, both covered
+#     season: '2026-27'
+#     dateChecked: 2026-09-18
+
+# Images that show no identifiable person and therefore need no consent entry. Every image the
+# site ships is either here or in `images` above; anything else fails the build.
+nonPersonImages:
+  - path: /brand/wfb-mark-navy-transparent.png
+    reason: The team's W BAY mark, navy on transparent, in the header. No person in the frame.
+  - path: /brand/wfb-mark-white-knockout.png
+    reason: The same mark knocked out in white, in the navy footer. No person in the frame.
+  - path: /brand/wfb-mark-square-light-512.png
+    reason: Square light-background version of the mark, for sharing. No person in the frame.
+
+# Capitalised phrases this site is allowed to print. The guard (`unreviewedNames` in
+# src/lib/publishing-policy.ts) finds every run of two or more capitalised words in the copy and
+# flags any run it cannot cover, end to end, with the entries below. That is how an unreviewed
+# student name is caught before it reaches prod.
+#
+# PHRASES, NOT WORDS (the v1-e36-t07 review)
+# ------------------------------------------
+# This used to be a list of single words, because the guard checked a name word by word. Reviewing
+# "Blue Valley West High School" and "Olathe North High School" therefore left Blue, Valley, West
+# and North permitted on their own, anywhere on the site, for ever: a student called West would
+# have passed, and every later school loosened the guard again for the prose after it. An entry
+# here now permits its words only in the order they were reviewed in, so the list can grow with
+# the site without the guard weakening.
+#
+# A multi-word run may be covered by several entries end to end, which is why the ordinary words
+# below ("The", "Email") earn their place: they let a real sentence run into a reviewed name
+# without the name itself having to be listed twice.
+#
+# A student's name never goes here. It goes in `students` above, with a consent reference.
+# The full published-names allowlist, covering opponent schools and tournaments, is v1-e37-t03.
+permittedNamePhrases:
+  # Adults acting publicly, named under the Students rules: coaches may be named as coaches.
+  - Charlie Clark
+  - Coach Clark
+  - Head Coach
+  # The school and the team, as the site and the header mark name them.
+  - Whitefish Bay
+  - Whitefish Bay Debate
+  - Whitefish Bay High School
+  - Whitefish Bay Blue Dukes
+  # The footer's "Whitefish Bay High School Debate Team", covered as two reviewed phrases.
+  - Debate Team
+  # Organisations, leagues and events. The two fragments are what the guard sees of "National
+  # Speech and Debate Association": the lower-case "and" ends one run of capitals and starts
+  # another, so the expansion reaches it as two phrases rather than one.
+  - National Speech
+  - Debate Association
+  - National Catholic Forensic League
+  - Wisconsin Debate Coaches Association
+  - Public Forum
+  # Page headings that are written in title case, so the guard reads them as a name.
+  - Debate Events Offered
+  # The schools and universities in Coach Clark's coaching history on content/pages/coaches.md,
+  # each one reviewed with Charlie when he supplied the list. Every one is an institution; none is
+  # a person, and a student name still never goes here.
+  - Kansas City
+  - Kansas City Central High School
+  - Olathe North High School
+  - Neenah High School
+  - Blue Valley West High School
+  - Marquette University High School
+  - Jefferson City High School
+  - Indiana University
+  # The country named in the Public Forum resolution in content/events.yaml.
+  - United States
+  # The studies and school districts cited in the academic-case band of content/home.yaml, each one
+  # from the approved list in docs/data/academic-case-sources.md. Institutions and journals only;
+  # the researchers are named by surname, which the guard does not read as a run. The journal
+  # names reach the guard in fragments, split by their lower-case "and".
+  - Boston Public Schools
+  - Houston Independent School District
+  - English Language Arts
+  - Educational Evaluation
+  - Policy Analysis
+  - Educational Research
+  # The accessibility statement, and the holiday the practice calendar skips.
+  - Web Content Accessibility Guidelines
+  - Martin Luther King Jr
+  # Ordinary words that begin a sentence or a heading immediately before a reviewed phrase, and so
+  # end up inside the same run of capitals. They cover one word each and permit nothing on their
+  # own, because a single capitalised word is never a run.
+  - The
+  - Email
+  - Joining
+  # Days and months, so a date next to a capitalised word is not read as a name.
+  - Monday
+  - Mondays
+  - Tuesday
+  - Wednesday
+  - Wednesdays
+  - Thursday
+  - Thursdays
+  - Friday
+  - Saturday
+  - Sunday
+  - January
+  - February
+  - March
+  - April
+  - May
+  - June
+  - July
+  - August
+  - September
+  - October
+  - November
+  - December

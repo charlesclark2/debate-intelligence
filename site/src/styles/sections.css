@@ -1,0 +1,587 @@
+/*
+ * The layout kit: bands, the reading column, card grids and the home page hero.
+ *
+ * Before v1-e36-t06 every page was one prose column inside <main>. The kit splits that into two
+ * shapes. A Markdown page still renders one .page-column, exactly the measure it had. A composed
+ * page such as the home page renders a stack of .section bands instead: each one is full bleed,
+ * carries its own background, and centres its content on one axis. <main> itself no
+ * longer sets a width or padding, because a band has to be able to reach the edge of the
+ * viewport for its background to read as a band at all.
+ *
+ * All vertical rhythm comes from --space-section-block and --space-section-gap in tokens.css, so
+ * how much air the site has is one edit in one place rather than a number per component.
+ */
+
+/* The reading column: a Markdown page, unchanged in width from v1-e36-t04. */
+.page-column {
+  max-width: calc(var(--layout-prose-width) + 2 * var(--layout-gutter));
+  margin: 0 auto;
+  padding: var(--space-section-block) var(--layout-gutter);
+}
+
+.section {
+  padding-block: var(--space-section-block);
+}
+
+.section__inner {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding-inline: var(--layout-gutter);
+}
+
+/*
+ * The text column, centred in its band.
+ *
+ * Everything on a page that is read rather than scanned goes in here: section headers, the hero,
+ * the parent session panel, prose. Because it is one column rather than a cap per element, a
+ * heading, the paragraph under it and the list under that all share a left edge and a right edge,
+ * and the block as a whole sits on the middle of the page. Only a card grid breaks out of it, to
+ * the wider .section__inner, and it is centred on the same axis.
+ */
+.section__column,
+.section__header,
+.hero__content {
+  max-width: var(--layout-prose-width);
+  margin-inline: auto;
+}
+
+.section__header {
+  margin-bottom: var(--space-section-gap);
+}
+
+/*
+ * The header of a band whose content is wider than the text column. It spans the band and
+ * centres, so a heading naming a row of three sits over the middle of that row rather than over
+ * the middle of a 36rem column tucked inside it, which read as though the heading had slipped
+ * left. The centred text column above is untouched: this is a modifier, not a change to it.
+ */
+.section__header--centered {
+  max-width: none;
+  text-align: center;
+}
+
+/*
+ * The header of a band whose content is a card grid. It spans the band like the centred modifier
+ * but keeps its text left-aligned, so the eyebrow, the heading and the intro start on the same
+ * left edge as the cards underneath them. Without it a header sits in the 36rem text column over
+ * a 56rem grid and is indented from its own content, which is the one thing on the page that
+ * reads as unpolished at 768px and up. Use this over --centered when the content below is left
+ * aligned, and --centered only when the row itself is centred.
+ */
+.section__header--wide {
+  max-width: none;
+}
+
+.section__eyebrow {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.section__title {
+  margin-bottom: var(--space-3);
+}
+
+.section__intro {
+  margin: 0;
+  font-size: var(--font-size-lead);
+}
+
+.section__intro:last-child {
+  margin-bottom: 0;
+}
+
+/* The tinted band. The panel tint is the only background other than white and navy. */
+.section--tinted {
+  background-color: var(--color-surface-panel);
+}
+
+/*
+ * The inverse band: brand navy, white copy, light-blue links and the light-blue focus ring, the
+ * same treatment the footer uses. One band per page at most. The warm accent never appears here:
+ * it measures 3.04:1 on navy, which is too close to the non-text floor to rely on.
+ */
+.section--inverse {
+  background-color: var(--color-surface-inverse);
+  color: var(--color-text-inverse);
+}
+
+.section--inverse h2,
+.section--inverse h3,
+.section--inverse .section__eyebrow {
+  color: var(--color-text-inverse);
+}
+
+.section--inverse .section__eyebrow {
+  color: var(--color-link-inverse);
+}
+
+.section--inverse a {
+  color: var(--color-link-inverse);
+}
+
+.section--inverse :focus-visible {
+  outline-color: var(--color-focus-ring-inverse);
+}
+
+/* A white section following a white section gets a hairline, so the two do not run together. */
+.section--plain + .section--plain {
+  border-top: 1px solid var(--color-border);
+}
+
+/*
+ * The home page hero. No background image and no colour wash: the weight comes from the size of
+ * the type and from the space around it. The short warm rule above the heading is the one place
+ * the warm accent appears on a white surface, and it is a rule rather than text because #B36B00
+ * on white measures 4.18:1, which is large-text and non-text only.
+ */
+.hero {
+  padding-block: var(--space-8) var(--space-section-block);
+}
+
+.hero__rule {
+  width: var(--space-7);
+  height: 4px;
+  margin-bottom: var(--space-5);
+  border: 0;
+  background-color: var(--color-brand-warm);
+}
+
+.hero__title {
+  margin-bottom: var(--space-5);
+  font-size: var(--font-size-display);
+  line-height: var(--line-height-display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.hero__lead {
+  margin-bottom: var(--space-6);
+  font-size: var(--font-size-lead-hero);
+}
+
+/*
+ * The parent session panel: the most prominent block on the home page after the hero. It is the
+ * page's only inverse band, which is what makes it outrank the cards below it without needing a
+ * larger heading than the sections around it.
+ */
+.parent-session__facts {
+  display: grid;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-6);
+}
+
+.parent-session__facts dt {
+  color: var(--color-link-inverse);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.parent-session__facts dd {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-lead);
+}
+
+.parent-session__facts dd:last-of-type {
+  margin-bottom: 0;
+}
+
+.parent-session__expect {
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  list-style: none;
+}
+
+.parent-session__expect li {
+  margin-bottom: var(--space-3);
+  padding-left: var(--space-5);
+  position: relative;
+}
+
+/* A tick drawn from a border rather than an icon font, so nothing is fetched. */
+.parent-session__expect li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 0.55em;
+  height: 0.3em;
+  border-left: 2px solid var(--color-link-inverse);
+  border-bottom: 2px solid var(--color-link-inverse);
+  transform: rotate(-45deg);
+}
+
+@media (min-width: 48rem) {
+  .parent-session__facts {
+    grid-template-columns: max-content 1fr;
+  }
+
+  .parent-session__facts dd {
+    margin-bottom: var(--space-2);
+  }
+}
+
+/* The card grid: one up on a phone, two or three up from 48rem. */
+.card-grid {
+  display: grid;
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-grid__item {
+  display: flex;
+}
+
+.card-grid__item > * {
+  width: 100%;
+}
+
+@media (min-width: 48rem) {
+  .card-grid--2-up {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .card-grid--3-up {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 64rem) {
+  .card-grid--3-up {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/*
+ * "What debate builds": four short claims, set as a list with a rule above each rather than as
+ * cards, so the page does not end on a second grid of boxes.
+ */
+.claim-list {
+  display: grid;
+  gap: var(--space-5) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.claim-list__item {
+  padding-top: var(--space-4);
+  border-top: 3px solid var(--color-brand-navy);
+}
+
+.claim-list__title {
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-heading-3);
+}
+
+.claim-list__body {
+  margin: 0;
+}
+
+@media (min-width: 48rem) {
+  .claim-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/*
+ * The same list, but three across in one row rather than two and then one.
+ *
+ * "True of all three events" is a set of exactly three, and a two-plus-one layout made it read
+ * as a list that had run out rather than as the three things it names. The columns arrive at
+ * 60rem rather than 48rem so a tablet gets one clean column instead of a cramped three; between
+ * those widths the default single column above applies, and 2-up never happens here.
+ */
+@media (min-width: 48rem) {
+  .claim-list--three-across {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 60rem) {
+  .claim-list--three-across {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/*
+ * The events comparison: three cards carrying the same four fields in the same order.
+ *
+ * The parallelism is the whole point, so the styling is the same in all three and the only thing
+ * that changes between them is the words. The grid is the existing .card-grid--3-up, which is one
+ * column below 48rem: at 390px a parent gets three stacked cards, each the full width of the
+ * gutter box, and nothing to scroll sideways for.
+ *
+ * NO HORIZONTAL OVERFLOW AT 390px (task v1-e36-t07 acceptance criterion 3). Two rules do that
+ * work, and both matter:
+ *   - the label and the value stack, rather than sitting in a two-column grid whose label column
+ *     would be as wide as the longest label in the set;
+ *   - nothing declares a fixed width or white-space: nowrap, so every value wraps inside its card
+ *     however narrow the card gets. "Four short speeches a side and three crossfires, in about 40
+ *     to 50 minutes" is the longest value on the page and it is the one this is for.
+ * tests/events.test.tsx asserts both from this file. The pixel confirmation is v1-e36-t08.
+ */
+.event-card__summary {
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-lead);
+}
+
+.event-comparison {
+  margin: 0 0 var(--space-5);
+}
+
+/* The field name. Uppercase at the eyebrow tracking, and body grey rather than the muted grey,
+   because at this size the muted grey is large-text only (see the contrast table in tokens.css). */
+.event-comparison__label {
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.event-comparison__value {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-heading);
+}
+
+.event-comparison__value:last-of-type {
+  margin-bottom: 0;
+}
+
+/*
+ * The topic an event is arguing right now.
+ *
+ * It sits above the four comparison fields and is styled apart from them, because it is the one
+ * thing on the card with a shelf life: Public Forum and Lincoln-Douglas change theirs through
+ * the season. Keeping it out of the comparison list is also what keeps that list the four fields
+ * it is supposed to be.
+ *
+ * The rule down its left edge is the warm accent, used as a non-text rule (3:1) exactly as the
+ * card title's underline is; the text beside it is body grey on the panel tint at 6.01:1.
+ */
+.event-topic {
+  margin-bottom: var(--space-5);
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--color-brand-warm);
+}
+
+.event-topic__label {
+  margin: 0 0 var(--space-1);
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.event-topic__value {
+  color: var(--color-text-heading);
+}
+
+.event-topic__value .prose > :last-child {
+  margin-bottom: 0;
+}
+
+/*
+ * ALIGNING THE THREE COMPARISON CARDS, ROW BY ROW
+ * -----------------------------------------------
+ * A comparison only works if a reader can run their eye across it. With three cards whose
+ * summaries and topics are different lengths, every field below the longest one started at a
+ * different height in each card, so "Team size" in the Policy card sat level with "Speech
+ * pattern" in the other two. Nothing was wrong with any one card; the row was wrong.
+ *
+ * CSS subgrid fixes it properly. The grid defines the rows once, and each card hands its own
+ * rows back to that grid instead of sizing them itself, so every row is as tall as the tallest
+ * of the three and all three cards start each field on the same line. No script, no measuring,
+ * and no fixed heights that a longer topic would overflow next month.
+ *
+ * THE ROW COUNT. Fourteen rows, in reading order:
+ *     1        the event name
+ *     2        the one-line summary
+ *     3 to 4   the current topic: its label, then its value
+ *     5 to 12  the four comparison fields, a label and a value each
+ *     13       a flexible spacer, which is what pushes the action to the foot of every card
+ *     14       the link down to that event's detail section
+ * Twelve of those are content rows sized to their tallest card, hence `repeat(12, auto)`. The
+ * arithmetic depends on there being exactly four comparison fields, so tests/events.test.tsx
+ * recomputes it from EVENT_COMPARISON_FIELDS and fails if a fifth is ever added here.
+ *
+ * WHERE IT APPLIES. Only from 64rem, where all three cards are in one row and there is anything
+ * to align. Below that the cards stack one per row, and a stacked card has nothing to line up
+ * with, so the flex layout in components.css is left alone. The grid is also held to one column
+ * until then rather than going two and then one, which is the ragged shape this page already
+ * fixed once in the band above.
+ *
+ * WHERE IT DOES NOT. Browsers without subgrid (anything older than Chrome 117, Safari 16 or
+ * Firefox 71) skip the @supports block entirely and get the cards exactly as they were: correct,
+ * readable, and not aligned across the row. That is the right thing to lose first.
+ *
+ * The selector is keyed to the comparison band rather than to .card or .card-grid, because those
+ * components belong to v1-e36-t06 and the home page uses both. Nothing outside this band
+ * changes.
+ */
+#compare-the-events .card-grid {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 64rem) {
+  #compare-the-events .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  @supports (grid-template-rows: subgrid) {
+    /* The rows are defined here, once, and every card inherits them. The row gap goes to zero
+       because these rows are now the insides of the cards, not the space between them; the
+       spacing inside a card comes from the margins it already had. */
+    #compare-the-events .card-grid {
+      grid-template-rows: repeat(12, auto) 1fr auto;
+      row-gap: 0;
+      column-gap: var(--space-5);
+    }
+
+    /* The list item and the card itself pass the rows straight through. They are written as two
+       rules rather than one selector list so each can be read, and asserted, on its own. */
+    #compare-the-events .card-grid__item {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 14;
+    }
+
+    #compare-the-events .card {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 14;
+      height: auto;
+    }
+
+    /* Row 1 is the event name; the body takes the other thirteen. */
+    #compare-the-events .card__body {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 13;
+    }
+
+    /* Two rows for the current topic, eight for the four comparison fields. */
+    #compare-the-events .event-topic {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 2;
+    }
+
+    #compare-the-events .event-comparison {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 8;
+    }
+
+    /* The last row, past the flexible spacer above it, so the three actions sit on one line
+       however much copy is in the card. */
+    #compare-the-events .card__body > .link-cta {
+      grid-row: 13 / 14;
+      align-self: end;
+    }
+  }
+}
+
+/*
+ * THE PAGE LEAD AND THE AT-A-GLANCE BLOCK
+ * ----------------------------------------
+ * The lighter version of what the FAQ and the events page do, for about, join, coaches and
+ * contact. Each of those was a title and then a column of prose, so a parent who wanted one fact
+ * (when practice is, who to email, what a season costs) had to read from the top to find it. The
+ * summary block puts those facts first, as labels and values, and leaves the prose to explain
+ * them underneath.
+ *
+ * The label sits above its value rather than beside it, for the same reason the events
+ * comparison stacks: a two-column grid sizes its label column to the longest label in the set,
+ * which is what pushes a card or a list past the width of a 390px screen. From 48rem there is
+ * room for the two-column form, and the label column is sized to its content.
+ */
+.page-lead {
+  margin: 0;
+  font-size: var(--font-size-lead);
+}
+
+.at-a-glance {
+  display: grid;
+  gap: var(--space-1) var(--space-5);
+  margin: 0;
+}
+
+/* Body grey, not the muted grey: at 14px this is small text, and #74798E is large-text and
+   non-text only. See the contrast table in tokens.css. */
+.at-a-glance__label {
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.at-a-glance__value {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-heading);
+  font-size: var(--font-size-lead);
+}
+
+.at-a-glance__value:last-of-type {
+  margin-bottom: 0;
+}
+
+@media (min-width: 48rem) {
+  .at-a-glance {
+    grid-template-columns: max-content 1fr;
+  }
+
+  .at-a-glance__label {
+    /* Lines the label up with the first line of its value, which is set two steps larger. */
+    padding-top: 0.2em;
+  }
+
+  .at-a-glance__value {
+    margin-bottom: var(--space-3);
+  }
+}
+
+/*
+ * THE ACADEMIC CASE (v1-e36-t09)
+ * ------------------------------
+ * One Card per research claim, on the existing .card-grid: one up on a phone, two up from 48rem.
+ * Nothing here sets a width, a fixed column or white-space: nowrap, so at 390px each card is the
+ * full gutter box and a long citation wraps inside it rather than pushing the page sideways.
+ *
+ * The source line sits at the foot of its card, under a hairline, so the claim reads first and
+ * what it rests on reads second. It is small text, so it is body grey: #55596B on the panel tint
+ * measures 6.01:1 (the contrast table in tokens.css). The muted grey and the warm accent are
+ * large-text and non-text only and never appear here. No transition is added, so there is nothing
+ * for the prefers-reduced-motion block in globals.css to switch off.
+ */
+.source-line {
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+/* The claim body keeps its gap above the hairline however short it is. */
+#academic-case .card__body > p:not(.source-line) {
+  margin-bottom: var(--space-4);
+}
+
+.source-line cite {
+  font-style: italic;
+}
+
+.source-line__link {
+  color: var(--color-link);
+}

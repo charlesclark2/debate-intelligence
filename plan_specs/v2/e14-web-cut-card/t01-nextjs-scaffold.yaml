@@ -1,5 +1,5 @@
 # TASK v2-e14-t01-nextjs-scaffold — Next.js application scaffold
-# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E14 Web App Shell & Cut-a-Card | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §4 Next.js + TypeScript + React, Tailwind + shadcn/ui, §6 web/, §12
 ---
 apiVersion: planspec.io/v1alpha1
@@ -21,20 +21,24 @@ spec:
     app in TypeScript strict mode, Tailwind CSS and shadcn/ui primitives, an app shell (header, nav for
     Research / Cut a Card / Library, responsive layout, light/dark), typed runtime config for API base URL
     and Cognito ids per environment, ESLint + Prettier, Vitest + Testing Library for components,
-    Playwright for end-to-end with an axe accessibility check, and a CI job. The workspace consumes the
+    Playwright for end-to-end with an axe accessibility check, and CI split per
+    docs/process/working-agreements.md §1: lint, typecheck and unit tests on PRs touching web/ or
+    clients/; the build and Playwright suites in validate-dev (post-merge, pre-promotion) and nightly,
+    never on PRs into dev. The workspace consumes the
     existing generated API client package clients/ts-api-client (from v2-e12-t06) as a workspace/file
     dependency rather than generating its own. The scaffold contains no
     feature logic: auth is t02, hosting t03, Cut-a-Card t04. The web app never talks to AWS services
     directly; it only calls the debate API.
   priority: 1
   constraints:
-    packages: [web]
+    packages: [web, .github/workflows]
     forbidden:
       - AWS SDK usage or credentials in the browser bundle
       - Secrets in NEXT_PUBLIC_* variables
       - Business logic duplicated from debate_core (validation of evidence lives server-side)
       - Disabling TypeScript strict mode or ESLint rules globally
       - Third-party analytics/trackers (users may be minors)
+      - Playwright/browser end-to-end suites in the PR path into dev
   context:
     - kind: TaskRef
       name: v1-e01-t04-ci-pipeline
@@ -49,11 +53,14 @@ spec:
         Cut a Card and Library placeholder routes.
     - id: ac2
       description: >-
-        `pnpm --dir web lint` and `pnpm --dir web test` pass in CI on every PR touching web/.
+        `pnpm --dir web lint`, `pnpm --dir web typecheck` and `pnpm --dir web test` pass in a `web` job in
+        .github/workflows/ci.yml gated on the `web` path filter and listed in the aggregate `ci` job's
+        needs, on every PR touching web/ or clients/, well inside the 5-minute `ci` budget.
     - id: ac3
       description: >-
         A Playwright smoke test loads the shell, navigates all placeholder routes and reports zero serious
-        or critical axe violations.
+        or critical axe violations; the Playwright suite runs as a web-e2e suite of validate-dev and on a
+        nightly schedule, not on PRs into dev.
     - id: ac4
       description: >-
         Runtime config is validated with zod at startup, failing fast on missing values, and contains no
@@ -83,7 +90,8 @@ spec:
         name: pnpm workspace and Next.js app
         description: >-
           web/pnpm-workspace.yaml (including ../clients/ts-api-client), web/apps/app (or web/ root app)
-          with App Router, strict tsconfig, ESLint/Prettier, typed zod runtime config, and the API client
+          with App Router, strict tsconfig, ESLint/Prettier, package scripts lint, typecheck
+          (tsc --noEmit) and test, typed zod runtime config, and the API client
           added as a workspace/file dependency on clients/ts-api-client.
         outputs: [web/package.json, web/pnpm-workspace.yaml, web/tsconfig.json, web/src/config.ts]
         estimatedEffort: 2h
@@ -128,14 +136,21 @@ spec:
         kind: Task
         name: Web CI job
         description: >-
-          GitHub Actions job with pnpm cache running lint, test, build and Playwright on web/** changes.
+          A `web` job in .github/workflows/ci.yml (not a separate workflow), gated on
+          `needs.changes.outputs.web` and appended to the aggregate `ci` job's needs, with pnpm cache running
+          lint, typecheck and unit tests; a separate web-e2e workflow (workflow_call from validate-dev,
+          nightly schedule, workflow_dispatch) running build and Playwright with browser caching.
         dependsOn: [test-stack]
-        outputs: [.github/workflows/web.yml]
+        outputs: [.github/workflows/ci.yml, .github/workflows/web-e2e.yml]
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: artifact_exists
-            name: Web CI workflow exists
-            path: .github/workflows/web.yml
+            name: ci.yml runs the web checks
+            path: .github/workflows/ci.yml
+            contentMatch: "pnpm --dir web typecheck"
+          - type: artifact_exists
+            name: Playwright runs outside the PR path
+            path: .github/workflows/web-e2e.yml
             contentMatch: "playwright"
 status:
   phase: Pending

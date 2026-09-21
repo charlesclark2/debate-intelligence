@@ -1,5 +1,5 @@
 # TASK v1-e09-t04-prompt-promotion-gate — Prompt/model promotion gate
-# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.3 (V1 quality gate & team pilot) | Major: V1
+# Epic: E09 V1 Quality, Evaluation & Team Pilot | Release: v1.5 (V1 quality gate & team pilot) | Major: V1
 # Architecture refs: §10 Prompt/version governance, §16 (model upgrades require eval comparison)
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,26 +10,30 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
   annotations:
     debate/title: Prompt/model promotion gate
     debate/architecture-refs: §10, §16
 spec:
   description: >-
-    Make "newer model" or "edited prompt" insufficient on its own. A promotion manifest
-    (config/promoted.yaml) pins the prompt versions and routed model per task class that production uses.
-    A GitHub Actions job triggers on PRs that change prompts/, config/model_routing.yaml or
-    config/promoted.yaml: it runs the t03 harness for the candidate (from committed replay cassettes the
-    author recorded) and the baseline, compares metrics with configured non-regression thresholds
-    (unsupported_text_rate must stay 0; underline recall and selection F1 may not drop more than 2 points;
-    per-event floors), and posts a comparison table to the job summary. The job is a required check.
+    Make "newer model" or "edited prompt" insufficient on its own. A promotion manifest (config/promoted.yaml)
+    pins the prompt versions and routed model per task class that production uses. A GitHub Actions job
+    triggers on dev → main promotion PRs (and hotfix/* PRs into main) whose diff against main changes
+    prompts/, config/model_routing*.yaml (the per-environment files from v1-e01-t09) or config/promoted.yaml,
+    and on manual workflow_dispatch for any branch; it never runs on PRs into dev
+    (docs/process/working-agreements.md §1: eval suites stay out of the PR path). It runs the t03 harness for
+    the candidate (from committed replay cassettes the author recorded) and the baseline, compares metrics
+    with configured non-regression thresholds (unsupported_text_rate must stay 0; underline recall and
+    selection F1 may not drop more than 2 points; per-event floors), and posts a comparison table to the job
+    summary. The job is a required check on main, matching the "evaluation gates" step of a promotion.
     Boundaries: does not record cassettes in CI and does not choose models; harness logic stays in t03.
   priority: 2
   constraints:
     packages: [.github/workflows, evals, config/promoted.yaml, scripts]
     forbidden:
       - Live model calls or AWS credentials in the CI promotion job
+      - Running the eval job on pull requests into dev or making it part of the `ci` check
       - Promoting a candidate with unsupported_text_rate > 0
       - Changing thresholds and prompts in the same PR without coach approval
   context:
@@ -53,8 +57,10 @@ spec:
         table (baseline vs candidate per metric and event).
     - id: ac3
       description: >-
-        The prompt-promotion workflow runs only on changes to prompts/ or model/promotion config, uses replay
-        cassettes, and is marked a required status check on main.
+        The prompt-promotion workflow runs only on promotion/hotfix PRs into main (or workflow_dispatch)
+        whose diff touches prompts/ or model/promotion config, never on PRs into dev, uses replay cassettes,
+        and is marked a required status check in the protect-main ruleset (passing trivially when no
+        prompt or model config changed).
     - id: ac4
       description: >-
         A PR changing a prompt without new cassettes fails with MissingFixtureError guidance rather than
@@ -70,7 +76,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.3
+    debate/release: v1.5
     debate/epic: v1-e09-v1-quality-pilot
 spec:
   description: >-
@@ -113,8 +119,10 @@ spec:
         kind: Task
         name: Prompt-promotion GitHub Actions workflow
         description: >-
-          Path-filtered workflow running baseline and candidate evals on replay cassettes and writing the
-          comparison to the job summary.
+          Workflow on pull_request into main plus workflow_dispatch (no PRs into dev) that diffs the head
+          against main for prompts/ and model/promotion config, runs baseline and candidate evals on
+          replay cassettes when they changed (otherwise reports success with "no prompt/model change"),
+          and writes the comparison to the job summary.
         dependsOn: [compare-script]
         outputs: [.github/workflows/prompt-promotion.yml]
         estimatedEffort: 2h
@@ -127,17 +135,19 @@ spec:
         kind: Task
         name: Required status check on main
         description: >-
-          Add the job as a required check in main's branch protection and demonstrate a failing and a passing PR.
+          Add the job as a required check in the protect-main ruleset (GitHub UI) and demonstrate a failing
+          and a passing run (workflow_dispatch on a task branch, then the next promotion PR).
         dependsOn: [workflow]
         estimatedEffort: 30m
         acceptanceCriteria:
           - type: command_succeeds
-            name: Branch protection lists the promotion check
+            name: Rulesets for main list the promotion check
             command: gh
-            args: [api, "repos/{owner}/{repo}/branches/main/protection/required_status_checks"]
+            args: [api, "repos/{owner}/{repo}/rules/branches/main"]
           - type: custom
             name: Demonstration PRs
             description: >-
-              A regressing test PR is blocked and a non-regressing one passes; links recorded in the task PR.
+              A regressing candidate fails the check and a non-regressing one passes (dispatch runs or
+              promotion PRs into main); run links recorded in the task PR.
 status:
   phase: Pending

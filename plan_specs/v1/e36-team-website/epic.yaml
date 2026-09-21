@@ -1,0 +1,287 @@
+# EPIC E36 — Team Website Foundation
+# Major version: V1 | Release: v1.6 (Public team website)
+# Architecture refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-team-website
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: E36 — Team Website Foundation
+    debate/architecture-refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+spec:
+  description: >-
+    A public static website for the Whitefish Bay debate team under a team domain: publishing and student-privacy
+    policy, hosting on S3 + CloudFront with HTTPS in dev and prod, a Next.js static site in site/, the
+    core pages parents need, and a dev-preview-then-prod deploy flow. The V2 authenticated app later lives
+    under the same domain.
+  priority: 7
+  constraints:
+    majorVersion: v1
+    release: v1.6
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      A publishing policy approved by Charlie records the district's approval and sets rules for student
+      names, photos and results.
+  - id: ac2
+    description: >-
+      The site is served over HTTPS from S3 + CloudFront in dev (preview) and prod, defined in Terraform,
+      with ADR-0012 recording the hosting decision.
+  - id: ac3
+    description: >-
+      Home, about, events explained, join, coaches, parent FAQ and contact are live, mobile-first and
+      WCAG 2.1 AA, and look professionally designed: a real home page hero and October 1 panel, cards
+      and sections rather than prose columns, and scannable FAQ and events pages, all verified at phone,
+      tablet and desktop widths before October 1, 2026.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-team-website-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Task graph for epic E36 (Team Website Foundation). Each Task node points at its own task-level PlanSpec.
+  goalRef:
+    name: v1-e36-team-website
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e29-t02-terraform-bootstrap
+      kind: External
+      name: 'Prerequisite from E29: Terraform bootstrap and environments'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t02-terraform-bootstrap
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t02-terraform-bootstrap.yaml
+    - id: t01
+      kind: Task
+      name: Website publishing and student-privacy policy
+      description: >-
+        docs/policies/website-publishing.md: records the district/activities-director approval and its
+        conditions; rules for students (first names or none, photos only under the district media-consent
+        process, how results and awards are shown), branding and school-name use, accessibility (WCAG
+        2.1 AA), analytics (none or privacy-preserving, no third-party trackers), content removal on request;
+        approved by Charlie. Gates publishing anything about students.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t01-publishing-policy.yaml
+        goalRef: v1-e36-t01-publishing-policy
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t01-publishing-policy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t01-publishing-policy
+    - id: t02
+      kind: Task
+      name: Site hosting infrastructure (ADR-0012)
+      description: >-
+        ADR-0012 web hosting (S3 + CloudFront with origin access control, ACM certificate, Route 53 or
+        external DNS for the team domain; the V2 app later mounts under the same domain), and Terraform
+        for debate-dev-site-* and debate-prod-site-* buckets and distributions using the remote state
+        from v1-e29-t02: private buckets, HTTPS only, security headers, no logging of visitor IPs beyond
+        CloudFront defaults. Domain purchase and DNS changes are operator steps.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t02-site-hosting.yaml
+        goalRef: v1-e36-t02-site-hosting
+      dependsOn:
+      - ext-v1-e29-t02-terraform-bootstrap
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t02-site-hosting reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t02-site-hosting
+    - id: t03
+      kind: Task
+      name: Static site scaffold
+      description: >-
+        Next.js (static export) + TypeScript in site/ (separate from the V2 app in web/), mobile-first
+        layout, Whitefish Bay colors and a simple design system, accessible navigation, SEO basics (titles,
+        Open Graph, sitemap), content read from site/content/ files so pages hold no hard-coded copy;
+        `pnpm --dir site lint|test|build` offline and fast.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t03-site-scaffold.yaml
+        goalRef: v1-e36-t03-site-scaffold
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t03-site-scaffold reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t03-site-scaffold
+    - id: t04
+      kind: Task
+      name: Core pages for parents and students
+      description: >-
+        Home, About the team, Debate events explained (Policy, LD, PF) for parents, How to join, Coaches,
+        Parent FAQ (travel, costs, time commitment, judging), Contact (mailto or form service, no stored
+        PII), and a hidden-until-V2 Debater login link; copy drafted from the project's topic and intro
+        materials and reviewed by Charlie; follows the publishing policy.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t04-core-pages.yaml
+        goalRef: v1-e36-t04-core-pages
+      dependsOn:
+      - t01
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t04-core-pages reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t04-core-pages
+    - id: t05
+      kind: Task
+      name: 'Deploy flow: dev preview then prod'
+      description: >-
+        scripts/site_deploy.sh builds site/ and syncs it to the dev or prod site bucket with CloudFront
+        invalidation, prod only from main per ADR-0013; operator-run until keyless CI deploys exist (v2-e10-t03);
+        smoke check (HTTP 200, HTTPS redirect, security headers) against dev then prod; the first prod
+        launch is recorded in the runbook.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t05-site-deploy.yaml
+        goalRef: v1-e36-t05-site-deploy
+      dependsOn:
+      - t02
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t05-site-deploy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t05-site-deploy
+    - id: t06
+      kind: Task
+      name: 'Visual design pass: layout system and home page'
+      description: >-
+        Turn the pages from single prose columns into a designed site, inside the existing static export
+        (no server, no new hosting; ADR-0012 stands). A reusable layout kit built on the existing tokens:
+        a typographic scale with measured line length, vertical rhythm and section spacing, a section
+        component with optional tinted background, the existing Card component actually used, primary
+        and secondary buttons/links with hover, focus-visible and active states, and a footer that carries
+        the knockout mark. A home page with a real hero (team name, one-line description, primary action),
+        a prominent October 1 parent-session panel, three to five scannable entry points into the site,
+        and a short 'what debate builds' section. Motion is restrained and respects prefers-reduced-motion.
+        Every pair still passes the contrast rules from v1-e36-t03 and axe stays clean.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t06-visual-design-pass.yaml
+        goalRef: v1-e36-t06-visual-design-pass
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t06-visual-design-pass reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t06-visual-design-pass
+    - id: t07
+      kind: Task
+      name: Scannable structure for the FAQ, events and remaining pages
+      description: >-
+        Restructure the long pages so a parent finds one answer without reading everything. FAQ: grouped
+        into topic sections with native <details>/<summary> disclosure (no hand-rolled ARIA, Ctrl+F and
+        printing still work), the two or three most-asked questions open by default, and an in-page topic
+        index. Events: Policy, Lincoln-Douglas and Public Forum as parallel cards with a compact comparison
+        (team size, speech pattern, topic cadence, best for) and the detail beneath each. About, join,
+        coaches and contact get the same treatment at their own scale: summary first, detail second, no
+        wall of prose. Content stays in site/content as data the pages render; copy edits are Charlie's.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t07-page-structure-pass.yaml
+        goalRef: v1-e36-t07-page-structure-pass
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t07-page-structure-pass reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t07-page-structure-pass
+    - id: t08
+      kind: Task
+      name: Pre-launch visual QA and launch readiness
+      description: >-
+        Prove the site looks right before it is shown to parents: screenshots of every page at 390px,
+        768px and 1280px committed as an artifact-free checklist in the report, Lighthouse (or equivalent)
+        scores for performance, accessibility, best practices and SEO recorded per page with a floor of
+        95 on accessibility and best practices, axe clean, keyboard-only walk of every interactive element,
+        print stylesheet check on the FAQ, and a check in Safari and Chrome on a phone. Ends with the
+        October 1 room filled in, a clean prod build, and the promotion checklist ready for Charlie.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t08-prelaunch-visual-qa.yaml
+        goalRef: v1-e36-t08-prelaunch-visual-qa
+      dependsOn:
+      - t06
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t08-prelaunch-visual-qa reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t08-prelaunch-visual-qa
+    - id: t09
+      kind: Task
+      name: 'Home page: the academic case for debate'
+      description: >-
+        Add the academic case for debate to the home page from the team's intro-to-debate material: what
+        debate builds (research, critical thinking, public speaking, writing, teamwork), with the evidence
+        the deck uses, in a band that fits the t06 layout kit. Charlie supplies and approves the copy
+        and the sources; no claim goes up unsourced, and the house rules from the brand guide apply (no
+        graduation-rate or dropout research with this audience, acronyms translated, no em dashes). Also
+        aligns the home entry-point card labels with the page titles they link to. Content stays in site/content;
+        runs after t07 and can run alongside t08.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t09-home-academic-case.yaml
+        goalRef: v1-e36-t09-home-academic-case
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t09-home-academic-case reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t09-home-academic-case
+status:
+  phase: Pending

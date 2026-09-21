@@ -1,5 +1,5 @@
 # TASK v1-e05-t07-usage-telemetry — Token/cost telemetry and budgets
-# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
 # Architecture refs: §10, ADR-005, §15 (model cost, quotas, token telemetry), §20 step 5
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.2
     debate/epic: v1-e05-model-router
   annotations:
     debate/title: Token/cost telemetry and budgets
@@ -21,9 +21,9 @@ spec:
     config/model_pricing.yaml table keyed by model_id, not from code), with a correlation/run id. A
     BudgetGuard decorator on the router enforces a per-run limit and a per-day local limit (persisted in the
     local data dir) and raises BudgetExceededError before issuing a call that would exceed them. Delivers a
-    shared `--max-cost` option helper for debate_cli so any model-using command (cut in E06, auto-cut and
-    daily in E08) can adopt it, plus `debate-research usage` for a daily summary. Boundaries: does not
-    implement CloudWatch metrics (V2) or change routing decisions (t01); the fake router reports zero cost.
+    shared `--max-cost` option helper for debate_cli so any model-using command (landscape classification
+    in E32, cut in E06, auto-cut and daily in E08) can adopt it, plus `debate-research usage` for a daily
+    summary. Boundaries: does not implement CloudWatch metrics (V2) or change routing decisions (t01); the fake router reports zero cost.
   priority: 2
   constraints:
     packages: [debate_core.integrations, debate_core.application, debate_cli]
@@ -63,7 +63,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.2
     debate/epic: v1-e05-model-router
 spec:
   description: >-

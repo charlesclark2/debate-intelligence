@@ -1,0 +1,183 @@
+# TASK v1-e29-t04-s3-blob-store — S3 blob-store adapter
+# Epic: E29 Cloud Evidence Store (S3) | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §6 ports/adapters, §7 (S3 system of record), §8 provenance, §14, §16, ADR-0003
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t04-s3-blob-store
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: S3 blob-store adapter
+    debate/architecture-refs: §6, §7, §8, §14, §16, ADR-0003
+spec:
+  description: >-
+    Implement S3 adapters so debate_core can use the evidence bucket (t03) without the domain or
+    application layers ever importing boto3. S3SnapshotStore implements the existing SnapshotStore port
+    (v1-e02-t02) with content-addressed, write-once keys <prefix>/sha256/<ab>/<cd>/<sha256> matching the
+    local FsSnapshotStore layout, idempotent put (an existing key with identical bytes is a no-op and
+    creates no new version; mismatched bytes for an existing key raise an integrity error), sha256
+    verification on read, S3 additional checksums (SHA256) on upload, and multipart upload above a
+    configurable threshold for large camp files and archives. A small EvidenceObjectStore port (list
+    by prefix, head with sha256, put_file, get_file by named key) plus S3 and filesystem adapters
+    covers named objects such as manifests/*.jsonl and reports/*, which t05 syncs. Adapters live in the
+    integrations adapter layer (debate_core.integrations.s3), take bucket/region/profile via their
+    constructor, use the standard AWS credential chain (AWS SSO profile locally), map botocore errors to
+    the typed port errors, and pass the E02 SnapshotStore contract suite against moto. boto3 is an
+    optional `aws` extra. Out of scope: Settings/DEBATE_ENV wiring and the CLI (t05), bucket creation
+    (t03), presigned URLs and the V2 export store (v2-e11-t04, which should extend this adapter rather
+    than re-implement it), and DynamoDB metadata (V2).
+  priority: 1
+  constraints:
+    packages: [debate_core.integrations.s3, debate_core.application.ports, debate_core.integrations.local]
+    forbidden:
+      - Importing boto3/botocore in debate_core.domain or debate_core.application (import-linter enforced)
+      - Leaking botocore types or ClientError through port signatures
+      - Overwriting or deleting an existing content-addressed object
+      - Live AWS calls in unit/CI tests (moto only; any real-bucket check is a `live`-marked opt-in test)
+      - Logging credentials, session tokens or object contents
+  context:
+    - kind: TaskRef
+      name: v1-e29-t03-evidence-buckets
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t04-repo-contract-tests
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        S3SnapshotStore passes the shared SnapshotStore contract suite from debate_core.testing.contracts
+        under moto, including content-addressed dedupe, immutability and NotFound on a missing key.
+    - id: ac2
+      description: >-
+        A second put of identical bytes issues no PutObject and leaves one object version; a put whose
+        bytes do not match the sha256 of an existing key raises BlobIntegrityError; a read whose bytes do
+        not hash to the key raises BlobIntegrityError.
+    - id: ac3
+      description: >-
+        Files above the multipart threshold are uploaded in parts and read back byte-identical, with the
+        full-object sha256 stored in object metadata.
+    - id: ac4
+      description: >-
+        EvidenceObjectStore has S3 and filesystem adapters that both pass one shared contract test
+        (list by prefix, head returns size and sha256, put/get round trip, NotFound).
+    - id: ac5
+      description: >-
+        `uv run lint-imports` passes with a contract forbidding boto3/botocore outside
+        debate_core.integrations.s3, and pyright reports no errors for debate_core.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t04-s3-blob-store-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Add the named-object port and error mapping first, then the snapshot adapter against the contract
+    suite, multipart handling, the named-object adapters, and finally the import-boundary rule.
+  goalRef:
+    name: v1-e29-t04-s3-blob-store
+  graph:
+    nodes:
+      - id: object-port-and-errors
+        kind: Task
+        name: EvidenceObjectStore port and S3 error mapping
+        description: >-
+          Declare the EvidenceObjectStore Protocol (ObjectInfo with key, size, sha256, version_id) and a
+          BlobIntegrityError; add an error-mapping helper translating NoSuchKey/404 to NotFound,
+          AccessDenied to StoreAccessDenied and expired SSO tokens to StoreCredentialsExpired with an
+          `aws sso login` hint.
+        outputs:
+          - packages/debate_core/src/debate_core/application/ports/evidence_store.py
+          - packages/debate_core/src/debate_core/integrations/s3/errors.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: EvidenceObjectStore port exists
+            path: packages/debate_core/src/debate_core/application/ports/evidence_store.py
+            contentMatch: "class EvidenceObjectStore(Protocol)"
+      - id: snapshot-adapter
+        kind: Task
+        name: S3SnapshotStore behind the SnapshotStore port
+        description: >-
+          Content-addressed keys, head-before-put idempotency with sha256 metadata comparison,
+          ChecksumAlgorithm SHA256 on upload, sha256 verification on get; bound to the E02 contract suite
+          with a moto-backed make_adapter fixture.
+        dependsOn: [object-port-and-errors]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/s3/snapshot_store.py
+          - packages/debate_core/tests/integrations/s3/test_s3_snapshot_store.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: SnapshotStore contract passes for the S3 adapter under moto
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/s3/test_s3_snapshot_store.py]
+      - id: multipart
+        kind: Task
+        name: Multipart upload for large files
+        description: >-
+          Use boto3 TransferConfig with a configurable threshold/part size; compute the full-file sha256
+          while streaming and store it as metadata; test with a generated multi-part file under moto.
+        dependsOn: [snapshot-adapter]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Multipart round-trip test passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/s3, -k, multipart]
+      - id: named-object-adapters
+        kind: Task
+        name: S3 and filesystem EvidenceObjectStore adapters
+        description: >-
+          S3EvidenceObjectStore (paginated list, head, put_file, get_file to a temp file then atomic
+          rename) and FsEvidenceObjectStore over the local evidence directory, both bound to one shared
+          contract module.
+        dependsOn: [object-port-and-errors]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/s3/object_store.py
+          - packages/debate_core/src/debate_core/integrations/local/fs_object_store.py
+          - packages/debate_core/src/debate_core/testing/contracts/evidence_object_store.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: EvidenceObjectStore contract passes for S3 (moto) and filesystem adapters
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/contracts, -k, evidence_object_store]
+      - id: boundaries-and-types
+        kind: Task
+        name: Optional aws extra, import boundary and type check
+        description: >-
+          Declare boto3 under an `aws` optional dependency of debate_core (moto in dev dependencies), add
+          a [tool.importlinter] contract forbidding boto3/botocore outside debate_core.integrations.s3, and
+          run pyright and the full offline adapter suite.
+        dependsOn: [multipart, named-object-adapters]
+        outputs: [packages/debate_core/pyproject.toml, pyproject.toml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: test_passes
+            name: Full S3 adapter suite passes offline
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/s3]
+status:
+  phase: Pending

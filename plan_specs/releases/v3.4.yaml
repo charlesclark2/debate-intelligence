@@ -16,7 +16,7 @@ spec:
   description: >-
     Coaches and students generate sourced scouting reports on opponents, and disclosures inform coverage
     predictions.
-  priority: 14
+  priority: 17
   acceptanceCriteria:
   - id: epic-e25
     description: >-

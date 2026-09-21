@@ -25,7 +25,8 @@ spec:
     reuse E11 t05 optimistic concurrency so a card revision write never silently overwrites a student
     edit. This task does NOT expose endpoints (t02), sharing policy/permissions logic (t06), revision diff
     UI (t04) or exports (t05). Revisions preserve snapshot_id, offsets and hashes; evidence text is never
-    stored in a form that bypasses verification.
+    stored in a form that bypasses verification. Folders organize individual Cards; they are not the debate
+    tub's file collections (TubFile/collections, v2-e35-t01), which index whole files in S3.
   priority: 1
   constraints:
     packages: [debate_core.domain, debate_core.application, debate_core.integrations, docs/data]

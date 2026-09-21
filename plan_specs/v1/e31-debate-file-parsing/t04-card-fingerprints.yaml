@@ -1,0 +1,186 @@
+# TASK v1-e31-t04-card-fingerprints — Card fingerprints and occurrences
+# Epic: E31 Debate File Parsing | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §6 FileIntelligenceService, §8 hashes/provenance, §13 file parsing, §14, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t04-card-fingerprints
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: Card fingerprints and occurrences
+    debate/architecture-refs: §6, §8, §13, §14, §16
+spec:
+  description: >-
+    Recognize the same card when many teams disclose it, so the landscape (E32) counts it once and the file
+    builder (E33) can reference it by a stable id. Each ParsedCard from t03 gets an exact fingerprint (sha256
+    of its evidence body under a documented fingerprint normalization: Unicode NFKC, casefold, unified quotes
+    and dashes, collapsed whitespace; tags and cites are excluded because teams re-tag the same card) and a
+    near-duplicate cluster id from word shingles with seeded MinHash and LSH buckets, confirmed by Jaccard or
+    containment so a card cut a paragraph shorter still joins its cluster. ABBREVIATED and CITE_ONLY cards
+    (wiki-converted first/last-words disclosures) are linked to full cards by short cite plus first and last
+    words, never merged into their text. An occurrence table records every place a card appears: cluster id,
+    exact fingerprint, caselist, school, team code, side, tournament, round, snapshot first/last seen, source
+    sha256 and element index. Cite tails often carry the initials or short handle of whoever originally
+    cut the card, which is real cross-team provenance the parser already reads: record it verbatim on the
+    occurrence as an opaque cutter mark, subject to the same minimization as a team code (caselist-data-use.md
+    prohibition 6) — never expanded to a name, never joined to any roster or Tabroom entry, never shown in a
+    report beyond school plus team code, and absent from fixtures and logs. Because weekly archives are cumulative, an occurrence is keyed by source sha256
+    plus element index, so the same disclosure in later snapshots is counted once. `debate-research caselist
+    cards` reads parsed-card JSONL (the ParsedCard schema t03 defines) and prints statistics: cards, exact
+    unique cards, clusters, duplicate rate, and the most-read cards by distinct teams with short cite and tag.
+    The fingerprint normalization is for matching only; stored and displayed evidence text is never altered.
+    Boundaries: parsing is t03; the incremental pipeline, parsed store layout and S3 publishing are t06;
+    position classification and landscape reports are E32; recipes that cite fingerprints are v1-e33-t01.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.evidence, debate_core.application, debate_cli, tests/smoke]
+    forbidden:
+      - Using the fingerprint normalization to rewrite, store or display evidence text
+      - Non-deterministic hashing (Python hash(), unseeded random) in fingerprints or MinHash permutations
+      - Printing debater names; team codes appear only behind an explicit --by-team flag per the data-use policy
+      - Model or embedding calls for deduplication
+      - Business logic in debate_cli (the command calls an application service)
+  context:
+    - kind: TaskRef
+      name: v1-e31-t03-debate-docx-parser
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Exact fingerprints are identical for the same card body with different tags, cites, highlighting,
+        smart vs straight quotes or whitespace, differ when a word of evidence changes, and carry a
+        fingerprint_version.
+    - id: ac2
+      description: >-
+        On the synthetic variant set (trimmed start/end, extra paragraph, OCR-style spacing, re-highlighted,
+        different card from the same article), near-duplicate clustering reaches precision at least 0.98 and
+        recall at least 0.90, and cluster ids are stable across runs and input order.
+    - id: ac3
+      description: >-
+        ABBREVIATED/CITE_ONLY cards link to a full card's cluster when short cite and first/last words match,
+        and remain unlinked (not guessed) when they don't.
+    - id: ac4
+      description: >-
+        Loading the same disclosure from three cumulative snapshots yields one occurrence with first_seen and
+        last_seen snapshots, and occurrence counts per cluster count distinct teams, not files.
+    - id: ac5
+      description: >-
+        `debate-research caselist cards --caselist hsld26 --parsed <dir> [--snapshot] [--top N] [--json]`
+        prints totals and the top clusters by distinct teams; a smoke check covers it on fixture JSONL.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t04-card-fingerprints-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Exact fingerprints first, then MinHash/LSH near-duplicate clusters, abbreviated-card linking, the
+    occurrence table across cumulative snapshots, and finally the statistics command with smoke checks.
+  goalRef:
+    name: v1-e31-t04-card-fingerprints
+  graph:
+    nodes:
+      - id: exact-fingerprint
+        kind: Task
+        name: Fingerprint normalization and exact hash
+        description: >-
+          CardFingerprint model and a pure function computing the matching-only normalization and sha256 of
+          the evidence body, with fingerprint_version and documented rules.
+        outputs:
+          - packages/debate_core/src/debate_core/domain/card_occurrence.py
+          - packages/debate_core/src/debate_core/evidence/fingerprints.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Exact fingerprint tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_fingerprints.py, -k, exact]
+      - id: near-duplicate-clusters
+        kind: Task
+        name: MinHash/LSH near-duplicate clustering
+        description: >-
+          Word 5-shingles, 128 seeded MinHash permutations and 32x4 LSH bands produce candidate buckets;
+          candidates are confirmed by Jaccard >= 0.8 or containment >= 0.9 and merged with union-find;
+          cluster id is the smallest exact fingerprint in the cluster. Thresholds live in settings.
+        dependsOn: [exact-fingerprint]
+        outputs:
+          - packages/debate_core/src/debate_core/evidence/near_duplicates.py
+          - tests/fixtures/fingerprints/variants.jsonl
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Near-duplicate precision/recall and stability tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_near_duplicates.py]
+      - id: abbreviated-linking
+        kind: Task
+        name: Link abbreviated and cite-only cards
+        description: >-
+          Key ABBREVIATED/CITE_ONLY cards by normalized short cite plus first and last words and attach them
+          to a full card's cluster only on an unambiguous match.
+        dependsOn: [near-duplicate-clusters]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Abbreviated linking tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_fingerprints.py, -k, abbreviated]
+      - id: occurrence-table
+        kind: Task
+        name: Occurrence table and statistics service
+        description: >-
+          CardOccurrence keyed by source sha256 + element index with disclosure metadata from the E30
+          SourceDocument/Disclosure and first/last seen snapshots; CaselistCardStatsService builds the table
+          from parsed-card JSONL and computes totals, duplicate rate and top clusters by distinct teams.
+        dependsOn: [abbreviated-linking]
+        outputs: [packages/debate_core/src/debate_core/application/caselist_card_stats.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Occurrence and statistics tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_card_stats.py]
+      - id: cards-cli-and-smoke
+        kind: Task
+        name: "`caselist cards` command, smoke check and gates"
+        description: >-
+          Thin Typer command in the caselist group with table and --json output, --by-team off by default, a
+          tests/smoke/ check over fixture JSONL, type check and import boundaries.
+        dependsOn: [occurrence-table]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/caselist_cards.py
+          - tests/smoke/test_caselist_cards.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_caselist_cards.py]
+          - type: test_passes
+            name: Smoke check passes
+            command: uv
+            args: [run, pytest, tests/smoke/test_caselist_cards.py]
+          - type: command_succeeds
+            name: Type check passes
+            command: uv
+            args: [run, pyright, packages/debate_core, packages/debate_cli]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

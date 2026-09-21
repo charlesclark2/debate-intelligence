@@ -570,17 +570,17 @@ the original source URL plus retrieval time for every assertion.
 
 # 18. Key Architecture Decisions (ADRs)
 
-| **Decision** | **Choice**                               | **Why**                                                                                                   |
-|--------------|------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| ADR-001      | Python domain core                       | Maximizes reuse across CLI, document parsing, retrieval, LLM, and API workers.                            |
-| ADR-002      | DynamoDB operational store               | Serverless, scalable, no warehouse dependency; access-pattern-driven design fits card/file/job workloads. |
-| ADR-003      | S3 source-of-truth for raw artifacts     | Cheap durable storage, versioning/hashes, separates blob lifecycle from metadata.                         |
-| ADR-004      | OpenSearch is derived, not authoritative | Enables BM25/vector retrieval without risking data loss if an index is rebuilt.                           |
-| ADR-005      | Bedrock behind ModelRouter               | AWS-native credentials/governance while preserving model portability.                                     |
-| ADR-006      | Exact-source evidence verification       | LLM can select but cannot author quoted evidence.                                                         |
-| ADR-007      | Argument graph before simulator          | Coverage, auditing, round state, and opponent prep all depend on structured debate semantics.             |
-| ADR-008      | No Neptune initially                     | DynamoDB adjacency is sufficient until V3 proves a need for complex graph traversal.                      |
-| ADR-009      | Async job architecture in V2             | Prevents article/file/LLM latency from coupling directly to browser request lifetimes.                    |
+| **Decision**                                                      | **Choice**                               | **Why**                                                                                                   |
+|-------------------------------------------------------------------|------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| [ADR-001](../adr/0001-python-domain-core.md)                      | Python domain core                       | Maximizes reuse across CLI, document parsing, retrieval, LLM, and API workers.                            |
+| [ADR-002](../adr/0002-dynamodb-operational-store.md)              | DynamoDB operational store               | Serverless, scalable, no warehouse dependency; access-pattern-driven design fits card/file/job workloads. |
+| [ADR-003](../adr/0003-s3-source-of-truth-for-raw-artifacts.md)    | S3 source-of-truth for raw artifacts     | Cheap durable storage, versioning/hashes, separates blob lifecycle from metadata.                         |
+| [ADR-004](../adr/0004-opensearch-is-derived-not-authoritative.md) | OpenSearch is derived, not authoritative | Enables BM25/vector retrieval without risking data loss if an index is rebuilt.                           |
+| [ADR-005](../adr/0005-bedrock-behind-model-router.md)             | Bedrock behind ModelRouter               | AWS-native credentials/governance while preserving model portability.                                     |
+| [ADR-006](../adr/0006-exact-source-evidence-verification.md)      | Exact-source evidence verification       | LLM can select but cannot author quoted evidence.                                                         |
+| [ADR-007](../adr/0007-argument-graph-before-simulator.md)         | Argument graph before simulator          | Coverage, auditing, round state, and opponent prep all depend on structured debate semantics.             |
+| [ADR-008](../adr/0008-no-neptune-initially.md)                    | No Neptune initially                     | DynamoDB adjacency is sufficient until V3 proves a need for complex graph traversal.                      |
+| [ADR-009](../adr/0009-async-job-architecture.md)                  | Async job architecture in V2             | Prevents article/file/LLM latency from coupling directly to browser request lifetimes.                    |
 
 # 19. Risks and Mitigations
 

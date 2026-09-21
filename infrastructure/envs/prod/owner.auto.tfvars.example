@@ -1,0 +1,21 @@
+# Copy to owner.auto.tfvars, which is gitignored and loaded automatically. It carries the
+# maintainer's email and Identity Center user name, which the task spec keeps out of the
+# repository.
+owner = "you@example.com"
+
+# Identity Center user names assigned this environment's SitePublisher permission set, which is
+# what `scripts/site_deploy.sh` publishes with (v1-e36-t05-site-deploy). Adult maintainers only.
+# Leave it empty and the permission set exists but nobody can assume it.
+site_publisher_user_names = ["your-identity-center-user-name"]
+
+# Identity Center user names assigned this environment's evidence permission sets
+# (v1-e29-t03-evidence-buckets). Adult maintainers only.
+#
+# EvidenceOperator is everyday work — list, read, publish, use the key, and no delete at all. It
+# is what `debate-research store sync|ls|get` runs as.
+evidence_operator_user_names = ["your-identity-center-user-name"]
+
+# EvidenceRemoval is takedowns under docs/policies/caselist-data-use.md and nothing else. Exactly
+# one name: the module refuses a second, because a removal purges noncurrent versions and there is
+# nothing left to restore from. Leave it empty and no one can run a takedown.
+evidence_removal_user_names = ["your-identity-center-user-name"]

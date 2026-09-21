@@ -1,0 +1,243 @@
+# TASK v1-e30-t03-archive-importer — Weekly archive importer
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §6 OpponentIntelService, §8 provenance/hashes, §9 opponent data, §14, §16
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t03-archive-importer
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: Weekly archive importer
+    debate/architecture-refs: §6, §8, §9, §14, §16
+spec:
+  description: >-
+    Ship `debate-research caselist import <zip|dir> --caselist <slug> --snapshot <date>`, which turns one
+    weekly OpenCaselist open-source archive (e.g. hsld26-0915) into deduplicated SourceDocuments and
+    Disclosures in the local evidence store. Paths follow
+    <snapshot>/<School>/<TeamCode>/<School>-<TeamCode>-<Side>-<Tournament>-<Round>.docx; the School and
+    TeamCode come from directories, and the filename is parsed around the side token (Aff/Neg, AFF,
+    Affirmative, Pro/Con for PF), tolerating hyphenated tournaments, a missing round, "(1)" or "-2"
+    re-upload suffixes, and .doc/.pdf files. Files are hashed (sha256) and stored once in the
+    content-addressed SnapshotStore; because archives are cumulative, each file is classified against
+    earlier snapshots as NEW, UNCHANGED (carried forward), CHANGED (same disclosure path, new content),
+    DUPLICATE (same content under another path) or REMOVED (absent from this snapshot). PDFs and .doc
+    files are stored as unparsed sources. A JSONL manifest is written per snapshot and the command reports
+    counts. The service lives in debate_core.application; the CLI only wires and renders. Boundaries:
+    OpenEv camp files are t04, S3 publishing t05, the real-corpus backfill t06, DOCX parsing E31, API
+    download E34. Members whose sha256 is on the removal suppression list are skipped and counted as
+    SUPPRESSED (the list and its check are implemented in t07).
+  priority: 1
+  constraints:
+    packages:
+      - debate_core.application
+      - debate_core.domain
+      - debate_core.integrations.local
+      - debate_cli
+      - tests/fixtures/caselist
+      - tests/smoke
+    forbidden:
+      - Real caselist files, real school names or debater initials in fixtures, tests or logs
+      - Committing the coach's downloads (~/Documents/debate/...) or any part of them
+      - Hardcoding caselist slugs; the slug is always an input
+      - Extracting archive members outside the staging directory (zip-slip) or following symlinks
+      - Modifying source file bytes; blobs are stored exactly as downloaded
+      - Network calls or model calls in the importer or its tests
+      - Business logic in debate_cli; importing typer in debate_core
+  context:
+    - kind: TaskRef
+      name: v1-e30-t02-caselist-domain-model
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t03-local-repositories
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t07-cli-skeleton
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t05-settings-config
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The filename parser extracts School, TeamCode, Side, Tournament and Round for the canonical pattern
+        and for every odd case in the synthetic fixture (missing round, side spelled Aff/AFF/Affirmative/
+        Pro/Con, hyphenated tournament, re-upload suffix, .doc/.pdf, filename prefix not matching the
+        directory); an unparseable name yields a Disclosure with Side UNKNOWN and a warning, never a drop.
+    - id: ac2
+      description: >-
+        Importing the three synthetic cumulative snapshots in order stores each distinct file once (blob
+        count equals distinct sha256 count) and reports NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts that
+        match the fixture's expected summary exactly.
+    - id: ac3
+      description: >-
+        Re-importing the same snapshot is a no-op: identical manifest bytes and nothing newly stored.
+        Classification counts describe the archive against the latest snapshot strictly earlier than it, so
+        they are a property of the archive and do not change between runs - which is what makes the manifest
+        byte-identical, and which is why a re-import's NEW count is not zero. What is zero on a second run is
+        what the run wrote. Importing a snapshot older than the latest one already imported is refused unless
+        --allow-out-of-order is given.
+    - id: ac4
+      description: >-
+        The object key manifests/<caselist>/<snapshot>.jsonl in the evidence object store - which is the
+        bucket key t05 publishes, and <data_dir>/objects/manifests/... on local disk, because that is where
+        FsEvidenceObjectStore roots named objects - has one schema-versioned row per archive member
+        (relative path, sha256, size, format, classification, parsed School/TeamCode/Side/Tournament/Round,
+        warnings), sorted by path, and a trailing summary row.
+    - id: ac5
+      description: >-
+        Archive members outside the staging root, symlinks, __MACOSX/, .DS_Store and ~$ Word lock files are
+        skipped with a counted reason, and a zip over the configured size limit is rejected before unpacking.
+    - id: ac6
+      description: >-
+        `debate-research caselist import` prints a Rich summary table (or JSON with --json), supports
+        --dry-run (no writes), and logs at INFO only counts, the caselist slug and the snapshot date. No
+        path, school, team code, filename or file content reaches a log record, an error message or a
+        traceback: docs/policies/caselist-data-use.md rule 4 governs, and a relative archive path is
+        <School>/<TeamCode>/<filename>, which is all three forbidden things at once.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t03-archive-importer-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Build the synthetic fixture first so every later step is test-driven, then the filename parser, the
+    safe archive reader, the import service with cumulative dedupe, and the manifest plus CLI.
+  goalRef:
+    name: v1-e30-t03-archive-importer
+  graph:
+    nodes:
+      - id: synthetic-fixture
+        kind: Task
+        name: Synthetic cumulative archive fixture
+        description: >-
+          A builder that generates three tiny cumulative snapshots (testcl26-0901/0908/0915) with fake
+          schools and team codes (e.g. "Maple Grove", "QX"), a few-KB generated .docx files, one .pdf, one
+          .doc, a re-upload, a same-content copy, a file removed in the last week, the odd filenames listed
+          in ac1 and junk members (__MACOSX, lock file, path-traversal entry), plus expected_summary.json.
+        outputs:
+          - tests/fixtures/caselist/build_synthetic_archives.py
+          - tests/fixtures/caselist/expected_summary.json
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Expected summary committed
+            path: tests/fixtures/caselist/expected_summary.json
+            contentMatch: "testcl26"
+          - type: test_passes
+            name: Fixture builder is deterministic
+            command: uv
+            args: [run, pytest, tests/fixtures/caselist/test_build_synthetic_archives.py]
+      - id: filename-parser
+        kind: Task
+        name: Path and filename parser
+        description: >-
+          Pure function mapping a relative archive path to School, TeamCode, Side, Tournament, RoundLabel
+          and warnings: take School/TeamCode from directories, strip the "<School>-<TeamCode>-" prefix,
+          anchor on the side token, split tournament and round, normalize round labels, detect re-upload
+          suffixes and classify the extension.
+        dependsOn: [synthetic-fixture]
+        outputs: [packages/debate_core/src/debate_core/application/caselist/path_parser.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Filename parser table tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist/test_path_parser.py]
+      - id: archive-reader
+        kind: Task
+        name: Safe zip/directory reader
+        description: >-
+          Iterate members of a zip or an unpacked directory with a size limit from settings, zip-slip and
+          symlink protection, junk-member skipping with reasons, and streamed sha256 hashing.
+        dependsOn: [synthetic-fixture]
+        outputs: [packages/debate_core/src/debate_core/integrations/local/archive_reader.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Archive reader safety tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/local/test_archive_reader.py]
+      - id: import-service
+        kind: Task
+        name: Import service with cumulative dedupe and SQLite repository
+        description: >-
+          CaselistImportService classifies each member against the latest earlier snapshot
+          (NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED), stores blobs via SnapshotStore, updates first/last
+          seen, records Disclosures, enforces snapshot ordering and idempotent re-import; the SQLite
+          CaselistRepository adapter (with migration) implements the t02 port.
+        dependsOn: [filename-parser, archive-reader]
+        outputs:
+          - packages/debate_core/src/debate_core/application/caselist/import_service.py
+          - packages/debate_core/src/debate_core/integrations/local/sqlite_caselist_repository.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cumulative import tests match expected summary
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist/test_import_service.py]
+          - type: test_passes
+            name: SQLite caselist repository tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/integrations/local/test_sqlite_caselist_repository.py
+      - id: manifest-and-cli
+        kind: Task
+        name: JSONL manifest writer and caselist import command
+        description: >-
+          Deterministic, schema-versioned manifest writer; the Typer `caselist import` command with
+          --caselist, --snapshot, --dry-run, --allow-out-of-order and --json, rendering the summary table.
+        dependsOn: [import-service]
+        outputs:
+          - packages/debate_core/src/debate_core/application/caselist/manifest.py
+          - packages/debate_cli/src/debate_cli/commands/caselist.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Manifest and CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_caselist_import.py]
+          - type: command_succeeds
+            name: Command is registered
+            command: uv
+            args: [run, debate-research, caselist, import, --help]
+      - id: smoke-and-gates
+        kind: Task
+        name: Smoke check and quality gates
+        description: >-
+          Add a tests/smoke check that imports the synthetic snapshots into a temp data dir and asserts the
+          summary; run type check, lint and import boundaries.
+        dependsOn: [manifest-and-cli]
+        outputs: [tests/smoke/test_caselist_import_smoke.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist import smoke check passes
+            command: uv
+            args: [run, pytest, tests/smoke/test_caselist_import_smoke.py]
+          - type: command_succeeds
+            name: Type check passes
+            command: uv
+            args: [run, pyright, packages/debate_core, packages/debate_cli]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

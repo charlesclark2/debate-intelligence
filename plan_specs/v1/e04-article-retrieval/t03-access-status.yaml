@@ -1,5 +1,5 @@
 # TASK v1-e04-t03-access-status — Access-status and paywall detection
-# Epic: E04 Article Retrieval & Extraction | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E04 Article Retrieval & Extraction | Release: v1.3 (URL → verified card) | Major: V1
 # Architecture refs: §6 ArticleService (detect paywall/retrieval failures), §8 hard failure rule, §14, §19
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e04-article-retrieval
   annotations:
     debate/title: Access-status and paywall detection
@@ -68,7 +68,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.3
     debate/epic: v1-e04-article-retrieval
 spec:
   description: >-

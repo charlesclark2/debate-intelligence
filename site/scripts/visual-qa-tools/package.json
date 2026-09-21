@@ -1,0 +1,14 @@
+{
+  "name": "debate-site-visual-qa-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The headless browser and the scorer behind site/scripts/visual-qa.mjs. A separate package on purpose: these are hundreds of megabytes and need the network, and site/package.json has to stay installable offline and in seconds for lint, test and build (docs/process/working-agreements.md, CI budget). Installed once by the operator; see 'Pre-launch visual QA' in site/README.md.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "lighthouse": "latest",
+    "playwright": "latest"
+  }
+}

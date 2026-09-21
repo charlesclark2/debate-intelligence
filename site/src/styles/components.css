@@ -1,0 +1,262 @@
+/* Button, Card, the in-text call to action, and Prose. */
+
+/*
+ * Actions.
+ *
+ * Four states, all drawn from tokens: rest, hover, :focus-visible and :active. They are
+ * deliberately different from each other in more than one way, because a parent using the site on
+ * a phone in a school car park should not have to judge a 5% colour shift to know a button
+ * responded. Hover changes the fill, :active presses the button 1px into the page, and
+ * :focus-visible draws the site's one focus ring, unchanged from v1-e36-t03.
+ *
+ * The 44px minimum target from WCAG 2.1 SC 2.5.5 is set on both axes and survives every padding
+ * change below; tests/design-system.test.tsx asserts it from this file.
+ */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-small);
+  border: 2px solid transparent;
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-transition) var(--easing-standard),
+    border-color var(--duration-transition) var(--easing-standard),
+    color var(--duration-transition) var(--easing-standard);
+}
+
+/* The hero action. Still one line of bold text, just given the room its job deserves. */
+.button--large {
+  min-height: 52px;
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--font-size-lead);
+}
+
+/* The press. Not transitioned: a delayed press reads as lag rather than as feedback. */
+.button:active {
+  transform: translateY(1px);
+}
+
+/* White on navy measures 12.71:1. */
+.button--primary {
+  background-color: var(--color-brand-navy);
+  border-color: var(--color-brand-navy);
+  color: var(--color-text-inverse);
+}
+
+/* White on the accent measures 8.04:1. */
+.button--primary:hover {
+  background-color: var(--color-brand-accent);
+  border-color: var(--color-brand-accent);
+  color: var(--color-text-inverse);
+}
+
+.button--primary:active {
+  background-color: var(--color-brand-navy);
+  border-color: var(--color-brand-navy);
+}
+
+/* Navy on white measures 12.71:1. */
+.button--secondary {
+  background-color: var(--color-surface);
+  border-color: var(--color-brand-navy);
+  color: var(--color-brand-navy);
+}
+
+/* Navy on the panel tint measures 11.02:1. */
+.button--secondary:hover {
+  background-color: var(--color-surface-panel);
+  border-color: var(--color-brand-accent);
+  color: var(--color-brand-navy);
+}
+
+.button--secondary:active {
+  background-color: var(--color-surface-panel);
+  border-color: var(--color-brand-navy);
+}
+
+/*
+ * Actions on navy. The navy fill would vanish into an inverse band, so the primary action
+ * inverts: a white button with a navy label (12.71:1), hovering to the panel tint (11.02:1). The
+ * focus ring inverts with it, to light blue on navy (6.51:1), through the rule in sections.css.
+ */
+.section--inverse .button--primary {
+  background-color: var(--color-surface);
+  border-color: var(--color-surface);
+  color: var(--color-brand-navy);
+}
+
+.section--inverse .button--primary:hover {
+  background-color: var(--color-surface-panel);
+  border-color: var(--color-surface-panel);
+  color: var(--color-brand-navy);
+}
+
+.section--inverse .button--secondary {
+  background-color: transparent;
+  border-color: var(--color-brand-light);
+  color: var(--color-text-inverse);
+}
+
+.section--inverse .button--secondary:hover {
+  background-color: var(--color-brand-accent);
+  border-color: var(--color-brand-light);
+  color: var(--color-text-inverse);
+}
+
+/*
+ * The in-text call to action: a link that ends a card or a section and points further into the
+ * site. The chevron is a rotated border rather than an icon font or an SVG sprite, so nothing is
+ * fetched, and it is aria-hidden by being drawn in CSS at all: a screen reader reads the label.
+ * It nudges forward on hover, which is the only movement the design pass adds.
+ */
+.link-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
+.link-cta::after {
+  content: "";
+  width: 0.4em;
+  height: 0.4em;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--duration-transition) var(--easing-standard);
+}
+
+.link-cta:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.link-cta:hover::after {
+  transform: translateX(3px) rotate(45deg);
+}
+
+/*
+ * A card. It is a column so that a card with more copy than its neighbour still puts its call to
+ * action on the same baseline as the rest of the row.
+ */
+.card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--color-surface-panel);
+  border-radius: var(--radius-medium);
+  padding: var(--space-5);
+}
+
+/* The warm accent reaches only 3.63:1 on the panel tint, so it is used as a non-text rule, which
+   WCAG 2.1 asks to clear 3:1, and never as small text. */
+.card__title {
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 3px solid var(--color-brand-warm);
+}
+
+.card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.card__body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Pushes a trailing call to action to the foot of the card. */
+.card__body > .link-cta:last-child {
+  margin-top: auto;
+}
+
+/* A card sitting on the panel tint would disappear, so there it takes the white surface. */
+.section--tinted .card {
+  background-color: var(--color-surface);
+}
+
+.prose {
+  max-width: var(--layout-prose-width);
+}
+
+.prose > :last-child {
+  margin-bottom: 0;
+}
+
+.prose h2 {
+  margin-top: var(--space-6);
+}
+
+.prose h3 {
+  margin-top: var(--space-5);
+}
+
+.prose li {
+  margin-bottom: var(--space-2);
+}
+
+/*
+ * A table in a Markdown page. The practice times on the join page are the only one on the site,
+ * and unstyled it read as two columns of floating text: no rule under the header, no line between
+ * the rows, and the "Where" column drifting away from the "When" it belonged to.
+ *
+ * Borders on the cells rather than on the table, collapsed, so every cell is boxed and a reader's
+ * eye cannot slide from one row into the next. The header row takes the panel tint, which is the
+ * same surface a card sits on. It is set to the full width of the measure so the columns do not
+ * depend on how long the longest cell happens to be.
+ */
+.prose table {
+  width: 100%;
+  margin: 0 0 var(--space-4);
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.prose th,
+.prose td {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.prose th {
+  background-color: var(--color-surface-panel);
+  color: var(--color-text-heading);
+}
+
+.prose blockquote {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 4px solid var(--color-brand-accent);
+}
+
+/*
+ * A fact Charlie has not supplied yet, written into the copy as [[TBD]] or [[TBD: note]] and
+ * rendered by src/lib/content.ts. It is styled to be impossible to miss on a dev preview, which
+ * is how the gaps get found during review; a prod build never reaches this rule, because
+ * src/lib/publishing-policy.ts fails the build while any placeholder remains.
+ *
+ * Body grey on the panel tint is 6.01:1, so the badge meets AA for normal text. The warm accent
+ * is used for the border only, which needs 3:1. See tests/tokens.test.ts.
+ */
+.placeholder {
+  display: inline-block;
+  padding: 0 var(--space-2);
+  border: 2px dashed var(--color-brand-warm);
+  border-radius: var(--radius-small);
+  background: var(--color-surface-panel);
+  color: var(--color-text-body);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}

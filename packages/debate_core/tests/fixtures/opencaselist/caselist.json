@@ -1,0 +1,12 @@
+{
+  "caselist_id": 9001,
+  "name": "testcl26",
+  "slug": "/testcl26",
+  "display_name": "Synthetic Test Caselist 2026-27",
+  "event": "ld",
+  "level": "hs",
+  "team_size": 1,
+  "year": 2026,
+  "archived": false,
+  "field_added_by_a_later_api_version": "ignored"
+}

@@ -1,5 +1,5 @@
 # EPIC E07 — Discovery Provider Adapters
-# Major version: V1 | Release: v1.2 (Federated research from the CLI)
+# Major version: V1 | Release: v1.4 (Federated research from the CLI)
 # Architecture refs: §9 Discovery adapters, §15, §19, §20 step 4
 # Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
 ---
@@ -11,7 +11,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e07-discovery-adapters
   annotations:
     debate/title: E07 — Discovery Provider Adapters
@@ -20,10 +20,10 @@ spec:
   description: >-
     Implement free/low-cost scholarly, news and government discovery providers behind one SearchProvider
     contract with health checks and recorded-fixture tests.
-  priority: 3
+  priority: 5
   constraints:
     majorVersion: v1
-    release: v1.2
+    release: v1.4
     rule: Every task in this epic ships in this release; no task crosses major versions.
   acceptanceCriteria:
   - id: ac1
@@ -45,7 +45,7 @@ metadata:
   labels:
     planspec.io/kind: epic
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e07-discovery-adapters
 spec:
   description: >-
@@ -68,7 +68,7 @@ spec:
       kind: External
       name: 'Prerequisite from E06: CitationService with per-field provenance'
       description: >-
-        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.1).
+        Cross-epic prerequisite owned by v1-e06-card-cutting (release v1.3).
       inputs:
         goalRef: v1-e06-t01-citation-service
         specRef: plan_specs/v1/e06-card-cutting/t01-citation-service.yaml

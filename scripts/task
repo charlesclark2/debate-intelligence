@@ -1,0 +1,503 @@
+#!/usr/bin/env bash
+# Task lifecycle CLI for the Debate Intelligence Platform.
+#
+#   scripts/task ready [--all]              list tasks whose prerequisites are all Succeeded (on origin/dev),
+#                                           hiding ones already started (a task/<name> branch exists)
+#   scripts/task start  <task> [--launch vscode|terminal|none] [--no-launch] [--force]
+#                                           worktree + task/<task> branch off origin/dev, mark InProgress,
+#                                           create the session report, open the Claude session with the
+#                                           kickoff prompt (VS Code window by default)
+#   scripts/task resume <task> [--launch vscode|terminal]
+#                                           reopen the task's worktree / Claude session
+#   scripts/task prompt <task>              print the kickoff prompt again (and copy it to the clipboard)
+#   scripts/task list                       active task worktrees with phase, PM verdict and PR state
+#   scripts/task report <task>              print the session report (and copy it to the clipboard)
+#   scripts/task review <task>              commits, diffstat and verdict vs origin/dev (for PM review)
+#   scripts/task sync   <task>              rebase the task branch onto the latest origin/dev
+#   scripts/task pr     <task> [--partial] [--force]
+#                                           after PM verdict ACCEPTED: checks, push, open PR into dev
+#                                           --partial: the session's work is done and reviewed, but the
+#                                           Goal stays InProgress because criteria that only the operator
+#                                           can close are still open. Verdict must still be ACCEPTED.
+#   scripts/task finish <task> [--partial] [--abandon] [--force]
+#                                           after the PR is merged: remove worktree + local/remote branch
+#
+# Full workflow: docs/process/task-workflow.md
+# Environment: DEBATE_WORKTREES overrides the worktree parent directory
+#              (default: <repo parent>/debate-intelligence-worktrees).
+#              DEBATE_TASK_LAUNCHER sets the default launcher: vscode (default), terminal or none.
+# Portable to macOS bash 3.2: no associative arrays, mapfile or ${var,,}.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HELPER="$SCRIPT_DIR/task_helper.py"
+
+die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
+info() { printf '==> %s\n' "$*"; }
+warn() { printf 'warning: %s\n' "$*" >&2; }
+has()  { command -v "$1" >/dev/null 2>&1; }
+
+has git || die "git is required"
+has uv  || die "uv is required (https://docs.astral.sh/uv/)"
+
+COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+  || die "run this from inside the debate-intelligence repository"
+REPO_ROOT="$(dirname "$COMMON_DIR")"
+WT_BASE="${DEBATE_WORKTREES:-$(dirname "$REPO_ROOT")/debate-intelligence-worktrees}"
+
+git_root() { git -C "$REPO_ROOT" "$@"; }
+helper()   { local dir="$1"; shift; (cd "$dir" && uv run --quiet "$HELPER" "$@"); }
+
+validate_name() {
+  [ -n "${1:-}" ] || die "missing <task> argument (e.g. v1-e01-t03-uv-workspace-tooling)"
+  case "$1" in
+    v[0-9]-e[0-9][0-9]-t[0-9][0-9]-*) ;;
+    *) die "'$1' is not a task name (expected v<major>-e<NN>-t<NN>-<slug>); see: scripts/task ready" ;;
+  esac
+}
+wt_path()  { printf '%s/%s' "$WT_BASE" "$1"; }
+branch()   { printf 'task/%s' "$1"; }
+need_wt()  { [ -d "$(wt_path "$1")" ] || die "no worktree for $1 at $(wt_path "$1")"; }
+is_clean() { [ -z "$(git -C "$1" status --porcelain)" ]; }
+
+remote_web_url() {
+  local url; url="$(git_root remote get-url origin)"
+  url="${url%.git}"
+  case "$url" in
+    git@github.com:*) url="https://github.com/${url#git@github.com:}" ;;
+  esac
+  printf '%s' "$url"
+}
+
+ensure_local_excludes() {
+  local ex="$COMMON_DIR/info/exclude"
+  mkdir -p "$(dirname "$ex")"
+  grep -qx '.task/' "$ex" 2>/dev/null || printf '.task/\n' >> "$ex"
+}
+
+LAUNCHER_DEFAULT="${DEBATE_TASK_LAUNCHER:-vscode}"
+
+check_launcher() {
+  case "$1" in vscode|terminal|none) ;; *) die "unknown launcher '$1' (use vscode, terminal or none)" ;; esac
+}
+
+copy_prompt() { # <worktree> -> 0 if the prompt is now on the clipboard
+  if has pbcopy; then pbcopy < "$1/.task/prompt.md"; return 0; fi
+  return 1
+}
+
+open_vscode() { # <worktree>
+  if has code; then
+    code -n "$1"
+  elif has open && [ -d "/Applications/Visual Studio Code.app" ]; then
+    open -na "Visual Studio Code" --args "$1"
+  else
+    warn "could not find VS Code (Command Palette > \"Shell Command: Install 'code' command in PATH\")"
+    printf 'Open this folder in VS Code yourself: %s\n' "$1"
+  fi
+}
+
+launch_session() { # <launcher> <worktree> <start|resume>
+  local launcher="$1" wt="$2" mode="$3" task
+  task="$(basename "$wt")"
+  case "$launcher" in
+    vscode)
+      info "Opening $wt in a new VS Code window"
+      open_vscode "$wt"
+      if [ "$mode" = "start" ]; then
+        if copy_prompt "$wt"; then
+          printf '\nThe kickoff prompt is on your clipboard.\n'
+        else
+          printf '\nCopy the kickoff prompt from: %s/.task/prompt.md\n' "$wt"
+        fi
+        printf 'In the new VS Code window (title: %s):\n' "$task"
+        printf '  1. Open Claude Code (Cmd+Esc, or the Claude icon in the editor toolbar).\n'
+        printf '  2. Paste the prompt (Cmd+V) and press Enter.\n'
+      else
+        printf '\nIn that window, open Claude Code and continue this task'"'"'s conversation from the\n'
+        printf 'past-conversations list, or start a new one with: scripts/task prompt %s\n' "$task"
+      fi ;;
+    terminal)
+      if has claude; then
+        if [ "$mode" = "start" ]; then
+          cd "$wt" && exec claude "$(cat "$wt/.task/prompt.md")"
+        else
+          cd "$wt" && exec claude --continue
+        fi
+      else
+        warn "the 'claude' CLI was not found on PATH; using VS Code instead"
+        launch_session vscode "$wt" "$mode"
+      fi ;;
+    none)
+      printf '\nNot launching. Prompt: %s/.task/prompt.md (scripts/task prompt %s)\n' "$wt" "$task" ;;
+  esac
+}
+
+spec_phase_on_dev() { # <spec path> -> phase recorded on origin/dev (empty if absent)
+  git_root show "origin/dev:$1" 2>/dev/null | awk '/^status:$/ { getline; print $2; exit }'
+}
+
+pr_state() { # <task> -> MERGED|OPEN|CLOSED|NONE|UNKNOWN
+  if has gh; then
+    (cd "$REPO_ROOT" && gh pr view "$(branch "$1")" --json state -q .state 2>/dev/null) || printf 'NONE'
+  else
+    printf 'UNKNOWN'
+  fi
+}
+
+# ---------------------------------------------------------------------------------------------
+
+cmd_ready() {
+  local all=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --all) all=1 ;;
+      *) die "unknown option $1 (ready takes only --all)" ;;
+    esac; shift
+  done
+  info "Fetching origin/dev"
+  git_root fetch --quiet --prune origin
+  local tmp; tmp="$(mktemp -d)"
+  git_root archive origin/dev plan_specs docs/process | tar -x -C "$tmp"
+  # Tasks already started: a local task/<name> branch (with or without a worktree) or a pushed
+  # origin/task/<name> branch (PR open, not merged yet). origin/dev still says Pending for these.
+  local started
+  started="$( { git_root for-each-ref --format='%(refname:strip=2)' refs/heads/task/
+                git_root for-each-ref --format='%(refname:strip=3)' refs/remotes/origin/task/; } \
+              | sed 's#^task/##' | sort -u | tr '\n' ' ' )"
+  local rows; rows="$(helper "$tmp" ready)"
+  rm -rf "$tmp"
+  printf 'Tasks on origin/dev whose prerequisites are all Succeeded'
+  [ "$all" -eq 1 ] && printf ' (including started ones)'
+  printf ':\n\n'
+  printf '%s\n' "$rows" | awk -F '\t' -v started="$started" -v all="$all" '
+    BEGIN { n = split(started, s, " "); for (i = 1; i <= n; i++) if (s[i] != "") busy[s[i]] = 1 }
+    NF == 0 { next }
+    busy[$2] && !all { hidden++; next }
+    { printf "  %-5s %-48s %s%s\n", $1, $2, $3, (busy[$2] ? "  [started]" : "") }
+    END {
+      if (hidden) printf "\n(%d already started, hidden: see scripts/task list, or scripts/task ready --all)\n", hidden
+    }'
+  printf '\nStart one with: scripts/task start <task>\n'
+}
+
+cmd_start() {
+  local task="" launcher="$LAUNCHER_DEFAULT" force=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-launch) launcher=none ;;
+      --launch) [ $# -gt 1 ] || die "--launch needs vscode, terminal or none"; launcher="$2"; shift ;;
+      --launch=*) launcher="${1#--launch=}" ;;
+      --force) force=1 ;;
+      -*) die "unknown option $1" ;;
+      *) task="$1" ;;
+    esac; shift
+  done
+  validate_name "$task"
+  check_launcher "$launcher"
+  local wt br; wt="$(wt_path "$task")"; br="$(branch "$task")"
+
+  [ -e "$wt" ] && die "worktree already exists: $wt (use: scripts/task resume $task)"
+  git_root show-ref --verify --quiet "refs/heads/$br" && die "branch $br already exists locally"
+
+  info "Fetching origin/dev"
+  git_root fetch --quiet origin dev
+  git_root ls-remote --exit-code --heads origin "$br" >/dev/null 2>&1 \
+    && die "branch $br already exists on origin; finish or delete it first"
+
+  mkdir -p "$WT_BASE"
+  ensure_local_excludes
+  info "Creating worktree $wt on $br (from origin/dev)"
+  git_root worktree add --quiet -b "$br" "$wt" origin/dev
+
+  local spec title
+  IFS=$'\t' read -r spec title _ _ _ < <(helper "$wt" info "$task") \
+    || { git_root worktree remove --force "$wt"; git_root branch -D "$br" >/dev/null; exit 1; }
+
+  info "Prerequisites"
+  if ! helper "$wt" prereqs "$task"; then
+    if [ "$force" -eq 1 ]; then
+      warn "starting despite unmet prerequisites (--force)"
+    else
+      git_root worktree remove --force "$wt"
+      git_root branch -D "$br" >/dev/null
+      die "prerequisites are not Succeeded on origin/dev; nothing was created (override with --force)"
+    fi
+  fi
+
+  helper "$wt" set-phase "$task" InProgress
+  local report; report="$(helper "$wt" new-report "$task")"
+  git -C "$wt" add "$spec" "$report"
+  git -C "$wt" commit --quiet -m "Start $task" -m "Set Goal status to InProgress and create $report."
+
+  mkdir -p "$wt/.task"
+  helper "$wt" prompt "$task" "$wt" > "$wt/.task/prompt.md"
+
+  # A fresh worktree gets its own .venv, and uv does not install the workspace packages into it
+  # until asked, so `import debate_core` fails until this runs. v1-e30-t03 lost time to it before
+  # working out that the venv, not the code, was the problem. It is seconds from a warm uv cache.
+  info "Syncing the workspace venv (uv sync --all-packages)"
+  if ! (cd "$wt" && uv sync --quiet --all-packages); then
+    warn "uv sync failed; run 'uv sync --all-packages' in $wt before the session starts"
+  fi
+
+  cat <<EOF
+
+Task:      $task — $title
+Worktree:  $wt
+Branch:    $br
+Spec:      $spec
+Report:    $report
+Prompt:    $wt/.task/prompt.md
+
+Next: the Claude session implements the task and fills in the report.
+Then hand the report to the PM:   scripts/task report $task
+After the PM verdict is ACCEPTED: scripts/task pr $task
+EOF
+  if [ -d "$wt/site" ]; then
+    cat <<'EOF'
+Touching site/? Two one-time steps this worktree does not inherit:
+  pnpm --dir site install
+  pnpm --dir site/scripts/visual-qa-tools install   # only before `pnpm --dir site qa`; ~300MB
+
+EOF
+  fi
+  launch_session "$launcher" "$wt" start
+}
+
+cmd_resume() {
+  local task="" launcher="$LAUNCHER_DEFAULT"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --launch) [ $# -gt 1 ] || die "--launch needs vscode or terminal"; launcher="$2"; shift ;;
+      --launch=*) launcher="${1#--launch=}" ;;
+      -*) die "unknown option $1" ;;
+      *) task="$1" ;;
+    esac; shift
+  done
+  validate_name "$task"; need_wt "$task"; check_launcher "$launcher"
+  launch_session "$launcher" "$(wt_path "$task")" resume
+}
+
+cmd_prompt() {
+  validate_name "${1:-}"; need_wt "$1"
+  cat "$(wt_path "$1")/.task/prompt.md"
+  if copy_prompt "$(wt_path "$1")"; then printf '\n(copied to clipboard)\n' >&2; fi
+}
+
+cmd_list() {
+  local found=0 path br task
+  printf '%-48s %-11s %-18s %s\n' TASK PHASE PM_VERDICT PR
+  while read -r key val; do
+    case "$key" in
+      worktree) path="$val" ;;
+      branch)
+        br="${val#refs/heads/}"
+        case "$br" in
+          task/*)
+            task="${br#task/}"; found=1
+            local phase verdict
+            phase="$(helper "$path" info "$task" 2>/dev/null | cut -f5)"; phase="${phase:-?}"
+            verdict="$(helper "$path" verdict "$task" 2>/dev/null || printf '?')"
+            is_clean "$path" || phase="$phase*"
+            printf '%-48s %-11s %-18s %s\n' "$task" "$phase" "$verdict" "$(pr_state "$task")"
+            ;;
+        esac ;;
+    esac
+  done < <(git_root worktree list --porcelain)
+  [ "$found" -eq 1 ] || printf '(no active task worktrees)\n'
+  printf '\n* = uncommitted changes in the worktree\n'
+}
+
+cmd_report() {
+  validate_name "${1:-}"; need_wt "$1"
+  local rep; rep="$(wt_path "$1")/docs/session-reports/$1.md"
+  [ -f "$rep" ] || die "no session report at $rep"
+  cat "$rep"
+  if has pbcopy; then pbcopy < "$rep"; printf '\n(copied to clipboard)\n' >&2; fi
+  printf '\nReport file: %s\n' "$rep" >&2
+}
+
+cmd_review() {
+  validate_name "${1:-}"; need_wt "$1"
+  local wt; wt="$(wt_path "$1")"
+  git_root fetch --quiet origin dev
+  printf 'Task %s\nWorktree %s\nPM verdict: %s\n' "$1" "$wt" "$(helper "$wt" verdict "$1")"
+  is_clean "$wt" || printf '\nUNCOMMITTED CHANGES:\n%s\n' "$(git -C "$wt" status --short)"
+  printf '\nCommits on %s not on origin/dev:\n' "$(branch "$1")"
+  git -C "$wt" log --oneline origin/dev..HEAD
+  printf '\nFiles changed:\n'
+  git -C "$wt" diff --stat origin/dev...HEAD
+}
+
+cmd_sync() {
+  validate_name "${1:-}"; need_wt "$1"
+  local wt; wt="$(wt_path "$1")"
+  is_clean "$wt" || die "commit or stash changes in $wt first"
+  git_root fetch --quiet origin dev
+  info "Rebasing $(branch "$1") onto origin/dev"
+  git -C "$wt" rebase origin/dev || die "rebase stopped on conflicts; resolve them in $wt (or have the session do it), then 'git rebase --continue'"
+  if git_root ls-remote --exit-code --heads origin "$(branch "$1")" >/dev/null 2>&1; then
+    info "Updating the pushed branch (force-with-lease)"
+    git -C "$wt" push --quiet --force-with-lease origin "$(branch "$1")"
+  fi
+}
+
+cmd_pr() {
+  local task="" force=0 partial=0
+  while [ $# -gt 0 ]; do
+    case "$1" in --force) force=1 ;; --partial) partial=1 ;; -*) die "unknown option $1" ;; *) task="$1" ;; esac; shift
+  done
+  validate_name "$task"; need_wt "$task"
+  local wt br verdict phase
+  wt="$(wt_path "$task")"; br="$(branch "$task")"
+
+  verdict="$(helper "$wt" verdict "$task")"
+  local report_path="docs/session-reports/$task.md"
+  if ! is_clean "$wt"; then
+    if [ "$verdict" = "ACCEPTED" ] && [ "$(git -C "$wt" status --porcelain)" = " M $report_path" ]; then
+      info "Committing the PM review recorded in $report_path"
+      git -C "$wt" commit --quiet -m "PM review: ACCEPTED" -- "$report_path"
+    else
+      die "uncommitted changes in $wt; commit them (or have the session commit) first"
+    fi
+  fi
+
+  if [ "$verdict" != "ACCEPTED" ]; then
+    [ "$force" -eq 1 ] || die "PM verdict is $verdict; the report's PM review must say ACCEPTED (override with --force)"
+    warn "opening PR with PM verdict $verdict (--force)"
+  fi
+  phase="$(helper "$wt" info "$task" | cut -f5)"
+  if [ "$phase" != "Succeeded" ] && [ "$partial" -eq 1 ]; then
+    # A partial merge: reviewed work ships now, the Goal stays open on criteria only the operator
+    # can close (a keyboard walk, a sign-off, a run that needs credentials). The verdict check above
+    # still applies, so this is never a way past an unreviewed branch - only past an unfinished one.
+    [ "$phase" = "InProgress" ] || die "--partial expects status.phase InProgress, found $phase"
+    warn "partial merge: $task stays InProgress; the report must name the criteria left open"
+    grep -q 'NOT RUN\|NOT APPLICABLE\|PARTIAL\|FAIL' "$wt/$report_path" \
+      || die "--partial needs the report to record which criteria are still open in $report_path"
+  else
+    [ "$phase" = "Succeeded" ] || [ "$force" -eq 1 ] || die "spec status.phase is $phase, expected Succeeded (if operator-only criteria are what remain, use --partial)"
+  fi
+
+  git_root fetch --quiet origin dev
+  if ! git -C "$wt" merge-base --is-ancestor origin/dev HEAD; then
+    die "origin/dev has moved since this branch was created; run: scripts/task sync $task"
+  fi
+
+  info "Quick checks (spec validation)"
+  (cd "$wt" && uv run --quiet scripts/validate_specs.py)
+
+  info "Pushing $br"
+  git -C "$wt" push --quiet -u origin "$br"
+
+  local title body
+  title="$task: $(helper "$wt" info "$task" | cut -f2)"
+  body="$wt/.task/pr-body.md"; mkdir -p "$wt/.task"
+  helper "$wt" pr-body "$task" > "$body"
+
+  if has gh; then
+    info "Opening pull request into dev"
+    (cd "$wt" && gh pr create --base dev --head "$br" --title "$title" --body-file "$body")
+  else
+    local url; url="$(remote_web_url)/compare/dev...$br?expand=1"
+    warn "GitHub CLI (gh) not installed; open the PR in the browser instead (brew install gh to automate this)"
+    printf '\nTitle: %s\nURL:   %s\nBody:  %s\n' "$title" "$url" "$body"
+    if has pbcopy; then pbcopy < "$body"; printf '(PR body copied to clipboard)\n'; fi
+    case "$url" in https://*) if has open; then open "$url" 2>/dev/null || true; fi ;; esac
+  fi
+  printf '\nAfter the PR is squash-merged into dev: scripts/task finish %s\n' "$task"
+}
+
+cmd_finish() {
+  local task="" abandon=0 force=0 partial=0
+  while [ $# -gt 0 ]; do
+    case "$1" in --abandon) abandon=1 ;; --force) force=1 ;; --partial) partial=1 ;; -*) die "unknown option $1" ;; *) task="$1" ;; esac; shift
+  done
+  validate_name "$task"
+  local wt br; wt="$(wt_path "$task")"; br="$(branch "$task")"
+
+  git_root fetch --quiet --prune origin
+  if [ "$abandon" -eq 0 ]; then
+    local state spec phase
+    state="$(pr_state "$task")"
+    if [ "$state" != "MERGED" ]; then
+      spec=""
+      [ -d "$wt" ] && spec="$(helper "$wt" info "$task" | cut -f1)"
+      phase=""
+      [ -n "$spec" ] && phase="$(spec_phase_on_dev "$spec")"
+      if [ "$phase" = "Succeeded" ]; then
+        info "origin/dev records $task as Succeeded (merge confirmed via the spec)"
+      elif [ "$partial" -eq 1 ] && [ "$phase" = "InProgress" ]; then
+        # A partially merged task stays InProgress on dev, so the phase cannot confirm the merge.
+        # The squash commit also breaks ancestry, so the branch tip is no ancestor of dev either.
+        # What does land on dev is the reviewed report, so that is what is checked.
+        if git_root cat-file -e "origin/dev:docs/session-reports/$task.md" 2>/dev/null \
+           && git_root show "origin/dev:docs/session-reports/$task.md" | grep -q '^\*\*Verdict:\*\* ACCEPTED'; then
+          info "origin/dev carries the accepted report for $task; partial merge confirmed, operator criteria remain"
+        else
+          die "--partial could not confirm the merge: origin/dev has no accepted report at docs/session-reports/$task.md"
+        fi
+      elif [ "$force" -eq 1 ]; then
+        warn "could not confirm the merge (PR state $state, dev phase ${phase:-unknown}); continuing (--force)"
+      else
+        die "could not confirm $br was merged into dev (PR state $state, spec phase on origin/dev ${phase:-unknown}). Use --abandon to discard the task, or --force."
+      fi
+    else
+      info "PR for $br is merged"
+    fi
+  else
+    warn "abandoning $task: the worktree and branch are deleted without merging"
+  fi
+
+  if [ -d "$wt" ]; then
+    if ! is_clean "$wt"; then
+      [ "$force" -eq 1 ] || die "uncommitted changes in $wt:
+$(git -C "$wt" status --short)
+Refusing to delete them; commit/discard or pass --force."
+    fi
+    info "Removing worktree $wt"
+    git_root worktree remove --force "$wt"
+  fi
+  if git_root show-ref --verify --quiet "refs/heads/$br"; then
+    info "Deleting local branch $br"
+    git_root branch -D "$br" >/dev/null
+  fi
+  if git_root ls-remote --exit-code --heads origin "$br" >/dev/null 2>&1; then
+    info "Deleting remote branch origin/$br"
+    git_root push --quiet origin --delete "$br" 2>/dev/null || warn "could not delete origin/$br (already deleted by GitHub?)"
+  fi
+  git_root worktree prune
+  rmdir "$WT_BASE" 2>/dev/null || true
+
+  if [ "$(git_root rev-parse --abbrev-ref HEAD)" = "dev" ]; then
+    if is_clean "$REPO_ROOT"; then
+      info "Fast-forwarding local dev"
+      git_root pull --quiet --ff-only origin dev || warn "could not fast-forward local dev"
+    else
+      warn "local dev has uncommitted changes in $REPO_ROOT; run 'git pull --ff-only' there when ready"
+    fi
+  elif git_root show-ref --verify --quiet refs/heads/dev; then
+    git_root fetch --quiet origin dev:dev 2>/dev/null || warn "local dev not updated (checked out elsewhere or diverged)"
+  fi
+  info "Done: $task closed out"
+}
+
+usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; }
+
+cmd="${1:-help}"; [ $# -gt 0 ] && shift
+case "$cmd" in
+  ready)  cmd_ready "$@" ;;
+  start)  cmd_start "$@" ;;
+  resume) cmd_resume "$@" ;;
+  prompt) cmd_prompt "$@" ;;
+  list)   cmd_list "$@" ;;
+  report) cmd_report "$@" ;;
+  review) cmd_review "$@" ;;
+  sync)   cmd_sync "$@" ;;
+  pr)     cmd_pr "$@" ;;
+  finish) cmd_finish "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

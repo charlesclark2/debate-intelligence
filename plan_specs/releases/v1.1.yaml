@@ -1,5 +1,5 @@
-# RELEASE v1.1 — URL → verified card
-# Major version: V1. Epics: E04, E05, E06
+# RELEASE v1.1 — Caselist evidence store
+# Major version: V1. Epics: E29, E30, E31, E34
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -11,22 +11,31 @@ metadata:
     debate/major-version: v1
     debate/release: v1.1
   annotations:
-    debate/title: v1.1 — URL → verified card
+    debate/title: v1.1 — Caselist evidence store
 spec:
   description: >-
-    A student can run `debate-research cut <URL>` and receive a verified, tagged, cited, underlined card
-    as DOCX + JSON.
+    OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are imported, deduplicated,
+    parsed into cards and stored in S3 (dev and prod) with manifests; a weekly scheduled sync keeps the
+    store current without a manual download; CardMirror is evaluated and ADR-0014 records the editor
+    decision. E34 sits in this release rather than v1.2 because its client is already built and
+    accepted, because the capture-first split of the scheduled run stands on its own, and because
+    automating a weekly manual chore early is worth doing. ADR-0016 moved it here for a stronger reason
+    that turned out to be false; ADR-0017 records what actually holds.
   priority: 2
   acceptanceCriteria:
-  - id: epic-e04
+  - id: epic-e29
     description: >-
-      Epic E04 (Article Retrieval & Extraction) goal is Succeeded.
-  - id: epic-e05
+      Epic E29 (Cloud Evidence Store (S3)) goal is Succeeded.
+  - id: epic-e30
     description: >-
-      Epic E05 (Model Router & Structured LLM Contracts) goal is Succeeded.
-  - id: epic-e06
+      Epic E30 (Caselist Evidence Ingestion) goal is Succeeded.
+  - id: epic-e31
     description: >-
-      Epic E06 (Card Cutting, Citation & Export) goal is Succeeded.
+      Epic E31 (Debate File Parsing) goal is Succeeded.
+  - id: epic-e34
+    description: >-
+      Epic E34 (Scheduled Caselist Sync) goal is Succeeded, and the weekly schedule is enabled and has
+      completed at least one unattended run.
   - id: tagged
     description: >-
       Release tag v1.1.0 is pushed and CHANGELOG.md has a v1.1 section.
@@ -48,7 +57,7 @@ metadata:
 spec:
   gateType: review
   description: >-
-    Release review for v1.1 (URL → verified card): demo the release goal end to end, confirm CI green
+    Release review for v1.1 (Caselist evidence store): demo the release goal end to end, confirm CI green
     on the release tag, and confirm no evidence-integrity regressions.
   reviewers:
   - user:charlie
@@ -71,33 +80,40 @@ spec:
   version: v1.1
   graph:
     nodes:
-    - id: e04
+    - id: e29
       kind: External
-      name: Epic E04 — Article Retrieval & Extraction
+      name: Epic E29 — Cloud Evidence Store (S3)
       inputs:
-        goalRef: v1-e04-article-retrieval
-        specRef: plan_specs/v1/e04-article-retrieval/epic.yaml
-    - id: e05
+        goalRef: v1-e29-cloud-evidence-store
+        specRef: plan_specs/v1/e29-cloud-evidence-store/epic.yaml
+    - id: e30
       kind: External
-      name: Epic E05 — Model Router & Structured LLM Contracts
+      name: Epic E30 — Caselist Evidence Ingestion
       inputs:
-        goalRef: v1-e05-model-router
-        specRef: plan_specs/v1/e05-model-router/epic.yaml
-    - id: e06
+        goalRef: v1-e30-caselist-ingestion
+        specRef: plan_specs/v1/e30-caselist-ingestion/epic.yaml
+    - id: e31
       kind: External
-      name: Epic E06 — Card Cutting, Citation & Export
+      name: Epic E31 — Debate File Parsing
       inputs:
-        goalRef: v1-e06-card-cutting
-        specRef: plan_specs/v1/e06-card-cutting/epic.yaml
+        goalRef: v1-e31-debate-file-parsing
+        specRef: plan_specs/v1/e31-debate-file-parsing/epic.yaml
+    - id: e34
+      kind: External
+      name: Epic E34 — Scheduled Caselist Sync
+      inputs:
+        goalRef: v1-e34-caselist-sync
+        specRef: plan_specs/v1/e34-caselist-sync/epic.yaml
     - id: tag-release
       kind: Task
       name: Tag and publish v1.1.0
       description: >-
         Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
       dependsOn:
-      - e04
-      - e05
-      - e06
+      - e29
+      - e30
+      - e31
+      - e34
       acceptanceCriteria:
       - type: command_succeeds
         name: Release tag exists

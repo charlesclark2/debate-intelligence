@@ -1,5 +1,5 @@
 # TASK v1-e05-t06-card-selection-contract — CardSelection / MarkupSpan contract and prompts
-# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
 # Architecture refs: §8 steps 3-4, §10 Structured model contracts, ADR-006, §20 step 5
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.2
     debate/epic: v1-e05-model-router
   annotations:
     debate/title: CardSelection / MarkupSpan contract and prompts
@@ -72,7 +72,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.2
     debate/epic: v1-e05-model-router
 spec:
   description: >-

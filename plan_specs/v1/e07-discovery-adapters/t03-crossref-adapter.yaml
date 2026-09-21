@@ -1,5 +1,5 @@
 # TASK v1-e07-t03-crossref-adapter — Crossref adapter
-# Epic: E07 Discovery Provider Adapters | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
 # Architecture refs: §9 Discovery adapters (scholarly), §15, §16, §21 ref 8
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e07-discovery-adapters
   annotations:
     debate/title: Crossref adapter
@@ -62,7 +62,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e07-discovery-adapters
 spec:
   description: >-

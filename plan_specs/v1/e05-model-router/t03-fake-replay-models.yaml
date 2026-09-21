@@ -1,5 +1,5 @@
 # TASK v1-e05-t03-fake-replay-models — Deterministic fake and record/replay models
-# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.1 (URL → verified card) | Major: V1
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
 # Architecture refs: §10, ADR-005, §16 (offline deterministic tests, LLM evals), §20 step 5
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.2
     debate/epic: v1-e05-model-router
   annotations:
     debate/title: Deterministic fake and record/replay models
@@ -21,7 +21,10 @@ spec:
     FakeModelRouter returns fixture outputs keyed by prompt_id + a stable hash of the rendered input and
     schema; a missing key fails loudly instead of returning a default. RecordReplayModelRouter wraps any
     real router: in record mode (developer opt-in, with credentials) it stores request/response pairs as
-    reviewable JSON cassettes; in replay mode it serves them and errors on any unrecorded call. Fixtures
+    reviewable JSON cassettes; in replay mode it serves them and errors on any unrecorded call; in live
+    mode it passes through without recording. The mode has exactly one control, shared by every CLI,
+    eval runner and test in the project: the env var `DEBATE_MODEL_MODE=record|replay|live` and the
+    equivalent `--model-mode record|replay|live` CLI option (the option wins), default replay. Fixtures
     must never contain secrets or student-identifying data. This task does not implement Bedrock (t02),
     prompt files (t04) or validation/repair (t05); it only makes their tests reproducible.
   priority: 1
@@ -29,7 +32,9 @@ spec:
     packages: [debate_core.integrations, tests/fixtures/model_cassettes]
     forbidden:
       - Silent fallback to a real model when a fixture or cassette is missing
-      - Recording in CI (record mode requires an explicit env flag and is refused when CI=true)
+      - Recording in CI (record mode requires DEBATE_MODEL_MODE=record or --model-mode record and is
+        refused when CI=true)
+      - Any other flag, env var or setting name for choosing record/replay/live
       - Credentials, request signatures or student names inside cassette files
   context:
     - kind: TaskRef
@@ -64,7 +69,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.1
+    debate/release: v1.2
     debate/epic: v1-e05-model-router
 spec:
   description: >-
@@ -92,7 +97,8 @@ spec:
         name: FakeModelRouter
         description: >-
           Serve schema-validated outputs from tests/fixtures/model_outputs/<prompt_id>/<key>.json, with
-          deterministic embeddings (hash-seeded vectors) and rerank (lexical overlap) for offline search tests.
+          deterministic embeddings (hash-seeded vectors) and rerank (lexical overlap) for offline search
+          tests.
         dependsOn: [fixture-key]
         outputs: [packages/debate_core/src/debate_core/integrations/models/fake_router.py]
         estimatedEffort: 3h
@@ -106,7 +112,10 @@ spec:
         name: RecordReplayModelRouter with redaction
         description: >-
           Wrap a delegate router; record mode writes redacted cassettes under tests/fixtures/model_cassettes,
-          replay mode serves them; CI=true forbids record mode.
+          replay mode serves them, live mode passes through; the mode resolves from `--model-mode` or
+          DEBATE_MODEL_MODE (record|replay|live, default replay) via a shared helper that CLIs and eval
+          runners reuse, and a reusable `add_model_mode_option` for their argument parsers; CI=true
+          forbids record mode.
         dependsOn: [fixture-key]
         outputs: [packages/debate_core/src/debate_core/integrations/models/record_replay.py]
         estimatedEffort: 3h

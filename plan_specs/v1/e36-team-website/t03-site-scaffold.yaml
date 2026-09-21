@@ -1,0 +1,177 @@
+# TASK v1-e36-t03-site-scaffold — Static site scaffold
+# Epic: E36 Team Website Foundation | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t03-site-scaffold
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: Static site scaffold
+    debate/architecture-refs: §4, §5, §14, ADR-0010, ADR-0012, ADR-0013
+spec:
+  description: >-
+    Create the public team website's code base in site/: a Next.js App Router project with
+    `output: 'export'` and trailing slashes (so S3 + CloudFront from t02 can serve it), strict TypeScript,
+    its own pnpm lockfile, kept separate from the V2 app in web/. It provides a mobile-first layout
+    (header, accessible navigation with a skip link and a keyboard-operable mobile menu, footer), a small
+    design system (color, type and spacing tokens taken from the team brand guidelines, not invented;
+    button, card and prose components), SEO basics (per-page title and description, Open Graph tags,
+    sitemap.xml, robots.txt that disallows everything when SITE_ENV=dev) and a typed content loader that
+    reads Markdown/YAML from site/content/ and validates it with a schema at build time, so pages hold
+    no hard-coded copy. `pnpm --dir site lint|test|build` run offline in about a minute; tests use vitest
+    with jsdom and axe-core. A pre-commit hook runs them on site/ changes; the site job in
+    .github/workflows/ci.yml is added by v1-e01-t04 (or by this task if ci.yml exists). Out of scope:
+    real page copy and the core pages (t04), hosting (t02), deploys (t05), the events calendar and
+    announcements (E37), donations (E38), and any login, which is V2.
+  priority: 1
+  constraints:
+    packages: [site, .pre-commit-config.yaml]
+    forbidden:
+      - Importing from or sharing a package.json with web/ (the V2 app)
+      - Server-only Next.js features that break static export (API routes, middleware, server actions, ISR)
+      - Third-party scripts, trackers, analytics tags, remote fonts or CDN assets loaded at runtime
+      - Colors or logos not taken from the team brand guidelines or the district's approved marks
+      - Page copy hard-coded in components instead of site/content/
+      - Network access in lint, test or build
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `pnpm --dir site build` produces a static export in site/out/ with index.html, 404.html,
+        sitemap.xml and robots.txt, using no network and no server runtime.
+    - id: ac2
+      description: >-
+        A build with SITE_ENV=dev writes a robots.txt disallowing all paths and a noindex meta tag; a
+        prod build allows indexing and lists every content page in sitemap.xml.
+    - id: ac3
+      description: >-
+        Content under site/content/ is validated against a schema at build time; a page file missing a
+        required field (title, description) fails the build with the file name in the error.
+    - id: ac4
+      description: >-
+        The layout has a skip link, landmark regions, visible focus styles and a mobile menu operable by
+        keyboard, and axe-core reports no WCAG 2.1 AA violations on the layout and components in vitest.
+    - id: ac5
+      description: >-
+        Design tokens live in one file whose values cite the team brand guidelines, and body text and
+        link colors meet 4.5:1 contrast against their backgrounds in a unit test.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t03-site-scaffold-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Scaffold the export-only Next.js project, add the design tokens and accessible layout, add the
+    validated content loader, add SEO and environment-aware robots, then close with tests and the
+    pre-commit hook. About one day.
+  goalRef:
+    name: v1-e36-t03-site-scaffold
+  graph:
+    nodes:
+      - id: project-scaffold
+        kind: Task
+        name: Next.js static-export project in site/
+        description: >-
+          Create site/ with pinned Next.js, React and TypeScript versions, next.config.ts
+          (output 'export', trailingSlash true, images unoptimized), strict tsconfig, ESLint with the
+          Next and jsx-a11y rules, vitest with jsdom, and package scripts lint, test and build.
+        outputs: [site/package.json, site/pnpm-lock.yaml, site/next.config.ts, site/tsconfig.json]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Next config enables static export
+            path: site/next.config.ts
+            contentMatch: "output: 'export'"
+          - type: command_succeeds
+            name: Site builds offline
+            command: pnpm
+            args: [--dir, site, build]
+      - id: design-system-layout
+        kind: Task
+        name: Brand tokens, components and accessible layout
+        description: >-
+          Define color, type and spacing tokens from the team brand guidelines (citing the guide in a
+          comment), a mobile-first root layout with header, skip link, keyboard-operable nav menu and
+          footer, and Button, Card and Prose components with visible focus states.
+        dependsOn: [project-scaffold]
+        outputs:
+          - site/src/styles/tokens.css
+          - site/src/app/layout.tsx
+          - site/src/components/SiteNav.tsx
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Layout and components have no axe violations and pass contrast checks
+            command: pnpm
+            args: [--dir, site, test, --, layout, tokens]
+      - id: content-loader
+        kind: Task
+        name: Validated content loader for site/content/
+        description: >-
+          A typed loader that reads Markdown with YAML front matter and YAML data files from
+          site/content/, validates them with a zod schema (title, description, nav order, optional
+          Open Graph image), renders Markdown to HTML at build time, and fails the build naming the bad
+          file; a placeholder home page reads its copy from site/content/pages/home.md.
+        dependsOn: [project-scaffold]
+        outputs: [site/src/lib/content.ts, site/content/pages/home.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Content loader tests pass, including invalid front matter
+            command: pnpm
+            args: [--dir, site, test, --, content]
+      - id: seo-basics
+        kind: Task
+        name: Metadata, Open Graph, sitemap and environment-aware robots
+        description: >-
+          Per-page metadata from content front matter, Open Graph and canonical URLs from a SITE_URL
+          setting, sitemap.xml generated from the content pages, and robots.txt plus a noindex meta tag
+          when SITE_ENV=dev.
+        dependsOn: [design-system-layout, content-loader]
+        outputs: [site/src/app/sitemap.ts, site/src/app/robots.ts]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: SEO tests cover dev noindex and the prod sitemap
+            command: pnpm
+            args: [--dir, site, test, --, seo]
+      - id: quality-gates
+        kind: Task
+        name: Lint, test, build gates and pre-commit hook
+        description: >-
+          Run the full lint, test and build offline, add a pre-commit hook for site/ changes and a
+          site/README.md (commands, content layout, SITE_ENV and SITE_URL); if ci.yml exists add a
+          `site` job, otherwise note the hand-off to v1-e01-t04.
+        dependsOn: [seo-basics]
+        outputs: [site/README.md, .pre-commit-config.yaml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Site lint passes
+            command: pnpm
+            args: [--dir, site, lint]
+          - type: test_passes
+            name: Full site test suite passes offline
+            command: pnpm
+            args: [--dir, site, test]
+          - type: command_succeeds
+            name: Static export builds
+            command: pnpm
+            args: [--dir, site, build]
+status:
+  phase: Pending

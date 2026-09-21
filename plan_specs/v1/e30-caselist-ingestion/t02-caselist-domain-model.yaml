@@ -1,0 +1,169 @@
+# TASK v1-e30-t02-caselist-domain-model — Caselist domain model
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §7 key domain models (OpponentTeam, Disclosure), §9, §13, §14 data minimization
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t02-caselist-domain-model
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: Caselist domain model
+    debate/architecture-refs: §7, §9, §13, §14
+spec:
+  description: >-
+    Define the Pydantic entities and the repository port for disclosed and camp evidence so importers,
+    the parser (v1-e31-t03), landscape reports (E32) and the V2 debate tub share one vocabulary. Entities:
+    Caselist (slug such as hsld26/hspolicy26/hspf26 taken as data, event LD/POLICY/PF, level, season
+    "2026-27"), School, TeamCode (the code exactly as disclosed, e.g. initials; no debater_names field),
+    ArchiveSnapshot (caselist, snapshot date, archive sha256, acquisition MANUAL_DOWNLOAD or API, file
+    count), SourceDocument (sha256 identity, size, format DOCX/DOC/PDF/OTHER, first and last seen
+    snapshot, origin CASELIST_ARCHIVE or OPENEV), Disclosure (source sha256, school, team code, side
+    AFF/NEG/PRO/CON/UNKNOWN, tournament and round label as written plus a normalized round, source path,
+    snapshot, parse warnings, and the event, so a PF disclosure cannot be marked AFF) and CampFile
+    (source sha256, camp, year, event, file title, snapshot and parse warnings). Every entity
+    carries provenance (caselist or camp, snapshot, source sha256) and imported evidence uses the
+    FILE_IMPORT provenance mode from the E02 enums. Boundaries: path/filename parsing and SQLite storage
+    are t03, OpenEv metadata extraction t04, ParsedCard and card fingerprints are E31, Tabroom identity
+    resolution is V3.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application]
+    forbidden:
+      - Fields for debater full names, emails or Tabroom person ids on caselist entities
+      - Hardcoding caselist slugs (hsld26 etc.) as an enum; slugs are validated data
+      - Any concrete I/O (filesystem, sqlite3, httpx, boto3) in domain or port modules
+      - Importing boto3/botocore, fastapi or typer in debate_core
+  context:
+    - kind: TaskRef
+      name: v1-e02-t01-domain-entities
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e02-t02-ports
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Caselist, School, TeamCode, ArchiveSnapshot, SourceDocument, Disclosure and CampFile exist as frozen
+        Pydantic models in debate_core.domain.caselist with docstrings, and round-trip through JSON.
+    - id: ac2
+      description: >-
+        Validators reject a malformed sha256, a caselist slug not matching ^[a-z]+[0-9]{2}$, a snapshot
+        date in the future, and a team code longer than 12 characters or containing whitespace-separated
+        words (a guard against full names).
+    - id: ac3
+      description: >-
+        Side accepts AFF/NEG for LD and Policy and PRO/CON for PF, with UNKNOWN allowed for any event;
+        RoundLabel keeps the raw string and a normalized value (R1-R9, TRIPLES, DOUBLES, OCTAS, QUARTERS,
+        SEMIS, FINALS or None). TRIPLES is triple-octafinals and is required: it is 63 of the 74 unrecognised
+        round tokens the v1-e30-t03 run met on the real 2026-09-15 HS LD archive. "Rounds" and "Runoff" are
+        recognised too, accounting for the other 11. An unrecognised round normalizes to None and warns, and
+        does not aggregate at all in E32, so the spellings table is worth keeping current.
+    - id: ac4
+      description: >-
+        A CaselistRepository port (upsert snapshot, get/put SourceDocument by sha256, record disclosures and
+        camp files, list by caselist/snapshot/team, latest snapshot) is declared in
+        debate_core.application.ports with an in-memory fake used by later tasks.
+    - id: ac5
+      description: >-
+        No caselist model has a field for full names, and a test asserts the model field sets so that
+        adding one fails CI.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t02-caselist-domain-model-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Value types and enums first, then the entities, then the repository port and its fake, and finally
+    the test suite with the data-minimization guard.
+  goalRef:
+    name: v1-e30-t02-caselist-domain-model
+  graph:
+    nodes:
+      - id: value-types
+        kind: Task
+        name: Caselist value types and enums
+        description: >-
+          CaselistSlug, SnapshotDate, TeamCodeText (the constrained string; the entity keeps the name
+          TeamCode), Event, Side, RoundLabel, SourceFormat, SourceOrigin, re-using Sha256Hex from
+          debate_core.domain.base rather than defining a second hash scalar
+          and Acquisition types with validators and the round-label normalization table.
+        outputs: [packages/debate_core/src/debate_core/domain/caselist/values.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Value type validation tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/caselist/test_values.py]
+      - id: entities
+        kind: Task
+        name: Caselist entities
+        description: >-
+          Frozen Pydantic models for Caselist, School, TeamCode, ArchiveSnapshot, SourceDocument, Disclosure
+          and CampFile, each with a provenance block (origin, caselist or camp, snapshot, source sha256) and
+          the FILE_IMPORT provenance mode.
+        dependsOn: [value-types]
+        outputs: [packages/debate_core/src/debate_core/domain/caselist/entities.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Entities module defines Disclosure
+            path: packages/debate_core/src/debate_core/domain/caselist/entities.py
+            contentMatch: "class Disclosure"
+          - type: test_passes
+            name: Entity JSON round-trip tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/caselist/test_entities.py]
+      - id: repository-port
+        kind: Task
+        name: CaselistRepository port and in-memory fake
+        description: >-
+          Async CaselistRepository Protocol in debate_core.application.ports with typed NotFound/Conflict
+          errors, plus an in-memory fake in the shared fakes module.
+        dependsOn: [entities]
+        outputs:
+          - packages/debate_core/src/debate_core/application/ports/caselist.py
+          - packages/debate_core/src/debate_core/testing/fakes.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fake repository behaves per the port
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_fake_repository.py]
+      - id: minimization-and-gates
+        kind: Task
+        name: Data-minimization guard and quality gates
+        description: >-
+          A test that pins the field sets of every caselist model and fails on name-like fields; type check
+          and import boundaries.
+        dependsOn: [repository-port]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Data-minimization guard passes
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain/caselist/test_minimization.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+          - type: test_passes
+            name: Ports import no provider SDKs (repo-wide contracts arrive with v1-e02-t06)
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_port_conformance.py]
+status:
+  phase: Pending

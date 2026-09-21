@@ -1,0 +1,210 @@
+# TASK v1-e34-t01-caselist-api-client — OpenCaselist API client
+# Epic: E34 Scheduled Caselist Sync | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §2 provider adapters, §9 Opponent data, §13 Opponent intel, §14, §15 reliability
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t01-caselist-api-client
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: OpenCaselist API client
+    debate/architecture-refs: §2, §9, §13, §14, §15
+spec:
+  description: >-
+    Replace the operator's manual downloads with an authenticated, polite client for
+    api.opencaselist.com/v1, used only as the approved data-use policy (v1-e30-t01,
+    docs/policies/caselist-data-use.md) permits; this task must not start until that policy is
+    approved. A CaselistArchiveSource port in debate_core.application.ports and an httpx adapter in
+    debate_core.integrations.opencaselist cover: GET /caselists and /caselists/{caselist} (the caselist
+    slug, e.g. hsld26, hspolicy26 or hspf26, is always an input, never hardcoded), GET
+    /caselists/{caselist}/downloads, and GET /openev for OpenEv camp files. What the downloads
+    listing actually returns, established by the v1-e34-t01 session against the upstream source: a name
+    and a URL on the site's own file storage, on a different host, with no size and no date. So an
+    archive is fetched from that URL and the token is never sent there; only OpenEv files go through
+    /download?path=. The date is read from the archive name and the size checked against the
+    download's Content-Length. Each download is streamed to a temp file with sha256 and size checks and
+    an atomic rename into the importer's inbox. The listing carries two archives per caselist,
+    <caselist>-weekly-<date>.zip and <caselist>-all-<date>.zip; what the second one contains is an open
+    question against ADR-0016 and is settled by an operator listing call, not by this task. Authentication uses the operator's own
+    caselist_token cookie: `debate-research caselist auth login` prompts for Tabroom credentials
+    once, calls /login, stores only the returned token in the macOS keychain (keyring) or, as a
+    fallback, a 0600 gitignored local secret file, and never stores the password; `caselist auth
+    status|logout` manage it. The token is a SecretStr, redacted from logs, exceptions and httpx
+    event hooks. File downloads are limited to the rate the OpenCaselist maintainer set (10 file
+    downloads per minute, recorded in docs/policies/caselist-data-use.md v1.1): the client defaults to 8
+    per minute, rejects any configuration above 10, and counts archive and OpenEv downloads against one
+    limit. Requests are rate limited (configurable minimum interval, one download at a time) with
+    bounded backoff on 429/502/503/504 honoring Retry-After; 401/403 raise CaselistAuthExpired and are
+    never retried. Tests use respx with small synthetic, scrubbed JSON fixtures (no real student names or
+    team codes). Out of scope: importing archives (v1-e30-t03/t04 own parsing paths and manifests), the
+    per-school/team/round/cites endpoints and /search (V3 v3-e24-t02 extends this client with the
+    schools/teams/rounds/cites endpoints, so the client keeps transport, auth, rate limiting and
+    pagination in a shared base with one small module per resource group), scheduling and the pull
+    pipeline (t02), and run logs and notifications (t03).
+  priority: 2
+  constraints:
+    packages: [debate_core.integrations.opencaselist, debate_core.application.ports, debate_cli.commands]
+    forbidden:
+      - Starting implementation or any live download before the v1-e30-t01 data-use policy is approved
+      - Logging, printing, committing or embedding caselist_token or Tabroom passwords (including in fixtures)
+      - Storing the Tabroom password anywhere, or the token in the repo or any non-gitignored file
+      - Hardcoding a caselist slug
+      - Parallel downloads, ignoring Retry-After, or scraping opencaselist.com pages instead of the API
+      - Live network calls in CI tests (respx fixtures only; live checks are `live`-marked and opt-in)
+      - Real student names or team codes in fixtures or logs
+  context:
+    - kind: TaskRef
+      name: v1-e30-t01-caselist-data-use-policy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t03-archive-importer
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The client lists caselists, lists a caselist's archives as typed ArchiveListing records
+        (caselist slug, archive date, path, size) and lists OpenEv files, all parsed from respx fixtures
+        into Pydantic models that tolerate unknown fields.
+    - id: ac2
+      description: >-
+        download_archive streams to a temp file, verifies byte length, records sha256, and atomically
+        renames into the importer inbox; an interrupted download leaves no partial file behind.
+    - id: ac3
+      description: >-
+        A test captures all log output and exception text across login, list, download and a 401
+        response and asserts the fixture token and password strings never appear; the token is read from
+        keyring or the 0600 secret file, and the secret file path is covered by .gitignore.
+    - id: ac4
+      description: >-
+        File downloads never exceed 10 in any rolling 60-second window (default 8), a configuration above
+        10 per minute fails validation, and consecutive requests are spaced by at least the configured
+        interval; 429 and 503 are retried with
+        backoff honoring Retry-After up to a max attempt count; 401/403 raise CaselistAuthExpired after
+        exactly one request.
+    - id: ac5
+      description: >-
+        `debate-research caselist auth login|status|logout` work against respx fixtures, and the
+        client refuses to run unless settings.caselist.api_enabled is true (defaulting to false until the
+        policy is approved).
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t01-caselist-api-client-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Confirm the policy gate, then build token storage first (so no later step can leak it), the port and
+    response models from recorded fixtures, the polite transport, streamed downloads, and the auth
+    commands.
+  goalRef:
+    name: v1-e34-t01-caselist-api-client
+  graph:
+    nodes:
+      - id: policy-gate-and-fixtures
+        kind: Task
+        name: Policy gate check and scrubbed API fixtures
+        description: >-
+          Confirm docs/policies/caselist-data-use.md is approved and permits automated archive download;
+          record synthetic, scrubbed JSON fixtures for /caselists, /caselists/{caselist},
+          /caselists/{caselist}/downloads and /openev (shapes from the /v1/docs OpenAPI spec; fake school
+          names and team codes only).
+        outputs: [packages/debate_core/tests/fixtures/opencaselist/downloads.json]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Data-use policy is approved
+            path: docs/policies/caselist-data-use.md
+            contentMatch: "Approved"
+          - type: artifact_exists
+            name: Downloads fixture exists
+            path: packages/debate_core/tests/fixtures/opencaselist/downloads.json
+      - id: token-store
+        kind: Task
+        name: caselist_token storage with redaction
+        description: >-
+          CaselistTokenStore with a keyring backend (macOS keychain) and a 0600 file fallback under a
+          gitignored secrets directory; token held as SecretStr; logging filter that redacts cookie
+          headers; .gitignore entry.
+        dependsOn: [policy-gate-and-fixtures]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/opencaselist/token_store.py
+          - .gitignore
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Token storage and redaction tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/opencaselist, -k, "token or redact"]
+      - id: port-and-models
+        kind: Task
+        name: CaselistArchiveSource port and response models
+        description: >-
+          Declare the port (list_caselists, list_archives(slug), list_openev, download(path, dest)) and
+          Pydantic models (CaselistInfo, ArchiveListing, OpenEvFile) parsed from the fixtures.
+        dependsOn: [policy-gate-and-fixtures]
+        outputs:
+          - packages/debate_core/src/debate_core/application/ports/caselist_source.py
+          - packages/debate_core/src/debate_core/integrations/opencaselist/models.py
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CaselistArchiveSource port exists
+            path: packages/debate_core/src/debate_core/application/ports/caselist_source.py
+            contentMatch: "class CaselistArchiveSource(Protocol)"
+      - id: http-client
+        kind: Task
+        name: Polite httpx client with rate limiting and backoff
+        description: >-
+          OpenCaselistClient implementing the port, built as a shared transport base (auth, limiter,
+          backoff, typed errors) plus per-resource modules (caselists, downloads, openev) so V3
+          (v3-e24-t02) can add schools/teams/rounds/cites modules without touching transport: base URL
+          from settings, identifying User-Agent,
+          min-interval limiter, Retry-After-aware backoff for 429/5xx, CaselistAuthExpired on 401/403,
+          streamed download with size check, sha256 and atomic rename; api_enabled settings gate.
+        dependsOn: [token-store, port-and-models]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/opencaselist/transport.py
+          - packages/debate_core/src/debate_core/integrations/opencaselist/client.py
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Client tests pass offline with respx
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/opencaselist/test_client.py]
+      - id: auth-commands
+        kind: Task
+        name: caselist auth login, status and logout
+        description: >-
+          Thin Typer commands: login prompts (hidden input) for Tabroom credentials and stores only the
+          token; status reports presence and last validation without printing it; logout deletes it.
+          Adds a `live`-marked opt-in test (excluded from CI) and a smoke check for `caselist auth status`.
+        dependsOn: [http-client]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/caselist_auth.py
+          - tests/smoke/test_caselist_auth.py
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Auth command tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_caselist_auth.py]
+          - type: command_succeeds
+            name: Import boundaries hold (httpx only in integrations)
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

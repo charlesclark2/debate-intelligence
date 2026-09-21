@@ -1,0 +1,210 @@
+# EPIC E37 — Calendar & Announcements (Coach-Editable)
+# Major version: V1 | Release: v1.6 (Public team website)
+# Architecture refs: §14 (privacy), ADR-0012
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-calendar-and-announcements
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: E37 — Calendar & Announcements (Coach-Editable)
+    debate/architecture-refs: §14 (privacy), ADR-0012
+spec:
+  description: >-
+    Coaches keep the site current without code: events come from a shared team Google Calendar that parents
+    can also subscribe to, and announcements and page text are edited through a lightweight CMS; the site
+    rebuilds when content changes; parents can sign up for email updates through a mailing service.
+  priority: 7
+  constraints:
+    majorVersion: v1
+    release: v1.6
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      ADR-0015 records how coaches edit content (calendar source and CMS), with no code or git knowledge
+      needed.
+  - id: ac2
+    description: >-
+      Upcoming tournaments and events appear on the site from the team calendar, with a subscribe link
+      that works in Google, Apple and Outlook calendars.
+  - id: ac3
+    description: >-
+      Coach-posted announcements appear on the home page and a news list; content changes are detected
+      and rebuilt automatically, and published with one operator command until keyless CI deploys (v2-e10-t03)
+      make publishing fully automatic.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-calendar-and-announcements-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Task graph for epic E37 (Calendar & Announcements (Coach-Editable)). Each Task node points at its
+    own task-level PlanSpec.
+  goalRef:
+    name: v1-e37-calendar-and-announcements
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e36-t01-publishing-policy
+      kind: External
+      name: 'Prerequisite from E36: Website publishing and student-privacy policy'
+      description: >-
+        Cross-epic prerequisite owned by v1-e36-team-website (release v1.6).
+      inputs:
+        goalRef: v1-e36-t01-publishing-policy
+        specRef: plan_specs/v1/e36-team-website/t01-publishing-policy.yaml
+    - id: ext-v1-e36-t03-site-scaffold
+      kind: External
+      name: 'Prerequisite from E36: Static site scaffold'
+      description: >-
+        Cross-epic prerequisite owned by v1-e36-team-website (release v1.6).
+      inputs:
+        goalRef: v1-e36-t03-site-scaffold
+        specRef: plan_specs/v1/e36-team-website/t03-site-scaffold.yaml
+    - id: ext-v1-e36-t04-core-pages
+      kind: External
+      name: 'Prerequisite from E36: Core pages for parents and students'
+      description: >-
+        Cross-epic prerequisite owned by v1-e36-team-website (release v1.6).
+      inputs:
+        goalRef: v1-e36-t04-core-pages
+        specRef: plan_specs/v1/e36-team-website/t04-core-pages.yaml
+    - id: ext-v1-e36-t05-site-deploy
+      kind: External
+      name: 'Prerequisite from E36: Deploy flow: dev preview then prod'
+      description: >-
+        Cross-epic prerequisite owned by v1-e36-team-website (release v1.6).
+      inputs:
+        goalRef: v1-e36-t05-site-deploy
+        specRef: plan_specs/v1/e36-team-website/t05-site-deploy.yaml
+    - id: t01
+      kind: Task
+      name: How coaches edit content (ADR-0015)
+      description: >-
+        Evaluate a shared Google Calendar as the events source and a git-backed or hosted headless CMS
+        for announcements/pages (free tier, coach logins, no student PII, works with a static export);
+        decide in ADR-0015; set up the team calendar and CMS accounts (operator) and document the coach
+        workflow in docs/guides/coach-website-editing.md.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t01-content-editing-decision.yaml
+        goalRef: v1-e37-t01-content-editing-decision
+      dependsOn:
+      - ext-v1-e36-t03-site-scaffold
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t01-content-editing-decision reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t01-content-editing-decision
+    - id: t02
+      kind: Task
+      name: Events and tournaments calendar
+      description: >-
+        Build-time fetch of the team calendar (public ICS or Calendar API with a read-only key kept out
+        of the repo) into upcoming-events and tournament pages (date, location, entry deadline, travel
+        notes), a subscribe/ICS link, graceful fallback when the fetch fails (last good data), recorded
+        fixtures in tests.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t02-events-calendar.yaml
+        goalRef: v1-e37-t02-events-calendar
+      dependsOn:
+      - t01
+      - ext-v1-e36-t04-core-pages
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t02-events-calendar reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t02-events-calendar
+    - id: t03
+      kind: Task
+      name: Announcements and news
+      description: >-
+        CMS-backed announcements with title, date, body and optional expiry, shown on the home page and
+        a news list; content validated at build (no student full names per the publishing policy); fixture
+        content for tests.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t03-announcements.yaml
+        goalRef: v1-e37-t03-announcements
+      dependsOn:
+      - t01
+      - ext-v1-e36-t04-core-pages
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t03-announcements reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t03-announcements
+    - id: t04
+      kind: Task
+      name: Automatic republish on content changes
+      description: >-
+        CMS webhook and a scheduled rebuild (e.g. hourly GitHub Actions or an EventBridge-triggered build)
+        that runs the build and dev->prod deploy for content-only changes, with a failure notification;
+        no long-lived AWS keys (use the V2 OIDC role when it exists, operator-triggered deploy until then).
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t04-auto-republish.yaml
+        goalRef: v1-e37-t04-auto-republish
+      dependsOn:
+      - t02
+      - t03
+      - ext-v1-e36-t05-site-deploy
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t04-auto-republish reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t04-auto-republish
+    - id: t05
+      kind: Task
+      name: Parent email updates
+      description: >-
+        Choose between a mailing service (free tier, double opt-in, unsubscribe) and the district's existing
+        messaging tool; embed the signup (or link) on the site; subscriber emails are never stored by
+        the platform; document how coaches send an update.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t05-parent-email-signup.yaml
+        goalRef: v1-e37-t05-parent-email-signup
+      dependsOn:
+      - ext-v1-e36-t04-core-pages
+      - ext-v1-e36-t01-publishing-policy
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t05-parent-email-signup reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t05-parent-email-signup
+status:
+  phase: Pending

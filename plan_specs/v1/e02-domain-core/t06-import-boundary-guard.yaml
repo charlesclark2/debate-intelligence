@@ -18,7 +18,11 @@ metadata:
 spec:
   description: >-
     Make the ports-and-adapters architecture mechanically enforced with import-linter contracts run by
-    `uv run lint-imports` (already a CI job from E01-t04): debate_core.domain and
+    `uv run lint-imports` (v1-e29-t04 bootstrapped [tool.importlinter] with the AWS contract only and
+    added import-linter to the dev group; this task owns the section and extends it. There is no
+    .github/ in the repo yet, so nothing runs it automatically: if v1-e01-t04 has landed, add the job
+    to ci.yml; if not, wire it into pre-commit and hand the CI job to v1-e01-t04):
+    debate_core.domain and
     debate_core.application may not import boto3/botocore, httpx, typer, rich or fastapi; domain may
     not import application or integrations; debate_core may never import debate_cli, debate_api or
     debate_workers; and delivery packages may import debate_core.application but not
@@ -120,7 +124,8 @@ spec:
         kind: Task
         name: Wire into the import-boundaries CI job
         description: >-
-          Extend the existing import-boundaries job in ci.yml to run both checks.
+          Run both checks in CI if ci.yml exists (v1-e01-t04); otherwise wire them into pre-commit and
+          record the hand-off to v1-e01-t04 in the report.
         dependsOn: [negative-tests, thin-handlers]
         outputs: [.github/workflows/ci.yml]
         estimatedEffort: 0.5h

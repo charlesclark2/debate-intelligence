@@ -1,0 +1,173 @@
+# TASK v1-e38-t03-donor-recognition — Opt-in donor recognition
+# Epic: E38 Team Donations | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §14 (security, privacy, student safety), ADR-0012 (site hosting)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e38-t03-donor-recognition
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e38-donations
+  annotations:
+    debate/title: Opt-in donor recognition
+    debate/architecture-refs: §14, ADR-0012
+spec:
+  description: >-
+    Add an optional thank-you section to the donate page that lists donors only when they have opted in
+    in writing, in exactly the form they chose (for example "The Nguyen family" or "Anonymous"), maintained
+    by coaches through the CMS chosen in ADR-0015 (v1-e37-t01). Each entry holds only a display name, an
+    optional season and an opaque opt-in reference (e.g. OPT-2026-007) that points to the written opt-in
+    Charlie or a coach keeps outside the platform; no email, address, phone, gift amount or other donor
+    data is stored in the CMS, the repository or the built site. A build-time validation fails the build
+    when an entry lacks a well-formed opt-in reference, repeats one, carries fields beyond the schema, or
+    has a display name that looks like contact details. The section follows the donations policy's
+    recognition rules (t01) and the website publishing policy (v1-e36-t01): no student names in display
+    names, and removal on request by deleting the entry and republishing. The section is hidden when there
+    are no entries. Boundaries: the opt-in rules themselves are t01's policy; the donate page and its
+    payment-link guard are t02; CMS selection and coach accounts are v1-e37-t01; automatic republish is
+    v1-e37-t04.
+  priority: 3
+  constraints:
+    packages: [site/app, site/content, site/lib, site/tests, docs/guides]
+    forbidden:
+      - Listing any donor without a written opt-in record reference
+      - Storing donor emails, addresses, phone numbers, gift amounts or opt-in documents on the platform
+      - Student names in donor display names, contrary to the website publishing policy
+      - Real donor names in test fixtures or the repository outside published content
+      - Network access in site tests or the build-time validation
+  context:
+    - kind: TaskRef
+      name: v1-e38-t02-donation-page
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e37-t01-content-editing-decision
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t01-publishing-policy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A donor-recognition content type in the ADR-0015 CMS has exactly displayName, optInRef and optional
+        season fields, and coaches can add, edit and delete entries without code.
+    - id: ac2
+      description: >-
+        The build fails with a message naming the entry when any donor lacks an optInRef matching the
+        policy's format, when two entries share an optInRef, or when an entry has fields beyond the schema.
+    - id: ac3
+      description: >-
+        The build fails when a displayName contains an email address, phone number, URL or street address
+        pattern, or exceeds the policy's length limit; synthetic fixtures cover each case.
+    - id: ac4
+      description: >-
+        The thank-you section renders only opted-in display names (never optInRef) and is absent from
+        out/donate/index.html when there are no entries.
+    - id: ac5
+      description: >-
+        docs/guides/donor-recognition.md gives coaches the opt-in request wording, how to assign an opt-in
+        reference, where to file the written opt-in outside the platform, and how to remove an entry on
+        request; Charlie approves it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e38-t03-donor-recognition-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e38-donations
+spec:
+  description: >-
+    Define the minimal content schema and its validator first, then the CMS content type, the rendered
+    section, and the coach guide with Charlie's review.
+  goalRef:
+    name: v1-e38-t03-donor-recognition
+  graph:
+    nodes:
+      - id: schema-and-validator
+        kind: Task
+        name: Donor entry schema and build-time validation
+        description: >-
+          Define a strict schema in site/lib/content/donors.ts (displayName, optInRef, optional season;
+          unknown keys rejected) and a validator that enforces the opt-in reference format from the
+          donations policy, uniqueness of references, a display-name length limit, and rejection of
+          email/phone/URL/address patterns. Synthetic fixtures only.
+        outputs:
+          - site/lib/content/donors.ts
+          - site/tests/donors.test.ts
+          - site/tests/fixtures/donors/
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Donor validation accepts valid entries and rejects each invalid fixture
+            command: pnpm
+            args: [--dir, site, test, tests/donors.test.ts]
+      - id: cms-content-type
+        kind: Task
+        name: CMS content type for donor recognition
+        description: >-
+          Add the donor-recognition collection to the CMS configuration chosen in ADR-0015 with the same
+          three fields and help text reminding coaches that an entry needs a written opt-in reference,
+          storing entries under site/content/donors/ (or pulling them at build for a hosted CMS).
+        dependsOn: [schema-and-validator]
+        outputs: [site/content/donors/]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Coach can manage a donor entry in the CMS
+            description: >-
+              A coach account adds, edits and deletes a synthetic donor entry through the CMS without code,
+              and the saved entry contains only displayName, optInRef and season.
+      - id: section-render
+        kind: Task
+        name: Thank-you section on the donate page
+        description: >-
+          Render a thank-you section on /donate from validated entries (display names only, sorted as the
+          policy says), hidden when empty, and run the validator in the build so invalid content blocks
+          the export.
+        dependsOn: [schema-and-validator]
+        outputs: [site/app/donate/DonorThanks.tsx, site/tests/donor-thanks.test.ts]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Section renders names only and is absent when empty
+            command: pnpm
+            args: [--dir, site, test, tests/donor-thanks.test.ts]
+          - type: command_succeeds
+            name: Build validates donor content and exports the donate page
+            command: pnpm
+            args: [--dir, site, build]
+      - id: coach-guide-and-review
+        kind: Task
+        name: Coach guide and approval
+        description: >-
+          Write docs/guides/donor-recognition.md (opt-in request wording, assigning the next opt-in
+          reference, filing the written opt-in outside the platform, removal on request), run lint and the
+          full offline suite, and have Charlie review the guide and a dev preview with synthetic entries.
+        dependsOn: [cms-content-type, section-render]
+        outputs: [docs/guides/donor-recognition.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Coach guide covers removal on request
+            path: docs/guides/donor-recognition.md
+            contentMatch: "remov"
+          - type: command_succeeds
+            name: Site lint passes
+            command: pnpm
+            args: [--dir, site, lint]
+          - type: custom
+            name: Charlie approves recognition workflow
+            description: >-
+              Charlie confirms the guide matches the donations and publishing policies and that the dev
+              preview shows only display names, before any real donor entry is added.
+status:
+  phase: Pending

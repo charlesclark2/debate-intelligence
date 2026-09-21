@@ -1,0 +1,48 @@
+{
+  "fixture": "direct-formatting-only.docx",
+  "category": "heuristic",
+  "summary": "Neither Verbatim styles nor outline levels \u2014 the shape CardMirror imports as loose paragraphs. Headings are recognised from bold plus size alone, at a lower confidence.",
+  "profile_version": "2026.09.20-verbatim-1",
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "Data Centre Moratorium Negative",
+      "expected_unit": "POCKET",
+      "expected_rule_id": "heuristic-direct-formatted-heading-pocket",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    },
+    {
+      "index": 1,
+      "text": "Grid Reliability",
+      "expected_unit": "HAT",
+      "expected_rule_id": "heuristic-direct-formatted-heading-hat",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    },
+    {
+      "index": 2,
+      "text": "Data centre demand collapses the reserve margin",
+      "expected_unit": "TAG",
+      "expected_rule_id": "heuristic-direct-formatted-heading-tag",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    },
+    {
+      "index": 3,
+      "text": "Okonkwo et al. 2026, Journal of Grid Studies.",
+      "expected_unit": "CITE",
+      "expected_rule_id": "heuristic-cite-line-author-year",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    },
+    {
+      "index": 4,
+      "text": "Grid operators in the region reported that demand from new data centres rose faster than any other load category last year, and the increase outpaced every scenario the utility had planned against, leaving the reserve margin thinner than at any point in the past decade.",
+      "expected_unit": "EVIDENCE",
+      "expected_rule_id": "heuristic-shrunk-body-text",
+      "expected_match_source": "HEURISTIC",
+      "note": "Shrunk, unread card body. Small is formatting, not a reason to drop text."
+    }
+  ]
+}

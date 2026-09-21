@@ -1,0 +1,201 @@
+# TASK v1-e36-t01-publishing-policy — Website publishing and student-privacy policy
+# Epic: E36 Team Website Foundation | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t01-publishing-policy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: Website publishing and student-privacy policy
+    debate/architecture-refs: §4, §5, §14, ADR-0010, ADR-0012, ADR-0013
+spec:
+  description: >-
+    Write docs/policies/website-publishing.md, the policy that governs everything published on the
+    public Whitefish Bay debate team website, in the style of docs/policies/caselist-data-use.md
+    (version table, status, owner, scope, numbered rules, open questions, approval block). It records
+    the district/activities director's approval of a team website and the conditions attached to it,
+    which Charlie supplies (the session never invents them). Rules for students, who are minors: first
+    names only or no names, never surnames, grades or ages paired with a name; photos only under the
+    district's media-consent process and never of students whose families opted out; no student email,
+    phone, social handles or home town; how tournament results and awards are shown (team-level or
+    first-name only, per the policy); content taken down on request by a student, parent or the
+    district, without argument. Also: school-name, mascot and logo use per the district's conditions and
+    the team brand guidelines; WCAG 2.1 AA as the accessibility floor; no third-party trackers, ads,
+    pixels or embedded social widgets, and analytics either none or CloudFront aggregate reports only;
+    donations go to the district activity account via the district's own payment method and the site
+    never handles money, card data or donor PII (not legal or tax advice); a pre-publication checklist
+    the core pages (t04), calendar/announcements (E37) and donations (E38) must pass. Approved by Charlie.
+    It gates publishing anything about students. Out of scope: hosting (t02), site code (t03), page
+    copy (t04), how coaches edit content (ADR-0015, v1-e37-t01), donation mechanics (v1-e38-t01).
+  priority: 1
+  constraints:
+    packages: [docs/policies, docs/README.md]
+    forbidden:
+      - Inventing the district's approval conditions, media-consent rules or dates; they come from Charlie
+      - Real student names, photos or contact details in the policy or its examples
+      - Permitting third-party trackers, ad networks, tracking pixels or embedded social feeds
+      - Any rule that has the site collect or store donor, payment or visitor PII
+      - Presenting the policy as legal or tax advice
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/policies/website-publishing.md exists with a version table (version, status, owner, approved
+        by, next review) and sections Scope, District approval and conditions, Students, Photos and media
+        consent, Results and awards, Branding, Accessibility, Analytics and third parties, Donations,
+        Removal on request, Pre-publication checklist, Open questions and Approval.
+    - id: ac2
+      description: >-
+        The District approval section records who approved the website, on what date and each condition
+        exactly as Charlie supplied it; any condition not yet known is listed as an open question rather
+        than guessed.
+    - id: ac3
+      description: >-
+        The student rules follow the district's naming rule for students with media consent on file
+        (FIRST NAME LAST NAME (GRADUATION YEAR)), reducible or withdrawn on request; require a consent
+        check before publishing and at the start of each season; forbid student contact details; allow
+        photos only with district media consent confirmed for website use; and give a
+        removal-on-request procedure naming who acts and the target time to take content down from prod
+        (including a CloudFront invalidation), with a faster clock for student names and images than for
+        other content.
+    - id: ac4
+      description: >-
+        The Analytics and third parties section forbids trackers, ads, pixels and embedded social widgets
+        and permits only no analytics or CloudFront aggregate reports; the Accessibility section sets
+        WCAG 2.1 AA as the floor for every page.
+    - id: ac5
+      description: >-
+        The Pre-publication checklist is a numbered list that t04, E37 and E38 can cite item by item,
+        and the policy status reads Approved with Charlie's name and date.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t01-publishing-policy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Draft the policy skeleton and student rules, ask Charlie for the district's approval details and
+    conditions and record them verbatim, add the third-party, accessibility and donation rules plus the
+    pre-publication checklist, then get Charlie's approval. About half a day of session time plus
+    Charlie's review.
+  goalRef:
+    name: v1-e36-t01-publishing-policy
+  graph:
+    nodes:
+      - id: policy-draft
+        kind: Task
+        name: Policy skeleton and student rules
+        description: >-
+          Create the policy with the caselist data-use policy's structure (version table, scope, numbered
+          rules, open questions, approval block) and draft the Students, Photos and media consent, Results
+          and awards and Removal on request sections, marking each district-specific fact as an open
+          question for Charlie.
+        outputs: [docs/policies/website-publishing.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy has a Students section
+            path: docs/policies/website-publishing.md
+            contentMatch: "## Students"
+          - type: artifact_exists
+            name: Policy has a removal-on-request section
+            path: docs/policies/website-publishing.md
+            contentMatch: "## Removal on request"
+      - id: district-conditions
+        kind: Task
+        name: Record the district approval and its conditions
+        description: >-
+          Ask Charlie for the approver's role, the approval date, the conditions attached (for example
+          school-name and logo use, required disclaimers, media-consent process, who must be able to
+          request removal) and record each verbatim in a numbered conditions table, citing where Charlie
+          keeps the written approval (not committed). Unknowns stay open questions.
+        dependsOn: [policy-draft]
+        outputs: [docs/policies/website-publishing.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy records the district approval
+            path: docs/policies/website-publishing.md
+            contentMatch: "## District approval and conditions"
+          - type: custom
+            name: District conditions recorded as Charlie supplied them
+            description: >-
+              Charlie confirms the District approval and conditions section names the approver's role and
+              date and lists every condition the district attached, with nothing added or softened, and
+              that any condition still unknown is listed under Open questions.
+      - id: site-wide-rules
+        kind: Task
+        name: Branding, accessibility, analytics and donation rules
+        description: >-
+          Add Branding (school name, mascot and logo per the district's conditions; colors and type from
+          the team brand guidelines), Accessibility (WCAG 2.1 AA floor, alt text, captions for video),
+          Analytics and third parties (no trackers, ads, pixels, social embeds or third-party fonts that
+          log visitors; CloudFront aggregate reports only) and Donations (link out to the district's
+          payment method; no money, card data or donor PII on the site; not legal or tax advice).
+        dependsOn: [policy-draft]
+        outputs: [docs/policies/website-publishing.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy has the analytics and third-party rules
+            path: docs/policies/website-publishing.md
+            contentMatch: "## Analytics and third parties"
+          - type: artifact_exists
+            name: Policy sets WCAG 2.1 AA
+            path: docs/policies/website-publishing.md
+            contentMatch: "WCAG 2.1 AA"
+      - id: prepublish-checklist
+        kind: Task
+        name: Pre-publication checklist and docs index
+        description: >-
+          Add a numbered Pre-publication checklist (names, photos and consent, contact details, results,
+          third-party content, accessibility, brand) that t04, E37 and E38 reviews cite by number, and
+          link the policy from docs/README.md beside the caselist data-use policy.
+        dependsOn: [district-conditions, site-wide-rules]
+        outputs: [docs/policies/website-publishing.md, docs/README.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy has the pre-publication checklist
+            path: docs/policies/website-publishing.md
+            contentMatch: "## Pre-publication checklist"
+          - type: artifact_exists
+            name: Docs index links the policy
+            path: docs/README.md
+            contentMatch: "website-publishing.md"
+      - id: charlie-approval
+        kind: Task
+        name: Charlie approves the policy
+        description: >-
+          Charlie reviews the whole policy; the session applies his edits, sets the status to Approved
+          with his name, the date and version 1.0, and lists any accepted open questions.
+        dependsOn: [prepublish-checklist]
+        outputs: [docs/policies/website-publishing.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Policy status is Approved
+            path: docs/policies/website-publishing.md
+            contentMatch: "**Approved**"
+          - type: custom
+            name: Charlie approves the website publishing policy
+            description: >-
+              Charlie reads the policy end to end and confirms in the PR that it matches the district's
+              approval, that the student, photo, results and removal rules are the ones he will enforce,
+              and that it may gate publishing on the team website.
+status:
+  phase: Pending

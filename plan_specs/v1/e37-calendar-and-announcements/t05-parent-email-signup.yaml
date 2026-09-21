@@ -1,0 +1,175 @@
+# TASK v1-e37-t05-parent-email-signup — Parent email updates
+# Epic: E37 Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §14 (data minimization, minors), ADR-0012, docs/policies/website-publishing.md
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t05-parent-email-signup
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: Parent email updates
+    debate/architecture-refs: §14, ADR-0012
+spec:
+  description: >-
+    Give parents and guardians a way to get team updates by email without the platform ever holding their
+    addresses. Compare the district's existing parent messaging tool (preferred if the activities director
+    allows team use, since the district already owns consent and lists) with a mailing service free tier
+    (double opt-in, one-click unsubscribe, list owned by a team/district account with two owners, open/click
+    tracking disabled where possible), record the choice and Charlie's reasoning in
+    docs/guides/parent-email-updates.md, and have the operator set it up. The site gets a "Get email updates"
+    section on the home and contact pages that links out to the provider's hosted signup page (or a plain HTML
+    form posting directly to it, with no provider JavaScript), with copy aimed at parents and guardians.
+    Addresses go straight to the provider; the site has no backend, stores nothing, and loads no third-party
+    scripts. The guide shows coaches how to send an update and what may not be included about students.
+    Boundaries: announcements on the site are t03 (emails may link to them); contact form handling stays with
+    v1-e36-t04; no automated email sending from the platform.
+  priority: 2
+  constraints:
+    packages: [site/components, site/content, docs/guides]
+    forbidden:
+      - Storing, logging or proxying subscriber email addresses in the platform, repo or AWS
+      - Loading a mailing provider's JavaScript, pixels or trackers on the site
+      - A mailing list owned by a coach's personal account, or one without double opt-in and unsubscribe
+      - Collecting student contact information or targeting the signup at students
+      - Committing provider API keys; creating accounts or lists from an agent session (operator steps)
+  context:
+    - kind: TaskRef
+      name: v1-e36-t04-core-pages
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t01-publishing-policy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/guides/parent-email-updates.md records the chosen channel (district tool or named mailing
+        service), the comparison on cost, double opt-in, unsubscribe, ownership and tracking, and Charlie's
+        approval; if a mailing service is chosen, the activities director has been told.
+    - id: ac2
+      description: >-
+        The home and contact pages show an email-updates section whose link or form target comes from site
+        content config, and the built site/out contains no script tags from the provider's domain.
+    - id: ac3
+      description: >-
+        No site code, workflow or infrastructure receives or stores subscriber addresses; the only data path
+        is visitor browser → provider.
+    - id: ac4
+      description: >-
+        Charlie subscribes a test address through the dev preview, receives the confirmation (double opt-in)
+        email, confirms, receives a test update and unsubscribes with one click.
+    - id: ac5
+      description: >-
+        The guide explains how a coach sends an update, the no-student-contact-info and first-names-only rules
+        from the publishing policy, and who owns the list.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t05-parent-email-signup-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Compare channels and get Charlie's decision, have the operator set up the list, add the tracker-free
+    signup section, then verify the opt-in/unsubscribe loop and write the coach guide.
+  goalRef:
+    name: v1-e37-t05-parent-email-signup
+  graph:
+    nodes:
+      - id: compare-and-decide
+        kind: Task
+        name: Compare channels and decide
+        description: >-
+          Draft docs/guides/parent-email-updates.md with a short comparison: the district parent messaging tool
+          (ask Charlie to confirm with the activities director whether the team may use it) versus two or
+          three mailing-service free tiers, scored on $0 at team scale, double opt-in, unsubscribe, list
+          ownership continuity, tracking controls and a signup page that needs no embedded script.
+        outputs: [docs/guides/parent-email-updates.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Comparison drafted
+            path: docs/guides/parent-email-updates.md
+            contentMatch: "double opt-in"
+          - type: custom
+            name: Charlie chooses the channel
+            description: >-
+              Charlie picks the channel (after checking with the activities director if the district tool is
+              an option) and the decision is recorded in the guide.
+      - id: operator-setup
+        kind: Task
+        name: Operator sets up the list
+        description: >-
+          Charlie creates or configures the list under a team/district-owned identity with a second owner,
+          enables double opt-in, disables open/click tracking where the provider allows, and gives the site
+          the public signup URL only. Record ownership (no credentials) in the guide.
+        dependsOn: [compare-and-decide]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: List configured and team-owned
+            description: >-
+              Charlie confirms double opt-in is on, the list has two owners on a team/district identity, and
+              only the public signup URL was shared for the site.
+      - id: signup-section
+        kind: Task
+        name: Tracker-free signup section
+        description: >-
+          Add an EmailUpdates component to the home and contact pages reading the signup URL (and form action,
+          if a plain form is used) from site/content/email-updates.json, parent/guardian-oriented copy, and a
+          CSP form-action entry for the provider only if a form is used. Test that no external script tags are
+          rendered.
+        dependsOn: [operator-setup]
+        outputs:
+          - site/components/EmailUpdates.tsx
+          - site/content/email-updates.json
+          - site/tests/email-updates.test.tsx
+          - site/tests/no-third-party-scripts.test.ts
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Email-updates component tests pass
+            command: pnpm
+            args: [--dir, site, test, tests/email-updates.test.tsx]
+          - type: command_succeeds
+            name: Static export builds
+            command: pnpm
+            args: [--dir, site, build]
+          - type: test_passes
+            name: Built output has no third-party scripts
+            command: pnpm
+            args: [--dir, site, test, tests/no-third-party-scripts.test.ts]
+      - id: verify-and-guide
+        kind: Task
+        name: Opt-in loop check and coach guide
+        description: >-
+          After an operator deploy to dev, Charlie runs subscribe → confirm → test update → unsubscribe
+          loop. Finish the guide with how coaches send an update, what may not be included about students,
+          linking to site announcements, and list ownership; link it from docs/guides/coach-website-editing.md.
+        dependsOn: [signup-section]
+        outputs: [docs/guides/parent-email-updates.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Guide covers sending an update
+            path: docs/guides/parent-email-updates.md
+            contentMatch: "How to send an update"
+          - type: custom
+            name: Double opt-in and unsubscribe verified
+            description: >-
+              Charlie completes subscribe, confirmation, test update and one-click unsubscribe with a test
+              address from the dev preview.
+status:
+  phase: Pending

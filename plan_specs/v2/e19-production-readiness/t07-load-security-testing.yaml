@@ -17,23 +17,26 @@ metadata:
     debate/architecture-refs: §14, §15, §19
 spec:
   description: >-
-    Final pre-rollout verification. Load test the key workflows in stage at school scale (target: 60
-    concurrent students, e.g. a whole squad researching the night before a tournament) - search, cut card,
-    library browse, extend - with model and provider calls served by the replay router/stubs so tests
-    measure platform behaviour, not Bedrock. Run an OWASP ASVS level-1 ("lite") review focused on
+    Final pre-rollout verification. Load test the key workflows in dev (ADR-0013: no stage environment),
+    temporarily scaled to prod task sizing and seeded with synthetic accounts and data, at school scale
+    (target: 60 concurrent students, e.g. a whole squad researching the night before a tournament) - search,
+    cut card, library browse, extend - with model and provider calls served by the replay router/stubs so
+    tests measure platform behaviour, not Bedrock. Run an OWASP ASVS level-1 ("lite") review focused on
     authentication, access control (cross-tenant IDOR on every resource route), input handling (pasted HTML,
     URLs submitted for fetching / SSRF), session management and secrets; add dependency scanning (pip-audit,
-    pnpm audit) and container image scanning (ECR/Trivy) to CI; and fix or formally accept every finding.
-    This task verifies t01 quotas and t02 audit logging under load; it does NOT add new product features or
-    perform a third-party penetration test.
+    pnpm audit) and container image scanning (ECR/Trivy) as a scheduled workflow (nightly, after each dev
+    deploy, and on workflow_dispatch; not on PRs into dev, per docs/process/working-agreements.md §1); and fix
+    or formally accept every finding. This task verifies t01 quotas and t02 audit logging under load; it does
+    NOT add new product features or perform a third-party penetration test.
   priority: 1
   constraints:
     packages: [tests/load, docs/security, .github/workflows]
     forbidden:
       - Load testing against prod or with live Bedrock/provider calls
+      - Load tests or multi-minute security/image scans in the PR path into dev
       - Leaving high/critical scanner findings unremediated without a documented, dated risk acceptance
       - Using real student accounts or data in load or security tests
-      - Security testing of third-party sites (only our own stage environment)
+      - Security testing of third-party sites (only our own dev environment)
   context:
     - kind: TaskRef
       name: v2-e19-t01-quotas-rate-limits
@@ -44,8 +47,8 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        A k6 (or Locust) scenario at 60 concurrent users for 15 minutes in stage meets p95 < 800 ms for
-        synchronous API routes, zero 5xx, and CardJob completion p95 < 45 s with replay models.
+        A k6 (or Locust) scenario at 60 concurrent users for 15 minutes in dev (prod sizing) meets p95 < 800
+        ms for synchronous API routes, zero 5xx, and CardJob completion p95 < 45 s with replay models.
     - id: ac2
       description: >-
         Under load, quota 429s and audit events behave correctly (no over-admission, one audit event per
@@ -56,11 +59,12 @@ spec:
         second organization's token and receives 403/404 in all cases.
     - id: ac4
       description: >-
-        The URL fetcher and pasted-HTML paths are tested for SSRF (private IPs, metadata endpoint, redirects to
-        internal hosts) and script injection, with all attempts blocked.
+        The URL fetcher and pasted-HTML paths are tested for SSRF (private IPs, metadata endpoint, redirects
+        to internal hosts) and script injection, with all attempts blocked.
     - id: ac5
       description: >-
-        pip-audit, pnpm audit and container scans run in CI and fail on high/critical findings; the ASVS-lite
+        pip-audit, pnpm audit and container scans run nightly, after each dev deploy and on
+        workflow_dispatch (never on PRs into dev) and fail on high/critical findings; the ASVS-lite
         checklist and findings register in docs/security/ show every item fixed or risk-accepted.
 status:
   phase: Pending
@@ -77,16 +81,19 @@ metadata:
     debate/epic: v2-e19-production-readiness
 spec:
   description: >-
-    Wire scanners into CI first, then the automated cross-tenant and SSRF suites, then the load test in stage,
-    and close with the ASVS-lite review and remediation register.
+    Wire the scheduled scanners first, then the automated cross-tenant and SSRF suites, then the load test in
+    dev, and close with the ASVS-lite review and remediation register.
   goalRef:
     name: v2-e19-t07-load-security-testing
   graph:
     nodes:
       - id: ci-scanning
         kind: Task
-        name: Dependency and container scanning in CI
-        description: pip-audit, pnpm audit and Trivy image scan jobs failing on high/critical.
+        name: Scheduled dependency and container scanning
+        description: >-
+          security-scan.yml on a nightly schedule, on completion of the dev deploy and on workflow_dispatch
+          (no pull_request trigger): pip-audit, pnpm audit and Trivy image scan jobs failing on
+          high/critical.
         outputs: [.github/workflows/security-scan.yml]
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -116,14 +123,22 @@ spec:
             args: [run, pytest, tests/security]
       - id: load-test
         kind: Task
-        name: Stage load test
+        name: Dev load test at prod sizing
         description: >-
-          k6 scenarios for search, cut, library and extend at 60 VUs using the replay model router in stage;
-          capture latency, errors, quota and audit behaviour.
+          Scale dev services to prod task sizing via a tfvars override, seed synthetic users and data, run
+          k6 scenarios for search, cut, library and extend at 60 VUs using the replay model router in dev;
+          capture latency, errors, quota and audit behaviour, then scale dev back down. The scale-up, run
+          and scale-down are operator steps, never CI.
         dependsOn: [authz-ssrf-suite]
         outputs: [tests/load/school_night.js, docs/security/load-test-report.md]
         estimatedEffort: 4h
         acceptanceCriteria:
+          - type: custom
+            name: Operator runs the dev load test
+            description: >-
+              Operator-run (expected > 2 min, ~15 min plus scaling): `k6 run tests/load/school_night.js`
+              against dev scaled to prod sizing; success = p95 < 800 ms on synchronous routes, zero 5xx and
+              CardJob completion p95 < 45 s, with the k6 summary pasted into the session.
           - type: artifact_exists
             name: Load test report recorded
             path: docs/security/load-test-report.md

@@ -1,5 +1,5 @@
 # TASK v1-e07-t04-semantic-scholar-adapter — Semantic Scholar adapter
-# Epic: E07 Discovery Provider Adapters | Release: v1.2 (Federated research from the CLI) | Major: V1
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
 # Architecture refs: §9 Discovery adapters (scholarly), §14 (secrets), §15, §21 ref 9
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,7 +10,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e07-discovery-adapters
   annotations:
     debate/title: Semantic Scholar adapter
@@ -59,7 +59,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.4
     debate/epic: v1-e07-discovery-adapters
 spec:
   description: >-

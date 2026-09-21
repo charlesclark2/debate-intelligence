@@ -1,0 +1,174 @@
+# TASK v1-e34-t03-sync-monitoring — Sync run log and staleness warnings
+# Epic: E34 Scheduled Caselist Sync | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §8 provenance, §9 Opponent data (retrieval time), §14, §15 reliability/observability
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t03-sync-monitoring
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: Sync run log and staleness warnings
+    debate/architecture-refs: §8, §9, §14, §15
+spec:
+  description: >-
+    Make an unattended weekly sync impossible to fail silently. Under ADR-0017 a missed run is a delay
+    rather than a loss, because the site retains a back-catalogue of weekly archives that can be fetched
+    late - so this is operational hygiene rather than a guard against unrecoverable damage. It still
+    fires on a run that did not happen at all, not only on one that ran and failed, because a schedule
+    nobody notices has stopped is how a season's worth of late fetches accumulates.
+    Make an unattended sync impossible to fail silently. Every `caselist pull` run (t02) appends
+    a SyncRunRecord (run id, environment, start/end, caselist slugs, archives seen/downloaded, stage
+    outcomes, pending publish work, error class and message) to a local run log and publishes it to
+    reports/sync-runs/<yyyy>/<run-id>.json in the environment's evidence bucket; `debate-research caselist
+    runs [--last N]` lists recent runs from the local log (or S3 with --remote). On failure, on an
+    expired caselist_token (CaselistAuthExpired) or on an expired AWS SSO session, a Notifier port posts a
+    macOS notification (osascript adapter; a null adapter elsewhere and in tests) with the one command
+    that fixes it. Landscape reports gain a staleness check: when the newest imported snapshot for a
+    caselist is more than eight days older than the report date, the Markdown report starts with a
+    stale-data banner naming the snapshot date and the CSV metadata carries stale=true, so debaters do
+    not prep against an old landscape. Run records hold counts and error classes only, never tokens,
+    file contents or student names. Out of scope: the pipeline itself and the launchd agent (t02),
+    landscape content and layout (v1-e32-t03/t05; this task adds only the banner hook), and V2
+    CloudWatch alarms.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli.commands]
+    forbidden:
+      - Tokens, credentials, file contents, card text or student names in run records or notifications
+      - Swallowing a failed stage (every failure yields a non-zero exit, a run record and a notification)
+      - Notification or AWS calls in CI tests (null notifier and moto only)
+      - Changing landscape report content beyond the staleness banner and metadata flag
+  context:
+    - kind: TaskRef
+      name: v1-e34-t02-scheduled-sync
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each pull run, successful or failed, produces exactly one SyncRunRecord in the local log and at
+        reports/sync-runs/<yyyy>/<run-id>.json (moto in tests), validated by a Pydantic schema.
+    - id: ac2
+      description: >-
+        A failing stage, CaselistAuthExpired and an expired SSO session each trigger one notification
+        whose text names the fix (`debate-research caselist auth login` or `aws sso login --profile
+        <profile>`), verified with a recording notifier.
+    - id: ac3
+      description: >-
+        A landscape report generated with a newest snapshot nine days old starts with the stale-data
+        banner and its CSV metadata has stale=true; at seven days no banner appears.
+    - id: ac4
+      description: >-
+        `debate-research caselist runs --last 5` shows run id, start time, outcome, archives downloaded
+        and pending publish work, and a redaction test proves no fixture token or synthetic student name
+        appears in records or notifications.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t03-sync-monitoring-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Define the run record and its local/S3 persistence, add the notifier, hook both into the sync
+    service, add the staleness banner to landscape reports, then the runs command and smoke check.
+  goalRef:
+    name: v1-e34-t03-sync-monitoring
+  graph:
+    nodes:
+      - id: run-record
+        kind: Task
+        name: SyncRunRecord and run log persistence
+        description: >-
+          Pydantic SyncRunRecord, a JSONL local run log under the data dir, and publication of each record
+          to reports/sync-runs/ through the EvidenceObjectStore port (deferred like other publish work if
+          credentials are expired).
+        outputs:
+          - packages/debate_core/src/debate_core/application/sync_runs.py
+          - packages/debate_core/tests/application/test_sync_runs.py
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run record persistence tests pass (local and moto)
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_sync_runs.py]
+      - id: notifier
+        kind: Task
+        name: Notifier port with macOS and null adapters
+        description: >-
+          Notifier Protocol; MacOsNotifier using osascript display notification with escaped text;
+          NullNotifier and RecordingNotifier for tests; selection from settings.
+        outputs:
+          - packages/debate_core/src/debate_core/application/ports/notifier.py
+          - packages/debate_core/src/debate_core/integrations/local/macos_notifier.py
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Notifier port exists
+            path: packages/debate_core/src/debate_core/application/ports/notifier.py
+            contentMatch: "class Notifier(Protocol)"
+      - id: sync-hooks
+        kind: Task
+        name: Hook run records and notifications into CaselistSyncService
+        description: >-
+          Wrap every pull in a run-record context that always writes a record, maps failures, auth expiry
+          and SSO expiry to notifications with fix commands, and redacts messages.
+        dependsOn: [run-record, notifier]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Failure, auth-expiry and redaction tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_caselist_sync.py
+              - -k
+              - "run_record or notify or redact"
+      - id: staleness-banner
+        kind: Task
+        name: Stale-data banner in landscape reports
+        description: >-
+          Compute snapshot age from the manifests for the report's caselist; above eight days prepend
+          the banner to the Markdown report and set stale=true in CSV metadata; threshold configurable.
+        outputs: [packages/debate_core/src/debate_core/application/landscape_staleness.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Staleness boundary tests pass (7 vs 9 days)
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_staleness.py]
+      - id: runs-command
+        kind: Task
+        name: caselist runs command and smoke check
+        description: >-
+          Thin Typer command listing recent runs (local log, --remote for S3) with a Rich table; smoke
+          check added for validate-dev; quality gates.
+        dependsOn: [sync-hooks, staleness-banner]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/caselist_runs.py
+          - tests/smoke/test_caselist_runs.py
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: runs command tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_caselist_runs.py]
+          - type: command_succeeds
+            name: Type check passes for debate_core
+            command: uv
+            args: [run, pyright, packages/debate_core]
+status:
+  phase: Pending

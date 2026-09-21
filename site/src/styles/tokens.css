@@ -1,0 +1,200 @@
+/*
+ * Design tokens for the public Whitefish Bay debate team site.
+ *
+ * SOURCE OF THE PALETTE
+ * ---------------------
+ * Sampled by the operator from the team deck template, taken off the Blue Dukes "W BAY"
+ * wordmark. Wikipedia lists the school colours as blue and grey; the district publishes no
+ * official hex codes, so these sampled values are the team's working brand reference until the
+ * Branding section of docs/policies/website-publishing.md (task v1-e36-t01) records something
+ * more authoritative. No colour below was invented for this site.
+ *
+ *   Primary navy      #2E2578
+ *   Accent            #4A41A8
+ *   Light blue        #B9B4E8   (for use on navy)
+ *   Body grey         #55596B
+ *   Muted grey        #74798E
+ *   Panel tint        #EEEEF7
+ *   Warm accent       #B36B00   (used sparingly)
+ *   Backgrounds are white by default; no decorative colour bars or stripes.
+ *
+ * CONTRAST (WCAG 2.1; AA needs 4.5:1 for normal text, 3:1 for large text and non-text)
+ * ------------------------------------------------------------------------------------
+ * Every pair the site actually paints, as a table a machine can read. tests/tokens.test.ts
+ * parses these rows, resolves both token names out of the :root block below and recomputes the
+ * ratio with the sRGB relative-luminance formula, so a number here cannot drift away from the
+ * colour it describes and a pair cannot be added without being measured.
+ *
+ * The verdict column says which threshold the pair is allowed to be used at:
+ *   AA        clears 4.5:1, so it may carry text at any size.
+ *   AA-large  clears 3:1 but not 4.5:1: large text only (>=24px, or >=18.66px bold), or
+ *             non-text use such as a border, a rule or an icon.
+ *
+ *   RATIO  VERDICT   FOREGROUND                    ON BACKGROUND
+ *   12.71  AA        --color-text-heading          on --color-surface
+ *   11.02  AA        --color-text-heading          on --color-surface-panel
+ *    8.04  AA        --color-link                  on --color-surface
+ *    6.97  AA        --color-link                  on --color-surface-panel
+ *    6.94  AA        --color-text-body             on --color-surface
+ *    6.01  AA        --color-text-body             on --color-surface-panel
+ *   12.71  AA        --color-text-inverse          on --color-surface-inverse
+ *    6.51  AA        --color-link-inverse          on --color-surface-inverse
+ *   12.71  AA        --color-focus-ring            on --color-surface
+ *   11.02  AA        --color-focus-ring            on --color-surface-panel
+ *    6.51  AA        --color-focus-ring-inverse    on --color-surface-inverse
+ *   12.71  AA        --color-brand-navy            on --color-surface
+ *    8.04  AA        --color-text-inverse          on --color-brand-accent
+ *   11.02  AA        --color-surface-panel         on --color-surface-inverse
+ *    4.31  AA-large  --color-text-muted            on --color-surface
+ *    3.74  AA-large  --color-text-muted            on --color-surface-panel
+ *    4.18  AA-large  --color-brand-warm            on --color-surface
+ *    3.63  AA-large  --color-brand-warm            on --color-surface-panel
+ *
+ * Rows the design pass in v1-e36-t06 added, and what they are for:
+ *   --color-focus-ring on --color-surface-panel    the focus ring where a section is tinted;
+ *   --color-focus-ring-inverse on navy             the focus ring inside the October 1 panel
+ *                                                  and the footer, both of which sit on navy;
+ *   --color-brand-navy on --color-surface          the white action button inside that panel,
+ *                                                  whose label is navy on white;
+ *   --color-surface-panel on --color-surface-inverse  the panel tint used as a rule and as a
+ *                                                  card surface on navy.
+ *
+ * The warm accent is deliberately absent from navy: #B36B00 on #2E2578 measures 3.04:1, which
+ * clears the non-text threshold by too small a margin to rely on. On navy the light blue
+ * (6.51:1) carries every rule instead.
+ *
+ * Small secondary copy therefore uses --color-text-body, never --color-text-muted. This is the
+ * deviation the operator authorised: keep the brand colour, restrict it to large text.
+ *
+ * TYPEFACE
+ * --------
+ * The decks use Arial. The site may not load a remote font (see the forbidden list in the task
+ * spec: no CDN assets or third-party fonts at runtime, and no network during the build), so it
+ * asks for Arial first and falls back to the metric-compatible faces already installed on each
+ * platform: Helvetica Neue on macOS, Liberation Sans on Linux, Roboto on Android. No web font is
+ * downloaded. That substitution is the only difference from the deck template.
+ */
+
+:root {
+  /* Brand palette, exactly as sampled. */
+  --color-brand-navy: #2e2578;
+  --color-brand-accent: #4a41a8;
+  --color-brand-light: #b9b4e8;
+  --color-brand-warm: #b36b00;
+
+  /* Surfaces. White by default; the panel tint is the only other background. */
+  --color-surface: #ffffff;
+  --color-surface-panel: #eeeef7;
+  --color-surface-inverse: var(--color-brand-navy);
+
+  /* Text. --color-text-muted is large-text-and-borders only: see the contrast table above. */
+  --color-text-heading: var(--color-brand-navy);
+  --color-text-body: #55596b;
+  --color-text-muted: #74798e;
+  --color-text-inverse: #ffffff;
+
+  /* Links. */
+  --color-link: var(--color-brand-accent);
+  --color-link-hover: var(--color-brand-navy);
+  --color-link-inverse: var(--color-brand-light);
+
+  /* Borders and focus. The focus ring reaches 12.71:1 on white, 11.02:1 on the panel tint and,
+     in its inverse form, 6.51:1 on navy, all well past the 3:1 that WCAG 2.1 SC 1.4.11 asks of
+     non-text indicators. */
+  --color-border: #d6d6e6;
+  --color-focus-ring: var(--color-brand-navy);
+  --color-focus-ring-inverse: var(--color-brand-light);
+
+  /* Type. Arial first, then metric-compatible system faces; nothing is fetched. */
+  --font-family-base: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", Roboto, system-ui,
+    sans-serif;
+
+  --font-size-small: 0.875rem; /* 14px */
+  --font-size-body: 1rem; /* 16px */
+  --font-size-lead: 1.125rem; /* 18px: the intro paragraph of a section */
+  --font-size-large: 1.5rem; /* 24px: the WCAG large-text threshold at normal weight */
+  --font-size-heading-3: 1.375rem;
+  --font-size-heading-2: 1.75rem;
+  --font-size-heading-1: 2.25rem;
+
+  /*
+   * Two fluid sizes for the home page hero, above the heading scale. Both use clamp() rather
+   * than a breakpoint so the headline grows with the viewport instead of stepping once: the
+   * minimum is what a 360px phone gets, the maximum what a desktop gets, and the middle term is
+   * the slope between them. The minimum of each is also its floor when a visitor has zoomed, so
+   * nothing collapses at 200% zoom (WCAG 2.1 SC 1.4.4).
+   */
+  --font-size-display: clamp(2.25rem, 1.55rem + 3.1vw, 3.5rem); /* 36px to 56px */
+  --font-size-lead-hero: clamp(1.125rem, 1.03rem + 0.42vw, 1.375rem); /* 18px to 22px */
+
+  --font-weight-regular: 400;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.25;
+  --line-height-display: 1.1;
+  --line-height-body: 1.6;
+
+  /* The eyebrow above a section heading. Uppercase at this tracking stays readable. */
+  --letter-spacing-eyebrow: 0.09em;
+
+  /* Spacing, on a 4px base. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 5rem;
+
+  /*
+   * Section rhythm. --space-section-block is the padding above and below one band of the page
+   * and is the single control for how much air the site has; --space-section-gap is the space
+   * between the blocks inside a band. The phone values are here and the desktop values are in
+   * the media query at the foot of this file, which is the only place the token set changes with
+   * the viewport.
+   */
+  --space-section-block: var(--space-7); /* 3rem on a phone */
+  --space-section-gap: var(--space-5);
+
+  --radius-small: 4px;
+  --radius-medium: 8px;
+  --radius-large: 12px;
+
+  /*
+   * Motion. One duration and one easing for the whole site. The cap is 200ms, set by the task
+   * spec for v1-e36-t06 and asserted by tests/design-system.test.ts, and every transition is
+   * switched off by the prefers-reduced-motion block in globals.css. Nothing animates on load.
+   */
+  --duration-transition: 150ms;
+  --easing-standard: ease-out;
+
+  /*
+   * Two widths, and everything on a page is centred on the same axis.
+   *
+   * --layout-prose-width is the text column: the measure body copy is set to, and also the width
+   * every heading, intro, list and panel sits in, so a heading and the paragraph under it share a
+   * left edge rather than starting at two different places. Arial averages about half its point
+   * size per character in English prose, so at the 16px body size 36rem (576px) works out at
+   * roughly 72 characters, inside the 60 to 75 that reads comfortably.
+   *
+   * --layout-max-width is the wide band: the header, the footer and the one kind of content that
+   * is allowed to break out of the text column, a grid of cards. It is deliberately not much
+   * wider. An earlier revision of this pass set it to 68rem, which left a 36rem paragraph sitting
+   * against the left edge of a 68rem band with 32rem of empty space to its right; the page read
+   * as though it had slipped sideways. A band only needs to be wide enough for the widest thing
+   * in it.
+   */
+  --layout-prose-width: 36rem;
+  --layout-max-width: 56rem;
+  --layout-gutter: var(--space-4);
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --layout-gutter: var(--space-6);
+    --space-section-block: var(--space-9); /* 5rem from tablet width up */
+    --space-section-gap: var(--space-6);
+  }
+}

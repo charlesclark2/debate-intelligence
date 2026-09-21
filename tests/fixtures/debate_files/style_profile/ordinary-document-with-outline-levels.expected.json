@@ -1,0 +1,32 @@
+{
+  "fixture": "ordinary-document-with-outline-levels.docx",
+  "category": "negative",
+  "summary": "A document that uses outline levels without any of the formatting that accompanies them in a debate file. Nothing in it may be promoted to a pocket, hat, block or tag.",
+  "profile_version": "2026.09.20-verbatim-1",
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "Course outline for the autumn term",
+      "expected_unit": "OTHER",
+      "expected_rule_id": "heuristic-unclassified-paragraph",
+      "expected_match_source": "HEURISTIC",
+      "note": "Outline level 0, no bold, body size. Not a pocket."
+    },
+    {
+      "index": 1,
+      "text": "Week one: introductions",
+      "expected_unit": "OTHER",
+      "expected_rule_id": "heuristic-unclassified-paragraph",
+      "expected_match_source": "HEURISTIC",
+      "note": "Bold but well below the 22 pt a hat carries. Not a hat."
+    },
+    {
+      "index": 2,
+      "text": "Students should bring a printed copy of the reading to the first session, and should expect to be asked about it. Attendance is recorded from week one onwards, and the participation mark depends on it.",
+      "expected_unit": "EVIDENCE",
+      "expected_rule_id": "heuristic-prose-paragraph",
+      "expected_match_source": "HEURISTIC",
+      "note": "The weakest rule in the set, at 0.4 confidence: inside a debate file this is card body, and outside one it is a false positive the parser's grouping discards because no tag precedes it."
+    }
+  ]
+}

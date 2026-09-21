@@ -1,0 +1,227 @@
+# TASK v1-e29-t03-evidence-buckets — Evidence buckets and operator access
+# Epic: E29 Cloud Evidence Store (S3) | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §5, §7 (S3 system of record), §14 private/encrypted, §15 versioning, ADR-0003, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t03-evidence-buckets
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: Evidence buckets and operator access
+    debate/architecture-refs: §5, §7, §14, §15, ADR-0003, ADR-0013
+spec:
+  description: >-
+    Create the S3 system of record for disclosed caselist evidence, camp files, parsed card stores,
+    built team files and reports (ADR-0003). A reusable evidence_bucket Terraform module, instantiated
+    once in envs/dev and once in envs/prod, creates a private bucket (all four block-public-access
+    flags, BucketOwnerEnforced, no ACLs, no website hosting), versioning, SSE-KMS with a customer-managed
+    evidence key (rotation on) and bucket keys, a TLS-only bucket policy, lifecycle rules (noncurrent
+    versions to Standard-IA then expire; abort incomplete multipart uploads after 7 days; current
+    versions never auto-deleted except under exports/, which expire after 1 day), and a documented key
+    layout: raw/caselist/<caselist-slug>/..., raw/openev/..., parsed/, files/, manifests/, reports/,
+    uploads/ (V2 coach uploads to the debate tub and V3 user uploads), exports/ (bulk zip downloads) and
+    quarantine/ (files held for scanning or removal requests). The KMS key is a separately addressable
+    resource with its own outputs so v2-e10-t04 can adopt it with `moved` blocks, and the module takes
+    an input list of additional principal ARNs (empty in V1) granted read and presign access (GetObject
+    plus kms:Decrypt) so V2 worker/API roles attach later without editing the module. It also defines a
+    least-privilege
+    EvidenceOperator Identity Center permission set (list/get/put on the environment's bucket and
+    encrypt/decrypt with its key; no DeleteObject, no bucket-policy or KMS-policy changes) used by the
+    operator and the `debate-research store` CLI through the SSO profiles from t01, and a separate
+    EvidenceRemoval permission set, assigned to Charlie only and used only for takedowns under the
+    data-use policy (`caselist remove`, v1-e30-t07), through its own SSO profiles (e.g.
+    debate-dev-evidence-removal, debate-prod-evidence-removal): s3:ListBucketVersions, GetObjectVersion, DeleteObject and
+    DeleteObjectVersion scoped to the raw/, parsed/, files/, manifests/ and quarantine/ prefixes, plus
+    PutObject on manifests/_suppression/ and kms Decrypt/GenerateDataKey; still no bucket-policy, KMS-policy
+    or bucket-deletion rights. terraform apply is an
+    operator step (dev first, validated, then prod); CI only validates and runs offline `terraform test`
+    with a mocked provider. dev holds synthetic/sample data only unless the backfill task
+    (v1-e30-t06) says the operator loads the real corpus for validation. Out of scope: remote state
+    and env roots (t02), the Python adapter (t04), sync commands (t05), OIDC/CI roles (v2-e10-t03),
+    V2 KMS data-class keys and Secrets Manager (v2-e10-t04, which should adopt this evidence key rather
+    than create a second one), and presigned-URL delivery to the web app (V2).
+  priority: 1
+  constraints:
+    packages: [infrastructure/modules/evidence_bucket, infrastructure/envs/dev, infrastructure/envs/prod, docs]
+    forbidden:
+      - Public buckets, public ACLs, bucket website hosting or presigned URLs from Terraform outputs
+      - Lifecycle rules that delete current object versions outside exports/
+      - Granting the additional-principal list write, delete or KMS encrypt/admin permissions
+      - s3:DeleteObject, s3:PutBucketPolicy or kms:* for the EvidenceOperator permission set
+      - >-
+        Delete rights for EvidenceRemoval outside raw/, parsed/, files/, manifests/ and quarantine/, or any
+        s3:DeleteBucket, s3:PutBucketPolicy, s3:PutLifecycleConfiguration or kms:* admin action for it
+      - Long-lived IAM access keys (operators use Identity Center SSO profiles)
+      - terraform apply from CI or an agent session (operator-run only)
+      - Real caselist data or student names in Terraform test fixtures
+  context:
+    - kind: TaskRef
+      name: v1-e29-t02-terraform-bootstrap
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The evidence_bucket module passes `terraform test` offline, asserting versioning Enabled,
+        SSE-KMS with the module's key, all four public-access-block flags true, BucketOwnerEnforced and a
+        policy statement denying aws:SecureTransport=false.
+    - id: ac2
+      description: >-
+        Lifecycle configuration transitions noncurrent versions to STANDARD_IA after 30 days and expires
+        them after 365 days in prod (30 in dev), aborts incomplete multipart uploads after 7 days,
+        expires objects under exports/ after 1 day, and has no other rule that expires current versions.
+    - id: ac3
+      description: >-
+        The EvidenceOperator permission set grants only ListBucket (scoped to the documented prefixes),
+        GetObject, PutObject, GetObjectVersion and kms Encrypt/Decrypt/GenerateDataKey on the
+        environment's key; a DeleteObject attempt with the operator profile returns AccessDenied. The
+        EvidenceRemoval permission set can delete objects and noncurrent versions under raw/, parsed/,
+        files/, manifests/ and quarantine/ only (a delete under reports/ is denied), and is assigned to
+        Charlie alone.
+    - id: ac4
+      description: >-
+        docs/architecture/evidence-store-layout.md documents bucket naming, the raw/, parsed/, files/,
+        manifests/, reports/, uploads/, exports/ and quarantine/ key layout with examples,
+        content-addressed sha256 keys, and which task or release writes each prefix.
+    - id: ac6
+      description: >-
+        The KMS key (aws_kms_key.evidence) and its alias are separate resources exposed as module
+        outputs, and a `terraform test` run with a non-empty additional_reader_principal_arns input shows
+        those principals in the bucket and key policies with read/decrypt-only actions.
+    - id: ac5
+      description: >-
+        The operator has applied dev and then prod; docs/runbooks/evidence-store.md records apply dates,
+        bucket names (no account ids) and a put/get/delete-denied check with each SSO profile.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t03-evidence-buckets-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Write the bucket module and its offline tests, document the key layout, add the operator permission
+    set, wire both environments, then hand the applies to the operator (dev first, then prod) and record
+    the results.
+  goalRef:
+    name: v1-e29-t03-evidence-buckets
+  graph:
+    nodes:
+      - id: bucket-module
+        kind: Task
+        name: evidence_bucket module with KMS key, versioning and lifecycle
+        description: >-
+          Module creating the customer-managed KMS key as its own resource (aws_kms_key.evidence, rotation,
+          alias alias/debate-<env>-evidence, matching the DenyProdKmsKeysByAlias guardrail on alias/debate-prod-*) for later adoption by v2-e10-t04 via moved blocks, the bucket
+          with versioning, SSE-KMS + bucket key, public access block, BucketOwnerEnforced, TLS-only policy
+          and lifecycle rules (including 1-day expiry on exports/); variables for environment, noncurrent
+          retention days and additional_reader_principal_arns (default empty) granted GetObject and
+          kms:Decrypt for presigning; outputs bucket name/ARN, key id/ARN and alias.
+        outputs:
+          - infrastructure/modules/evidence_bucket/main.tf
+          - infrastructure/modules/evidence_bucket/variables.tf
+          - infrastructure/modules/evidence_bucket/outputs.tf
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Module enables versioning
+            path: infrastructure/modules/evidence_bucket/main.tf
+            contentMatch: "aws_s3_bucket_versioning"
+          - type: artifact_exists
+            name: Module blocks public access
+            path: infrastructure/modules/evidence_bucket/main.tf
+            contentMatch: "restrict_public_buckets = true"
+      - id: module-tests
+        kind: Task
+        name: Offline terraform test with a mocked provider
+        description: >-
+          terraform test files using mock_provider "aws" assert encryption, versioning, public access
+          block, TLS-only policy, lifecycle rules (dev/prod retention, exports/ 1-day expiry) and the
+          additional-reader grants with an empty and a non-empty principal list; runs in seconds
+          with no credentials so it can join the terraform-checks CI job.
+        dependsOn: [bucket-module]
+        outputs: [infrastructure/modules/evidence_bucket/tests/evidence_bucket.tftest.hcl]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: evidence_bucket terraform tests pass offline
+            command: terraform
+            args: [-chdir=infrastructure/modules/evidence_bucket, test]
+      - id: key-layout-doc
+        kind: Task
+        name: Evidence store key layout
+        description: >-
+          Document bucket naming (debate-evidence-<env>-<suffix>), prefixes and example keys:
+          raw/caselist/hsld26/sha256/ab/cd/<hash>, raw/openev/..., parsed/<caselist>/...,
+          files/<team-file>/..., manifests/<caselist>/<snapshot>.jsonl, reports/<caselist>/<snapshot>/...,
+          uploads/, exports/ and quarantine/, and the owner of each (E30 publish, E31 parse, E32
+          landscape, E33 file builder, E34 sync run logs, V2 debate tub uploads and bulk exports, V3 user
+          uploads, quarantine for scanning and removal requests).
+        dependsOn: [bucket-module]
+        outputs: [docs/architecture/evidence-store-layout.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Key layout doc lists the manifests prefix
+            path: docs/architecture/evidence-store-layout.md
+            contentMatch: "quarantine/"
+      - id: operator-access-and-envs
+        kind: Task
+        name: EvidenceOperator permission set and env wiring
+        description: >-
+          Define the EvidenceOperator permission set (inline policy scoped to the env bucket and key, no
+          delete) and the EvidenceRemoval permission set (prefix-scoped object and version delete for
+          takedowns only), and instantiate the module in envs/dev and envs/prod with environment-specific retention;
+          both roots validate.
+        dependsOn: [module-tests]
+        outputs:
+          - infrastructure/envs/dev/evidence_store.tf
+          - infrastructure/envs/prod/evidence_store.tf
+          - infrastructure/modules/evidence_bucket/operator_access.tf
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dev root validates with the evidence store
+            command: terraform
+            args: [-chdir=infrastructure/envs/dev, validate]
+          - type: command_succeeds
+            name: prod root validates with the evidence store
+            command: terraform
+            args: [-chdir=infrastructure/envs/prod, validate]
+      - id: operator-apply
+        kind: Task
+        name: Operator applies dev, validates, then applies prod
+        description: >-
+          Operator-run (terraform plan/apply exceed the session budget and need SSO credentials): apply in
+          dev, check put/get succeed under the debate-dev-evidence profile and that DeleteObject is denied
+          for it (debate-dev is DebateMaintainer/PowerUser and is not the least-privilege claim), and that the
+          debate-dev-evidence-removal profile can delete a test object's versions under quarantine/ but not under
+          reports/, then apply prod and
+          repeat with debate-prod. Record results in the runbook.
+        dependsOn: [operator-access-and-envs, key-layout-doc]
+        outputs: [docs/runbooks/evidence-store.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Runbook records the prod apply and access checks
+            path: docs/runbooks/evidence-store.md
+            contentMatch: "debate-prod"
+          - type: custom
+            name: Operator confirms both buckets and least privilege
+            description: >-
+              Charlie confirms in the console that both buckets show versioning, SSE-KMS and "Block all
+              public access", and that `aws s3api delete-object` with the operator profile is denied.
+status:
+  phase: Pending

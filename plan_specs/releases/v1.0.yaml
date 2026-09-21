@@ -14,8 +14,8 @@ metadata:
     debate/title: v1.0 — Foundation & verified evidence core
 spec:
   description: >-
-    Repo, tooling, CI, domain core, and deterministic evidence verification exist; `debate-research verify`
-    works on JSON manifests. No LLM yet.
+    Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic evidence verification
+    exist; `debate-research verify` works on JSON manifests.
   priority: 1
   acceptanceCriteria:
   - id: epic-e01

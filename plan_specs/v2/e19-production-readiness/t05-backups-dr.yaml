@@ -19,18 +19,21 @@ spec:
   description: >-
     Prove the platform can recover from data loss before the school relies on it mid-season. Verify (and
     enforce in Terraform/policy checks) DynamoDB point-in-time recovery on AppTable and the audit table,
-    S3 versioning plus lifecycle for noncurrent versions on snapshot/export buckets, and a weekly
-    export manifest (item counts and hashes per table/prefix). Set RTO/RPO targets (proposed: RPO <= 5
-    minutes for DynamoDB, <= 24 hours for manifests; RTO <= 4 hours), then run and document a restore drill
-    in stage: restore AppTable to a point in time into a new table, recover a deleted S3 snapshot version,
-    rebuild the OpenSearch index from restored data (E15 t06), and verify a sample of cards still pass
-    EvidenceVerifier. This task does NOT implement cross-region replication (out of scope for V2) or
-    account deletion (t03; note that restores must re-apply deletions made after the restore point).
+    S3 versioning plus lifecycle for noncurrent versions on snapshot/export buckets, and a weekly export
+    manifest (item counts and hashes per table/prefix). Set RTO/RPO targets (proposed: RPO <= 5 minutes
+    for DynamoDB, <= 24 hours for manifests; RTO <= 4 hours), then run and document a restore drill in dev
+    (there is no stage environment, ADR-0013) against a synthetic, prod-scale dataset seeded for the drill
+    (dev never holds real student data): restore AppTable to a point in time into a new table, recover a
+    deleted S3 snapshot version, rebuild the OpenSearch index from restored data (E15 t06), and verify a
+    sample of cards still pass EvidenceVerifier. This task does NOT implement cross-region replication
+    (out of scope for V2) or account deletion (t03; note that restores must re-apply deletions made after
+    the restore point).
   priority: 1
   constraints:
     packages: [infrastructure/modules/dynamodb, infrastructure/modules/s3, docs/runbooks, scripts]
     forbidden:
       - Running the restore drill against the prod table in place
+      - Copying real prod data into dev to make the drill realistic (seed synthetic data instead)
       - Restores that resurrect accounts deleted after the restore point (replay deletion log)
       - Declaring backups done without a completed, timed drill
       - Public access on any backup or manifest bucket
@@ -50,8 +53,10 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        A policy test (terraform plan JSON checked in CI) fails if any table lacks PITR or any data bucket
-        lacks versioning, block-public-access or KMS encryption.
+        A policy check over terraform plan JSON fails if any table lacks PITR or any data bucket lacks
+        versioning, block-public-access or KMS encryption; it runs on the real dev plan in the post-merge
+        and nightly plan workflows (never on PRs into dev), while its unit tests use committed plan JSON
+        fixtures offline.
     - id: ac2
       description: >-
         A weekly export-manifest job writes counts and SHA-256 rollups per table and S3 prefix to a private
@@ -62,7 +67,8 @@ spec:
         PITR, S3 object versions and OpenSearch rebuild, including re-applying post-restore deletions.
     - id: ac4
       description: >-
-        A stage restore drill is completed and logged with actual timings vs RTO, row-count reconciliation
+        A dev restore drill on the synthetic dataset is completed and logged with actual timings vs RTO,
+        row-count reconciliation
         against the manifest, and 20 sampled cards re-verified VERIFIED.
 status:
   phase: Pending
@@ -80,7 +86,7 @@ metadata:
 spec:
   description: >-
     Enforce backup settings as policy, add export manifests, write the runbook with RTO/RPO, then run and
-    record the drill in stage.
+    record the drill in dev against synthetic data.
   goalRef:
     name: v2-e19-t05-backups-dr
   graph:
@@ -89,8 +95,9 @@ spec:
         kind: Task
         name: Backup configuration policy checks
         description: >-
-          Confirm PITR/versioning/lifecycle settings in modules and add a CI check over `terraform show -json`
-          plan output for required settings.
+          Confirm PITR/versioning/lifecycle settings in modules and add a check over `terraform show -json`
+          plan output for required settings, run in the post-merge dev plan step and the nightly drift plan
+          (v2-e10-t03 workflows), not on PRs into dev; unit tests run against committed plan JSON fixtures.
         outputs: [scripts/check_backup_policy.py]
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -129,14 +136,22 @@ spec:
             contentMatch: "RPO"
       - id: drill
         kind: Task
-        name: Stage restore drill
+        name: Dev restore drill on synthetic data
         description: >-
-          Execute the runbook in stage end to end, reconcile against the manifest, re-verify sampled cards,
+          Seed dev with a synthetic dataset at expected prod scale (scripts/seed_synthetic_data.py), then
+          execute the runbook in dev end to end, reconcile against the manifest, re-verify sampled cards,
           and log timings and issues.
         dependsOn: [runbook]
         outputs: [docs/runbooks/restore-drill-log.md]
         estimatedEffort: 3h
         acceptanceCriteria:
+          - type: custom
+            name: Operator runs seeding and restore drill
+            description: >-
+              Operator-run (expected > 2 min): `uv run scripts/seed_synthetic_data.py --env dev` then the
+              docs/runbooks/restore.md procedures (scripts/restore_table.sh, S3 version recovery, index
+              rebuild); success = restored counts reconcile with the manifest and 20 sampled cards
+              re-verify VERIFIED, with timings pasted into the drill log.
           - type: artifact_exists
             name: Drill log recorded
             path: docs/runbooks/restore-drill-log.md

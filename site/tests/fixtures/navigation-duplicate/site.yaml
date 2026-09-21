@@ -1,0 +1,17 @@
+name: Fixture Site
+shortName: Fixture
+tagline: A fixture.
+footerNote: A fixture footer.
+logoAlternativeText: Fixture logo
+navigationLabel: Main
+footerNavigationLabel: About this site
+skipLinkLabel: Skip to main content
+contactEmails:
+  - address: fixture.coach@example.invalid
+    name: Fixture Coach
+    role: Head Coach
+debaterLoginLabel: Debater login
+# The same page listed twice, which would render the same link twice.
+primaryNavigation:
+  - alpha
+  - alpha

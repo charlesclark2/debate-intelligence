@@ -19,23 +19,25 @@ spec:
   description: >-
     Provide the runtime substrate for the FastAPI service (E12-t04) and workers (E13-t02): a VPC with
     public and private subnets across two AZs, a cost-aware egress design (single NAT gateway in
-    dev/stage, gateway endpoints for S3/DynamoDB, interface endpoints only where they pay for
+    dev, gateway endpoints for S3/DynamoDB, interface endpoints only where they pay for
     themselves, e.g. ECR/Logs/Bedrock runtime in prod), ECR repositories with scan-on-push and lifecycle
     rules, an ECS cluster with Fargate/Fargate Spot capacity providers, shared task execution roles and
     per-service CloudWatch log groups. Workers must reach arbitrary publisher URLs over HTTPS for article
     retrieval, so egress is required. This task does NOT define services or task definitions for the
-    API or workers, nor dashboards/alarms (t06).
+    API or workers, nor dashboards/alarms (t06). It lands in the dev and prod accounts and Terraform
+    roots created in V1 (v1-e29-t01/v1-e29-t02; no stage, ADR-0013); the S3 gateway endpoint and task
+    roles reach the existing V1 evidence buckets (v1-e29-t03) by reference, never by recreating them.
   priority: 1
   constraints:
     packages: [infrastructure/modules/network, infrastructure/modules/ecr, infrastructure/modules/ecs_cluster]
     forbidden:
       - Placing ECS tasks in public subnets with public IPs
       - Security groups allowing 0.0.0.0/0 ingress to anything other than a load balancer listener
-      - One NAT gateway per AZ in dev/stage without a documented cost justification
+      - One NAT gateway per AZ in dev without a documented cost justification
       - Mutable image tags for deploys (use immutable tags / digests)
   context:
     - kind: TaskRef
-      name: v2-e10-t02-terraform-bootstrap
+      name: v1-e29-t02-terraform-bootstrap
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

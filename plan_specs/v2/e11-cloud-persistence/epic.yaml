@@ -20,7 +20,7 @@ spec:
   description: >-
     Design AppTable access patterns, provision DynamoDB and S3, and implement cloud repositories that
     pass the V1 contract tests unchanged.
-  priority: 5
+  priority: 8
   constraints:
     majorVersion: v2
     release: v2.0
@@ -75,6 +75,14 @@ spec:
       inputs:
         goalRef: v1-e02-t04-repo-contract-tests
         specRef: plan_specs/v1/e02-domain-core/t04-repo-contract-tests.yaml
+    - id: ext-v1-e29-t04-s3-blob-store
+      kind: External
+      name: 'Prerequisite from E29: S3 blob-store adapter'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t04-s3-blob-store
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t04-s3-blob-store.yaml
     - id: ext-v2-e10-t04-kms-secrets
       kind: External
       name: 'Prerequisite from E10: KMS keys and Secrets Manager'
@@ -163,6 +171,7 @@ spec:
       dependsOn:
       - ext-v2-e10-t04-kms-secrets
       - ext-v1-e02-t04-repo-contract-tests
+      - ext-v1-e29-t04-s3-blob-store
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e11-t04-s3-snapshot-store reports phase Succeeded

@@ -1,0 +1,22 @@
+[project]
+name = "debate-cli"
+version = "0.1.0"
+description = "debate-research command-line interface (thin surface over debate_core)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # `caselist auth` and the scheduled pull (E34) need the OpenCaselist client's extra.
+    "debate-core[opencaselist]",
+    "rich>=13.9",
+    "typer>=0.15",
+]
+
+[project.scripts]
+debate-research = "debate_cli.app:main"
+
+[tool.uv.sources]
+debate-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12"]
+build-backend = "uv_build"

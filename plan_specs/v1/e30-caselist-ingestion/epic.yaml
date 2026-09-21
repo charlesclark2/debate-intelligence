@@ -1,0 +1,270 @@
+# EPIC E30 — Caselist Evidence Ingestion
+# Major version: V1 | Release: v1.1 (Caselist evidence store)
+# Architecture refs: §9 (opponent data / OpenCaselist), §13 Opponent intelligence, §14, §19
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-caselist-ingestion
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: E30 — Caselist Evidence Ingestion
+    debate/architecture-refs: §9 (opponent data / OpenCaselist), §13 Opponent intelligence, §14, §19
+spec:
+  description: >-
+    Import the OpenCaselist open-source archives (HS LD, Policy, PF) and OpenEv camp files that the
+    operator downloads, deduplicate across snapshots, record provenance manifests, and
+    publish sources to the S3 evidence store, under a written data-use policy.
+  priority: 2
+  constraints:
+    majorVersion: v1
+    release: v1.1
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      A data-use policy for OpenCaselist and OpenEv content (permitted uses, no public redistribution,
+      handling of debater initials, attribution) is written and approved before any import is published
+      or automated.
+  - id: ac2
+    description: >-
+      `debate-research caselist import` turns a weekly archive or camp-file download into deduplicated
+      source documents with School/Team/Side/Tournament/Round metadata and a manifest.
+  - id: ac3
+    description: >-
+      Imported sources and manifests for LD, Policy, PF and OpenEv are in the dev and prod evidence buckets.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-caselist-ingestion-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Task graph for epic E30 (Caselist Evidence Ingestion). Each Task node points at its own task-level
+    PlanSpec.
+  goalRef:
+    name: v1-e30-caselist-ingestion
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e01-t07-cli-skeleton
+      kind: External
+      name: 'Prerequisite from E01: debate_cli Typer + Rich skeleton'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t07-cli-skeleton
+        specRef: plan_specs/v1/e01-repo-foundation/t07-cli-skeleton.yaml
+    - id: ext-v1-e02-t01-domain-entities
+      kind: External
+      name: 'Prerequisite from E02: Pydantic domain entities and enums'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t01-domain-entities
+        specRef: plan_specs/v1/e02-domain-core/t01-domain-entities.yaml
+    - id: ext-v1-e02-t02-ports
+      kind: External
+      name: 'Prerequisite from E02: Repository and provider port interfaces'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t02-ports
+        specRef: plan_specs/v1/e02-domain-core/t02-ports.yaml
+    - id: ext-v1-e02-t03-local-repositories
+      kind: External
+      name: 'Prerequisite from E02: Local filesystem and SQLite repository implementations'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t03-local-repositories
+        specRef: plan_specs/v1/e02-domain-core/t03-local-repositories.yaml
+    - id: ext-v1-e02-t05-settings-config
+      kind: External
+      name: 'Prerequisite from E02: Settings and configuration'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0).
+      inputs:
+        goalRef: v1-e02-t05-settings-config
+        specRef: plan_specs/v1/e02-domain-core/t05-settings-config.yaml
+    - id: ext-v1-e29-t05-evidence-sync-cli
+      kind: External
+      name: 'Prerequisite from E29: `debate-research store` sync commands'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t05-evidence-sync-cli
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml
+    - id: t01
+      kind: Task
+      name: Caselist and OpenEv data-use policy
+      description: >-
+        Read and record the OpenCaselist and OpenEv terms of use and community norms; decide permitted
+        uses (team-internal research and file building, no public redistribution), retention, handling
+        of debater names (team codes carry initials), attribution in built files, and a removal process.
+        Written to docs/policies/caselist-data-use.md and approved by Charlie. Gates automated download
+        (E34) and sharing through the debate tub.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml
+        goalRef: v1-e30-t01-caselist-data-use-policy
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t01-caselist-data-use-policy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t01-caselist-data-use-policy
+    - id: t02
+      kind: Task
+      name: Caselist domain model
+      description: >-
+        Domain entities and ports: Caselist (event, season, e.g. the HS LD, Policy and PF caselists),
+        School, TeamCode, ArchiveSnapshot (weekly archive date), SourceDocument (sha256, size, format,
+        first/last seen snapshot), Disclosure (side, tournament, round label, source path) and CampFile;
+        minimal personal data.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t02-caselist-domain-model.yaml
+        goalRef: v1-e30-t02-caselist-domain-model
+      dependsOn:
+      - ext-v1-e02-t01-domain-entities
+      - ext-v1-e02-t02-ports
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t02-caselist-domain-model reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t02-caselist-domain-model
+    - id: t03
+      kind: Task
+      name: Weekly archive importer
+      description: >-
+        `debate-research caselist import <zip|dir> --caselist <name> --snapshot <date>`: unpack a weekly
+        archive, parse School/Team/Side-Tournament-Round from paths and filenames, hash files, deduplicate
+        against earlier snapshots (adjacent windows rather than a cumulative series, see ADR-0016),
+        record a manifest, keep PDFs as unparsed
+        sources, and report new/changed/duplicate counts. Writes to the local evidence store.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t03-archive-importer.yaml
+        goalRef: v1-e30-t03-archive-importer
+      dependsOn:
+      - t02
+      - ext-v1-e02-t03-local-repositories
+      - ext-v1-e01-t07-cli-skeleton
+      - ext-v1-e02-t05-settings-config
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t03-archive-importer reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t03-archive-importer
+    - id: t04
+      kind: Task
+      name: OpenEv camp-file importer
+      description: >-
+        Import manually downloaded OpenEv camp-file archives with camp, year, event and file-title metadata,
+        using the same hashing, deduplication and manifest as the archive importer.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t04-openev-importer.yaml
+        goalRef: v1-e30-t04-openev-importer
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t04-openev-importer reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t04-openev-importer
+    - id: t05
+      kind: Task
+      name: Publish sources and manifests to S3
+      description: >-
+        Publish imported sources and manifests to the evidence bucket (raw/caselist/<caselist-slug>/sha256/..., manifests/<caselist>/<snapshot>.jsonl),
+        idempotently; `debate-research caselist status` compares local and S3.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml
+        goalRef: v1-e30-t05-caselist-publish
+      dependsOn:
+      - t03
+      - ext-v1-e29-t05-evidence-sync-cli
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t05-caselist-publish reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t05-caselist-publish
+    - id: t06
+      kind: Task
+      name: Initial caselist and camp-file backfill
+      description: >-
+        Operator-run import and publish of the downloads already on hand (HS LD weekly archives 2026-09-01,
+        09-08, 09-15 and any Policy/PF archives and camp files) into dev, then prod; record counts and
+        deduplication rates in the session report.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml
+        goalRef: v1-e30-t06-initial-backfill
+      dependsOn:
+      - t04
+      - t05
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t06-initial-backfill reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t06-initial-backfill
+    - id: t07
+      kind: Task
+      name: Source removal and suppression list
+      description: >-
+        `debate-research caselist remove --source <sha256>|--team <caselist/school/team>`: delete a source
+        and its parsed cards locally and from S3 (raw/, parsed/, manifests entries), add its sha256 to
+        a suppression list that the archive/OpenEv importers and the publisher check so repeated
+        archives never re-import it, and log the removal per the data-use policy.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml
+        goalRef: v1-e30-t07-source-removal
+      dependsOn:
+      - t01
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t07-source-removal reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t07-source-removal
+status:
+  phase: Pending

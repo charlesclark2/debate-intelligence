@@ -1,0 +1,184 @@
+# TASK v1-e01-t10-validate-dev-gate — validate-dev smoke gate for promotions
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §4 (GitHub Actions), §8 (verification), §16 (recorded fixtures), §17; branching-and-environments.md
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t10-validate-dev-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: validate-dev smoke gate for promotions
+    debate/architecture-refs: §4, §8, §16, §17
+spec:
+  description: >-
+    Make "validated in dev" a machine-checked fact. A validate-dev workflow runs when a dev pre-release (t09)
+    is published: scripts/validate_dev.py resolves the release for the commit, downloads its assets, verifies
+    SHA256SUMS, installs that exact build into an isolated uv tool dir, asserts that `debate-research
+    --version --json` reports the same commit SHA and channel dev, then runs the smoke suite in tests/smoke/
+    against the installed binary (not the source tree) with DEBATE_ENV=dev and a temp data dir. The recorded
+    tier (default, always run) covers --version, doctor, `config show` redaction and env selection, and
+    `verify` on a fixture manifest (all-VERIFIED exits 0; a tampered card exits 1 and is reported UNVERIFIED).
+    An offline slow tier runs from the source at the same SHA (`uv run pytest -m "slow and not live"`): the
+    suites later tasks mark `slow` to keep them out of the PR `ci` check (docs/process/working-agreements.md
+    §1) run here, after the merge and before any promotion, and also on a nightly schedule against the dev
+    head. A small opt-in live canary tier (pytest marker `live`, enabled by workflow_dispatch input or a repo
+    variable) makes at most a handful of polite, low-cost calls under the dev budget. The workflow posts a
+    commit status with context `validate-dev` (pending, then success/failure with the run link) on that exact
+    SHA, so a promotion PR whose dev head moved since validation is blocked until the new head validates.
+    Hotfixes get no exception: a hotfix/* head is validated exactly like a dev head, from the pre-release t09
+    builds for it by manual workflow_dispatch, with the full suite and the same `validate-dev` status required
+    on the hotfix PR into main. tests/smoke/README.md documents how later tasks add smoke checks. Boundaries:
+    building the pre-release is t09; branch guards and the promotion template are t08; cloud smoke tests
+    against AWS dev extend this gate in v2-e12-t07; eval gates are E09.
+  priority: 1
+  constraints:
+    packages: [.github/workflows, scripts, tests/smoke, repo settings]
+    forbidden:
+      - Posting validate-dev for any SHA other than the one whose pre-release was installed and tested
+      - Running the smoke suite from the source checkout instead of the installed pre-release
+      - Live network or model calls in the default recorded tier
+      - Real student data or prod data dirs in smoke fixtures (synthetic and public data only)
+      - Marking validate-dev success when any smoke test is skipped for a missing fixture
+      - Validating any head (including hotfix/*) from source instead of its installed pre-release
+  context:
+    - kind: TaskRef
+      name: v1-e01-t09-dev-prerelease-channel
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e03-t06-verify-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        After each dev pre-release is published, the dev head commit shows a `validate-dev` status that
+        links to the run, and the run log shows the installed version and SHA equal to the tag's.
+    - id: ac2
+      description: >-
+        The recorded smoke tier passes offline in under 5 minutes and includes a `verify` check where a
+        tampered fixture card is reported UNVERIFIED with exit code 1; the offline slow tier
+        (`pytest -m "slow and not live"`) runs for the same SHA and validate-dev is green only if both pass.
+    - id: ac3
+      description: >-
+        protect-main requires `validate-dev`; a promotion PR whose head SHA has no or a failing
+        validate-dev status cannot be merged.
+    - id: ac4
+      description: >-
+        The live canary tier runs only when explicitly enabled, uses DEBATE_ENV=dev, and a run with it
+        disabled makes no outbound network requests (enforced by a socket-blocking fixture).
+    - id: ac5
+      description: >-
+        tests/smoke/README.md explains the tiers, markers and how a task adding a user-facing command adds
+        its smoke check, and the task PR template links to it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t10-validate-dev-gate-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Build the smoke suite against an installed binary, then the install-and-verify driver script, then
+    the workflow that posts the status, then make it required and prove it blocks a stale promotion.
+  goalRef:
+    name: v1-e01-t10-validate-dev-gate
+  graph:
+    nodes:
+      - id: smoke-suite
+        kind: Task
+        name: Recorded smoke suite
+        description: >-
+          tests/smoke/conftest.py locates the binary from DEBATE_SMOKE_BIN, sets DEBATE_ENV=dev and a temp
+          data dir, and blocks sockets unless -m live; tests for --version/--json, doctor, config show
+          redaction and env, and verify on fixture manifests with snapshots (two VERIFIED, one tampered).
+        outputs:
+          - tests/smoke/conftest.py
+          - tests/smoke/test_cli_smoke.py
+          - tests/smoke/fixtures/verify_manifest.json
+          - tests/smoke/README.md
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Recorded smoke tier passes against the local build
+            command: uv
+            args: [run, pytest, tests/smoke, -m, "not live"]
+          - type: artifact_exists
+            name: Smoke README documents how to add checks
+            path: tests/smoke/README.md
+            contentMatch: "Adding a smoke check"
+      - id: driver-script
+        kind: Task
+        name: validate_dev.py install-and-verify driver
+        description: >-
+          scripts/validate_dev.py --sha <sha> [--tag] [--live] [--post-status]: resolve the pre-release
+          for the SHA, download and checksum-verify assets, install into an isolated UV_TOOL_DIR, assert
+          --version reports that SHA, run pytest tests/smoke, and post `validate-dev` via the statuses
+          API; the same path serves dev and hotfix/* heads (no from-source shortcut). gh calls isolated
+          behind a small client so tests run offline.
+        dependsOn: [smoke-suite]
+        outputs: [scripts/validate_dev.py, tests/scripts/test_validate_dev.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Driver tests pass offline
+            command: uv
+            args: [run, pytest, tests/scripts/test_validate_dev.py]
+      - id: workflow
+        kind: Task
+        name: validate-dev workflow
+        description: >-
+          validate-dev.yml on release (prereleased, which covers dev and hotfix/* pre-releases),
+          workflow_dispatch (sha, live) and a nightly schedule for the dev head; a slow-tier job checks out
+          the SHA and runs `uv run pytest -m "slow and not live"` offline; posts pending first, then the final
+          state with target_url = run link; permissions contents: read and statuses: write; exposes
+          workflow_call inputs so v2-e12-t07 can add the cloud suite.
+        dependsOn: [driver-script]
+        outputs: [.github/workflows/validate-dev.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Workflow posts the validate-dev context
+            path: .github/workflows/validate-dev.yml
+            contentMatch: "validate-dev"
+          - type: artifact_exists
+            name: Workflow runs the offline slow tier
+            path: .github/workflows/validate-dev.yml
+            contentMatch: "slow and not live"
+          - type: command_succeeds
+            name: Workflow passes actionlint
+            command: actionlint
+            args: [.github/workflows/validate-dev.yml]
+      - id: require-and-prove
+        kind: Task
+        name: Require validate-dev on main and prove the gate
+        description: >-
+          Add `validate-dev` to protect-main's required checks in the GitHub UI; open a promotion PR,
+          push one more commit to dev before validation finishes and confirm the PR is blocked until
+          the new head validates; then complete the first real promotion with a green validate-dev.
+        dependsOn: [workflow]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Latest validate-dev run on dev succeeded
+            command: bash
+            args: [-c, "gh run list --workflow validate-dev.yml --limit 1 --json conclusion
+                   | jq -e '.[0].conclusion == \"success\"'"]
+          - type: custom
+            name: Stale promotion blocked, fresh promotion merged
+            description: >-
+              Charlie confirms protect-main lists validate-dev as required, the promotion PR was blocked
+              while its head lacked a green validate-dev, and it merged once the exact head validated.
+status:
+  phase: Pending

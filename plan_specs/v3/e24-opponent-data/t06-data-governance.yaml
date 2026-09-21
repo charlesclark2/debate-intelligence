@@ -17,7 +17,10 @@ metadata:
     debate/architecture-refs: §13, §14, §19
 spec:
   description: >-
-    Write and approve the policy that governs opponent data before any ingestion runs. It names permitted
+    Extend the V1 caselist data-use policy (docs/policies/caselist-data-use.md, v1-e30-t01), which already
+    records the OpenCaselist/OpenEv terms, permitted team-internal uses, debater-name handling, retention
+    and a removal process, with an opponent-scouting addendum, and approve it before any opponent ingestion
+    runs; nothing already decided there is rewritten from scratch. The addendum names permitted
     sources and interfaces (OpenCaselist documented API with the team's authorized account; Tabroom public
     results pages), prohibited ones (authenticated Tabroom, private caselists, social media, bulk crawling),
     a field-level minimization table (debater names only as published and only when needed for
@@ -25,10 +28,11 @@ spec:
     and a removal process with a response time. Each source gets a dated terms-of-service/API-terms review.
     The policy is enforced in code: ingestion is disabled unless settings name the approved policy version
     and the source is enabled. Approval comes from the coach and a school administrator, informed by the V2
-    privacy/legal review. Boundaries: removal tooling itself is t05.
+    privacy/legal review. Boundaries: removal tooling itself is t05; the V1 policy's archive/file-building
+    rules and the debate tub removal flow (v2-e35-t05) stay as they are and are referenced, not duplicated.
   priority: 1
   constraints:
-    packages: [docs/governance, debate_core.application]
+    packages: [docs/policies, debate_core.application]
     forbidden:
       - Ingesting opponent data before the policy is approved
       - >-
@@ -39,19 +43,23 @@ spec:
     - kind: TaskRef
       name: v2-e19-t04-privacy-legal-review
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t01-caselist-data-use-policy
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
-        docs/governance/opponent-data-policy.md states permitted and prohibited sources/interfaces,
-        purposes, org scoping and a semver policy version.
+        docs/policies/opponent-data-policy.md extends and links docs/policies/caselist-data-use.md (which
+        links back to it) and states permitted and prohibited sources/interfaces, purposes, org scoping and
+        a semver policy version.
     - id: ac2
       description: >-
         A minimization table lists every field allowed per entity with justification, and retention is
         defined (current and previous season, then purge).
     - id: ac3
       description: >-
-        A dated terms review for OpenCaselist and for Tabroom records reviewer, terms/API documentation
-        consulted, rate limits and conclusions.
+        A dated terms review for Tabroom, and a re-dated OpenCaselist review that starts from the V1 terms
+        record, records reviewer, terms/API documentation consulted, rate limits and conclusions.
     - id: ac4
       description: >-
         The removal process defines who may request removal (students, parents, coaches, other schools), a
@@ -88,29 +96,31 @@ spec:
         kind: Task
         name: Policy and minimization table
         description: >-
-          Write the policy, minimization table, retention and removal process.
-        outputs: [docs/governance/opponent-data-policy.md]
+          Write the opponent-scouting addendum to the V1 caselist data-use policy: minimization table,
+          retention and removal process for opponent records, reusing the V1 rules where they apply.
+        outputs: [docs/policies/opponent-data-policy.md, docs/policies/caselist-data-use.md]
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: artifact_exists
             name: Opponent data policy exists
-            path: docs/governance/opponent-data-policy.md
+            path: docs/policies/opponent-data-policy.md
             contentMatch: "Minimization"
       - id: source-reviews
         kind: Task
         name: Source terms reviews
         description: >-
-          Review OpenCaselist and Tabroom terms and API documentation; record findings and rate limits.
-        outputs: [docs/governance/source-reviews/]
+          Re-check the OpenCaselist terms recorded in V1 and review Tabroom terms and API documentation;
+          record findings and rate limits.
+        outputs: [docs/policies/source-reviews/]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: artifact_exists
             name: OpenCaselist review exists
-            path: docs/governance/source-reviews/opencaselist.md
+            path: docs/policies/source-reviews/opencaselist.md
             contentMatch: "Reviewed"
           - type: artifact_exists
             name: Tabroom review exists
-            path: docs/governance/source-reviews/tabroom.md
+            path: docs/policies/source-reviews/tabroom.md
             contentMatch: "Reviewed"
       - id: enforcement-gate
         kind: Task

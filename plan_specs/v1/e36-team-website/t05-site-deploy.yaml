@@ -1,0 +1,189 @@
+# TASK v1-e36-t05-site-deploy — Deploy flow: dev preview then prod
+# Epic: E36 Team Website Foundation | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t05-site-deploy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: 'Deploy flow: dev preview then prod'
+    debate/architecture-refs: §4, §5, §14, ADR-0010, ADR-0012, ADR-0013
+spec:
+  description: >-
+    Ship the site. scripts/site_deploy.sh <dev|prod> builds site/ with the environment's SITE_ENV and
+    SITE_URL, writes a version.json with the commit sha, syncs site/out/ to that environment's site bucket
+    (--delete; long cache for hashed _next/static assets, no-cache for HTML) and creates a CloudFront
+    invalidation, reading the bucket and distribution from Terraform outputs. It uses the SitePublisher
+    SSO profile from t02 and refuses prod unless the checkout is clean, on main and equal to origin/main
+    (ADR-0013); it has a --dry-run mode. It is operator-run until keyless CI deploys arrive (v2-e10-t03)
+    and is never run from an agent session. scripts/site_smoke.py checks a deployed site: every page in
+    sitemap.xml returns 200 over HTTPS, http:// redirects to https://, the security headers from t02 are
+    present, dev carries noindex and prod does not, and version.json matches the expected sha. It is
+    tested offline with respx and registered in tests/smoke/ so validate-dev runs it. The operator deploys
+    dev, smoke-checks it, promotes dev to main, deploys prod and smoke-checks it, and records the first
+    prod launch in docs/runbooks/team-website.md — all before the parent information session on
+    October 1, 2026. Out of scope: infrastructure (t02), page content (t04), GitHub OIDC and CI deploys
+    (v2-e10-t03), automatic republish on content changes (v1-e37-t04).
+  priority: 1
+  constraints:
+    packages: [scripts, tests/smoke, tests/scripts, docs/runbooks]
+    forbidden:
+      - Deploying to prod from any branch or commit other than a clean main equal to origin/main
+      - Running the deploy script from CI or an agent session before OIDC deploys exist (v2-e10-t03)
+      - Long-lived AWS access keys, or account ids and credentials committed in scripts or the runbook
+      - Live network calls in the offline test suite (smoke checks run only against a deployed site)
+      - Deleting or overwriting objects outside the environment's own site bucket
+  context:
+    - kind: TaskRef
+      name: v1-e36-t02-site-hosting
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t04-core-pages
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        scripts/site_deploy.sh passes shellcheck, and its offline tests (stubbed aws, git, pnpm and
+        terraform on PATH) show prod is refused from a non-main branch, a dirty tree or a commit not equal
+        to origin/main, and that --dry-run makes no aws s3 or cloudfront write call.
+    - id: ac2
+      description: >-
+        scripts/site_smoke.py fails on a non-200 page, a missing HSTS, CSP or X-Content-Type-Options
+        header, a missing http-to-https redirect, noindex on prod, or a version.json sha mismatch, as shown
+        by respx-backed tests that make no live call.
+    - id: ac3
+      description: >-
+        The dev preview has been deployed and passes the smoke check with its noindex header, and the same
+        commit reached main through a validated dev-to-main promotion.
+    - id: ac4
+      description: >-
+        docs/runbooks/team-website.md has a deploy and rollback procedure and a First prod launch entry
+        recording the date, commit sha, URL and smoke result (no account ids).
+    - id: ac5
+      description: >-
+        The dev preview is deployed and passes the smoke check end to end, and a prod deploy has been
+        rehearsed with --dry-run. The prod launch itself moved to v1-e36-t08-prelaunch-visual-qa, which
+        owns filling in the October 1 room, the clean prod build and the promotion checklist, so the site
+        parents see is the designed one.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t05-site-deploy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Write the deploy script and its offline tests, write the smoke checker and register it with
+    validate-dev, then hand the dev deploy and the prod launch to the operator and record them. About
+    half a day of session time plus two short operator runs.
+  goalRef:
+    name: v1-e36-t05-site-deploy
+  graph:
+    nodes:
+      - id: deploy-script
+        kind: Task
+        name: scripts/site_deploy.sh with prod guard and dry run
+        description: >-
+          Bash (set -euo pipefail): parse <dev|prod> and --dry-run, enforce the prod guard (clean tree,
+          branch main, HEAD equals origin/main), read bucket and distribution from
+          `terraform -chdir=infrastructure/envs/<env> output -json`, build with SITE_ENV/SITE_URL, write
+          version.json, `aws s3 sync --delete` with cache-control per path, then create and wait for a
+          CloudFront invalidation using AWS_PROFILE debate-<env>-site.
+        outputs: [scripts/site_deploy.sh]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Deploy script passes shellcheck
+            command: shellcheck
+            args: [scripts/site_deploy.sh]
+      - id: deploy-script-tests
+        kind: Task
+        name: Offline tests for the deploy script
+        description: >-
+          pytest cases that run the script with stub aws, git, pnpm and terraform executables on PATH and
+          assert the prod guard refusals, the dry-run behavior and the exact sync and invalidation calls.
+        dependsOn: [deploy-script]
+        outputs: [tests/scripts/test_site_deploy.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Deploy script tests pass offline
+            command: uv
+            args: [run, pytest, tests/scripts/test_site_deploy.py]
+      - id: smoke-check
+        kind: Task
+        name: Site smoke checker registered with validate-dev
+        description: >-
+          scripts/site_smoke.py (httpx) takes --url and --env and optionally --expect-sha, checks every
+          sitemap page, the HTTPS redirect, security headers, noindex by environment and version.json;
+          respx tests cover each failure; tests/smoke/test_site.py runs it when SITE_SMOKE_URL is set.
+        dependsOn: [deploy-script]
+        outputs: [scripts/site_smoke.py, tests/scripts/test_site_smoke.py, tests/smoke/test_site.py]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Smoke checker tests pass offline
+            command: uv
+            args: [run, pytest, tests/scripts/test_site_smoke.py]
+          - type: command_succeeds
+            name: Lint passes
+            command: uv
+            args: [run, ruff, check, scripts/site_smoke.py, tests/scripts, tests/smoke/test_site.py]
+      - id: dev-preview
+        kind: Task
+        name: Operator deploys and smoke-checks the dev preview
+        description: >-
+          Operator-run: `scripts/site_deploy.sh dev` with the debate-dev-site profile, then
+          `uv run scripts/site_smoke.py --env dev --url <dev URL>`; Charlie shares the preview for review.
+          The runbook gains the deploy, rollback (redeploy a previous commit) and removal-on-request
+          (edit, redeploy, invalidate) procedures and the dev result.
+        dependsOn: [deploy-script-tests, smoke-check]
+        outputs: [docs/runbooks/team-website.md]
+        estimatedEffort: 45m
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Runbook documents the deploy procedure
+            path: docs/runbooks/team-website.md
+            contentMatch: "site_deploy.sh"
+          - type: custom
+            name: Dev preview passes the smoke check
+            description: >-
+              Charlie confirms the dev smoke check passed for the commit being promoted, including the
+              noindex header, and that the preview looks right on a phone.
+      - id: prod-launch
+        kind: Task
+        name: Promote to main, launch prod and record it
+        description: >-
+          After the dev-to-main promotion PR merges, the operator runs `scripts/site_deploy.sh prod` from a
+          clean main with the debate-prod-site profile and the smoke check with --expect-sha, then records
+          the First prod launch (date, sha, URL, smoke result, domain status) in the runbook.
+        dependsOn: [dev-preview]
+        outputs: [docs/runbooks/team-website.md]
+        estimatedEffort: 45m
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Runbook records the first prod launch
+            path: docs/runbooks/team-website.md
+            contentMatch: "First prod launch"
+          - type: custom
+            name: Prod site is live before the October 1 parent session
+            description: >-
+              Charlie confirms, on or before September 30, 2026, that the prod site passes the smoke check
+              at the URL he will give parents at the October 1, 2026 information session, and that the
+              runbook entry records that URL.
+status:
+  phase: Pending

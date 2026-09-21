@@ -1,5 +1,5 @@
 # TASK v2-e13-t02-sqs-workers — SQS queues and worker framework
-# Epic: E13 Async Job Orchestration | Release: v2.1 (Async jobs & web Cut-a-Card) | Major: V2
+# Epic: E13 Async Job Orchestration | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
 # Architecture refs: §5 SQS / ECS Fargate, ADR-009, §15 retries, back-pressure, correlation ids
 ---
 apiVersion: planspec.io/v1alpha1
@@ -40,6 +40,9 @@ spec:
       relation: dependsOn
     - kind: TaskRef
       name: v2-e10-t05-container-platform
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t07-promotion-pipeline
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -133,7 +136,8 @@ spec:
         name: Fargate worker service and autoscaling
         description: >-
           Worker Dockerfile, ECS service/task role (queue, table, bucket, Bedrock permissions), step scaling
-          on ApproximateNumberOfMessagesVisible, deploy workflow reusing the OIDC deploy role.
+          on ApproximateNumberOfMessagesVisible, deploy workflow reusing the OIDC deploy role (dev deploys
+          from dev; prod only via the v2-e12-t07 promotion pipeline from main, same image digest).
         dependsOn: [consumer-loop]
         outputs: [packages/debate_workers/Dockerfile, infrastructure/modules/workers/service.tf]
         estimatedEffort: 3h

@@ -1,0 +1,170 @@
+# TASK v2-e35-t03-tub-api — Tub API
+# Epic: E35 Debate Tub (Web File Access) | Release: v2.1 (Web app, debate tub & async jobs) | Major: V2
+# Architecture refs: §12 Card Library + Authentication and authorization, §14 (signed URLs, least privilege)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e35-t03-tub-api
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+  annotations:
+    debate/title: Tub API
+    debate/architecture-refs: §6, §12, §14, ADR-0014
+spec:
+  description: >-
+    Expose the tub through debate_api under /v1/tub. Routes: list files filtered by event, topic,
+    position, side, kind and collection with cursor pagination; facet counts for browsing; file detail
+    with provenance; metadata search over the t01 search-term items (title, position, school code; not
+    card full-text, which is E15/E16); POST download that returns a short-lived presigned GET URL
+    (default 300 s, max 900 s) with an attachment Content-Disposition; coach-only upload that issues a
+    presigned POST restricted to uploads/<org>/ with .docx/.pdf content types and a 50 MB cap, then
+    confirms metadata; and a zipped bulk download that runs as an async job on the E13 exports queue and
+    returns a presigned URL to a zip that expires after 24 hours. Every route uses the E12 principal and
+    require_same_org plus the t01 tub_can policy (deny by default, 404 for other organizations).
+    Presigning lives behind a UrlSigner port with an S3 adapter in debate_core.integrations. The download
+    audit record, takedown flow and exposure checks are t05; the UI is t04.
+  priority: 1
+  constraints:
+    packages: [debate_api.routes, debate_core.application, debate_core.integrations, debate_workers]
+    forbidden:
+      - Returning public, unsigned or long-lived S3 URLs, or proxying file bytes through the API
+      - Issuing download URLs for REMOVED files or files of another organization
+      - Authorization logic inside route handlers instead of the shared policy helpers
+      - boto3 imports outside debate_core.integrations
+      - Presigned URLs, tokens or debater names in logs or job payloads
+      - Synchronous zip building in the request path
+  context:
+    - kind: TaskRef
+      name: v2-e35-t02-tub-index-sync
+      relation: dependsOn
+    - kind: TaskRef
+      name: v2-e12-t03-authn-authz
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        GET /v1/tub/files filters by topic, position, side and kind, returns at most 100 items per page with
+        an opaque cursor, and never includes files of another organization or REMOVED files.
+    - id: ac2
+      description: >-
+        POST /v1/tub/files/{id}/download returns a presigned URL whose X-Amz-Expires is at most 900 seconds
+        and that is scoped to that object's key and version; a student in another organization gets 404.
+    - id: ac3
+      description: >-
+        Coach uploads use a presigned POST with content-length-range and content-type conditions; students
+        get 403 and a wrong-type or oversized upload is rejected by S3 policy, proven by moto tests.
+    - id: ac4
+      description: >-
+        A bulk download of up to 200 files or 500 MB creates a job whose status is readable via the E13 job
+        API and yields a zip whose entries match the requested files' sha256; larger requests get 422.
+    - id: ac5
+      description: >-
+        The routes appear in the exported OpenAPI schema with typed responses, and the regenerated
+        TypeScript client builds.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e35-t03-tub-api-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.1
+    debate/epic: v2-e35-debate-tub
+spec:
+  description: >-
+    Use cases and the signer port first, then read routes, download and upload routes, the async bulk
+    zip job, and finally schema export and quality gates.
+  goalRef:
+    name: v2-e35-t03-tub-api
+  graph:
+    nodes:
+      - id: tub-use-cases
+        kind: Task
+        name: Tub query use cases and UrlSigner port
+        description: >-
+          ListTubFiles, GetTubFile, SearchTub and IssueDownload use cases in debate_core.application, a
+          UrlSigner port and an S3 presigner adapter (SigV4, version-pinned, bounded TTL from settings).
+        outputs:
+          - packages/debate_core/src/debate_core/application/tub/queries.py
+          - packages/debate_core/src/debate_core/integrations/s3_url_signer.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tub use case and signer tests pass under moto
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/tub/test_queries.py]
+      - id: read-routes
+        kind: Task
+        name: List, facet, detail and search routes
+        description: >-
+          FastAPI routes with Pydantic response models, cursor pagination, facet counts and 404 on
+          cross-organization or REMOVED ids, all wired through require_same_org and tub_can.
+        dependsOn: [tub-use-cases]
+        outputs: [packages/debate_api/src/debate_api/routes/tub.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tub read route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_tub_read.py]
+      - id: download-upload-routes
+        kind: Task
+        name: Presigned download and coach upload routes
+        description: >-
+          POST download (sanitized filename, attachment disposition), coach-only upload initiation with a
+          conditioned presigned POST to uploads/<org>/, and upload confirmation that records topic,
+          position and side for the indexer.
+        dependsOn: [read-routes]
+        outputs: [packages/debate_api/src/debate_api/routes/tub_files.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Download and upload route tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/routes/test_tub_files.py]
+      - id: bulk-zip-job
+        kind: Task
+        name: Async zipped bulk download
+        description: >-
+          A tub.bulk_zip handler that streams selected objects into a zip under exports/<org>/ (lifecycle
+          expiry 24 h), verifies each entry's sha256, and completes the job with a presigned URL on request.
+        dependsOn: [download-upload-routes]
+        outputs: [packages/debate_workers/src/debate_workers/handlers/tub_bulk_zip.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bulk zip handler tests pass
+            command: uv
+            args: [run, pytest, packages/debate_workers/tests/handlers/test_tub_bulk_zip.py]
+      - id: schema-and-gates
+        kind: Task
+        name: OpenAPI export and quality gates
+        description: >-
+          Regenerate openapi/openapi.json and the TypeScript client, and run type and import checks.
+        dependsOn: [bulk-zip-job]
+        outputs: [openapi/openapi.json]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: OpenAPI schema includes the tub routes
+            path: openapi/openapi.json
+            contentMatch: "/v1/tub/files"
+          - type: command_succeeds
+            name: Type check passes for debate_api
+            command: uv
+            args: [run, pyright, packages/debate_api]
+          - type: command_succeeds
+            name: Import boundaries hold
+            command: uv
+            args: [run, lint-imports]
+status:
+  phase: Pending

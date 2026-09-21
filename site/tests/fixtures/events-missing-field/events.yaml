@@ -1,0 +1,48 @@
+# The Policy card is missing its topic cadence, so the three cards would no longer be a
+# comparison: one column of the table would be blank. The build fails naming this file.
+comparisonLabels:
+  teamSize: Team size
+  speechPattern: Speech pattern
+  topicCadence: Topic cadence
+  bestFor: Best for
+sharedTruths:
+  title: True of all three
+  items:
+    - title: Students argue both sides
+      body: Which side you get is assigned, not chosen.
+comparisonTitle: The three events side by side
+comparisonIntro: Every event is open to a beginner.
+events:
+  - id: public-forum
+    name: Public Forum debate
+    summary: Asks whether something does more good than harm on balance.
+    detailActionLabel: How a Public Forum round runs
+    comparison:
+      teamSize: Two students per side.
+      speechPattern: Four short speeches a side.
+      topicCadence: A new topic every month or two.
+      bestFor: The most common starting point.
+    detail: A round is about 40 to 50 minutes.
+  - id: lincoln-douglas
+    name: Lincoln-Douglas debate
+    summary: Asks what ought to be done and how we would know.
+    detailActionLabel: How a Lincoln-Douglas round runs
+    comparison:
+      teamSize: One student per side.
+      speechPattern: Five speeches and two cross-examinations.
+      topicCadence: A new topic every two months.
+      bestFor: A student who wants to work alone.
+    detail: A round is about 40 to 45 minutes.
+  - id: policy
+    name: Policy debate
+    summary: Asks whether one specific plan should be adopted.
+    detailActionLabel: How a Policy round runs
+    comparison:
+      teamSize: Two students per side.
+      speechPattern: Eight speeches and four cross-examinations.
+      bestFor: A student who wants to go deep with a partner.
+    detail: A round is about 80 minutes of speeches plus prep.
+closingSections:
+  - id: what-the-judge-does
+    title: What the judge does
+    body: One judge decides the round.

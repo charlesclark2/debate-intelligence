@@ -1,0 +1,199 @@
+# TASK v1-e31-t01-cardmirror-evaluation — CardMirror evaluation and editor decision
+# Epic: E31 Debate File Parsing | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §6 FileIntelligenceService, §13 Argument graph (file parsing), §14, §16, §18 ADRs
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t01-cardmirror-evaluation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: CardMirror evaluation and editor decision
+    debate/architecture-refs: §6, §13, §14, §16, §18
+spec:
+  description: >-
+    Time-boxed spike (about two days) that decides how the platform relates to CardMirror, the free,
+    open-source ProseMirror/TypeScript debate editor that reads and writes Verbatim-compatible .docx
+    losslessly (web app plus Mac/Windows/Linux desktop). The spike reviews CardMirror's document schema
+    (pockets, hats, blocks, tags, cards, cites, analytics, undertags) against the structural units our
+    parser will emit, its public TS API (schema, fromDocx, toDocx, exportDoc, importDoc, newHeadingId), the
+    experimental plugin bridge, which features need a paid Debate Decoded subscription (co-editing, card
+    sharing), and the PolyForm Noncommercial 1.0.0 license for each use we might make of it (debaters using
+    the desktop app, running fromDocx/toDocx in our tooling, embedding the editor in the V2 web app). It
+    round-trips a sample of team, caselist (including non-Verbatim and wiki-converted uploads) and OpenEv
+    camp files through CardMirror and measures what survives. The outcome is ADR-0014
+    (docs/adr/0014-debate-file-editor.md): adopt CardMirror as the team editor and a compatibility target,
+    treat it as a compatibility target only, or neither, with the consequences for the style profile (t02),
+    the lossless writer (v1-e33-t02), the debate tub's "open in CardMirror" (v2-e35-t04), the V2 card
+    editor/library and V3 file upload (v3-e20). The decision is Charlie's; the spike supplies the evidence.
+    Boundaries: no parser or writer code here (t02/t03, E33); a Node round-trip script may be written but
+    is an operator tool, not a CI or runtime dependency, unless the ADR explicitly decides otherwise. CardMirror
+    does not cut cards; nothing in this task changes the evidence-integrity rules.
+  priority: 1
+  constraints:
+    packages: [docs/adr, docs/architecture, scripts/cardmirror-roundtrip, scripts, tests/scripts]
+    forbidden:
+      - Committing real team, caselist or camp files, or their round-tripped outputs, to the repository
+      - >-
+        Student or debater names, team codes or school names in the evaluation note (files are referred to
+        by category and a short sha256 prefix only)
+      - >-
+        Loading real caselist or team files into a hosted CardMirror/Debate Decoded instance or any
+        subscription feature during the spike (desktop app or a locally built web app only)
+      - Adding the Node round-trip script to CI, the pnpm workspace or any Python package dependency
+      - Buying a Debate Decoded subscription or accepting new terms without Charlie's approval
+  context:
+    - kind: TaskRef
+      name: v1-e01-t06-adr-docs
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/architecture/cardmirror-evaluation.md maps every CardMirror node/mark type (pocket, hat, block,
+        tag, card, cite, analytic, undertag, underline/emphasis/highlight marks) to our structural unit
+        names, lists the public TS API exports with what each does, and records plugin-bridge maturity and
+        the features that require a Debate Decoded subscription.
+    - id: ac2
+      description: >-
+        At least 25 files (at least 8 team files across Policy/LD/PF, 12 caselist files from the hsld26
+        snapshots including at least 3 non-Verbatim and 2 wiki-converted, and 5 camp files) are
+        round-tripped with fromDocx/toDocx; the note reports per category whether paragraph text, heading
+        levels, cite styling and underline/highlight/bold runs are unchanged, with each failure categorized.
+    - id: ac3
+      description: >-
+        A license section reviews PolyForm Noncommercial 1.0.0 for each intended use (desktop use by debaters,
+        running fromDocx/toDocx in operator tooling, embedding or linking from the V2 web app, forking), marks
+        each permitted / not permitted / needs author confirmation, and is signed off by Charlie.
+    - id: ac4
+      description: >-
+        docs/adr/0014-debate-file-editor.md is Accepted, states the chosen option and rejected alternatives,
+        names the consequences for t02, v1-e33-t02, v2-e35-t04, the V2 card editor and v3-e20, and says
+        whether the Node round-trip script is ever run in CI (default: no).
+    - id: ac5
+      description: >-
+        Charlie's decision is recorded in the ADR (who, date, option) and docs/adr/README.md moves 0014 from
+        Reserved numbers to the Index table.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t01-cardmirror-evaluation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Review CardMirror hands-on and on paper, review the license, build a small operator-only round-trip
+    harness, have the operator run it on a sample of real files, then write ADR-0014 for Charlie's decision.
+  goalRef:
+    name: v1-e31-t01-cardmirror-evaluation
+  graph:
+    nodes:
+      - id: schema-and-api-review
+        kind: Task
+        name: Schema, API, plugin bridge and subscription review
+        description: >-
+          Install the desktop app and build the web app locally from a pinned commit; read the ProseMirror
+          schema and exported TS API; exercise pockets/hats/blocks/tags/cites/analytics/undertags on a
+          synthetic file; write the schema mapping table, API notes, plugin-bridge findings and the list of
+          subscription-gated features into the evaluation note.
+        outputs: [docs/architecture/cardmirror-evaluation.md]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Evaluation note has the schema mapping
+            path: docs/architecture/cardmirror-evaluation.md
+            contentMatch: "Schema mapping"
+      - id: license-review
+        kind: Task
+        name: PolyForm Noncommercial 1.0.0 license review
+        description: >-
+          Read the license text at the pinned commit and assess each intended use (debater desktop use,
+          operator tooling, V2 web-app embedding or deep links, forking); list open questions for the author.
+        outputs: [docs/architecture/cardmirror-evaluation.md]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: License review section exists
+            path: docs/architecture/cardmirror-evaluation.md
+            contentMatch: "PolyForm Noncommercial 1.0.0"
+          - type: custom
+            name: Charlie signs off the license review
+            description: >-
+              Charlie reads the per-use license verdicts, confirms the team's use is noncommercial, and
+              decides whether any "needs author confirmation" item must be resolved before the ADR is accepted.
+      - id: roundtrip-harness
+        kind: Task
+        name: Operator-only round-trip harness
+        description: >-
+          scripts/cardmirror-roundtrip/ holds a pinned package.json and roundtrip.mjs calling fromDocx then
+          toDocx on each input file; scripts/compare_docx_roundtrip.py (python-docx + lxml) compares paragraph
+          text, paragraph styles and run underline/highlight/bold/size per file and writes an aggregate JSON
+          summary keyed by sha256 prefix. The README states the harness is operator-run and not part of CI.
+        outputs:
+          - scripts/cardmirror-roundtrip/README.md
+          - scripts/cardmirror-roundtrip/roundtrip.mjs
+          - scripts/compare_docx_roundtrip.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Harness README marks it operator-only
+            path: scripts/cardmirror-roundtrip/README.md
+            contentMatch: "not run in CI"
+          - type: test_passes
+            name: Comparison script tests pass on synthetic documents
+            command: uv
+            args: [run, pytest, tests/scripts/test_compare_docx_roundtrip.py]
+      - id: roundtrip-run
+        kind: Task
+        name: Round-trip the sample files (operator-run)
+        description: >-
+          Operator-run on Charlie's Mac against the local downloads (never copied into the repo): round-trip
+          the 25-file sample, open three results in the desktop app and in Word with Verbatim to edit and
+          re-save, then paste the aggregate results table (categories and sha256 prefixes only) into the note.
+        dependsOn: [schema-and-api-review, roundtrip-harness]
+        outputs: [docs/architecture/cardmirror-evaluation.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Round-trip results recorded
+            path: docs/architecture/cardmirror-evaluation.md
+            contentMatch: "Round-trip results"
+      - id: adr-0014
+        kind: Task
+        name: Write ADR-0014 and record Charlie's decision
+        description: >-
+          Draft docs/adr/0014-debate-file-editor.md from the template with the options (team editor plus
+          compatibility target, compatibility target only, neither), evidence from the note, consequences for
+          later epics and the CI stance on the Node harness; Charlie chooses, the ADR is set to Accepted and
+          the ADR index is updated.
+        dependsOn: [license-review, roundtrip-run]
+        outputs: [docs/adr/0014-debate-file-editor.md, docs/adr/README.md]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ADR-0014 is accepted
+            path: docs/adr/0014-debate-file-editor.md
+            contentMatch: "Status: Accepted"
+          - type: artifact_exists
+            name: ADR index lists 0014
+            path: docs/adr/README.md
+            contentMatch: "0014-debate-file-editor.md"
+          - type: custom
+            name: Charlie makes the editor decision
+            description: >-
+              Charlie reviews the evaluation note and draft ADR, picks the option for the team (and whether
+              debaters are told to use CardMirror this season), and the ADR records his name, the date and
+              the chosen option.
+status:
+  phase: Pending

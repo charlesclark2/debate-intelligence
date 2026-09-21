@@ -81,9 +81,11 @@ spec:
         macro-enabled, .doc or .pdf inputs yield a typed ParseFailure with a reason instead of partial output.
     - id: ac6
       description: >-
-        8-10 scrubbed structural fixtures (team Policy/LD/PF files, Verbatim and non-Verbatim caselist files,
-        a wiki-converted cite file, a camp file, a pre-2026 direct-formatted file) have snapshot expectations,
-        and a 300-page (about 5 MB) synthetic file parses in under 20 s in a `slow` test.
+        8-10 synthetic structural fixtures modelled on the template families the v1-e31-t02 survey measured
+        (team Verbatim, Verbatim and non-Verbatim caselist uploads, wiki-converted cites, camp files,
+        pre-2026 direct formatting) have snapshot expectations, and a 300-page (about 5 MB) synthetic file
+        parses in under 20 s in a `slow` test. No real file or excerpt is committed: accuracy against real
+        files is measured in place by v1-e31-t05.
 status:
   phase: Pending
 ---

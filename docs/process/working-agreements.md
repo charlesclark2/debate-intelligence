@@ -41,6 +41,16 @@ Success looks like: `42 passed`; paste the last 20 lines back into the session.
 It waits for the result, then continues. The same commands are listed under **Operator
 follow-ups** in the session report.
 
+**What makes something a hand-off** is one of three things, not a label in a spec:
+
+1. It is expected to run longer than about 2 minutes.
+2. It changes something outside the worktree: an apply, a deploy, a purchase, a push, a message.
+3. It needs credentials, an approval or a device the session should not use on its own.
+
+A read-only command over files the operator already has, finishing in seconds, is none of those: a
+session runs it and reports the measured runtime. If a spec calls such a step "operator-run", the
+session may run it and say so in Deviations. When in doubt, hand it over.
+
 ## 3. Documentation lives in predictable places
 
 | Directory | What goes there |

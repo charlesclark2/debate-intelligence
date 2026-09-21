@@ -26,7 +26,11 @@ spec:
     (wiki-converted first/last-words disclosures) are linked to full cards by short cite plus first and last
     words, never merged into their text. An occurrence table records every place a card appears: cluster id,
     exact fingerprint, caselist, school, team code, side, tournament, round, snapshot first/last seen, source
-    sha256 and element index. Because weekly archives are cumulative, an occurrence is keyed by source sha256
+    sha256 and element index. Cite tails often carry the initials or short handle of whoever originally
+    cut the card, which is real cross-team provenance the parser already reads: record it verbatim on the
+    occurrence as an opaque cutter mark, subject to the same minimization as a team code (caselist-data-use.md
+    prohibition 6) — never expanded to a name, never joined to any roster or Tabroom entry, never shown in a
+    report beyond school plus team code, and absent from fixtures and logs. Because weekly archives are cumulative, an occurrence is keyed by source sha256
     plus element index, so the same disclosure in later snapshots is counted once. `debate-research caselist
     cards` reads parsed-card JSONL (the ParsedCard schema t03 defines) and prints statistics: cards, exact
     unique cards, clusters, duplicate rate, and the most-read cards by distinct teams with short cite and tag.

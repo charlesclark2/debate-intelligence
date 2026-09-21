@@ -30,7 +30,10 @@ spec:
     wiki-converted cite entries, each result carrying the rule that fired and a match source (VERBATIM,
     VERBATIM_ALIAS, HEURISTIC). The scrub script for turning real files into safe fixtures lands here because
     this is the first task that curates fixtures from team and caselist files; t03 and t05 reuse it. A style
-    survey of the downloaded corpus (operator-run) grounds the aliases in what teams actually use.
+    survey of the downloaded corpus grounds the aliases in what teams actually use; it reads style
+    information only, emits aggregates only, leaves the files where they are, and takes well under a minute,
+    so it is not an operator hand-off. It writes the full unredacted aggregate to a gitignored path on every
+    run, because the committed report names only published style vocabulary.
     Boundaries: walking document.xml and assembling cards is t03; per-team card cutting conventions for
     generated cards are v1-e06-t03, which consumes this profile; writing documents is v1-e33-t02.
   priority: 1
@@ -112,7 +115,7 @@ spec:
             args: [run, pytest, tests/scripts/test_scrub_docx_fixture.py]
       - id: style-survey
         kind: Task
-        name: Style survey of the downloaded corpus (operator-run)
+        name: Style survey of the downloaded corpus (read-only, run in session)
         description: >-
           scripts/survey_docx_styles.py reads only styles.xml and style references from each .docx and emits
           aggregate counts. Operator-run on Charlie's Mac over the hsld26 snapshots and camp files (several
@@ -160,9 +163,13 @@ spec:
         kind: Task
         name: Style fixtures, coach review and quality gates
         description: >-
-          tests/fixtures/debate_files/style_profile/ holds synthetic documents generated from the profile plus
-          4-6 scrubbed excerpts (team Verbatim, caselist non-Verbatim, wiki-converted, camp) with a MANIFEST.md
-          of category, season and scrub date; type check and import boundaries.
+          tests/fixtures/debate_files/style_profile/ holds synthetic documents generated from the profile,
+          one per template family, with a MANIFEST.md recording what each represents. No real file or excerpt
+          is committed, scrubbed or otherwise: cards travel between programs, so a team file can carry another
+          school's disclosed evidence, and docs/policies/caselist-data-use.md prohibitions 1, 9 and 10 forbid
+          it in this repository. Real-file coverage happens in place in v1-e31-t05 over the whole corpus,
+          which is stronger evidence than a handful of excerpts. The scrub script still ships for operator-side
+          use. Type check and import boundaries.
         dependsOn: [scrub-script, heuristic-classifier]
         outputs: [tests/fixtures/debate_files/style_profile/MANIFEST.md]
         estimatedEffort: 2h
@@ -170,12 +177,7 @@ spec:
           - type: artifact_exists
             name: Style fixture manifest exists
             path: tests/fixtures/debate_files/style_profile/MANIFEST.md
-            contentMatch: "scrubbed"
-          - type: custom
-            name: Coach reviews scrubbed excerpts
-            description: >-
-              Charlie opens each scrubbed excerpt in Word and confirms no names, team codes or authorship
-              metadata remain and the excerpts reflect real formatting habits.
+            contentMatch: "synthetic"
           - type: command_succeeds
             name: Type check passes for debate_core
             command: uv

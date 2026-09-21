@@ -902,12 +902,18 @@ class EvidenceSyncService:
         one bucket can both see the same object.
         """
         seen: dict[ObjectKey, ObjectInfo] = {}
+        walked: set[tuple[int, str]] = set()
         for keyspace in self._keyspaces:
-            if prefix and not (keyspace.holds(prefix) or keyspace.remote_prefix.startswith(prefix)):
-                continue
             local_filter = _local_filter_for(keyspace, prefix)
             if local_filter is None:
                 continue
+            # Two keyspaces over one bucket with the same effective prefix would page the same
+            # listing twice. Keyed by the store's identity as well as the prefix, because two
+            # keyspaces are only asking the same question if they are asking the same store.
+            walk = (id(keyspace.remote), keyspace.remote_key(local_filter))
+            if walk in walked:
+                continue
+            walked.add(walk)
             for info in await self._list_remote(keyspace, local_filter):
                 seen.setdefault(info.key, info)
         return tuple(sorted(seen.values(), key=lambda info: info.key))

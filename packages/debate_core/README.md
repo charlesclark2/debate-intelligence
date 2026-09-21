@@ -245,10 +245,10 @@ uv sync --extra docx       # or: pip install 'debate-core[docx]'
 | `parser.py` | `DebateDocxParser`: classification through the t02 style profile, section paths, card assembly and `FILE_IMPORT` provenance |
 
 ```python
-parser = DebateDocxParser()                      # loads the verbatim style profile
+parser = DebateDocxParser()  # loads the verbatim style profile
 result = parser.parse(content, source, source_path=disclosure.source_path)
 if isinstance(result, ParsedDocument):
-    ...                                          # otherwise it is a ParseFailure with a reason
+    ...  # otherwise it is a ParseFailure with a reason
 ```
 
 Things worth knowing before you use or extend this:

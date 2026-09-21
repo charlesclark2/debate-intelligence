@@ -95,8 +95,20 @@ describe('the header navigation is the list in content/site.yaml', () => {
       'join',
       'coaches',
       'faq',
-      'contact',
     ])
+  })
+
+  /**
+   * Contact is deliberately not in the header. It is a short page whose whole content is four
+   * ways to send an email, the coaches page in the nav carries the address already, and the
+   * footer is where a visitor looks for a contact link. It is still on every page, which is what
+   * this asserts: moved, not hidden.
+   */
+  it('keeps contact out of the header and in the footer of every page', () => {
+    expect(settings.primaryNavigation).not.toContain('contact')
+    renderFrame()
+    expect(within(headerNav()).queryByRole('link', { name: /contact/i })).toBeNull()
+    expect(within(footerNav()).getByRole('link', { name: /contact/i })).toBeDefined()
   })
 
   it('is no longer every file in content/pages/', () => {

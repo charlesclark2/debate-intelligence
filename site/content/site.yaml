@@ -18,6 +18,10 @@ skipLinkLabel: Skip to main content
 # Every published page that is not on this list is a utility page and is linked from the footer
 # instead, so nothing becomes unreachable by being left out.
 #
+# Contact is deliberately not here. It is a short page whose whole content is four ways to send an
+# email, the coaches page in the nav carries the address already, and the footer is where a visitor
+# looks for a contact link. It is linked from the footer of every page.
+#
 # src/lib/content.ts validates it at build time: a slug here that is not a published page fails
 # the build naming the slug, so renaming a page cannot silently empty a nav item.
 primaryNavigation:
@@ -27,7 +31,6 @@ primaryNavigation:
   - join
   - coaches
   - faq
-  - contact
 logoAlternativeText: Whitefish Bay Blue Dukes
 footerNote: >-
   A site run by the Whitefish Bay High School Debate Team, Whitefish Bay, Wisconsin. It is

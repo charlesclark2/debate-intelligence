@@ -17,11 +17,6 @@ atAGlance:
       value: <charles.clark@wfbschools.org>
     - label: Coaching since
       value: 2007, at seven schools in Missouri, Kansas and Wisconsin.
-    - label: Coaching stipend
-      value: Donated in full back to the team.
-    - label: Financial support
-      value: >-
-        Email Coach Clark directly. That conversation stays between the family and the coach.
 ---
 
 ## Before coaching

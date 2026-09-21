@@ -548,3 +548,80 @@ def test_the_profile_is_frozen_like_every_other_domain_model(profile: StyleProfi
     attribute = "profile_version"
     with pytest.raises(ValidationError):
         setattr(profile, attribute, "tampered")
+
+
+# --------------------------------------------------------------------------------------------
+# Import boundaries
+# --------------------------------------------------------------------------------------------
+#
+# `uv run lint-imports` is the repo-wide version of this and arrives with
+# v1-e02-t06-import-boundary-guard. Until it does, these two tests hold the same line for the
+# modules this task adds.
+
+FORBIDDEN_IN_THE_DOMAIN = ("docx", "lxml", "yaml", "boto3", "botocore", "httpx", "typer", "fastapi")
+FORBIDDEN_IN_STYLE_CLASSIFICATION = ("model_router", "ModelRouter", "bedrock", "anthropic", "openai")
+
+
+def test_the_style_profile_model_imports_no_io_library() -> None:
+    """`debate_core.domain` holds data and invariants; reading the YAML is the loader's job."""
+    import inspect
+
+    from debate_core.domain import style_profile
+
+    for line in inspect.getsource(style_profile).splitlines():
+        if not line.startswith(("import ", "from ")) or line.startswith("from __future__"):
+            continue
+        assert not any(forbidden in line for forbidden in FORBIDDEN_IN_THE_DOMAIN), line
+
+
+def test_style_classification_reaches_no_model() -> None:
+    """The spec forbids a model call anywhere in style classification. Nothing here can make one."""
+    import inspect
+
+    from debate_core.evidence import style_classifier
+
+    source = inspect.getsource(style_classifier)
+    for forbidden in FORBIDDEN_IN_STYLE_CLASSIFICATION:
+        assert forbidden not in source, forbidden
+
+
+# --------------------------------------------------------------------------------------------
+# Character styles take the same five routes as paragraph styles
+# --------------------------------------------------------------------------------------------
+
+
+def test_a_character_style_resolves_through_its_display_name(profile: StyleProfile) -> None:
+    match = profile.resolve_character_style("cs7", style_name="Style Underline")
+    assert match is not None
+    assert match.emphasis is RunEmphasis.UNDERLINE
+    assert match.rule_id == "verbatim-alias-name:Style Underline"
+
+
+def test_a_deduplicated_character_style_resolves(profile: StyleProfile) -> None:
+    """`Emphasis1` inherits from `Heading1` in 10 surveyed files and is still an Emphasis."""
+    match = profile.resolve_character_style("Emphasis1", based_on_chain=("Heading1",))
+    assert match is not None
+    assert match.emphasis is RunEmphasis.EMPHASIS
+    assert match.rule_id == "verbatim-deduplicated:Emphasis1->Emphasis"
+
+
+def test_a_character_style_falls_back_to_its_based_on_ancestor(profile: StyleProfile) -> None:
+    """`Rehighlighting` inherits from `Emphasis` in 9 surveyed files."""
+    match = profile.resolve_character_style("Rehighlighting", based_on_chain=("Emphasis",))
+    assert match is not None
+    assert match.emphasis is RunEmphasis.EMPHASIS
+    assert match.rule_id == "verbatim-based-on:Emphasis"
+
+
+def test_an_unrecognised_character_style_returns_none(profile: StyleProfile) -> None:
+    assert profile.resolve_character_style("inqyif", based_on_chain=("s2",)) is None
+
+
+def test_a_cardmirror_mark_with_no_emphasis_and_no_explanation_is_refused() -> None:
+    document = _profile_document()
+    marks: list[dict[str, Any]] = document["cardmirror_marks"]
+    for mark in marks:
+        if mark.get("emphasis") is None:
+            mark["notes"] = ""
+    with pytest.raises(StyleProfileError, match="maps to no emphasis and says no why"):
+        load_style_profile_from_text(yaml.safe_dump(document))

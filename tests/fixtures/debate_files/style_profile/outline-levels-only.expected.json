@@ -1,0 +1,56 @@
+{
+  "fixture": "outline-levels-only.docx",
+  "category": "heuristic",
+  "summary": "No Verbatim style is defined or referenced. Structure survives only as `w:outlineLvl` plus the bold and the sizes that go with each level.",
+  "profile_version": "2026.09.20-verbatim-1",
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "Data Centre Moratorium Negative",
+      "expected_unit": "POCKET",
+      "expected_rule_id": "heuristic-outline-level-0",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    },
+    {
+      "index": 1,
+      "text": "Grid Reliability",
+      "expected_unit": "HAT",
+      "expected_rule_id": "heuristic-outline-level-1",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    },
+    {
+      "index": 2,
+      "text": "AT: Reserve Margin Turn",
+      "expected_unit": "BLOCK",
+      "expected_rule_id": "heuristic-outline-level-2",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    },
+    {
+      "index": 3,
+      "text": "Data centre demand collapses the reserve margin",
+      "expected_unit": "TAG",
+      "expected_rule_id": "heuristic-outline-level-3",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    },
+    {
+      "index": 4,
+      "text": "Okonkwo 26, Professor of Energy Policy, 14 March 2026.",
+      "expected_unit": "CITE",
+      "expected_rule_id": "heuristic-cite-line-author-year",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    },
+    {
+      "index": 5,
+      "text": "Grid operators in the region reported that demand from new data centres rose faster than any other load category last year, and the increase outpaced every scenario the utility had planned against, leaving the reserve margin thinner than at any point in the past decade.",
+      "expected_unit": "EVIDENCE",
+      "expected_rule_id": "heuristic-marked-up-body-text",
+      "expected_match_source": "HEURISTIC",
+      "note": ""
+    }
+  ]
+}

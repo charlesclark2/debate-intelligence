@@ -9,6 +9,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 |---|---|---|
 | `ArticleRepository` | `persistence` | Article and snapshot-metadata records |
 | `SnapshotStore` | `persistence` | Immutable, content-addressed blobs |
+| `EvidenceObjectStore` | `evidence_store` | Evidence objects stored under a name: manifests, reports |
 | `CardRepository` | `persistence` | Card records and their revision checks |
 | `SearchRepository` | `persistence` | Searches and their ranked results |
 | `CaselistRepository` | `caselist` | Imported caselist and camp-file records (E30) |
@@ -31,6 +32,14 @@ worked example.
 """
 
 from debate_core.application.ports.caselist import CaselistRepository
+from debate_core.application.ports.evidence_store import (
+    MAX_OBJECT_KEY_BYTES,
+    OBJECT_KEY_PATTERN,
+    EvidenceObjectStore,
+    ObjectInfo,
+    ObjectKey,
+    validate_object_key,
+)
 from debate_core.application.ports.persistence import (
     DEFAULT_PAGE_SIZE,
     ArticleRepository,
@@ -61,6 +70,8 @@ from debate_core.application.ports.providers import (
 
 __all__ = [
     "DEFAULT_PAGE_SIZE",
+    "MAX_OBJECT_KEY_BYTES",
+    "OBJECT_KEY_PATTERN",
     "ArticleFetcher",
     "ArticleRepository",
     "BlobKey",
@@ -69,6 +80,7 @@ __all__ = [
     "CaselistRepository",
     "Clock",
     "ContentExtractor",
+    "EvidenceObjectStore",
     "ExtractedContent",
     "ExtractionQuality",
     "FetchResult",
@@ -77,6 +89,8 @@ __all__ = [
     "ModelInvocationMetadata",
     "ModelRouter",
     "ModelTaskClass",
+    "ObjectInfo",
+    "ObjectKey",
     "Page",
     "ProviderQuery",
     "ProviderResponse",
@@ -84,4 +98,5 @@ __all__ = [
     "SearchRepository",
     "SnapshotStore",
     "SourceMetadataHints",
+    "validate_object_key",
 ]

@@ -15,6 +15,16 @@ dependencies = [
     "python-ulid>=3.0",
 ]
 
+# boto3 is optional on purpose. The domain and application layers never import it — the
+# import-linter contract in the workspace root enforces that — and a laptop running the V1 CLI
+# against its local evidence directory has no reason to install an AWS SDK. Only
+# debate_core.integrations.s3 (v1-e29-t04-s3-blob-store) needs it, so it arrives with the extra
+# that names the cloud it talks to: `uv sync --extra aws`, or `pip install debate-core[aws]`.
+[project.optional-dependencies]
+aws = [
+    "boto3>=1.35",
+]
+
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12"]
 build-backend = "uv_build"

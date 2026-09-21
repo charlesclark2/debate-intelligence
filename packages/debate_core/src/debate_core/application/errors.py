@@ -18,6 +18,10 @@ The hierarchy::
     │   └── RevisionMismatch
     ├── InvalidCursor
     ├── BlobIntegrityError
+    ├── StoreError
+    │   ├── StoreAccessDenied
+    │   ├── StoreCredentialsExpired
+    │   └── StoreUnavailable
     ├── InvalidModelOutput
     └── ProviderError
         ├── ProviderUnavailable
@@ -41,6 +45,10 @@ __all__ = [
     "ProviderRateLimited",
     "ProviderUnavailable",
     "RevisionMismatch",
+    "StoreAccessDenied",
+    "StoreCredentialsExpired",
+    "StoreError",
+    "StoreUnavailable",
 ]
 
 
@@ -157,6 +165,82 @@ class BlobIntegrityError(DomainError):
         """The digest the stored bytes actually produce, when it was computed."""
         found = "" if actual_sha256 is None else f"; stored bytes hash to {actual_sha256}"
         super().__init__(f"blob {key} failed its integrity check{found}")
+
+
+# --------------------------------------------------------------------------------------------
+# Reaching the store at all
+# --------------------------------------------------------------------------------------------
+
+
+class StoreError(DomainError):
+    """A store could not be reached or refused the request, whatever it stores things in.
+
+    The three errors below are the conditions a *remote* store adds to the ones a local directory
+    already has, and they exist so that `botocore`'s `ClientError`, `NoCredentialsError` and
+    `UnauthorizedSSOTokenError` stop at the adapter's edge
+    (:mod:`debate_core.integrations.s3.errors`). They say nothing about AWS: a filesystem store
+    raises :class:`StoreAccessDenied` when the operating system refuses a directory, and a future
+    store on another cloud would map its own failures the same way.
+
+    Catching this catches "the store is not answering" without catching
+    :class:`NotFound`, which is an answer.
+    """
+
+
+class StoreAccessDenied(StoreError):
+    """The credentials are valid, and they are not allowed to do this.
+
+    Almost always a policy that does not grant the action rather than anything wrong with the
+    request: an `EvidenceOperator` session listing the bucket root, or a `DebateMaintainer` session
+    reaching for `debate-prod-evidence`, which ADR-0010 rule 4 denies on purpose.
+
+    The message names the operation and the resource and nothing else. It never carries the
+    credential, the session token or the object's contents.
+    """
+
+    def __init__(self, operation: str, resource: str, *, hint: str | None = None) -> None:
+        self.operation = operation
+        """The store operation that was refused, e.g. `"GetObject"`."""
+        self.resource = resource
+        """What it was refused on: a bucket, a key, a directory. Never a credential."""
+        self.hint = hint
+        """One line a CLI can print to say what to do about it, when there is one."""
+        super().__init__(f"not allowed to {operation} {resource}" + (f": {hint}" if hint else ""))
+
+
+class StoreCredentialsExpired(StoreError):
+    """There are no usable credentials: the SSO session expired, or there were never any.
+
+    Split out from :class:`StoreAccessDenied` because the answer is different and boring — log in
+    again — and because a wall of `botocore` traceback is the wrong way to tell an operator that.
+    The adapter fills in :attr:`hint` with the exact command to run, so the CLI prints one line
+    (`v1-e29-t05-evidence-sync-cli` ac4).
+    """
+
+    def __init__(self, message: str = "no usable AWS credentials", *, hint: str | None = None) -> None:
+        self.hint = hint
+        """The command that fixes it, e.g. `"aws sso login --profile debate-dev-evidence"`."""
+        super().__init__(message + (f": {hint}" if hint else ""))
+
+
+class StoreUnavailable(StoreError):
+    """The store did not complete the request, and the reason is not one of the two above.
+
+    A 500 from S3, a throttle, a timeout, a connection that never opened, or a response code this
+    adapter has no more specific translation for. It is deliberately one class rather than a
+    catalogue: a caller's response to all of it is to retry or to give up, and the underlying
+    exception stays on `__cause__` for the log.
+
+    It exists so that the promise in this module's first paragraph holds without exception — no
+    `ClientError` reaches a service, not even an unrecognised one.
+    """
+
+    def __init__(self, operation: str, resource: str, message: str) -> None:
+        self.operation = operation
+        """The store operation that failed."""
+        self.resource = resource
+        """What it was attempted on."""
+        super().__init__(f"{operation} on {resource} failed: {message}")
 
 
 # --------------------------------------------------------------------------------------------

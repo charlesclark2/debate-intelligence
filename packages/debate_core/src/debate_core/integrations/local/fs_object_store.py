@@ -86,14 +86,25 @@ class FsEvidenceObjectStore:
 
     Args:
         data_dir: The environment's data directory. Objects go under `<data_dir>/objects/`.
+        subdirectory: Which directory inside `data_dir` this store is rooted at. The default,
+            :data:`OBJECT_DIRECTORY`, is the named-object tree and is what every caller but one
+            wants. `v1-e29-t05-evidence-sync-cli` passes `blobs` as well, because a sync moves
+            both trees to the bucket and the diff it does that with is written once, over this
+            port, rather than twice (:mod:`debate_core.application.evidence_sync`).
+
+            That store is for *listing and transferring* the blob tree, never for writing into it
+            by name: a blob is written through
+            :meth:`~debate_core.integrations.local.FsSnapshotStore.put`, which refuses to
+            overwrite, and the sync's own rule is that a content-addressed key already present is
+            skipped and never rewritten.
     """
 
-    def __init__(self, data_dir: Path) -> None:
-        self._root = Path(data_dir) / OBJECT_DIRECTORY
+    def __init__(self, data_dir: Path, *, subdirectory: Path = OBJECT_DIRECTORY) -> None:
+        self._root = Path(data_dir) / subdirectory
 
     @property
     def root(self) -> Path:
-        """The directory named objects are stored under: `<data_dir>/objects`."""
+        """The directory this store's objects live under: `<data_dir>/objects` by default."""
         return self._root
 
     def path_for(self, key: ObjectKey) -> Path:

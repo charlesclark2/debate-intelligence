@@ -58,7 +58,7 @@ the tests ran after it, so the nine suites that read `site/out/` checked this co
 | Node: Lint passes | PASS | exit 0 |
 | Node: Type check passes | PASS | exit 0 |
 | Node: Charlie approved the exact copy and the source list (custom) | PASS | Charlie was shown the band exactly as it publishes (eyebrow, title, intro, both claims, both source lines) plus the three card-label changes, and answered "Approved as written" on 2026-09-20. This is his sign-off under pre-publication checklist item 16 |
-| Band stacks to one column at 390px with no horizontal overflow (node description) | PASS at CSS level; pixel check NOT RUN | `.card-grid` is one column below 48rem. The new rules set no width, no nowrap and no transition (asserted in `home`), and `overflow-wrap: anywhere` lets long citations wrap. A browser check at 390px needs the operator-only `pnpm --dir site qa` (see Operator follow-ups) |
+| Band stacks to one column at 390px with no horizontal overflow (node description) | PASS | Operator ran `pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95` against a fresh prod export (2026-09-21 04:47 UTC, Chromium via playwright 1.63.0, Lighthouse 13.5.0, axe-core 4.13.0) and it exited clean: `8 pages clear the floor with axe clean at every width`. Home `/`: performance 96, accessibility 100, best practices 100, SEO 100. No horizontal overflow at 390, 768 or 1280. axe (colour-contrast enabled) found no violations on any page at any width. I reviewed the `home-390.png` and `home-1280.png` screenshots: one card per row at 390 with the source lines wrapping inside the cards, two up at 1280 with both source lines lined up along the bottom |
 | Spec validation | PASS | `uv run scripts/validate_specs.py` → `OK: 282 files, 38 epics, 224 tasks, 20 releases` |
 
 ## Files changed
@@ -117,16 +117,20 @@ the tests ran after it, so the nine suites that read `site/out/` checked this co
 
 ## Operator follow-ups
 
-**Operator command** (expected runtime a few minutes; needs Chromium, operator-only per site/README.md)
-Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e36-t09-home-academic-case`
+Done. The browser QA run above was handed to the operator and came back clean. My first hand-off
+left out the one-time tools install that every new worktree needs
+(`site/scripts/visual-qa-tools/node_modules` lives in each worktree, while Chromium is cached per
+machine). The complete sequence, as run:
+
 ```bash
+pnpm --dir site/scripts/visual-qa-tools install
+pnpm --dir site/scripts/visual-qa-tools exec playwright install chromium
 SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build
 pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95
 ```
-Success looks like: exit 0, the home page at or above 95 on accessibility and best practices, and no
-horizontal scroll at 390px. This is the pixel-level check that the new band stacks cleanly on a
-phone, which the offline suite can only assert from the CSS. It can wait for the next t08-style QA
-pass before promotion.
+
+The screenshots in `site/qa-artifacts/` are git-ignored and were not committed. `/contact/` scored 88 on
+performance. Performance has no floor, it scored 88 in the same run, and this task did not change that page.
 
 ## Follow-up work
 

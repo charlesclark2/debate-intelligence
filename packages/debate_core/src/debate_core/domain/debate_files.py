@@ -329,9 +329,16 @@ class ParsedCard(DomainModel):
     `UNVERIFIED`.
 
     `match_source` and `confidence` are the *weakest* of the matches that built the card, and
-    `rule_ids` names every rule that fired. A card assembled from `Heading4` plus a cite character
-    style is a `VERBATIM` card at confidence 1.0; one assembled out of bold text at a heading size
-    says `HEURISTIC` and a lower number, and the evaluation in `v1-e31-t05` can sort by it.
+    `rule_ids` names every rule that fired, in order. Weakest rather than strongest because a card
+    is only as trustworthy as the least certain step that built it, and reporting the strongest
+    would make a guess look like a style match in the accuracy evaluation.
+
+    This has a consequence worth knowing before reading a number: an ordinary Verbatim card
+    reports `HEURISTIC`. Verbatim gives a card's body no paragraph style of its own, so the body
+    is recognised by its underlining and highlighting rather than by a style, and that step is a
+    heuristic however perfectly styled the tag and cite above it are. `rule_ids` is where the
+    detail lives — `verbatim-style-id:Heading4`, `verbatim-cite-run-style`,
+    `heuristic-marked-up-body-text` — and it is what `v1-e31-t05` sorts misses by.
     """
 
     tag: str = Field(default="", description="The claim the card is read for; empty if the file had none.")
@@ -339,6 +346,10 @@ class ParsedCard(DomainModel):
         default=None, description="The part a debater says out loud, e.g. `Okonkwo 26`; None if unreadable."
     )
     full_cite: str = Field(default="", description="The whole cite line, exactly as written.")
+    undertag: str = Field(
+        default="",
+        description="Undertag lines under the tag, joined by newlines; empty when the card has none.",
+    )
     evidence_text: str = Field(
         default="", description="The card's body, the runs' text concatenated, copied exactly."
     )

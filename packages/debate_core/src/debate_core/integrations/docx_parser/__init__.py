@@ -21,9 +21,12 @@ from debate_core.integrations.docx_parser.package import (
     PackageLimits,
     open_debate_docx,
 )
+from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 
 __all__ = [
     "DEFAULT_PACKAGE_LIMITS",
+    "DOCX_PARSER_VERSION",
+    "DebateDocxParser",
     "DocxPackage",
     "DocxPackageError",
     "PackageLimits",

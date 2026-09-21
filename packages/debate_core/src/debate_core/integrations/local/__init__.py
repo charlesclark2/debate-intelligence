@@ -42,6 +42,16 @@ enough of these to matter, the fix is a thread pool inside these adapters and no
 else — which is the point of the port.
 """
 
+from debate_core.integrations.local.archive_reader import (
+    ArchiveEntry,
+    ArchiveMember,
+    ArchiveTooLarge,
+    SkippedMember,
+    SkipReason,
+    UnreadableArchive,
+    archive_digest,
+    read_archive,
+)
 from debate_core.integrations.local.fs_blob_store import (
     BLOB_DIRECTORY,
     BLOB_FILE_MODE,
@@ -66,6 +76,14 @@ from debate_core.integrations.local.sqlite_repos import (
 
 __all__ = [
     "BLOB_DIRECTORY",
+    "ArchiveEntry",
+    "ArchiveMember",
+    "ArchiveTooLarge",
+    "SkipReason",
+    "SkippedMember",
+    "UnreadableArchive",
+    "archive_digest",
+    "read_archive",
     "BLOB_FILE_MODE",
     "DATABASE_FILENAME",
     "OBJECT_DIRECTORY",

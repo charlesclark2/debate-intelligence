@@ -13,6 +13,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `CardRepository` | `persistence` | Card records and their revision checks |
 | `SearchRepository` | `persistence` | Searches and their ranked results |
 | `CaselistRepository` | `caselist` | Imported caselist and camp-file records (E30) |
+| `ArchiveMember` / `SkippedMember` | `archive` | What reading a weekly archive yields (E30) |
 | `SearchProvider` | `providers` | One discovery source |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
 | `ContentExtractor` | `providers` | Readable-text extraction |
@@ -31,6 +32,12 @@ How a service takes its ports is written up in `docs/architecture/ports-and-adap
 worked example.
 """
 
+from debate_core.application.ports.archive import (
+    ArchiveEntry,
+    ArchiveMember,
+    SkippedMember,
+    SkipReason,
+)
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.evidence_store import (
     MAX_OBJECT_KEY_BYTES,
@@ -72,6 +79,8 @@ __all__ = [
     "DEFAULT_PAGE_SIZE",
     "MAX_OBJECT_KEY_BYTES",
     "OBJECT_KEY_PATTERN",
+    "ArchiveEntry",
+    "ArchiveMember",
     "ArticleFetcher",
     "ArticleRepository",
     "BlobKey",
@@ -96,6 +105,8 @@ __all__ = [
     "ProviderResponse",
     "SearchProvider",
     "SearchRepository",
+    "SkipReason",
+    "SkippedMember",
     "SnapshotStore",
     "SourceMetadataHints",
     "validate_object_key",

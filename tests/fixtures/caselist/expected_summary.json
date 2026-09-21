@@ -1,0 +1,85 @@
+{
+  "caselist": "testcl26",
+  "event": "LD",
+  "season": "2026-27",
+  "description": "Expected import summary for the three synthetic cumulative archives built by build_synthetic_archives.py. Schools, team codes, tournaments and document bodies are invented; no real caselist content appears here or in the archives.",
+  "snapshots": [
+    {
+      "snapshot": "2026-09-01",
+      "archive": "testcl26-0901",
+      "classifications": {
+        "NEW": 4,
+        "UNCHANGED": 0,
+        "CHANGED": 0,
+        "DUPLICATE": 0,
+        "REMOVED": 0,
+        "SUPPRESSED": 0
+      },
+      "skipped": {
+        "directory": 3,
+        "zip": 3
+      },
+      "disclosures": 4,
+      "warnings": 1,
+      "distinct_sha256_after": 4,
+      "notes": [
+        "Four files, all new; nothing to compare against.",
+        "One warning: the Harbor Classic affirmative states no round."
+      ]
+    },
+    {
+      "snapshot": "2026-09-08",
+      "archive": "testcl26-0908",
+      "classifications": {
+        "NEW": 7,
+        "UNCHANGED": 3,
+        "CHANGED": 1,
+        "DUPLICATE": 2,
+        "REMOVED": 0,
+        "SUPPRESSED": 0
+      },
+      "skipped": {
+        "directory": 3,
+        "zip": 3
+      },
+      "disclosures": 13,
+      "warnings": 4,
+      "distinct_sha256_after": 12,
+      "notes": [
+        "Seven bodies appear for the first time; the Round 2 negative is revised in place.",
+        "Two members repeat the Round 1 affirmative's bytes: a re-upload and another team's copy.",
+        "Warnings, one member each: the Harbor Classic affirmative states no round; a Public Forum side in an LD caselist; a filename with no side token to anchor on; a filename prefix naming neither the school nor the team code its directories name."
+      ]
+    },
+    {
+      "snapshot": "2026-09-15",
+      "archive": "testcl26-0915",
+      "classifications": {
+        "NEW": 2,
+        "UNCHANGED": 12,
+        "CHANGED": 0,
+        "DUPLICATE": 0,
+        "REMOVED": 1,
+        "SUPPRESSED": 0
+      },
+      "skipped": {
+        "directory": 4,
+        "zip": 5
+      },
+      "disclosures": 14,
+      "warnings": 4,
+      "distinct_sha256_after": 14,
+      "notes": [
+        "Two new bodies; everything else carried forward unchanged.",
+        "The same four warnings as the second week: they belong to members still in the archive.",
+        "The Harbor Classic octafinals negative is absent: one REMOVED.",
+        "The directory build skips a symlink; the zip build skips that and a `../` member."
+      ]
+    }
+  ],
+  "totals": {
+    "distinct_sha256": 14,
+    "stored_blobs": 14,
+    "document_bodies": 14
+  }
+}

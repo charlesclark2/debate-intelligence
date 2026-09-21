@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import typer
 
-from debate_cli.commands import config, doctor, store
+from debate_cli.commands import caselist, config, doctor, store
 
 __all__ = ["command_group", "register_commands"]
 
@@ -51,6 +51,10 @@ def register_commands(app: typer.Typer) -> None:
     configuration = command_group("config", "Inspect the settings this installation runs with.")
     configuration.command("show")(config.show)
     app.add_typer(configuration)
+
+    disclosed_evidence = command_group("caselist", "Import and inspect disclosed caselist evidence.")
+    disclosed_evidence.command("import")(caselist.import_archive)
+    app.add_typer(disclosed_evidence)
 
     evidence_store = command_group("store", "Move evidence between this machine and its bucket.")
     evidence_store.command("sync")(store.sync)

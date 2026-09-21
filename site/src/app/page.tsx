@@ -59,7 +59,9 @@ export default function HomePage() {
           {parentSession.facts.map((fact) => (
             <Fragment key={fact.label}>
               <dt>{fact.label}</dt>
-              <dd>{fact.value}</dd>
+              <dd>
+                {fact.value ?? <span className="placeholder">{fact.unsetNote}</span>}
+              </dd>
             </Fragment>
           ))}
         </dl>
@@ -76,6 +78,7 @@ export default function HomePage() {
 
       <Section
         contentWidth="wide"
+        headerAlign="wide"
         eyebrow={entryPoints.eyebrow}
         id="start-here"
         intro={entryPoints.intro}
@@ -100,6 +103,7 @@ export default function HomePage() {
 
       <Section
         contentWidth="wide"
+        headerAlign="wide"
         eyebrow={whatDebateBuilds.eyebrow}
         id="what-debate-builds"
         intro={whatDebateBuilds.intro}

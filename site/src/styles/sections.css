@@ -60,6 +60,18 @@
   text-align: center;
 }
 
+/*
+ * The header of a band whose content is a card grid. It spans the band like the centred modifier
+ * but keeps its text left-aligned, so the eyebrow, the heading and the intro start on the same
+ * left edge as the cards underneath them. Without it a header sits in the 36rem text column over
+ * a 56rem grid and is indented from its own content, which is the one thing on the page that
+ * reads as unpolished at 768px and up. Use this over --centered when the content below is left
+ * aligned, and --centered only when the row itself is centred.
+ */
+.section__header--wide {
+  max-width: none;
+}
+
 .section__eyebrow {
   margin: 0 0 var(--space-2);
   color: var(--color-text-body);

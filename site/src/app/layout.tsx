@@ -2,7 +2,12 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { SiteFrame } from '@/components/SiteFrame'
-import { buildNavigation, loadGuardedContent, loadSiteSettings } from '@/lib/content'
+import {
+  announcementFields,
+  buildNavigation,
+  loadGuardedContent,
+  loadSiteSettings,
+} from '@/lib/content'
 import { debaterLoginNavigationItem } from '@/lib/feature-flags'
 import { loadMediaConsent } from '@/lib/media-consent'
 import { enforcePublishingPolicy } from '@/lib/publishing-policy'
@@ -39,10 +44,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // content/home.yaml, content/faq.yaml and content/events.yaml carry copy too, so they are
   // guarded alongside the Markdown pages rather than being the files on the site where an address
   // or a name is not checked. loadGuardedContent() is that whole list.
+  // announcementFields() is the October 1 panel's facts. They go through the guard as fields
+  // rather than as copy because a fact nobody has supplied leaves no trace in the copy: a panel
+  // with no room in it is a well-formed panel. A prod build fails while one is unset.
   enforcePublishingPolicy({
     pages: loadGuardedContent(),
     settings,
     consent: loadMediaConsent(),
+    announcements: announcementFields(),
   })
 
   // The header carries the pages content/site.yaml names, in that order; the footer carries

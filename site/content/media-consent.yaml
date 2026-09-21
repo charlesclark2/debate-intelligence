@@ -54,84 +54,70 @@ nonPersonImages:
   - path: /brand/wfb-mark-square-light-512.png
     reason: Square light-background version of the mark, for sharing. No person in the frame.
 
-# Words that may appear inside a capitalised name on this site. The guard flags any run of
-# capitalised words containing a word that is not listed here, which is how an unreviewed student
-# name is caught before it reaches prod. Reviewing words rather than whole phrases is what keeps
-# "Email Coach Clark" and "Whitefish Bay High School" quiet while "Jordan Rivera" is not.
+# Capitalised phrases this site is allowed to print. The guard (`unreviewedNames` in
+# src/lib/publishing-policy.ts) finds every run of two or more capitalised words in the copy and
+# flags any run it cannot cover, end to end, with the entries below. That is how an unreviewed
+# student name is caught before it reaches prod.
+#
+# PHRASES, NOT WORDS (the v1-e36-t07 review)
+# ------------------------------------------
+# This used to be a list of single words, because the guard checked a name word by word. Reviewing
+# "Blue Valley West High School" and "Olathe North High School" therefore left Blue, Valley, West
+# and North permitted on their own, anywhere on the site, for ever: a student called West would
+# have passed, and every later school loosened the guard again for the prose after it. An entry
+# here now permits its words only in the order they were reviewed in, so the list can grow with
+# the site without the guard weakening.
+#
+# A multi-word run may be covered by several entries end to end, which is why the ordinary words
+# below ("The", "Email") earn their place: they let a real sentence run into a reviewed name
+# without the name itself having to be listed twice.
 #
 # A student's name never goes here. It goes in `students` above, with a consent reference.
 # The full published-names allowlist, covering opponent schools and tournaments, is v1-e37-t03.
-permittedNameWords:
-  # Adults acting publicly, named under Students rule: coaches may be named as coaches.
-  - Charlie
-  - Clark
-  - Coach
-  - Head
-  # The school, the district and the places the team goes.
-  - Whitefish
-  - Bay
-  - High
-  - School
-  - Team
-  - English
-  - Wing
-  - Wisconsin
-  - Kansas
-  - City
-  - Chicago
-  - Minneapolis
-  - Iowa
-  # Organisations and events.
-  - National
-  - Speech
-  - Debate
-  - Association
-  - Catholic
-  - Forensic
-  - League
-  - Coaches
-  - Tournament
-  - Champions
-  - Public
-  - Forum
-  - Policy
-  # Accessibility statement and holidays.
-  - Web
-  - Content
-  - Accessibility
-  - Guidelines
-  - Martin
-  - Luther
-  - King
-  - Jr
-  # Ordinary words that start a sentence or a heading next to a capitalised word.
+permittedNamePhrases:
+  # Adults acting publicly, named under the Students rules: coaches may be named as coaches.
+  - Charlie Clark
+  - Coach Clark
+  - Head Coach
+  # The school and the team, as the site and the header mark name them.
+  - Whitefish Bay
+  - Whitefish Bay Debate
+  - Whitefish Bay High School
+  - Whitefish Bay Blue Dukes
+  # The footer's "Whitefish Bay High School Debate Team", covered as two reviewed phrases.
+  - Debate Team
+  # Organisations, leagues and events. The two fragments are what the guard sees of "National
+  # Speech and Debate Association": the lower-case "and" ends one run of capitals and starts
+  # another, so the expansion reaches it as two phrases rather than one.
+  - National Speech
+  - Debate Association
+  - National Catholic Forensic League
+  - Wisconsin Debate Coaches Association
+  - Public Forum
+  # Page headings that are written in title case, so the guard reads them as a name.
+  - Debate Events Offered
+  # The schools and universities in Coach Clark's coaching history on content/pages/coaches.md,
+  # each one reviewed with Charlie when he supplied the list. Every one is an institution; none is
+  # a person, and a student name still never goes here.
+  - Kansas City
+  - Kansas City Central High School
+  - Olathe North High School
+  - Neenah High School
+  - Blue Valley West High School
+  - Marquette University High School
+  - Jefferson City High School
+  - Indiana University
+  # The country named in the Public Forum resolution in content/events.yaml.
+  - United States
+  # The accessibility statement, and the holiday the practice calendar skips.
+  - Web Content Accessibility Guidelines
+  - Martin Luther King Jr
+  # Ordinary words that begin a sentence or a heading immediately before a reviewed phrase, and so
+  # end up inside the same run of capitals. They cover one word each and permit nothing on their
+  # own, because a single capitalised word is never a run.
+  - The
   - Email
   - Joining
-  - The
-  # From the title-case page heading "Debate Events Offered" (v1-e36-t07). Neither word is a
-  # surname; they are here rather than the heading being reworded because this is the path the
-  # guard itself names for a capitalised phrase that is not a person.
-  - Events
-  - Offered
-  # From the Public Forum resolution in content/events.yaml, which names the country.
-  - United
-  - States
-  # The schools, universities and states in Coach Clark's coaching history on content/pages/
-  # coaches.md (v1-e36-t07). Every one is an institution or a place, reviewed with Charlie when he
-  # supplied the list; none is a person. A student name still never goes here, it goes in
-  # `students` above with a consent reference.
-  - Central
-  - Olathe
-  - North
-  - Neenah
-  - Blue
-  - Valley
-  - West
-  - Marquette
-  - University
-  - Jefferson
-  - Missouri
-  - Indiana
   # Days and months, so a date next to a capitalised word is not read as a name.
   - Monday
   - Mondays

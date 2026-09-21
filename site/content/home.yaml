@@ -24,7 +24,14 @@ hero:
     href: /join/
 
 # The single most important thing on this page. It renders as the one navy panel, directly under
-# the hero. The room is the fact nobody has yet; v1-e36-t08 fills it in before launch.
+# the hero.
+#
+# Each fact carries either a `value`, or an `unsetNote` saying why it is still missing. The room
+# is the one nobody has yet: while it has an `unsetNote`, a dev preview shows that note in the
+# gap badge and a prod build fails naming the field (src/lib/publishing-policy.ts). Replace the
+# `unsetNote` with a `value` to fill it in. If the answer turns out to be that there is no room
+# to give yet, that is a `value` too: "To be announced" is a decision, an empty field is an
+# oversight.
 parentSession:
   eyebrow: For parents
   title: Parent information session
@@ -39,7 +46,7 @@ parentSession:
     - label: Place
       value: Whitefish Bay High School
     - label: Room
-      value: The room is not set yet. It will be posted here before the session.
+      value: To be announced
   whatToExpect:
     - The three events the team competes in, explained in plain language.
     - What a tournament weekend actually looks like, from Friday to Sunday.

@@ -833,6 +833,94 @@ syncs, an invalidation that completes, and then `All N checks passed.` — with 
 A refusal here is the guard working. `prod refused: on branch 'dev', not main` means the
 promotion has not merged yet; `HEAD ... is not origin/main` means the local `main` is behind.
 
+## Promotion checklist
+
+The launch, start to finish, for Charlie. The pieces are all above; this is the order, what has to
+be true before it starts, and what to do when something looks wrong. Added by
+[`v1-e36-t08-prelaunch-visual-qa`](../../plan_specs/v1/e36-team-website/t08-prelaunch-visual-qa.yaml).
+
+Work top to bottom and stop at the first thing that does not do what it says here. Nothing below
+is reversible in a hurry once parents have the URL, and every step exists because skipping it is
+how a page about a child goes out unreviewed.
+
+### Before you start
+
+| | What has to be true | How you know |
+|---|---|---|
+| 1 | **The October 1 room is filled in.** `content/home.yaml` gives the Room fact a `value`, not an `unsetNote`. "To be announced" is a value; leaving it unset is not | `SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build` exits 0 |
+| 2 | **The prod build is clean.** No unfilled placeholder, no unreviewed name, no address outside the allowlist, no image without a consent entry | The same build. A failure names the file and the field |
+| 3 | **The offline checks pass, against an export built from this commit** | Build first, then test, in that order: see the note below the table |
+| 4 | **The browser QA run is green.** Every page at or above 95 on accessibility and best practices, axe clean at 390, 768 and 1280px, nothing scrolling sideways | `pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95` exits 0. The report it writes goes in the session report |
+| 5 | **The pre-publication checklist is ticked** for the commit being promoted | [`docs/policies/website-publishing.md`](../policies/website-publishing.md), Pre-publication checklist, items 1 to 16 (17 and 18 too, on the season's first deploy) |
+| 6 | **You have read the site as a parent would**, on a phone, on the dev preview | Step 2 below |
+
+**Build before you test, every time.** Nine of the site's test suites read the built export in
+`site/out/` from disk. When there is no export they skip, which is harmless. When there is an
+export **from an earlier commit**, they check that old HTML instead of the code in front of you,
+and they can pass. A green run then proves nothing about what is about to be promoted, and nothing
+on screen says so. `site/scripts/pre-commit-checks.sh` runs `test` before `build`, so on its own
+it reads whatever the previous run left behind. For preconditions 2 to 4, run them in this order,
+from the commit you mean to promote, with nothing edited in between:
+
+```bash
+SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build   # preconditions 1 and 2
+pnpm --dir site lint && pnpm --dir site typecheck && pnpm --dir site test   # precondition 3
+pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95         # precondition 4
+```
+
+The QA command reads `site/out/` too, so the same rule applies to it: its scores are evidence for
+the export on disk, and only for that.
+
+### The promotion
+
+```
+[ ] 1. Deploy dev              scripts/site_deploy.sh dev
+[ ] 2. Smoke-check dev         uv run scripts/site_smoke.py --env dev \
+                                 --url https://dev.wfbdebate.com --expect-sha $(git rev-parse HEAD)
+[ ] 3. Read it on a phone      https://dev.wfbdebate.com/ in Safari and in Chrome
+[ ] 4. Promote                 PR dev -> main, reviewed, merged
+[ ] 5. Deploy prod             from the main clone, on a clean main: scripts/site_deploy.sh prod
+[ ] 6. Smoke-check prod        uv run scripts/site_smoke.py --env prod \
+                                 --url https://wfbdebate.com --expect-sha $(git rev-parse HEAD)
+[ ] 7. Record it               First prod launch and What to record, below
+```
+
+1. **Deploy dev.** Full command block under [Deploy the dev preview](#deploy-the-dev-preview).
+2. **Smoke-check dev.** `All N checks passed.` Since `v1-e36-t08` this also confirms the October 1
+   panel is on the home page, the parent FAQ's answers still open individually, and how many pages
+   still carry a gap badge. On the preview a gap is reported rather than failed; **if that count is
+   not zero, stop here**: the same commit cannot build for prod.
+3. **Read it on a phone.** The smoke check cannot tell you whether the copy is right, and that is
+   the part that matters most. Open the home page, the October 1 panel, the events cards and the
+   FAQ on an iPhone in Safari and on an Android phone in Chrome. Nothing cut off, nothing
+   overlapping, every disclosure opening on a tap.
+4. **Promote.** A pull request from `dev` into `main` ([ADR-0013](../adr/0013-two-environments-and-dev-main-promotion.md)).
+   Prod can only ever be what is on `main`, and the deploy script refuses anything else.
+5. **Deploy prod.** From the **main clone on `main`**, not a task worktree. Full command block
+   under [Deploy prod](#deploy-prod). A refusal here is the guard working, not a problem to route
+   around.
+6. **Smoke-check prod** with `--expect-sha`. On prod there must be **no** `X-Robots-Tag`, a
+   `robots.txt` that allows crawling, and **no gap badge on any page**.
+7. **Record it** in [First prod launch](#first-prod-launch) and [What to record](#what-to-record),
+   and commit that with the session report. No account ids.
+
+### If it looks wrong
+
+**Before the promotion has merged**, nothing is public: fix it on the branch, deploy dev again and
+start from step 1. This is the cheap case, which is the entire reason the preview exists.
+
+**After prod is live**, what to do depends on what is wrong.
+
+| What is wrong | What to do |
+|---|---|
+| A page about a student, an image, or anything the publishing policy covers | [The emergency lever](#the-emergency-lever) first, minutes not hours, then [Taking something down on request](#taking-something-down-on-request) the same day. The policy's clock is not met until the edge stops serving it |
+| A broken page, a wrong fact, a layout that fails on a phone | Revert on a `hotfix/` branch into `main`, deploy prod, back-merge to `dev` the same day: [Rolling back a deploy](#rolling-back-a-deploy) |
+| The smoke check fails but the site looks fine in a browser | Believe the smoke check. A missing security header or a lost `noindex` is invisible in a browser and is exactly what it is for. Read which check failed before doing anything else |
+| The edge is still serving the previous build | `version.json` names the commit. The deploy waits for its invalidation, so this normally means the deploy did not finish: read its output rather than deploying again |
+
+Do not deploy prod a second time to "see if it fixes it". Prod is a build of a commit; if the
+commit is wrong, the next deploy of it is wrong in the same way.
+
 ## Rolling back a deploy
 
 The site is a static export of a commit, so a rollback is a deploy of a different commit. What

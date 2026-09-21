@@ -3,8 +3,14 @@ import { join } from 'node:path'
 
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import type { ContentPage, SiteSettings } from '@/lib/content'
-import { loadGuardedContent, loadSiteSettings, parsePage } from '@/lib/content'
+import type { AnnouncementField, ContentPage, SiteSettings } from '@/lib/content'
+import {
+  announcementFields,
+  loadGuardedContent,
+  loadSiteSettings,
+  parentSessionFactSchema,
+  parsePage,
+} from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
 import { isStale, loadMediaConsent, seasonStart } from '@/lib/media-consent'
 import {
@@ -130,17 +136,54 @@ describe('images and media consent', () => {
 
 describe('named students', () => {
   it('stays quiet about capitalised phrases whose words have all been reviewed', () => {
-    expect(unreviewedNames('Email Coach Clark at Whitefish Bay High School.', consent.permittedNameWords))
+    expect(unreviewedNames('Email Coach Clark at Whitefish Bay High School.', consent.permittedNamePhrases))
       .toEqual([])
-    expect(unreviewedNames('Martin Luther King Jr weekend', consent.permittedNameWords)).toEqual([])
+    expect(unreviewedNames('Martin Luther King Jr weekend', consent.permittedNamePhrases)).toEqual([])
   })
 
   it('flags a name made of words nobody has reviewed', () => {
-    expect(unreviewedNames('Jordan Rivera won.', consent.permittedNameWords)).toEqual(['Jordan Rivera'])
+    expect(unreviewedNames('Jordan Rivera won.', consent.permittedNamePhrases)).toEqual(['Jordan Rivera'])
+  })
+
+  /**
+   * The v1-e36-t07 review's point, as a test. When the guard checked words, reviewing the schools
+   * Coach Clark has coached at left Blue, Valley, West, North and Central permitted on their own,
+   * anywhere on the site. A student with any of those as a name would have passed.
+   */
+  it('does not leave the words of a reviewed school permitted on their own', () => {
+    expect(consent.permittedNamePhrases).toContain('Blue Valley West High School')
+    expect(unreviewedNames('Blue Valley West High School hosted it.', consent.permittedNamePhrases))
+      .toEqual([])
+    for (const invented of ['Blue Rivera', 'West Valley', 'Olathe Jordan', 'Kansas Rivera']) {
+      expect(
+        unreviewedNames(`${invented} spoke second.`, consent.permittedNamePhrases),
+        `${invented} should not be covered by the phrases behind it`,
+      ).toEqual([invented])
+    }
+  })
+
+  it('covers one run of capitals with several reviewed phrases end to end', () => {
+    expect(unreviewedNames('Head Coach Charlie Clark answered.', consent.permittedNamePhrases))
+      .toEqual([])
+    expect(
+      unreviewedNames('The Whitefish Bay High School Debate Team travels.', consent.permittedNamePhrases),
+    ).toEqual([])
+  })
+
+  it('permits nothing from a one-word entry, because one word is never a run', () => {
+    expect(consent.permittedNamePhrases).toContain('The')
+    expect(unreviewedNames('The Rivera family came.', consent.permittedNamePhrases)).toEqual([
+      'The Rivera',
+    ])
+  })
+
+  it('reads a typographic apostrophe as the plain one the manifest is written with', () => {
+    expect(unreviewedNames('Coach Clark’s room', ["Coach Clark's"])).toEqual([])
+    expect(unreviewedNames('Coach Clark’s room', ['Coach Clark'])).toEqual(['Coach Clark’s'])
   })
 
   it('does not run a heading into the paragraph under it', () => {
-    expect(unreviewedNames('## Joining\n\nDebate is open.', consent.permittedNameWords)).toEqual([])
+    expect(unreviewedNames('## Joining\n\nDebate is open.', consent.permittedNamePhrases)).toEqual([])
   })
 
   it('fails the build when a named student has no consent entry', () => {
@@ -223,6 +266,78 @@ describe('placeholder markers', () => {
   })
 })
 
+/**
+ * The announcement guard (the v1-e36-t07 review's ruling, implemented in v1-e36-t08).
+ *
+ * v1-e36-t06 moved the October 1 panel out of prose and into fields, and in doing so replaced the
+ * [[TBD]] marker on the room with an ordinary sentence. Nothing then flagged it: a panel with no
+ * room in it is a well-formed panel, and the guard reads copy, not absences. These are the checks
+ * that make an unset field speak.
+ */
+describe('required announcement fields', () => {
+  const field = (overrides: Partial<AnnouncementField> = {}): AnnouncementField => ({
+    location: 'content/home.yaml',
+    announcement: 'Parent information session',
+    label: 'Room',
+    unsetNote: 'The room is not set yet.',
+    ...overrides,
+  })
+
+  function announcementErrors(announcements: AnnouncementField[]): string {
+    return checkPublishingPolicy({ pages: [], settings, consent, announcements })
+      .errors.map((error) => error.message)
+      .join('\n')
+  }
+
+  it('fails the build while a field is unset, naming the field and the announcement', () => {
+    expect(announcementErrors([field()])).toMatch(
+      /the Room of the "Parent information session" announcement is still unset/,
+    )
+  })
+
+  it('is quiet once the field carries a value', () => {
+    expect(announcementErrors([field({ unsetNote: null })])).toBe('')
+  })
+
+  it('accepts "To be announced" as a value, because that is a decision', () => {
+    const decided = parentSessionFactSchema.parse({ label: 'Room', value: 'To be announced' })
+    expect(decided.unsetNote).toBeUndefined()
+    expect(announcementErrors([field({ unsetNote: null })])).toBe('')
+  })
+
+  it('refuses a fact that is neither given nor declared missing', () => {
+    expect(parentSessionFactSchema.safeParse({ label: 'Room' }).success).toBe(false)
+    expect(
+      parentSessionFactSchema.safeParse({ label: 'Room', value: 'Room 214', unsetNote: 'unknown' })
+        .success,
+    ).toBe(false)
+  })
+
+  it('reports a prod build failure rather than a printed note', () => {
+    expect(() =>
+      enforcePublishingPolicy({ pages: [], settings, consent, announcements: [field()] }, PROD),
+    ).toThrowError(PublishingPolicyError)
+  })
+
+  it('lets a dev preview come up, so the gap can be reviewed on the page', () => {
+    expect(() =>
+      enforcePublishingPolicy({ pages: [], settings, consent, announcements: [field()] }, DEV),
+    ).not.toThrow()
+  })
+
+  it('checks nothing when it is given nothing, which is what a one-page check wants', () => {
+    expect(checkPublishingPolicy({ pages: [], settings, consent }).errors).toEqual([])
+  })
+
+  it('carries the October 1 panel through from content/home.yaml', () => {
+    const labels = announcementFields().map((entry) => entry.label)
+    expect(labels).toContain('Room')
+    for (const entry of announcementFields()) {
+      expect(entry.location).toBe('content/home.yaml')
+    }
+  })
+})
+
 describe('third-party content in the built pages', () => {
   const builtPage = (html: string) => ({
     pages: [] as ContentPage[],
@@ -273,10 +388,30 @@ describe('the content this site actually ships', () => {
   // copy in it", so a new YAML content file cannot be added and quietly left unguarded.
   const pages = loadGuardedContent()
 
-  it('breaks no rule except the placeholders still waiting on Charlie', () => {
-    const { errors } = checkPublishingPolicy({ pages, settings, consent })
-    const notPlaceholders = errors.filter((error) => !error.message.includes('placeholder'))
-    expect(notPlaceholders).toEqual([])
+  it('breaks no rule except the facts still waiting on Charlie', () => {
+    const { errors } = checkPublishingPolicy({
+      pages,
+      settings,
+      consent,
+      announcements: announcementFields(),
+    })
+    expect(errors).toEqual([])
+  })
+
+  /**
+   * This began life as a tripwire asserting the room was still missing, on the reasoning that it
+   * should fail the day Charlie supplied it. It has now fired and been turned around: the room
+   * carries "To be announced", a decision rather than a gap, and the gate this test guards is that
+   * no announcement fact goes back to being silently unset before October 1.
+   */
+  it('leaves no October 1 announcement fact unset', () => {
+    const { errors } = checkPublishingPolicy({
+      pages,
+      settings,
+      consent,
+      announcements: announcementFields(),
+    })
+    expect(errors.map((error) => error.message).join('\n')).not.toMatch(/still unset/)
   })
 
   it('puts every content file that carries copy through the guard', () => {
@@ -296,7 +431,7 @@ describe('the content this site actually ships', () => {
 
   it('names no student, so no consent entry is needed yet', () => {
     for (const page of pages) {
-      expect(unreviewedNames(page.guardedHtml, consent.permittedNameWords), page.filePath).toEqual(
+      expect(unreviewedNames(page.guardedHtml, consent.permittedNamePhrases), page.filePath).toEqual(
         [],
       )
     }

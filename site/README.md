@@ -24,8 +24,9 @@ pnpm --dir site install
 | `pnpm --dir site typecheck` | `tsc --noEmit` against a strict config |
 | `pnpm --dir site test` | vitest with jsdom: content, tokens, layout, SEO, routes, contact, the login flag, the content guard, page accessibility and the offline guards |
 | `pnpm --dir site build` | Static export into `site/out/` |
+| `pnpm --dir site qa` | Pre-launch visual QA in a real browser. **Operator only, needs the network**: see [Pre-launch visual QA](#pre-launch-visual-qa) |
 
-`site/scripts/pre-commit-checks.sh` runs all four. The `site-checks` pre-commit hook runs it
+`site/scripts/pre-commit-checks.sh` runs the first four. The `site-checks` pre-commit hook runs it
 whenever anything under `site/` changes; together they take about ten seconds.
 
 Node 22.13 or newer and pnpm 10.15 are required. Install pnpm with
@@ -84,9 +85,12 @@ file name, so a page missing a title fails `pnpm --dir site build` instead of sh
 2. **Spell out every acronym.** A page that uses `NSDA`, `NCFL`, `WDCA`, `TOC`, `LD` or `PF` must
    also contain the full name somewhere on the same page. The list is `ACRONYM_EXPANSIONS` in
    `src/lib/content.ts`; add to it as the site grows. Parents and new students are the audience.
-3. **Facts nobody has supplied are marked, not invented.** Write `[[TBD]]`, or
-   `[[TBD: what is needed]]`, where a fact has to come from Charlie. It renders as a visible
-   **TBD** badge so a dev preview shows every gap, and it fails a prod build until it is filled.
+3. **Facts nobody has supplied are marked, not invented.** In prose, write `[[TBD]]` or
+   `[[TBD: what is needed]]` where a fact has to come from Charlie. In a structured announcement
+   such as the October 1 panel in `content/home.yaml`, give the fact an `unsetNote` instead of a
+   `value`. Both render as a visible gap badge, so a dev preview shows every hole, and both fail a
+   prod build until they are filled. "To be announced" is a `value`: deciding not to say is an
+   answer, and only an unanswered fact is a gap.
 
 ## The content guard
 
@@ -101,9 +105,10 @@ a dev build prints it and carries on**, so the copy can be reviewed with the gap
 | An email address that is not in `contactEmails` in `site.yaml` | Only coach and team addresses publish; a student address never does |
 | Anything shaped like a phone number | The site publishes none, of anyone |
 | An image with no entry in `media-consent.yaml` | Every image of a person needs a current-season consent reference; every other image needs a line saying nobody is in it |
-| A capitalised name whose words are not in `permittedNameWords` | A student name cannot reach prod unreviewed. The full published-names allowlist is `v1-e37-t03` |
+| A run of capitalised words that `permittedNamePhrases` cannot cover end to end | A student name cannot reach prod unreviewed. Phrases, not words: reviewing "Blue Valley West High School" must not leave Blue, Valley and West permitted on their own. The full published-names allowlist is `v1-e37-t03` |
 | A named student whose consent entry is from a previous season | The district's form renews annually; consent does not carry over |
 | A `[[TBD]]` marker | A half-written page is not published |
+| An announcement field with an `unsetNote` rather than a value | An announcement states every fact it lists. A room of "To be announced" is a decision; an empty one is an oversight, and a panel with nothing where the room goes leaves no trace in the copy for the other rules to catch |
 | A script or an iframe from another origin, in the built HTML | The site loads nothing from anyone else |
 
 It **warns**, in every environment, when a consent entry was last checked before the current
@@ -179,12 +184,65 @@ asserted against the tokens instead, in `tests/tokens.test.ts`.
 
 **`pnpm test` before `pnpm build` means no export yet**, which is the order CI uses, so the
 suites that read `site/out/` skip themselves when it is absent rather than failing.
-`site/scripts/pre-commit-checks.sh` runs test then build, so the second run of it checks the real
-files. Build first when you want that coverage in one go:
+
+**A stale export is the dangerous case.** An export left over from an earlier commit is not
+absent, so those suites do not skip: they check the old HTML instead of the code in front of you,
+and they can pass. `site/scripts/pre-commit-checks.sh` runs test then build, so every run of it
+after the first reads the export the previous run left, which is only the right one if nothing has
+changed since. Build first, from the same source, whenever the export-reading suites are meant to
+count:
 
 ```bash
 pnpm --dir site build && pnpm --dir site test
 ```
+
+## Pre-launch visual QA
+
+`site/scripts/visual-qa.mjs` is the check the unit suite cannot do. vitest runs under jsdom, which
+has no layout engine: it can tell you the October 1 panel is in the document, but not that it fits
+a 390px phone, that a card grid reflows, or whether a colour pair passes, which is why the axe
+colour-contrast rule is off in the unit suite. This script serves `site/out` over http and, in
+headless Chromium:
+
+* walks **every URL in `sitemap.xml`**, so a page cannot be skipped by being forgotten;
+* screenshots each page at **390, 768 and 1280px**, and fails any page that scrolls sideways;
+* runs **axe-core** in the page at each width on the `wcag2a`, `wcag2aa`, `wcag21a` and `wcag21aa`
+  rule sets **with colour-contrast enabled**;
+* runs **Lighthouse** for performance, accessibility, best practices and SEO;
+* writes a Markdown score table to paste into the session report, and exits non-zero if any page
+  is below the floor, axe finds anything, or a page overflows.
+
+**It is an operator command and is not part of lint, test or build.** The browser and the scorer
+are several hundred megabytes over the network, and the site job has to stay inside the CI budget
+in [`docs/process/working-agreements.md`](../docs/process/working-agreements.md), so they are a
+package of their own rather than devDependencies here. `tests/offline.test.ts` fails if either
+turns up in `site/package.json` or in one of the four offline scripts.
+
+**One-time operator setup**, per clone:
+
+```bash
+pnpm --dir site/scripts/visual-qa-tools install
+pnpm --dir site/scripts/visual-qa-tools exec playwright install chromium
+```
+
+Then, after any change to the site:
+
+```bash
+pnpm --dir site build
+pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--min-accessibility` | 95 | Floor for the Lighthouse accessibility score on every page |
+| `--min-best-practices` | 95 | Floor for the Lighthouse best-practices score on every page |
+| `--out-dir` | `site/qa-artifacts` | Where the screenshots and `visual-qa-report.md` are written |
+
+The output directory is gitignored and nothing in it is ever committed: once consent entries exist
+the site will carry photographs, and an image of a student must not reach the repository
+(`docs/policies/website-publishing.md`, Students 10-11). The screenshots are regenerated by
+running the command again. The report records the Chromium, Lighthouse and axe-core versions that
+produced the numbers, because a score with no toolchain beside it cannot be reproduced.
 
 ## What this project must not do
 

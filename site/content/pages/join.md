@@ -34,7 +34,7 @@ showing up late.
 | When | Where |
 |---|---|
 | Mondays and Wednesdays, during the lunch period | Whitefish Bay High School |
-| Thursdays, after school | The English Wing |
+| Thursdays, after school | Whitefish Bay High School |
 
 Practice is where cases get written, evidence gets found and rounds get run against teammates.
 

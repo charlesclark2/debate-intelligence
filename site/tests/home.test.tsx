@@ -7,7 +7,15 @@ import { describe, expect, it } from 'vitest'
 
 import { SiteFrame } from '@/components/SiteFrame'
 import HomePage from '@/app/page'
-import { HOME_SLUG, loadHomeContent, loadPage, loadPages, loadSiteSettings } from '@/lib/content'
+import type { ParentSessionFact } from '@/lib/content'
+import {
+  HOME_SLUG,
+  announcementFields,
+  loadHomeContent,
+  loadPage,
+  loadPages,
+  loadSiteSettings,
+} from '@/lib/content'
 
 import { describeViolations, findAccessibilityViolations } from './axe'
 
@@ -34,6 +42,14 @@ function renderHome() {
     </SiteFrame>,
     { container: document.body },
   )
+}
+
+/**
+ * What the panel shows for one fact: its value, or, while nobody has supplied it, the note that
+ * says so. Every fact carries exactly one of the two (parentSessionFactSchema), so this is total.
+ */
+function factText(fact: ParentSessionFact): string {
+  return fact.value ?? fact.unsetNote ?? ''
 }
 
 /** next/link settles its internal state a microtask after mount. */
@@ -70,7 +86,36 @@ describe('the October 1 parent session panel', () => {
     expect(panel, 'no #parent-session panel on the home page').not.toBeNull()
     for (const fact of content.parentSession.facts) {
       expect(within(panel as HTMLElement).getByText(fact.label)).toBeDefined()
-      expect(within(panel as HTMLElement).getByText(fact.value)).toBeDefined()
+      expect(within(panel as HTMLElement).getByText(factText(fact))).toBeDefined()
+    }
+  })
+
+  /**
+   * The room is the fact nobody has supplied yet, and v1-e36-t06 replaced the [[TBD]] marker that
+   * used to say so with an ordinary sentence, which left nothing flagging it. A fact is now
+   * either a value or an unsetNote, and an unsetNote shows in the same gap badge a [[TBD]] marker
+   * does, so the preview a reviewer reads still shows the gap as a gap.
+   */
+  it('shows an unset fact in the gap badge, not as ordinary copy', () => {
+    renderHome()
+    const panel = document.getElementById('parent-session') as HTMLElement
+    for (const fact of content.parentSession.facts) {
+      const shown = within(panel).getByText(factText(fact))
+      expect(
+        shown.classList.contains('placeholder'),
+        `the ${fact.label} fact should ${fact.value ? 'not ' : ''}be in the gap badge`,
+      ).toBe(fact.value === undefined)
+    }
+  })
+
+  it('offers every fact in the panel to the publishing-policy guard as a field', () => {
+    const fields = announcementFields()
+    expect(fields.map((field) => field.label)).toEqual(
+      content.parentSession.facts.map((fact) => fact.label),
+    )
+    for (const field of fields) {
+      expect(field.location).toBe('content/home.yaml')
+      expect(field.announcement).toBe(content.parentSession.title)
     }
   })
 
@@ -208,7 +253,7 @@ describe('the page holds no copy of its own', () => {
     content.parentSession.intro,
     content.parentSession.note,
     content.parentSession.action.label,
-    ...content.parentSession.facts.flatMap((fact) => [fact.label, fact.value]),
+    ...content.parentSession.facts.flatMap((fact) => [fact.label, factText(fact)]),
     ...content.parentSession.whatToExpect,
     content.entryPoints.eyebrow,
     content.entryPoints.title,

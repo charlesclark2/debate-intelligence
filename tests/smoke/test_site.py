@@ -12,6 +12,14 @@ it:
     SITE_SMOKE_SHA=$(git rev-parse HEAD) \\
     uv run pytest tests/smoke -m dev
 
+What it asks, beyond "is it up": that the security headers the CloudFront policy sets are all
+present, that the preview is not indexable and prod is, that the commit being served is the one
+meant to be, and, since v1-e36-t08, that the pages say what they should: the October 1 panel is
+on the home page, the parent FAQ's answers still open individually, and no page on prod shows a
+gap badge where a fact nobody supplied would go. That last one is the interesting failure. A prod
+build refuses to export a gap badge at all, so finding one on the live site does not mean the
+copy is unfinished; it means the build guard was bypassed.
+
 The default pytest options exclude `live` and disable sockets for the whole suite; the
 `enable_socket` marker on each test below is what lets these two, and only these two, reach the
 network. `SITE_SMOKE_SHA` is optional and worth setting: without it the checks confirm that *a*

@@ -19,7 +19,7 @@ promotion.
 
 | File | What it checks | Told where to look by |
 |---|---|---|
-| `test_site.py` | The public team website: every page in the sitemap, the HTTPS redirect, the security headers, `noindex` on the preview and not on prod, and the commit in `version.json` (`scripts/site_smoke.py`, `v1-e36-t05`) | `SITE_SMOKE_URL`, `SITE_SMOKE_ENV`, `SITE_SMOKE_SHA` |
+| `test_site.py` | The public team website: every page in the sitemap, the HTTPS redirect, the security headers, `noindex` on the preview and not on prod, the commit in `version.json`, and the launch surfaces (the October 1 panel on the home page, the parent FAQ's disclosures, and no unfilled fact badge on prod) (`scripts/site_smoke.py`, `v1-e36-t05` and `v1-e36-t08`) | `SITE_SMOKE_URL`, `SITE_SMOKE_ENV`, `SITE_SMOKE_SHA` |
 | `test_store_cli.py` | The evidence store, read-only: `debate-research store ls` reaches the environment's bucket, and `store sync --dry-run` plans against it with nothing mismatched and nothing written (`v1-e29-t05`) | `STORE_SMOKE_ENV`, and an SSO session for that environment's evidence profile |
 | `test_caselist_import_smoke.py` | `debate-research caselist import`, offline: three synthetic weekly archives into a fresh data directory, with the counts, the manifests and the re-import no-op checked against `tests/fixtures/caselist/expected_summary.json` (`v1-e30-t03`) | Nothing. It builds its own archives and its own profile |
 

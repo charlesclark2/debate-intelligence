@@ -95,6 +95,44 @@ describe('the build stays offline', () => {
     expect(sourceFiles('src', ['.ts', '.tsx'])).not.toContain('src/middleware.ts')
   })
 
+  /**
+   * The browser QA command (v1-e36-t08). It needs a headless browser and Lighthouse, which are
+   * hundreds of megabytes fetched over the network, and the CI budget in
+   * docs/process/working-agreements.md gives the whole site job about ten seconds plus its
+   * install. So the rule is not "be careful with the QA tooling", it is that the QA tooling is
+   * not in this package at all: it is a package of its own that the operator installs once.
+   */
+  it('keeps the browser QA toolchain out of lint, test and build', () => {
+    const manifest = JSON.parse(read('package.json')) as {
+      scripts: Record<string, string>
+      dependencies: Record<string, string>
+      devDependencies: Record<string, string>
+    }
+    expect(manifest.scripts.qa, 'the qa script is missing').toContain('scripts/visual-qa.mjs')
+    for (const task of ['lint', 'typecheck', 'test', 'build']) {
+      expect(manifest.scripts[task], `${task} must not run the browser QA command`).not.toContain(
+        'visual-qa',
+      )
+    }
+    const installed = Object.keys({ ...manifest.dependencies, ...manifest.devDependencies })
+    for (const tool of ['playwright', 'lighthouse', 'puppeteer', 'chrome-launcher']) {
+      expect(installed, `${tool} belongs in scripts/visual-qa-tools, not in site/package.json`)
+        .not.toContain(tool)
+    }
+  })
+
+  it('installs the browser and the scorer from a package of their own', () => {
+    const tools = JSON.parse(read('scripts/visual-qa-tools/package.json')) as {
+      dependencies: Record<string, string>
+    }
+    expect(Object.keys(tools.dependencies).sort()).toEqual(['lighthouse', 'playwright'])
+  })
+
+  it('never commits a screenshot, an audit file or a score report', () => {
+    const ignored = read('.gitignore')
+    expect(ignored, 'the QA output directory must be gitignored').toMatch(/^qa-artifacts\/$/m)
+  })
+
   it('keeps the site independent of the V2 app in web/', () => {
     for (const path of appSources) {
       expect(read(path), path).not.toMatch(/from ['"][^'"]*\bweb\//)

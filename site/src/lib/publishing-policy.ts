@@ -1,4 +1,4 @@
-import type { ContentPage, SiteSettings } from './content'
+import type { AnnouncementField, ContentPage, SiteSettings } from './content'
 import type { MediaConsent } from './media-consent'
 import { isStale } from './media-consent'
 import { readSiteEnvironment } from './site-settings'
@@ -82,15 +82,53 @@ export function visibleText(markdownOrHtml: string): string {
     .replace(/`[^`]*`/g, ' ')
 }
 
+/** Lower case, with a typographic apostrophe folded to a plain one, for comparing names. */
+function fold(text: string): string {
+  return text.toLowerCase().replace(/’/g, "'")
+}
+
 /**
- * A capitalised phrase is a candidate person name unless every word in it has been reviewed and
- * listed in the manifest's `permittedNameWords`. Checking words rather than whole phrases is what
- * keeps "Email Coach Clark" and "Whitefish Bay High School" quiet while "Jordan Rivera" is not.
+ * True when the whole run of words can be covered, end to end, by entries from the allowlist.
+ *
+ * Longest match is not enough on its own: "Blue Valley West" is covered by one entry, and
+ * "Whitefish Bay High School" by two, so the covering has to be searched rather than chosen
+ * greedily. This walks positions left to right and marks each one reachable, which is a match if
+ * and only if the last position is reached. Every word has to be inside some entry, so a single
+ * unreviewed word anywhere in the phrase leaves it uncovered, which is the property the guard
+ * depends on.
  */
-export function unreviewedNames(text: string, permittedWords: readonly string[]): string[] {
-  const permitted = new Set(permittedWords.map((word) => word.toLowerCase()))
-  const found = collect(visibleText(text), CAPITALISED_PHRASE).filter((phrase) =>
-    phrase.split(/\s+/).some((word) => !permitted.has(word.toLowerCase())),
+function isCoveredByPhrases(words: string[], permitted: ReadonlySet<string>, longest: number): boolean {
+  const reachable = new Set<number>([0])
+  for (let start = 0; start < words.length; start += 1) {
+    if (!reachable.has(start)) {
+      continue
+    }
+    for (let length = 1; length <= longest && start + length <= words.length; length += 1) {
+      if (permitted.has(words.slice(start, start + length).join(' '))) {
+        reachable.add(start + length)
+      }
+    }
+  }
+  return reachable.has(words.length)
+}
+
+/**
+ * A capitalised phrase is a candidate person name unless it is covered, word for word, by the
+ * phrases in the manifest's `permittedNamePhrases`. That is what keeps "Email Coach Clark" and
+ * "Whitefish Bay High School" quiet while "Jordan Rivera" is not.
+ *
+ * Phrases rather than the bare words this used to check (the v1-e36-t07 review). A word list has
+ * to admit every word of every reviewed name separately, so reviewing "Blue Valley West High
+ * School" and "Olathe North High School" left North, West, Blue and Valley permitted on their
+ * own, anywhere, for ever. A student called Blue or West would have passed, and each later name
+ * loosened the guard again for the prose after it. An entry here permits the words only in the
+ * order they were reviewed in, so the list can grow without the guard weakening.
+ */
+export function unreviewedNames(text: string, permittedPhrases: readonly string[]): string[] {
+  const permitted = new Set(permittedPhrases.map(fold))
+  const longest = Math.max(1, ...permittedPhrases.map((phrase) => phrase.trim().split(/\s+/).length))
+  const found = collect(visibleText(text), CAPITALISED_PHRASE).filter(
+    (phrase) => !isCoveredByPhrases(fold(phrase).split(/\s+/), permitted, longest),
   )
   return [...new Set(found)]
 }
@@ -109,6 +147,11 @@ export interface PolicyInput {
   consent: MediaConsent
   /** Built pages, when there are any: `[{ location: '/faq/', html }]`. */
   builtPages?: Array<{ location: string; html: string }>
+  /**
+   * The facts the site's announcements promise, from `announcementFields()`. Left out, nothing is
+   * checked, which is right for the many call sites that hand this function one page of Markdown.
+   */
+  announcements?: AnnouncementField[]
 }
 
 export function checkPublishingPolicy({
@@ -116,6 +159,7 @@ export function checkPublishingPolicy({
   settings,
   consent,
   builtPages = [],
+  announcements = [],
 }: PolicyInput): PolicyReport {
   const errors: PolicyFinding[] = []
   const warnings: PolicyFinding[] = []
@@ -196,7 +240,7 @@ export function checkPublishingPolicy({
       }
     }
 
-    for (const name of unreviewedNames(text, consent.permittedNameWords)) {
+    for (const name of unreviewedNames(text, consent.permittedNamePhrases)) {
       const entry = consentedNames.get(name.toLowerCase())
       if (!entry) {
         errors.push({
@@ -204,7 +248,8 @@ export function checkPublishingPolicy({
           message:
             `names "${name}", which has no entry in content/media-consent.yaml. If this is a ` +
             'student, add a consent entry confirmed with the activities office for season ' +
-            `${consent.season}. If it is not a person, add its words to permittedNameWords.`,
+            `${consent.season}. If it is not a person, add the whole phrase to ` +
+            'permittedNamePhrases.',
         })
       } else if (isStale(entry, consent.season)) {
         errors.push({
@@ -230,6 +275,24 @@ export function checkPublishingPolicy({
         errors.push({ location, message: `contains an iframe, which this site does not use: ${tag}` })
       }
     }
+  }
+
+  // An announcement states every fact it lists. A [[TBD]] marker catches this in prose, where
+  // the missing fact is a hole in a sentence; in a panel built from fields there is no sentence
+  // to leave a hole in, so a fact nobody has supplied is simply a field with nothing in it, and
+  // nothing in the copy says so. These findings are that missing signal. A room of "To be
+  // announced" passes here, because that is an answer; an unset one does not, because it is not.
+  for (const field of announcements) {
+    if (field.unsetNote === null) {
+      continue
+    }
+    errors.push({
+      location: field.location,
+      message:
+        `the ${field.label} of the "${field.announcement}" announcement is still unset ` +
+        `("${field.unsetNote}"). Replace unsetNote with the value, or, if not knowing is the ` +
+        'answer, with a value that says so such as "To be announced".',
+    })
   }
 
   for (const page of pages) {

@@ -18,8 +18,8 @@ metadata:
     debate/architecture-refs: §9 (opponent data / OpenCaselist), §13 Opponent intelligence, §14, §19
 spec:
   description: >-
-    Import the weekly OpenCaselist open-source archives (HS LD, Policy, PF) and OpenEv camp files that
-    the operator downloads, deduplicate across cumulative snapshots, record provenance manifests, and
+    Import the OpenCaselist open-source archives (HS LD, Policy, PF) and OpenEv camp files that the
+    operator downloads, deduplicate across snapshots, record provenance manifests, and
     publish sources to the S3 evidence store, under a written data-use policy.
   priority: 2
   constraints:
@@ -159,7 +159,8 @@ spec:
       description: >-
         `debate-research caselist import <zip|dir> --caselist <name> --snapshot <date>`: unpack a weekly
         archive, parse School/Team/Side-Tournament-Round from paths and filenames, hash files, deduplicate
-        against earlier snapshots (archives are cumulative), record a manifest, keep PDFs as unparsed
+        against earlier snapshots (adjacent windows rather than a cumulative series, see ADR-0016),
+        record a manifest, keep PDFs as unparsed
         sources, and report new/changed/duplicate counts. Writes to the local evidence store.
       inputs:
         specRef: plan_specs/v1/e30-caselist-ingestion/t03-archive-importer.yaml
@@ -248,7 +249,7 @@ spec:
       description: >-
         `debate-research caselist remove --source <sha256>|--team <caselist/school/team>`: delete a source
         and its parsed cards locally and from S3 (raw/, parsed/, manifests entries), add its sha256 to
-        a suppression list that the archive/OpenEv importers and the publisher check so cumulative weekly
+        a suppression list that the archive/OpenEv importers and the publisher check so repeated
         archives never re-import it, and log the removal per the data-use policy.
       inputs:
         specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml

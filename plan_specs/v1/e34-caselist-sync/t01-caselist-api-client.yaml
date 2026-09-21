@@ -1,5 +1,5 @@
 # TASK v1-e34-t01-caselist-api-client — OpenCaselist API client
-# Epic: E34 Scheduled Caselist Sync | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Epic: E34 Scheduled Caselist Sync | Release: v1.1 (Caselist evidence store) | Major: V1
 # Architecture refs: §2 provider adapters, §9 Opponent data, §13 Opponent intel, §14, §15 reliability
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,20 +10,21 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.1
     debate/epic: v1-e34-caselist-sync
   annotations:
     debate/title: OpenCaselist API client
     debate/architecture-refs: §2, §9, §13, §14, §15
 spec:
   description: >-
-    Replace the operator's manual weekly downloads with an authenticated, polite client for
+    Replace the operator's manual downloads with an authenticated, polite client for
     api.opencaselist.com/v1, used only as the approved data-use policy (v1-e30-t01,
     docs/policies/caselist-data-use.md) permits; this task must not start until that policy is
     approved. A CaselistArchiveSource port in debate_core.application.ports and an httpx adapter in
     debate_core.integrations.opencaselist cover: GET /caselists and /caselists/{caselist} (the caselist
     slug, e.g. hsld26, hspolicy26 or hspf26, is always an input, never hardcoded), GET
-    /caselists/{caselist}/downloads (weekly cumulative open-source archives with their dates), GET
+    /caselists/{caselist}/downloads (open-source archives with their dates; each holds roughly the last
+    seven days of modifications rather than a cumulative corpus, see ADR-0016), GET
     /download?path=... streamed to a temp file with sha256 and size checks and atomic rename into the
     importer's inbox, and GET /openev for OpenEv camp files. Authentication uses the operator's own
     caselist_token cookie: `debate-research caselist auth login` prompts for Tabroom credentials
@@ -62,7 +63,7 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        The client lists caselists, lists a caselist's weekly archives as typed ArchiveListing records
+        The client lists caselists, lists a caselist's archives as typed ArchiveListing records
         (caselist slug, archive date, path, size) and lists OpenEv files, all parsed from respx fixtures
         into Pydantic models that tolerate unknown fields.
     - id: ac2
@@ -97,7 +98,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.1
     debate/epic: v1-e34-caselist-sync
 spec:
   description: >-

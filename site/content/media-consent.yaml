@@ -113,6 +113,9 @@ permittedNameWords:
   # guard itself names for a capitalised phrase that is not a person.
   - Events
   - Offered
+  # From the Public Forum resolution in content/events.yaml, which names the country.
+  - United
+  - States
   # Days and months, so a date next to a capitalised word is not read as a name.
   - Monday
   - Mondays

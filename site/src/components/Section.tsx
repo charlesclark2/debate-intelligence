@@ -15,6 +15,13 @@ export type SectionTone = 'plain' | 'tinted' | 'inverse'
 export type SectionContentWidth = 'text' | 'wide'
 
 /**
+ * Where the band's header sits. `start` keeps it in the centred text column with the content
+ * under it; `center` lets it span the band and centres the text over content that is wider than
+ * that column, such as a row of three.
+ */
+export type SectionHeaderAlign = 'start' | 'center'
+
+/**
  * One band of a page: full-bleed background, content centred inside it, and the same vertical
  * rhythm everywhere (--space-section-block, which grows from 3rem on a phone to 5rem from tablet
  * width up).
@@ -28,6 +35,12 @@ export type SectionContentWidth = 'text' | 'wide'
  * one: an id generated at render time would differ between the server render and the browser,
  * and these are anchor targets on the home page besides.
  *
+ * `headerAlign="center"` lets the header out of that column and centres it, which is only ever
+ * right above content that is itself wider than the column: a heading that reads as belonging to
+ * a three-column row has to sit over the middle of the row, not over the middle of a 36rem
+ * column inside it. Text bands keep the default, because a centred heading above a left-aligned
+ * paragraph looks like a mistake.
+ *
  * The heading level is the caller's choice for the same reason Card takes one: a page keeps a
  * single unbroken outline rather than every band claiming <h2>. Level 1 is for the band that
  * opens a composed interior page and carries its <h1>: the FAQ and the events page are built from
@@ -38,6 +51,7 @@ export function Section({
   children,
   contentWidth = 'text',
   eyebrow,
+  headerAlign = 'start',
   headingLevel = 2,
   id,
   intro,
@@ -47,6 +61,7 @@ export function Section({
   children: ReactNode
   contentWidth?: SectionContentWidth
   eyebrow?: string
+  headerAlign?: SectionHeaderAlign
   headingLevel?: 1 | 2 | 3
   id?: string
   intro?: string
@@ -65,7 +80,13 @@ export function Section({
     >
       <div className="section__inner">
         {hasHeader ? (
-          <div className="section__header">
+          <div
+            className={
+              headerAlign === 'center'
+                ? 'section__header section__header--centered'
+                : 'section__header'
+            }
+          >
             {eyebrow ? <p className="section__eyebrow">{eyebrow}</p> : null}
             {title ? (
               <Heading className="section__title" {...(headingId ? { id: headingId } : {})}>

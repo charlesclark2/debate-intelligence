@@ -49,6 +49,17 @@
   margin-bottom: var(--space-section-gap);
 }
 
+/*
+ * The header of a band whose content is wider than the text column. It spans the band and
+ * centres, so a heading naming a row of three sits over the middle of that row rather than over
+ * the middle of a 36rem column tucked inside it, which read as though the heading had slipped
+ * left. The centred text column above is untouched: this is a modifier, not a change to it.
+ */
+.section__header--centered {
+  max-width: none;
+  text-align: center;
+}
+
 .section__eyebrow {
   margin: 0 0 var(--space-2);
   color: var(--color-text-body);

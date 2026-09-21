@@ -53,7 +53,13 @@ export default function EventsPage() {
 
       {/* What a parent does not have to check event by event, so the comparison below only has to
           carry what actually differs. */}
-      <Section contentWidth="wide" id="true-of-all-three" title={sharedTruths.title} tone="tinted">
+      <Section
+        contentWidth="wide"
+        headerAlign="center"
+        id="true-of-all-three"
+        title={sharedTruths.title}
+        tone="tinted"
+      >
         <ul className="claim-list claim-list--three-across">
           {sharedTruths.items.map((item) => (
             <li className="claim-list__item" key={item.title}>

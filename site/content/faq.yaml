@@ -29,8 +29,8 @@ indexTitle: Jump to a topic
 closing:
   title: Still have a question?
   body: |
-    If your question is not here, email Coach Clark at <charles.clark@wfbschools.org>. No question
-    is too basic.
+    If your question is not here, email Coach Clark at <charles.clark@wfbschools.org>. Families
+    are welcome to ask about any part of the program, at any stage.
 
 groups:
   - id: cost-and-travel
@@ -160,11 +160,22 @@ groups:
           the debate, decides which side was more persuasive, and often provides written feedback.
           Students typically alternate between affirmative and negative positions depending on the
           format.
+
+          Once the rounds are over, the tournament gives awards to the top teams, along with
+          speaker awards recognising the strongest individual speakers.
       - question: What should my student bring to a tournament?
         answer: |
           Common items include a laptop and charger, debate materials, pens and paper, water,
           snacks, appropriate clothing, and anything specifically requested by coaches. The team can
           provide a more detailed tournament checklist.
+      - question: Which division will my student compete in?
+        answer: |
+          Wisconsin tournaments run two divisions. Junior varsity is for students in their first
+          two years of competition. Varsity is for students beyond those two years, and for
+          students competing at a higher level who are ready for a stronger field sooner.
+
+          Coaches decide which division fits a student, and a student who starts in junior
+          varsity moves up as their experience grows.
       - question: Will my student win right away?
         answer: |
           Maybe, but that is not the primary expectation. Debate has a significant learning curve,

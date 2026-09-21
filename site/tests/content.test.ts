@@ -139,7 +139,9 @@ describe('the grouped FAQ content', () => {
     expect(faq.indexTitle.length).toBeGreaterThan(0)
 
     const questions = faq.groups.flatMap((group) => group.questions)
-    expect(questions.length).toBe(16)
+    // The sixteen from the approved draft, plus anything later reviews added. The roster that
+    // proves none of the sixteen was lost is in tests/faq.test.tsx.
+    expect(questions.length).toBeGreaterThanOrEqual(16)
     for (const question of questions) {
       expect(question.question.length, 'a question with no text').toBeGreaterThan(0)
       expect(question.answerHtml, question.question).toContain('<p>')

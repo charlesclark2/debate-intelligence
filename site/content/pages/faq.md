@@ -7,5 +7,6 @@ navLabel: Parent FAQ
 navOrder: 50
 ---
 
-The questions families ask before a student joins, grouped by topic. Open the one you came with;
-the three asked most often are open already.
+Answers to the questions families ask most often about joining the debate team: cost, the time
+commitment, judging, getting started and competing. Select a topic below, or open any question to
+read its answer.

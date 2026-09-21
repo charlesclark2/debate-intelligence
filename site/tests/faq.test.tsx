@@ -70,12 +70,36 @@ describe('the questions are grouped into topics', () => {
     }
   })
 
-  it('keeps every question from the approved copy, each in exactly one topic', () => {
+  /**
+   * The sixteen questions in the v1-e36-t04 draft Charlie approved. This task regrouped them and
+   * later reviews added to them, so a count cannot say whether one was lost on the way: the
+   * roster can. A question removed on purpose is removed from this list in the same commit.
+   */
+  const APPROVED_QUESTIONS = [
+    'Will I be expected to judge?',
+    'How much time does it take?',
+    'What does it cost?',
+    'How do students get to tournaments?',
+    'What does the first month look like?',
+    'Does debate conflict with other activities and sports?',
+    'Does my student need to be a strong public speaker before joining?',
+    'Is debate mostly about arguing or being confrontational?',
+    'How much research will my student need to do?',
+    'How will my student know which type of debate is right for them?',
+    'What happens at a debate tournament?',
+    'Will my student win right away?',
+    'How are students evaluated?',
+    'What can parents do to support their student?',
+    'What should my student bring to a tournament?',
+    'How does debate help students outside of competition?',
+  ]
+
+  it('keeps every approved question, each in exactly one topic', () => {
     const questions = allQuestions.map((question) => question.question)
-    expect(new Set(questions).size).toBe(questions.length)
-    // The v1-e36-t04 draft Charlie approved had sixteen questions and this task moved them, so a
-    // question quietly lost in the regrouping is a failure and not a tidy-up.
-    expect(questions.length).toBe(16)
+    expect(new Set(questions).size, 'a question appears in two topics').toBe(questions.length)
+    for (const approved of APPROVED_QUESTIONS) {
+      expect(questions, `"${approved}" was lost in the regrouping`).toContain(approved)
+    }
   })
 })
 

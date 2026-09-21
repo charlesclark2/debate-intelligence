@@ -72,12 +72,15 @@ events:
     # The label on the link from this card down to the detail below. Each event names itself, so
     # the three links read differently from one another in a screen reader's list of links.
     detailActionLabel: How a Public Forum round runs
-    currentTopic: '[[TBD: the Public Forum topic for this month]]'
+    currentTopic: >-
+      Resolved: The United States federal government should enact a moratorium on hyperscale
+      data center construction.
     comparison:
       teamSize: Two students per side.
-      speechPattern: Four short speeches a side and three crossfires, in about 40 to 50 minutes.
+      speechPattern: >-
+        Four short speeches a side and three crossfires, in about 40 to 50 minutes plus prep.
       topicCadence: A new topic every month or two.
-      bestFor: The most common starting point.
+      bestFor: A student drawn to current events and to persuasive speaking.
     detail: |
       Public Forum debate asks whether something does more good than harm on balance. The topic
       changes every month or two, so the research stays current: a recent one asked whether the
@@ -107,10 +110,11 @@ events:
       Asks what ought to be done and how we would know: moral and philosophical questions rather
       than predictions.
     detailActionLabel: How a Lincoln-Douglas round runs
-    currentTopic: '[[TBD: the Lincoln-Douglas topic for this two-month cycle]]'
+    currentTopic: 'Resolved: Outer space colonization is a moral imperative.'
     comparison:
-      teamSize: One student per side, with no partner.
-      speechPattern: Five speeches and two cross-examinations, in about 40 to 45 minutes.
+      teamSize: One student per side.
+      speechPattern: >-
+        Five speeches and two cross-examinations, in about 40 to 45 minutes plus prep.
       topicCadence: A new topic every two months.
       bestFor: A student who wants to work alone on moral and philosophical questions.
     detail: |

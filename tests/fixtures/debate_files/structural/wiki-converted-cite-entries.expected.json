@@ -1,0 +1,90 @@
+{
+  "fixture": "wiki-converted-cite-entries.docx",
+  "family": "wiki-converted",
+  "corpus": "caselist",
+  "summary": "An opencaselist wiki-to-docx conversion: the Verbatim styles are all defined and not one paragraph references them, so every unit comes from a heuristic. A disclosure records a card's first and last words with an ellipsis between, which makes the card ABBREVIATED, and sometimes records no body at all, which makes it CITE_ONLY. Neither is padded out and neither is dropped.",
+  "profile_version": "2026.09.20-verbatim-1",
+  "parser_version": "2026.09.20-docx-1",
+  "warnings_contain": [],
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "Data centre demand collapses the reserve margin",
+      "unit": "TAG",
+      "rule_id": "heuristic-direct-formatted-heading-tag",
+      "match_source": "HEURISTIC",
+      "section_path": [],
+      "note": ""
+    },
+    {
+      "index": 1,
+      "text": "Okonkwo 26 (Adaeze Okonkwo, Professor of Energy Policy, invented for this fixture), Reserve Margins Under Load Growth, Journal of Grid Studies, 14 March 2026.",
+      "unit": "CITE",
+      "rule_id": "heuristic-cite-line-author-year",
+      "match_source": "HEURISTIC",
+      "section_path": [
+        "Data centre demand collapses the reserve margin"
+      ],
+      "note": ""
+    },
+    {
+      "index": 2,
+      "text": "Grid operators in the region reported that demand … thinner than at any point in the past decade.",
+      "unit": "EVIDENCE",
+      "rule_id": "heuristic-marked-up-body-text",
+      "match_source": "HEURISTIC",
+      "section_path": [
+        "Data centre demand collapses the reserve margin"
+      ],
+      "note": "The ellipsis is what makes the card ABBREVIATED rather than truncated."
+    },
+    {
+      "index": 3,
+      "text": "Load growth outpaced every planning scenario",
+      "unit": "TAG",
+      "rule_id": "heuristic-direct-formatted-heading-tag",
+      "match_source": "HEURISTIC",
+      "section_path": [],
+      "note": ""
+    },
+    {
+      "index": 4,
+      "text": "Ferreira 25 (Journal of Grid Studies, 2 November 2025).",
+      "unit": "CITE",
+      "rule_id": "heuristic-cite-line-author-year",
+      "match_source": "HEURISTIC",
+      "section_path": [
+        "Load growth outpaced every planning scenario"
+      ],
+      "note": ""
+    }
+  ],
+  "cards": [
+    {
+      "tag": "Data centre demand collapses the reserve margin",
+      "short_cite": "Okonkwo 26",
+      "full_cite": "Okonkwo 26 (Adaeze Okonkwo, Professor of Energy Policy, invented for this fixture), Reserve Margins Under Load Growth, Journal of Grid Studies, 14 March 2026.",
+      "undertag": "",
+      "evidence_text": "Grid operators in the region reported that demand … thinner than at any point in the past decade.",
+      "completeness": "ABBREVIATED",
+      "section_path": [],
+      "first_element_index": 0,
+      "last_element_index": 2,
+      "underlined_text": [
+        "…"
+      ]
+    },
+    {
+      "tag": "Load growth outpaced every planning scenario",
+      "short_cite": "Ferreira 25",
+      "full_cite": "Ferreira 25 (Journal of Grid Studies, 2 November 2025).",
+      "undertag": "",
+      "evidence_text": "",
+      "completeness": "CITE_ONLY",
+      "section_path": [],
+      "first_element_index": 3,
+      "last_element_index": 4,
+      "underlined_text": []
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "fixture": "pre-2026-direct-formatting.docx",
+  "family": "other-heuristic",
+  "corpus": "team",
+  "summary": "A file that has been copied between documents for three seasons. `Heading411` is a Heading 4 that Word de-duplicated twice — 197 files in the survey carry one — and it must resolve to a tag rather than to the pocket its id starts with. The block heading below it survives only as bold underlined text at a heading size, with no outline level at all: the wall CardMirror hits and leaves flat.",
+  "profile_version": "2026.09.20-verbatim-1",
+  "parser_version": "2026.09.20-docx-1",
+  "warnings_contain": [],
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "AT: Reserve Margin Turn",
+      "unit": "BLOCK",
+      "rule_id": "heuristic-direct-formatted-heading-block",
+      "match_source": "HEURISTIC",
+      "section_path": [],
+      "note": "No outline level, no style: bold, underlined and 16 pt is all there is."
+    },
+    {
+      "index": 1,
+      "text": "Data centre demand collapses the reserve margin",
+      "unit": "TAG",
+      "rule_id": "verbatim-deduplicated:Heading411->Heading4",
+      "match_source": "VERBATIM_ALIAS",
+      "section_path": [
+        "AT: Reserve Margin Turn"
+      ],
+      "note": "Stripping Word's de-duplication digits reaches Heading4, not Heading1."
+    },
+    {
+      "index": 2,
+      "text": "Okonkwo 26 (Adaeze Okonkwo, Professor of Energy Policy, invented for this fixture), Reserve Margins Under Load Growth, Journal of Grid Studies, 14 March 2026.",
+      "unit": "CITE",
+      "rule_id": "verbatim-cite-run-style",
+      "match_source": "VERBATIM_ALIAS",
+      "section_path": [
+        "AT: Reserve Margin Turn",
+        "Data centre demand collapses the reserve margin"
+      ],
+      "note": ""
+    },
+    {
+      "index": 3,
+      "text": "Grid operators in the region reported that demand from new data centres rose faster than any other load category last year, and the increase outpaced every scenario the utility had planned against, leaving the reserve margin thinner than at any point in the past decade.",
+      "unit": "EVIDENCE",
+      "rule_id": "heuristic-marked-up-body-text",
+      "match_source": "HEURISTIC",
+      "section_path": [
+        "AT: Reserve Margin Turn",
+        "Data centre demand collapses the reserve margin"
+      ],
+      "note": ""
+    }
+  ],
+  "cards": [
+    {
+      "tag": "Data centre demand collapses the reserve margin",
+      "short_cite": "Okonkwo 26",
+      "full_cite": "Okonkwo 26 (Adaeze Okonkwo, Professor of Energy Policy, invented for this fixture), Reserve Margins Under Load Growth, Journal of Grid Studies, 14 March 2026.",
+      "undertag": "",
+      "evidence_text": "Grid operators in the region reported that demand from new data centres rose faster than any other load category last year, and the increase outpaced every scenario the utility had planned against, leaving the reserve margin thinner than at any point in the past decade.",
+      "completeness": "FULL",
+      "section_path": [
+        "AT: Reserve Margin Turn"
+      ],
+      "first_element_index": 1,
+      "last_element_index": 3,
+      "underlined_text": [
+        "faster than any other load category last year"
+      ]
+    }
+  ]
+}

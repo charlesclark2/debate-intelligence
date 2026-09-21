@@ -24,6 +24,15 @@ dependencies = [
 aws = [
     "boto3>=1.35",
 ]
+# The debate .docx parser (v1-e31-t03) reads WordprocessingML with lxml, which is the only XML
+# parser that can be built with entity resolution, DTD loading and network access all switched
+# off — a file that arrived from a stranger is opened with all three off. It is optional for the
+# same reason boto3 is: the domain and application layers never import it (the import-linter
+# contract in the workspace root enforces that), and only debate_core.integrations.docx_parser
+# needs it: `uv sync --extra docx`, or `pip install debate-core[docx]`.
+docx = [
+    "lxml>=5.3",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12"]

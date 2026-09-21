@@ -1,0 +1,30 @@
+{
+  "fixture": "not-a-debate-file.docx",
+  "family": "not-a-debate-file",
+  "corpus": "negative",
+  "summary": "A syllabus that uses outline levels and no Verbatim style. It must not come out as a stack of pockets, and it must produce no cards: this is what the profile's size and weight guards exist for, and what a parser without them gets wrong at scale.",
+  "profile_version": "2026.09.20-verbatim-1",
+  "parser_version": "2026.09.20-docx-1",
+  "warnings_contain": [],
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "Course outline",
+      "unit": "OTHER",
+      "rule_id": "heuristic-unclassified-paragraph",
+      "match_source": "HEURISTIC",
+      "section_path": [],
+      "note": "Outline level 0 with no bold and no heading size promotes nothing."
+    },
+    {
+      "index": 1,
+      "text": "Students are expected to complete the assigned reading before each seminar. The reading list is posted two weeks in advance and every item on it is available through the library's catalogue. Assessment is by two essays and a presentation, weighted equally, and late submissions are accepted only with prior agreement.",
+      "unit": "EVIDENCE",
+      "rule_id": "heuristic-prose-paragraph",
+      "match_source": "HEURISTIC",
+      "section_path": [],
+      "note": "Long unmarked prose is the weakest evidence rule there is, and it says so in its confidence. It produces no card, because there is no tag and no cite."
+    }
+  ],
+  "cards": []
+}

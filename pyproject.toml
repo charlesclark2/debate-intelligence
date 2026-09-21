@@ -35,6 +35,10 @@ dev = [
     # owns the full set and the CI job.
     "import-linter>=2.0",
     "lxml>=5.3",
+    # The debate .docx parser (v1-e31-t03) reads WordprocessingML with lxml, and lxml ships no
+    # inline types; pyright runs strict over debate_core, so the stubs are what let the adapter be
+    # type-checked at all. Same reason as boto3-stubs above.
+    "lxml-stubs>=0.5",
     # Answers the S3 adapters in-process (v1-e29-t04). The PR test suite reaches no AWS account.
     "moto[s3]>=5.0",
     "pre-commit>=4.0",
@@ -133,6 +137,7 @@ source_modules = [
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.docx_parser",
     "debate_core.integrations.file_streaming",
     "debate_api",
     "debate_workers",
@@ -155,6 +160,26 @@ type = "forbidden"
 allow_indirect_imports = true
 source_modules = ["debate_cli"]
 forbidden_modules = ["boto3", "botocore"]
+
+# v1-e31-t03-debate-docx-parser. A document library is an adapter's business: the parse output
+# model and the DebateFileParser port are plain values and Protocols, so nothing above the
+# adapter has a reason to know that OOXML exists. python-docx is named alongside lxml because it
+# is in the dev environment and is the other library that could drift across this boundary.
+[[tool.importlinter.contracts]]
+name = "Document libraries stay inside debate_core.integrations.docx_parser"
+type = "forbidden"
+source_modules = [
+    "debate_core.domain",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.s3",
+    "debate_core.integrations.file_streaming",
+    "debate_cli",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["lxml", "docx"]
 
 # ---------------------------------------------------------------------------------------------
 # pytest: every project marker is registered here, once. Later tasks use them, never add their own.

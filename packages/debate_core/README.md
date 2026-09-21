@@ -34,6 +34,7 @@ model in architecture proposal §7, so V2 swaps storage rather than schemas.
 | `citation.py` | `Citation`, `CitationField[T]` |
 | `schema_export.py` | Renders the published JSON Schemas (no I/O; the script writes them) |
 | `caselist/` | Disclosed and camp evidence: see below (v1-e30-t02-caselist-domain-model) |
+| `debate_files.py` | What reading a debate `.docx` produces: `ParsedDocument`, `FileSection`, `ParsedCard`, `FormattingSpan`, `FontSizeSpan`, `CardCompleteness`, `FileImportProvenance`, `ParseFailure` (v1-e31-t03-debate-docx-parser) |
 
 Things worth knowing before you add a field:
 
@@ -81,6 +82,7 @@ cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/
 | `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository`, and the `Page` returned by every listing |
 | `ports/providers.py` | `SearchProvider`, `ArticleFetcher`, `ContentExtractor`, `ModelRouter`, `Clock`, `IdGenerator`, and the value objects they exchange |
 | `ports/caselist.py` | `CaselistRepository`, the boundary the E30 importers, publisher and removal command store through (v1-e30-t02) |
+| `ports/debate_files.py` | `DebateFileParser`, the boundary a debate `.docx` is taken apart behind. Synchronous, because parsing waits on nothing, and a file it cannot read comes back as a `ParseFailure` rather than an exception (v1-e31-t03) |
 | `ports/evidence_store.py` | `EvidenceObjectStore` and `ObjectInfo`: evidence stored under a *name* rather than a digest — manifests, reports — plus the key validation both its adapters share (v1-e29-t04) |
 | `services/article_registration.py` | The worked example of the constructor-injection pattern every service follows |
 
@@ -225,6 +227,43 @@ Things worth knowing before you add a style or a rule:
   (`uv run python scripts/generate_style_fixtures.py`) — a test fails if they disagree.
 * **The profile is not an exported JSON Schema.** `EXPORTED_MODELS` publishes the entities the web
   client and the V2 API read; the profile is configuration this package loads for itself.
+
+### `integrations/docx_parser/` — the debate `.docx` parser (v1-e31-t03-debate-docx-parser)
+
+The V1 `DebateFileParser`. **The only place in the platform that imports lxml**, which an
+import-linter contract in the workspace root enforces; lxml is an optional dependency, so this
+package needs the `docx` extra:
+
+```bash
+uv sync --extra docx       # or: pip install 'debate-core[docx]'
+```
+
+| Module | Contents |
+|---|---|
+| `package.py` | `open_debate_docx`: zip and XML hardening — entry count, uncompressed size, per-part size and compression ratio, and a parser built with entity resolution, DTD loading and network access all off. Refuses PDFs, legacy `.doc`, encrypted and macro-enabled packages by name. `NEVER_READ_PARTS` is what it will not open |
+| `runs.py` | Paragraph text and character-offset `FormattingSpan`s, built in one walk so they cannot disagree. Keeps tracked insertions, drops deletions, counts a dual-encoded underline once |
+| `parser.py` | `DebateDocxParser`: classification through the t02 style profile, section paths, card assembly and `FILE_IMPORT` provenance |
+
+```python
+parser = DebateDocxParser()  # loads the verbatim style profile
+result = parser.parse(content, source, source_path=disclosure.source_path)
+if isinstance(result, ParsedDocument):
+    ...  # otherwise it is a ParseFailure with a reason
+```
+
+Things worth knowing before you use or extend this:
+
+* **Evidence text is copied, never produced.** A card's `evidence_text` is the concatenated run
+  text, character for character, and every span indexes that exact string. Nothing normalizes,
+  corrects or re-flows it.
+* **An imported card is `UNVERIFIED` and cannot say otherwise.** It is deliberately not a `Card`.
+* **A refusal is a return value.** A bulk import of twelve thousand files needs a row it can
+  count, not an exception that stops the run.
+* **Nothing reads `docProps`, comments, `people.xml` or `settings.xml`.** The opened package
+  records every part it did read, and a test asserts that list.
+* **A card reports the weakest match that built it**, which for an ordinary Verbatim card is a
+  heuristic: Verbatim gives a card body no paragraph style, so the body is found by its markup.
+  `rule_ids` is where the detail is.
 
 ### `schemas/` — published JSON Schemas
 

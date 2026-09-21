@@ -1,0 +1,48 @@
+{
+  "fixture": "tables-and-text-boxes.docx",
+  "family": "verbatim",
+  "corpus": "team",
+  "summary": "A speech-time table whose first cell carries `Heading4`, and a page banner in a text box that Word wrote twice. Both are OTHER: a table cell and a text box are page furniture whatever style they carry, and the box is read once rather than twice.",
+  "profile_version": "2026.09.20-verbatim-1",
+  "parser_version": "2026.09.20-docx-1",
+  "warnings_contain": [],
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "Speech times",
+      "unit": "OTHER",
+      "rule_id": "assembly-table-cell",
+      "match_source": "HEURISTIC",
+      "section_path": [],
+      "note": "Carries Heading4 and is still OTHER, because it sits in a table cell."
+    },
+    {
+      "index": 1,
+      "text": "6 minutes",
+      "unit": "OTHER",
+      "rule_id": "assembly-table-cell",
+      "match_source": "HEURISTIC",
+      "section_path": [],
+      "note": ""
+    },
+    {
+      "index": 2,
+      "text": "Read this block first.",
+      "unit": "OTHER",
+      "rule_id": "heuristic-unclassified-paragraph",
+      "match_source": "HEURISTIC",
+      "section_path": [],
+      "note": ""
+    },
+    {
+      "index": 3,
+      "text": "Invitational — Octafinals",
+      "unit": "OTHER",
+      "rule_id": "assembly-text-box",
+      "match_source": "HEURISTIC",
+      "section_path": [],
+      "note": "Word writes the box twice; it is read once."
+    }
+  ],
+  "cards": []
+}

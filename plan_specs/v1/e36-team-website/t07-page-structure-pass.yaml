@@ -27,15 +27,20 @@ spec:
     hand-rolled ARIA widget so that keyboard and screen-reader behaviour comes from the browser, and so
     find-in-page and printing still reach collapsed answers. The events page presents Public Forum,
     Lincoln-Douglas and Policy as parallel cards with a compact comparison (team size, speech pattern,
-    topic cadence, best for) and the full explanation beneath each. About, join, coaches and contact get
+    topic cadence, best for), the topic currently being argued as a per-event content field outside those
+    four (so Charlie updates it when topics roll over in season), and the full explanation beneath each. About, join, coaches and contact get
     the same treatment at their own scale: a summary or at-a-glance block first, detail second. All of
     it stays data under site/content/, validated by the loader, so copy edits remain Charlie's and need
     no code change. It also owns the site's navigation: the nav is currently generated from every file
     in site/content/pages/, so the accessibility statement sits in it by accident. Navigation becomes an
     explicit, ordered list of the pages a parent or prospective debater needs (home, about, events, join,
-    coaches, FAQ, contact), with utility pages such as the accessibility statement in the footer instead;
+    coaches, FAQ), with contact, the accessibility statement and other utility pages in the footer instead:
+    contact is four ways to send one email and the coaches page already carries the address, so it earns a
+    footer link rather than a nav slot, and moving it back is one line in site.yaml;
     a page can opt out of the primary nav in its front matter; the current page is marked with
-    aria-current; and the mobile menu is checked at 390px for target size and reachability. Out of scope: rewriting the copy itself, the layout kit and home page (t06), the
+    aria-current; and the mobile menu is checked at 390px for target size and reachability. Copy: this task does not invent copy, but Charlie
+    may supply or approve changes while reviewing each page, and those ship here rather than waiting for
+    another task. Out of scope: unreviewed rewriting, the layout kit and home page (t06), the
     pre-launch QA sweep (t08), the events calendar (E37) and donations (E38). This task shares only the
     tokens with t06 and must build whether or not t06 has landed; where a page uses a component t06
     also touches, t07 owns the page's structure and t06 owns the component's look.

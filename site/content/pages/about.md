@@ -5,15 +5,31 @@ description: >-
   the leagues we belong to, and how a season is shaped.
 navLabel: About
 navOrder: 10
+lead: >-
+  Whitefish Bay High School has competed in debate for decades. Students take a question with no
+  easy answer, research it for weeks, write the case for both sides of it, and then defend
+  whichever side they are handed in front of a judge who decides at the end of the round. The
+  question changes every few months. The work does not.
+atAGlance:
+  title: The team at a glance
+  items:
+    - label: Events
+      value: Policy debate, Lincoln-Douglas debate and Public Forum debate.
+    - label: Size
+      value: More than 20 students competing this season.
+    - label: Practice
+      value: Mondays and Wednesdays at lunch, and Thursdays after school.
+    - label: Season
+      value: >-
+        The season runs from early October to Martin Luther King Jr. weekend in January.
+    - label: Leagues
+      value: >-
+        The Wisconsin Debate Coaches Association, the National Speech and Debate Association and
+        the National Catholic Forensic League.
 ---
 
-The Whitefish Bay High School debate team competes in three events: Policy debate,
-Lincoln-Douglas debate and Public Forum debate. Students research a question, prepare the case
-for both sides of it, and argue it in front of a judge. What each event looks like is explained on
+What each event looks like, and how a round actually runs, is explained on
 [what the events are](/events/).
-
-The program has been running for several decades. More than 20 students are competing this
-season.
 
 ## Where we compete
 
@@ -37,9 +53,8 @@ Tournament of Champions circuit.
 
 ## How the season runs
 
-The season starts in early October and runs through Martin Luther King Jr. weekend in January.
 Students pursuing national qualification keep going into the summer, with a much lighter travel
 schedule in the second semester.
 
-Practice is twice a week at lunch and once a week after school; the times are on
+Practice is twice a week at lunch and once a week after school; the times and the rooms are on
 [how to join](/join/).

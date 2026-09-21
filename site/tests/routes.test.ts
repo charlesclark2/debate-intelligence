@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { generateStaticParams } from '@/app/[slug]/page'
 import sitemap from '@/app/sitemap'
-import { HOME_SLUG, loadPages, loadRoutedPages } from '@/lib/content'
+import { COMPOSED_SLUGS, HOME_SLUG, loadPages, loadRoutedPages } from '@/lib/content'
 
 /**
  * The core pages parents need before the October 1 information session (v1-e36-t04 acceptance
@@ -62,15 +62,31 @@ describe('the core pages exist as content', () => {
 })
 
 describe('the static export', () => {
-  it('generates a route for every page except home, which is the root', () => {
+  it('generates a route for every Markdown page that is not composed by a module of its own', () => {
     const slugs = generateStaticParams().map((params) => params.slug)
     expect(slugs).toEqual(loadRoutedPages().map((page) => page.slug))
-    for (const slug of CORE_PAGES) {
-      if (slug !== HOME_SLUG) {
-        expect(slugs, `no route for ${slug}`).toContain(slug)
-      }
+    for (const slug of COMPOSED_SLUGS) {
+      expect(slugs, `${slug} has a route module of its own and must not also be generated here`)
+        .not.toContain(slug)
     }
-    expect(slugs).not.toContain(HOME_SLUG)
+  })
+
+  /**
+   * A composed page (v1-e36-t07) is a route module under src/app/ rather than a run of Markdown
+   * poured into a column, so it does not come from generateStaticParams above. Every core page is
+   * still reachable: either the dynamic segment generates it, or its own page.tsx exists.
+   */
+  it.each(CORE_PAGES)('reaches %s either from the dynamic segment or its own route module', (slug) => {
+    if (slug === HOME_SLUG) {
+      expect(existsSync(join(process.cwd(), 'src/app/page.tsx'))).toBe(true)
+      return
+    }
+    const generated = generateStaticParams().map((params) => params.slug)
+    const ownModule = join(process.cwd(), 'src/app', slug, 'page.tsx')
+    expect(
+      generated.includes(slug) || existsSync(ownModule),
+      `${slug} has neither a generated route nor ${ownModule}`,
+    ).toBe(true)
   })
 
   it.each(CORE_PAGES)('lists %s in sitemap.xml', (slug) => {

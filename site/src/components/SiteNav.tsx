@@ -1,11 +1,25 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
 export interface NavigationItem {
   href: string
   label: string
+}
+
+/**
+ * Compares two site paths without caring about the trailing slash.
+ *
+ * next.config.ts sets trailingSlash, so a route is written "/join/", but the pathname a browser
+ * reports and the one next/link normalises to are not reliably in the same form. Comparing the
+ * trimmed paths is what keeps the current page marked in the export, in the browser, and in a
+ * test, rather than in two of the three.
+ */
+function isSamePath(left: string, right: string): boolean {
+  const trim = (path: string) => path.replace(/\/+$/, '')
+  return trim(left) === trim(right) && left.startsWith('/')
 }
 
 /**
@@ -19,8 +33,13 @@ export interface NavigationItem {
  *
  * Links opt out of prefetching. The whole site is a static export of a handful of pages,
  * so prefetching every route would cost the visitor requests for no gain.
+ *
+ * The link to the page you are on carries aria-current="page", which is what tells a screen
+ * reader user where they are in a list of seven links that otherwise all sound alike. It is also
+ * marked visually, because that information is no less useful to someone who can see the nav.
  */
 export function SiteNav({ items, label }: { items: NavigationItem[]; label: string }) {
+  const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const menuId = useId()
   const toggleRef = useRef<HTMLButtonElement>(null)
@@ -60,18 +79,22 @@ export function SiteNav({ items, label }: { items: NavigationItem[]; label: stri
         className={isOpen ? 'site-nav__list site-nav__list--open' : 'site-nav__list'}
         id={menuId}
       >
-        {items.map((item) => (
-          <li key={item.href}>
-            <Link
-              className="site-nav__link"
-              href={item.href}
-              onClick={() => setIsOpen(false)}
-              prefetch={false}
-            >
-              {item.label}
-            </Link>
-          </li>
-        ))}
+        {items.map((item) => {
+          const isCurrent = pathname ? isSamePath(pathname, item.href) : false
+          return (
+            <li key={item.href}>
+              <Link
+                aria-current={isCurrent ? 'page' : undefined}
+                className={isCurrent ? 'site-nav__link site-nav__link--current' : 'site-nav__link'}
+                href={item.href}
+                onClick={() => setIsOpen(false)}
+                prefetch={false}
+              >
+                {item.label}
+              </Link>
+            </li>
+          )
+        })}
       </ul>
     </nav>
   )

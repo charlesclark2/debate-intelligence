@@ -153,7 +153,11 @@ export function checkPublishingPolicy({
   }
 
   const sources: Array<{ location: string; text: string; raw: string | null }> = [
-    ...pages.map((page) => ({ location: page.filePath, text: page.html, raw: null })),
+    // guardedHtml, not html: a page's lead and its at-a-glance values live in the front matter
+    // and are rendered by the route module rather than by Prose, and they are published copy
+    // exactly as a paragraph is. Reading html alone would leave the guard blind to the part of a
+    // page that carries its most important facts.
+    ...pages.map((page) => ({ location: page.filePath, text: page.guardedHtml, raw: null })),
     ...builtPages.map((page) => ({
       location: page.location,
       text: withoutScripts(page.html),

@@ -108,6 +108,30 @@ permittedNameWords:
   - Email
   - Joining
   - The
+  # From the title-case page heading "Debate Events Offered" (v1-e36-t07). Neither word is a
+  # surname; they are here rather than the heading being reworded because this is the path the
+  # guard itself names for a capitalised phrase that is not a person.
+  - Events
+  - Offered
+  # From the Public Forum resolution in content/events.yaml, which names the country.
+  - United
+  - States
+  # The schools, universities and states in Coach Clark's coaching history on content/pages/
+  # coaches.md (v1-e36-t07). Every one is an institution or a place, reviewed with Charlie when he
+  # supplied the list; none is a person. A student name still never goes here, it goes in
+  # `students` above with a consent reference.
+  - Central
+  - Olathe
+  - North
+  - Neenah
+  - Blue
+  - Valley
+  - West
+  - Marquette
+  - University
+  - Jefferson
+  - Missouri
+  - Indiana
   # Days and months, so a date next to a capitalised word is not read as a name.
   - Monday
   - Mondays

@@ -10,6 +10,7 @@ export interface SiteFrameStrings {
   shortName: string
   skipLinkLabel: string
   navigationLabel: string
+  footerNavigationLabel: string
   logoAlternativeText: string
   footerNote: string
 }
@@ -26,10 +27,13 @@ export function SiteFrame({
   children,
   items,
   strings,
+  utilityLinks = [],
 }: {
   children: ReactNode
   items: NavigationItem[]
   strings: SiteFrameStrings
+  /** The footer's links: the published pages the header navigation does not carry. */
+  utilityLinks?: NavigationItem[]
 }) {
   return (
     <>
@@ -43,7 +47,12 @@ export function SiteFrame({
       <main className="site-main" id={MAIN_CONTENT_ID} tabIndex={-1}>
         {children}
       </main>
-      <SiteFooter note={strings.footerNote} wordmark={strings.shortName} />
+      <SiteFooter
+        navigationLabel={strings.footerNavigationLabel}
+        note={strings.footerNote}
+        utilityLinks={utilityLinks}
+        wordmark={strings.shortName}
+      />
     </>
   )
 }

@@ -23,6 +23,15 @@ describe('the contact page', () => {
   const page = loadPage('contact')
   const settings = loadSiteSettings()
 
+  /**
+   * guardedHtml, not html: since v1-e36-t07 the page's ways to reach the team live in its
+   * at-a-glance block, which is front matter rendered by the route module rather than by Prose.
+   * These assertions are about what the page publishes, so they have to read all of what it
+   * publishes. Reading the body alone would have quietly stopped checking the addresses the
+   * moment they moved into the summary, which is exactly what happened when it did.
+   */
+  const published = page.guardedHtml
+
   it('is in the navigation and the sitemap like any other page', () => {
     expect(loadPages().map((candidate) => candidate.slug)).toContain('contact')
     expect(page.route).toBe('/contact/')
@@ -30,7 +39,7 @@ describe('the contact page', () => {
 
   it('links every allowlisted address as a mailto', () => {
     for (const contact of settings.contactEmails) {
-      expect(page.html, `no mailto link for ${contact.address}`).toContain(
+      expect(published, `no mailto link for ${contact.address}`).toContain(
         `href="mailto:${contact.address}"`,
       )
     }
@@ -38,7 +47,7 @@ describe('the contact page', () => {
 
   it('publishes no address that is not in the allowlist in content/site.yaml', () => {
     const allowed = new Set(settings.contactEmails.map((contact) => contact.address.toLowerCase()))
-    const addresses = page.html.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? []
+    const addresses = published.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? []
     expect(addresses.length).toBeGreaterThan(0)
     for (const address of addresses) {
       expect(allowed.has(address.toLowerCase()), `${address} is not allowlisted`).toBe(true)
@@ -47,17 +56,17 @@ describe('the contact page', () => {
 
   it('has no form, no input and no upload', () => {
     for (const pattern of [/<form\b/i, /<input\b/i, /<textarea\b/i, /<select\b/i, /<button\b/i]) {
-      expect(page.html, `contact.md contains ${pattern}`).not.toMatch(pattern)
+      expect(published, `contact.md contains ${pattern}`).not.toMatch(pattern)
     }
   })
 
   it('names the school as an alternative route without publishing a phone number', () => {
-    expect(page.html).toMatch(/activities\s+office/i)
-    expect(page.html).not.toMatch(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\b\d{3})[\s.-]\d{3}[\s.-]\d{4}\b/)
+    expect(published).toMatch(/activities\s+office/i)
+    expect(published).not.toMatch(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\b\d{3})[\s.-]\d{3}[\s.-]\d{4}\b/)
   })
 
   it('tells a visitor how to have something taken off the site', () => {
-    expect(page.html.toLowerCase()).toMatch(/remov/)
+    expect(published.toLowerCase()).toMatch(/remov/)
   })
 })
 

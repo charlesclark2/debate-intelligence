@@ -16,6 +16,7 @@ const strings = {
   shortName: 'WFB Debate',
   skipLinkLabel: 'Skip to main content',
   navigationLabel: 'Main',
+  footerNavigationLabel: 'About this site',
   logoAlternativeText: 'Whitefish Bay Blue Dukes',
   footerNote: 'Whitefish Bay High School, Whitefish Bay, Wisconsin.',
 }

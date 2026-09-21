@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { ContentPage, SiteSettings } from '@/lib/content'
-import { homeContentAsPage, loadPages, loadSiteSettings, parsePage } from '@/lib/content'
+import { loadGuardedContent, loadSiteSettings, parsePage } from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
 import { isStale, loadMediaConsent, seasonStart } from '@/lib/media-consent'
 import {
@@ -267,14 +267,25 @@ describe('the build guard', () => {
 })
 
 describe('the content this site actually ships', () => {
-  // content/home.yaml holds copy as well, so it goes through the guard with the Markdown pages.
-  // src/app/layout.tsx passes exactly this list at build time.
-  const pages = [...loadPages(), homeContentAsPage()]
+  // content/home.yaml, content/faq.yaml and content/events.yaml hold copy as well, so they go
+  // through the guard with the Markdown pages. src/app/layout.tsx passes exactly this list at
+  // build time, which is what loadGuardedContent() is for: one definition of "everything with
+  // copy in it", so a new YAML content file cannot be added and quietly left unguarded.
+  const pages = loadGuardedContent()
 
   it('breaks no rule except the placeholders still waiting on Charlie', () => {
     const { errors } = checkPublishingPolicy({ pages, settings, consent })
     const notPlaceholders = errors.filter((error) => !error.message.includes('placeholder'))
     expect(notPlaceholders).toEqual([])
+  })
+
+  it('puts every content file that carries copy through the guard', () => {
+    const guarded = pages.map((page) => page.filePath)
+    for (const filePath of ['content/home.yaml', 'content/faq.yaml', 'content/events.yaml']) {
+      expect(guarded, `${filePath} is not checked by the publishing-policy guard`).toContain(
+        filePath,
+      )
+    }
   })
 
   it('has a media-consent manifest for the current season', () => {
@@ -285,7 +296,9 @@ describe('the content this site actually ships', () => {
 
   it('names no student, so no consent entry is needed yet', () => {
     for (const page of pages) {
-      expect(unreviewedNames(page.html, consent.permittedNameWords), page.filePath).toEqual([])
+      expect(unreviewedNames(page.guardedHtml, consent.permittedNameWords), page.filePath).toEqual(
+        [],
+      )
     }
   })
 })

@@ -231,7 +231,12 @@ describe('the text column is centred, not pinned left', () => {
 describe('the footer carries the white knockout mark', () => {
   it('renders the knockout artwork on navy, decoratively', async () => {
     const { container } = render(
-      <SiteFooter note="A site run by the team's coaches." wordmark="WFB Debate" />,
+      <SiteFooter
+        navigationLabel="About this site"
+        note="A site run by the team's coaches."
+        utilityLinks={[]}
+        wordmark="WFB Debate"
+      />,
       { container: document.body },
     )
     const footer = screen.getByRole('contentinfo')

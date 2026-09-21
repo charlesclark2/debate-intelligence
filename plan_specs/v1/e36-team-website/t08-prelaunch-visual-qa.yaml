@@ -38,8 +38,9 @@ spec:
     by anything, so the publishing-policy guard gets a check that fails a prod build while a required
     announcement field is unset (a room of "TBA" is a decision, an empty one is an oversight); the
     media-consent name allowlist becomes phrases rather than bare words, because entries like North, West,
-    Blue and Valley weaken a word list for future prose; and the validate-dev tier gains its first site
-    smoke entries, which no task has added yet.
+    Blue and Valley weaken a word list for future prose; and the validate-dev site smoke suite that t05
+    added in tests/smoke/test_site.py gains checks on what the pages say, not only that they are up and
+    serving the right commit.
   priority: 1
   constraints:
     packages: [site/scripts, site/package.json, site/content, scripts, tests/smoke, docs/session-reports, docs/runbooks]

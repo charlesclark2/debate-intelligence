@@ -26,7 +26,10 @@ spec:
     or sheet (same last-good fallback as t02). A build-time validator enforces the publishing policy: schema
     errors, a likely student full name that is not on the public-names allowlist (coaches, schools,
     tournaments), email addresses, phone numbers, raw HTML/scripts and third-party embeds fail the build for
-    that item with a message a coach can act on. Expiry is evaluated at build time, so timely removal relies
+    that item with a message a coach can act on. Two gaps in that guard, found by the v1-e36-t08 review,
+    close here because this is the task that first publishes an image: the name rules run over visible text
+    only, so a name in an alt attribute is invisible to them; and nothing stops the reviewed-phrase allowlist
+    decaying back into the bare words t08 removed. Expiry is evaluated at build time, so timely removal relies
     on the scheduled rebuild in t04. Boundaries: events/calendar are t02, rebuild triggers and deploys are
     t04, email distribution is t05; general page copy editing stays with whatever ADR-0015 decides and is not
     migrated here beyond the announcements collection.
@@ -69,6 +72,16 @@ spec:
       description: >-
         `pnpm --dir site lint`, `test` and `build` pass offline, and a coach posts and expires one real
         announcement end to end on the dev preview.
+    - id: ac6
+      description: >-
+        The publishing-policy name rules read image alt text and figure captions as well as visible text, so
+        a non-allowlisted "First Last" in an alt attribute fails the build with the same message it would get
+        in body copy, with a fixture proving it; this must land before the first photograph is published.
+    - id: ac7
+      description: >-
+        A check keeps the media-consent allowlist in reviewed phrases rather than bare words: every entry is
+        either multi-word or on a short, explicitly reviewed list of ordinary single words, and the check
+        fails on a new bare-word entry outside that list, so the v1-e36-t08 ruling cannot quietly erode.
 status:
   phase: Pending
 ---

@@ -164,6 +164,28 @@ The main clone (`debate-intelligence-tool/debate-intelligence`) should stay on `
 local edits; all work happens in task worktrees. `scripts/task` lives on `dev`, and `finish`
 fast-forwards that checkout for you.
 
+## Conflicts a rebase will hand you
+
+`scripts/task sync` rebases a task branch onto `origin/dev`. Four files conflict often, always for
+the same reason - two tasks each added something, and neither removed anything. **The resolution is
+always to keep both sides**, and picking one silently deletes another task's work.
+
+| File | Why | What to do |
+|---|---|---|
+| `uv.lock` | Two tasks added dependencies | Never hand-merge. `git checkout --ours uv.lock && uv lock && git add uv.lock` - take dev's copy and regenerate against the merged `pyproject.toml`, which must be resolved first |
+| `pyproject.toml`, `packages/*/pyproject.toml` | Two tasks added a dependency or an extra | Keep both entries with their comments, alphabetically. A wrong resolution here breaks `uv lock` with a TOML parse error |
+| `**/__init__.py` | Two tasks exported something | Keep every import and every `__all__` entry from both sides, alphabetically. Ruff and pyright catch a missing import; a missing `__all__` entry passes both |
+| `commands/__init__.py`, `container.py`, `test_app.py`, `tests/smoke/README.md` | Two tasks registered a command, a service or a smoke check | Keep both registrations. The three lists must agree: a service in `container.py` is a service in `test_app.py` |
+
+Two rules learned the hard way:
+
+* **A second conflict in a file you already resolved is the dangerous one.** `git add` during a
+  rebase does not check for markers and `rebase --continue` does not either. Conflict markers
+  reached `dev` once this way, inside a Markdown table in a module docstring, where Python parsed
+  the file and 1,788 tests passed over it. The `check-merge-conflict` pre-commit hook now catches
+  this, but only if the hook is installed: `uv run pre-commit install`, once per clone.
+* **Run the suite after the rebase, not before.** A regenerated `uv.lock` can move a version.
+
 ## Changes that are not a task
 
 The PM also refreshes `ROADMAP.md` this way (`specs/roadmap-refresh`) after a batch of merges.

@@ -47,7 +47,7 @@ import zipfile
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from io import BytesIO
-from typing import Final, TypeAlias
+from typing import Final
 
 from lxml import etree
 
@@ -57,7 +57,7 @@ from debate_core.evidence.style_profile_loader import resolve_based_on_chain
 #: One element of a parsed XML tree. lxml publishes no non-underscored name for it — `_Element`
 #: *is* its public type, and every lxml-typed codebase aliases it once like this rather than
 #: spelling the private name at every use.
-XmlElement: TypeAlias = etree._Element  # pyright: ignore[reportPrivateUsage]
+type XmlElement = etree._Element  # pyright: ignore[reportPrivateUsage]
 
 __all__ = [
     "DEFAULT_PACKAGE_LIMITS",

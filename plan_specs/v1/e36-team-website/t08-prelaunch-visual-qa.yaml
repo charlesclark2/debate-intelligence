@@ -33,6 +33,13 @@ spec:
     the promotion checklist ready for Charlie to run. Out of scope: the design and structure work
     itself (t06, t07), the deploy script and smoke checks (t05), and running any deploy: promotion to
     main and the prod deploy stay operator steps until keyless CI deploys arrive (v2-e10-t03).
+    Four things this task also owns, from the v1-e36-t07 review: the October 1 room is no longer flagged by
+    anything, so the publishing-policy guard gets a check that fails a prod build while a required
+    announcement field is unset (a room of "TBA" is a decision, an empty one is an oversight); the
+    media-consent name allowlist becomes phrases rather than bare words, because entries like North, West,
+    Blue and Valley weaken a word list for future prose; tests/smoke/ gains its first site entries for the
+    validate-dev tier, which no task has added yet; and the home page's entry-point card labels are aligned
+    with the page titles they link to.
   priority: 1
   constraints:
     packages: [site/scripts, site/package.json, site/content, docs/session-reports, docs/runbooks]

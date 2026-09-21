@@ -1,0 +1,251 @@
+# TASK v1-e36-t09-home-academic-case — Home page: the academic case for debate
+# Epic: E36 Team Website Foundation | Release: v1.6 (Public team website) | Major: V1
+# Architecture refs: §4 (stack), §5 (AWS), §14 (security/privacy), ADR-0010, ADR-0012, ADR-0013
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t09-home-academic-case
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: 'Home page: the academic case for debate'
+    debate/architecture-refs: §4, §5, §14, ADR-0010, ADR-0012, ADR-0013
+spec:
+  description: >-
+    The home page tells a parent what debate is, when the October 1 session is and how to join, and
+    it closes with the "what debate builds" band t06 shipped: four plain, qualitative lines about
+    research, speaking, arguing both sides and the team. What it never answers is the question the
+    October 1 room will actually ask, which is whether a season of this is good for a student
+    academically. The team's intro decks make that case in front of parents already. This task moves
+    it onto the page as one more band on the existing layout kit, so a parent reading at home sees
+    what a parent in the room hears. The band is a new `academicCase` section in site/content/home.yaml
+    rendered through the Section, CardGrid and Card components from t06; no new layout primitive is
+    built and no copy is written into a component. The rule that makes this task different from every
+    other copy task in the epic is that a claim about what debate does for a student is a research
+    claim about other people's children, so nothing here ships on the drafting session's word:
+    Charlie supplies each source, the session quotes what that source actually measured, and a claim
+    whose source is still missing carries the `[[TBD: source]]` marker that already fails a prod
+    build. The house rules from the team brand guide apply verbatim and are checked by the build
+    where they can be: no em dashes, every acronym spelled out on the page, low-pressure phrasing,
+    and no graduation-rate, dropout or "at risk" research, which reads as condescending in an
+    affluent district and is the one category of evidence Charlie has ruled out by name. Test scores,
+    grade point average, college readiness and skill acquisition are the categories that are in.
+    The task also closes a small inconsistency t06 left: the four entry-point cards on the home page
+    are labelled in their own words ("What the events are", "Who coaches the team") rather than the
+    titles of the pages they open, so a parent who clicks lands on a heading that does not match what
+    they pressed. Card labels come into line with the destination page titles and the loader resolves
+    every card href to a real page. Out of scope: the existing `whatDebateBuilds` band keeps its four
+    qualitative claims and gains no research (folding the two bands into one is Charlie's call, and
+    is recorded rather than taken); rewriting the approved copy on any other page; the FAQ, events and
+    remaining page structure (t07); the screenshot, Lighthouse and keyboard sweep and the October 1
+    room placeholder (t08); hosting and deploys (t02, t05); the calendar (E37) and donations (E38).
+    This task can run alongside t08 and must leave t08's gate set passing.
+  priority: 2
+  constraints:
+    packages: [site/content, site/src/lib, site/src/app, site/src/components, site/src/styles, site/tests]
+    forbidden:
+      - A claim about what debate does for students without a source Charlie supplied and approved in-session
+      - Graduation-rate, dropout or "at risk" research, and any framing implying these students would otherwise fail
+      - A statistic invented, estimated, rounded, or recalled rather than read off the source Charlie supplied
+      - Em dashes in body copy, or an acronym used without its expansion somewhere on the same page
+      - High-pressure phrasing about ability or keeping up; the brand guide's low-pressure register governs
+      - Claim text, source citations or card labels hard-coded in a component instead of site/content/
+      - A new section or card primitive when Section, CardGrid and Card from t06 already exist
+      - Server-only Next.js features that break static export (API routes, middleware, server actions, ISR)
+      - Third-party UI frameworks, remote fonts, CDN assets, trackers, analytics tags or embedded sources
+      - Small text in muted grey #74798E or warm accent #B36B00; a source line is small text and uses body grey #55596B
+      - Motion that ignores prefers-reduced-motion
+      - Student names or photographs, and any change that weakens the publishing-policy guard
+      - Network access during lint, typecheck, test or build
+  context:
+    - kind: TaskRef
+      name: v1-e36-t07-page-structure-pass
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The home page renders an academic-case band built from the Section, CardGrid and Card
+        components shipped in t06, after the existing "what debate builds" band, and a test fails if
+        any of its headings, claim text or source citations appear in src/app/page.tsx or a component.
+    - id: ac2
+      description: >-
+        Every claim in the band carries a visible source line naming the publication or organisation,
+        the year, and what was measured; homeContentSchema requires a source object on every claim,
+        so a claim added without one fails the build naming site/content/home.yaml.
+    - id: ac3
+      description: >-
+        A claim whose source Charlie has not yet supplied carries a `[[TBD: source]]` marker, which
+        renders as a visible TBD in the dev preview and fails a prod build, so no unsourced claim can
+        reach prod; a test asserts a prod build with such a marker fails and names the claim.
+    - id: ac4
+      description: >-
+        The build rejects the excluded evidence category: a content check fails, naming the file and
+        the line, on graduation-rate, dropout or "at risk" wording anywhere in site/content/, and the
+        existing no-em-dash and acronym-expansion checks still pass over the new copy.
+    - id: ac5
+      description: >-
+        Each home entry-point card's label matches the title of the page it links to, and the loader
+        resolves every card href to a page under site/content/pages/, failing the build on a card
+        that points nowhere or is labelled differently from its destination.
+    - id: ac6
+      description: >-
+        `pnpm --dir site lint`, `typecheck`, `test` and `build` pass offline; axe-core reports no
+        WCAG 2.1 AA violations on the home page; the source lines are painted with body grey rather
+        than either restricted colour and tests/tokens.test.ts still recomputes every pair; and the
+        publishing-policy guard reports only the October 1 room placeholder, with any organisation
+        named in a source added to permittedNameWords in site/content/media-consent.yaml.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t09-home-academic-case-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Get the sources from Charlie first, give them a content shape that cannot hold an unsourced
+    claim, teach the build the excluded evidence category, render the band on the existing kit,
+    align the entry-point labels, then close on the accessibility and approval gates. About half a day.
+  goalRef:
+    name: v1-e36-t09-home-academic-case
+  graph:
+    nodes:
+      - id: sourced-claims-content
+        kind: Task
+        name: Sourced academic-case claims in home.yaml
+        description: >-
+          Draft the band from the intro decks' parent-facing material (what a season builds in
+          research, argument analysis, writing, public speaking and teamwork) and add it to
+          site/content/home.yaml as an `academicCase` section: eyebrow, title, intro and three to
+          five claims, each with a title, a body in the brand guide's low-pressure register, and a
+          source giving the publication or organisation, the year, what was measured and an optional
+          external link. Charlie supplies each source in-session; a claim he has not yet sourced
+          carries `[[TBD: source]]` rather than a plausible-looking citation, and the categories stay
+          within test scores, grade point average, college readiness and skill acquisition.
+        outputs: [site/content/home.yaml]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Home content carries an academic-case section
+            path: site/content/home.yaml
+            contentMatch: "academicCase"
+          - type: custom
+            name: Charlie supplied every source in-session
+            description: >-
+              For each claim on the band, Charlie supplied the source it rests on and the session
+              read the claim off that source rather than from memory; any claim he could not source
+              is left as a [[TBD: source]] marker rather than published.
+      - id: claim-schema-and-house-rules
+        kind: Task
+        name: Schema requiring a source, and the excluded-evidence check
+        description: >-
+          Extend homeContentSchema in src/lib/content.ts with the academicCase section, making the
+          source object required on every claim and constraining an external source link to https,
+          and add a house-rule check for the evidence category the brand guide excludes
+          (graduation rate, dropout, drop-out, at risk) that fails naming the file and the offending
+          text, beside the existing no-em-dash and acronym-expansion rules. Record the rule and its
+          reason in site/README.md's house-style list.
+        dependsOn: [sourced-claims-content]
+        outputs:
+          - site/src/lib/content.ts
+          - site/tests/content.test.ts
+          - site/README.md
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: A sourceless claim and an excluded-evidence claim both fail the loader
+            command: pnpm
+            args: [--dir, site, test, content]
+      - id: academic-case-band
+        kind: Task
+        name: The band on the existing layout kit
+        description: >-
+          Render the section in src/app/page.tsx through Section and CardGrid, one Card per claim
+          with the claim body and a source line beneath it; style the source line from tokens at
+          body grey so it stays legible as small text, label any external source link as leaving the
+          team site, and confirm the band stacks to one column at 390px with no horizontal overflow.
+          No string is written into the component.
+        dependsOn: [claim-schema-and-house-rules]
+        outputs:
+          - site/src/app/page.tsx
+          - site/src/styles/sections.css
+          - site/tests/home.test.tsx
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Band renders every claim with its source line, and no copy lives in the component
+            command: pnpm
+            args: [--dir, site, test, home]
+          - type: command_succeeds
+            name: Static export builds with the new band
+            command: pnpm
+            args: [--dir, site, build]
+      - id: entry-card-labels
+        kind: Task
+        name: Entry-point card labels matched to their destination pages
+        description: >-
+          Set each home entry-point card's title to the title of the page its href opens, keeping the
+          card body and the action label as they are, and have the home content loader resolve every
+          card href against the pages it loaded so a card pointing nowhere, or labelled differently
+          from its destination, fails the build naming the card.
+        dependsOn: [claim-schema-and-house-rules]
+        outputs:
+          - site/content/home.yaml
+          - site/src/lib/content.ts
+          - site/tests/home.test.tsx
+        estimatedEffort: 0.75h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Every entry-point card is labelled with, and resolves to, its destination page
+            command: pnpm
+            args: [--dir, site, test, home]
+      - id: accessibility-and-approval-gates
+        kind: Task
+        name: Accessibility, guard and approval gates
+        description: >-
+          Run axe-core over the home page through the site frame, confirm the source-line colour pair
+          is in the tokens contrast table and that no transition the band adds escapes the
+          prefers-reduced-motion block, add any organisation named in a source to permittedNameWords
+          so the content guard still reports only the October 1 room placeholder, then run the full
+          offline gate set and take Charlie's approval of the exact copy and source list.
+        dependsOn: [academic-case-band, entry-card-labels]
+        outputs:
+          - site/content/media-consent.yaml
+          - site/tests/pages-a11y.test.tsx
+        estimatedEffort: 0.75h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Home page has no WCAG 2.1 AA violations and the content guard finds only the room placeholder
+            command: pnpm
+            args: [--dir, site, test, pages-a11y]
+          - type: test_passes
+            name: Full site suite passes offline
+            command: pnpm
+            args: [--dir, site, test]
+          - type: command_succeeds
+            name: Lint passes
+            command: pnpm
+            args: [--dir, site, lint]
+          - type: command_succeeds
+            name: Type check passes
+            command: pnpm
+            args: [--dir, site, typecheck]
+          - type: custom
+            name: Charlie approved the exact copy and the source list
+            description: >-
+              Charlie has read the band exactly as it will publish, approved each claim's wording
+              against the source behind it, confirmed the entry-point card labels, and signed off
+              under pre-publication checklist item 16 of docs/policies/website-publishing.md.
+status:
+  phase: Pending

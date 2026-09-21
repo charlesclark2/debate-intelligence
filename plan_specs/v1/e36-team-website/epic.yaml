@@ -258,5 +258,30 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e36-t08-prelaunch-visual-qa
+    - id: t09
+      kind: Task
+      name: 'Home page: the academic case for debate'
+      description: >-
+        Add the academic case for debate to the home page from the team's intro-to-debate material: what
+        debate builds (research, critical thinking, public speaking, writing, teamwork), with the evidence
+        the deck uses, in a band that fits the t06 layout kit. Charlie supplies and approves the copy
+        and the sources; no claim goes up unsourced, and the house rules from the brand guide apply (no
+        graduation-rate or dropout research with this audience, acronyms translated, no em dashes). Also
+        aligns the home entry-point card labels with the page titles they link to. Content stays in site/content;
+        runs after t07 and can run alongside t08.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t09-home-academic-case.yaml
+        goalRef: v1-e36-t09-home-academic-case
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t09-home-academic-case reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t09-home-academic-case
 status:
   phase: Pending

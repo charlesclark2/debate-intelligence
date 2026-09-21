@@ -186,6 +186,45 @@ Things worth knowing before you use or extend these:
   here the I/O really is a network round trip.
 * **Tests use `moto`, never an account.** The fixtures are in `packages/debate_core/tests/conftest.py`
   and the suite runs with `--disable-socket`.
+### The debate-file style profile (v1-e31-t02-verbatim-style-profile)
+
+What a pocket, hat, block, tag, cite, analytic and undertag look like in a Word `.docx`, in one
+place that the parser (`v1-e31-t03`), the lossless writer (`v1-e33-t02`) and the card format
+profiles (`v1-e06-t03`) all read. **No reader or writer keeps its own idea of what `Heading4`
+means.**
+
+| Module | Contents |
+|---|---|
+| `domain/style_profile.py` | `StructuralUnit`, `RunEmphasis`, `StyleMatchSource`, the `StyleProfile` model and the rules that resolve a Word style to a unit or an emphasis |
+| `evidence/style_profiles/verbatim.yaml` | The data: styles, aliases, highlight colours, the shrink rule, heuristic thresholds, cite conventions, writer style definitions and the CardMirror mapping |
+| `evidence/style_profile_loader.py` | `load_style_profile()` (cached), and `resolve_based_on_chain` for a document's own style table |
+| `evidence/style_classifier.py` | `classify_paragraph` / `classify_run` for files that carry no Verbatim styles |
+
+```python
+from debate_core.evidence import load_style_profile, resolve_based_on_chain
+
+profile = load_style_profile()
+match = profile.resolve_paragraph_style("Heading411", "Heading 411", ("Heading1", "Normal"))
+match.unit          # StructuralUnit.TAG
+match.rule_id       # 'verbatim-deduplicated:Heading411->Heading4'
+match.match_source  # StyleMatchSource.VERBATIM_ALIAS
+```
+
+Things worth knowing before you add a style or a rule:
+
+* **Every number in the YAML was measured**, over 2,066 real files. The corpus, the counts and how
+  to refresh them are in [docs/data/debate-file-style-survey.md](../../docs/data/debate-file-style-survey.md).
+* **`basedOn` is resolved last, and that is deliberate.** `Heading411` appears in 197 files and is
+  a Heading 4 that inherits from `Heading1`. Word's numeric de-duplication rule is tried first
+  because `basedOn` would get those files wrong.
+* **Underline is dual-encoded** — a named character style in body slots, a direct `<w:u>` in
+  structural slots, and CardMirror writes both on body runs. A reader must count it once. 63% of
+  the corpus has been through CardMirror at least once, so this is the common case, not the edge.
+* **`profile_version` is recorded on every parsed card**, so a card can be re-read under the
+  profile it was parsed with. Bump it whenever a rule changes, and regenerate the fixtures
+  (`uv run python scripts/generate_style_fixtures.py`) — a test fails if they disagree.
+* **The profile is not an exported JSON Schema.** `EXPORTED_MODELS` publishes the entities the web
+  client and the V2 API read; the profile is configuration this package loads for itself.
 
 ### `schemas/` — published JSON Schemas
 

@@ -16,8 +16,8 @@ spec:
   description: >-
     Weekly argument-landscape reports show which positions are being read and with which cards; coaches
     build Verbatim/CardMirror-compatible files from disclosed cards with provenance. The scheduled sync
-    moved to v1.1 under ADR-0016; what this release adds to it is the parse and landscape stages of the
-    same daily run.
+    moved to v1.1 under ADR-0017; what this release adds to it is the parse and landscape stages of the
+    same weekly run.
   priority: 3
   acceptanceCriteria:
   - id: epic-e05

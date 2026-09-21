@@ -108,3 +108,22 @@ through the bug it was meant to catch.
   instead of beside it, and a tag demoted to an analytic that went on occupying tag level.
 * The same reasoning applies to a number quoted in a report. A count is recorded from a run that
   happened, and a criterion that could not be exercised is `NOT RUN`, never a plausible value.
+
+## 7. A decision record is measured first, and checked against policy
+
+ADR-0016 was written and superseded on the same day. It reordered a release and drove spec changes
+across three epics on two premises that one authenticated listing call disproved, and it decided a
+download cadence that an already-approved policy forbade.
+
+* **Measure the source, not a sample of its output.** ADR-0016 inferred how OpenCaselist publishes
+  archives from three files that had been downloaded by hand. What it needed was the list of what the
+  site actually offers. Where a decision rests on how an external system behaves, ask that system
+  before writing the decision down.
+* **A decision that contradicts an approved policy is wrong, not an exception.** The daily cadence in
+  ADR-0016 contradicted `docs/policies/caselist-data-use.md`, agreed with a volunteer maintainer who
+  answered a question as a favour. The policy is checked before a decision record is written, and
+  where they conflict the policy governs until it is renegotiated with whoever approved it.
+* **Urgency is a reason to check, not a reason to skip checking.** The argument for haste - every day
+  costs data that cannot be recovered - was itself the thing that was untrue.
+* Superseded records stay in place with their reasoning intact. Whoever reads them next should be
+  able to see what was believed, what it caused, and what disproved it.

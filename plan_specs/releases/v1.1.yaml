@@ -15,11 +15,12 @@ metadata:
 spec:
   description: >-
     OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are imported, deduplicated,
-    parsed into cards and stored in S3 (dev and prod) with manifests; a daily scheduled sync captures
-    every archive window from the day it ships; CardMirror is evaluated and ADR-0014 records the editor
-    decision. E34 sits in this release rather than v1.2 because of ADR-0016: an OpenCaselist download
-    holds about seven days of modifications and nothing can re-fetch a window that was missed, so the
-    sync has to be running before, not after, the corpus work that depends on it.
+    parsed into cards and stored in S3 (dev and prod) with manifests; a weekly scheduled sync keeps the
+    store current without a manual download; CardMirror is evaluated and ADR-0014 records the editor
+    decision. E34 sits in this release rather than v1.2 because its client is already built and
+    accepted, because the capture-first split of the scheduled run stands on its own, and because
+    automating a weekly manual chore early is worth doing. ADR-0016 moved it here for a stronger reason
+    that turned out to be false; ADR-0017 records what actually holds.
   priority: 2
   acceptanceCriteria:
   - id: epic-e29
@@ -33,7 +34,7 @@ spec:
       Epic E31 (Debate File Parsing) goal is Succeeded.
   - id: epic-e34
     description: >-
-      Epic E34 (Scheduled Caselist Sync) goal is Succeeded, and the daily schedule is enabled and has
+      Epic E34 (Scheduled Caselist Sync) goal is Succeeded, and the weekly schedule is enabled and has
       completed at least one unattended run.
   - id: tagged
     description: >-

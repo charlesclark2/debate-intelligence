@@ -22,11 +22,14 @@ spec:
     ~2,342 .docx and 32 .pdf, imported in date order so cumulative dedupe works; the ~106 Policy OpenEv
     camp files; and any HS Policy or PF archives on hand. The operator imports and publishes to dev
     first, checks `caselist status` and spot-checks disclosures there, then publishes the same local
-    store to prod. Under ADR-0016 this is the first day of accumulation rather than a backfill: the three
-    downloads are adjacent seven-day windows of editing activity, not a census of HS LD disclosure, and
-    everything last modified before 2026-08-24 and untouched since is already unreachable. The summary
-    says so in those terms, and this task runs after E34's daily sync is enabled, so no further window is
-    lost while it is being written. Because the imports and uploads run well past two minutes, no step runs in CI or in an
+    store to prod. Under ADR-0017 the baseline is the complete archive: the run downloads
+    <caselist>-all-<date>.zip first and imports it as the corpus, then imports the dated weekly archives
+    for the history they carry - the three already on the operator's machine, plus the back-catalogue the
+    site still lists, which reaches 2026-07-07 for hsld26. The weeklies are adjacent seven-day windows of
+    editing activity and are reported as such; the full archive is what the coverage numbers come from.
+    Bulk downloads are capped at 5 per user per day, so fetching the back-catalogue and the full archive
+    spans more than one day and is planned in the runbook rather than attempted in one run. Confirm that
+    hspolicy26 and hspf26 list a FULL archive before relying on one for them. Because the imports and uploads run well past two minutes, no step runs in CI or in an
     implementation session; the session prepares the runbook and summary template, and the recorded
     results are committed as aggregate counts only in docs/data/caselist-backfill-2026-09.md (files per
     snapshot, NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts, dedupe rate, PDFs and unparsed names, bytes
@@ -67,11 +70,13 @@ spec:
       description: >-
         docs/data/caselist-backfill-2026-09.md records per snapshot the member count and the
         NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts, the overall dedupe rate, PDF/.doc and
-        unparsed-filename counts, and total bytes stored, with aggregate numbers only. REMOVED is labelled
-        as paths no longer present, not as removals, and a separate figure counts sources whose sha256 is
-        absent from the whole snapshot, which is what withdrawal looks like. The summary also states the
-        measured dedupe rate rather than the epic's assumption of a large one: three weeks of HS LD
-        collapsed 2,374 members to 2,107 distinct files, an 11% saving.
+        unparsed-filename counts, and total bytes stored, with aggregate numbers only. Between two weekly
+        archives, REMOVED is labelled as paths no longer present rather than as removals, because a
+        filename carries a per-team sequence number that increments. Against the full archive it means
+        what it says: a sha256 present in an earlier snapshot and absent from the complete archive is a
+        withdrawal, and that figure is reported separately. The summary states the measured dedupe rate
+        across the weeklies rather than assuming a large one: three weeks of HS LD collapsed 2,374
+        members to 2,107 distinct files, an 11% saving.
     - id: ac3
       description: >-
         manifests/hsld26/2026-09-01.jsonl, 2026-09-08.jsonl and 2026-09-15.jsonl and the OpenEv manifest exist

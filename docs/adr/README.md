@@ -26,7 +26,8 @@ New records use the template in [0000-template.md](0000-template.md).
 | [0012](0012-web-hosting.md) | Web hosting — a static export on S3 and CloudFront, under one team domain | Accepted 2026-09-20 | Private bucket + CloudFront with origin access control, security headers at the edge, no access logging; the public team site first, the V2 app later under the same domain. |
 | [0013](0013-two-environments-and-dev-main-promotion.md) | Two environments (dev, prod) and dev→main promotion | Accepted 2026-09-17 | Supersedes the `stage` environment in proposal [§4](../architecture/architecture_proposal.md#4-technology-stack) and [§5](../architecture/architecture_proposal.md#5-aws-cloud-architecture); operational detail in [docs/process/branching-and-environments.md](../process/branching-and-environments.md). |
 | [0014](0014-debate-file-editor.md) | Debate file editor and format reference (CardMirror) | Accepted 2026-09-20 | CardMirror is a compatibility target for every debate `.docx` we write, and an allowed (not mandated) team editor; not embedded or forked. Evidence in [cardmirror-evaluation.md](../architecture/cardmirror-evaluation.md). |
-| [0016](0016-caselist-corpus-is-accumulated.md) | The caselist corpus is accumulated from windows, not captured | Accepted 2026-09-21 | An OpenCaselist download holds ~7 days of modifications, not a cumulative archive, and no full export exists. The sync runs daily and ships before the backfill; the evidence store is the archive of record. Measured in [v1-e30-t03's report](../session-reports/v1-e30-t03-archive-importer.md). |
+| [0016](0016-caselist-corpus-is-accumulated.md) | The caselist corpus is accumulated from windows, not captured | Superseded 2026-09-21 | Claimed no full export exists and decided a daily sync. Both were wrong: the site publishes `<caselist>-all-<date>.zip` and retains weekly archives back to 2026-07-07, and the daily cadence contradicted the approved data-use policy. Its measurements of the three September windows stand and are carried into [0017](0017-caselist-corpus-is-retrievable.md). |
+| [0017](0017-caselist-corpus-is-retrievable.md) | The caselist corpus is retrievable, and the sync stays weekly | Accepted 2026-09-21 | Supersedes [0016](0016-caselist-corpus-is-accumulated.md): the site publishes a complete archive and retains a weekly back-catalogue, so the backfill starts from the full archive and the sync stays at the policy's weekly cadence. |
 
 ## Reserved numbers
 
@@ -40,11 +41,11 @@ decision lands. A reservation moves into the index above when its record is writ
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
 | 0015 | How coaches edit website content (calendar source and CMS) | [`v1-e37-t01-content-editing-decision`](../../plan_specs/v1/e37-calendar-and-announcements/t01-content-editing-decision.yaml) |
 
-New ADRs take the next free number after the highest written or reserved one: **0016** is the
-next free number. Do not skip numbers; if a reservation is dropped, note it here rather than silently
+New ADRs take the next free number after the highest written or reserved one: **0018** is the
+next free number (0015 is reserved by v1-e37-t01). Do not skip numbers; if a reservation is dropped, note it here rather than silently
 reusing the number.
 
-## Proposing a new ADR (ADR-0016+)
+## Proposing a new ADR (ADR-0018+)
 
 1. **Confirm this needs an ADR.** ADRs record decisions that shape the architecture and
    would be expensive to reverse. Configuration choices, feature toggles, and everyday
@@ -54,7 +55,7 @@ reusing the number.
    numbers* table in this README in the same PR.
 3. **Copy [0000-template.md](0000-template.md)** to `docs/adr/NNNN-short-descriptive-title.md`.
    Use kebab-case slugs; keep the title short but say what the decision is
-   (`0016-signed-url-download-strategy.md`, not `0016-download.md`).
+   (`0018-signed-url-download-strategy.md`, not `0018-download.md`).
 4. **Write in the standard sections.** Status, Context, Decision, Consequences,
    Alternatives considered, References. Reference at least one section anchor in
    [docs/architecture/architecture_proposal.md](../architecture/architecture_proposal.md);

@@ -19,12 +19,13 @@ metadata:
 spec:
   description: >-
     After the data-use policy allows it, pull archives from the OpenCaselist API with the operator's own
-    login token on a daily schedule, and run import → publish so every window is captured before it is
-    gone; parse and landscape attach to the same run once E31 and E32 exist. ADR-0016 is why this epic
-    ships in v1.1 ahead of the backfill rather than after the landscape work: a download holds roughly
-    seven days of modifications, no endpoint returns a complete caselist, and consecutive weekly pulls
-    overlap by about 6% of a week's files, so a run that slips loses the gap permanently. Daily pulls
-    overlap six-sevenths and cost bandwidth rather than storage, because identity is content-addressed.
+    login token on a weekly schedule, and run import → publish; parse and landscape attach to the same
+    run once E31 and E32 exist. Weekly is the cadence the archives are published at and the most
+    docs/policies/caselist-data-use.md permits (E34 gate 4, agreed with the maintainer). ADR-0017: the
+    site publishes a complete archive and retains a weekly back-catalogue, so a missed run is a delay
+    rather than a loss. This epic ships in v1.1 because t01 is already built, because the capture-first
+    split of the scheduled run stands on its own, and because automating a weekly manual chore early is
+    worth doing - not, as ADR-0016 had it, to prevent unrecoverable loss.
   priority: 2
   constraints:
     majorVersion: v1
@@ -37,14 +38,14 @@ spec:
       with rate limiting and without ever logging the token.
   - id: ac2
     description: >-
-      A daily scheduled run on the operator's machine imports and publishes new archives idempotently,
+      A weekly scheduled run on the operator's machine imports and publishes new archives idempotently,
       and reports what it captured. Parse and landscape stages run when their epics are present and are
       skipped, not failed, when they are not.
   - id: ac3
     description: >-
       A failed, skipped or stale run is impossible to miss: the run log, a staleness check the operator
-      sees without going looking, and a warning in any report built on stale data. Under ADR-0016 a
-      silently missed run is unrecoverable data loss, not a delayed refresh.
+      sees without going looking, and a warning in any report built on stale data. Under ADR-0017 a
+      missed run is a delay rather than a loss, because the weekly back-catalogue can be fetched late.
 status:
   phase: Pending
 ---
@@ -138,7 +139,7 @@ spec:
         - v1-e34-t01-caselist-api-client
     - id: t02
       kind: Task
-      name: Daily scheduled sync
+      name: Weekly scheduled sync
       description: >-
         `debate-research caselist pull` plus a launchd schedule on the operator's Mac: download new archives,
         import, parse, publish and regenerate landscape reports; idempotent; summary per run.

@@ -6,9 +6,10 @@ because the moment a command does any of those the CLI stops being replaceable b
 workers, which wire the same services differently (architecture proposal §6, and
 `docs/architecture/ports-and-adapters.md` for the injection pattern the services themselves use).
 
-The first service is wired: :meth:`ServiceContainer.evidence_sync`, which `debate-research store`
-runs (`v1-e29-t05-evidence-sync-cli`). The rest of V1's services and their adapters arrive in
-E02–E08 and slot in the same way.
+Two services are wired: :meth:`ServiceContainer.evidence_sync`, which `debate-research store`
+runs (`v1-e29-t05-evidence-sync-cli`), and :meth:`ServiceContainer.caselist_import`, which
+`debate-research caselist import` runs (`v1-e30-t03-archive-importer`). The rest of V1's services
+and their adapters arrive in E02–E08 and slot in the same way.
 
 ## Adding a service
 
@@ -54,13 +55,20 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Final, cast
 
+from debate_core.application.caselist.import_service import CaselistImportService
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
     SyncJournal,
     SyncKeyspace,
 )
 from debate_core.application.settings import ConfigurationError, Environment, Settings
-from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
+from debate_core.integrations.local import (
+    BLOB_DIRECTORY,
+    FsEvidenceObjectStore,
+    FsSnapshotStore,
+    SqliteDatabase,
+)
+from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 
 __all__ = [
     "SERVICE_NAMES",
@@ -70,7 +78,7 @@ __all__ = [
     "SettingsNotConfigured",
 ]
 
-SERVICE_NAMES: Final[tuple[str, ...]] = ("evidence_sync",)
+SERVICE_NAMES: Final[tuple[str, ...]] = ("caselist_import", "evidence_sync")
 """Names of the services this container can build, for `debate-research doctor` to report."""
 
 
@@ -146,6 +154,30 @@ class ServiceContainer:
     def override(self, name: str, instance: object) -> None:
         """Register `instance` under `name`, so a test can supply a fake before a command runs."""
         self._instances[name] = instance
+
+    @property
+    def database(self) -> SqliteDatabase:
+        """This environment's SQLite file, opened and migrated once per run.
+
+        A property on the container rather than a per-service construction, because every local
+        repository shares one connection — that is what makes the pragmas, the migration run and
+        the transaction boundary singular (see `debate_core.integrations.local.sqlite_db`).
+        """
+        return self.singleton("database", lambda: SqliteDatabase.open(self.settings.storage.data_dir))
+
+    def caselist_import(self) -> CaselistImportService:
+        """Build the weekly-archive importer over this environment's local evidence store.
+
+        No S3 and no bucket: an import writes to the machine it runs on, and publishing what it
+        wrote is a separate, deliberate `debate-research store sync` (v1-e30-t05).
+        """
+        return self.singleton("caselist_import", self._build_caselist_import)
+
+    def _build_caselist_import(self) -> CaselistImportService:
+        return CaselistImportService(
+            caselists=SqliteCaselistRepository(self.database),
+            blobs=FsSnapshotStore(self.settings.storage.data_dir),
+        )
 
     def evidence_sync(self, *, blob_prefix: str | None = None) -> EvidenceSyncService:
         """Build the sync between this environment's local evidence store and its bucket.

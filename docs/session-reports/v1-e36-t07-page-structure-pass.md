@@ -20,10 +20,12 @@ now a written-out list in `content/site.yaml` rather than every file in `content
 accessibility statement has moved to the footer where it belongs, and the link to the page you are
 on carries `aria-current`.
 
-None of the approved copy was rewritten to achieve any of that; it was regrouped. Charlie reviewed
-the FAQ and events pages on the dev preview twice during the session and the changes he asked for
-are in, including several new facts he supplied (see **Decisions**). All of it is data under
-`site/content/`, validated by `src/lib/content.ts`, so a copy edit stays a content edit.
+The structural work rewrote none of the approved copy; it regrouped it. Charlie then reviewed the
+pages on the dev preview three times during the session, and the copy changes he asked for at each
+round are in, including a substantial amount of new material he supplied: the live resolutions, the
+entry-fee figure, the two Wisconsin divisions, and his own coaching history. All of it is data
+under `site/content/`, validated by `src/lib/content.ts`, so a copy edit stays a content edit. The
+full list is in **Decisions**.
 
 **The PM should look first at the Deviations section.** Two things went beyond the spec at
 Charlie's direction during review: the events cards carry a current topic, and the FAQ gained a
@@ -127,10 +129,18 @@ fixtures cover the loader and navigation failures. 611 tests, up from 308.
    owns are untouched, the overrides are keyed to the events band by id, and the home page is
    unaffected. Flagging it because it is a judgement call on that boundary.
 
-5. **Copy changed, at Charlie's direction.** The spec says the copy is out of scope and the
-   constraints forbid changing the facts without Charlie. Charlie supplied or approved every item
-   below in session, but the spec still says the copy is fixed, so it is recorded here rather than
-   buried in a commit. See **Decisions** for the full list.
+5. **Copy changed, at Charlie's direction, on every page.** The spec says rewriting the copy is
+   out of scope and the constraints forbid changing the facts without Charlie. Charlie supplied or
+   approved every change in session across three rounds of review, so the constraint was met, but
+   "structure and presentation only" no longer describes what this task did. The coaches page in
+   particular is substantially new content. Recorded here rather than buried in commits; see
+   **Decisions** for the full list.
+
+6. **`tests/contact.test.ts` was reading the wrong thing.** Its assertions about what the contact
+   page publishes read the Markdown body, so when the addresses moved into the at-a-glance block
+   they quietly stopped covering them. It now reads `guardedHtml`. Worth the PM knowing, because
+   it is the kind of coverage gap that opens silently whenever content moves between a body and
+   front matter.
 
 ## Decisions and assumptions
 
@@ -143,6 +153,21 @@ fixtures cover the loader and navigation failures. 611 tests, up from 308.
 - Public Forum's "Best for" is no longer "the most common starting point".
 - The events page is titled "Debate Events Offered".
 - New wording for the FAQ lead and the closing block, replacing "No question is too basic".
+- Join drops "open enrollment" and "no tryout": the point a family is really asking about is that
+  no experience is needed and the coaching staff readies a new debater for their first rounds.
+- The Remind group and its code, `@debatewfb`, now appear in the join summary as well as the body.
+- Coach Clark's coaching history: seven schools across Missouri, Kansas and Wisconsin from 2007,
+  with the result at each, and what he does away from the team.
+
+**Copy I drafted, which Charlie has not yet seen.** Three leads were rewritten to his brief rather
+than to his words, and he should read them before launch: the about lead, the join lead and the
+contact lead. Each is built from facts already on the site; none introduces one.
+
+**Two numbers that disagreed.** The approved coaches copy said "twenty years of coaching
+experience"; the history Charlie supplied starts in 2007, which is nineteen seasons. The page now
+says "coaching since 2007", because the list underneath makes the arithmetic checkable and a page
+should not carry both. The generic "has qualified many students to national tournaments" sentence
+was dropped for the same reason: the per-school list says it specifically.
 
 **Copy I derived rather than quoted, and Charlie then approved on the preview.** The comparison
 fields had to be compressed to fit a card. `speechPattern` for all three and `bestFor` for
@@ -158,12 +183,18 @@ click, and separately asserts that every summary is a native `<summary>` child o
 with no `tabindex` — a `tabindex` being the usual way a hand-rolled accordion loses those keys. The
 real key presses belong to the keyboard-only walk in v1-e36-t08.
 
-**Four words were added to `permittedNameWords`.** `Events` and `Offered` (from the title-case
-heading "Debate Events Offered") and `United` and `States` (from the Public Forum resolution). The
-unreviewed-name guard reads any run of capitalised words as a possible person, and its own message
-names this as the fix for a phrase that is not one. Two other findings were reworded instead of
-allowlisted: "Early October" and "Contact Coach Clark" are ordinary sentence starts, and
-allowlisting `Early` and `Contact` would blunt the guard for nothing.
+**Sixteen words were added to `permittedNameWords`.** `Events` and `Offered` (the title-case
+heading "Debate Events Offered"); `United` and `States` (the Public Forum resolution); and
+`Central`, `Olathe`, `North`, `Neenah`, `Blue`, `Valley`, `West`, `Marquette`, `University`,
+`Jefferson`, `Missouri` and `Indiana` (the schools, universities and states in the coaching
+history). The unreviewed-name guard reads any run of capitalised words as a possible person, and
+its own message names this as the fix for a phrase that is not one. **Every one of these is an
+institution or a place that Charlie supplied and reviewed in session; none is a person, and a
+student name still never goes in this list.** The PM may want to look at this: sixteen additions in
+one task is the largest expansion the allowlist has had, and `North`, `West`, `Blue` and `Valley`
+are generic enough to weaken it slightly for future prose. Two other findings were reworded instead
+of allowlisted, because they were ordinary sentence starts and allowlisting `Early` and `Contact`
+would have blunted the guard for nothing.
 
 **The FAQ and events pages get route modules of their own.** `COMPOSED_SLUGS` keeps the generic
 `[slug]` route from generating the same paths, which would be a build error rather than a silent
@@ -190,6 +221,10 @@ about 10s, both well inside the CI budget in `docs/process/working-agreements.md
 2. **The home page's entry-point card still says "What the events are"** and now links to a page
    headed "Debate Events Offered". That card is t06's approved copy, so I left it. Worth aligning
    in t08 or a copy pass.
+
+2b. **Three leads need Charlie's eye before launch.** The about, join and contact leads were
+   drafted to his brief in session but he has not read them on the preview. Nothing in them is a
+   new fact; they are still someone else's words on his site.
 3. **The October 1 room.** Still unfilled, and now *not* flagged by the guard, because t06 wrote it
    as a sentence rather than a `[[TBD]]` marker. t08 owns filling it in; consider making it a
    marker so the build carries the reminder.

@@ -28,21 +28,21 @@ spec:
     checklist and the score table go in the session report; the screenshots stay local review artifacts
     and are never committed, so no image of a student can reach the repository. On top of that: a
     keyboard-only walk of every interactive element, a print check of the FAQ, and a look at the dev
-    preview in Safari on an iPhone and Chrome on an Android phone. It ends with the October 1 room
-    filled in from Charlie, which removes the last placeholder and lets a prod build succeed, and with
-    the promotion checklist ready for Charlie to run. Out of scope: the design and structure work
-    itself (t06, t07), the deploy script and smoke checks (t05), and running any deploy: promotion to
-    main and the prod deploy stay operator steps until keyless CI deploys arrive (v2-e10-t03).
-    Four things this task also owns, from the v1-e36-t07 review: the October 1 room is no longer flagged by
-    anything, so the publishing-policy guard gets a check that fails a prod build while a required
+    preview in Safari on an iPhone and Chrome on an Android phone. It ends with the October 1
+    announcement carrying a value Charlie has chosen, which lets a prod build succeed, and with the
+    promotion checklist ready for Charlie to run. Out of scope: the design and structure work
+    itself (t06, t07), the deploy script and smoke checks (t05), the home entry-point card labels
+    (t09, which owns them and edits the same home.yaml in parallel), and running any deploy: promotion
+    to main and the prod deploy stay operator steps until keyless CI deploys arrive (v2-e10-t03).
+    Three things this task also owns, from the v1-e36-t07 review: the October 1 room is no longer flagged
+    by anything, so the publishing-policy guard gets a check that fails a prod build while a required
     announcement field is unset (a room of "TBA" is a decision, an empty one is an oversight); the
     media-consent name allowlist becomes phrases rather than bare words, because entries like North, West,
-    Blue and Valley weaken a word list for future prose; tests/smoke/ gains its first site entries for the
-    validate-dev tier, which no task has added yet; and the home page's entry-point card labels are aligned
-    with the page titles they link to.
+    Blue and Valley weaken a word list for future prose; and the validate-dev tier gains its first site
+    smoke entries, which no task has added yet.
   priority: 1
   constraints:
-    packages: [site/scripts, site/package.json, site/content, docs/session-reports, docs/runbooks]
+    packages: [site/scripts, site/package.json, site/content, scripts, tests/smoke, docs/session-reports, docs/runbooks]
     forbidden:
       - Running a deploy, a promotion or an AWS command from an agent session
       - Wiring the browser-based QA tooling into `pnpm --dir site lint|test|build`, which must stay offline and fast
@@ -82,14 +82,18 @@ spec:
         trap, and printing the FAQ shows every answer; both are recorded item by item in the report.
     - id: ac5
       description: >-
-        The October 1 room is filled in from Charlie, no placeholder remains, and
-        `SITE_ENV=prod SITE_URL=<team domain> pnpm --dir site build` exits 0 with the publishing-policy
-        guard reporting no errors, alongside a passing lint, typecheck and full test run.
+        Every required October 1 announcement field carries a value Charlie has supplied — the room
+        itself, or an explicit stand-in he has chosen such as "To be announced" — with no field left
+        unset, and `SITE_ENV=prod SITE_URL=<team domain> pnpm --dir site build` exits 0 with the
+        publishing-policy guard reporting no errors, alongside a passing lint, typecheck and full test
+        run. A stand-in is a decision and satisfies this criterion; silence is an oversight and does not.
+        Replacing a stand-in with the room later is a one-line content edit tracked by ac6, not a reopen.
     - id: ac6
       description: >-
         docs/runbooks/team-website.md carries a promotion checklist Charlie can follow (dev smoke check,
-        promotion to main, prod deploy, prod smoke check, what to do if it looks wrong), and Charlie has
-        ticked the pre-publication checklist in docs/policies/website-publishing.md for the launch commit.
+        replacing any announcement stand-in with the real value, promotion to main, prod deploy, prod
+        smoke check, what to do if it looks wrong), and Charlie has ticked the pre-publication checklist
+        in docs/policies/website-publishing.md for the launch commit.
 status:
   phase: Pending
 ---
@@ -182,17 +186,19 @@ spec:
               disclosures read correctly with nothing cut off or overlapping.
       - id: fill-room-and-prod-build
         kind: Task
-        name: Fill the October 1 room and prove a clean prod build
+        name: Settle the October 1 announcement and prove a clean prod build
         description: >-
-          Take the room from Charlie, replace the `[[TBD]]` marker in site/content/pages/home.md (and
-          the panel fields the home page reads), then run the full gate set and a prod build so the
-          publishing-policy guard reports no errors for the first time.
+          Take the room from Charlie, or the stand-in he chooses in its place, and replace the
+          announcement field's `unsetNote` in site/content/home.yaml with that value, then run the full
+          gate set and a prod build so the publishing-policy guard reports no errors for the first time.
+          Touch only the announcement fact: the entry-point card labels in the same file belong to t09,
+          which runs in parallel.
         dependsOn: [human-checks]
-        outputs: [site/content/pages/home.md, site/content/home.yaml]
+        outputs: [site/content/home.yaml]
         estimatedEffort: 45m
         acceptanceCriteria:
           - type: command_succeeds
-            name: Prod build succeeds with no placeholder left
+            name: Prod build succeeds with no announcement field left unset
             command: env
             args: [SITE_ENV=prod, SITE_URL=https://wfbdebate.com, pnpm, --dir, site, build]
           - type: test_passes

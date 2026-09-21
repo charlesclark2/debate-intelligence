@@ -19,7 +19,12 @@ spec:
   description: >-
     Implement the deterministic DOCX adapter behind a new DebateFileParser port. Moved from V3 (was
     v3-e20-t03) because the caselist evidence store needs it now; v3-e20 reuses it for web uploads. The
-    parser reads word/document.xml with python-docx + lxml and uses the t02 StyleProfile and non-Verbatim
+    parser reads word/document.xml with lxml alone - not python-docx, which builds its parser with
+    remove_blank_text=True and can therefore drop a whitespace-only run in exactly the converted files
+    this parser exists for, against ac3's requirement that evidence text be copied exactly; lxml with
+    entity resolution, DTD loading and network access all off does the job and is the safer parse besides.
+    No task may read evidence text with python-docx; an import-linter contract keeps both libraries out of
+    domain/ and application/. The parser uses the t02 StyleProfile and non-Verbatim
     classifier to turn a SourceDocument (E30-t02 caselist domain model: caselist, snapshot, sha256, source
     path, CampFile metadata) into a ParsedDocument of FileSections (pocket, hat, block, tag, cite, evidence,
     analytic, undertag, other) with section paths, and ParsedCards grouping tag + cite + evidence. Evidence
@@ -177,10 +182,14 @@ spec:
         kind: Task
         name: Structural fixture suite and quality gates
         description: >-
-          Scrub 8-10 files with scripts/scrub_docx_fixture.py into tests/fixtures/debate_files/structural/
-          with a MANIFEST.md (category, season, scrub date; no schools or team codes), add snapshot
-          expectations and a synthetic large-file timing test marked `slow` (validate-dev slow tier, not the PR
-          `ci` check), then type check and import boundaries.
+          Write 8-10 synthetic fixtures into tests/fixtures/debate_files/structural/ with a MANIFEST.md
+          recording what template family each one represents. No real file or excerpt is committed,
+          scrubbed or otherwise: cards travel between programs, so a team file can carry another
+          program's cutter marks, and ac6 and v1-e31-t02 both settle this. Snapshot expectations are
+          hand-written from the fixture, never generated from the parser's own output, because an
+          expectation derived from the implementation cannot contradict it. Add a synthetic large-file
+          timing test marked `slow` (validate-dev slow tier, not the PR `ci` check), then type check and
+          import boundaries.
         dependsOn: [section-and-card-assembly]
         outputs: [tests/fixtures/debate_files/structural/MANIFEST.md]
         estimatedEffort: 3h
@@ -189,11 +198,6 @@ spec:
             name: Structural fixture manifest exists
             path: tests/fixtures/debate_files/structural/MANIFEST.md
             contentMatch: "wiki-converted"
-          - type: custom
-            name: Coach reviews scrubbed structural fixtures
-            description: >-
-              Charlie opens each scrubbed fixture in Word and confirms no names, team codes, comments or
-              authorship metadata remain and that the set represents team, caselist and camp formatting.
           - type: test_passes
             name: Structural fixture tests pass
             command: uv

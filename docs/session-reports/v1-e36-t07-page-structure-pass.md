@@ -58,7 +58,7 @@ question. Both want the spec amended rather than left implicit.
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| FAQ content is grouped data (`site/content/faq.yaml` matching `openByDefault`) | PASS | File exists; `grep -c openByDefault site/content/faq.yaml` → 3. |
+| FAQ content is grouped data (`site/content/faq.yaml` matching `openByDefault`) | PASS | File exists and contains `openByDefault`: `grep -n openByDefault site/content/faq.yaml` → 4 lines, three of them the field set on the most-asked questions (lines 40, 70, 93) and one the comment above them explaining the rule. |
 | Loader validates the new content files and names a bad one (`pnpm --dir site test content`) | PASS | 2 files, **59 passed**. |
 | FAQ uses native details, opens the named questions and indexes its topics (`pnpm --dir site test faq`) | PASS | **77 passed**. |
 | Events page renders three parallel cards with the same comparison fields (`pnpm --dir site test events`) | PASS | **79 passed**. |

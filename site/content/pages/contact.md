@@ -4,10 +4,21 @@ description: >-
   How to reach the Whitefish Bay High School debate team's coaches by email.
 navLabel: Contact
 navOrder: 60
+lead: >-
+  Email is the way to reach the team. There is no form on this page and nothing is stored: your
+  message goes to a coach's school email address and nowhere else.
+atAGlance:
+  title: Ways to reach the team
+  items:
+    - label: Email a coach
+      value: Charlie Clark, Head Coach, at <charles.clark@wfbschools.org>.
+    - label: Write about
+      value: Joining, practice, tournaments, travel, costs, financial support or parent judging.
+    - label: Through the school
+      value: The Whitefish Bay High School activities office can pass a message on.
+    - label: Remove something
+      value: Email Coach Clark. A student's name or photograph comes down within 24 hours.
 ---
-
-Email is the way to reach the team. There is no form on this page and nothing is stored: your
-message goes to a coach's school email address and nowhere else.
 
 ## Coaches
 

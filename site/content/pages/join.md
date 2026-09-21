@@ -5,10 +5,23 @@ description: >-
   Practice times, what to bring on the first day, and three ways to sign up.
 navLabel: Join
 navOrder: 30
+lead: >-
+  Debate is open enrollment. Any student in grades 9 through 12 may join, there is no tryout, and
+  no experience is necessary. Most of the team started knowing nothing about it.
+atAGlance:
+  title: Joining at a glance
+  items:
+    - label: Who can join
+      value: Any student in grades 9 through 12. No tryout and no experience needed.
+    - label: When
+      value: Any time during the fall semester. Earlier is better, but nobody is turned away.
+    - label: Practice
+      value: Mondays and Wednesdays at lunch, and Thursdays after school.
+    - label: Bring
+      value: Something to take notes on. A Chromebook is ideal.
+    - label: First step
+      value: Email Coach Clark at <charles.clark@wfbschools.org>, or come to any practice.
 ---
-
-Debate is open enrollment. Any student in grades 9 through 12 may join, there is no tryout, and
-no experience is necessary. Most of the team started knowing nothing about it.
 
 Students may join at any time during the fall semester. Earlier is better, because the season
 starts in early October, but nobody is turned away for showing up late.

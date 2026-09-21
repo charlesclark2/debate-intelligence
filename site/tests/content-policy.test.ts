@@ -296,7 +296,9 @@ describe('the content this site actually ships', () => {
 
   it('names no student, so no consent entry is needed yet', () => {
     for (const page of pages) {
-      expect(unreviewedNames(page.html, consent.permittedNameWords), page.filePath).toEqual([])
+      expect(unreviewedNames(page.guardedHtml, consent.permittedNameWords), page.filePath).toEqual(
+        [],
+      )
     }
   })
 })

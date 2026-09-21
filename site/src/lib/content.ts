@@ -73,9 +73,31 @@ function renderPlaceholders(text: string): string {
   return text.replace(PLACEHOLDER_PATTERN, '<span class="placeholder">TBD</span>')
 }
 
+/**
+ * The at-a-glance block: the handful of facts a visitor came for, as labels and values, before
+ * any of the prose that explains them.
+ *
+ * Two to six items. Below two it is not a summary of anything, and past six a reader is back to
+ * reading rather than glancing, which is the failure this whole task exists to fix. The loader
+ * enforces the range so the rule lives with the content rather than in a reviewer's head.
+ *
+ * Values are inline Markdown, so an email address or a link inside one behaves as it does
+ * anywhere else in content/, and an unfilled [[TBD]] shows as the placeholder badge.
+ */
+export const atAGlanceSchema = z.object({
+  title: z.string().min(1),
+  items: z
+    .array(z.object({ label: z.string().min(1), value: z.string().min(1) }))
+    .min(2, 'an at-a-glance block with one item is not a summary')
+    .max(6, 'past six items a reader is reading again rather than glancing'),
+})
+
 export const pageFrontMatterSchema = z.object({
   title: z.string().min(1, 'title must not be empty'),
   description: z.string().min(1, 'description must not be empty'),
+  /** The one paragraph under the page title, before the at-a-glance block. */
+  lead: z.string().min(1).optional(),
+  atAGlance: atAGlanceSchema.optional(),
   navLabel: z.string().min(1).optional(),
   navOrder: z.number().int().nonnegative().optional(),
   openGraphImage: z.string().min(1).optional(),
@@ -175,6 +197,19 @@ export type PageFrontMatter = z.infer<typeof pageFrontMatterSchema>
 export type ContactEmail = z.infer<typeof contactEmailSchema>
 export type SiteSettings = z.infer<typeof siteSettingsSchema>
 
+export interface AtAGlanceItem {
+  label: string
+  /** The value as written in the front matter. */
+  value: string
+  /** The same value as inline HTML, so a link or an address inside it works. */
+  valueHtml: string
+}
+
+export interface AtAGlance {
+  title: string
+  items: AtAGlanceItem[]
+}
+
 export interface ContentPage {
   /** File stem, e.g. `join` for content/pages/join.md. */
   slug: string
@@ -184,12 +219,25 @@ export interface ContentPage {
   filePath: string
   title: string
   description: string
+  /** The paragraph under the title, when the page opens with one. */
+  lead?: string
+  /** The summary block between the lead and the detail, when the page has one. */
+  atAGlance?: AtAGlance
   navLabel: string
   navOrder: number
   openGraphImage?: string
   draft: boolean
   /** Markdown body rendered to HTML at build time. */
   html: string
+  /**
+   * Everything published on the page, as HTML: the body plus the lead and the at-a-glance values
+   * that live in the front matter and are rendered by the route module rather than by Prose.
+   *
+   * src/lib/publishing-policy.ts reads this rather than `html`. A value in a summary block is
+   * published copy exactly as a paragraph is, and the guard cannot have a blind spot wherever a
+   * page happens to keep its most important facts.
+   */
+  guardedHtml: string
   /**
    * One entry per `[[TBD]]` marker left in the file, holding the note written beside it. Empty on
    * a page that is ready to publish.
@@ -206,6 +254,19 @@ export class ContentValidationError extends Error {
     this.name = 'ContentValidationError'
     this.filePath = filePath
   }
+}
+
+/**
+ * One value from the front matter, rendered as inline HTML: links and emphasis work, and a
+ * placeholder marker becomes the visible badge, but nothing is wrapped in a paragraph, because
+ * these land inside a <dd> or a <p> the page has already written.
+ */
+function renderInlineMarkdown(filePath: string, markdown: string): string {
+  const rendered = marked.parseInline(renderPlaceholders(markdown), { async: false })
+  if (typeof rendered !== 'string') {
+    throw new ContentValidationError(filePath, 'Markdown could not be rendered synchronously')
+  }
+  return rendered
 }
 
 export function defaultContentDirectory(): string {
@@ -278,14 +339,44 @@ export function parsePage(slug: string, filePath: string, source: string): Conte
   const body = parsed.content
   // gray-matter strips the front matter, so the body starts this many lines into the file.
   const lineOffset = source.split('\n').length - body.split('\n').length
+
+  // The lead and the at-a-glance values are copy like any other, so they go through the house
+  // style, the acronym rule, the placeholder scan and the publishing guard with the body.
+  const frontMatterCopy = [
+    frontMatter.lead ?? '',
+    frontMatter.atAGlance?.title ?? '',
+    ...(frontMatter.atAGlance?.items.flatMap((item) => [item.label, item.value]) ?? []),
+  ].filter((text) => text.length > 0)
+
   assertNoEmDashesInFrontMatter(filePath, frontMatter)
+  for (const text of frontMatterCopy) {
+    if (text.includes(EM_DASH)) {
+      throw new ContentValidationError(
+        filePath,
+        `the front matter uses an em dash in "${text}". ${HOUSE_STYLE_REWRITE}`,
+      )
+    }
+  }
   assertNoEmDashesInBody(filePath, body, lineOffset)
-  assertAcronymsAreExpanded(filePath, `${frontMatter.title}\n${frontMatter.description}\n${body}`)
+
+  const allCopy = [frontMatter.title, frontMatter.description, ...frontMatterCopy, body].join('\n')
+  assertAcronymsAreExpanded(filePath, allCopy)
 
   const rendered = marked.parse(renderPlaceholders(body), { async: false })
   if (typeof rendered !== 'string') {
     throw new ContentValidationError(filePath, 'Markdown could not be rendered synchronously')
   }
+
+  const atAGlance = frontMatter.atAGlance
+    ? {
+        title: frontMatter.atAGlance.title,
+        items: frontMatter.atAGlance.items.map((item) => ({
+          label: item.label,
+          value: item.value,
+          valueHtml: renderInlineMarkdown(filePath, item.value),
+        })),
+      }
+    : undefined
 
   return {
     slug,
@@ -293,12 +384,15 @@ export function parsePage(slug: string, filePath: string, source: string): Conte
     filePath,
     title: frontMatter.title,
     description: frontMatter.description,
+    ...(frontMatter.lead ? { lead: frontMatter.lead } : {}),
+    ...(atAGlance ? { atAGlance } : {}),
     navLabel: frontMatter.navLabel ?? frontMatter.title,
     navOrder: frontMatter.navOrder ?? Number.MAX_SAFE_INTEGER,
     ...(frontMatter.openGraphImage ? { openGraphImage: frontMatter.openGraphImage } : {}),
     draft: frontMatter.draft ?? false,
     html: rendered,
-    placeholders: findPlaceholders(`${frontMatter.title}\n${frontMatter.description}\n${body}`),
+    guardedHtml: [...frontMatterCopy.map((text) => `<p>${text}</p>`), rendered].join('\n'),
+    placeholders: findPlaceholders(allCopy),
   }
 }
 
@@ -465,6 +559,7 @@ export function homeContentAsPage(
     navOrder: Number.MAX_SAFE_INTEGER,
     draft: false,
     html: text,
+    guardedHtml: text,
     placeholders: findPlaceholders(text),
   }
 }
@@ -809,6 +904,7 @@ function yamlContentAsPage(
     navOrder: Number.MAX_SAFE_INTEGER,
     draft: false,
     html: text,
+    guardedHtml: text,
     placeholders: findPlaceholders(text),
   }
 }

@@ -4,6 +4,21 @@ description: >-
   Who coaches debate at Whitefish Bay High School, and how to reach them.
 navLabel: Coaches
 navOrder: 40
+lead: >-
+  Questions from parents and from students are welcome at any time, whether or not a student has
+  joined.
+atAGlance:
+  title: Who coaches the team
+  items:
+    - label: Head coach
+      value: Charlie Clark
+    - label: Email
+      value: <charles.clark@wfbschools.org>
+    - label: Experience
+      value: Twenty years of coaching, and a college debater before that.
+    - label: Financial support
+      value: >-
+        Email Coach Clark directly. That conversation stays between the family and the coach.
 ---
 
 ## Charlie Clark, Head Coach

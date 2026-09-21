@@ -5,15 +5,29 @@ description: >-
   the leagues we belong to, and how a season is shaped.
 navLabel: About
 navOrder: 10
+lead: >-
+  The Whitefish Bay High School debate team competes in three events. Students research a question,
+  prepare the case for both sides of it, and argue it in front of a judge.
+atAGlance:
+  title: The team at a glance
+  items:
+    - label: Events
+      value: Policy debate, Lincoln-Douglas debate and Public Forum debate.
+    - label: Size
+      value: More than 20 students competing this season.
+    - label: Practice
+      value: Mondays and Wednesdays at lunch, and Thursdays after school.
+    - label: Season
+      value: >-
+        The season runs from early October to Martin Luther King Jr. weekend in January.
+    - label: Leagues
+      value: >-
+        The Wisconsin Debate Coaches Association, the National Speech and Debate Association and
+        the National Catholic Forensic League.
 ---
 
-The Whitefish Bay High School debate team competes in three events: Policy debate,
-Lincoln-Douglas debate and Public Forum debate. Students research a question, prepare the case
-for both sides of it, and argue it in front of a judge. What each event looks like is explained on
-[what the events are](/events/).
-
-The program has been running for several decades. More than 20 students are competing this
-season.
+What each event looks like is explained on [what the events are](/events/). The program has been
+running for several decades.
 
 ## Where we compete
 

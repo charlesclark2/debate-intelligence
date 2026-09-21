@@ -478,3 +478,63 @@
     }
   }
 }
+
+/*
+ * THE PAGE LEAD AND THE AT-A-GLANCE BLOCK
+ * ----------------------------------------
+ * The lighter version of what the FAQ and the events page do, for about, join, coaches and
+ * contact. Each of those was a title and then a column of prose, so a parent who wanted one fact
+ * (when practice is, who to email, what a season costs) had to read from the top to find it. The
+ * summary block puts those facts first, as labels and values, and leaves the prose to explain
+ * them underneath.
+ *
+ * The label sits above its value rather than beside it, for the same reason the events
+ * comparison stacks: a two-column grid sizes its label column to the longest label in the set,
+ * which is what pushes a card or a list past the width of a 390px screen. From 48rem there is
+ * room for the two-column form, and the label column is sized to its content.
+ */
+.page-lead {
+  margin: 0;
+  font-size: var(--font-size-lead);
+}
+
+.at-a-glance {
+  display: grid;
+  gap: var(--space-1) var(--space-5);
+  margin: 0;
+}
+
+/* Body grey, not the muted grey: at 14px this is small text, and #74798E is large-text and
+   non-text only. See the contrast table in tokens.css. */
+.at-a-glance__label {
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.at-a-glance__value {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-heading);
+  font-size: var(--font-size-lead);
+}
+
+.at-a-glance__value:last-of-type {
+  margin-bottom: 0;
+}
+
+@media (min-width: 48rem) {
+  .at-a-glance {
+    grid-template-columns: max-content 1fr;
+  }
+
+  .at-a-glance__label {
+    /* Lines the label up with the first line of its value, which is set two steps larger. */
+    padding-top: 0.2em;
+  }
+
+  .at-a-glance__value {
+    margin-bottom: var(--space-3);
+  }
+}

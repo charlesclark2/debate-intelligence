@@ -17,11 +17,11 @@ metadata:
     debate/architecture-refs: §8, §9, §14, §15
 spec:
   description: >-
-    Make an unattended daily sync impossible to fail silently. Under ADR-0016 this is not operational
-    polish: a download holds about seven days of modifications and nothing can re-fetch a window that was
-    missed, so a run that fails quietly is permanent data loss rather than a delayed refresh. The
-    staleness check therefore has to reach the operator without being looked for, and it fires on a run
-    that did not happen at all, not only on one that ran and failed.
+    Make an unattended weekly sync impossible to fail silently. Under ADR-0017 a missed run is a delay
+    rather than a loss, because the site retains a back-catalogue of weekly archives that can be fetched
+    late - so this is operational hygiene rather than a guard against unrecoverable damage. It still
+    fires on a run that did not happen at all, not only on one that ran and failed, because a schedule
+    nobody notices has stopped is how a season's worth of late fetches accumulates.
     Make an unattended sync impossible to fail silently. Every `caselist pull` run (t02) appends
     a SyncRunRecord (run id, environment, start/end, caselist slugs, archives seen/downloaded, stage
     outcomes, pending publish work, error class and message) to a local run log and publishes it to

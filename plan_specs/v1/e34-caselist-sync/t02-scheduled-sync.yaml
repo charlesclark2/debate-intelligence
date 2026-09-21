@@ -1,4 +1,4 @@
-# TASK v1-e34-t02-scheduled-sync — Daily scheduled sync
+# TASK v1-e34-t02-scheduled-sync — Weekly scheduled sync
 # Epic: E34 Scheduled Caselist Sync | Release: v1.1 (Caselist evidence store) | Major: V1
 # Architecture refs: §2 async/slow work, §6 thin CLI, §9 Opponent data, §14, §15 reliability
 ---
@@ -13,16 +13,17 @@ metadata:
     debate/release: v1.1
     debate/epic: v1-e34-caselist-sync
   annotations:
-    debate/title: Daily scheduled sync
+    debate/title: Weekly scheduled sync
     debate/architecture-refs: §2, §6, §9, §14, §15
 spec:
   description: >-
-    Capture every archive window before it is gone. ADR-0016 is the premise: an OpenCaselist download
-    holds roughly the last seven days of modifications, no endpoint returns a complete caselist, and
-    consecutive weekly pulls overlap by only about 6% of a week's files, so a slipped run loses that gap
-    for good. This run is daily, and the stages that cannot be redone later - download, import, publish -
-    are the ones it must complete. Parsing a stored file can happen any time; capturing a window cannot.
-    Automate the caselist and OpenEv cycle on the operator's Mac. A CaselistSyncService in
+    Automate the weekly caselist and OpenEv cycle on the operator's Mac. ADR-0017 is the premise: the
+    site publishes a weekly archive and a complete one, retains a back-catalogue of weeklies, and the
+    approved data-use policy permits weekly cadence at most - no polling faster than archives are
+    published. So the run is weekly, a missed run is fetched late rather than lost, and the run still
+    completes download, import and publish before anything optional, because those are the stages that
+    put bytes somewhere durable. Bulk downloads are capped at 5 per user per day upstream, which the
+    selection logic budgets for across the configured caselists rather than discovering at runtime. A CaselistSyncService in
     debate_core.application composes existing services in order: list archives for each configured
     caselist slug (t01), select archives newer than the latest imported snapshot per the manifests,
     download them oldest-first, import (v1-e30-t03; OpenEv camp files listed by the client are
@@ -31,18 +32,16 @@ spec:
     of the same run: each is invoked when its service is available and skipped with a recorded reason
     when it is not, so this task ships in v1.1 without waiting for either, and neither can fail a run
     whose captured bytes are already safe. Each archive becomes its own snapshot; content deduplication
-    keeps storage flat, which is what makes a daily cadence nearly free on disk despite the
-    six-sevenths overlap between consecutive pulls. The run is idempotent (a re-run
+    keeps storage flat, so re-fetching an archive already held costs nothing on disk. The run is idempotent (a re-run
     with nothing new downloads nothing and exits 0), holds a lock file so two runs never overlap, and
     writes a structured per-run summary. Local stages (download, import, parse) need no AWS credentials;
     if the AWS SSO session has expired the S3 publish and report steps are recorded as pending and
     retried on the next run or by `caselist pull --publish-pending`. `debate-research caselist pull
     --caselist <slug> [--caselist <slug> ...] [--dry-run]` is the entry point; --dry-run lists what
     would be downloaded and processed without writing anything. The launchd agent (plist template,
-    wrapper script and install script under ops/launchd/) runs pull daily and runs a missed job on wake,
-    which matters more here than it would on a weekly schedule: a laptop asleep at the scheduled hour
-    must still take the window. Installing and enabling it is an operator step, taken only after one
-    manual DEBATE_ENV=dev run validates the pipeline and the first scheduled prod run is recorded. Out of scope: the API client and token (t01), run-log
+    wrapper script and install script under ops/launchd/) runs pull weekly and runs a missed job on
+    wake. Installing and enabling it is an operator step, taken only after one manual DEBATE_ENV=dev run
+    validates the pipeline and the first scheduled prod run is recorded. Out of scope: the API client and token (t01), run-log
     storage, failure notifications and the stale-data banner (t03), and the importer/parser/landscape
     internals (E30, E31, E32).
   priority: 2
@@ -172,8 +171,8 @@ spec:
         kind: Task
         name: launchd agent template, wrapper and installer
         description: >-
-          Plist template (StartCalendarInterval daily at 06:00 local; runs missed jobs on wake, so a
-          sleeping laptop does not skip a window), wrapper script (DEBATE_ENV, AWS_PROFILE, log path under
+          Plist template (StartCalendarInterval weekly, e.g. Wednesday 06:00 local after the archives
+          are published; runs missed jobs on wake), wrapper script (DEBATE_ENV, AWS_PROFILE, log path under
           ~/Library/Logs/debate-research) and install.sh with --dry-run that renders to stdout; runbook
           explains install, enable, disable and logs.
         dependsOn: [pull-command]
@@ -185,7 +184,7 @@ spec:
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: artifact_exists
-            name: Plist template schedules a daily run
+            name: Plist template schedules a weekly run
             path: ops/launchd/com.debate-intelligence.caselist-sync.plist.template
             contentMatch: "StartCalendarInterval"
           - type: test_passes

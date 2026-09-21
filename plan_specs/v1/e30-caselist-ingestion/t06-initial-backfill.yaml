@@ -29,7 +29,14 @@ spec:
     editing activity and are reported as such; the full archive is what the coverage numbers come from.
     Bulk downloads are capped at 5 per user per day, so fetching the back-catalogue and the full archive
     spans more than one day and is planned in the runbook rather than attempted in one run. Confirm that
-    hspolicy26 and hspf26 list a FULL archive before relying on one for them. Because the imports and uploads run well past two minutes, no step runs in CI or in an
+    hspolicy26 and hspf26 list a FULL archive before relying on one for them.
+    One local store serves both environments. The v1-e30-t05 session found that the dev and prod profiles
+    point at different data directories, so a prod publish run under the prod profile would read an empty
+    store rather than the one the archives were imported into. The archives are downloaded and imported
+    once, into the dev profile's data directory, and that same store is published to dev, verified with
+    `caselist status`, and then published to prod with an explicit DEBATE_STORAGE__DATA_DIR override
+    naming it. The bytes are identical in both buckets by construction, which is the point: importing
+    twice could produce two stores that differ, and the runbook would have no way to tell. Because the imports and uploads run well past two minutes, no step runs in CI or in an
     implementation session; the session prepares the runbook and summary template, and the recorded
     results are committed as aggregate counts only in docs/data/caselist-backfill-2026-09.md (files per
     snapshot, NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts, dedupe rate, PDFs and unparsed names, bytes

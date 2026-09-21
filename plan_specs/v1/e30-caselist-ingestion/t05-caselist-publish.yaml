@@ -21,7 +21,10 @@ spec:
     `debate-research caselist status` so imported sources and manifests reach the evidence bucket of the
     environment selected by DEBATE_ENV (dev or prod). Sources go to content-addressed keys
     raw/caselist/<caselist-slug>/sha256/ab/cd/<hash> (content-addressed, no file extension, and no school or team code in keys, per the data-use policy; an extension would make identical bytes two objects) and manifests to
-    manifests/<caselist>/<snapshot>.jsonl (manifests/openev/<year>-<event>.jsonl for camp files). Publishing
+    manifests/<caselist>/<snapshot>.jsonl (manifests/openev/<year>-<event>.jsonl for camp files). OpenEv
+    camp files are the one exception to the raw/caselist/<slug>/ pattern: they are not a caselist, and
+    docs/architecture/evidence-store-layout.md, v1-e29-t03 and the store CLI guide all file them under
+    raw/openev/<year>/sha256/ab/cd/<hash>. Publishing
     is idempotent and resumable: objects already present with a matching sha256 checksum are skipped, all
     sources of a snapshot are uploaded before its manifest, and the manifest is written last so its
     presence means the snapshot is complete. `caselist status` compares local manifests with S3 and

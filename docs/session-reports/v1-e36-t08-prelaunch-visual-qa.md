@@ -456,9 +456,16 @@ throughout.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-21
 
-**Notes:**
+**Notes:** Accepted as the session's work, which is complete. The Goal stays InProgress: ac4
+(keyboard walk, FAQ print check, iPhone and Android) and ac6 (Charlie's pre-publication tick
+against the promotion commit) are operator criteria and no session can close them. All three
+deviations were ruled and merged before this report: 764f8c9 removed the t09-owned card labels and
+rewrote ac5 to accept a chosen announcement value, 547416c corrected the tests/smoke clause. The
+announcement guard's value/unsetNote shape is better than the ruling that prompted it. The branch
+merges now rather than waiting on ac4 and ac6, because the guard, the QA command and the promotion
+checklist are needed for the October 1 launch.

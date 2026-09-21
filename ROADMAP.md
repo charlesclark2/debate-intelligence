@@ -61,12 +61,12 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 10 | 150 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 3 | 18 | 7 | 196 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 4 | 20 | 0 | 210 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 21 | 13 | 227 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 17 | 6 | 141 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 17 | 8 | 141 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 11 | 0 | 109 |
@@ -128,7 +128,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 
 ### v1.1 — Caselist evidence store
 
-Weekly OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are imported, deduplicated, parsed into cards and stored in S3 (dev and prod) with manifests; CardMirror is evaluated and ADR-0014 records the editor decision.
+OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are imported, deduplicated, parsed into cards and stored in S3 (dev and prod) with manifests; a weekly scheduled sync keeps the store current without a manual download; CardMirror is evaluated and ADR-0014 records the editor decision. E34 sits in this release rather than v1.2 because its client is already built and accepted, because the capture-first split of the scheduled run stands on its own, and because automating a weekly manual chore early is worth doing. ADR-0016 moved it here for a stronger reason that turned out to be false; ADR-0017 records what actually holds.
 
 #### [E29 — Cloud Evidence Store (S3)](plan_specs/v1/e29-cloud-evidence-store/epic.yaml)
 
@@ -138,7 +138,7 @@ Weekly OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are 
 | [Terraform bootstrap and environments](plan_specs/v1/e29-cloud-evidence-store/t02-terraform-bootstrap.yaml) `v1-e29-t02-terraform-bootstrap` | Succeeded | 1 | 7.0 |
 | [Evidence buckets and operator access](plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml) `v1-e29-t03-evidence-buckets` | Succeeded | 1 | 9.0 |
 | [S3 blob-store adapter](plan_specs/v1/e29-cloud-evidence-store/t04-s3-blob-store.yaml) `v1-e29-t04-s3-blob-store` | Succeeded | 2 | 11.0 |
-| [`debate-research store` sync commands](plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml) `v1-e29-t05-evidence-sync-cli` | Pending | 3 | 11.5 |
+| [`debate-research store` sync commands](plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml) `v1-e29-t05-evidence-sync-cli` | Succeeded | 3 | 11.5 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 
@@ -146,9 +146,9 @@ Weekly OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are 
 |---|---|---|---|
 | [Caselist and OpenEv data-use policy](plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml) `v1-e30-t01-caselist-data-use-policy` | Succeeded | 0 | 9.0 |
 | [Caselist domain model](plan_specs/v1/e30-caselist-ingestion/t02-caselist-domain-model.yaml) `v1-e30-t02-caselist-domain-model` | Succeeded | 2 | 7.0 |
-| [Weekly archive importer](plan_specs/v1/e30-caselist-ingestion/t03-archive-importer.yaml) `v1-e30-t03-archive-importer` | Pending | 4 | 15.0 |
+| [Weekly archive importer](plan_specs/v1/e30-caselist-ingestion/t03-archive-importer.yaml) `v1-e30-t03-archive-importer` | Succeeded | 4 | 15.0 |
 | [OpenEv camp-file importer](plan_specs/v1/e30-caselist-ingestion/t04-openev-importer.yaml) `v1-e30-t04-openev-importer` | Pending | 1 | 8.0 |
-| [Publish sources and manifests to S3](plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml) `v1-e30-t05-caselist-publish` | Pending | 2 | 9.0 |
+| [Publish sources and manifests to S3](plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml) `v1-e30-t05-caselist-publish` | Succeeded | 2 | 9.0 |
 | [Initial caselist and camp-file backfill](plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml) `v1-e30-t06-initial-backfill` | Pending | 3 | 5.0 |
 | [Source removal and suppression list](plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml) `v1-e30-t07-source-removal` | Pending | 2 | 12.5 |
 
@@ -157,16 +157,24 @@ Weekly OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [CardMirror evaluation and editor decision](plan_specs/v1/e31-debate-file-parsing/t01-cardmirror-evaluation.yaml) `v1-e31-t01-cardmirror-evaluation` | Succeeded | 1 | 11.5 |
-| [Verbatim/CardMirror style profile](plan_specs/v1/e31-debate-file-parsing/t02-verbatim-style-profile.yaml) `v1-e31-t02-verbatim-style-profile` | Pending | 2 | 13.0 |
-| [Debate .docx parser](plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml) `v1-e31-t03-debate-docx-parser` | Pending | 2 | 15.0 |
+| [Verbatim/CardMirror style profile](plan_specs/v1/e31-debate-file-parsing/t02-verbatim-style-profile.yaml) `v1-e31-t02-verbatim-style-profile` | Succeeded | 2 | 13.0 |
+| [Debate .docx parser](plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml) `v1-e31-t03-debate-docx-parser` | Succeeded | 2 | 15.0 |
 | [Card fingerprints and occurrences](plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml) `v1-e31-t04-card-fingerprints` | Pending | 1 | 13.0 |
 | [Parser accuracy evaluation](plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) `v1-e31-t05-parser-eval` | Pending | 1 | 17.0 |
 | [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | Pending | 4 | 12.0 |
 
+#### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [OpenCaselist API client](plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml) `v1-e34-t01-caselist-api-client` | Succeeded | 2 | 11.0 |
+| [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Pending | 3 | 11.5 |
+| [Sync run log and staleness warnings](plan_specs/v1/e34-caselist-sync/t03-sync-monitoring.yaml) `v1-e34-t03-sync-monitoring` | Pending | 1 | 9.0 |
+
 
 ### v1.2 — Argument landscape & file building
 
-Weekly argument-landscape reports show which positions are being read and with which cards; coaches build Verbatim/CardMirror-compatible files from disclosed cards with provenance; caselist sync can run on a schedule.
+Weekly argument-landscape reports show which positions are being read and with which cards; coaches build Verbatim/CardMirror-compatible files from disclosed cards with provenance. The scheduled sync moved to v1.1 under ADR-0017; what this release adds to it is the parse and landscape stages of the same weekly run.
 
 #### [E05 — Model Router & Structured LLM Contracts](plan_specs/v1/e05-model-router/epic.yaml)
 
@@ -199,14 +207,6 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | Pending | 3 | 10.0 |
 | [Built-file quality checks](plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml) `v1-e33-t04-file-quality-checks` | Pending | 1 | 11.0 |
 | [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | Pending | 3 | 9.0 |
-
-#### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
-
-| Task | Status | Prereqs | Est. hours |
-|---|---|---|---|
-| [OpenCaselist API client](plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml) `v1-e34-t01-caselist-api-client` | Pending | 2 | 11.0 |
-| [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Pending | 5 | 11.5 |
-| [Sync run log and staleness warnings](plan_specs/v1/e34-caselist-sync/t03-sync-monitoring.yaml) `v1-e34-t03-sync-monitoring` | Pending | 1 | 9.0 |
 
 
 ### v1.3 — URL → verified card
@@ -297,9 +297,9 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Core pages for parents and students](plan_specs/v1/e36-team-website/t04-core-pages.yaml) `v1-e36-t04-core-pages` | Succeeded | 2 | 8.5 |
 | [Deploy flow: dev preview then prod](plan_specs/v1/e36-team-website/t05-site-deploy.yaml) `v1-e36-t05-site-deploy` | Succeeded | 2 | 5.5 |
 | [Visual design pass: layout system and home page](plan_specs/v1/e36-team-website/t06-visual-design-pass.yaml) `v1-e36-t06-visual-design-pass` | Succeeded | 1 | 7.0 |
-| [Scannable structure for the FAQ, events and remaining pages](plan_specs/v1/e36-team-website/t07-page-structure-pass.yaml) `v1-e36-t07-page-structure-pass` | Pending | 1 | 9.5 |
-| [Pre-launch visual QA and launch readiness](plan_specs/v1/e36-team-website/t08-prelaunch-visual-qa.yaml) `v1-e36-t08-prelaunch-visual-qa` | Pending | 2 | 6.5 |
-| [Home page: the academic case for debate](plan_specs/v1/e36-team-website/t09-home-academic-case.yaml) `v1-e36-t09-home-academic-case` | Pending | 1 | 5.0 |
+| [Scannable structure for the FAQ, events and remaining pages](plan_specs/v1/e36-team-website/t07-page-structure-pass.yaml) `v1-e36-t07-page-structure-pass` | Succeeded | 1 | 9.5 |
+| [Pre-launch visual QA and launch readiness](plan_specs/v1/e36-team-website/t08-prelaunch-visual-qa.yaml) `v1-e36-t08-prelaunch-visual-qa` | InProgress | 2 | 6.5 |
+| [Home page: the academic case for debate](plan_specs/v1/e36-team-website/t09-home-academic-case.yaml) `v1-e36-t09-home-academic-case` | Succeeded | 1 | 5.0 |
 
 #### [E37 — Calendar & Announcements (Coach-Editable)](plan_specs/v1/e37-calendar-and-announcements/epic.yaml)
 

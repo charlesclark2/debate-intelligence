@@ -200,9 +200,43 @@ All runs are local, from the task worktree, on 2026-09-20.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-21
 
 **Notes:**
+
+Both deviations upheld. The session followed the documentation and the spec was the outlier in each
+case; the amendments are `d2e6a47` on `specs/publish-rulings`.
+
+**OpenEv prefix.** `raw/openev/<year>/` is right. `docs/architecture/evidence-store-layout.md`,
+`v1-e29-t03`'s bucket spec and the store CLI guide all file camp files there; t05's description
+implied the caselist prefix only by failing to name the exception, and it names it now. Nothing
+publishes OpenEv until t04, so nothing has to move.
+
+**Policy rule 3.** Correct, and more serious than it looks, because an approved policy was
+describing a key form the evidence store has never used. Fixed to
+`raw/caselist/<caselist-slug>/sha256/ab/cd/<hash>` with the no-extension rule stated, and the policy
+goes to version 1.2. It loosens nothing - the prohibition on schools, team codes and filenames in
+keys and metadata is unchanged and the corrected form additionally rules out the extension - so
+under the policy's own change control it takes effect on merge.
+
+**The dev/prod data directory is the most valuable finding in this report** and was not asked for.
+A prod publish under the prod profile reads `~/.debate-research/prod`, so the run would have
+reported success having uploaded nothing, or someone would have re-imported into the prod profile
+and produced a second store that could silently differ from the one already in dev. `v1-e30-t06`
+now imports once, publishes that store to dev, verifies with `caselist status`, and publishes the
+same store to prod under an explicit `DEBATE_STORAGE__DATA_DIR` override. Identical bytes in both
+buckets by construction.
+
+**On the verification.** Disabling the manifest-last check to watch 7 of 21 tests fail is worth more
+than those tests passing: a green suite says the code works today, a suite that goes red when the
+invariant is removed says it would notice if someone removed it tomorrow. Combined with killing the
+publish at 1 and at 8 uploads in flight, the interrupted case is genuinely covered rather than
+gestured at, and the hand-written `expected_publish.json` keeps the counts honest per working
+agreement 6. The smoke check being unmarked, and shown as `1 passed` rather than skipped, avoids the
+`live`-marker trap that `v1-e30-t03` found.
+
+The whole-repo suite was not required; the touched trees passed and nothing here crosses into the
+rest. The first real publish stays with t06.

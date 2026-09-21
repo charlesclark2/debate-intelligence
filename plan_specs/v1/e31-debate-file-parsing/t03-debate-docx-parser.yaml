@@ -92,7 +92,7 @@ spec:
         parses in under 20 s in a `slow` test. No real file or excerpt is committed: accuracy against real
         files is measured in place by v1-e31-t05.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

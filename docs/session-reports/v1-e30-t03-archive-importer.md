@@ -32,8 +32,14 @@ that is where the shipped evidence object store roots named objects and therefor
 `store sync` will publish in t05; and ac6 asks for relative paths at INFO, which
 `docs/policies/caselist-data-use.md` rule 4 forbids — the policy won, and a test asserts it.
 
-Everything is synthetic. No real caselist file, school, team code or path is in the repository,
-and real-corpus verification is an operator run ([Operator follow-ups](#operator-follow-ups)).
+Everything committed is synthetic — no real caselist file, school, team code or path is in the
+repository. The real corpus *was* verified, in this session rather than by the operator: it takes
+3.9 seconds, not the 10–25 minutes first estimated. The parser came through at a 4.6% warning
+rate from a single cause, but the run also showed that **the real archives are far less
+cumulative than the epic assumes** — paths barely persist week to week, deduplication saves 11%
+rather than most of the corpus, and `REMOVED` counts renames rather than takedowns. That needs a
+decision before `v1-e30-t06` publishes numbers: see
+[What the real corpus showed](#what-the-real-corpus-showed) and Follow-up 1.
 
 ## Plan nodes
 
@@ -250,77 +256,100 @@ would be: there is no path to escape onto.
 
 ## Operator follow-ups
 
-### Verify the parser and the dedupe against the real corpus
+**None.** The real-corpus verification this section originally handed over was measured at
+**3.9 seconds for all three weeks**, not the 10–25 minutes first estimated, so under
+`docs/process/working-agreements.md` §2 it was this session's to run rather than yours. It was
+run, against `~/Documents/debate/2026-2027/LD Debate/Opencaselist/`, into a scratch directory
+(`/tmp/caselist-real-corpus`) that has since been deleted. Neither the real dev nor the real prod
+store was touched, and nothing from the corpus was copied into the repository.
 
-This is the one thing the synthetic fixture cannot tell you: whether the parser copes with the
-real 2,342 files and what the real deduplication rate is. It will take well over two minutes, so
-it is yours to run.
-
-**Operator command** (expected runtime ~10–25 min for all three weeks, mostly hashing)
-Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e30-t03-archive-importer`
+Re-run it yourself in about four seconds if you want to see it:
 
 ```bash
-# A scratch data directory, so this touches neither ~/.debate-research/dev nor prod.
-export DEBATE_STORAGE__DATA_DIR=/tmp/caselist-real-corpus
-rm -rf "$DEBATE_STORAGE__DATA_DIR"
+cd debate-intelligence-worktrees/v1-e30-t03-archive-importer
 CORPUS=~/Documents/debate/2026-2027/"LD Debate"/Opencaselist
-
-for week in 0901 0908 0915; do
-  uv run debate-research --json caselist import "$CORPUS/hsld26-$week" \
-    --caselist hsld26 --snapshot "2026-09-${week:2:2}" | tee "/tmp/hsld26-$week.json"
+for d in 2026-09-01 2026-09-08 2026-09-15; do
+  DEBATE_STORAGE__DATA_DIR=/tmp/caselist-real-corpus \
+    uv run debate-research --json caselist import "$CORPUS/hsld26-${d:5:2}${d:8:2}" \
+    --caselist hsld26 --snapshot "$d"
 done
+rm -rf /tmp/caselist-real-corpus
 ```
 
-Success looks like: three JSON objects with `"status": "ok"`, and counts in this shape —
-09-01 almost all `NEW` (~64 files); 09-08 mostly `UNCHANGED` with ~680 `NEW`; 09-15 mostly
-`UNCHANGED` with ~850 `NEW` and some `REMOVED`. What to check, and paste back into the PR:
+### What the real corpus showed
 
-1. `counts` and `skipped` for each week — **counts only, no paths**.
-2. `warnings` per week as a fraction of `members`. If it is above roughly 10%, the parser is
-   missing a real filename shape and that is worth a follow-up task rather than a silent
-   acceptance.
-3. `distinct_sha256` for 09-15 against the sum of `NEW` across the three weeks — they should
-   agree, and that is the deduplication working.
-4. That nothing was written outside `$DEBATE_STORAGE__DATA_DIR`.
+Counts only, as the data-use policy requires. The parser and the reader came through well; the
+*premise* did not.
 
-To see *which* filename shapes are being warned about without quoting any of them:
+| Week | Members | NEW | UNCHANGED | CHANGED | DUPLICATE | REMOVED | Skipped | Warnings |
+|---|---|---|---|---|---|---|---|---|
+| 2026-09-01 | 64 | 59 | 0 | 0 | 5 | 0 | 0 | 1 |
+| 2026-09-08 | 745 | 666 | 5 | 0 | 74 | 59 | 0 | 29 |
+| 2026-09-15 | 1,597 | 1,387 | 58 | 2 | 148 | 685 | 2 | 74 |
 
-```bash
-jq -r 'select(.kind=="member") | .warnings[]' \
-  /tmp/caselist-real-corpus/objects/manifests/hsld26/2026-09-15.jsonl \
-  | sort | uniq -c | sort -rn
-```
+**The parser holds up.** 74 warnings out of 1,597 members is a 4.6% rate, and every one of them
+is the same single cause — an unrecognised round token. Three distinct tokens account for all of
+them: `Triples` (63), `Rounds` (7) and `Runoff` (4). No filename failed to parse a side, a school
+or a team code. The real shapes the operator flagged — `Neg-02----<Tournament>-Round-6`,
+`Aff-[01]-----<Tournament>-Round-2`, hyphen-separated tournament words, doubled and
+quintupled hyphens — all come out with a clean tournament, the right round and the copy index
+lifted off. The two skipped members were `.DS_Store` files.
 
-That prints warning texts and counts, never a school, team code or path — safe to paste.
+**The archives are much less cumulative than the spec assumes.** This is the finding worth the
+PM's attention, and it is about the data rather than the code:
 
-**Do not** copy any part of the corpus, any manifest, or any archive into the repository
-(`docs/policies/caselist-data-use.md`; the spec's `forbidden` list). Aggregate counts only.
+* Disclosure paths barely persist week to week: **4 of week 1's 63** paths appear in week 2, and
+  **60 of week 2's 728** appear in week 3.
+* Schools persist much better — 36 of 45 from week 2 into week 3 — and grow steeply
+  (9 → 45 → 140 schools, 20 → 128 → 309 teams). The three downloads look like progressively
+  wider exports as more schools disclosed, not three snapshots of one fixed set.
+* Content deduplication therefore saves **11%**, not the large fraction the epic's framing
+  implies: 2,374 members across the three weeks collapse to **2,107 distinct files**.
 
-### Then remove the scratch directory
+The mechanism is visible in the filenames. The numeric token between the side and the tournament
+is a per-team sequence that increments as a team adds rounds — the same logical file is
+`…-Aff-01----<Tournament>-Round-1.docx` one week and `…-Aff-02----<Other-Tournament>-Round-2.docx`
+the next — so a path-keyed comparison sees a removal and an addition where a person sees a
+rename. `REMOVED=685` in week 3 therefore means "no longer at that path", **not** "taken down by
+the team", and reading it as a takedown count would be wrong.
 
-```bash
-rm -rf /tmp/caselist-real-corpus /tmp/hsld26-09*.json
-```
+The importer is doing exactly what ac2 and the t02 port specify: identity is
+`(caselist, snapshot, source_path)` for a disclosure and the SHA-256 for a source document.
+Nothing here is a defect against the spec. But two things downstream depend on the
+interpretation, so they are in [Follow-up work](#follow-up-work) rather than being quietly
+absorbed here: what `v1-e30-t06` should report as a removal, and what E32 should treat as a
+file's first- and last-seen range.
 
 ## Follow-up work
 
-1. **`caselist status` / listing commands** — nothing yet shows what has been imported without
+1. **What `REMOVED` should mean, for `v1-e30-t06` and E32.** *(New, and the most important of
+   these — see [the real-corpus results](#what-the-real-corpus-showed).)* A disclosure is keyed by
+   path, and real archives rename files week to week, so the backfill will report ~685 "removals"
+   for one week of HS LD when almost none of those files were taken down. Two things need a
+   decision before t06's numbers go in `docs/data/`: whether t06's report should distinguish
+   "gone from this path" from "gone from the corpus" (a file whose SHA-256 is absent from the
+   whole snapshot, which *is* a takedown), and whether E32's first/last-seen ranges should be
+   keyed on `(school, team, sha256)` rather than on the path. Both are spec decisions, not code
+   this task should have improvised.
+2. **`Triples`, `Rounds` and `Runoff` are unrecognised rounds.** *(New.)* They are 74 of the 74
+   warnings on the real 09-15 archive; `Triples` alone is 63 of them and is a real elimination
+   round (triple-octafinals). Adding `NormalizedRound.TRIPLES` and the spellings would take the
+   warning rate from 4.6% to about 0.7%. `NormalizedRound` and `ELIMINATION_ROUND_SPELLINGS` are
+   `v1-e30-t02`'s, so this is a small amendment there rather than a change here — and it matters
+   before E32 aggregates by round, because an unrecognised round does not aggregate at all.
+3. **`caselist status` / listing commands** — nothing yet shows what has been imported without
    reading the SQLite file. The repository supports it (`list_snapshots`, `list_sources`,
    `list_disclosures`); `v1-e30-t05` already owns a `caselist status` that compares local and S3,
    so it probably belongs there rather than in a new task.
-2. **A `--suppression-list` flag.** The service takes `suppressed_hashes`; the CLI has no way to
+4. **A `--suppression-list` flag.** The service takes `suppressed_hashes`; the CLI has no way to
    pass one yet, because the list's format and location are `v1-e30-t07`'s to define. t07 will
    need to add the flag (or the container wiring) when it does.
-3. **No source-path filter on `CaselistRepository.list_disclosures`.** The importer reads a whole
+5. **No source-path filter on `CaselistRepository.list_disclosures`.** The importer reads a whole
    snapshot's disclosures into a dictionary to build its baseline, which is right at a weekly
    archive's scale (a few thousand short strings) but means "what is at this path?" is a listing
    plus a filter in Python. If E32's reports or t07's removal need that lookup, it is a port
    change for whichever task hits it first.
-4. **Unrecognised round spellings.** `normalize_round_token` knows prelims and the usual
-   elimination names; anything else is kept raw with a warning. The operator run above will show
-   which real spellings come back unrecognised, and whether
-   `ELIMINATION_ROUND_SPELLINGS` (v1-e30-t02) is worth extending before E32 aggregates by round.
-5. **`uv sync --all-packages` in a fresh worktree.** This worktree's `.venv` had the four
+6. **`uv sync --all-packages` in a fresh worktree.** This worktree's `.venv` had the four
    workspace packages missing, so `import debate_core` failed until `uv sync --all-packages` was
    run. If `scripts/task` creates worktrees, having it run that (or documenting it in
    `docs/process/task-workflow.md`) would save the next session the detour.

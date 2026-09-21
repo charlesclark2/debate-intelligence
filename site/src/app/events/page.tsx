@@ -20,9 +20,8 @@ export function generateMetadata(): Metadata {
  * The page that explains the three events to a parent who has never seen a round.
  *
  * The question it has to answer in about five seconds is "how are these three different?",
- * and twelve hundred words of prose under three headings never answered it: the facts that
- * separate Public Forum from Lincoln-Douglas from Policy were scattered through the paragraphs
- * that explained each one.
+ * and twelve hundred words of prose under three headings never answered it: the facts that tell
+ * one event from another were scattered through the paragraphs explaining each one.
  *
  * So the page is now read twice over. First the comparison: three cards, side by side above 48rem
  * and stacked on a phone, each carrying the same four fields in the same order, which is what
@@ -38,6 +37,7 @@ export default function EventsPage() {
   const page = loadPage(EVENTS_SLUG)
   const {
     comparisonLabels,
+    currentTopicLabel,
     sharedTruths,
     comparisonTitle,
     comparisonIntro,
@@ -54,7 +54,7 @@ export default function EventsPage() {
       {/* What a parent does not have to check event by event, so the comparison below only has to
           carry what actually differs. */}
       <Section contentWidth="wide" id="true-of-all-three" title={sharedTruths.title} tone="tinted">
-        <ul className="claim-list">
+        <ul className="claim-list claim-list--three-across">
           {sharedTruths.items.map((item) => (
             <li className="claim-list__item" key={item.title}>
               <h3 className="claim-list__title">{item.title}</h3>
@@ -74,6 +74,14 @@ export default function EventsPage() {
           {events.map((event) => (
             <Card headingLevel={3} key={event.id} title={event.name}>
               <p className="event-card__summary">{event.summary}</p>
+              {/* Apart from the four comparison fields below, because it is the one thing on
+                  the card that changes during the season. */}
+              <div className="event-topic">
+                <p className="event-topic__label">{currentTopicLabel}</p>
+                <div className="event-topic__value">
+                  <Prose html={event.currentTopicHtml} />
+                </div>
+              </div>
               {/* The four fields, in one order, in all three cards. A definition list is what
                   this is: a label and the value of that label for this event. */}
               <dl className="event-comparison">

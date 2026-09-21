@@ -79,6 +79,41 @@ describe('the questions are grouped into topics', () => {
   })
 })
 
+/**
+ * Where the way out of the page sits.
+ *
+ * "If your question is not here, email Coach Clark" was the first thing a parent read, which put
+ * the exit above the content. It belongs at the foot, where someone who has been through the
+ * topics without finding their question is actually looking, and the top of the page belongs to
+ * saying what the page is.
+ */
+describe('the page leads with what it is and closes with how to ask', () => {
+  it('opens with a lead that explains the page, not with the email address', () => {
+    renderFaq()
+    const lead = document.querySelector('.section .prose') as HTMLElement
+    expect(lead, 'the FAQ has no lead paragraph').not.toBeNull()
+    expect(lead.textContent).not.toContain('@')
+  })
+
+  it('closes with the block for a question none of the topics answered', () => {
+    renderFaq()
+    const closing = document.getElementById('ask-a-question')
+    expect(closing, 'no closing block on the FAQ').not.toBeNull()
+    expect(screen.getByRole('heading', { level: 2, name: content.closing.title })).toBeDefined()
+    expect(within(closing as HTMLElement).getByRole('link', { name: /@/ })).toBeDefined()
+  })
+
+  it('puts that block after every topic, not before them', () => {
+    const { container } = renderFaq()
+    const bands = [...(container.querySelectorAll('main > section') ?? [])]
+    expect(bands.at(-1)?.id, 'the closing block is not the last band on the page').toBe(
+      'ask-a-question',
+    )
+    const lastTopic = content.groups.at(-1)!.id
+    expect(bands.findIndex((band) => band.id === lastTopic)).toBeLessThan(bands.length - 1)
+  })
+})
+
 describe('the in-page topic index', () => {
   it('is a named navigation region linking to every topic section', () => {
     renderFaq()
@@ -90,6 +125,17 @@ describe('the in-page topic index', () => {
     expect(links.map((link) => link.textContent)).toEqual(
       content.groups.map((group) => group.label),
     )
+  })
+
+  it('is one column of equal rows, not a wrapped row of ragged pills', () => {
+    const stylesheet = readFileSync(join(process.cwd(), 'src/styles/disclosure.css'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+    const list = /(?:^|\})\s*\.topic-index__list\s*\{([^}]*)\}/m.exec(stylesheet)?.[1] ?? ''
+    expect(list, '.topic-index__list is not in disclosure.css').not.toBe('')
+    // Five labels of five different lengths wrapped into three and two with ragged edges. A
+    // single column is the same shape at 390px as it is on a desktop.
+    expect(list).not.toMatch(/flex-wrap/)
+    expect(list).toContain('display: grid')
   })
 
   it('points at a heading that is really on the page, not a dead anchor', () => {
@@ -383,6 +429,8 @@ describe('the page holds no copy of its own', () => {
       group.label,
       ...group.questions.flatMap((question) => [question.question, question.answer]),
     ]),
+    content.closing.title,
+    content.closing.body,
   ]
 
   it('shows more than a handful of strings, so this test is checking something', () => {

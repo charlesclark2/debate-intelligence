@@ -36,7 +36,7 @@ comparisonLabels:
 # The at-a-glance block above the comparison: the things a parent does not have to check event by
 # event, because they are the same in all three.
 sharedTruths:
-  title: True of all three
+  title: True of all three events
   items:
     - title: Students argue both sides
       body: >-
@@ -50,6 +50,16 @@ sharedTruths:
       body: >-
         A round is a small room with the two sides, a judge and a timer.
 
+# The label above the topic each event is arguing right now. It sits apart from the four
+# comparison fields because it is the one thing on this page with a shelf life: Public Forum and
+# Lincoln-Douglas change theirs through the season and Charlie updates them here, with no code
+# change and no deploy of anything but content.
+#
+# A topic nobody has filled in yet is written as [[TBD: what is needed]]. It renders as a visible
+# TBD badge on the dev preview and src/lib/publishing-policy.ts fails a prod build while it is
+# there, so a stale or empty topic cannot quietly reach parents.
+currentTopicLabel: Current topic
+
 comparisonTitle: The three events side by side
 comparisonIntro: >-
   A student usually picks one and sticks with it for a season, and every event is open to a
@@ -57,11 +67,12 @@ comparisonIntro: >-
 
 events:
   - id: public-forum
-    name: Public Forum debate
+    name: Public Forum
     summary: Asks whether something does more good than harm on balance.
     # The label on the link from this card down to the detail below. Each event names itself, so
     # the three links read differently from one another in a screen reader's list of links.
     detailActionLabel: How a Public Forum round runs
+    currentTopic: '[[TBD: the Public Forum topic for this month]]'
     comparison:
       teamSize: Two students per side.
       speechPattern: Four short speeches a side and three crossfires, in about 40 to 50 minutes.
@@ -91,11 +102,12 @@ events:
       written.
 
   - id: lincoln-douglas
-    name: Lincoln-Douglas debate
+    name: Lincoln-Douglas
     summary: >-
       Asks what ought to be done and how we would know: moral and philosophical questions rather
       than predictions.
     detailActionLabel: How a Lincoln-Douglas round runs
+    currentTopic: '[[TBD: the Lincoln-Douglas topic for this two-month cycle]]'
     comparison:
       teamSize: One student per side, with no partner.
       speechPattern: Five speeches and two cross-examinations, in about 40 to 45 minutes.
@@ -132,6 +144,9 @@ events:
     name: Policy debate
     summary: Asks whether one specific plan should be adopted.
     detailActionLabel: How a Policy round runs
+    # From the approved copy, which names this year's resolution: Policy runs one topic all year,
+    # so this is the only one of the three that is already known.
+    currentTopic: Whether the federal government should establish national health insurance.
     comparison:
       teamSize: Two students per side.
       speechPattern: Eight speeches and four cross-examinations, in about 80 minutes plus prep.

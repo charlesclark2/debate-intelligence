@@ -22,36 +22,68 @@
  * tests/design-system.test.tsx forbids.
  */
 
-/* The topic index: the in-page links at the top of the FAQ, above the first topic. */
+/*
+ * The topic index: the in-page links at the top of the FAQ, above the first topic.
+ *
+ * It was a wrapped row of pill buttons, and with five topics of five different lengths it broke
+ * three and two with ragged edges: it read as a handful of buttons someone had spilled rather
+ * than as the contents of the page. One column fixes that. Five rows of equal width, in the
+ * order the topics appear below, with a rule between them and a chevron at the end of each, is
+ * unmistakably an index, and it is the same shape at 390px as it is on a desktop.
+ */
 .topic-index__list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
+  display: grid;
   margin: 0;
   padding: 0;
   list-style: none;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  /* Keeps the first and last rows inside the rounded corners on hover. */
+  overflow: hidden;
+}
+
+.topic-index__list li + li {
+  border-top: 1px solid var(--color-border);
 }
 
 .topic-index__link {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
   min-height: 44px;
-  padding: var(--space-2) var(--space-4);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-small);
-  background-color: var(--color-surface);
+  padding: var(--space-3) var(--space-4);
   color: var(--color-link);
   font-weight: var(--font-weight-bold);
   text-decoration: none;
   transition:
     background-color var(--duration-transition) var(--easing-standard),
-    border-color var(--duration-transition) var(--easing-standard),
     color var(--duration-transition) var(--easing-standard);
 }
 
+/* The chevron, drawn from two borders exactly as .link-cta draws its own, so nothing is
+   fetched. It is decorative: the row is named by its label. */
+.topic-index__link::after {
+  content: "";
+  flex: none;
+  width: 0.4em;
+  height: 0.4em;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--duration-transition) var(--easing-standard);
+}
+
 .topic-index__link:hover {
-  border-color: var(--color-brand-navy);
+  background-color: var(--color-surface-panel);
   color: var(--color-link-hover);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.topic-index__link:hover::after {
+  transform: translateX(3px) rotate(45deg);
 }
 
 /* One question. The rule above it is what separates two questions in a topic, so a list of them

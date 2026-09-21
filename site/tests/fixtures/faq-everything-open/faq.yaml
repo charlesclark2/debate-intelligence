@@ -1,6 +1,9 @@
 # Every question marked most-asked, which is the page this task replaced: nothing is collapsed,
 # so nothing is scannable. The loader fails rather than shipping it.
 indexTitle: Jump to a topic
+closing:
+  title: Still have a question?
+  body: Email Coach Clark.
 groups:
   - id: cost
     label: Cost

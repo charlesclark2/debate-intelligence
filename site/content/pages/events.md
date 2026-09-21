@@ -1,5 +1,5 @@
 ---
-title: What the events are
+title: Debate Events Offered
 description: >-
   Policy debate, Lincoln-Douglas debate and Public Forum debate explained for a parent with no
   debate background: what a round looks like, who speaks when, cross-examination, prep time and

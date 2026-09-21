@@ -559,6 +559,8 @@ export const faqGroupSchema = z.object({
 export const faqContentSchema = z
   .object({
     indexTitle: z.string().min(1),
+    /** The block that closes the page: how to ask a question the page does not answer. */
+    closing: z.object({ title: z.string().min(1), body: z.string().min(1) }),
     groups: z
       .array(faqGroupSchema)
       .min(2, 'grouping the questions needs at least two topics to group them into'),
@@ -591,10 +593,18 @@ export interface FaqGroup {
   questions: FaqQuestion[]
 }
 
+export interface FaqClosing {
+  title: string
+  body: string
+  bodyHtml: string
+}
+
 export interface FaqContent {
   /** The heading above the in-page topic index, which also names it for a screen reader. */
   indexTitle: string
   groups: FaqGroup[]
+  /** The block at the foot of the page, for a question none of the topics answered. */
+  closing: FaqClosing
 }
 
 /** Every string content/faq.yaml puts on the page, in reading order. */
@@ -605,6 +615,8 @@ function faqContentStrings(content: FaqContent): string[] {
       group.label,
       ...group.questions.flatMap((question) => [question.question, question.answer]),
     ]),
+    content.closing.title,
+    content.closing.body,
   ]
 }
 
@@ -623,6 +635,10 @@ export function loadFaqContent(contentDirectory: string = defaultContentDirector
         openByDefault: question.openByDefault ?? false,
       })),
     })),
+    closing: {
+      ...parsed.closing,
+      bodyHtml: renderMarkdown(filePath, parsed.closing.body),
+    },
   }
   assertYamlHouseStyle(filePath, faqContentStrings(content))
   return content
@@ -640,6 +656,13 @@ export const debateEventSchema = z.object({
   name: z.string().min(1),
   summary: z.string().min(1),
   detailActionLabel: z.string().min(1),
+  /**
+   * What this event is arguing right now. Every event has to declare one, because a comparison
+   * with a hole in it is what this page replaced; an event whose topic nobody has supplied yet
+   * says so with a [[TBD]] marker, which the publishing-policy guard turns into a failed prod
+   * build rather than a blank space on the page.
+   */
+  currentTopic: z.string().min(1),
   comparison: eventComparisonSchema,
   detail: z.string().min(1),
 })
@@ -647,6 +670,7 @@ export const debateEventSchema = z.object({
 export const eventsContentSchema = z
   .object({
     comparisonLabels: eventComparisonSchema,
+    currentTopicLabel: z.string().min(1),
     sharedTruths: z.object({
       title: z.string().min(1),
       items: z.array(z.object({ title: z.string().min(1), body: z.string().min(1) })).min(1),
@@ -683,6 +707,10 @@ export interface DebateEvent {
   summary: string
   /** The label on the link from this event's comparison card down to its detail section. */
   detailActionLabel: string
+  /** The topic this event is arguing right now, as Markdown. */
+  currentTopic: string
+  /** The same topic rendered to HTML, so an unfilled [[TBD]] shows as the placeholder badge. */
+  currentTopicHtml: string
   comparison: EventComparison
   /** The full explanation as Markdown, exactly as content/events.yaml holds it. */
   detail: string
@@ -699,6 +727,8 @@ export interface EventsClosingSection {
 
 export interface EventsContent {
   comparisonLabels: EventComparison
+  /** The label above each card's current topic. Shared, so the three read as one row. */
+  currentTopicLabel: string
   sharedTruths: { title: string; items: Array<{ title: string; body: string }> }
   comparisonTitle: string
   comparisonIntro: string
@@ -710,6 +740,7 @@ export interface EventsContent {
 function eventsContentStrings(content: EventsContent): string[] {
   return [
     ...EVENT_COMPARISON_FIELDS.map((field) => content.comparisonLabels[field]),
+    content.currentTopicLabel,
     content.sharedTruths.title,
     ...content.sharedTruths.items.flatMap((item) => [item.title, item.body]),
     content.comparisonTitle,
@@ -718,6 +749,7 @@ function eventsContentStrings(content: EventsContent): string[] {
       event.name,
       event.summary,
       event.detailActionLabel,
+      event.currentTopic,
       ...EVENT_COMPARISON_FIELDS.map((field) => event.comparison[field]),
       event.detail,
     ]),
@@ -739,6 +771,7 @@ export function loadEventsContent(
     ...parsed,
     events: parsed.events.map((event) => ({
       ...event,
+      currentTopicHtml: renderMarkdown(filePath, event.currentTopic),
       detailHtml: renderMarkdown(filePath, event.detail),
     })),
     closingSections: parsed.closingSections.map((section) => ({

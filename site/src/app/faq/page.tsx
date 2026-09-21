@@ -32,7 +32,7 @@ export function generateMetadata(): Metadata {
  */
 export default function FaqPage() {
   const page = loadPage(FAQ_SLUG)
-  const { indexTitle, groups } = loadFaqContent()
+  const { closing, indexTitle, groups } = loadFaqContent()
 
   return (
     <>
@@ -69,6 +69,12 @@ export default function FaqPage() {
           ))}
         </Section>
       ))}
+
+      {/* The way out of the page, at the foot of it: a parent who has read the topics and not
+          found their question is looking here, not at the top. */}
+      <Section id="ask-a-question" title={closing.title} tone="tinted">
+        <Prose html={closing.bodyHtml} />
+      </Section>
     </>
   )
 }

@@ -22,6 +22,16 @@
 
 indexTitle: Jump to a topic
 
+# The block that closes the page. It used to be the first thing a parent read, which put the way
+# out of the FAQ above the FAQ; it belongs where someone who has been through the topics and not
+# found their question will be looking. The wording is Charlie's, unchanged; only the heading
+# above it is new.
+closing:
+  title: Still have a question?
+  body: |
+    If your question is not here, email Coach Clark at <charles.clark@wfbschools.org>. No question
+    is too basic.
+
 groups:
   - id: cost-and-travel
     label: Cost and travel
@@ -29,8 +39,9 @@ groups:
       - question: What does it cost?
         openByDefault: true
         answer: |
-          Families pay for entry fees, travel, food and camp. The activity fund covers the team's
-          debate evidence packets and its school membership costs.
+          Families pay for entry fees, travel, food and camp. Wisconsin tournament entry fees are
+          typically between $10 and $20 per tournament. The activity fund covers the team's debate
+          evidence packets and its school membership costs.
 
           The team is raising money to offset those family costs, and eventually to fund camp
           scholarships for families who need them.

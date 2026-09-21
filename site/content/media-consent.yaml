@@ -108,6 +108,11 @@ permittedNameWords:
   - Email
   - Joining
   - The
+  # From the title-case page heading "Debate Events Offered" (v1-e36-t07). Neither word is a
+  # surname; they are here rather than the heading being reworded because this is the path the
+  # guard itself names for a capitalised phrase that is not a person.
+  - Events
+  - Offered
   # Days and months, so a date next to a capitalised word is not read as a name.
   - Monday
   - Mondays

@@ -269,6 +269,26 @@
 }
 
 /*
+ * The same list, but three across in one row rather than two and then one.
+ *
+ * "True of all three events" is a set of exactly three, and a two-plus-one layout made it read
+ * as a list that had run out rather than as the three things it names. The columns arrive at
+ * 60rem rather than 48rem so a tablet gets one clean column instead of a cramped three; between
+ * those widths the default single column above applies, and 2-up never happens here.
+ */
+@media (min-width: 48rem) {
+  .claim-list--three-across {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 60rem) {
+  .claim-list--three-across {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/*
  * The events comparison: three cards carrying the same four fields in the same order.
  *
  * The parallelism is the whole point, so the styling is the same in all three and the only thing
@@ -310,5 +330,39 @@
 }
 
 .event-comparison__value:last-of-type {
+  margin-bottom: 0;
+}
+
+/*
+ * The topic an event is arguing right now.
+ *
+ * It sits above the four comparison fields and is styled apart from them, because it is the one
+ * thing on the card with a shelf life: Public Forum and Lincoln-Douglas change theirs through
+ * the season. Keeping it out of the comparison list is also what keeps that list the four fields
+ * it is supposed to be.
+ *
+ * The rule down its left edge is the warm accent, used as a non-text rule (3:1) exactly as the
+ * card title's underline is; the text beside it is body grey on the panel tint at 6.01:1.
+ */
+.event-topic {
+  margin-bottom: var(--space-5);
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--color-brand-warm);
+}
+
+.event-topic__label {
+  margin: 0 0 var(--space-1);
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-eyebrow);
+  text-transform: uppercase;
+}
+
+.event-topic__value {
+  color: var(--color-text-heading);
+}
+
+.event-topic__value .prose > :last-child {
   margin-bottom: 0;
 }

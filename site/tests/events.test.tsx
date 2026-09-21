@@ -10,6 +10,7 @@ import { SiteFrame } from '@/components/SiteFrame'
 import {
   EVENTS_SLUG,
   EVENT_COMPARISON_FIELDS,
+  findPlaceholders,
   loadEventsContent,
   loadPage,
   loadPages,
@@ -130,6 +131,62 @@ describe('the comparison is genuinely a comparison', () => {
   })
 })
 
+/**
+ * The topic each event is arguing right now, which Charlie maintains through the season.
+ *
+ * It is deliberately not a fifth comparison field: the four fields describe how an event works
+ * and do not change, and this one has a shelf life measured in weeks. Mixing them would make the
+ * whole block look stale the moment a Public Forum topic rolled over.
+ */
+describe('the topic each event is arguing right now', () => {
+  it('shows one on every card, under the same label', () => {
+    renderEvents()
+    for (const [index, event] of content.events.entries()) {
+      const card = comparisonCards()[index] as HTMLElement
+      const topic = card.querySelector('.event-topic')
+      expect(topic, `${event.name} has no current topic`).not.toBeNull()
+      expect(within(topic as HTMLElement).getByText(content.currentTopicLabel)).toBeDefined()
+      expect((topic as HTMLElement).textContent?.trim().length).toBeGreaterThan(
+        content.currentTopicLabel.length,
+      )
+    }
+  })
+
+  it('keeps it out of the four comparison fields, which stay four', () => {
+    renderEvents()
+    for (const [index, event] of content.events.entries()) {
+      const card = comparisonCards()[index] as HTMLElement
+      const list = card.querySelector('.event-comparison')
+      expect(list?.querySelectorAll('dt'), `${event.name}`).toHaveLength(COMPARISON_FIELD_COUNT)
+      expect((list as HTMLElement).textContent).not.toContain(content.currentTopicLabel)
+    }
+  })
+
+  /**
+   * A topic nobody has supplied yet is a [[TBD]] marker, not a blank. It renders as the visible
+   * placeholder badge on a dev preview and src/lib/publishing-policy.ts fails a prod build while
+   * it is there, so the site cannot go live telling a parent nothing about what is being argued.
+   */
+  it('marks an unsupplied topic as a placeholder rather than leaving a hole', () => {
+    renderEvents()
+    for (const [index, event] of content.events.entries()) {
+      const card = comparisonCards()[index] as HTMLElement
+      const topic = card.querySelector('.event-topic') as HTMLElement
+      const placeholders = findPlaceholders(event.currentTopic)
+      if (placeholders.length > 0) {
+        expect(topic.querySelector('.placeholder'), `${event.name} placeholder badge`).not.toBeNull()
+        for (const note of placeholders) {
+          expect(note.length, `${event.name} placeholder has no note saying what is needed`)
+            .toBeGreaterThan(0)
+        }
+      } else {
+        expect(topic.querySelector('.placeholder'), `${event.name}`).toBeNull()
+        expect(topic.textContent).toContain(event.currentTopic.replace(/\s+/g, ' ').trim())
+      }
+    }
+  })
+})
+
 describe('the detail sits beneath the comparison, not inside it', () => {
   it('gives each event a detail section of its own, in the order of the cards', () => {
     renderEvents()
@@ -182,6 +239,21 @@ describe('the detail sits beneath the comparison, not inside it', () => {
 })
 
 describe('what is true of all three, and what closes the page', () => {
+  it('lays the three out in one row rather than two and then one', () => {
+    renderEvents()
+    const list = document.querySelector('#true-of-all-three .claim-list')
+    expect(list?.className, 'the shared truths use the default 2-up claim list').toContain(
+      'claim-list--three-across',
+    )
+    expect(list?.querySelectorAll(':scope > li')).toHaveLength(content.sharedTruths.items.length)
+  })
+
+  it('says three of what, rather than leaving the heading to be guessed', () => {
+    // A heading that counts things has to name them: "True of all three" on its own asks the
+    // reader to work out three of what, on a page that has not yet listed the three.
+    expect(content.sharedTruths.title.toLowerCase()).toContain('event')
+  })
+
   it('leads with the things a parent does not have to check event by event', () => {
     renderEvents()
     const band = document.getElementById('true-of-all-three')
@@ -306,6 +378,7 @@ describe('the page holds no copy of its own', () => {
 
   const copy = [
     ...EVENT_COMPARISON_FIELDS.map((field) => content.comparisonLabels[field]),
+    content.currentTopicLabel,
     content.sharedTruths.title,
     ...content.sharedTruths.items.flatMap((item) => [item.title, item.body]),
     content.comparisonTitle,
@@ -314,6 +387,7 @@ describe('the page holds no copy of its own', () => {
       event.name,
       event.summary,
       event.detailActionLabel,
+      event.currentTopic,
       ...EVENT_COMPARISON_FIELDS.map((field) => event.comparison[field]),
       event.detail,
     ]),

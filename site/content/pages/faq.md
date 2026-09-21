@@ -7,5 +7,5 @@ navLabel: Parent FAQ
 navOrder: 50
 ---
 
-If your question is not here, email Coach Clark at <charles.clark@wfbschools.org>. No question is
-too basic.
+The questions families ask before a student joins, grouped by topic. Open the one you came with;
+the three asked most often are open already.

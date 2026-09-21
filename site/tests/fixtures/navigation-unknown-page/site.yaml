@@ -5,14 +5,13 @@ footerNote: A fixture footer.
 logoAlternativeText: Fixture logo
 navigationLabel: Main
 footerNavigationLabel: About this site
-# Deliberately not every page in pages/: zulu.md is published and left off, so it lands in the
-# footer instead. That is the rule v1-e36-t07 replaced "every file is a nav item" with.
-primaryNavigation:
-  - home
-  - alpha
 skipLinkLabel: Skip to main content
 contactEmails:
   - address: fixture.coach@example.invalid
     name: Fixture Coach
     role: Head Coach
 debaterLoginLabel: Debater login
+# A slug that is not a published page: what a rename leaves behind.
+primaryNavigation:
+  - alpha
+  - ghost

@@ -4,7 +4,30 @@ name: Whitefish Bay Debate
 shortName: WFB Debate
 tagline: The competitive debate team at Whitefish Bay High School.
 navigationLabel: Main
+footerNavigationLabel: About this site
 skipLinkLabel: Skip to main content
+
+# THE PRIMARY NAVIGATION, WRITTEN OUT
+# -----------------------------------
+# The header nav used to be every file in content/pages/, ordered by navOrder, which is how the
+# accessibility statement came to sit in it between Contact and nothing: it was in the nav
+# because it was a file, not because a parent needs it there.
+#
+# This list is the nav. It is the pages a parent or a prospective debater goes looking for, in the
+# order they need them, and adding a page to the site no longer adds it to the nav by accident.
+# Every published page that is not on this list is a utility page and is linked from the footer
+# instead, so nothing becomes unreachable by being left out.
+#
+# src/lib/content.ts validates it at build time: a slug here that is not a published page fails
+# the build naming the slug, so renaming a page cannot silently empty a nav item.
+primaryNavigation:
+  - home
+  - about
+  - events
+  - join
+  - coaches
+  - faq
+  - contact
 logoAlternativeText: Whitefish Bay Blue Dukes
 footerNote: >-
   A site run by the Whitefish Bay High School Debate Team, Whitefish Bay, Wisconsin. It is

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { SiteFrame } from '@/components/SiteFrame'
-import { loadGuardedContent, loadPages, loadSiteSettings } from '@/lib/content'
+import { buildNavigation, loadGuardedContent, loadSiteSettings } from '@/lib/content'
 import { debaterLoginNavigationItem } from '@/lib/feature-flags'
 import { loadMediaConsent } from '@/lib/media-consent'
 import { enforcePublishingPolicy } from '@/lib/publishing-policy'
@@ -35,7 +35,6 @@ export function generateMetadata(): Metadata {
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
   const settings = loadSiteSettings()
-  const pages = loadPages()
 
   // content/home.yaml, content/faq.yaml and content/events.yaml carry copy too, so they are
   // guarded alongside the Markdown pages rather than being the files on the site where an address
@@ -46,7 +45,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     consent: loadMediaConsent(),
   })
 
-  const items = pages.map((page) => ({ href: page.route, label: page.navLabel }))
+  // The header carries the pages content/site.yaml names, in that order; the footer carries
+  // everything else published. See buildNavigation in src/lib/content.ts.
+  const { primary, utility } = buildNavigation()
+  const items = [...primary]
   const debaterLogin = debaterLoginNavigationItem(settings.debaterLoginLabel)
   if (debaterLogin) {
     items.push(debaterLogin)
@@ -55,7 +57,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <SiteFrame items={items} strings={settings}>
+        <SiteFrame items={items} strings={settings} utilityLinks={utility}>
           {children}
         </SiteFrame>
       </body>

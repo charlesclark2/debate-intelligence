@@ -2,12 +2,24 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { render } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import ContentPageRoute from '@/app/[slug]/page'
+import EventsPage from '@/app/events/page'
+import FaqPage from '@/app/faq/page'
+import HomePage from '@/app/page'
 import { Prose } from '@/components/Prose'
 import { SiteFrame } from '@/components/SiteFrame'
-import type { ContentPage } from '@/lib/content'
-import { HOME_SLUG, loadNotFoundPage, loadPages, loadSiteSettings } from '@/lib/content'
+import {
+  EVENTS_SLUG,
+  FAQ_SLUG,
+  HOME_SLUG,
+  buildNavigation,
+  loadNotFoundPage,
+  loadPages,
+  loadSiteSettings,
+} from '@/lib/content'
 
 import { describeViolations, findAccessibilityViolations } from './axe'
 
@@ -31,10 +43,9 @@ import { describeViolations, findAccessibilityViolations } from './axe'
 
 const settings = loadSiteSettings()
 const pages = loadPages()
+const navigation = buildNavigation()
 const outDirectory = join(process.cwd(), 'out')
 const hasExport = existsSync(join(outDirectory, 'index.html'))
-
-const navigationItems = pages.map((page) => ({ href: page.route, label: page.navLabel }))
 
 function exportedPath(slug: string): string {
   return slug === HOME_SLUG
@@ -46,36 +57,71 @@ function exportedPath(slug: string): string {
  * Landmark rules only hold when banner, main and contentinfo are top level, so the frame goes
  * straight into document.body rather than the wrapper testing-library adds by default.
  */
-function renderPage(page: ContentPage) {
+function renderInFrame(content: ReactNode) {
   return render(
-    <SiteFrame items={navigationItems} strings={settings}>
-      <h1>{page.title}</h1>
-      <Prose html={page.html} />
+    <SiteFrame
+      items={navigation.primary}
+      strings={settings}
+      utilityLinks={navigation.utility}
+    >
+      {content}
     </SiteFrame>,
     { container: document.body },
   )
 }
 
+/**
+ * The real route module for a slug, not an approximation of it.
+ *
+ * This used to render `<h1>{title}</h1><Prose html={page.html} />` for every page, which was the
+ * whole of a page until v1-e36-t07. It is not any more: the home page, the FAQ, the events page
+ * and every Markdown page are composed by route modules that add bands, disclosures, a card grid
+ * and a summary block, and none of that was being checked here. A sweep over an approximation of
+ * every page is worth less than it looks, so the sweep now renders what the site renders.
+ */
+async function routeFor(slug: string): Promise<ReactNode> {
+  if (slug === HOME_SLUG) {
+    return <HomePage />
+  }
+  if (slug === FAQ_SLUG) {
+    return <FaqPage />
+  }
+  if (slug === EVENTS_SLUG) {
+    return <EventsPage />
+  }
+  return ContentPageRoute({ params: Promise.resolve({ slug }) })
+}
+
+async function renderPage(slug: string) {
+  return renderInFrame(await routeFor(slug))
+}
+
 describe('every content page, rendered through the site frame', () => {
   it.each(pages.map((page) => [page.slug, page] as const))(
     '%s has no WCAG 2.1 AA violation',
-    async (_slug, page) => {
-      renderPage(page)
+    async (slug) => {
+      await renderPage(slug)
       const violations = await findAccessibilityViolations(document.body)
       expect(violations, describeViolations(violations)).toEqual([])
     },
   )
 
   it('the 404 page has no WCAG 2.1 AA violation', async () => {
-    renderPage(loadNotFoundPage())
+    const page = loadNotFoundPage()
+    renderInFrame(
+      <>
+        <h1>{page.title}</h1>
+        <Prose html={page.html} />
+      </>,
+    )
     const violations = await findAccessibilityViolations(document.body)
     expect(violations, describeViolations(violations)).toEqual([])
   })
 })
 
 describe('every page has exactly one h1 and headings in order', () => {
-  it.each(pages.map((page) => [page.slug, page] as const))('%s', (_slug, page) => {
-    renderPage(page)
+  it.each(pages.map((page) => [page.slug, page] as const))('%s', async (slug, page) => {
+    await renderPage(slug)
     expect(document.querySelectorAll('h1')).toHaveLength(1)
 
     const levels = [...document.querySelectorAll('h1, h2, h3, h4, h5, h6')].map((heading) =>
@@ -92,8 +138,8 @@ describe('every page has exactly one h1 and headings in order', () => {
 })
 
 describe('every image carries alt text', () => {
-  it.each(pages.map((page) => [page.slug, page] as const))('%s', (_slug, page) => {
-    renderPage(page)
+  it.each(pages.map((page) => [page.slug, page] as const))('%s', async (slug, page) => {
+    await renderPage(slug)
     for (const image of document.querySelectorAll('img')) {
       expect(image.getAttribute('alt'), `${page.filePath}: ${image.getAttribute('src')}`).not.toBeNull()
     }

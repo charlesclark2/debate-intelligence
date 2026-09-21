@@ -100,6 +100,13 @@ export const pageFrontMatterSchema = z.object({
   atAGlance: atAGlanceSchema.optional(),
   navLabel: z.string().min(1).optional(),
   navOrder: z.number().int().nonnegative().optional(),
+  /**
+   * Keeps a page out of the primary navigation whatever content/site.yaml says. The list in
+   * site.yaml decides what is in the nav; this is the page's own veto, for a page that should
+   * never be put there by a later edit. Listing an opted-out page in primaryNavigation fails the
+   * build rather than quietly picking a winner.
+   */
+  excludeFromNavigation: z.boolean().optional(),
   openGraphImage: z.string().min(1).optional(),
   draft: z.boolean().optional(),
 })
@@ -118,6 +125,12 @@ export const siteSettingsSchema = z.object({
   footerNote: z.string().min(1),
   logoAlternativeText: z.string().min(1),
   navigationLabel: z.string().min(1),
+  /** Names the footer's list of utility links for a screen reader moving between landmarks. */
+  footerNavigationLabel: z.string().min(1),
+  /** The ordered slugs in the header navigation. See the comment in content/site.yaml. */
+  primaryNavigation: z
+    .array(z.string().min(1))
+    .min(1, 'the site needs at least one page in its navigation'),
   skipLinkLabel: z.string().min(1),
   contactEmails: z.array(contactEmailSchema).min(1),
   debaterLoginLabel: z.string().min(1),
@@ -225,6 +238,8 @@ export interface ContentPage {
   atAGlance?: AtAGlance
   navLabel: string
   navOrder: number
+  /** True when the page's own front matter keeps it out of the primary navigation. */
+  excludeFromNavigation: boolean
   openGraphImage?: string
   draft: boolean
   /** Markdown body rendered to HTML at build time. */
@@ -388,6 +403,7 @@ export function parsePage(slug: string, filePath: string, source: string): Conte
     ...(atAGlance ? { atAGlance } : {}),
     navLabel: frontMatter.navLabel ?? frontMatter.title,
     navOrder: frontMatter.navOrder ?? Number.MAX_SAFE_INTEGER,
+    excludeFromNavigation: frontMatter.excludeFromNavigation ?? false,
     ...(frontMatter.openGraphImage ? { openGraphImage: frontMatter.openGraphImage } : {}),
     draft: frontMatter.draft ?? false,
     html: rendered,
@@ -557,6 +573,7 @@ export function homeContentAsPage(
     description: content.hero.lead,
     navLabel: content.parentSession.title,
     navOrder: Number.MAX_SAFE_INTEGER,
+    excludeFromNavigation: true,
     draft: false,
     html: text,
     guardedHtml: text,
@@ -902,6 +919,7 @@ function yamlContentAsPage(
     description: title,
     navLabel: title,
     navOrder: Number.MAX_SAFE_INTEGER,
+    excludeFromNavigation: true,
     draft: false,
     html: text,
     guardedHtml: text,
@@ -949,4 +967,87 @@ export function loadGuardedContent(
     faqContentAsPage(contentDirectory),
     eventsContentAsPage(contentDirectory),
   ]
+}
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * NAVIGATION
+ *
+ * The header nav used to be every file in content/pages/, ordered by navOrder. That is how the
+ * accessibility statement came to sit in the nav beside Contact: not because a parent needs it
+ * there, but because it was a file. The rule is now the other way round. content/site.yaml names
+ * the pages a parent goes looking for, in the order they need them, and everything else
+ * published is a utility page linked from the footer.
+ *
+ * Nothing published can fall out of both lists, which is the property that makes an explicit nav
+ * safe: a page left off primaryNavigation moves to the footer rather than becoming unreachable.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+export interface NavigationLink {
+  href: string
+  label: string
+}
+
+export interface SiteNavigation {
+  /** The header navigation, in the order content/site.yaml lists it. */
+  primary: NavigationLink[]
+  /** Everything else published, for the footer, in navOrder then title order. */
+  utility: NavigationLink[]
+}
+
+function toLink(page: ContentPage): NavigationLink {
+  return { href: page.route, label: page.navLabel }
+}
+
+/**
+ * The two navigation lists, built from content/site.yaml and the published pages.
+ *
+ * Three ways this fails the build rather than shipping a broken nav, each naming the offender:
+ *   - a slug in primaryNavigation that is not a published page, which is what a rename or an
+ *     unpublished draft would otherwise turn into a nav item leading nowhere;
+ *   - the same slug listed twice, which would render the same link twice;
+ *   - a page whose front matter opts it out of the nav being listed anyway, because a page and
+ *     the site config disagreeing is a question nobody should have to answer by reading code.
+ */
+export function buildNavigation(
+  contentDirectory: string = defaultContentDirectory(),
+): SiteNavigation {
+  const filePath = 'content/site.yaml'
+  const settings = loadSiteSettings(contentDirectory)
+  const pages = loadPages(contentDirectory)
+  const bySlug = new Map(pages.map((page) => [page.slug, page]))
+
+  const seen = new Set<string>()
+  const primary = settings.primaryNavigation.map((slug) => {
+    if (seen.has(slug)) {
+      throw new ContentValidationError(
+        filePath,
+        `primaryNavigation lists "${slug}" twice, so the navigation would show it twice.`,
+      )
+    }
+    seen.add(slug)
+
+    const page = bySlug.get(slug)
+    if (!page) {
+      throw new ContentValidationError(
+        filePath,
+        `primaryNavigation lists "${slug}", which is not a published page in content/pages/. ` +
+          'Add the page, publish it, or take the slug out of the list.',
+      )
+    }
+    if (page.excludeFromNavigation) {
+      throw new ContentValidationError(
+        filePath,
+        `primaryNavigation lists "${slug}", but ${page.filePath} sets excludeFromNavigation. ` +
+          'Remove one of the two: a page and the site config must not disagree.',
+      )
+    }
+    return toLink(page)
+  })
+
+  // Everything published that the nav does not carry. Nothing published is left off both lists.
+  const utility = pages.filter((page) => !seen.has(page.slug)).map(toLink)
+
+  return { primary, utility }
 }

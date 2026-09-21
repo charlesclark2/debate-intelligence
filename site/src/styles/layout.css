@@ -107,6 +107,16 @@
   text-decoration: underline;
 }
 
+/*
+ * The page you are on. aria-current tells a screen reader; this tells everyone else, and it says
+ * it twice on purpose: the label goes navy and a rule appears under it. Colour alone would carry
+ * the whole message in one channel, which WCAG 2.1 SC 1.4.1 asks us not to do.
+ */
+.site-nav__link--current {
+  color: var(--color-brand-navy);
+  border-bottom: 3px solid var(--color-brand-warm);
+}
+
 @media (min-width: 48rem) {
   .site-nav__toggle {
     display: none;
@@ -178,6 +188,35 @@
 .site-footer__note {
   margin: 0;
   color: var(--color-text-inverse);
+}
+
+/*
+ * The utility links: the accessibility statement and anything else published that the header
+ * navigation does not carry. They sit below the note, set apart by a rule, because they are the
+ * small print of the site rather than a second navigation competing with the first.
+ */
+.site-footer__nav {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-link-inverse);
+}
+
+.site-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 44px on both axes, the same target the header links and the buttons keep. */
+.site-footer__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-link-inverse);
+  font-weight: var(--font-weight-bold);
 }
 
 .site-footer a {

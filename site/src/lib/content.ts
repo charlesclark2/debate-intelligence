@@ -161,6 +161,28 @@ export const homeActionSchema = z.object({
   href: internalHref,
 })
 
+/**
+ * One fact in the October 1 parent-session panel: a label, and either the value or, while nobody
+ * has supplied it yet, the note the preview shows in its place.
+ *
+ * Exactly one of the two, which is the point of the shape. A published announcement that gives a
+ * date, a time and a place, and simply says nothing about the room, reads as though a room were
+ * never needed: the gap is invisible precisely because it is a gap. `unsetNote` makes it say so
+ * out loud, src/lib/publishing-policy.ts fails a prod build while one remains, and a decision not
+ * to name a room yet is written as a value ("To be announced") rather than as silence. A room of
+ * "To be announced" is a decision; an empty one is an oversight.
+ */
+export const parentSessionFactSchema = z
+  .object({
+    label: z.string().min(1),
+    value: z.string().min(1).optional(),
+    unsetNote: z.string().min(1).optional(),
+  })
+  .refine(
+    (fact) => (fact.value === undefined) !== (fact.unsetNote === undefined),
+    'needs exactly one of value (the fact) and unsetNote (why it is still missing)',
+  )
+
 export const homeContentSchema = z.object({
   hero: z.object({
     lead: z.string().min(1),
@@ -170,7 +192,7 @@ export const homeContentSchema = z.object({
     eyebrow: z.string().min(1),
     title: z.string().min(1),
     intro: z.string().min(1),
-    facts: z.array(z.object({ label: z.string().min(1), value: z.string().min(1) })).min(1),
+    facts: z.array(parentSessionFactSchema).min(1),
     whatToExpect: z.array(z.string().min(1)).min(1),
     note: z.string().min(1),
     action: homeActionSchema,
@@ -204,6 +226,7 @@ export const homeContentSchema = z.object({
 })
 
 export type HomeAction = z.infer<typeof homeActionSchema>
+export type ParentSessionFact = z.infer<typeof parentSessionFactSchema>
 export type HomeContent = z.infer<typeof homeContentSchema>
 
 export type PageFrontMatter = z.infer<typeof pageFrontMatterSchema>
@@ -520,7 +543,7 @@ function homeContentStrings(content: HomeContent): string[] {
     parentSession.eyebrow,
     parentSession.title,
     parentSession.intro,
-    ...parentSession.facts.flatMap((fact) => [fact.label, fact.value]),
+    ...parentSession.facts.flatMap((fact) => [fact.label, fact.value ?? fact.unsetNote ?? '']),
     ...parentSession.whatToExpect,
     parentSession.note,
     parentSession.action.label,
@@ -566,6 +589,43 @@ export function loadHomeContent(
   }
   assertAcronymsAreExpanded(filePath, text)
   return content
+}
+
+/**
+ * A fact a published announcement promises its readers, and whether anyone has supplied it yet.
+ *
+ * The guard reads copy, and copy cannot tell it that a fact is missing: the October 1 panel with
+ * no room in it is a perfectly well-formed panel. This is the shape that can, one entry per fact
+ * in the announcement, carrying the note the preview shows while the fact is still owed.
+ * src/lib/publishing-policy.ts turns every one of those notes into an error, so a prod build
+ * fails while a required announcement field is unset.
+ */
+export interface AnnouncementField {
+  /** The content file the fact lives in. */
+  location: string
+  /** The announcement it belongs to, worded as the page heads it. */
+  announcement: string
+  /** The fact's label in the panel: Date, Time, Place, Room. */
+  label: string
+  /** Why it is still unset, as the preview shows it, or null once it carries a value. */
+  unsetNote: string | null
+}
+
+/**
+ * Every fact the site's announcements promise. Today that is the October 1 parent session in
+ * content/home.yaml; E37's announcements and calendar entries join it here rather than growing a
+ * second guard of their own.
+ */
+export function announcementFields(
+  contentDirectory: string = defaultContentDirectory(),
+): AnnouncementField[] {
+  const { parentSession } = loadHomeContent(contentDirectory)
+  return parentSession.facts.map((fact) => ({
+    location: 'content/home.yaml',
+    announcement: parentSession.title,
+    label: fact.label,
+    unsetNote: fact.unsetNote ?? null,
+  }))
 }
 
 /**

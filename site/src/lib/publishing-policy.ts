@@ -1,4 +1,4 @@
-import type { ContentPage, SiteSettings } from './content'
+import type { AnnouncementField, ContentPage, SiteSettings } from './content'
 import type { MediaConsent } from './media-consent'
 import { isStale } from './media-consent'
 import { readSiteEnvironment } from './site-settings'
@@ -109,6 +109,11 @@ export interface PolicyInput {
   consent: MediaConsent
   /** Built pages, when there are any: `[{ location: '/faq/', html }]`. */
   builtPages?: Array<{ location: string; html: string }>
+  /**
+   * The facts the site's announcements promise, from `announcementFields()`. Left out, nothing is
+   * checked, which is right for the many call sites that hand this function one page of Markdown.
+   */
+  announcements?: AnnouncementField[]
 }
 
 export function checkPublishingPolicy({
@@ -116,6 +121,7 @@ export function checkPublishingPolicy({
   settings,
   consent,
   builtPages = [],
+  announcements = [],
 }: PolicyInput): PolicyReport {
   const errors: PolicyFinding[] = []
   const warnings: PolicyFinding[] = []
@@ -230,6 +236,24 @@ export function checkPublishingPolicy({
         errors.push({ location, message: `contains an iframe, which this site does not use: ${tag}` })
       }
     }
+  }
+
+  // An announcement states every fact it lists. A [[TBD]] marker catches this in prose, where
+  // the missing fact is a hole in a sentence; in a panel built from fields there is no sentence
+  // to leave a hole in, so a fact nobody has supplied is simply a field with nothing in it, and
+  // nothing in the copy says so. These findings are that missing signal. A room of "To be
+  // announced" passes here, because that is an answer; an unset one does not, because it is not.
+  for (const field of announcements) {
+    if (field.unsetNote === null) {
+      continue
+    }
+    errors.push({
+      location: field.location,
+      message:
+        `the ${field.label} of the "${field.announcement}" announcement is still unset ` +
+        `("${field.unsetNote}"). Replace unsetNote with the value, or, if not knowing is the ` +
+        'answer, with a value that says so such as "To be announced".',
+    })
   }
 
   for (const page of pages) {

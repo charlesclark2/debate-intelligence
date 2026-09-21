@@ -3,8 +3,14 @@ import { join } from 'node:path'
 
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import type { ContentPage, SiteSettings } from '@/lib/content'
-import { loadGuardedContent, loadSiteSettings, parsePage } from '@/lib/content'
+import type { AnnouncementField, ContentPage, SiteSettings } from '@/lib/content'
+import {
+  announcementFields,
+  loadGuardedContent,
+  loadSiteSettings,
+  parentSessionFactSchema,
+  parsePage,
+} from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
 import { isStale, loadMediaConsent, seasonStart } from '@/lib/media-consent'
 import {
@@ -223,6 +229,78 @@ describe('placeholder markers', () => {
   })
 })
 
+/**
+ * The announcement guard (the v1-e36-t07 review's ruling, implemented in v1-e36-t08).
+ *
+ * v1-e36-t06 moved the October 1 panel out of prose and into fields, and in doing so replaced the
+ * [[TBD]] marker on the room with an ordinary sentence. Nothing then flagged it: a panel with no
+ * room in it is a well-formed panel, and the guard reads copy, not absences. These are the checks
+ * that make an unset field speak.
+ */
+describe('required announcement fields', () => {
+  const field = (overrides: Partial<AnnouncementField> = {}): AnnouncementField => ({
+    location: 'content/home.yaml',
+    announcement: 'Parent information session',
+    label: 'Room',
+    unsetNote: 'The room is not set yet.',
+    ...overrides,
+  })
+
+  function announcementErrors(announcements: AnnouncementField[]): string {
+    return checkPublishingPolicy({ pages: [], settings, consent, announcements })
+      .errors.map((error) => error.message)
+      .join('\n')
+  }
+
+  it('fails the build while a field is unset, naming the field and the announcement', () => {
+    expect(announcementErrors([field()])).toMatch(
+      /the Room of the "Parent information session" announcement is still unset/,
+    )
+  })
+
+  it('is quiet once the field carries a value', () => {
+    expect(announcementErrors([field({ unsetNote: null })])).toBe('')
+  })
+
+  it('accepts "To be announced" as a value, because that is a decision', () => {
+    const decided = parentSessionFactSchema.parse({ label: 'Room', value: 'To be announced' })
+    expect(decided.unsetNote).toBeUndefined()
+    expect(announcementErrors([field({ unsetNote: null })])).toBe('')
+  })
+
+  it('refuses a fact that is neither given nor declared missing', () => {
+    expect(parentSessionFactSchema.safeParse({ label: 'Room' }).success).toBe(false)
+    expect(
+      parentSessionFactSchema.safeParse({ label: 'Room', value: 'Room 214', unsetNote: 'unknown' })
+        .success,
+    ).toBe(false)
+  })
+
+  it('reports a prod build failure rather than a printed note', () => {
+    expect(() =>
+      enforcePublishingPolicy({ pages: [], settings, consent, announcements: [field()] }, PROD),
+    ).toThrowError(PublishingPolicyError)
+  })
+
+  it('lets a dev preview come up, so the gap can be reviewed on the page', () => {
+    expect(() =>
+      enforcePublishingPolicy({ pages: [], settings, consent, announcements: [field()] }, DEV),
+    ).not.toThrow()
+  })
+
+  it('checks nothing when it is given nothing, which is what a one-page check wants', () => {
+    expect(checkPublishingPolicy({ pages: [], settings, consent }).errors).toEqual([])
+  })
+
+  it('carries the October 1 panel through from content/home.yaml', () => {
+    const labels = announcementFields().map((entry) => entry.label)
+    expect(labels).toContain('Room')
+    for (const entry of announcementFields()) {
+      expect(entry.location).toBe('content/home.yaml')
+    }
+  })
+})
+
 describe('third-party content in the built pages', () => {
   const builtPage = (html: string) => ({
     pages: [] as ContentPage[],
@@ -273,10 +351,34 @@ describe('the content this site actually ships', () => {
   // copy in it", so a new YAML content file cannot be added and quietly left unguarded.
   const pages = loadGuardedContent()
 
-  it('breaks no rule except the placeholders still waiting on Charlie', () => {
-    const { errors } = checkPublishingPolicy({ pages, settings, consent })
-    const notPlaceholders = errors.filter((error) => !error.message.includes('placeholder'))
-    expect(notPlaceholders).toEqual([])
+  it('breaks no rule except the facts still waiting on Charlie', () => {
+    const { errors } = checkPublishingPolicy({
+      pages,
+      settings,
+      consent,
+      announcements: announcementFields(),
+    })
+    const stillOwed = errors.filter(
+      (error) => !error.message.includes('placeholder') && !error.message.includes('still unset'),
+    )
+    expect(stillOwed).toEqual([])
+  })
+
+  /**
+   * The one finding this task expects to see, and the reason a prod build cannot succeed until
+   * Charlie supplies the room. When he does, this test says so by failing, which is the point: it
+   * is the launch gate, not a tolerated warning.
+   */
+  it('still owes the October 1 room, which is what stops a prod build today', () => {
+    const { errors } = checkPublishingPolicy({
+      pages,
+      settings,
+      consent,
+      announcements: announcementFields(),
+    })
+    expect(errors.map((error) => error.message).join('\n')).toMatch(
+      /the Room of the "Parent information session" announcement is still unset/,
+    )
   })
 
   it('puts every content file that carries copy through the guard', () => {

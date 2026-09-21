@@ -59,7 +59,9 @@ export default function HomePage() {
           {parentSession.facts.map((fact) => (
             <Fragment key={fact.label}>
               <dt>{fact.label}</dt>
-              <dd>{fact.value}</dd>
+              <dd>
+                {fact.value ?? <span className="placeholder">{fact.unsetNote}</span>}
+              </dd>
             </Fragment>
           ))}
         </dl>

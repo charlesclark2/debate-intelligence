@@ -21,7 +21,7 @@ accessibility statement has moved to the footer where it belongs, and the link t
 on carries `aria-current`.
 
 The structural work rewrote none of the approved copy; it regrouped it. Charlie then reviewed the
-pages on the dev preview three times during the session, and the copy changes he asked for at each
+pages on the dev preview four times during the session, and the copy changes he asked for at each
 round are in, including a substantial amount of new material he supplied: the live resolutions, the
 entry-fee figure, the two Wisconsin divisions, and his own coaching history. All of it is data
 under `site/content/`, validated by `src/lib/content.ts`, so a copy edit stays a content edit. The
@@ -131,10 +131,16 @@ fixtures cover the loader and navigation failures. 610 tests, up from 308.
 
 5. **Copy changed, at Charlie's direction, on every page.** The spec says rewriting the copy is
    out of scope and the constraints forbid changing the facts without Charlie. Charlie supplied or
-   approved every change in session across three rounds of review, so the constraint was met, but
+   approved every change in session across four rounds of review, so the constraint was met, but
    "structure and presentation only" no longer describes what this task did. The coaches page in
    particular is substantially new content. Recorded here rather than buried in commits; see
    **Decisions** for the full list.
+
+6. **`tests/contact.test.ts` was reading the wrong thing.** Its assertions about what the contact
+   page publishes read the Markdown body, so when the addresses moved into the at-a-glance block
+   they quietly stopped covering them. It now reads `guardedHtml`. Worth the PM knowing, because
+   it is the kind of coverage gap that opens silently whenever content moves between a body and
+   front matter.
 
 7. **Contact is in the footer, not the primary navigation, which contradicts ac0.** ac0 enumerates
    the nav as "home, about, events, join, coaches, FAQ, contact". Charlie asked in review for
@@ -144,12 +150,6 @@ fixtures cover the loader and navigation failures. 610 tests, up from 308.
    page, so nothing became harder to find than one scroll. **The PM should amend ac0's list, or
    say the word and it moves back in one line of `content/site.yaml`.** Flagging the trade-off
    plainly: contact is a page some parents will go to the nav looking for.
-
-6. **`tests/contact.test.ts` was reading the wrong thing.** Its assertions about what the contact
-   page publishes read the Markdown body, so when the addresses moved into the at-a-glance block
-   they quietly stopped covering them. It now reads `guardedHtml`. Worth the PM knowing, because
-   it is the kind of coverage gap that opens silently whenever content moves between a body and
-   front matter.
 
 ## Decisions and assumptions
 

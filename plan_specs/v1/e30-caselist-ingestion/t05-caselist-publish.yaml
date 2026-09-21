@@ -72,7 +72,7 @@ spec:
         DEBATE_ENV selects the bucket; publishing to prod requires --confirm-prod, and --dry-run lists the
         planned uploads without writing.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

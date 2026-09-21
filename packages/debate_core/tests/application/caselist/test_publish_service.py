@@ -8,8 +8,8 @@ tables — never from a run of this service (working agreements §6).
 `PutObject` calls are counted at botocore's own event hook, so "uploads nothing" means no request
 was built for AWS, not that a counter this code keeps about itself stayed at zero.
 
-The interrupted cases use :class:`ScriptedBucket`, a wrapper that passes every call through to the
-real S3 adapter and raises when told to. :class:`SimulatedKill` is a `BaseException`, like the
+The interrupted cases use `ScriptedBucket` (`tests/fixtures/caselist/interruptible_bucket.py`), a wrapper that passes every call through to the
+real S3 adapter and raises when told to. `SimulatedKill` is a `BaseException`, like the
 `KeyboardInterrupt` or `SystemExit` an operator's Ctrl-C or a killed job produces: the service does
 not catch it, so the run stops where it stands, and what the bucket holds afterwards is exactly what
 a real interruption would leave.
@@ -19,7 +19,6 @@ Nothing here reaches AWS; `packages/debate_core/tests/conftest.py` builds the bu
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -27,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import DOCUMENT_BODIES, SYNTHETIC_CASELIST
+from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket, SimulatedKill
 from tests.fixtures.caselist.publish_expectations import (
     FICTIONAL_IDENTIFIERS,
     digest_of_body,
@@ -43,8 +43,7 @@ from debate_core.application.caselist.publish_service import (
     SourceResult,
 )
 from debate_core.application.errors import StoreCredentialsExpired, StoreUnavailable
-from debate_core.application.ports.evidence_store import ObjectInfo, ObjectKey
-from debate_core.integrations.local import FsEvidenceObjectStore
+from debate_core.application.ports.evidence_store import ObjectKey
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -57,48 +56,6 @@ WEEKS = {week["snapshot"]: week for week in EXPECTED["snapshots"]}
 EVERY_BODY = sorted({name for week in EXPECTED["snapshots"] for name in week["sources"]})
 EXPECTED_SOURCE_KEYS = {expected_source_key(name) for name in EVERY_BODY}
 EXPECTED_MANIFEST_KEYS = {f"manifests/{SYNTHETIC_CASELIST}/{week}.jsonl" for week in WEEKS}
-
-
-class SimulatedKill(BaseException):
-    """What a Ctrl-C or a killed process looks like to the code it interrupts."""
-
-
-class ScriptedBucket:
-    """The real S3 store, with a hook that may raise before a `put_file` reaches it.
-
-    Uploads already started when a :class:`SimulatedKill` lands keep running in the adapter's
-    worker threads — in a real killed process they would die with it — so a test awaits
-    :meth:`settle` before it reads the bucket, and what it reads is then stable.
-    """
-
-    def __init__(
-        self, inner: S3EvidenceObjectStore, before_put: Callable[[ObjectKey, int], None] | None = None
-    ) -> None:
-        self.inner = inner
-        self.before_put = before_put
-        self.puts = 0
-        self._uploads: list[asyncio.Future[ObjectInfo]] = []
-
-    async def settle(self) -> None:
-        """Wait for every upload that was started, however its caller ended."""
-        await asyncio.gather(*self._uploads, return_exceptions=True)
-
-    async def list_objects(self, prefix: str) -> tuple[ObjectInfo, ...]:
-        return await self.inner.list_objects(prefix)
-
-    async def head(self, key: ObjectKey) -> ObjectInfo:
-        return await self.inner.head(key)
-
-    async def put_file(self, key: ObjectKey, source: Path) -> ObjectInfo:
-        self.puts += 1
-        if self.before_put is not None:
-            self.before_put(key, self.puts)
-        upload = asyncio.ensure_future(self.inner.put_file(key, source))
-        self._uploads.append(upload)
-        return await asyncio.shield(upload)
-
-    async def get_file(self, key: ObjectKey, destination: Path) -> ObjectInfo:
-        return await self.inner.get_file(key, destination)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -116,18 +73,6 @@ def put_keys(s3_client: S3Client) -> list[str]:
 
     s3_client.meta.events.register("provide-client-params.s3.PutObject", record)
     return recorded
-
-
-@pytest.fixture
-def local(imported_data_dir: Path) -> LocalEvidence:
-    objects = FsEvidenceObjectStore(imported_data_dir)
-    blobs = FsEvidenceObjectStore(imported_data_dir, subdirectory=Path("blobs"))
-    return LocalEvidence(objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for)
-
-
-@pytest.fixture
-def bucket(evidence_bucket: str, s3_client: S3Client) -> S3EvidenceObjectStore:
-    return S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client)
 
 
 def service_over(local: LocalEvidence, remote: Any, **options: Any) -> CaselistPublishService:

@@ -12,6 +12,7 @@ Nothing in these archives is real caselist content (`docs/policies/caselist-data
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import (
@@ -21,12 +22,17 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_zips,
 )
 
+from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
 from debate_core.application.caselist.manifest import manifest_key, write_manifest
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore, SqliteDatabase
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+from debate_core.integrations.s3 import S3EvidenceObjectStore
+
+if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
+    from mypy_boto3_s3.client import S3Client
 
 _LIMITS = {"max_archive_bytes": 64 * 1024 * 1024, "max_unpacked_bytes": 64 * 1024 * 1024}
 
@@ -62,3 +68,19 @@ async def imported_data_dir(tmp_path: Path) -> Path:
     data_dir = tmp_path / "evidence"
     await import_synthetic_weeks(data_dir, tmp_path / "downloads")
     return data_dir
+
+
+@pytest.fixture
+def local(imported_data_dir: Path) -> LocalEvidence:
+    """The imported data directory as the publisher reads it: named objects and blobs."""
+    objects = FsEvidenceObjectStore(imported_data_dir)
+    blobs = FsEvidenceObjectStore(imported_data_dir, subdirectory=Path("blobs"))
+    return LocalEvidence(
+        objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
+    )
+
+
+@pytest.fixture
+def bucket(evidence_bucket: str, s3_client: S3Client) -> S3EvidenceObjectStore:
+    """The moto evidence bucket, through the real S3 adapter."""
+    return S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client)

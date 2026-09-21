@@ -34,6 +34,9 @@ dev = [
     # contract (no AWS SDK outside debate_core.integrations.s3); v1-e02-t06-import-boundary-guard
     # owns the full set and the CI job.
     "import-linter>=2.0",
+    # The caselist_token store (v1-e34-t01) talks to the OS keychain through keyring. Tests never
+    # reach the real keychain: they hand the store an in-memory backend.
+    "keyring>=25",
     "lxml>=5.3",
     # The debate .docx parser (v1-e31-t03) reads WordprocessingML with lxml, and lxml ships no
     # inline types; pyright runs strict over debate_core, so the stubs are what let the adapter be
@@ -139,10 +142,39 @@ source_modules = [
     "debate_core.integrations.local",
     "debate_core.integrations.docx_parser",
     "debate_core.integrations.file_streaming",
+    "debate_core.integrations.opencaselist",
     "debate_api",
     "debate_workers",
 ]
 forbidden_modules = ["boto3", "botocore"]
+
+[[tool.importlinter.contracts]]
+name = "The HTTP client and the keychain library stay inside debate_core.integrations.opencaselist"
+type = "forbidden"
+# v1-e34-t01-caselist-api-client brings httpx and keyring in as the `opencaselist` extra. Like
+# boto3, neither may reach the domain, the application layer, the shared test fakes or another
+# adapter, even indirectly. The article fetcher (v1-e04-t02) adds its own adapter to the allowed
+# side when it arrives, by leaving it off this list.
+source_modules = [
+    "debate_core.domain",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.file_streaming",
+    "debate_core.integrations.s3",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["httpx", "keyring"]
+
+[[tool.importlinter.contracts]]
+name = "The CLI reaches httpx and keyring only through debate_core.integrations.opencaselist"
+type = "forbidden"
+# The composition root builds the OpenCaselist client, so the chain to httpx is by design; what is
+# forbidden is a command importing httpx or keyring itself.
+allow_indirect_imports = true
+source_modules = ["debate_cli"]
+forbidden_modules = ["httpx", "keyring"]
 
 [[tool.importlinter.contracts]]
 name = "The CLI reaches the AWS SDK only through debate_core.integrations.s3"

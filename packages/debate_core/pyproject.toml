@@ -34,6 +34,16 @@ docx = [
     "lxml>=5.3",
 ]
 
+# The OpenCaselist API client (v1-e34-t01-caselist-api-client) and nothing else: httpx for the
+# transport in debate_core.integrations.opencaselist, and keyring for the macOS keychain the
+# operator's caselist_token lives in. Optional for the same reason boto3 is: the domain and
+# application layers never import either, and an installation that never pulls from OpenCaselist
+# has no use for them.
+opencaselist = [
+    "httpx>=0.28",
+    "keyring>=25",
+]
+
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12"]
 build-backend = "uv_build"

@@ -14,7 +14,12 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `SearchRepository` | `persistence` | Searches and their ranked results |
 | `CaselistRepository` | `caselist` | Imported caselist and camp-file records (E30) |
 | `ArchiveMember` / `SkippedMember` | `archive` | What reading a weekly archive yields (E30) |
+<<<<<<< HEAD
+| `CaselistArchiveSource` | `caselist_source` | Listing and downloading OpenCaselist archives and OpenEv files (E34) |
 | `DebateFileParser` | `debate_files` | Reading a debate `.docx` into sections and cards (E31) |
+=======
+| `CaselistArchiveSource` | `caselist_source` | OpenCaselist archive and OpenEv listings and downloads (E34) |
+>>>>>>> 5e73363 (Add the polite OpenCaselist client: shared transport, per-resource modules)
 | `SearchProvider` | `providers` | One discovery source |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
 | `ContentExtractor` | `providers` | Readable-text extraction |
@@ -40,6 +45,14 @@ from debate_core.application.ports.archive import (
     SkipReason,
 )
 from debate_core.application.ports.caselist import CaselistRepository
+from debate_core.application.ports.caselist_source import (
+    ArchiveKind,
+    ArchiveListing,
+    CaselistArchiveSource,
+    CaselistInfo,
+    DownloadedFile,
+    OpenEvFile,
+)
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.evidence_store import (
     MAX_OBJECT_KEY_BYTES,
@@ -82,16 +95,21 @@ __all__ = [
     "MAX_OBJECT_KEY_BYTES",
     "OBJECT_KEY_PATTERN",
     "ArchiveEntry",
+    "ArchiveKind",
+    "ArchiveListing",
     "ArchiveMember",
     "ArticleFetcher",
     "ArticleRepository",
     "BlobKey",
     "CandidateResult",
     "CardRepository",
+    "CaselistArchiveSource",
+    "CaselistInfo",
     "CaselistRepository",
     "Clock",
     "ContentExtractor",
     "DebateFileParser",
+    "DownloadedFile",
     "EvidenceObjectStore",
     "ExtractedContent",
     "ExtractionQuality",
@@ -103,6 +121,7 @@ __all__ = [
     "ModelTaskClass",
     "ObjectInfo",
     "ObjectKey",
+    "OpenEvFile",
     "Page",
     "ProviderQuery",
     "ProviderResponse",

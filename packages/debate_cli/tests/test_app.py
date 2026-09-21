@@ -131,10 +131,16 @@ def test_doctor_reports_the_environment_as_json() -> None:
     # Every real run has a settings loader (v1-e02-t05); `doctor` reports that it is wired, not
     # that it has been run — loading is lazy and `doctor` does not need settings.
     assert data["settings_configured"] is True
-    # The services the container can build, which `evidence_sync` (v1-e29-t05) was the first of
-    # and `caselist_import` (v1-e30-t03) the second. A later epic adding one adds it here too:
-    # this is the list an operator reads to find out what this installation is wired for.
-    assert data["services"] == ["caselist_import", "evidence_sync"]
+    # The services the container can build, which `evidence_sync` (v1-e29-t05) was the first of,
+    # `caselist_import` (v1-e30-t03) the second, and the OpenCaselist token store and client
+    # (v1-e34-t01) the next two. A later epic adding one adds it here too: this is the list an
+    # operator reads to find out what this installation is wired for.
+    assert data["services"] == [
+        "caselist_import",
+        "caselist_token_store",
+        "evidence_sync",
+        "opencaselist_client",
+    ]
 
 
 def test_verbose_diagnostics_stay_off_stdout() -> None:

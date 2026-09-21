@@ -76,11 +76,17 @@ spec:
         match the fixture's expected summary exactly.
     - id: ac3
       description: >-
-        Re-importing the same snapshot is a no-op (identical manifest bytes, zero NEW), and importing a
-        snapshot older than the latest one already imported is refused unless --allow-out-of-order is given.
+        Re-importing the same snapshot is a no-op: identical manifest bytes and nothing newly stored.
+        Classification counts describe the archive against the latest snapshot strictly earlier than it, so
+        they are a property of the archive and do not change between runs - which is what makes the manifest
+        byte-identical, and which is why a re-import's NEW count is not zero. What is zero on a second run is
+        what the run wrote. Importing a snapshot older than the latest one already imported is refused unless
+        --allow-out-of-order is given.
     - id: ac4
       description: >-
-        <data_dir>/manifests/<caselist>/<snapshot>.jsonl has one schema-versioned row per archive member
+        The object key manifests/<caselist>/<snapshot>.jsonl in the evidence object store - which is the
+        bucket key t05 publishes, and <data_dir>/objects/manifests/... on local disk, because that is where
+        FsEvidenceObjectStore roots named objects - has one schema-versioned row per archive member
         (relative path, sha256, size, format, classification, parsed School/TeamCode/Side/Tournament/Round,
         warnings), sorted by path, and a trailing summary row.
     - id: ac5
@@ -90,7 +96,10 @@ spec:
     - id: ac6
       description: >-
         `debate-research caselist import` prints a Rich summary table (or JSON with --json), supports
-        --dry-run (no writes), and logs only counts and relative paths at INFO, never file contents.
+        --dry-run (no writes), and logs at INFO only counts, the caselist slug and the snapshot date. No
+        path, school, team code, filename or file content reaches a log record, an error message or a
+        traceback: docs/policies/caselist-data-use.md rule 4 governs, and a relative archive path is
+        <School>/<TeamCode>/<filename>, which is all three forbidden things at once.
 status:
   phase: Pending
 ---

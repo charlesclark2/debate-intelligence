@@ -18,9 +18,14 @@ metadata:
 spec:
   description: >-
     Extend the landscape bundle with two deterministic views. Trends compare consecutive snapshots of the
-    same caselist and topic: because weekly archives are cumulative, week-over-week change is computed
-    from disclosures first seen in each snapshot (the rounds disclosed that week), not from cumulative
-    totals, and each position is labeled NEW, RISING, FALLING or STEADY by its change in share of the
+    same caselist and topic, computed from disclosures first seen in each snapshot (the rounds disclosed
+    that week) rather than from cumulative totals. First-seen is keyed on content and team, never on the
+    disclosure path: v1-e30-t03 measured that only 60 of one week's 728 paths survive into the next, because
+    the numeric token between the side and the tournament is a per-team sequence that increments as a team
+    adds rounds, so a path-keyed first-seen would report a rename as a fresh disclosure and inflate every
+    week's trend. A test covers the rename case explicitly. The weekly archives are also far less cumulative
+    than this epic first assumed - deduplication saves about 11%, not most of the corpus - so a snapshot is
+    treated as the export it is rather than as a superset of the one before it, and each position is labeled NEW, RISING, FALLING or STEADY by its change in share of the
     week's disclosing teams, with a minimum-teams floor so one team does not make a trend. Trends never
     compare across a topic change (the LD and PF topics rotate). The per-school view lists, for each
     school and team code as disclosed, the positions read on aff and on neg with round counts and the

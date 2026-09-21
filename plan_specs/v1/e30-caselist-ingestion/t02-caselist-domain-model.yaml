@@ -59,8 +59,11 @@ spec:
     - id: ac3
       description: >-
         Side accepts AFF/NEG for LD and Policy and PRO/CON for PF, with UNKNOWN allowed for any event;
-        RoundLabel keeps the raw string and a normalized value (R1-R9, DOUBLES, OCTAS, QUARTERS, SEMIS,
-        FINALS or None).
+        RoundLabel keeps the raw string and a normalized value (R1-R9, TRIPLES, DOUBLES, OCTAS, QUARTERS,
+        SEMIS, FINALS or None). TRIPLES is triple-octafinals and is required: it is 63 of the 74 unrecognised
+        round tokens the v1-e30-t03 run met on the real 2026-09-15 HS LD archive. "Rounds" and "Runoff" are
+        recognised too, accounting for the other 11. An unrecognised round normalizes to None and warns, and
+        does not aggregate at all in E32, so the spellings table is worth keeping current.
     - id: ac4
       description: >-
         A CaselistRepository port (upsert snapshot, get/put SourceDocument by sha256, record disclosures and

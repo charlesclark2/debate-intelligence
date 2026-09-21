@@ -1,12 +1,12 @@
 """The contract every persistence adapter must pass, wherever it stores things.
 
-`debate_core.application.ports.persistence` says in prose what an `ArticleRepository`, a
-`SnapshotStore`, a `CardRepository` and a `SearchRepository` do. This package says it in tests.
+`debate_core.application.ports` says in prose what an `ArticleRepository`, a `SnapshotStore`, a
+`CardRepository`, a `SearchRepository` and an `EvidenceObjectStore` do. This package says it in tests.
 A V1 adapter built on SQLite and the local filesystem and a V2 adapter built on DynamoDB and S3
 are interchangeable only if both are held to the same rules, and the way to make that true is for
 both to run the same suite (architecture proposal §16, §17).
 
-Four contract classes, one per port::
+Five contract classes, one per port::
 
     from debate_core.testing.contracts import CardRepositoryContract
 
@@ -25,6 +25,10 @@ import build_fake_ports` keeps working in production code paths, and only a test
 `debate_core.testing.contracts`.
 """
 
+from debate_core.testing.contracts.evidence_object_store import (
+    EvidenceObjectStoreContract,
+    EvidenceObjectStoreFactory,
+)
 from debate_core.testing.contracts.harness import (
     ASYNC_BACKEND,
     AdapterContract,
@@ -50,6 +54,8 @@ __all__ = [
     "BlobCorruptor",
     "CardRepositoryContract",
     "CardRepositoryFactory",
+    "EvidenceObjectStoreContract",
+    "EvidenceObjectStoreFactory",
     "SearchRepositoryContract",
     "SearchRepositoryFactory",
     "SnapshotStoreContract",

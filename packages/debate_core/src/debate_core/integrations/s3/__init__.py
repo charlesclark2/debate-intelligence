@@ -55,6 +55,7 @@ from debate_core.integrations.s3.client import (
     build_transfer_config,
 )
 from debate_core.integrations.s3.errors import S3Call, mapped_s3_errors, translate_s3_error
+from debate_core.integrations.s3.object_store import S3EvidenceObjectStore
 from debate_core.integrations.s3.snapshot_store import (
     BLOB_KEY_SEGMENT,
     SHA256_METADATA_NAME,
@@ -68,6 +69,7 @@ __all__ = [
     "MINIMUM_PART_SIZE_BYTES",
     "SHA256_METADATA_NAME",
     "S3Call",
+    "S3EvidenceObjectStore",
     "S3SnapshotStore",
     "build_s3_client",
     "build_transfer_config",

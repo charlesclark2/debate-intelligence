@@ -234,6 +234,14 @@ cmd_start() {
   mkdir -p "$wt/.task"
   helper "$wt" prompt "$task" "$wt" > "$wt/.task/prompt.md"
 
+  # A fresh worktree gets its own .venv, and uv does not install the workspace packages into it
+  # until asked, so `import debate_core` fails until this runs. v1-e30-t03 lost time to it before
+  # working out that the venv, not the code, was the problem. It is seconds from a warm uv cache.
+  info "Syncing the workspace venv (uv sync --all-packages)"
+  if ! (cd "$wt" && uv sync --quiet --all-packages); then
+    warn "uv sync failed; run 'uv sync --all-packages' in $wt before the session starts"
+  fi
+
   cat <<EOF
 
 Task:      $task — $title
@@ -247,6 +255,14 @@ Next: the Claude session implements the task and fills in the report.
 Then hand the report to the PM:   scripts/task report $task
 After the PM verdict is ACCEPTED: scripts/task pr $task
 EOF
+  if [ -d "$wt/site" ]; then
+    cat <<'EOF'
+Touching site/? Two one-time steps this worktree does not inherit:
+  pnpm --dir site install
+  pnpm --dir site/scripts/visual-qa-tools install   # only before `pnpm --dir site qa`; ~300MB
+
+EOF
+  fi
   launch_session "$launcher" "$wt" start
 }
 

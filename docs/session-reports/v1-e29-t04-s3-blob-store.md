@@ -250,9 +250,30 @@ come from `v1-e29-t05-evidence-sync-cli`, which resolves a bucket and a profile.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- Conforms to the spec. Same content-addressed layout as the local store, idempotent put that issues
+  no PutObject and leaves one version, sha256 re-hashed on read, multipart streaming for large camp
+  files, botocore errors mapped to port errors, bucket and key ARNs as constructor arguments
+  documented as coming from the Terraform outputs, and the E02 contract suite passing against moto
+  with nothing skipped or adapted. Verifying that lint-imports actually fails when boto3 is added to
+  the application layer is the check that makes the boundary real rather than declared.
+- Storing the full-object sha256 in metadata because S3's own checksum is a composite on multipart
+  uploads is the right call and worth keeping visible: without it a multipart blob could never be
+  compared against its own key.
+- The three out-of-package files are accepted: the port errors belong where every other port error
+  lives, `integrations/file_streaming.py` avoids one adapter package importing another, and
+  `testing/contracts/` is named by the task's own node outputs.
+- `EvidenceObjectStore` is a good call. A small named-object port with S3 and filesystem adapters on
+  one contract is what lets t05's sync be a single diff over two stores rather than two code paths.
+- `list_objects` stating no digest, identically in both adapters, is accepted. S3 returns no
+  checksums from a listing, so promising them would hide one HeadObject per object; t05 heads what it
+  is actually considering, where the cost is visible.
+- **PM action taken:** v1-e02-t06's spec claimed lint-imports was already a CI job from E01-t04.
+  There is no .github/ in the repo, so that was wrong. Amended on branch `specs/import-guard-ci`:
+  t06 owns and extends the [tool.importlinter] section this task bootstrapped, and adds the CI job
+  only if v1-e01-t04 has landed, otherwise wiring the checks into pre-commit.

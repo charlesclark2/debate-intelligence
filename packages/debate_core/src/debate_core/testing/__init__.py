@@ -34,6 +34,7 @@ from debate_core.testing.fakes import (
     FAKE_EPOCH,
     FakeArticleFetcher,
     FakeContentExtractor,
+    FakeDebateFileParser,
     FakeModelRouter,
     FakePorts,
     FakeSearchProvider,
@@ -46,6 +47,7 @@ from debate_core.testing.fakes import (
     RecordedModelCall,
     SequentialIdGenerator,
     build_fake_caselist_repository,
+    build_fake_debate_file_parser,
     build_fake_ports,
 )
 
@@ -53,6 +55,7 @@ __all__ = [
     "FAKE_EPOCH",
     "FakeArticleFetcher",
     "FakeContentExtractor",
+    "FakeDebateFileParser",
     "FakeModelRouter",
     "FakePorts",
     "FakeSearchProvider",
@@ -69,6 +72,7 @@ __all__ = [
     "build_card_span",
     "build_citation",
     "build_fake_caselist_repository",
+    "build_fake_debate_file_parser",
     "build_fake_ports",
     "build_search",
     "build_search_result",

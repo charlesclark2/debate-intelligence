@@ -44,6 +44,7 @@ from debate_core.application.ports import (
     CaselistRepository,
     Clock,
     ContentExtractor,
+    DebateFileParser,
     ExtractedContent,
     ExtractionQuality,
     FetchResult,
@@ -74,13 +75,17 @@ from debate_core.domain.caselist import (
     CampFile,
     Disclosure,
     Event,
+    SnapshotDate,
     SourceDocument,
+    SourceFormat,
 )
+from debate_core.domain.debate_files import ParsedDocument, ParseFailure, ParseFailureReason
 
 __all__ = [
     "FAKE_EPOCH",
     "FakeArticleFetcher",
     "FakeContentExtractor",
+    "FakeDebateFileParser",
     "FakeModelRouter",
     "FakePorts",
     "FakeSearchProvider",
@@ -93,6 +98,7 @@ __all__ = [
     "RecordedModelCall",
     "SequentialIdGenerator",
     "build_fake_caselist_repository",
+    "build_fake_debate_file_parser",
     "build_fake_ports",
 ]
 
@@ -685,6 +691,73 @@ class FakeContentExtractor:
         )
 
 
+class FakeDebateFileParser:
+    """Answers with whatever a test registered for a file's SHA-256.
+
+    It really does the part of the job that callers branch on: a source whose format is not DOCX
+    is refused with `UNSUPPORTED_FORMAT`, empty bytes are refused with `NOT_A_ZIP`, and anything
+    else it has not been told about comes back as a document it read and found no cards in —
+    which is a real outcome for a file of nothing but page furniture, not a stand-in for one.
+    A test that cares what is *in* a document registers it with :meth:`add`.
+
+    The real reading lives in `debate_core.integrations.docx_parser`; tests of that adapter build
+    `.docx` packages rather than using this.
+    """
+
+    def __init__(
+        self, *, parser_version: str = "fake-docx-parser-1", profile_version: str = "fake-profile-1"
+    ) -> None:
+        self._parser_version = parser_version
+        self._profile_version = profile_version
+        self._results: dict[str, ParsedDocument | ParseFailure] = {}
+        self.calls: list[tuple[str, str]] = []
+        """Every `(sha256, source_path)` this parser was asked for, in order."""
+
+    @property
+    def parser_version(self) -> str:
+        return self._parser_version
+
+    def add(self, sha256: str, result: ParsedDocument | ParseFailure) -> None:
+        """Register what `parse` should return for one file's bytes."""
+        self._results[sha256] = result
+
+    def parse(
+        self,
+        content: bytes,
+        source: SourceDocument,
+        *,
+        source_path: str,
+        snapshot: SnapshotDate | None = None,
+        camp: str | None = None,
+    ) -> ParsedDocument | ParseFailure:
+        self.calls.append((source.sha256, source_path))
+        registered = self._results.get(source.sha256)
+        if registered is not None:
+            return registered
+        if source.source_format is not SourceFormat.DOCX:
+            return ParseFailure(
+                source_sha256=source.sha256,
+                source_path=source_path,
+                reason=ParseFailureReason.UNSUPPORTED_FORMAT,
+                detail=f"{source.source_format} is stored unparsed in V1",
+                parser_version=self._parser_version,
+            )
+        if not content:
+            return ParseFailure(
+                source_sha256=source.sha256,
+                source_path=source_path,
+                reason=ParseFailureReason.NOT_A_ZIP,
+                detail="the file is empty",
+                parser_version=self._parser_version,
+            )
+        return ParsedDocument(
+            source_sha256=source.sha256,
+            source_path=source_path,
+            parser_version=self._parser_version,
+            profile_version=self._profile_version,
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class RecordedModelCall:
     """One call made to :class:`FakeModelRouter`, kept so a test can assert on it."""
@@ -927,3 +1000,13 @@ def build_fake_caselist_repository() -> CaselistRepository:
     reports reach for it, and they ask for it by name.
     """
     return InMemoryCaselistRepository()
+
+
+def build_fake_debate_file_parser() -> DebateFileParser:
+    """Build the in-memory :class:`DebateFileParser` (v1-e31-t03), typed as the port.
+
+    The annotation is the point, as it is on :class:`FakePorts`: pyright strict checks the fake
+    against the Protocol here, so a signature that drifts fails in this package rather than in a
+    pipeline test months later.
+    """
+    return FakeDebateFileParser()

@@ -1,0 +1,40 @@
+{
+  "fixture": "drifted-style-names.docx",
+  "category": "verbatim",
+  "summary": "Verbatim styles under the ids real files pick up over time: a Word-deduplicated `Heading411`, a team's own `HeadingFake`, and an `Analytics` plural.",
+  "profile_version": "2026.09.20-verbatim-1",
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "Warming Advantage",
+      "expected_unit": "POCKET",
+      "expected_rule_id": "verbatim-style-id:Heading1",
+      "expected_match_source": "VERBATIM",
+      "note": ""
+    },
+    {
+      "index": 1,
+      "text": "AT: Adaptation Solves",
+      "expected_unit": "BLOCK",
+      "expected_rule_id": "verbatim-based-on:Heading3",
+      "expected_match_source": "VERBATIM_ALIAS",
+      "note": "Nobody's vocabulary but its own; it means what it inherits."
+    },
+    {
+      "index": 2,
+      "text": "Adaptation fails in the agricultural sector",
+      "expected_unit": "TAG",
+      "expected_rule_id": "verbatim-deduplicated:Heading411->Heading4",
+      "expected_match_source": "VERBATIM_ALIAS",
+      "note": "Inherits from Heading1 and is a Heading 4. Resolving by basedOn would call this a pocket, which is why de-duplication is tried first."
+    },
+    {
+      "index": 3,
+      "text": "Their author concedes this in the next paragraph.",
+      "expected_unit": "ANALYTIC",
+      "expected_rule_id": "verbatim-alias-id:Analytics",
+      "expected_match_source": "VERBATIM_ALIAS",
+      "note": ""
+    }
+  ]
+}

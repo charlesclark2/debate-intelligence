@@ -57,3 +57,9 @@ infrastructure/**/*.auto.tfvars
 # the bucket it creates exists (docs/runbooks/terraform-bootstrap.md). Never committed: it would
 # override the real backend for everyone.
 infrastructure/**/backend_override.tf
+
+# The style survey's full aggregate (v1-e31-t02). scripts/survey_docx_styles.py writes it on every
+# run, beside the committed report, so whoever refreshes one reads the other. Never committed: it
+# names every style id in the corpus, including ones a team named after a person, which is exactly
+# what the committed report withholds.
+docs/data/debate-file-style-survey.full.json

@@ -1,0 +1,549 @@
+# The Verbatim/CardMirror style profile: what a pocket, hat, block, tag, cite, analytic and
+# undertag look like in a debate .docx, and what a writer must emit to produce one.
+#
+# Loaded by debate_core.evidence.style_profile_loader into debate_core.domain.style_profile's
+# StyleProfile. Owned by v1-e31-t02-verbatim-style-profile. Consumed by the parser (v1-e31-t03),
+# the lossless writer (v1-e33-t02) and the card format profiles (v1-e06-t03) — none of which may
+# hardcode a style name of their own.
+#
+# Every number here was measured, not assumed. The corpus and the counts are in
+# docs/data/debate-file-style-survey.md; where a value came from somewhere else, the entry says so.
+---
+profile_version: "2026.09.20-verbatim-1"
+name: verbatim
+description: >-
+  Verbatim's paragraph and character styles as they appear in real team, caselist and camp files,
+  with the aliases a style picks up as it is copied between documents, the CardMirror node and
+  mark each unit corresponds to per ADR-0014, the thresholds for files that carry no Verbatim
+  styles at all, and the canonical style definitions a writer emits.
+
+# --------------------------------------------------------------------------------------------
+# Paragraph styles: what a paragraph carrying this style IS
+# --------------------------------------------------------------------------------------------
+paragraph_styles:
+  - unit: POCKET
+    style_id: Heading1
+    style_name: heading 1
+    outline_level: 0
+    cardmirror_node: pocket
+    aliases: [Pocket, "Heading 1"]
+    notes: >-
+      Referenced in 1,384 of 2,066 surveyed files. An empty Heading 1 is also how debate files
+      separate two documents packed into one, so an empty pocket is meaningful and is kept.
+  - unit: HAT
+    style_id: Heading2
+    style_name: heading 2
+    outline_level: 1
+    cardmirror_node: hat
+    aliases: [Hat, "Heading 2"]
+    notes: Referenced in 1,441 surveyed files.
+  - unit: BLOCK
+    style_id: Heading3
+    style_name: heading 3
+    outline_level: 2
+    cardmirror_node: block
+    aliases: [Block, "Heading 3"]
+    notes: Referenced in 1,564 surveyed files.
+  - unit: TAG
+    style_id: Heading4
+    style_name: heading 4
+    outline_level: 3
+    cardmirror_node: tag
+    aliases: [Tag, "Heading 4", "%tag"]
+    notes: >-
+      The most-used style in the corpus: 1,964 files, 50,934 paragraphs. `%tag` is a macro-era
+      spelling still current in a handful of files. `Tag2` and `tag10` resolve through Word's
+      de-duplication rule rather than being listed.
+  - unit: CITE
+    style_id: CiteParagraph
+    style_name: Cite Paragraph
+    cardmirror_node: cite_paragraph
+    aliases: [Cite]
+    notes: >-
+      Verbatim gives a cite no paragraph style of its own — it is recognised by the cite character
+      style its runs carry and by sitting under a tag. Some templates define one anyway
+      (`CiteParagraph` in 4 surveyed files), so it is listed; absence of this style is the norm,
+      not a problem.
+  - unit: EVIDENCE
+    style_id: CardBody
+    style_name: Card Body
+    cardmirror_node: card_body
+    aliases: ["card text", cardtext]
+    notes: >-
+      As with the cite, evidence is normally unstyled `Normal` text and is recognised by position.
+      `CardBody` and `card text` are the two spellings the survey found where a template names it.
+  - unit: ANALYTIC
+    style_id: Analytic
+    style_name: Analytic
+    cardmirror_node: analytic
+    aliases: [Analytics, "Analytic Paragraph"]
+    notes: >-
+      Referenced in 296 files. `Analytics` is listed explicitly because Word's de-duplication rule
+      strips digits, not a plural `s`. Analysis, never evidence: an ANALYTIC is never presented as
+      a quotation from a source.
+  - unit: UNDERTAG
+    style_id: Undertag
+    style_name: Undertag
+    cardmirror_node: undertag
+    aliases: [UnderTag, "Under Tag"]
+    notes: >-
+      Referenced in 41 files. Belongs to the tag above it and does not start a new card.
+  - unit: OTHER
+    style_id: Normal
+    style_name: Normal
+    cardmirror_node: paragraph
+    aliases:
+      - "Normal (Web)"
+      - NormalWeb
+      - "List Paragraph"
+      - ListParagraph
+      - "Body Text"
+      - BodyText
+      - paragraph
+      - Title
+      - header
+      - footer
+    notes: >-
+      Everything with no structural meaning. `Normal (Web)`, `List Paragraph` and `Body Text` are
+      Word and Google Docs built-ins that show up in converted caselist uploads; listing them here
+      stops the `basedOn` route from promoting a converted paragraph to a heading.
+
+# --------------------------------------------------------------------------------------------
+# Character styles: what a run carrying this style MEANS
+# --------------------------------------------------------------------------------------------
+character_styles:
+  - emphasis: UNDERLINE
+    style_id: StyleUnderline
+    style_name: Style Underline
+    cardmirror_mark: underline_mark
+    aliases:
+      - Underline
+      - UnderlineChar
+      - "Underline FIXED Char"
+      - UnderlineFIXEDChar
+      - "Style Bold Underline"
+      - StyleBoldUnderline
+      - "AAA UNDERLINE KEYBOARD"
+      - AAAUNDERLINEKEYBOARD
+    notes: >-
+      The busiest style in the corpus: 1,733 files, 1.9 million runs. The last four aliases are
+      Verbatim macro artefacts that spread between teams; all of them mean one underline. See
+      `underline_encoding` for why the named style is only half the story.
+  - emphasis: EMPHASIS
+    style_id: Emphasis
+    style_name: Emphasis
+    cardmirror_mark: emphasis_mark
+    aliases: ["Intense Emphasis", IntenseEmphasis]
+    notes: >-
+      1,628 files, 795,000 runs. Verbatim's `Emphasis` is itself underlined (measured: `w:u
+      single` in 376 of 376 definitions read), so an emphasised run is an underlined run that has
+      been marked up further — not an alternative to underlining.
+  - emphasis: CITE
+    style_id: Style13ptBold
+    style_name: Style 13 pt Bold
+    cardmirror_mark: cite_mark
+    aliases: [Cite, CiteChar, "Cite Char"]
+    notes: >-
+      1,726 files. This is how a cite paragraph is recognised in a file that gives cites no
+      paragraph style, which is nearly all of them.
+  - emphasis: UNDERTAG
+    style_id: UndertagChar
+    style_name: Undertag Char
+    cardmirror_mark: undertag_mark
+    aliases: []
+    notes: The linked character style of the `Undertag` paragraph style.
+  - emphasis: ANALYTIC
+    style_id: AnalyticChar
+    style_name: Analytic Char
+    cardmirror_mark: analytic_mark
+    aliases: []
+    notes: The linked character style of the `Analytic` paragraph style; 12 surveyed files.
+  - emphasis: HEADING
+    style_id: Heading4Char
+    style_name: Heading 4 Char
+    cardmirror_mark: null
+    aliases:
+      - Heading1Char
+      - "Heading 1 Char"
+      - Heading2Char
+      - "Heading 2 Char"
+      - Heading3Char
+      - "Heading 3 Char"
+      - TitleChar
+      - "Title Char"
+    notes: >-
+      Word's linked character styles for the heading paragraph styles, seen on runs inside a
+      heading (86 files for `Heading4Char` alone). They carry a structural style's run formatting
+      into a run, which is a formatting fact rather than an emphasis, so CardMirror has no mark
+      for them and neither do we — this is the one RunEmphasis with no CardMirror mark.
+
+# --------------------------------------------------------------------------------------------
+# Direct run formatting
+# --------------------------------------------------------------------------------------------
+highlight_colors:
+  - value: cyan
+    reading_color: true
+    notes: 875,876 runs in the surveyed corpus — the most common reading colour by a wide margin.
+  - value: green
+    reading_color: true
+    notes: 349,204 runs.
+  - value: yellow
+    reading_color: true
+    notes: 83,912 runs.
+  - value: lightGray
+    reading_color: false
+    notes: 4,326 runs. Used to de-emphasise rather than to mark reading.
+  - value: magenta
+    reading_color: false
+    notes: >-
+      3,646 runs. Too rare to call a reading colour on the evidence available; a team that uses it
+      that way will show up as a parser-accuracy miss in v1-e31-t05, which is the right place to
+      revisit this.
+  - value: white
+    reading_color: false
+    notes: 1,872 runs. Usually hidden text rather than emphasis.
+  - value: red
+    reading_color: false
+    notes: 1,417 runs. See the note on magenta.
+  - value: darkCyan
+    reading_color: false
+    notes: 741 runs.
+  - value: darkGray
+    reading_color: false
+    notes: 576 runs.
+  - value: black
+    reading_color: false
+    notes: 52 runs.
+  - value: blue
+    reading_color: false
+    notes: 1 run.
+  - value: darkBlue
+    reading_color: false
+    notes: A valid OOXML token; not seen in the surveyed corpus.
+  - value: darkGreen
+    reading_color: false
+    notes: A valid OOXML token; not seen in the surveyed corpus.
+  - value: darkMagenta
+    reading_color: false
+    notes: A valid OOXML token; not seen in the surveyed corpus.
+  - value: darkRed
+    reading_color: false
+    notes: A valid OOXML token; not seen in the surveyed corpus.
+  - value: darkYellow
+    reading_color: false
+    notes: A valid OOXML token; not seen in the surveyed corpus.
+
+underline_encoding:
+  named_style_slots: [EVIDENCE, CITE, UNDERTAG, OTHER]
+  direct_slots: [POCKET, HAT, BLOCK, TAG, ANALYTIC]
+  both_encodings_on_body_runs: true
+  notes: >-
+    Underline is dual-encoded. In body slots it is the `StyleUnderline` character style; in
+    structural slots it is a direct `<w:u>` with no character style. Verbatim's macros key on the
+    difference and CardMirror normalizes to it — and on export CardMirror writes *both* on body
+    runs, `rStyle StyleUnderline` and `<w:u w:val="single"/>` together. A reader must treat the
+    two as one underline and must not count a run carrying both twice. This is not a rare case:
+    63% of the surveyed corpus has been through CardMirror at least once.
+
+shrink:
+  maximum_half_points: 16
+  body_half_points: 22
+  underlined_text_is_never_shrunk: true
+  notes: >-
+    Measured over 63,599 sized runs in 120 caselist files: 79.7% of non-underlined runs are at
+    `w:sz` 16 (8 pt), while underlined and highlighted runs sit at 22-26 (11-13 pt). Shrunk text
+    is the part of a card that is not read aloud. It is still evidence and is still parsed; it is
+    a formatting fact, not a reason to drop text.
+
+# --------------------------------------------------------------------------------------------
+# Files that carry no Verbatim styles at all
+# --------------------------------------------------------------------------------------------
+heuristics:
+  - unit: POCKET
+    outline_level: 0
+    minimum_half_points: 52
+    requires_bold: true
+    confidence: 0.8
+    notes: >-
+      CardMirror's `outlineHeadingNode` thresholds, which match the sizes measured in Verbatim's
+      own style definitions (Heading1 is `w:sz` 52 in 377 of 400 files read). The size and weight
+      guards exist to stop an ordinary Word document that merely uses outline levels — a syllabus,
+      a brief — from being read as a stack of pockets.
+  - unit: HAT
+    outline_level: 1
+    minimum_half_points: 44
+    requires_bold: true
+    confidence: 0.8
+    notes: Heading2 is `w:sz` 44 in 374 of 400 files read.
+  - unit: BLOCK
+    outline_level: 2
+    minimum_half_points: 32
+    requires_bold: true
+    requires_underline: true
+    confidence: 0.8
+    notes: Heading3 is `w:sz` 32, bold and single-underlined in 376 of 400 files read.
+  - unit: TAG
+    outline_level: 3
+    requires_bold: true
+    confidence: 0.7
+    notes: >-
+      Effective bold only: no size floor, because a tag is body-sized (`w:sz` 26) and a size guard
+      would reject most real tags. Level 3 is by far the most common outline level in the corpus
+      (3,055 paragraphs against 26 at level 0), which is what makes the weaker guard acceptable
+      here and not at level 0.
+
+cite:
+  short_cite_pattern: >-
+    ^\s*(?P<author>[A-Z][\w'’\-]*(?:\s+(?:and|&)\s+[A-Z][\w'’\-]*)?(?:\s+et\s+al\.?)?)\s*,?\s*['’]?(?P<year>\d{4}|\d{2})\b
+  author_year_pattern: >-
+    \b(?P<author>[A-Z][\w'’\-]{1,30}(?:\s+(?:and|&)\s+[A-Z][\w'’\-]{1,30})?(?:\s+et\s+al\.?)?)\s*,?\s*['’]?(?P<year>(?:19|20)\d{2}|\d{2})\b
+  wiki_ellipsis_markers: ["…", "...", "[…]", "[...]", "***"]
+  maximum_cite_characters: 1000
+  notes: >-
+    A short cite is what a debater says out loud — `Smith 26`, `Smith and Jones '26`, `Smith et
+    al. 2026`. The ellipsis markers are what a wiki-converted cite entry puts between its first
+    and last words; a card built from one is ABBREVIATED rather than truncated, and v1-e31-t03
+    flags it as such instead of padding or dropping it. These patterns are the starting point the
+    parser refines against the labelled set in v1-e31-t05.
+
+# --------------------------------------------------------------------------------------------
+# What a writer must emit
+# --------------------------------------------------------------------------------------------
+# Every value is the one the largest share of surveyed files carries. A writer that emits these
+# produces a file Verbatim's macros key on and Word renders the way a debater expects.
+writer_style_definitions:
+  - style_id: Heading1
+    style_name: heading 1
+    style_type: paragraph
+    based_on: Normal
+    next_style_id: Normal
+    half_points: 52
+    bold: true
+    outline_level: 0
+    page_break_before: true
+    keep_with_next: true
+    notes: "`w:sz` 52 in 377/400, bold in 370/400, pageBreakBefore in 370/400."
+  - style_id: Heading2
+    style_name: heading 2
+    style_type: paragraph
+    based_on: Normal
+    next_style_id: Normal
+    half_points: 44
+    bold: true
+    underline: double
+    outline_level: 1
+    page_break_before: true
+    keep_with_next: true
+    notes: >-
+      `w:sz` 44 in 374/400 and **double** underline in 370/400 — a detail worth not guessing at,
+      since single underline would look subtly wrong to anyone who cuts cards.
+  - style_id: Heading3
+    style_name: heading 3
+    style_type: paragraph
+    based_on: Normal
+    next_style_id: Normal
+    half_points: 32
+    bold: true
+    underline: single
+    outline_level: 2
+    page_break_before: true
+    keep_with_next: true
+    notes: "`w:sz` 32 in 376/400, single underline in 378/400."
+  - style_id: Heading4
+    style_name: heading 4
+    style_type: paragraph
+    based_on: Normal
+    next_style_id: Normal
+    half_points: 26
+    bold: true
+    outline_level: 3
+    page_break_before: false
+    keep_with_next: true
+    notes: >-
+      `w:sz` 26 in 371/400, bold in 368/400, no underline in 400/400, and no page break — a tag
+      belongs on the same page as its card.
+  - style_id: Analytic
+    style_name: Analytic
+    style_type: paragraph
+    based_on: Heading4
+    color: 1F3864
+    notes: >-
+      Inherits size and outline level from Heading4 (basedOn Heading4 in 327/329). The dark blue
+      `1F3864` in 271/329 is what makes analysis visibly not evidence on the page.
+  - style_id: Undertag
+    style_name: Undertag
+    style_type: paragraph
+    based_on: Normal
+    half_points: 24
+    color: "385623"
+    font: Times New Roman
+    notes: "`w:sz` 24 in 280/314, green `385623` in 277/314, Times New Roman in 296/314."
+  - style_id: Style13ptBold
+    style_name: Style 13 pt Bold
+    style_type: character
+    based_on: DefaultParagraphFont
+    half_points: 26
+    bold: true
+    underline: none
+    notes: "`w:sz` 26 in 371/377, bold in 374/377, underline explicitly off in 373/377."
+  - style_id: StyleUnderline
+    style_name: Style Underline
+    style_type: character
+    based_on: DefaultParagraphFont
+    half_points: 22
+    bold: false
+    underline: single
+    notes: "Single underline in 377/377, bold explicitly off in 372/377, `w:sz` 22 in 369/377."
+  - style_id: Emphasis
+    style_name: Emphasis
+    style_type: character
+    based_on: DefaultParagraphFont
+    half_points: 22
+    underline: single
+    font: Times New Roman
+    notes: >-
+      Single underline in 376/376. `bold` is deliberately left inherited: the corpus is split
+      (off in 262, on in 113), so a writer should not impose one reading on a team's template.
+
+# --------------------------------------------------------------------------------------------
+# CardMirror correspondence (ADR-0014)
+# --------------------------------------------------------------------------------------------
+# Every node and mark in docs/architecture/cardmirror-evaluation.md appears below, mapped to one
+# of ours or explicitly recorded as something we do not model and why. A test asserts the
+# coverage, so a schema change upstream shows up as a failure rather than as a silent gap.
+cardmirror_nodes:
+  - node: doc
+    unit: null
+    notes: >-
+      CardMirror's root. A flat sequence of block-level kinds, not a tree — the hierarchy is
+      derived from outline level, because real files pack several documents into one. Our
+      ParsedDocument (v1-e31-t03) is the counterpart.
+  - node: pocket
+    unit: POCKET
+  - node: hat
+    unit: HAT
+  - node: block
+    unit: BLOCK
+  - node: card
+    unit: null
+    notes: >-
+      A container with no docx counterpart; on export it is just its children. We rebuild it by
+      grouping a tag with the cite and evidence that follow, as a ParsedCard rather than a
+      FileSection. This is the one structure CardMirror has and we have to reconstruct.
+  - node: tag
+    unit: TAG
+  - node: cite_paragraph
+    unit: CITE
+  - node: card_body
+    unit: EVIDENCE
+  - node: analytic
+    unit: ANALYTIC
+  - node: analytic_unit
+    unit: null
+    notes: >-
+      CardMirror's peer of `card` for analysis with no evidence behind it. We keep analytics as
+      ANALYTIC sections rather than as a second kind of unit.
+  - node: undertag
+    unit: UNDERTAG
+  - node: paragraph
+    unit: OTHER
+  - node: table
+    unit: OTHER
+  - node: table_row
+    unit: OTHER
+  - node: table_cell
+    unit: OTHER
+  - node: table_header
+    unit: OTHER
+  - node: image
+    unit: null
+    notes: >-
+      An inline atom of base64 bytes, dimensions and alt text. Not modelled: nothing in this
+      platform reads evidence out of a picture, and CardMirror 1.11.0 corrupts a file whose image
+      alt text contains a quotation mark (ADR-0014), so we neither read nor write these.
+  - node: footnote
+    unit: null
+    notes: Footnotes and endnotes are not modelled; the parser does not read them into output.
+  - node: transclusion_ref
+    unit: null
+    notes: >-
+      A linked copy of another section. It freezes to a plain snapshot on export, so it never
+      reaches a `.docx` and there is nothing for a reader of files to model.
+  - node: self_ref
+    unit: null
+    notes: A live view of another section; freezes on export, as `transclusion_ref` does.
+  - node: text
+    unit: null
+    notes: >-
+      A text node, which marks hang off. Our formatting spans are character ranges over a
+      paragraph's text rather than a tree of text nodes, so there is no counterpart by design:
+      re-splitting runs must not change what a card looks like.
+
+cardmirror_marks:
+  - mark: cite_mark
+    emphasis: CITE
+  - mark: underline_mark
+    emphasis: UNDERLINE
+    notes: The named `StyleUnderline` encoding, used in body slots.
+  - mark: underline_direct
+    emphasis: UNDERLINE
+    notes: >-
+      The direct `<w:u>` encoding, used in structural slots. Deliberately the same emphasis as
+      `underline_mark`: see `underline_encoding`.
+  - mark: emphasis_mark
+    emphasis: EMPHASIS
+  - mark: undertag_mark
+    emphasis: UNDERTAG
+  - mark: analytic_mark
+    emphasis: ANALYTIC
+  - mark: highlight
+    emphasis: HIGHLIGHT
+  - mark: bold
+    emphasis: BOLD
+  - mark: bold_off
+    emphasis: null
+    notes: >-
+      CardMirror needs an explicit "not bold" because tags and headings are bold by CSS default.
+      We record effective bold instead, so the negation has nothing to map to.
+  - mark: italic
+    emphasis: null
+    notes: Carried by the parser as formatting metadata on a span, not as an emphasis.
+  - mark: strikethrough
+    emphasis: null
+    notes: Carried as formatting metadata.
+  - mark: superscript
+    emphasis: null
+    notes: Carried as formatting metadata.
+  - mark: subscript
+    emphasis: null
+    notes: Carried as formatting metadata.
+  - mark: shading
+    emphasis: null
+    notes: >-
+      `<w:shd>`. Carried as formatting metadata. Not folded into HIGHLIGHT: shading and
+      highlighting look alike on screen and mean different things to a debater.
+  - mark: font_color
+    emphasis: null
+    notes: Carried as formatting metadata.
+  - mark: font_size
+    emphasis: SHRUNK
+    notes: >-
+      Size is metadata in general; the one size fact that carries meaning is a run small enough to
+      be shrunk, which is what `shrink` defines.
+  - mark: font_family
+    emphasis: null
+    notes: Carried as formatting metadata.
+  - mark: link
+    emphasis: null
+    notes: >-
+      A hyperlink. On a cite paragraph it is the source URL, which belongs on the citation rather
+      than on a run.
+  - mark: comment_range
+    emphasis: null
+    notes: >-
+      Comments are dropped on the way in and never written out; they carry coach and student
+      names, which is exactly what the fixture scrub script removes.
+  - mark: pilcrow_marker
+    emphasis: null
+    notes: >-
+      CardMirror-only: where an original paragraph break was when a card is condensed.

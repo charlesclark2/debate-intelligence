@@ -10,42 +10,45 @@
 
 ## Summary
 
-Everything this task could build without a browser download, a human at a keyboard, or a fact only
-Charlie has is built, tested and committed. The two guards from the `v1-e36-t07` review are in:
-the publishing-policy guard now **fails a prod build while a required announcement field is
-unset**, and the media-consent name allowlist is **phrases rather than bare words**, so reviewing
-"Blue Valley West High School" no longer leaves Blue, Valley and West permitted on their own for
-ever. `scripts/site_smoke.py` gained the launch surfaces, so `validate-dev` checks what the pages
-say and not only that they are up. The browser QA command exists as `pnpm --dir site qa`, with its
-offline parts under test, and the runbook now carries a promotion checklist Charlie can follow.
+The two guards from the `v1-e36-t07` review are in: the publishing-policy guard now **fails a prod
+build while a required announcement field is unset**, and the media-consent name allowlist is
+**phrases rather than bare words**, so reviewing "Blue Valley West High School" no longer leaves
+Blue, Valley and West permitted on their own for ever. `scripts/site_smoke.py` gained the launch
+surfaces, so `validate-dev` checks what the pages say and not only that they are up. The browser
+QA command ships as `pnpm --dir site qa`, and the runbook carries a promotion checklist.
 
-**The task is not done, and cannot be from a session.** Four of the six acceptance criteria need
-something a session must not or cannot do: a several-hundred-megabyte browser install and the QA
-sweep that follows it (ac1, ac2, ac3), a human walking the site with a keyboard and on two phones
-(ac4), the October 1 room from Charlie (ac5), and Charlie's own sign-off (ac6). Every one has a
-paste-ready block under **Operator follow-ups**. The Goal is left `InProgress`.
+**The measured sweep has run and every page passes.** All eight pages score 100 on accessibility,
+best practices and SEO and 95 or 96 on performance against a local **prod** build; axe-core is
+clean on every page at all three widths with the colour-contrast rule enabled; nothing scrolls
+sideways at 390, 768 or 1280px. The full output is under
+[Measured results](#measured-results-the-qa-sweep). The room now carries `value: To be announced`
+and the prod build exits 0 with the guard silent.
 
-**What the guard reports today**, which is what the PM asked for first:
+**Two things still need a human, so the Goal stays `InProgress`.** ac4 is a keyboard-only walk,
+the FAQ print check and the two phone browsers; ac6 needs Charlie to tick the pre-publication
+checklist against the commit to be promoted. Both have a block under **Operator follow-ups**.
+
+**The guard did its job on the way through.** Before the room was filled, a prod build stopped
+with one error and only one:
 
 ```
-SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build   # exit 1
 content/home.yaml: the Room of the "Parent information session" announcement is still unset
 ("The room is not set yet. It will be posted here before the session."). Replace unsetNote
 with the value, or, if not knowing is the answer, with a value that says so such as
 "To be announced".
 ```
 
-That is the only error. Lint, typecheck, the full 647-test suite and a dev build all pass, so the
-moment the room arrives the prod build is clean.
+That is the finding the review asked for, and the one the site had no way of producing since
+`v1-e36-t06` replaced the `[[TBD]]` marker with a sentence.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
 | `qa-command` — Operator-run browser QA command | DONE | `site/scripts/visual-qa.mjs`, the `qa` package script, `site/scripts/visual-qa-tools/` and the README section. Its offline parts are covered by `site/tests/visual-qa.test.ts` (19 tests) |
-| `measured-sweep` — Scores, browser axe and responsive screenshots | BLOCKED | Needs the one-time browser and Lighthouse install, which is an operator step by the PM's instruction and by working agreements §2. Follow-up 1 |
+| `measured-sweep` — Scores, browser axe and responsive screenshots | DONE | Run by the operator on 2026-09-20 against a local prod build, after the one-time toolchain install. Output in [Measured results](#measured-results-the-qa-sweep); 24 screenshots written to the gitignored `site/qa-artifacts/screenshots/` |
 | `human-checks` — Keyboard walk, print check and phone browsers | NOT RUN | A human at a keyboard and two phones. Follow-up 2 |
-| `fill-room-and-prod-build` — Fill the October 1 room and prove a clean prod build | BLOCKED | The room is Charlie's to supply; inventing one is forbidden by the spec. The guard that makes its absence fail the build is done and reporting. Follow-up 3 |
+| `fill-room-and-prod-build` — Fill the October 1 room and prove a clean prod build | DONE | Charlie set the Room to `To be announced` in `fdd5122`, which the guard accepts as a decision rather than a gap. `SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build` → exit 0, no publishing-policy output. See Decisions |
 | `launch-readiness` — Promotion checklist and Charlie's sign-off | PARTIAL | The promotion checklist is in `docs/runbooks/team-website.md`. Charlie's pre-publication checklist tick is his. Follow-up 4 |
 
 Beyond the graph, the four items the Goal description adds from the `v1-e36-t07` review:
@@ -63,11 +66,11 @@ Beyond the graph, the four items the Goal description adds from the `v1-e36-t07`
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| **ac1** Per-page Lighthouse scores in the report; the audit exits non-zero below 95 on accessibility or best practices | NOT RUN (tooling PASS) | The command and its floor exist and are tested: `pnpm --dir site test visual-qa` → `19 passed`, including "fails a page below the accessibility floor", "fails a page below the best-practices floor" and "fails a page whose score was never produced, rather than assuming it". **No scores are recorded here, because no run produced any**; the spec forbids recording a score a run did not produce. Follow-up 1 fills in the table |
-| **ac2** Per-page checklist at 390, 768 and 1280px; screenshots regenerated by one command and not committed | NOT RUN (tooling PASS) | Widths are `WIDTHS` in `site/scripts/visual-qa.mjs`; the report template carries the `\| Page \| 390 \| 768 \| 1280 \|` table and the command fails any page that scrolls sideways. `pnpm --dir site test offline` → `11 passed`, including "never commits a screenshot, an audit file or a score report" (`qa-artifacts/` is gitignored). Follow-up 1 fills in the checklist |
-| **ac3** axe-core in a real browser, no WCAG 2.1 AA violations, colour-contrast included, rule sets named | NOT RUN (tooling PASS) | Rule sets `wcag2a, wcag2aa, wcag21a, wcag21aa` with `color-contrast` explicitly enabled, run at each of the three widths, and named in the report the command writes; asserted by `site/tests/visual-qa.test.ts` → "names the rule sets axe ran, so the claim can be checked". Under jsdom, `pnpm --dir site test` → `647 passed` with axe clean on every page, but that pass cannot judge contrast, which is the whole reason ac3 exists. Follow-up 1 |
+| **ac1** Per-page Lighthouse scores in the report; the audit exits non-zero below 95 on accessibility or best practices | PASS | `pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95` against a local prod build → exit 0, `8 pages clear the floor with axe clean at every width`. Scores for all eight sitemap pages under [Measured results](#measured-results-the-qa-sweep): accessibility and best practices 100 everywhere, performance 95 to 96, SEO 100. The floor itself is tested separately: `pnpm --dir site test visual-qa` → `19 passed`, including "fails a page below the accessibility floor" and "fails a page whose score was never produced, rather than assuming it" |
+| **ac2** Per-page checklist at 390, 768 and 1280px; screenshots regenerated by one command and not committed | PASS | The widths table under [Measured results](#measured-results-the-qa-sweep): no horizontal overflow on any of the eight pages at any of the three widths. 24 screenshots (8 pages x 3 widths) written by the one command to `site/qa-artifacts/screenshots/`; `git status --porcelain` prints nothing, and `pnpm --dir site test offline` → `11 passed` includes "never commits a screenshot, an audit file or a score report". The navigation, hero and panel readings are the operator's, under ac4 |
+| **ac3** axe-core in a real browser, no WCAG 2.1 AA violations, colour-contrast included, rule sets named | PASS | axe-core 4.13.0 in Chromium: **no violations on any page, at any width**. Rule sets are named in the output and are `wcag2a, wcag2aa, wcag21a, wcag21aa` with `color-contrast` explicitly enabled, which is the rule jsdom cannot evaluate and the reason this criterion exists. The jsdom pass (`pnpm --dir site test` → `647 passed`) stands alongside it, not instead of it |
 | **ac4** Keyboard-only walk of every interactive element; FAQ prints every answer; both recorded item by item | NOT RUN | Needs a human. Follow-up 2 carries the item-by-item table to fill in |
-| **ac5** The October 1 room filled in, no placeholder left, prod build exits 0 with the guard clean, alongside passing lint, typecheck and tests | FAIL, by design, on the room only | `SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build` → exit 1, one error: the unset Room (quoted in full above). `pnpm --dir site lint` → exit 0 (1s); `typecheck` → exit 0 (1s); `test` → `647 passed` (5s); dev `build` → exit 0 (2s). Follow-up 3 |
+| **ac5** The October 1 room filled in, no placeholder left, prod build exits 0 with the guard clean, alongside passing lint, typecheck and tests | PASS | `SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build` → **exit 0**, with no publishing-policy output at all. The built export carries `<meta name="robots" content="index, follow">`, a `robots.txt` that allows crawling, a sitemap on `https://wfbdebate.com/`, and **no gap badge on the home page**. `pnpm --dir site lint` → exit 0; `typecheck` → exit 0; `test` → `647 passed`. The room reads `To be announced`, which is a decision rather than a gap; see Decisions |
 | **ac6** Promotion checklist in the runbook; Charlie has ticked the pre-publication checklist for the launch commit | PARTIAL | Checklist: `grep -n "Promotion checklist" docs/runbooks/team-website.md` → line 836; it carries the six preconditions, the seven promotion steps and a table of what to do if it looks wrong. Charlie's tick: Follow-up 4 |
 
 ### Node criteria
@@ -76,11 +79,11 @@ Beyond the graph, the four items the Goal description adds from the `v1-e36-t07`
 |---|---|---|
 | `qa-command` → QA script exists and enforces a score floor (`site/scripts/visual-qa.mjs` contains `min-accessibility`) | PASS | `grep -c 'min-accessibility' site/scripts/visual-qa.mjs` → 3 lines |
 | `qa-command` → Lint, test and build stay offline and unaffected (`pnpm --dir site test offline`) | PASS | `pnpm --dir site test offline` → `Test Files 1 passed`, `Tests 11 passed`. Three of them are new and are the actual guarantee: the QA toolchain is absent from `site/package.json`, absent from all four offline scripts, and lives in its own package |
-| `measured-sweep` → Every page clears the floor with axe clean (`pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95`) | NOT RUN | Exits 2 with the setup instructions until the operator installs the toolchain. Follow-up 1 |
-| `measured-sweep` → Report records the per-page scores and the three widths (`1280` in this file) | NOT RUN | The string is present in this file, but as the template of a run that has not happened; recording it as PASS would be recording a number nobody produced |
+| `measured-sweep` → Every page clears the floor with axe clean (`pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95`) | PASS | exit 0, `visual-qa: 8 pages clear the floor with axe clean at every width.` |
+| `measured-sweep` → Report records the per-page scores and the three widths (`1280` in this file) | PASS | [Measured results](#measured-results-the-qa-sweep), pasted unaltered from `site/qa-artifacts/visual-qa-report.md` |
 | `human-checks` → Keyboard-only walk and print check pass | NOT RUN | Follow-up 2 |
 | `human-checks` → The site looks right on a real phone in Safari and Chrome | NOT RUN | Follow-up 2 |
-| `fill-room-and-prod-build` → Prod build succeeds with no placeholder left | FAIL (the room) | As ac5 |
+| `fill-room-and-prod-build` → Prod build succeeds with no placeholder left | PASS | As ac5: exit 0, guard silent, no gap badge in the export |
 | `fill-room-and-prod-build` → Full site suite passes offline (`pnpm --dir site test`) | PASS | `Test Files 18 passed (18)`, `Tests 647 passed (647)`, 4.5s |
 | `fill-room-and-prod-build` → Type check passes (`pnpm --dir site typecheck`) | PASS | exit 0, 1s |
 | `launch-readiness` → Runbook carries the promotion checklist | PASS | `docs/runbooks/team-website.md:836` |
@@ -93,7 +96,57 @@ Beyond the graph, the four items the Goal description adds from the `v1-e36-t07`
 | Python suites touched by this task | PASS | `uv run pytest tests/scripts tests/smoke -q` → `139 passed` in 15s |
 | Spec validation | PASS | `uv run scripts/validate_specs.py` → `OK: 282 files, 38 epics, 224 tasks, 20 releases` |
 | The whole offline site gate | PASS | `site/scripts/pre-commit-checks.sh` → exit 0 in 10s (lint, typecheck, test, build), well inside the CI budget |
-| The QA command's static server against the real export | PASS, verified by hand | All 8 sitemap pages served 200 as `text/html`, `/sitemap.xml` as `application/xml`, `/robots.txt` as `text/plain`, a `_next/static` stylesheet as `text/css`, and an unknown path served the 404 page with status 404. The home page carried `id="parent-session"` and, correctly for a dev build, one gap badge |
+| The QA command's static server against the real export | PASS | Verified by hand before the sweep (8 pages at 200 with correct content types, a `_next/static` stylesheet as `text/css`, an unknown path served the 404 page with status 404), and then by the sweep itself, which served all 24 page loads and the Lighthouse runs through it |
+| The QA toolchain, as installed | PASS | Chromium via playwright 1.63.0, Lighthouse 13.5.0, axe-core 4.13.0, recorded by the run rather than assumed |
+
+## Measured results: the QA sweep
+
+Run by the operator on 2026-09-20, after the one-time toolchain install, against a local **prod**
+build (`SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build`). Pasted unaltered
+from `site/qa-artifacts/visual-qa-report.md`, which the command writes; the command exited 0 with
+`visual-qa: 8 pages clear the floor with axe clean at every width.`
+
+### Lighthouse scores
+
+Run 2026-09-21 03:16 UTC against a local static export, Chromium (playwright 1.63.0), Lighthouse 13.5.0, form factor mobile. Floor: accessibility 95, best practices 95.
+
+| Page | Performance | Accessibility | Best practices | SEO |
+|---|---|---|---|---|
+| `/` | 96 | 100 | 100 | 100 |
+| `/about/` | 96 | 100 | 100 | 100 |
+| `/events/` | 95 | 100 | 100 | 100 |
+| `/join/` | 96 | 100 | 100 | 100 |
+| `/coaches/` | 96 | 100 | 100 | 100 |
+| `/faq/` | 95 | 100 | 100 | 100 |
+| `/contact/` | 95 | 100 | 100 | 100 |
+| `/accessibility/` | 96 | 100 | 100 | 100 |
+
+### axe-core
+
+axe-core 4.13.0 in Chromium, rule sets wcag2a, wcag2aa, wcag21a, wcag21aa, with the colour-contrast rule enabled. Every page was checked at each of the three widths.
+
+No violations on any page, at any width.
+
+### Widths
+
+| Page | 390 | 768 | 1280 |
+|---|---|---|---|
+| `/` | no horizontal overflow | no horizontal overflow | no horizontal overflow |
+| `/about/` | no horizontal overflow | no horizontal overflow | no horizontal overflow |
+| `/events/` | no horizontal overflow | no horizontal overflow | no horizontal overflow |
+| `/join/` | no horizontal overflow | no horizontal overflow | no horizontal overflow |
+| `/coaches/` | no horizontal overflow | no horizontal overflow | no horizontal overflow |
+| `/faq/` | no horizontal overflow | no horizontal overflow | no horizontal overflow |
+| `/contact/` | no horizontal overflow | no horizontal overflow | no horizontal overflow |
+| `/accessibility/` | no horizontal overflow | no horizontal overflow | no horizontal overflow |
+
+Screenshots for each cell are in the output directory, named `<page>-<width>.png`. They are review artifacts and are never committed.
+
+Two things worth saying about this run beyond the numbers. The pages measured are **every URL in
+`sitemap.xml`**, read at run time rather than listed anywhere, so a page cannot be missed by being
+forgotten. And performance sits at 95 to 96 rather than 100 on a static export with no third-party
+script, which is the mobile form factor's simulated throttling rather than anything the site does;
+the floor the spec sets is on accessibility and best practices, both of which are 100 everywhere.
 
 ## Files changed
 
@@ -102,7 +155,7 @@ Beyond the graph, the four items the Goal description adds from the `v1-e36-t07`
 * `site/src/lib/publishing-policy.ts` — an unset announcement field is an error, naming the field and the announcement.
 * `site/src/app/layout.tsx` — passes `announcementFields()` through the guard at build time.
 * `site/src/app/page.tsx` — an unset fact renders in the same gap badge a `[[TBD]]` marker does.
-* `site/content/home.yaml` — the Room is now an `unsetNote`, so it is flagged for the first time since `v1-e36-t06`.
+* `site/content/home.yaml` — the Room became an `unsetNote`, which is what made it fail a prod build for the first time since `v1-e36-t06`; Charlie then set it to `To be announced` in `fdd5122`.
 
 **The phrase allowlist**
 * `site/src/lib/publishing-policy.ts` — `unreviewedNames` covers a run of capitals with listed phrases end to end instead of checking word by word.
@@ -134,8 +187,9 @@ Beyond the graph, the four items the Goal description adds from the `v1-e36-t07`
    says to "replace the `[[TBD]]` marker in site/content/pages/home.md (and the panel fields the
    home page reads)". There is no marker in `home.md`; `v1-e36-t06` moved the room into
    `content/home.yaml` and replaced the marker with a sentence, which is exactly the hole the
-   review found. The room is filled in by replacing the Room fact's `unsetNote` with a `value` in
-   `content/home.yaml`, and nothing in `home.md` changes.
+   review found. The room was filled in by replacing the Room fact's `unsetNote` with a `value` in
+   `content/home.yaml`; `home.md` was not touched, and the plan node's own instruction could not
+   have been followed as written.
 
 2. **`tests/smoke/` already had its first site entries.** The Goal description says `tests/smoke/`
    "gains its first site entries for the validate-dev tier, which no task has added yet".
@@ -153,10 +207,12 @@ Beyond the graph, the four items the Goal description adds from the `v1-e36-t07`
    more specific owner wins; **the PM should strike the clause from the `t08` description** so the
    next reader is not left checking which task did it.
 
-4. **No screenshot, score or axe result is recorded from a run that did not happen.** ac1 to ac3
-   are marked NOT RUN rather than PASS, and this report carries no score table. The spec forbids
-   "recording a score not produced by a run", and a template filled with plausible numbers is the
-   failure that rule exists to prevent.
+4. **No screenshot, score or axe result was recorded before a run produced one.** ac1 to ac3 were
+   left NOT RUN, with no score table, until the operator's sweep on 2026-09-20; the numbers now in
+   [Measured results](#measured-results-the-qa-sweep) are that run's output pasted unaltered. The
+   spec forbids "recording a score not produced by a run", and a template filled with plausible
+   numbers is the failure that rule exists to prevent. On the record so the sequence is visible,
+   not because anything was done differently from the spec.
 
 ## Decisions and assumptions
 
@@ -189,40 +245,49 @@ Beyond the graph, the four items the Goal description adds from the `v1-e36-t07`
   real export instead, with the result recorded under Other gates.
 * **A Lighthouse category that could not be computed fails the floor.** Treating "not measured" as
   a pass is how a run that half worked gets recorded as a green launch gate.
+* **The room reads "To be announced", and that is a decision rather than a gap.** Charlie set it in
+  `fdd5122`, whose message calls it a stand-in. The guard accepts it for exactly the reason the
+  review gave: a room of "To be announced" is an answer, an empty one is an oversight. **What it
+  settles** is the build gate, ac5 and the promotion: nothing on the site is now unfinished in a
+  way a machine can see. **What it does not settle** is whether that is the wording parents should
+  read on October 1. If a real room arrives, follow-up 3 has the one-line change, and the sweep is
+  repeated because the home page will have changed.
+* **The tripwire test was turned around rather than deleted.** `content-policy.test.ts` carried
+  "still owes the October 1 room, which is what stops a prod build today", written to fail the day
+  the room was supplied. It fired, and `fdd5122` rewrote it as "leaves no October 1 announcement
+  fact unset", which guards the other direction: no announcement fact goes back to being silently
+  unset before October 1. That is the better test to be left holding, and its docstring records
+  the history.
+* **Playwright's named export did not survive the CommonJS boundary, and the operator fixed it.**
+  `loadQaToolchain` destructured `{ chromium }` from the dynamic import; playwright's entry point
+  is CommonJS and `cjs-module-lexer` does not find `chromium` among its re-exports, so the named
+  import was undefined. `fdd5122` takes `module.chromium ?? module.default?.chromium` and raises a
+  `VisualQaError` naming the version if neither works, instead of a `TypeError` deep in `main()`.
+  This was a real bug in the committed script and is the one thing the offline tests could not have
+  caught, since they never load the toolchain.
 
 ## Operator follow-ups
 
-### 1. Install the QA toolchain, then run the sweep
+Two of the four are done. They are kept here, marked, because the commands are what the next
+person repeats rather than reconstructs.
 
-The install is the one-time step; the sweep is what fills in ac1, ac2 and ac3.
+### 1. Install the QA toolchain, then run the sweep — DONE 2026-09-20
 
-**Operator command** (expected runtime ~5 min the first time, most of it the download)
-Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e36-t08-prelaunch-visual-qa`
 ```bash
 pnpm --dir site/scripts/visual-qa-tools install
 pnpm --dir site/scripts/visual-qa-tools exec playwright install chromium
-```
-Success looks like: the install finishes and `playwright install` reports Chromium downloaded.
-This needs the network. Nothing else in `site/` does.
-
-**Operator command** (expected runtime ~3 min: 8 pages, three widths each, plus a Lighthouse run per page)
-Where: the same worktree
-```bash
-pnpm --dir site build
+pnpm --dir site build          # SITE_ENV=prod SITE_URL=https://wfbdebate.com for the recorded run
 pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95
-echo "exit: $?"
 ```
-Success looks like: a Markdown score table, an axe section reading "No violations on any page, at
-any width", a widths table with "no horizontal overflow" in every cell, and
-`visual-qa: 8 pages clear the floor with axe clean at every width.` with exit 0.
+Result: exit 0, `visual-qa: 8 pages clear the floor with axe clean at every width.` Output in
+[Measured results](#measured-results-the-qa-sweep). Nothing from `site/qa-artifacts/` was
+committed; it is gitignored and `git status` is clean.
 
-Paste the whole of `site/qa-artifacts/visual-qa-report.md` into this report, replacing the
-"Lighthouse scores", "axe-core" and "Widths" sections it writes. **Do not commit anything from
-`site/qa-artifacts/`**; it is gitignored on purpose.
-
-A non-zero exit lists what failed, page by page. Anything below the floor, any axe violation or
-any page that scrolls sideways is a fix in `site/`, not a number to write down: the floor is not
-to be lowered and no page is to be skipped (spec constraints).
+**Repeat this run after any change to the site's copy, layout or tokens**, and in particular once
+the October 1 room is replaced with a real one. A non-zero exit lists what failed, page by page.
+Anything below the floor, any axe violation or any page that scrolls sideways is a fix in `site/`,
+not a number to write down: the floor is not to be lowered and no page is to be skipped (spec
+constraints).
 
 ### 2. The keyboard walk, the print check and the two phones
 
@@ -248,24 +313,21 @@ Then open `https://dev.wfbdebate.com/` on **an iPhone in Safari** and **an Andro
 Chrome**, and confirm the home hero, the October 1 panel, the events cards and the FAQ disclosures
 read correctly with nothing cut off or overlapping. Note the phone and browser versions.
 
-### 3. The October 1 room, then the prod build
+### 3. The October 1 room, then the prod build — DONE 2026-09-20
 
-Charlie supplies the room. Then, in the worktree:
+Charlie set the Room to `To be announced` in `fdd5122`, which the guard accepts as a decision
+rather than a gap, and `SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build` now
+exits 0 with no publishing-policy output. See Decisions for what that does and does not settle.
 
-```bash
-# site/content/home.yaml, in parentSession.facts:
-#   - label: Room
-#     value: <the room>        # replacing the unsetNote line entirely
-SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build
+**If a real room number arrives before October 1**, it is one line in `site/content/home.yaml`:
+
+```yaml
+    - label: Room
+      value: <the room>
 ```
-Success looks like: exit 0, the export written to `site/out/`, and no publishing-policy output at
-all. Then re-run follow-up 1's sweep, because the home page has changed.
 
-Two tests are written to fail when this happens, and that is intended: "still owes the October 1
-room, which is what stops a prod build today" in `site/tests/content-policy.test.ts`, and the
-matching branch of "shows an unset fact in the gap badge". Delete the first and the second passes
-on its own, since every fact will then carry a value. **If the answer is that there is no room to
-give yet, `value: To be announced` is the correct answer and passes the guard.**
+followed by a prod build and a repeat of follow-up 1's sweep, because the home page will have
+changed.
 
 ### 4. Charlie's sign-off
 
@@ -293,7 +355,16 @@ throughout.
   ordinary words would keep the review's ruling from eroding. `v1-e37-t03`.
 * **`site/scripts/visual-qa-tools` pins no versions.** It asks for `latest` and the report records
   what ran, which is the right trade for a review tool but would not be for anything that gates a
-  deploy. If the QA run ever becomes a required check, pin it and commit the lockfile.
+  deploy. The first install resolved playwright 1.63.0 and Lighthouse 13.5.0, and those are the
+  versions behind the numbers in this report. If the QA run ever becomes a required check, pin it
+  and commit the lockfile.
+* **The QA command has nothing automatic that exercises it end to end.** The playwright import bug
+  fixed in `fdd5122` reached a commit because the offline tests deliberately never load the
+  toolchain, and a browser download has no place in the PR path. Nothing cheap fixes that, but it
+  is worth knowing that the first real run of this command is always its first real test.
+* **Repeat the QA sweep if the room wording changes.** The recorded run measured `To be announced`
+  on the home page. A real room number is a different home page, and the numbers should be the
+  ones the launch commit actually produces.
 
 ## PM review
 

@@ -84,9 +84,12 @@ file name, so a page missing a title fails `pnpm --dir site build` instead of sh
 2. **Spell out every acronym.** A page that uses `NSDA`, `NCFL`, `WDCA`, `TOC`, `LD` or `PF` must
    also contain the full name somewhere on the same page. The list is `ACRONYM_EXPANSIONS` in
    `src/lib/content.ts`; add to it as the site grows. Parents and new students are the audience.
-3. **Facts nobody has supplied are marked, not invented.** Write `[[TBD]]`, or
-   `[[TBD: what is needed]]`, where a fact has to come from Charlie. It renders as a visible
-   **TBD** badge so a dev preview shows every gap, and it fails a prod build until it is filled.
+3. **Facts nobody has supplied are marked, not invented.** In prose, write `[[TBD]]` or
+   `[[TBD: what is needed]]` where a fact has to come from Charlie. In a structured announcement
+   such as the October 1 panel in `content/home.yaml`, give the fact an `unsetNote` instead of a
+   `value`. Both render as a visible gap badge, so a dev preview shows every hole, and both fail a
+   prod build until they are filled. "To be announced" is a `value`: deciding not to say is an
+   answer, and only an unanswered fact is a gap.
 
 ## The content guard
 
@@ -101,9 +104,10 @@ a dev build prints it and carries on**, so the copy can be reviewed with the gap
 | An email address that is not in `contactEmails` in `site.yaml` | Only coach and team addresses publish; a student address never does |
 | Anything shaped like a phone number | The site publishes none, of anyone |
 | An image with no entry in `media-consent.yaml` | Every image of a person needs a current-season consent reference; every other image needs a line saying nobody is in it |
-| A capitalised name whose words are not in `permittedNameWords` | A student name cannot reach prod unreviewed. The full published-names allowlist is `v1-e37-t03` |
+| A run of capitalised words that `permittedNamePhrases` cannot cover end to end | A student name cannot reach prod unreviewed. Phrases, not words: reviewing "Blue Valley West High School" must not leave Blue, Valley and West permitted on their own. The full published-names allowlist is `v1-e37-t03` |
 | A named student whose consent entry is from a previous season | The district's form renews annually; consent does not carry over |
 | A `[[TBD]]` marker | A half-written page is not published |
+| An announcement field with an `unsetNote` rather than a value | An announcement states every fact it lists. A room of "To be announced" is a decision; an empty one is an oversight, and a panel with nothing where the room goes leaves no trace in the copy for the other rules to catch |
 | A script or an iframe from another origin, in the built HTML | The site loads nothing from anyone else |
 
 It **warns**, in every environment, when a consent entry was last checked before the current

@@ -136,17 +136,54 @@ describe('images and media consent', () => {
 
 describe('named students', () => {
   it('stays quiet about capitalised phrases whose words have all been reviewed', () => {
-    expect(unreviewedNames('Email Coach Clark at Whitefish Bay High School.', consent.permittedNameWords))
+    expect(unreviewedNames('Email Coach Clark at Whitefish Bay High School.', consent.permittedNamePhrases))
       .toEqual([])
-    expect(unreviewedNames('Martin Luther King Jr weekend', consent.permittedNameWords)).toEqual([])
+    expect(unreviewedNames('Martin Luther King Jr weekend', consent.permittedNamePhrases)).toEqual([])
   })
 
   it('flags a name made of words nobody has reviewed', () => {
-    expect(unreviewedNames('Jordan Rivera won.', consent.permittedNameWords)).toEqual(['Jordan Rivera'])
+    expect(unreviewedNames('Jordan Rivera won.', consent.permittedNamePhrases)).toEqual(['Jordan Rivera'])
+  })
+
+  /**
+   * The v1-e36-t07 review's point, as a test. When the guard checked words, reviewing the schools
+   * Coach Clark has coached at left Blue, Valley, West, North and Central permitted on their own,
+   * anywhere on the site. A student with any of those as a name would have passed.
+   */
+  it('does not leave the words of a reviewed school permitted on their own', () => {
+    expect(consent.permittedNamePhrases).toContain('Blue Valley West High School')
+    expect(unreviewedNames('Blue Valley West High School hosted it.', consent.permittedNamePhrases))
+      .toEqual([])
+    for (const invented of ['Blue Rivera', 'West Valley', 'Olathe Jordan', 'Kansas Rivera']) {
+      expect(
+        unreviewedNames(`${invented} spoke second.`, consent.permittedNamePhrases),
+        `${invented} should not be covered by the phrases behind it`,
+      ).toEqual([invented])
+    }
+  })
+
+  it('covers one run of capitals with several reviewed phrases end to end', () => {
+    expect(unreviewedNames('Head Coach Charlie Clark answered.', consent.permittedNamePhrases))
+      .toEqual([])
+    expect(
+      unreviewedNames('The Whitefish Bay High School Debate Team travels.', consent.permittedNamePhrases),
+    ).toEqual([])
+  })
+
+  it('permits nothing from a one-word entry, because one word is never a run', () => {
+    expect(consent.permittedNamePhrases).toContain('The')
+    expect(unreviewedNames('The Rivera family came.', consent.permittedNamePhrases)).toEqual([
+      'The Rivera',
+    ])
+  })
+
+  it('reads a typographic apostrophe as the plain one the manifest is written with', () => {
+    expect(unreviewedNames('Coach Clark’s room', ["Coach Clark's"])).toEqual([])
+    expect(unreviewedNames('Coach Clark’s room', ['Coach Clark'])).toEqual(['Coach Clark’s'])
   })
 
   it('does not run a heading into the paragraph under it', () => {
-    expect(unreviewedNames('## Joining\n\nDebate is open.', consent.permittedNameWords)).toEqual([])
+    expect(unreviewedNames('## Joining\n\nDebate is open.', consent.permittedNamePhrases)).toEqual([])
   })
 
   it('fails the build when a named student has no consent entry', () => {
@@ -398,7 +435,7 @@ describe('the content this site actually ships', () => {
 
   it('names no student, so no consent entry is needed yet', () => {
     for (const page of pages) {
-      expect(unreviewedNames(page.guardedHtml, consent.permittedNameWords), page.filePath).toEqual(
+      expect(unreviewedNames(page.guardedHtml, consent.permittedNamePhrases), page.filePath).toEqual(
         [],
       )
     }

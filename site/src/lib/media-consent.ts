@@ -55,7 +55,13 @@ export const mediaConsentSchema = z.object({
   students: z.array(consentedStudentSchema),
   images: z.array(consentedImageSchema),
   nonPersonImages: z.array(nonPersonImageSchema),
-  permittedNameWords: z.array(z.string().min(1)),
+  /**
+   * Capitalised phrases the site is allowed to print: school names, organisations, places and the
+   * ordinary words that sit beside them. Phrases, not words, so that reviewing "Blue Valley West
+   * High School" does not leave Blue, Valley and West permitted on their own for ever
+   * (the v1-e36-t07 review). See `unreviewedNames` in src/lib/publishing-policy.ts.
+   */
+  permittedNamePhrases: z.array(z.string().min(1)),
 })
 
 export type ConsentedStudent = z.infer<typeof consentedStudentSchema>

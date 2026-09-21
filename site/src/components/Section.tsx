@@ -16,10 +16,11 @@ export type SectionContentWidth = 'text' | 'wide'
 
 /**
  * Where the band's header sits. `start` keeps it in the centred text column with the content
- * under it; `center` lets it span the band and centres the text over content that is wider than
- * that column, such as a row of three.
+ * under it; `wide` lets it span the band while staying left aligned, so it shares a left edge
+ * with a card grid below it; `center` spans the band and centres the text, for content that is
+ * itself centred.
  */
-export type SectionHeaderAlign = 'start' | 'center'
+export type SectionHeaderAlign = 'start' | 'center' | 'wide'
 
 /**
  * One band of a page: full-bleed background, content centred inside it, and the same vertical
@@ -35,11 +36,12 @@ export type SectionHeaderAlign = 'start' | 'center'
  * one: an id generated at render time would differ between the server render and the browser,
  * and these are anchor targets on the home page besides.
  *
- * `headerAlign="center"` lets the header out of that column and centres it, which is only ever
- * right above content that is itself wider than the column: a heading that reads as belonging to
- * a three-column row has to sit over the middle of the row, not over the middle of a 36rem
- * column inside it. Text bands keep the default, because a centred heading above a left-aligned
- * paragraph looks like a mistake.
+ * `headerAlign` lets the header out of that column when the content below is wider than it.
+ * `wide` keeps the text left aligned and is the right choice above a card grid: the header then
+ * starts on the same left edge as the cards instead of being indented from them by the
+ * difference between the two widths. `center` also centres the text, which only reads correctly
+ * above content that is itself centred. Text bands keep the default, because a centred heading
+ * above a left-aligned paragraph looks like a mistake.
  *
  * The heading level is the caller's choice for the same reason Card takes one: a page keeps a
  * single unbroken outline rather than every band claiming <h2>. Level 1 is for the band that
@@ -82,9 +84,9 @@ export function Section({
         {hasHeader ? (
           <div
             className={
-              headerAlign === 'center'
-                ? 'section__header section__header--centered'
-                : 'section__header'
+              headerAlign === 'start'
+                ? 'section__header'
+                : `section__header section__header--${headerAlign === 'center' ? 'centered' : 'wide'}`
             }
           >
             {eyebrow ? <p className="section__eyebrow">{eyebrow}</p> : null}

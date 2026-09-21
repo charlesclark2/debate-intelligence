@@ -72,6 +72,7 @@ export default function EventsPage() {
 
       <Section
         contentWidth="wide"
+        headerAlign="wide"
         id={COMPARISON_ID}
         intro={comparisonIntro}
         title={comparisonTitle}

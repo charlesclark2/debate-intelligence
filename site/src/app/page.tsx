@@ -78,6 +78,7 @@ export default function HomePage() {
 
       <Section
         contentWidth="wide"
+        headerAlign="wide"
         eyebrow={entryPoints.eyebrow}
         id="start-here"
         intro={entryPoints.intro}
@@ -102,6 +103,7 @@ export default function HomePage() {
 
       <Section
         contentWidth="wide"
+        headerAlign="wide"
         eyebrow={whatDebateBuilds.eyebrow}
         id="what-debate-builds"
         intro={whatDebateBuilds.intro}

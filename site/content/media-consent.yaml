@@ -86,7 +86,6 @@ permittedNamePhrases:
   - Whitefish Bay Blue Dukes
   # The footer's "Whitefish Bay High School Debate Team", covered as two reviewed phrases.
   - Debate Team
-  - English Wing
   # Organisations, leagues and events. The two fragments are what the guard sees of "National
   # Speech and Debate Association": the lower-case "and" ends one run of capitals and starts
   # another, so the expansion reaches it as two phrases rather than one.

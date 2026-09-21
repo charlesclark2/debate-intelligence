@@ -1,0 +1,19 @@
+[
+  {
+    "name": "testcl26-weekly-2026-09-08.zip",
+    "url": "https://caselist-files.example.invalid/weekly/testcl26/testcl26-weekly-2026-09-08.zip"
+  },
+  {
+    "name": "testcl26-weekly-2026-09-15.zip",
+    "url": "https://caselist-files.example.invalid/weekly/testcl26/testcl26-weekly-2026-09-15.zip",
+    "field_added_by_a_later_api_version": 1
+  },
+  {
+    "name": "testcl26-all-2026-09-15.zip",
+    "url": "https://caselist-files.example.invalid/weekly/testcl26/testcl26-all-2026-09-15.zip"
+  },
+  {
+    "name": "testcl26-bundle.zip",
+    "url": "https://caselist-files.example.invalid/weekly/testcl26/testcl26-bundle.zip"
+  }
+]

@@ -34,6 +34,9 @@ dev = [
     # contract (no AWS SDK outside debate_core.integrations.s3); v1-e02-t06-import-boundary-guard
     # owns the full set and the CI job.
     "import-linter>=2.0",
+    # The caselist_token store (v1-e34-t01) talks to the OS keychain through keyring. Tests never
+    # reach the real keychain: they hand the store an in-memory backend.
+    "keyring>=25",
     "lxml>=5.3",
     # The debate .docx parser (v1-e31-t03) reads WordprocessingML with lxml, and lxml ships no
     # inline types; pyright runs strict over debate_core, so the stubs are what let the adapter be

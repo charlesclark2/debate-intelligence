@@ -20,7 +20,9 @@ spec:
     Measure the t03 parser on the files it will actually see. Moved from V3 (was v3-e20-t04). The labeled
     set mixes the team's own files (2024-25 through 2026-27, Policy/LD/PF) with caselist uploads from the
     hsld26 weekly snapshots (Verbatim, non-Verbatim and wiki-converted) and OpenEv/Policy camp files, all
-    scrubbed with the t02 script into tests/fixtures/debate_files/eval/. Labels are paragraph-level units and
+    left where they are on the operator's machine: the repository holds only the labels (keyed by file
+    sha256, paragraph index and text hash) and the aggregate scores, never the files or excerpts, because a
+    team file can carry another program's disclosed cards (caselist-data-use.md prohibitions 1, 9 and 10). Labels are paragraph-level units and
     card boundaries (plus card completeness and underline/highlight spans on a sample), keyed by paragraph
     index and text hash. The eval reports per-unit precision/recall/F1, card-boundary exact match, completeness
     accuracy and span F1, broken down by source (team, caselist, camp), template family and format. It runs in

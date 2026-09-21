@@ -1,8 +1,36 @@
 # ADR-0016: The caselist corpus is accumulated from windows, not captured
 
-- Status: Accepted
+- Status: **Accepted, with decisions 2 and 3 under review since 2026-09-21**
 - Date: 2026-09-21
 - Deciders: Charlie Clark (coach, operator), PM
+
+> **Under review.** The v1-e34-t01 session read the upstream OpenCaselist source and found three
+> things this ADR did not account for. Nothing here is withdrawn, but **no task may implement
+> decision 2 or 3 until this is settled**, and v1-e34-t02 must not be started meanwhile.
+>
+> 1. **A complete archive may exist.** The downloads listing carries two archives per caselist:
+>    `<caselist>-weekly-<date>.zip`, which matches the measurements below, and
+>    `<caselist>-all-<date>.zip`, described upstream as every open-source file still attached to a
+>    round. If the deployed site publishes the second, the premise that no complete caselist can be
+>    fetched is wrong, and with it the urgency behind decisions 2 and 3.
+> 2. **The daily cadence contradicts an approved policy.** docs/policies/caselist-data-use.md,
+>    approved with the maintainer, says "weekly cadence at most — no polling faster than archives are
+>    published" (E34 gate 4, terms clause 6), and the maintainer's confirmation in clause 12 is scoped
+>    to "scheduled downloads of the weekly archives". Decision 2 was written without checking that
+>    clause. It does not override it. A daily sync needs either the maintainer's agreement or a
+>    different justification, and until then the cadence stays weekly.
+> 3. **The reasoning behind daily may not hold either.** Decision 2 argued that consecutive weekly
+>    pulls overlap by about 6% of a week's files, so a slipped run loses the gap permanently. That
+>    assumes a window not downloaded at the right moment is gone. If the listing exposes past dated
+>    archives, a missed week is simply downloaded late, and the policy's own rationale applies: polling
+>    faster than archives are published fetches the same file repeatedly and puts load on a
+>    volunteer-run service for nothing.
+>
+> Also from the same source: the site limits a user to **5 bulk downloads per day**, which any cadence
+> decision has to budget for across the three caselists.
+>
+> One authenticated listing call settles all of it. The measurements below are unaffected — they are
+> what three real downloads contained, whatever the site offers alongside them.
 
 ## Context
 

@@ -23,10 +23,15 @@ spec:
     approved. A CaselistArchiveSource port in debate_core.application.ports and an httpx adapter in
     debate_core.integrations.opencaselist cover: GET /caselists and /caselists/{caselist} (the caselist
     slug, e.g. hsld26, hspolicy26 or hspf26, is always an input, never hardcoded), GET
-    /caselists/{caselist}/downloads (open-source archives with their dates; each holds roughly the last
-    seven days of modifications rather than a cumulative corpus, see ADR-0016), GET
-    /download?path=... streamed to a temp file with sha256 and size checks and atomic rename into the
-    importer's inbox, and GET /openev for OpenEv camp files. Authentication uses the operator's own
+    /caselists/{caselist}/downloads, and GET /openev for OpenEv camp files. What the downloads
+    listing actually returns, established by the v1-e34-t01 session against the upstream source: a name
+    and a URL on the site's own file storage, on a different host, with no size and no date. So an
+    archive is fetched from that URL and the token is never sent there; only OpenEv files go through
+    /download?path=. The date is read from the archive name and the size checked against the
+    download's Content-Length. Each download is streamed to a temp file with sha256 and size checks and
+    an atomic rename into the importer's inbox. The listing carries two archives per caselist,
+    <caselist>-weekly-<date>.zip and <caselist>-all-<date>.zip; what the second one contains is an open
+    question against ADR-0016 and is settled by an operator listing call, not by this task. Authentication uses the operator's own
     caselist_token cookie: `debate-research caselist auth login` prompts for Tabroom credentials
     once, calls /login, stores only the returned token in the macOS keychain (keyring) or, as a
     fallback, a 0600 gitignored local secret file, and never stores the password; `caselist auth

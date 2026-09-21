@@ -358,9 +358,15 @@ file's first- and last-seen range.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-21
 
-**Notes:**
+**Notes:** All four deviations upheld; the specs were wrong, not the code. ac3, ac4 and ac6
+amended on specs/archive-importer-rulings, along with v1-e30-t04's copy of the same manifest-root
+mistake. The real-corpus run was correctly this session's to make under working-agreements §2
+(3.9s, not the 10-25 minutes estimated), was run into a deleted scratch directory, touched
+neither store, and copied nothing into the repository. The corpus finding is the most valuable
+thing in this report and has been pushed into v1-e30-t02, t06 and v1-e32-t04 rather than left as
+a note.

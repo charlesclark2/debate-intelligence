@@ -229,8 +229,10 @@ personal data about a minor (architecture proposal §14).
 2. **Never expand, never join.** Initials are not resolved to names, and team codes are never
    joined to Tabroom entries, rosters, social media or any other source, in V1 or V2.
 3. **Never in S3 keys or object metadata.** Sources are stored at content-addressed keys
-   (`raw/<caselist>/<sha256>.<ext>`); no school, team code or original filename appears in a key,
-   a metadata field or a tag (v1-e30-t05).
+   (`raw/caselist/<caselist-slug>/sha256/ab/cd/<hash>`, and `raw/openev/<year>/sha256/ab/cd/<hash>`
+   for camp files); no school, team code or original filename appears in a key, a metadata field or
+   a tag, and no key carries a file extension, because an extension would make identical bytes two
+   objects (v1-e30-t05, docs/architecture/evidence-store-layout.md).
 4. **Never in logs.** No school, team code, filename or disclosure path in application logs,
    error messages, tracebacks, metrics labels or telemetry — in any environment.
 5. **Never in committed artefacts.** Fixtures, cassettes, tests, session reports, runbooks and
@@ -519,10 +521,16 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.1 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.2 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
-are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 records
+are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
+
+Version 1.2 corrects rule 3, which still described the key form an earlier spec had proposed
+(`raw/<caselist>/<sha256>.<ext>`) rather than the one the evidence store actually uses. It
+loosens nothing: the rule that no school, team code or filename may appear in a key or in metadata
+is unchanged, and the corrected form is narrower, because it also rules out the file extension.
+Raised by the v1-e30-t05 session.
 
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.

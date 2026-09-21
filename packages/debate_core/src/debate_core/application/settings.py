@@ -107,6 +107,7 @@ __all__ = [
     "ConfigurationError",
     "Environment",
     "HttpSettings",
+    "CaselistSettings",
     "ModelSettings",
     "ProviderSettings",
     "S3StorageSettings",
@@ -383,6 +384,38 @@ class ProviderSettings(SettingsGroup):
     )
 
 
+class CaselistSettings(SettingsGroup):
+    """What the caselist importers will read, and how large an archive they will open.
+
+    Two ceilings, and they guard different things. `max_archive_bytes` is the size of the file on
+    disk: a weekly HS LD archive is a few hundred megabytes, and something an order of magnitude
+    larger is a wrong path rather than a big week. `max_unpacked_bytes` is the total the zip's own
+    directory says its members come to, checked *before* anything is extracted, which is what
+    stops a small archive that claims to unpack to a terabyte (v1-e30-t03 ac5).
+
+    Both are refusals, not warnings. An import that has already written half a corpus before
+    noticing the archive was wrong is worse than one that never started.
+    """
+
+    max_archive_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        gt=0,
+        description=(
+            "Largest archive file the importer will open, in bytes. The default is 2 GiB: several "
+            "times the largest weekly open-source archive, and far below a mistyped path to a "
+            "backup volume."
+        ),
+    )
+    max_unpacked_bytes: int = Field(
+        default=8 * 1024 * 1024 * 1024,
+        gt=0,
+        description=(
+            "Largest total the members of an archive may claim to unpack to, in bytes, read from "
+            "the zip's directory before any member is extracted."
+        ),
+    )
+
+
 class ModelSettings(SettingsGroup):
     """What the ModelRouter is allowed to do and which file tells it where to route.
 
@@ -439,6 +472,7 @@ class Settings(BaseSettings):
     http: HttpSettings = Field(default_factory=HttpSettings)
     providers: ProviderSettings = Field(default_factory=ProviderSettings)
     models: ModelSettings
+    caselist: CaselistSettings = Field(default_factory=CaselistSettings)
 
     @classmethod
     def settings_customise_sources(

@@ -101,7 +101,7 @@ spec:
         traceback: docs/policies/caselist-data-use.md rule 4 governs, and a relative archive path is
         <School>/<TeamCode>/<filename>, which is all three forbidden things at once.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

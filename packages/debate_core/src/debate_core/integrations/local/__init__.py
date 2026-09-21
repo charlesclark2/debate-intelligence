@@ -9,6 +9,7 @@ what `--env dev` wrote:
 
     <data_dir>/
       blobs/sha256/ab/cd/abcd1234…def0   immutable snapshot bytes, by digest (FsSnapshotStore)
+      objects/manifests/hsld26/….jsonl   evidence objects by name (FsEvidenceObjectStore)
       debate.sqlite3                     articles, snapshots, cards, searches (SqliteDatabase)
 
 The split is the same one the cloud uses (architecture proposal §7): bytes in a content-addressed
@@ -46,6 +47,10 @@ from debate_core.integrations.local.fs_blob_store import (
     BLOB_FILE_MODE,
     FsSnapshotStore,
 )
+from debate_core.integrations.local.fs_object_store import (
+    OBJECT_DIRECTORY,
+    FsEvidenceObjectStore,
+)
 from debate_core.integrations.local.sqlite_db import (
     DATABASE_FILENAME,
     Migration,
@@ -63,7 +68,9 @@ __all__ = [
     "BLOB_DIRECTORY",
     "BLOB_FILE_MODE",
     "DATABASE_FILENAME",
+    "OBJECT_DIRECTORY",
     "CorruptRecordError",
+    "FsEvidenceObjectStore",
     "FsSnapshotStore",
     "Migration",
     "MigrationError",

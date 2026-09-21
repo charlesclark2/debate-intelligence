@@ -22,9 +22,21 @@ members = [
 [dependency-groups]
 dev = [
     "anyio>=4.4",
+    # The S3 adapters (v1-e29-t04) are dev-tested against moto, never an AWS account, so the dev
+    # environment carries what debate-core's `aws` extra declares plus the stubs: boto3 to import
+    # the adapter, and boto3-stubs because pyright runs strict over debate_core and boto3 itself
+    # ships no inline types. moto, below, is what answers the adapter in place of AWS.
+    "boto3>=1.35",
+    "boto3-stubs[s3]>=1.35",
     "httpx>=0.28",
     "hypothesis>=6.100",
+    # `uv run lint-imports` checks the ports-and-adapters boundaries. v1-e29-t04 adds the first
+    # contract (no AWS SDK outside debate_core.integrations.s3); v1-e02-t06-import-boundary-guard
+    # owns the full set and the CI job.
+    "import-linter>=2.0",
     "lxml>=5.3",
+    # Answers the S3 adapters in-process (v1-e29-t04). The PR test suite reaches no AWS account.
+    "moto[s3]>=5.0",
     "pre-commit>=4.0",
     "pre-commit-hooks>=5.0",
     "pyright[nodejs]>=1.1.400",
@@ -93,6 +105,39 @@ venvPath = "."
 venv = ".venv"
 typeCheckingMode = "standard"
 strict = ["packages/debate_core"]
+
+# ---------------------------------------------------------------------------------------------
+# import-linter: the ports-and-adapters boundaries, checked by `uv run lint-imports`
+# ---------------------------------------------------------------------------------------------
+# v1-e02-t06-import-boundary-guard owns this section and the full set of contracts (no httpx, typer
+# or fastapi in the domain and application layers; a layers contract for domain < application <
+# integrations; the CI job that runs them). It has not run yet, and v1-e29-t04-s3-blob-store is the
+# task that first brings an AWS SDK into the repository, so it adds the one contract its own
+# acceptance criterion names and leaves the rest to t06, which extends this section rather than
+# replacing it.
+[tool.importlinter]
+root_packages = ["debate_core", "debate_cli", "debate_api", "debate_workers"]
+# Required for a contract that forbids a module from outside the repository, such as boto3.
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "The AWS SDK stays inside debate_core.integrations.s3"
+type = "forbidden"
+# Every module of every package except the one adapter package that is allowed to import boto3.
+# `debate_core.integrations` is named by its subpackages rather than whole, because listing the
+# parent would include `integrations.s3` itself; a new adapter subpackage is added to this list in
+# the PR that creates it.
+source_modules = [
+    "debate_core.domain",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.file_streaming",
+    "debate_cli",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["boto3", "botocore"]
 
 # ---------------------------------------------------------------------------------------------
 # pytest: every project marker is registered here, once. Later tasks use them, never add their own.

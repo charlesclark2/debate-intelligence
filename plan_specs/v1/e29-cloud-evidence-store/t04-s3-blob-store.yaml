@@ -71,7 +71,7 @@ spec:
         `uv run lint-imports` passes with a contract forbidding boto3/botocore outside
         debate_core.integrations.s3, and pyright reports no errors for debate_core.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

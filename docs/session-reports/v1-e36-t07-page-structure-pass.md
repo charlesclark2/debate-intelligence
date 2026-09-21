@@ -48,11 +48,11 @@ question. Both want the spec amended rather than left implicit.
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| **ac0** Explicit ordered nav, utility pages in the footer, `aria-current`, mobile menu at 390px | PASS | `pnpm --dir site test navigation` → **40 passed**. The nav is `primaryNavigation` in `content/site.yaml`; `navigation.primary.length < pages.length` is asserted, as is that no published page falls out of both lists. Export check: `/accessibility/` appears in every page's `<footer>` and in no `<header>`. Each page's own nav link carries `aria-current="page"` in the exported HTML; the accessibility page marks none. 390px: asserted as target sizes (44px on toggle, nav link and footer link), the 48rem breakpoint that decides the menu is a menu at 390px, tab order through all seven links, and Escape returning focus to the toggle. **The pixel check at 390px is not possible under jsdom** and belongs to v1-e36-t08. |
+| **ac0** Explicit ordered nav, utility pages in the footer, `aria-current`, mobile menu at 390px | PASS, with one deviation | `pnpm --dir site test navigation` → **41 passed**. The nav is six pages, not the seven ac0 enumerates: contact moved to the footer at Charlie's request, which is **deviation 7** below. The nav is `primaryNavigation` in `content/site.yaml`; `navigation.primary.length < pages.length` is asserted, as is that no published page falls out of both lists. Export check: `/accessibility/` and `/contact/` appear in every page's `<footer>` and in no `<header>`. Each page's own nav link carries `aria-current="page"` in the exported HTML; a page outside the nav marks none. 390px: asserted as target sizes (44px on toggle, nav link and footer link), the 48rem breakpoint that decides the menu is a menu at 390px, tab order through every link, and Escape returning focus to the toggle. **The pixel check at 390px is not possible under jsdom** and belongs to v1-e36-t08. |
 | **ac1** FAQ grouped into topic sections, native `<details>` with the question in `<summary>`, in-page index, no `role="button"`/`aria-expanded` | PASS | `pnpm --dir site test faq` → **77 passed**. Five sections, one `<details>` per question, the question in an `<h3>` inside the `<summary>`, an index of five in-page links each resolving to a real section id. `main` contains zero `[aria-expanded]` and zero `[role="button"]`, asserted both in the render and in the exported HTML. |
 | **ac2** Two or three named most-asked questions `open` in the export; every answer's full text present whether open or closed | PASS | `pnpm --dir site test faq` → **77 passed**. The exported `/faq/index.html` carries 17 `<details>` and exactly 3 with `open` (cost, time, judging). Every sentence over 24 characters of every answer is matched in the exported markup with the React payload stripped out, open or closed. |
 | **ac3** Three parallel cards, same four comparison fields, detail beneath; stacks at 390px with no horizontal overflow | PASS | `pnpm --dir site test events` → **79 passed**. The three cards render the same four labels and values in the same order; every field is filled; each field differs across the three, so the comparison says something. The card holds no part of the detail; each links to its own detail section below. 390px: the grid declares one column outside any media query and every multi-column rule is inside a `min-width` query; the field list stacks label above value and declares no fixed width and no `nowrap`. **Again a source-level check, not a pixel one.** |
-| **ac4** About, join, coaches and contact open with a summary block before their detail; a test fails a prose-only page | PASS | `pnpm --dir site test page-structure` → **37 passed**. Each of the four has a lead and a two-to-six-item at-a-glance block, and the summary band renders before the detail band. The blunt half: a page in that set whose body has no heading, list or table fails. |
+| **ac4** About, join, coaches and contact open with a summary block before their detail; a test fails a prose-only page | PASS | `pnpm --dir site test page-structure` → **37 passed**. Each of the four has a two-to-six-item at-a-glance block that renders before the detail band. The criterion asks for "a summary **or** at-a-glance block", so the block is what the suite requires of all four and a lead is optional beside it: contact has none, because a page titled Contact whose content is four ways to send an email does not need a paragraph saying so. A page that does carry a lead still has to say something in it. The blunt half: a page in that set whose body has no heading, list or table fails. |
 | **ac5** Every question, answer, comparison field and summary item is a validated field in `site/content/`; a file missing a required field fails the build naming that file | PASS | `pnpm --dir site test content` → **59 passed**. Three fixtures prove the failures: `faq-missing-answer` → `content/faq.yaml: invalid FAQ content (...answer...)`; `events-missing-field` → `content/events.yaml: invalid events content (...topicCadence...)`; `faq-everything-open` → the `openByDefault` range rule. Three more prove the navigation failures. `tests/faq.test.tsx` and `tests/events.test.tsx` each scan `src/app/` and `src/components/` and fail if any of that copy appears in a component. |
 | **ac6** axe clean on the restructured pages, every `<summary>` keyboard reachable and operable, print stylesheet expands all disclosures, publishing-policy guard reports only the October 1 room placeholder | PASS, with one caveat and one deviation | `pnpm --dir site test pages-a11y` → **42 passed** (axe over every page through the real route module, plus over the exported HTML). FAQ axe is run twice: with the three most-asked open, and again with every disclosure open. Print: the `@media print` block is asserted to reveal the panel both ways, and no rule anywhere in `disclosure.css` hides a panel. Guard: a prod build (`SITE_ENV=prod pnpm --dir site build`) completes, which it only does with zero findings. **Caveat on "operable by keyboard alone":** see Decisions. **Deviation on the placeholder:** see Deviations. |
 
@@ -136,6 +136,15 @@ fixtures cover the loader and navigation failures. 611 tests, up from 308.
    particular is substantially new content. Recorded here rather than buried in commits; see
    **Decisions** for the full list.
 
+7. **Contact is in the footer, not the primary navigation, which contradicts ac0.** ac0 enumerates
+   the nav as "home, about, events, join, coaches, FAQ, contact". Charlie asked in review for
+   contact to move to the footer: it is a short page whose whole content is four ways to send an
+   email, the coaches page in the nav carries the address already, and a footer is a conventional
+   place for a contact link. It is linked from the footer of **every** page and from the coaches
+   page, so nothing became harder to find than one scroll. **The PM should amend ac0's list, or
+   say the word and it moves back in one line of `content/site.yaml`.** Flagging the trade-off
+   plainly: contact is a page some parents will go to the nav looking for.
+
 6. **`tests/contact.test.ts` was reading the wrong thing.** Its assertions about what the contact
    page publishes read the Markdown body, so when the addresses moved into the at-a-glance block
    they quietly stopped covering them. It now reads `guardedHtml`. Worth the PM knowing, because
@@ -158,10 +167,15 @@ fixtures cover the loader and navigation failures. 611 tests, up from 308.
 - The Remind group and its code, `@debatewfb`, now appear in the join summary as well as the body.
 - Coach Clark's coaching history: seven schools across Missouri, Kansas and Wisconsin from 2007,
   with the result at each, and what he does away from the team.
+- The coaching stipend and the route to financial support left the coaches summary. Neither is a
+  fact about who coaches the team, and both are still on the FAQ, where a family thinking about
+  money already is.
+- Contact lost its lead and the duplicated 24-hour removal line.
 
-**Copy I drafted, which Charlie has not yet seen.** Three leads were rewritten to his brief rather
-than to his words, and he should read them before launch: the about lead, the join lead and the
-contact lead. Each is built from facts already on the site; none introduces one.
+**Copy I drafted, which Charlie has not yet seen.** Two leads were rewritten to his brief rather
+than to his words, and he should read them before launch: the about lead and the join lead. Both
+are built from facts already on the site; neither introduces one. (The contact lead he did see, and
+asked for its removal, so contact now has none.)
 
 **Two numbers that disagreed.** The approved coaches copy said "twenty years of coaching
 experience"; the history Charlie supplied starts in 2007, which is nineteen seasons. The page now
@@ -222,9 +236,9 @@ about 10s, both well inside the CI budget in `docs/process/working-agreements.md
    headed "Debate Events Offered". That card is t06's approved copy, so I left it. Worth aligning
    in t08 or a copy pass.
 
-2b. **Three leads need Charlie's eye before launch.** The about, join and contact leads were
-   drafted to his brief in session but he has not read them on the preview. Nothing in them is a
-   new fact; they are still someone else's words on his site.
+2b. **Two leads need Charlie's eye before launch.** The about and join leads were drafted to his
+   brief in session but he has not read them on the preview. Nothing in them is a new fact; they
+   are still someone else's words on his site.
 3. **The October 1 room.** Still unfilled, and now *not* flagged by the guard, because t06 wrote it
    as a sentence rather than a `[[TBD]]` marker. t08 owns filling it in; consider making it a
    marker so the build carries the reminder.

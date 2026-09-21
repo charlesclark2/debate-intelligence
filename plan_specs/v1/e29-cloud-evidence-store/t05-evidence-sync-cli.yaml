@@ -31,6 +31,14 @@ spec:
     never deletes remote objects. Out of scope: bucket creation (t03), the adapters (t04), caselist-
     specific publish logic and `caselist status` (v1-e30-t05), and bulk initial uploads, which are
     operator-run by the backfill task (v1-e30-t06).
+    Two keyspaces, not one: named objects keep their own path, while a content-addressed blob key records
+    no corpus, so `store sync` takes `--blob-prefix` (for example raw/caselist/hsld26) to say where a blob
+    belongs in the bucket, and refuses a run that has blobs and no prefix rather than filing a season's
+    disclosures under a guess. Posture: dry run by default with `--apply` to transfer, `--confirm-prod`
+    for production, `would_delete` reported and never acted on (the everyday evidence profiles cannot
+    delete; removal is v1-e30-t07). Each verified transfer is journalled, so an interrupted run resumes
+    without re-transferring what it already confirmed, and a repeat sync of an unchanged corpus issues no
+    HeadObject calls at all.
   priority: 1
   constraints:
     packages: [debate_core.application, debate_cli.commands, config/profiles, tests/smoke]

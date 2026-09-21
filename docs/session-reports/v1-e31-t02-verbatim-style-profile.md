@@ -28,21 +28,25 @@ files and is a Heading 4 that inherits from `Heading1`, so resolving by inherita
 called those files' tags pockets. The profile resolves by id, then alias, then display name, then
 Word's numeric de-duplication suffix, and only then `basedOn`.
 
-**What the PM should look at first:** the session is PARTIAL. Goal criteria `ac1`–`ac5` all pass,
-but the `fixtures-and-gates` node is short of two things — the 4-6 scrubbed excerpts of real files
-and the coach review of them, both of which need a replacement list only Charlie holds, and
-`uv run lint-imports`, whose tool is not installed yet. Both are in **Operator follow-ups**, and
-there is a recommendation under **Follow-up work** about where the scrubbed excerpts should live.
+**What the PM should look at first:** the session is PARTIAL, and for a reason the spec did not
+anticipate. Goal criteria `ac1`–`ac5` all pass. The `fixtures-and-gates` node deliberately does
+**not** ship the 4-6 scrubbed excerpts of real files it asks for: this repository is public, and
+`docs/policies/caselist-data-use.md` prohibitions 1 and 9 forbid publishing caselist or camp data
+"or any file built from them" to a git repository. That covers the team's own files too — teams
+read cards other teams cut and disclosed, so essentially every real debate file contains another
+program's evidence. Deviation 3 has the evidence. The other gap is `uv run lint-imports`, whose
+tool is not installed yet. See **Deviations** and **Follow-up work**; there is nothing outstanding
+for the operator to run.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `scrub-script` — Fixture scrub script | COMPLETE | `scripts/scrub_docx_fixture.py` plus 23 tests. Also smoke-run against a real 383-paragraph team file (see Decisions). |
+| `scrub-script` — Fixture scrub script | COMPLETE | `scripts/scrub_docx_fixture.py` plus 31 tests. Smoke-run against a real 383-paragraph team file, and a matching defect found and fixed after the first review pass (see Decisions). |
 | `style-survey` — Style survey of the downloaded corpus | COMPLETE | `scripts/survey_docx_styles.py` plus 21 tests; report committed, over 2,066 files. Run in-session rather than handed to the operator — see Deviations. |
 | `profile-model` — StyleProfile model and verbatim.yaml | COMPLETE | Model, YAML, loader, 78 tests. |
 | `heuristic-classifier` — Non-Verbatim paragraph and run classifier | COMPLETE | `style_classifier.py`, 71 tests, 100% statement and branch coverage. |
-| `fixtures-and-gates` — Style fixtures, coach review and quality gates | PARTIAL | Six synthetic fixtures, their expectations and `MANIFEST.md` are in; `pyright` passes. The scrubbed excerpts, the coach review and `lint-imports` did not happen. |
+| `fixtures-and-gates` — Style fixtures, coach review and quality gates | PARTIAL | Six synthetic fixtures, their expectations and `MANIFEST.md` are in; `pyright` passes. The scrubbed excerpts are withdrawn on policy grounds (Deviation 3), which removes the coach review with them; `lint-imports` could not run. |
 
 ## Acceptance criteria
 
@@ -53,16 +57,16 @@ there is a recommendation under **Follow-up work** about where the scrubbed exce
 | Goal `ac3` — the classifier labels headings, cite lines and evidence in the heuristic fixtures with the expected unit, rule id and match source `HEURISTIC`, deterministically and with no model calls | **PASS** | `uv run pytest packages/debate_core/tests/evidence/test_style_classifier.py` → `71 passed`. `test_every_fixture_paragraph_classifies_as_its_expectations_say` reads all six `.docx` fixtures and checks unit, rule id and match source against the committed `.expected.json`; `test_the_heuristic_fixtures_are_classified_without_a_single_verbatim_style` asserts every result in the three heuristic fixtures is `HEURISTIC` and that headings, a cite line and evidence are all present. Determinism: two tests classify 50 times and compare. No model calls: `test_style_classification_reaches_no_model` greps the module source. |
 | Goal `ac4` — `scrub_docx_fixture.py` removes `docProps` author fields, comments, `people.xml`, custom XML and tracked-change authors and replaces names/team codes from a coach-supplied list; its tests prove a seeded name no longer appears anywhere in the output package | **PASS** | `uv run pytest tests/scripts/test_scrub_docx_fixture.py` → `23 passed`. `test_seeded_name_and_team_code_appear_nowhere_in_the_scrubbed_package` searches every part of the output three ways — raw bytes as text, XML tags stripped and whitespace collapsed, and the part names — and a companion test proves the input really did contain the name, so the first cannot pass vacuously. |
 | Goal `ac5` — `docs/data/debate-file-style-survey.md` records aggregate style-name frequencies and the share of files per template family across the hsld26 snapshots and camp files, with no file names, schools or team codes | **PASS** | [`docs/data/debate-file-style-survey.md`](../data/debate-file-style-survey.md), 2,066 files: caselist 1,582, camp 110, team 374. Families: verbatim 23%, cardmirror 63%, wiki-converted 3%, other-heuristic 11%. Style tables give per-style file counts and reference counts; a style id is named only if it is published vocabulary or Word's de-duplication of one (see Decisions). Checked by hand for names after generation: `grep -ciE "maggie\|jordan\|tashma\|alex"` → `0`. |
-| Node `scrub-script` — Scrub script tests pass | **PASS** | `uv run pytest tests/scripts/test_scrub_docx_fixture.py` → `23 passed in 1.52s`. |
+| Node `scrub-script` — Scrub script tests pass | **PASS** | `uv run pytest tests/scripts/test_scrub_docx_fixture.py` → `31 passed`. Eight of those were added after a defect found in review; see Decisions. |
 | Node `style-survey` — Style survey report committed (`contentMatch: "template family"`) | **PASS** | `docs/data/debate-file-style-survey.md` exists; `grep -c "template family"` → `1`. |
 | Node `profile-model` — Style profile model and alias resolution tests pass | **PASS** | `uv run pytest packages/debate_core/tests/evidence/test_style_profile.py` → `78 passed in 2.02s`. |
 | Node `heuristic-classifier` — Classifier tests pass | **PASS** | `uv run pytest packages/debate_core/tests/evidence/test_style_classifier.py` → `71 passed in 2.19s`. |
 | Node `fixtures-and-gates` — Style fixture manifest exists (`contentMatch: "scrubbed"`) | **PASS** | `tests/fixtures/debate_files/style_profile/MANIFEST.md` exists; `grep -c "scrubbed"` → `2`. |
-| Node `fixtures-and-gates` — Coach reviews scrubbed excerpts | **NOT RUN** | No scrubbed excerpts are committed, so there is nothing to review. Scrubbing a real file needs the coach-supplied replacement list of names and team codes, which the spec keeps outside the repository and which does not exist yet; the script refuses to run without one. The `MANIFEST.md` carries the five slots, the exact command and the two-step procedure. See Operator follow-ups. |
+| Node `fixtures-and-gates` — Coach reviews scrubbed excerpts | **NOT RUN — criterion withdrawn** | No scrubbed excerpts are committed, so there is nothing to review, and none should be: see Deviation 3. Committing one would publish another program's disclosed evidence to a public repository, which `caselist-data-use.md` prohibitions 1 and 9 forbid and which scrubbing does not cure. Confirmed by the coach on 2026-09-20. `MANIFEST.md` records the reasoning in place of the slots. |
 | Node `fixtures-and-gates` — Type check passes for `debate_core` | **PASS** | `uv run pyright packages/debate_core` → `0 errors, 0 warnings, 0 informations`. |
 | Node `fixtures-and-gates` — Import boundaries hold | **NOT RUN** | `uv run lint-imports` → `error: Failed to spawn: lint-imports / No such file or directory (os error 2)`. import-linter is not a dependency yet: it arrives with `v1-e02-t06-import-boundary-guard`, whose Goal is `Pending`. Equivalent checks run instead: `test_the_style_profile_model_imports_no_io_library` asserts `debate_core.domain.style_profile` imports nothing matching `docx`, `lxml`, `yaml`, `boto3`, `botocore`, `httpx`, `typer` or `fastapi`, and `test_style_classification_reaches_no_model` asserts the classifier's source mentions no model router or provider; both pass, and `uv run pyright packages/debate_core` is clean. See Deviations. |
 
-Whole-suite check, after the work: `uv run pytest` → **`976 passed in 16.84s`**, 99% coverage
+Whole-suite check, after the work: `uv run pytest` → **`985 passed`**, 99% coverage
 (`style_classifier.py` and `style_profile_loader.py` at 100%, `style_profile.py` at 99%).
 `uv run ruff check .` → `All checks passed!`; `uv run ruff format --check .` → `179 files already
 formatted`; `uv run scripts/validate_specs.py` → `OK: 281 files, 38 epics, 223 tasks, 20 releases`.
@@ -85,7 +89,7 @@ that `v1-e31-t03` supersedes).
 **`scripts/`** — `scrub_docx_fixture.py` (the fixture gate), `survey_docx_styles.py` (the survey)
 and `generate_style_fixtures.py` (builds the fixtures from the profile).
 
-**`tests/scripts/`** — `test_scrub_docx_fixture.py` (23 tests) and `test_survey_docx_styles.py`
+**`tests/scripts/`** — `test_scrub_docx_fixture.py` (31 tests) and `test_survey_docx_styles.py`
 (21 tests). Both synthesize their own `.docx` packages in-process; nothing real is read.
 
 **`tests/fixtures/debate_files/style_profile/`** — six synthetic `.docx` fixtures, their
@@ -116,13 +120,35 @@ in `docs/README.md`). `packages/debate_core/README.md` gains a section on the pr
    `pyright` is clean. Nothing was added to `pyproject.toml`, because the import-linter contracts
    are `v1-e02-t06`'s to design.
 
-3. **The 4-6 scrubbed excerpts are not committed, and the coach review did not happen.** The
-   `fixtures-and-gates` node's description asks for them alongside the synthetic fixtures. Producing
-   one requires the replacement list of real names and team codes, which the spec itself places
-   outside the repository and which the coach maintains; the scrub script refuses to run without
-   one, and guessing at the list is precisely the failure the gate exists to prevent. The synthetic
-   fixtures, the scrub script, the manifest rows and the procedure are all in place, so the work
-   left is the operator's. See Operator follow-ups and Follow-up work.
+3. **The 4-6 scrubbed excerpts are withdrawn, not merely outstanding.** The `fixtures-and-gates`
+   node asks for them alongside the synthetic fixtures. They should not be committed, and the
+   reason survived three attempts to find a way round it.
+
+   * **The repository is public** (`charlesclark2/debate-intelligence`).
+     [`caselist-data-use.md`](../policies/caselist-data-use.md) prohibition 1 forbids publishing
+     "the archives, the sources, the parsed cards **or any file built from them**" to a git
+     repository, and prohibition 9 forbids committing real caselist or camp files or excerpts at
+     all. Permitted use 5 already says committed evaluation fixtures are synthetic and real-corpus
+     evaluation runs "against the corpus in place".
+   * **The team's own files are not a separate category.** This was the fallback — the team's work
+     product rather than someone else's disclosure — and it does not survive contact with how the
+     activity works. Teams read cards other teams cut and disclosed; re-cutting evidence somebody
+     has already found is not something anyone does. Measured over the team's fourteen files: eight
+     carry cite-tail cutter marks belonging to other programs' debaters (`Willie T` 46 times across
+     4 files, plus `Oliver J`, `PT`, `AD`, `TM`, `MH`, `EA`, `RP`, `AWright`) or strings shaped like
+     other schools' team codes (23 in one file, 14 in another). The remaining six carry no cite-tail
+     marks at all, which is not evidence of origin either way. There is no file that can be
+     certified as only this team's work.
+   * **Scrubbing does not cure it.** Replacing a debater's initials protects that debater. The card
+     is still another school's disclosed evidence, republished on a public repository, outside the
+     Tabroom login it sits behind.
+
+   Confirmed with the coach on 2026-09-20. `MANIFEST.md` now records this in place of the slots,
+   and the scrub script's own docstring says plainly that scrubbing makes a copy safe to work with
+   locally and does not make a real file safe to commit. **Recommended spec amendment:** drop the
+   scrubbed excerpts and the coach-review criterion from this node, and from `v1-e31-t03`'s `ac6`,
+   which asks for 8-10 of the same thing. Real-file coverage belongs to `v1-e31-t05-parser-eval`,
+   in place, over all 2,066 files — stronger evidence than six hand-picked ones.
 
 4. **`StyleProfile` was not added to `EXPORTED_MODELS`.** The published JSON Schemas are the
    contract the web client and the V2 API read, and they carry entities. The profile is
@@ -171,6 +197,17 @@ in `docs/README.md`). `packages/debate_core/README.md` gains a section on the pr
   only the `w:t` nodes a match actually touches, so every run outside the match keeps its
   formatting, which is the whole value of a style fixture.
 
+* **The scrub script had a matching defect, found in review and fixed.** Replacement was an
+  unanchored case-insensitive substring match. That is safe for a full name and dangerous for a
+  cutter mark: real teams sign cites with two letters, and `AD`, `PT`, `EA`, `TM` and `RP` are all
+  real marks in this corpus. Unanchored, `AD` rewrites the inside of `ADVANTAGE`, `PT` of
+  `CAPTURE`, `EA` of `TEAM` — silently, inside quoted evidence, which is worse than any privacy
+  problem the script solves. Replacement is now anchored so it can never begin or end inside a
+  word. Verification deliberately is **not**: for a string long enough to be unmistakable it still
+  looks anywhere, including inside the bytes of an embedded image, where there are no word
+  boundaries to anchor to. Eight regression tests cover both halves, including the case from a real
+  file where `Charlie C.` is a cutter mark and `Charlie Kirk` is a person named in the quotation.
+
 * **The scrub script was smoke-run against a real file**, a 383-paragraph team file, with output in
   the session scratchpad and not in the repository. It dropped three `customXml` parts, blanked
   five document properties, passed its own verification, and the result reads back cleanly with
@@ -210,53 +247,33 @@ the snapshots are cumulative, so surveying all three counts most files three tim
 file carries every style id, including the ones the report withholds — it stays outside the
 repository.
 
-**2. Write the fixture replacement list.** This is the input everything below waits on. It names
-real students, so it lives outside the repository and is never committed:
+**2. Nothing else.** The fixture replacement list and the scrubbed excerpts that earlier drafts of
+this report asked for are withdrawn — see Deviation 3. There is no scrubbing for the operator to
+do and no list to write.
 
-```bash
-mkdir -p ~/.debate-intelligence
-$EDITOR ~/.debate-intelligence/fixture-replacements.yaml
-```
+**3. Nothing to change in GitHub or AWS for this task.** One thing worth knowing rather than doing:
+the repository is public, which is what makes Deviation 3 binding. If it ever goes private that
+changes the risk but not the policy, and the policy is the thing that would have to be amended.
 
-```yaml
-version: 1
-replacements:
-  - find: <a real first and last name>
-    replace: <an invented one>
-  - find: <a team code>
-    replace: <an invented one>
-```
-
-The script refuses a list whose replacement text still matches another entry, and refuses to write
-any output in which a listed string survives.
-
-**3. Scrub and review the 4-6 excerpts** (a few minutes each, mostly your reading time)
-
-For each of the five slots in
-[`tests/fixtures/debate_files/style_profile/MANIFEST.md`](../../tests/fixtures/debate_files/style_profile/MANIFEST.md):
-
-```bash
-uv run python scripts/scrub_docx_fixture.py "<source>.docx" \
-    --output tests/fixtures/debate_files/style_profile/<descriptive-name>.docx \
-    --replacements ~/.debate-intelligence/fixture-replacements.yaml
-```
-
-Keep each excerpt to a few cards, not a whole file. Then open each one in Word and confirm no name,
-team code or authorship metadata remains and that the formatting looks like a real file. Fill in
-the manifest row with the scrub date and your confirmation, and commit the `.docx` and the row
-together. This is the node's `Coach reviews scrubbed excerpts` criterion.
-
-**4. Nothing to change in GitHub or AWS for this task.**
 
 ## Follow-up work
 
-* **The scrubbed excerpts may belong in `v1-e31-t03-debate-docx-parser` rather than here.** That
-  task's `ac6` already asks for 8-10 scrubbed structural fixtures from the same categories, drawn
-  from the same files, needing the same replacement list and the same coach review. Curating them
-  once, there, would be cheaper than curating five here and eight more a task later — and it would
-  let this task close on its synthetic fixtures, which is what its own tests need. A spec amendment
-  moving the excerpts (and the coach-review criterion) to `t03` is the PM's call; if you would
-  rather keep them here, Operator follow-up 3 is the whole job.
+* **`v1-e31-t03`'s `ac6` needs the same amendment this task did.** It asks for 8-10 scrubbed
+  structural fixtures from team, caselist, wiki-converted and camp files. Every argument in
+  Deviation 3 applies to it unchanged, and it will block in exactly the same place. Better to amend
+  it now than to have a session discover it again. `v1-e31-t05-parser-eval` should be checked too:
+  its labelled set is fine as long as the labels live in the repository and the files it labels do
+  not.
+
+* **Cards travel between teams, and the cite-tail cutter mark is how you can tell — which is a
+  finding for `v1-e31-t04-card-fingerprints`.** That task was specced around "the same card
+  disclosed by many teams"; the corpus shows the same card also travels *into* team files, marked
+  with the initials of whoever originally cut it. A mark like `Willie T` at the end of a cite is a
+  real provenance signal about which program a card came from, sitting in the text the parser
+  already reads. Worth recording on a `ParsedCard` rather than discarding — it is a cheap
+  cross-team occurrence link. It is also personal data about a student at another school, so it
+  belongs under the same minimization rules as a team code, never expanded or re-identified
+  (`caselist-data-use.md` prohibition 6).
 
 * **`scripts/compare_docx_roundtrip.py` keeps its own style tables.** It was written for the t01
   spike, before the profile existed, and its `PARAGRAPH_STYLE_UNITS`, `CITE_STYLES` and

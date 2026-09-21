@@ -583,3 +583,65 @@ def test_the_command_line_reports_a_missing_replacement_list_and_exits_non_zero(
     )
     assert exit_code == 1
     assert "replacement list not found" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------------------------
+# A replacement may not begin or end inside a word
+# --------------------------------------------------------------------------------------------
+#
+# Cutter marks — the initials a debater puts at the end of a cite — are routinely two letters.
+# `PT`, `AD`, `TM`, `EA` and `RP` are all real ones from a real team's files. An unanchored match
+# rewrites them inside ordinary words, silently, in quoted evidence.
+
+
+@pytest.mark.parametrize(
+    ("find", "text", "expected"),
+    [
+        ("AD", "THE ADVANTAGE IS UNIQUE; AD", "THE ADVANTAGE IS UNIQUE; <cutter>"),
+        ("PT", "they will CAPTURE the market; PT", "they will CAPTURE the market; <cutter>"),
+        ("EA", "the other TEAM conceded; EA", "the other TEAM conceded; <cutter>"),
+        ("TM", "the ITEM was priced; TM", "the ITEM was priced; <cutter>"),
+        ("RP", "a SHARP decline followed; RP", "a SHARP decline followed; <cutter>"),
+    ],
+)
+def test_a_two_letter_cutter_mark_is_not_matched_inside_a_word(find: str, text: str, expected: str) -> None:
+    assert scrub.Replacement(find=find, replace="<cutter>").pattern.sub("<cutter>", text) == expected
+
+
+def test_a_cutter_mark_is_replaced_without_touching_a_person_named_in_the_evidence() -> None:
+    """The case from a real file: `Charlie C.` cut the card; `Charlie Kirk` is in the quotation."""
+    replacement = scrub.Replacement(find="Charlie C.", replace="Rowan F.")
+    cite = "(DOA 11-06-2025); Charlie C.]"
+    evidence = "the killing of conservative activist Charlie Kirk has intensified fears"
+    assert replacement.pattern.sub(replacement.replace, cite) == "(DOA 11-06-2025); Rowan F.]"
+    assert replacement.pattern.sub(replacement.replace, evidence) == evidence
+
+
+def test_a_name_is_still_matched_when_punctuation_or_a_bracket_abuts_it() -> None:
+    replacement = scrub.Replacement(find="Willie T", replace="Devon R")
+    for text, expected in [
+        ("; Willie T]", "; Devon R]"),
+        ("(Willie T)", "(Devon R)"),
+        ("cut by Willie T.", "cut by Devon R."),
+        ("recut-Willie T", "recut-Devon R"),
+    ]:
+        assert replacement.pattern.sub(replacement.replace, text) == expected
+
+
+def test_a_name_that_is_a_prefix_of_a_longer_word_is_left_alone() -> None:
+    replacement = scrub.Replacement(find="Wood", replace="<X>")
+    assert replacement.pattern.sub("<X>", "Woodward argues that") == "Woodward argues that"
+    assert replacement.pattern.sub("<X>", "Wood 24 writes") == "<X> 24 writes"
+
+
+def test_verification_looks_harder_than_replacement_does() -> None:
+    """A full name inside a run of binary bytes has survived; `AD` inside `ADVANTAGE` has not."""
+    name = scrub.Replacement(find="Jamie Okafor", replace="Rowan Fields")
+    assert name.is_unambiguous is True
+    assert name.survivor_pattern.search("tEXtAuthorJamie Okafor\x00") is not None
+    assert name.pattern.search("tEXtAuthorJamie Okafor\x00") is None, "but it is never rewritten"
+
+    initials = scrub.Replacement(find="AD", replace="<cutter>")
+    assert initials.is_unambiguous is False
+    assert initials.survivor_pattern.search("THE ADVANTAGE IS UNIQUE") is None
+    assert initials.survivor_pattern.search("cut by AD") is not None

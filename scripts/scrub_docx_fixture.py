@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """Turn a real debate `.docx` into a fixture that is safe to commit.
 
-Team, caselist and camp files carry the names of real high-school students in three places at
-once: the visible text ("Harker-JeCa-Aff"), the authorship metadata Word writes into every save
+Debate files carry the names of real high-school students in three places at once: the visible
+text (a cite-tail cutter mark, a team code), the authorship metadata Word writes into every save
 (`docProps/core.xml`, `<w:ins w:author=...>`, `word/people.xml`), and the comment threads a coach
-left behind. A file is only allowed into `tests/fixtures/` once all three are gone, so this script
-is the one gate every fixture in this repository passes through.
+left behind. This script removes all three.
+
+**Scrubbing is necessary and not sufficient.** It is what makes a copy safe to keep and work with
+on the operator's machine. It does **not** make a real debate file safe to commit: teams read cards
+other teams cut and disclosed, so essentially every real file contains another program's evidence,
+and `docs/policies/caselist-data-use.md` prohibitions 1 and 9 forbid publishing those — scrubbed or
+not — to a git repository. Committed fixtures are synthetic; see
+`tests/fixtures/debate_files/style_profile/MANIFEST.md`. If a real file is ever proposed for
+committing, this script is the gate it passes through *after* the policy question is settled, not
+instead of it.
 
 What it does, in order:
 
@@ -149,12 +157,45 @@ class Replacement:
 
     @property
     def pattern(self) -> re.Pattern[str]:
-        """Case-insensitive literal match, with any run of whitespace matching any other.
+        """Case-insensitive literal match, anchored so it cannot begin or end inside a word.
 
-        Word splits a name across runs and sometimes across a non-breaking space; the whitespace
-        relaxation is what makes `Jamie  Okafor` and `Jamie Okafor` the same string to this
-        script.
+        Two relaxations and one restriction, each of which a real file made necessary.
+
+        * **Any run of whitespace matches any other.** Word splits a name across runs and
+          sometimes across a non-breaking space, so both spellings are one string here.
+        * **Case is ignored**, because a cutter mark is typed by hand and a team code gets
+          shouted in a header.
+        * **The match cannot begin or end inside a word.** Cutter marks are routinely two
+          letters - `PT`, `AD`, `TM`, `EA` and `RP` are all real ones - and an unanchored `AD`
+          matches inside `ADVANTAGE`, `PT` inside `CAPTURE`, `EA` inside `TEAM`. Rewriting a word
+          inside quoted evidence is worse than any privacy problem this script solves: it is
+          silent, and it makes the card wrong.
         """
+        parts = [re.escape(part) for part in self.find.split()]
+        return re.compile(r"(?<!\w)" + r"\s+".join(parts) + r"(?!\w)", re.IGNORECASE)
+
+    @property
+    def is_unambiguous(self) -> bool:
+        """Whether this string is long enough that finding it inside a word means something.
+
+        `Jamie Okafor` inside a run of PNG bytes is a name that survived. `AD` inside `ADVANTAGE`
+        is a coincidence. The dividing line is length: several characters, or more than one word.
+        """
+        return len(self.find) >= 5 or " " in self.find
+
+    @property
+    def survivor_pattern(self) -> re.Pattern[str]:
+        """The pattern verification uses, which is deliberately not the one replacement uses.
+
+        Replacement is anchored to word boundaries so it can never rewrite the inside of a word.
+        Verification has the opposite job — proving nothing survived — so for a string long enough
+        to be unmistakable it looks *anywhere*, including inside a word and inside the bytes of an
+        embedded image, where there are no word boundaries to anchor to. A short mark like `AD`
+        keeps the anchored pattern, because otherwise every card mentioning an advantage would
+        fail the scrub and no fixture could ever be produced.
+        """
+        if not self.is_unambiguous:
+            return self.pattern
         parts = [re.escape(part) for part in self.find.split()]
         return re.compile(r"\s+".join(parts), re.IGNORECASE)
 
@@ -173,8 +214,12 @@ class ReplacementList:
         return text
 
     def survivors(self, text: str) -> list[str]:
-        """Return the `find` strings still present in `text`, in list order."""
-        return [item.find for item in self.replacements if item.pattern.search(text)]
+        """Return the `find` strings still present in `text`, in list order.
+
+        Uses each entry's :attr:`Replacement.survivor_pattern`, which is broader than the one
+        used to replace — see that property for why the two differ.
+        """
+        return [item.find for item in self.replacements if item.survivor_pattern.search(text)]
 
 
 def load_replacement_list(path: Path) -> ReplacementList:

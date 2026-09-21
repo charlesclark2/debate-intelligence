@@ -13,7 +13,7 @@ repository.
 | | |
 |---|---|
 | Files surveyed | 2066 |
-| Run on | 2026-09-20 |
+| Run on | 2026-09-21 |
 | Reporting threshold | a style is named only if it appears in 3 or more files |
 | Corpus | the hsld26-0915 caselist snapshot, camp files, and one team's files across the 2024-25, 2025-26 and 2026-27 seasons |
 
@@ -27,6 +27,10 @@ fragment in the middle is occasionally the first name of whoever created it.
 Each file lands in exactly one template family, decided from its style *references* rather
 than its style *definitions*: most debate files define the whole Verbatim style set whether
 they use it or not.
+
+A category name says which corpus a file came from, not who cut the cards in it. Teams
+read cards other teams cut and disclosed, so a file in the `team` corpus routinely holds
+evidence from elsewhere; the split below is about provenance of the *file*, not the cards.
 
 `cardmirror` files are Verbatim files that also carry CardMirror's `pmd-heading-` bookmark
 ids, so they have been through that editor at least once. `wiki-converted` files define the

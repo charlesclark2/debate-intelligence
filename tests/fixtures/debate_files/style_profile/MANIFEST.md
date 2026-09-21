@@ -36,39 +36,38 @@ in any of them, so none of them has been scrubbed and none needs to be.
 | `wiki-converted-cite-entries.docx` | An opencaselist wiki conversion | 4 | The signature the survey found in 58 files: the whole Verbatim style set defined, not one paragraph referencing it. Cites carry an ellipsis between a card's first and last words. |
 | `ordinary-document-with-outline-levels.docx` | A document that is not a debate file | 3 | The negative fixture. A syllabus that uses outline levels must not be promoted to pockets, hats, blocks or tags — this is why the heuristics have size and weight guards. |
 
-## Scrubbed excerpts from real files
+## Why there are no excerpts of real files here
 
-Four to six short excerpts of real team, caselist and camp files, so the fixtures above are
-checked against formatting habits nobody invented. **None are committed yet**; the rows below are
-the slots, and each one is filled in when its file lands.
+The task spec asked for four to six scrubbed excerpts of real team, caselist and camp files. There
+are none, and there should not be. Two things rule them out, and the second one has no workaround.
 
-Every excerpt goes through
-[`scripts/scrub_docx_fixture.py`](../../../../scripts/scrub_docx_fixture.py) first, which removes
-comments, `people.xml`, custom XML, `docProps` authorship and tracked-change authors, and replaces
-names and team codes from a list the coach keeps outside this repository. The script refuses to
-write a file in which any listed string survives. Then Charlie opens each one in Word and confirms
-by eye that no name, team code or authorship metadata remains and that the formatting is what a
-real file looks like. Both steps, in that order, before a file is committed.
+**Redistribution.** [`docs/policies/caselist-data-use.md`](../../../../docs/policies/caselist-data-use.md)
+prohibition 1 forbids publishing "the archives, the sources, the parsed cards **or any file built
+from them**" to a git repository, and prohibition 9 forbids committing real caselist or camp files
+or excerpts at all. This repository is public.
 
-| File | Category | Season | Scrubbed on | Coach confirmed | Why this excerpt |
-|---|---|---|---|---|---|
-| _(pending)_ | team, Verbatim | 2026-27 | — | — | A team file cut in Verbatim: the alias list checked against a template nobody designed for a test. |
-| _(pending)_ | caselist, Verbatim | hsld26 | — | — | A disclosed file that has been through CardMirror, which is 78% of the caselist corpus. |
-| _(pending)_ | caselist, non-Verbatim | hsld26 | — | — | A disclosure with no Verbatim style references, for the outline-level and direct-formatting rules. |
-| _(pending)_ | caselist, wiki-converted | hsld26 | — | — | A wiki conversion with abbreviated cite entries. |
-| _(pending)_ | camp | 2026 | — | — | A camp file, which is where a team's template habits spread from. |
+**There is no such thing as a file that is only one team's work.** Teams routinely read cards other
+teams cut and disclosed — that is what open-source debate is, and a team that refused to would just
+be re-cutting evidence somebody already found. It shows up plainly in the corpus: of fourteen of
+this team's own files, eight carry cite-tail cutter marks belonging to other programs' debaters or
+strings shaped like other schools' team codes, and the remaining six carry no marks at all, which
+proves nothing either way. So "our own files" is not a category that can be separated out and
+committed. Scrubbing does not rescue it: replacing a debater's initials protects that debater, but
+the card is still another school's disclosed evidence, republished outside the login it sits behind.
 
-### Adding one
+**What does the job instead.** The synthetic fixtures above cover all four template families, which
+is what CI needs. Real-file coverage is measured where the policy already puts it —
+[`v1-e31-t05-parser-eval`](../../../../plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml)
+runs against the whole corpus **in place** on the operator's machine, which is both permitted
+(permitted use 5) and stronger evidence than six hand-picked files would have been.
 
-```bash
-uv run python scripts/scrub_docx_fixture.py <source>.docx \
-    --output tests/fixtures/debate_files/style_profile/<descriptive-name>.docx \
-    --replacements ~/.debate-intelligence/fixture-replacements.yaml
-```
+## The scrub script still matters
 
-Keep the excerpt short — a few cards, not a whole file. Open the result in Word, check it, then
-add its row above with the scrub date and your confirmation, and commit the two together.
+[`scripts/scrub_docx_fixture.py`](../../../../scripts/scrub_docx_fixture.py) is not obsolete. It
+strips authorship metadata, comments, `people.xml`, custom XML and tracked-change authors, and
+replaces names and team codes from a list kept outside this repository. Use it for any scrubbed
+copy that stays on the operator's machine, and it remains the gate if a file ever is proposed for
+committing — which needs the policy changed first, not a scrub.
 
-Real files that have **not** been through both steps do not belong in this repository at all, not
-in a branch and not in a stash. The replacement list is not committed either: it names real
-students.
+**Nothing derived from a real debate file is committed here without that policy question being
+settled first.** Not in a branch, not in a stash, not "temporarily".

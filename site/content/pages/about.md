@@ -6,8 +6,10 @@ description: >-
 navLabel: About
 navOrder: 10
 lead: >-
-  The Whitefish Bay High School debate team competes in three events. Students research a question,
-  prepare the case for both sides of it, and argue it in front of a judge.
+  Whitefish Bay High School has competed in debate for decades. Students take a question with no
+  easy answer, research it for weeks, write the case for both sides of it, and then defend
+  whichever side they are handed in front of a judge who decides at the end of the round. The
+  question changes every few months. The work does not.
 atAGlance:
   title: The team at a glance
   items:
@@ -26,8 +28,8 @@ atAGlance:
         the National Catholic Forensic League.
 ---
 
-What each event looks like is explained on [what the events are](/events/). The program has been
-running for several decades.
+What each event looks like, and how a round actually runs, is explained on
+[what the events are](/events/).
 
 ## Where we compete
 
@@ -51,9 +53,8 @@ Tournament of Champions circuit.
 
 ## How the season runs
 
-The season starts in early October and runs through Martin Luther King Jr. weekend in January.
 Students pursuing national qualification keep going into the summer, with a much lighter travel
 schedule in the second semester.
 
-Practice is twice a week at lunch and once a week after school; the times are on
+Practice is twice a week at lunch and once a week after school; the times and the rooms are on
 [how to join](/join/).

@@ -407,7 +407,24 @@ export function parsePage(slug: string, filePath: string, source: string): Conte
     ...(frontMatter.openGraphImage ? { openGraphImage: frontMatter.openGraphImage } : {}),
     draft: frontMatter.draft ?? false,
     html: rendered,
-    guardedHtml: [...frontMatterCopy.map((text) => `<p>${text}</p>`), rendered].join('\n'),
+    // What the page publishes, as the page publishes it: the lead and the labels as the plain
+    // text the route module prints, each at-a-glance value as the HTML it renders to, and the
+    // body. The values go in rendered rather than raw so that an address inside one is the
+    // mailto link a visitor actually gets, which is what the guard and tests/contact.test.ts are
+    // really asking about.
+    guardedHtml: [
+      ...(frontMatter.lead ? [`<p>${frontMatter.lead}</p>`] : []),
+      ...(atAGlance
+        ? [
+            `<p>${atAGlance.title}</p>`,
+            ...atAGlance.items.flatMap((item) => [
+              `<p>${item.label}</p>`,
+              `<p>${item.valueHtml}</p>`,
+            ]),
+          ]
+        : []),
+      rendered,
+    ].join('\n'),
     placeholders: findPlaceholders(allCopy),
   }
 }

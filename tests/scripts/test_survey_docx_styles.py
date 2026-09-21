@@ -321,11 +321,11 @@ def test_the_report_carries_no_file_names_or_paths(corpus: Path) -> None:
 # --------------------------------------------------------------------------------------------
 
 
-def test_the_command_line_writes_the_report_and_the_json_aggregate(
+def test_the_command_line_writes_the_report_and_the_aggregate(
     corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     report_path = tmp_path / "report" / "debate-file-style-survey.md"
-    json_path = tmp_path / "report" / "survey.json"
+    aggregate_path = tmp_path / "report" / "survey.full.json"
 
     exit_code = survey.main(
         [
@@ -333,8 +333,8 @@ def test_the_command_line_writes_the_report_and_the_json_aggregate(
             str(corpus),
             "--output",
             str(report_path),
-            "--json",
-            str(json_path),
+            "--aggregate",
+            str(aggregate_path),
             "--corpus-description",
             "four synthetic files",
         ]
@@ -343,12 +343,74 @@ def test_the_command_line_writes_the_report_and_the_json_aggregate(
     assert exit_code == 0
     assert "template family" in report_path.read_text(encoding="utf-8")
     assert "four synthetic files" in report_path.read_text(encoding="utf-8")
-    aggregate = json.loads(json_path.read_text(encoding="utf-8"))
+    aggregate = json.loads(aggregate_path.read_text(encoding="utf-8"))
     assert aggregate["total_files"] == 4
     assert aggregate["cardmirror_files"] == 1
     captured = capsys.readouterr()
     assert "surveyed 4 files" in captured.out
+    assert "full unredacted aggregate ->" in captured.out
     assert "verbatim.docx" not in captured.out
+
+
+def test_the_aggregate_holds_the_style_ids_the_report_withholds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The point of the aggregate: the report is a summary, and this is what it summarises."""
+    root = _corpus_with_custom_style(tmp_path / "corpus", 5)
+    report_path = tmp_path / "report.md"
+    aggregate_path = tmp_path / "report.full.json"
+
+    survey.main(
+        [
+            "--input",
+            str(root),
+            "--output",
+            str(report_path),
+            "--aggregate",
+            str(aggregate_path),
+            "--min-files",
+            "2",
+        ]
+    )
+    capsys.readouterr()
+
+    report = report_path.read_text(encoding="utf-8")
+    aggregate = json.loads(aggregate_path.read_text(encoding="utf-8"))
+
+    assert "NorthsideTag" not in report, "the committed report withholds it"
+    assert aggregate["paragraph_style_files"]["NorthsideTag"] == 5, "the aggregate does not"
+    assert aggregate["style_names"]["NorthsideTag"] == {"Northside Tag": 5}
+    assert aggregate["based_on_links"]["NorthsideTag<-Heading4"] == 5
+    assert aggregate["report_minimum_files"] == 2
+
+
+def test_a_style_below_the_reporting_threshold_is_still_in_the_aggregate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A new alias may show up in one file first; the aggregate is where it is visible."""
+    root = _corpus_with_custom_style(tmp_path / "corpus", 1)
+    aggregate_path = tmp_path / "report.full.json"
+    survey.main(
+        [
+            "--input",
+            str(root),
+            "--output",
+            str(tmp_path / "report.md"),
+            "--aggregate",
+            str(aggregate_path),
+            "--min-files",
+            "3",
+        ]
+    )
+    capsys.readouterr()
+    aggregate = json.loads(aggregate_path.read_text(encoding="utf-8"))
+    assert aggregate["paragraph_style_files"]["NorthsideTag"] == 1
+
+
+def test_the_default_aggregate_path_is_gitignored() -> None:
+    """If this ever stops being true, every run writes a committable file full of style ids."""
+    ignored = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert str(survey.DEFAULT_AGGREGATE_PATH) in ignored.splitlines()
 
 
 def test_the_command_line_reports_an_empty_corpus(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

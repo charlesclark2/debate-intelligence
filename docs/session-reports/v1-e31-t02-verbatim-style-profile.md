@@ -167,9 +167,13 @@ in `docs/README.md`). `packages/debate_core/README.md` gains a section on the pr
   `TashmaHeading1` into the committed report — real first names, in 12 to 23 files each, so a
   k-anonymity threshold alone did not catch them. Style ids a person chose are now counted and not
   named, over-long Word-concatenated ids are elided in the middle, and the full list stays in the
-  uncommitted `--json` aggregate for the operator. The cost is real: `UnderlineFIXEDChar` and
-  `StyleBoldUnderline` are useful aliases the report no longer surfaces on its own. They reached
-  the profile through the JSON in this session, and the refresh instructions say to read it.
+  full aggregate, which — per PM ruling 6 — is now written on **every** run to
+  `docs/data/debate-file-style-survey.full.json`, gitignored, beside the committed report. The
+  report is a summary of that file: 47 paragraph style ids and 75 character ids are in the
+  aggregate, 24 of the paragraph ids are withheld from the report, and the aggregate also carries
+  every display name and all 6,127 `basedOn` links. That is what stops `UnderlineFIXEDChar` and
+  `StyleBoldUnderline` — real underline aliases the report does not name — from being lost next
+  season, without relying on anyone having passed an optional flag.
 
 * **The writer style definitions were measured from 400 files, not written from memory.** Heading 2
   carries a **double** underline in 370 of them — not something worth guessing at, since single
@@ -237,15 +241,17 @@ uv run python scripts/survey_docx_styles.py \
   --input "team=$HOME/Documents/debate/2025-2026" \
   --min-files 3 \
   --corpus-description "the hsld26-0915 caselist snapshot, camp files, and one team's files across the 2024-25, 2025-26 and 2026-27 seasons" \
-  --output docs/data/debate-file-style-survey.md \
-  --json ~/style-survey-full.json
+  --output docs/data/debate-file-style-survey.md
 ```
 
 Success looks like `surveyed 2066 files -> docs/data/debate-file-style-survey.md` and `git diff`
 showing no change to the committed report. Point `caselist=` at the newest hsld26 snapshot only:
-the snapshots are cumulative, so surveying all three counts most files three times. The `--json`
-file carries every style id, including the ones the report withholds — it stays outside the
-repository.
+the snapshots are cumulative, so surveying all three counts most files three times.
+
+The run also writes `docs/data/debate-file-style-survey.full.json` — always, and gitignored —
+which holds every style id including the ones the report withholds. **Read it after a refresh:**
+a style id that has spread to enough files to matter belongs in the profile's alias list, and the
+aggregate is the only place it appears.
 
 **2. Nothing else.** The fixture replacement list and the scrubbed excerpts that earlier drafts of
 this report asked for are withdrawn — see Deviation 3. There is no scrubbing for the operator to
@@ -291,18 +297,65 @@ changes the risk but not the policy, and the policy is the thing that would have
   `debate_core.evidence` (no `docx`, no `lxml`, no provider SDK) as well as `domain` and
   `application`.
 
-* **The survey script's `--json` aggregate is where new aliases will be found.** Nothing schedules
-  a re-read of it. A sensible trigger is the next hsld26 snapshot backfill
-  (`v1-e30-t06-initial-backfill`): re-run the survey, diff the JSON, and add any alias that has
-  spread to enough files to matter.
+* **The full aggregate is where new aliases will be found, and nothing yet schedules a re-read.**
+  PM ruling 6 made it unconditional and gitignored, so it is always on disk beside the report
+  rather than behind a flag someone has to remember. What is still manual is looking at it. A
+  sensible trigger is the next hsld26 snapshot backfill (`v1-e30-t06-initial-backfill`): re-run the
+  survey, diff the JSON against the previous run, and add any alias that has spread to enough files
+  to matter. Worth a line in that task's spec rather than trusting to memory.
 
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
-**Notes:**
+**Rulings, in the order you asked them:**
+
+1. **Withdraw the scrubbed excerpts. Agreed, and the reasoning is the important part.** Measuring
+   that 8 of the team's 14 files carry other programs' cutter marks is what settles it: "our own work
+   product" is not a safe category in an activity where cards travel. Prohibitions 1, 9 and 10 apply
+   to team files as much as to caselist ones, and scrubbing a debater's initials does not change
+   whose evidence it is. The node now takes synthetic fixtures, one per measured template family, and
+   the coach-review criterion is withdrawn rather than failed. The scrub script still ships for
+   operator-side use.
+2. **v1-e31-t03 ac6 amended the same way, and v1-e31-t05 with it.** t03 takes synthetic structural
+   fixtures; t05 keeps labels and scores in the repository (keyed by sha256, paragraph index and text
+   hash) and leaves the files on your machine. Ruling now, as you suggested, rather than blocking a
+   session later.
+3. **lint-imports NOT RUN: accepted**, on the v1-e30-t02 precedent, with the substitutes standing.
+   This is the fourth task to carry it, so v1-e02-t06 moves up the queue, and its contracts should
+   cover debate_core.evidence when it lands.
+4. **"Operator-run" is a runtime-and-consequence judgement, not a label, and you judged it right.**
+   A read-only scan of files Charlie already has, finishing in 21 seconds, is not a hand-off. I have
+   written the rule into docs/process/working-agreements.md so it is not a judgement call next time:
+   a hand-off is (a) over about two minutes, (b) a change outside the worktree, or (c) something
+   needing credentials or approval. The node's wording is amended to match.
+5. **StyleProfile stays out of EXPORTED_MODELS.** The published schemas are the contract the web
+   client and V2 API read; the profile is configuration this package loads for itself. Export it if
+   and when a client needs it.
+6. **The redaction rule is right, and the manual step is not.** Naming only published vocabulary is
+   correct; relying on someone remembering to read an uncommitted --json aggregate is how
+   UnderlineFIXEDChar gets lost next season. **One commit before you open the PR:** make
+   survey_docx_styles.py always write the full unredacted aggregate to a gitignored path (e.g.
+   docs/data/.style-survey-full.json, added to .gitignore), and have the refresh instructions cite
+   that file rather than a flag. The spec is amended to require it.
+7. **PARTIAL session with a Succeeded Goal: confirmed.** All five Goal criteria pass; the gaps are at
+   node level, one withdrawn and one deferred to a task that does not exist yet. That is exactly the
+   combination the report's status field is for.
+
+**Two findings worth more than the rulings:**
+
+- The scrub-script defect is an evidence-integrity near-miss caught in the right place: an unanchored
+  two-letter replacement rewriting the inside of ADVANTAGE, CAPTURE and TEAM inside quoted evidence
+  would have been very hard to find later. Anchored replacement with unanchored verification is the
+  right asymmetry, and the Charlie C. / Charlie Kirk regression test is the one that proves it.
+- 63% of the corpus, and 78% of caselist files, carries CardMirror bookmarks. The editor ADR-0014
+  made a compatibility target is what most disclosed files have already passed through, so its dual
+  underline encoding is the common case rather than an edge. That is a direct input to v1-e33-t02 and
+  strengthens ADR-0014.
+
+Cutter marks are now recorded in v1-e31-t04's spec as opaque provenance under the same minimization
+rules as a team code. All spec amendments are on branch `specs/style-profile-rulings`.

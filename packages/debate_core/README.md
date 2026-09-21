@@ -205,8 +205,8 @@ from debate_core.evidence import load_style_profile, resolve_based_on_chain
 
 profile = load_style_profile()
 match = profile.resolve_paragraph_style("Heading411", "Heading 411", ("Heading1", "Normal"))
-match.unit          # StructuralUnit.TAG
-match.rule_id       # 'verbatim-deduplicated:Heading411->Heading4'
+match.unit  # StructuralUnit.TAG
+match.rule_id  # 'verbatim-deduplicated:Heading411->Heading4'
 match.match_source  # StyleMatchSource.VERBATIM_ALIAS
 ```
 

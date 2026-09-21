@@ -51,8 +51,11 @@ own ids, Word's built-in ids, or the ids the Google Docs and wiki-to-docx conver
 or is one of those with Word's numeric de-duplication suffix on it (`Heading4` →
 `Heading411`, `Emphasis` → `Emphasis1`). Every other id is counted and not named, because a
 style id a person chose is a place a person's name ends up; the corpus this survey was
-first run against contains styles named after individual debaters. The operator sees the
-full list in the `--json` aggregate, which is not committed.
+first run against contains styles named after individual debaters.
+
+**Every id is in the full aggregate**, written beside this file on every run at
+`docs/data/debate-file-style-survey.full.json` and gitignored. That is the file to read
+when looking for an alias worth adding to the style profile; this one is its summary.
 
 ## Paragraph styles referenced in the body
 
@@ -207,6 +210,9 @@ bare path takes its categories from its immediate subdirectories, the layout
 `caselist` at the newest snapshot only: successive hsld26 snapshots are cumulative, so
 surveying all of them counts most files several times.
 
-The `--json` aggregate carries every style id, including the ones this report withholds.
-It stays outside the repository. The command overwrites this file; read the diff before
-committing it, because a style id is the one field here a person could have put a name in.
+The command overwrites this file, and writes the full unredacted aggregate beside it at
+`docs/data/debate-file-style-survey.full.json` — always, and gitignored, so it is there to
+read and cannot be committed. **Read the aggregate** after a refresh: a style id that has
+spread to enough files to matter belongs in the profile's alias list, and the aggregate is
+the only place it appears. Read the diff of this file too, because a style id is the one
+field here a person could have put a name in.

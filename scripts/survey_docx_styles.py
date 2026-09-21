@@ -20,6 +20,11 @@ Two privacy guards back that up:
   counted in an "appears in one file only" bucket instead.
 * File names, directory names below the category level and paths never reach the output.
 
+**The full aggregate is always written**, to `docs/data/debate-file-style-survey.full.json`, which
+is gitignored. It holds every style id, including the ones the report withholds, and it is what
+you read to find a new alias worth adding to the profile. The report is a summary of that file;
+keeping the file beside it is what makes the summary checkable rather than merely trusted.
+
 ## Template families
 
 Each file is placed in exactly one family, from its style *references* rather than its style
@@ -70,6 +75,7 @@ from lxml import etree
 
 __all__ = [
     "CARDMIRROR_BOOKMARK_PREFIX",
+    "DEFAULT_AGGREGATE_PATH",
     "FileStyleUsage",
     "StyleSurvey",
     "SurveyError",
@@ -190,6 +196,16 @@ BODY_PARTS: Final = ("word/document.xml",)
 BODY_PART_PREFIXES: Final = ("word/header", "word/footer")
 
 DEFAULT_MINIMUM_FILES: Final = 2
+
+#: Where the full, unredacted aggregate is written on every run. It sits beside the committed
+#: report so whoever refreshes one reads the other, and it is gitignored because it carries every
+#: style id the report withholds — including the ones a team named after a person. It is always
+#: written: the report is a summary of this file, and a summary nobody can check is a summary
+#: nobody should trust.
+DEFAULT_AGGREGATE_PATH: Final = Path("docs/data/debate-file-style-survey.full.json")
+
+#: Repository root, so the default aggregate path resolves the same from any working directory.
+REPOSITORY_ROOT: Final = Path(__file__).resolve().parents[1]
 
 
 class SurveyError(RuntimeError):
@@ -515,10 +531,6 @@ def _share(count: int, total: int) -> str:
     return f"{100 * count / total:.0f}%" if total else "—"
 
 
-def _above_threshold(counter: Counter[str], minimum_files: int) -> list[tuple[str, int]]:
-    return [(key, count) for key, count in counter.most_common() if count >= minimum_files]
-
-
 def _first_name(survey: StyleSurvey, style_id: str) -> str:
     """The most common display name recorded for `style_id`, or an empty string."""
     names = survey.style_names.get(style_id)
@@ -639,8 +651,11 @@ def render_report(
         "or is one of those with Word's numeric de-duplication suffix on it (`Heading4` →",
         "`Heading411`, `Emphasis` → `Emphasis1`). Every other id is counted and not named, because a",
         "style id a person chose is a place a person's name ends up; the corpus this survey was",
-        "first run against contains styles named after individual debaters. The operator sees the",
-        "full list in the `--json` aggregate, which is not committed.",
+        "first run against contains styles named after individual debaters.",
+        "",
+        "**Every id is in the full aggregate**, written beside this file on every run at",
+        "`docs/data/debate-file-style-survey.full.json` and gitignored. That is the file to read",
+        "when looking for an alias worth adding to the style profile; this one is its summary.",
         "",
         "## Paragraph styles referenced in the body",
         "",
@@ -762,25 +777,45 @@ def render_report(
         "`caselist` at the newest snapshot only: successive hsld26 snapshots are cumulative, so",
         "surveying all of them counts most files several times.",
         "",
-        "The `--json` aggregate carries every style id, including the ones this report withholds.",
-        "It stays outside the repository. The command overwrites this file; read the diff before",
-        "committing it, because a style id is the one field here a person could have put a name in.",
+        "The command overwrites this file, and writes the full unredacted aggregate beside it at",
+        "`docs/data/debate-file-style-survey.full.json` — always, and gitignored, so it is there to",
+        "read and cannot be committed. **Read the aggregate** after a refresh: a style id that has",
+        "spread to enough files to matter belongs in the profile's alias list, and the aggregate is",
+        "the only place it appears. Read the diff of this file too, because a style id is the one",
+        "field here a person could have put a name in.",
         "",
     ]
     return "\n".join(lines)
 
 
 def survey_to_json(survey: StyleSurvey, minimum_files: int) -> dict[str, object]:
-    """The same aggregate as JSON, for an operator who wants to diff two runs."""
+    """The aggregate as JSON, with **nothing** withheld.
+
+    This is the counterpart to :func:`render_report`, and the difference between them is the
+    point. The report withholds a style id that a person chose and one that falls below the
+    reporting threshold, because it is committed to a public repository. This file is gitignored,
+    so it holds every id, every display name, every `basedOn` link and every count — which is what
+    makes it the place to look when deciding whether a new alias belongs in the style profile.
+
+    `report_minimum_files` records the threshold the report beside it was rendered at, so the two
+    can be compared without guessing.
+    """
     return {
         "total_files": survey.total_files,
-        "minimum_files": minimum_files,
+        "report_minimum_files": minimum_files,
         "files_by_category": dict(survey.files_by_category),
         "families_by_category": {
             category: dict(counts) for category, counts in survey.families_by_category.items()
         },
-        "paragraph_style_files": dict(_above_threshold(survey.paragraph_style_files, minimum_files)),
-        "character_style_files": dict(_above_threshold(survey.character_style_files, minimum_files)),
+        "paragraph_style_files": dict(survey.paragraph_style_files),
+        "paragraph_style_occurrences": dict(survey.paragraph_style_occurrences),
+        "character_style_files": dict(survey.character_style_files),
+        "character_style_occurrences": dict(survey.character_style_occurrences),
+        "defined_style_files": dict(survey.defined_style_files),
+        "style_names": {style_id: dict(names) for style_id, names in survey.style_names.items() if names},
+        "based_on_links": {
+            f"{style_id}<-{based_on}": count for (style_id, based_on), count in survey.based_on_links.items()
+        },
         "outline_levels": {str(level): count for level, count in sorted(survey.outline_levels.items())},
         "highlight_colors": dict(survey.highlight_colors),
         "cardmirror_files": survey.cardmirror_files,
@@ -809,7 +844,16 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--output", type=Path, required=True, help="Markdown report to write.")
-    parser.add_argument("--json", type=Path, default=None, help="Optional JSON aggregate to write too.")
+    parser.add_argument(
+        "--aggregate",
+        type=Path,
+        default=None,
+        help=(
+            "Where to write the full unredacted JSON aggregate. Always written; defaults to "
+            f"{DEFAULT_AGGREGATE_PATH}, which is gitignored. Any path given here must stay out of "
+            "version control: the aggregate names every style id, including team-specific ones."
+        ),
+    )
     parser.add_argument(
         "--category",
         default="uncategorized",
@@ -853,13 +897,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(report + "\n" if not report.endswith("\n") else report, encoding="utf-8")
-    if arguments.json is not None:
-        arguments.json.parent.mkdir(parents=True, exist_ok=True)
-        arguments.json.write_text(
-            json.dumps(survey_to_json(survey, arguments.min_files), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+    aggregate_path = arguments.aggregate or (REPOSITORY_ROOT / DEFAULT_AGGREGATE_PATH)
+    aggregate_path.parent.mkdir(parents=True, exist_ok=True)
+    aggregate_path.write_text(
+        json.dumps(survey_to_json(survey, arguments.min_files), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     print(f"surveyed {survey.total_files} files -> {arguments.output}")
+    print(f"  full unredacted aggregate -> {aggregate_path}")
     for category in sorted(survey.files_by_category):
         families = survey.families_by_category[category]
         breakdown = ", ".join(f"{family} {families[family]}" for family in FAMILY_ORDER if families[family])

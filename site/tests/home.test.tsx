@@ -6,6 +6,7 @@ import { act } from 'react'
 import { describe, expect, it } from 'vitest'
 
 import { SiteFrame } from '@/components/SiteFrame'
+import { SourceLine } from '@/components/SourceLine'
 import HomePage from '@/app/page'
 import type { ParentSessionFact } from '@/lib/content'
 import {
@@ -172,7 +173,7 @@ describe('the October 1 parent session panel', () => {
 describe('the entry points into the site', () => {
   it('offers between three and five cards', () => {
     const { container } = renderHome()
-    const cards = container.querySelectorAll('.card-grid .card')
+    const cards = container.querySelectorAll('#start-here .card-grid .card')
     expect(cards.length).toBeGreaterThanOrEqual(3)
     expect(cards.length).toBeLessThanOrEqual(5)
     expect(cards).toHaveLength(content.entryPoints.cards.length)
@@ -198,7 +199,7 @@ describe('the entry points into the site', () => {
 
   it('announces the cards as a list, so their number is known before they are read', () => {
     const { container } = renderHome()
-    const grid = container.querySelector('.card-grid')
+    const grid = container.querySelector('#start-here .card-grid')
     expect(grid?.tagName).toBe('UL')
     expect(grid?.querySelectorAll(':scope > li')).toHaveLength(content.entryPoints.cards.length)
   })
@@ -220,6 +221,179 @@ describe('the rest of the page', () => {
       expect(screen.getByRole('heading', { level: 3, name: claim.title })).toBeDefined()
     }
   })
+})
+
+/**
+ * The academic case (v1-e36-t09 acceptance criteria 1 and 2).
+ *
+ * What published research found, for the parent whose real question on October 1 is whether a
+ * season of this is good for a student academically. It is the last band on the page, after the
+ * qualitative "what debate builds" band, and it is built from the same kit as the entry points:
+ * Section, CardGrid and one Card per claim. Every claim shows its source on the page, because a
+ * research claim about other people's children is only as good as what it rests on.
+ */
+describe('the academic case band', () => {
+  function band(): HTMLElement {
+    const section = document.getElementById('academic-case')
+    expect(section, 'no #academic-case band on the home page').not.toBeNull()
+    return section as HTMLElement
+  }
+
+  it('comes after the "what debate builds" band, as the last band on the page', () => {
+    const { container } = renderHome()
+    const ids = [...container.querySelectorAll('main > section')].map((section) => section.id)
+    expect(ids.indexOf('academic-case')).toBe(ids.indexOf('what-debate-builds') + 1)
+    expect(ids.at(-1)).toBe('academic-case')
+  })
+
+  it('is a Section with one Card per claim in a CardGrid', () => {
+    renderHome()
+    const section = band()
+    expect(section.classList.contains('section')).toBe(true)
+    expect(section.getAttribute('aria-labelledby')).toBe('academic-case-title')
+    expect(document.getElementById('academic-case-title')?.textContent).toBe(
+      content.academicCase.title,
+    )
+    const grid = section.querySelector('.card-grid')
+    expect(grid?.tagName).toBe('UL')
+    expect(grid?.querySelectorAll(':scope > li > .card')).toHaveLength(
+      content.academicCase.claims.length,
+    )
+  })
+
+  it('carries between one and five claims, which the loader also enforces', () => {
+    expect(content.academicCase.claims.length).toBeGreaterThanOrEqual(1)
+    expect(content.academicCase.claims.length).toBeLessThanOrEqual(5)
+  })
+
+  it('puts its header on the same left edge as its cards', () => {
+    renderHome()
+    expect(band().querySelector('.section__header--wide')).not.toBeNull()
+  })
+
+  it.each(content.academicCase.claims.map((claim) => [claim.title, claim] as const))(
+    '"%s" shows its body and a source line naming who, where, when and what was measured',
+    (_title, claim) => {
+      renderHome()
+      const card = within(band())
+        .getByRole('heading', { level: 3, name: claim.title })
+        .closest('.card') as HTMLElement
+      expect(card, `no card for "${claim.title}"`).not.toBeNull()
+      expect(within(card).getByText(claim.body)).toBeDefined()
+
+      const sourceLine = card.querySelector('.source-line')
+      expect(sourceLine, `"${claim.title}" has no source line`).not.toBeNull()
+      const text = sourceLine?.textContent ?? ''
+      expect(text).toContain(content.academicCase.sourceLabel)
+      expect(typeof claim.source, `"${claim.title}" still has no source`).toBe('object')
+      if (typeof claim.source !== 'string') {
+        expect(text).toContain(claim.source.authors)
+        expect(text).toContain(claim.source.publication)
+        expect(text).toContain(String(claim.source.year))
+        expect(text).toContain(claim.source.measured)
+      }
+    },
+  )
+
+  it('shows every source line after the claim it supports', () => {
+    renderHome()
+    for (const card of band().querySelectorAll('.card')) {
+      expect(card.querySelector('.card__body > :last-child')?.classList.contains('source-line')).toBe(
+        true,
+      )
+    }
+  })
+})
+
+/**
+ * The source line on its own, for the two states the shipped content does not currently use: a
+ * claim still waiting on its source, and a source that links out of the team site.
+ */
+describe('a source line', () => {
+  const measuredSource = {
+    authors: 'Fixture and Example',
+    publication: 'Journal of Fixtures',
+    year: 2024,
+    measured: 'Something measured in a fixture.',
+  }
+
+  it('shows the gap badge while the source is still the [[TBD: source]] marker', () => {
+    const { container } = render(<SourceLine label="Source" source="[[TBD: source]]" />)
+    const badge = container.querySelector('.source-line .placeholder')
+    expect(badge?.textContent).toBe('TBD')
+    expect(container.textContent).not.toContain('[[TBD')
+  })
+
+  it('says a link to the source leaves the team site', () => {
+    render(
+      <SourceLine
+        externalLinkNote="opens a site outside the team's"
+        label="Source"
+        source={{ ...measuredSource, href: 'https://example.org/study' }}
+      />,
+    )
+    const link = screen.getByRole('link')
+    expect(link.getAttribute('href')).toBe('https://example.org/study')
+    expect(link.textContent).toContain(measuredSource.publication)
+    expect(link.textContent).toContain("opens a site outside the team's")
+  })
+
+  it('shows the publication as a citation without a link when there is none', () => {
+    const { container } = render(<SourceLine label="Source" source={measuredSource} />)
+    expect(container.querySelector('a')).toBeNull()
+    expect(container.querySelector('cite')?.textContent).toBe(measuredSource.publication)
+  })
+})
+
+/**
+ * The source line is small text, so it is body grey. The muted grey and the warm accent measure
+ * under 4.5:1 on the card's panel tint and are large-text only (tokens.css). And nothing in the
+ * band can push a 390px screen sideways: no fixed width and no nowrap, so a long citation wraps.
+ */
+describe('the academic case styles', () => {
+  const sectionsCss = readFileSync(join(process.cwd(), 'src/styles/sections.css'), 'utf8')
+  const sourceLineRules = [...sectionsCss.matchAll(/(\.source-line[^{]*|#academic-case[^{]*)\{([^}]*)\}/g)]
+
+  it('styles the source line', () => {
+    expect(sourceLineRules.length).toBeGreaterThan(0)
+  })
+
+  it('paints the source line body grey', () => {
+    const base = sourceLineRules.find((rule) => rule[1]?.trim() === '.source-line')
+    expect(base?.[2]).toMatch(/(?<!-)color:\s*var\(--color-text-body\)/)
+  })
+
+  it('never paints it with a restricted colour', () => {
+    for (const rule of sourceLineRules) {
+      expect(rule[2]).not.toMatch(/--color-(?:text-muted|brand-warm)/)
+    }
+  })
+
+  it('sets no fixed width, no nowrap and no transition', () => {
+    for (const rule of sourceLineRules) {
+      expect(rule[2]).not.toMatch(/(?:^|[\s;])(?:min-)?width\s*:/)
+      expect(rule[2]).not.toMatch(/white-space\s*:\s*nowrap/)
+      expect(rule[2]).not.toMatch(/transition|animation/)
+    }
+  })
+})
+
+/**
+ * v1-e36-t09 acceptance criterion 5: a parent who presses a card lands on a heading that matches
+ * what they pressed. The loader enforces it at build time (tests/content.test.ts has the failing
+ * cases); this is the shipped content, checked against the pages it opens.
+ */
+describe('each entry-point card', () => {
+  const pagesByRoute = new Map(loadPages().map((item) => [item.route, item]))
+
+  it.each(content.entryPoints.cards.map((card) => [card.href, card] as const))(
+    '%s is labelled with the title of the page it opens',
+    (href, card) => {
+      const destination = pagesByRoute.get(href)
+      expect(destination, `${href} is not a page`).toBeDefined()
+      expect(card.title).toBe(destination?.title)
+    },
+  )
 })
 
 /**
@@ -265,6 +439,18 @@ describe('the page holds no copy of its own', () => {
     content.whatDebateBuilds.title,
     content.whatDebateBuilds.intro,
     ...content.whatDebateBuilds.claims.flatMap((claim) => [claim.title, claim.body]),
+    content.academicCase.eyebrow,
+    content.academicCase.title,
+    content.academicCase.intro,
+    content.academicCase.sourceLabel,
+    ...(content.academicCase.externalLinkNote ? [content.academicCase.externalLinkNote] : []),
+    ...content.academicCase.claims.flatMap((claim) => [
+      claim.title,
+      claim.body,
+      ...(typeof claim.source === 'string'
+        ? []
+        : [claim.source.authors, claim.source.publication, claim.source.measured]),
+    ]),
   ]
 
   it('shows more than a handful of strings, so this test is checking something', () => {

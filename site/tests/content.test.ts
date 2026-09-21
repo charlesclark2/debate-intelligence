@@ -1,11 +1,17 @@
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   ContentValidationError,
   EVENT_COMPARISON_FIELDS,
   HOME_SLUG,
+  assertNoExcludedEvidence,
+  homeContentAsPage,
+  loadGuardedContent,
+  loadHomeContent,
   loadEventsContent,
   loadFaqContent,
   loadNotFoundPage,
@@ -13,6 +19,8 @@ import {
   loadRoutedPages,
   loadSiteSettings,
 } from '@/lib/content'
+import { loadMediaConsent } from '@/lib/media-consent'
+import { PublishingPolicyError, enforcePublishingPolicy } from '@/lib/publishing-policy'
 
 const fixture = (name: string) => join(process.cwd(), 'tests/fixtures', name)
 const siteContent = join(process.cwd(), 'content')
@@ -224,5 +232,263 @@ describe('the events comparison content', () => {
     expect(() => loadEventsContent(fixture('ordering'))).toThrowError(
       /content\/events\.yaml: file is missing/,
     )
+  })
+})
+
+/**
+ * The academic case, the excluded evidence category and the entry-point labels (v1-e36-t09
+ * acceptance criteria 2 to 5).
+ *
+ * Each case copies the content this site actually ships into a temporary directory and breaks
+ * exactly one thing, so a failure here is about that one thing and not about a fixture that has
+ * drifted from the real file. Nothing leaves the machine: the copy is on local disk and is
+ * deleted after each test.
+ */
+describe('the academic case and the entry points, when content/home.yaml is wrong', () => {
+  const copies: string[] = []
+
+  afterEach(() => {
+    for (const directory of copies.splice(0)) {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  /** A copy of site/content with `edit` applied to one file in it. */
+  function contentWith(fileName: string, edit: (source: string) => string): string {
+    const directory = mkdtempSync(join(tmpdir(), 'site-content-'))
+    copies.push(directory)
+    cpSync(siteContent, directory, { recursive: true })
+    const path = join(directory, fileName)
+    const original = readFileSync(path, 'utf8')
+    const edited = edit(original)
+    expect(edited, `the edit to ${fileName} changed nothing`).not.toBe(original)
+    writeFileSync(path, edited)
+    return directory
+  }
+
+  const home = loadHomeContent(siteContent)
+  const firstClaim = home.academicCase.claims[0]!
+
+  /** Replaces the first claim's source block in home.yaml with `replacement`. */
+  function withFirstSource(replacement: string): string {
+    return contentWith('home.yaml', (source) =>
+      source.replace(/\n {6}source:\n(?: {8}.*\n)+/, replacement),
+    )
+  }
+
+  it('ships at least one claim, each with a source object', () => {
+    expect(home.academicCase.claims.length).toBeGreaterThan(0)
+    for (const claim of home.academicCase.claims) {
+      expect(typeof claim.source, claim.title).toBe('object')
+    }
+  })
+
+  it('fails, naming the file, on a claim with no source', () => {
+    const directory = withFirstSource('\n')
+    expect(() => loadHomeContent(directory)).toThrowError(ContentValidationError)
+    expect(() => loadHomeContent(directory)).toThrowError(
+      /content\/home\.yaml: invalid home content \(academicCase\.claims\.0\.source: every claim needs a source/,
+    )
+  })
+
+  it('fails on a source that leaves out what was measured', () => {
+    const directory = contentWith('home.yaml', (source) =>
+      source.replace(/\n {8}measured: >-\n(?: {10}.*\n)+/, '\n'),
+    )
+    expect(() => loadHomeContent(directory)).toThrowError(
+      /content\/home\.yaml: invalid home content \(academicCase\.claims\.0\.source: a source needs authors, publication, year and measured \(measured: /,
+    )
+  })
+
+  it('fails on a source written as text that is not the [[TBD: source]] marker', () => {
+    const directory = withFirstSource("\n      source: 'A study I remember reading'\n")
+    expect(() => loadHomeContent(directory)).toThrowError(
+      /academicCase\.claims\.0\.source: a source written as text must be the \[\[TBD: source\]\] marker/,
+    )
+  })
+
+  it('fails on a source link that is not https', () => {
+    const directory = contentWith('home.yaml', (source) =>
+      source.replace(
+        '        year: 2025\n',
+        '        year: 2025\n        href: http://example.org/study\n',
+      ),
+    )
+    expect(() => loadHomeContent(directory)).toThrowError(
+      /academicCase\.claims\.0\.source\.href: an external source link must start with "https:\/\/"/,
+    )
+  })
+
+  it('accepts an https source link once externalLinkNote is set', () => {
+    const directory = contentWith('home.yaml', (source) =>
+      source.replace(
+        '        year: 2025\n',
+        '        year: 2025\n        href: https://example.org/study\n',
+      ),
+    )
+    expect(loadHomeContent(directory).academicCase.claims[0]?.source).toMatchObject({
+      href: 'https://example.org/study',
+    })
+  })
+
+  it('fails on a source link when nothing says the link leaves the team site', () => {
+    const directory = contentWith('home.yaml', (source) =>
+      source
+        .replace(/\n {2}externalLinkNote: .*\n/, '\n')
+        .replace('        year: 2025\n', '        year: 2025\n        href: https://example.org/study\n'),
+    )
+    expect(() => loadHomeContent(directory)).toThrowError(/externalLinkNote must say/)
+  })
+
+  it('accepts a claim waiting on its source, marked [[TBD: source]]', () => {
+    const directory = withFirstSource("\n      source: '[[TBD: source]]'\n")
+    expect(loadHomeContent(directory).academicCase.claims[0]?.source).toBe('[[TBD: source]]')
+  })
+
+  it('names the claim when its source is still [[TBD: source]]', () => {
+    const directory = withFirstSource("\n      source: '[[TBD: source]]'\n")
+    expect(homeContentAsPage(directory).placeholders).toEqual([
+      `source for the academic-case claim "${firstClaim.title}"`,
+    ])
+  })
+
+  /**
+   * Acceptance criterion 3: no unsourced claim can reach prod. This is the build guard exactly as
+   * src/app/layout.tsx calls it, with SITE_ENV set as a prod build sets it.
+   */
+  it('fails a prod build, naming the file and the claim, while a source is still [[TBD: source]]', () => {
+    const directory = withFirstSource("\n      source: '[[TBD: source]]'\n")
+    const input = {
+      pages: loadGuardedContent(directory),
+      settings: loadSiteSettings(directory),
+      consent: loadMediaConsent(directory),
+    }
+    const prod = { ...process.env, SITE_ENV: 'prod' }
+    expect(() => enforcePublishingPolicy(input, prod)).toThrowError(PublishingPolicyError)
+    expect(() => enforcePublishingPolicy(input, prod)).toThrowError(
+      new RegExp(
+        `content/home\\.yaml: still has an unfilled placeholder: source for the academic-case claim "${firstClaim.title}"`,
+      ),
+    )
+  })
+
+  it('lets a dev build through with the same marker, so the preview shows the gap', () => {
+    const directory = withFirstSource("\n      source: '[[TBD: source]]'\n")
+    const input = {
+      pages: loadGuardedContent(directory),
+      settings: loadSiteSettings(directory),
+      consent: loadMediaConsent(directory),
+    }
+    const report = enforcePublishingPolicy(input, { ...process.env, SITE_ENV: 'dev' })
+    expect(report.errors.map((error) => error.message).join('\n')).toMatch(
+      /unfilled placeholder: source for the academic-case claim/,
+    )
+  })
+
+  it('fails on an em dash in a claim, like anywhere else on the site', () => {
+    const directory = contentWith('home.yaml', (source) =>
+      source.replace('Students already doing well still gain', 'Students already doing well \u2014 still gain'),
+    )
+    expect(() => loadHomeContent(directory)).toThrowError(/content\/home\.yaml: uses an em dash/)
+  })
+
+  it('fails on an acronym in a claim that the page never spells out', () => {
+    const directory = contentWith('home.yaml', (source) =>
+      source.replace('taking part in policy debate', 'taking part in NSDA policy debate').replace(
+        'Taking part in policy debate',
+        'Taking part in NSDA policy debate',
+      ),
+    )
+    expect(() => loadHomeContent(directory)).toThrowError(
+      /content\/home\.yaml: uses "NSDA" without spelling it out/,
+    )
+  })
+
+  it('fails, naming the card, on an entry-point card that points at no page', () => {
+    const directory = contentWith('home.yaml', (source) =>
+      source.replace('      href: /coaches/\n', '      href: /coaching-staff/\n'),
+    )
+    expect(() => loadHomeContent(directory)).toThrowError(
+      /content\/home\.yaml: the entry-point card "Coaches" links to \/coaching-staff\/, which is not a published page/,
+    )
+  })
+
+  it('fails, naming the card and the page, on a card labelled differently from its destination', () => {
+    const directory = contentWith('home.yaml', (source) =>
+      source.replace('    - title: Coaches\n', '    - title: Who coaches the team\n'),
+    )
+    expect(() => loadHomeContent(directory)).toThrowError(
+      /the entry-point card "Who coaches the team" links to \/coaches\/, whose title is "Coaches" \(content\/pages\/coaches\.md\)/,
+    )
+  })
+
+  it('fails when a destination page is renamed and the card is not', () => {
+    const directory = contentWith('pages/coaches.md', (source) =>
+      source.replace('title: Coaches\n', 'title: Our coaches\n'),
+    )
+    expect(() => loadHomeContent(directory)).toThrowError(
+      /the entry-point card "Coaches" links to \/coaches\/, whose title is "Our coaches"/,
+    )
+  })
+})
+
+/**
+ * The evidence category the brand guide excludes (v1-e36-t09 acceptance criterion 4). The check
+ * reads every Markdown and YAML file in content/, and fails naming the file and the line.
+ */
+describe('the excluded evidence category', () => {
+  const copies: string[] = []
+
+  afterEach(() => {
+    for (const directory of copies.splice(0)) {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  function contentWithLineAppended(fileName: string, line: string): string {
+    const directory = mkdtempSync(join(tmpdir(), 'site-content-'))
+    copies.push(directory)
+    cpSync(siteContent, directory, { recursive: true })
+    const path = join(directory, fileName)
+    writeFileSync(path, `${readFileSync(path, 'utf8').replace(/\n*$/, '\n')}${line}\n`)
+    return directory
+  }
+
+  function lineCount(fileName: string): number {
+    return readFileSync(join(siteContent, fileName), 'utf8').replace(/\n*$/, '\n').split('\n')
+      .length
+  }
+
+  it('finds none of it in the content this site ships', () => {
+    expect(() => assertNoExcludedEvidence(siteContent)).not.toThrow()
+  })
+
+  it.each([
+    ['graduation rate', 'home.yaml', '# Debaters had a higher graduation rate.'],
+    ['graduation-rate', 'faq.yaml', '# graduation-rate research'],
+    ['dropout', 'pages/about.md', 'Debaters had a lower dropout rate.'],
+    ['drop-out', 'events.yaml', '# the drop-out figures'],
+    ['at risk', 'pages/join.md', 'Debate helps students at risk of falling behind.'],
+    ['at-risk', 'home.yaml', '# at-risk students'],
+  ])('fails on "%s", naming the file and the line', (words, fileName, line) => {
+    const directory = contentWithLineAppended(fileName, line)
+    const expectedLine = lineCount(fileName)
+    expect(() => assertNoExcludedEvidence(directory)).toThrowError(ContentValidationError)
+    expect(() => assertNoExcludedEvidence(directory)).toThrowError(
+      `content/${fileName}: line ${expectedLine} uses "${words}"`,
+    )
+  })
+
+  it('runs as part of the build, through the guarded content the layout loads', () => {
+    const directory = contentWithLineAppended('pages/about.md', 'A lower dropout rate.')
+    expect(() => loadGuardedContent(directory)).toThrowError(/content\/pages\/about\.md: line \d+ uses "dropout"/)
+  })
+
+  it('does not trip on ordinary words that merely contain the letters', () => {
+    const directory = contentWithLineAppended(
+      'pages/about.md',
+      'Graduation is in June. Students drop off forms at the office; the risk is low.',
+    )
+    expect(() => assertNoExcludedEvidence(directory)).not.toThrow()
   })
 })

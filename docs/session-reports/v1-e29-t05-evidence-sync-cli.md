@@ -272,9 +272,31 @@ Success looks like `2 passed`. Both checks are read-only, so the same command wi
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict:** ACCEPTED
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude, project chat), 2026-09-20
 
 **Notes:**
+
+- All five nodes pass, and the two measurements that matter are measured rather than asserted: zero
+  HeadObject calls on a first sync and on a repeat of an unchanged corpus, counted on botocore's
+  event system rather than on a counter the code keeps about itself. Staging a download and checking
+  it against the digest its key states before it enters the evidence tree is the right order of
+  operations for an evidence store.
+- **The second keyspace is a real gap in the spec, not a workaround.** A content-addressed key
+  records no corpus, so something has to say where a blob belongs in the bucket, and refusing a run
+  with blobs and no `--blob-prefix` is better than filing a season's disclosures under a guess.
+  Spec amended on branch `specs/sync-blob-prefix`, which also records the posture you were given
+  during the task: dry run by default with `--apply`, `--confirm-prod`, `would_delete` reported and
+  never acted on, and journalled transfers.
+- **Both defects were worth the out-of-package edits.** An eagerly resolved SSO profile escaping as
+  an untranslated ProfileNotFound is exactly the failure ac4 exists to prevent, and a CLI discarding
+  the `hint` the store errors carry defeats the reason those errors carry one.
+- **Splitting the AWS import contract is right.** A contract that makes the composition root unable
+  to construct the adapter it exists to wire is a contract with a bug; strict everywhere, direct-only
+  for the CLI, is the honest shape. v1-e02-t06 should keep that split when it takes the section over.
+- **Backfill sizing accepted:** 2,300 puts and 4,600 heads, about 3 requests per object, roughly
+  6-12 minutes, latency-bound rather than bandwidth-bound, about two cents. That is an operator run
+  and it waits on E30 filling the local store first. Both proposed optimisations (put_file returning
+  the digest the head recorded, and concurrency) are worth doing before a weekly scheduled sync
+  exists, not before the one-off backfill; they go to the PM backlog against v1-e34-t02.

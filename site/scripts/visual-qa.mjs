@@ -176,7 +176,18 @@ async function loadQaToolchain() {
       return 'unknown'
     }
   }
-  const { chromium } = await load('playwright')
+  const playwrightModule = await load('playwright')
+  /*
+   * playwright's entry point is CommonJS, and cjs-module-lexer does not find `chromium` among its
+   * re-exports, so the named import is undefined and only the default carries the browser types.
+   * Take either, and fail with a sentence rather than a TypeError deep in main() if neither works.
+   */
+  const chromium = playwrightModule.chromium ?? playwrightModule.default?.chromium
+  if (typeof chromium?.launch !== 'function') {
+    throw new VisualQaError(
+      `playwright ${version('playwright')} resolved, but it exposes no chromium.launch.\n\n${SETUP_INSTRUCTIONS}`,
+    )
+  }
   const lighthouseModule = await load('lighthouse')
   return {
     chromium,

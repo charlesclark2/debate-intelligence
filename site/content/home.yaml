@@ -46,7 +46,7 @@ parentSession:
     - label: Place
       value: Whitefish Bay High School
     - label: Room
-      unsetNote: The room is not set yet. It will be posted here before the session.
+      value: To be announced
   whatToExpect:
     - The three events the team competes in, explained in plain language.
     - What a tournament weekend actually looks like, from Friday to Sunday.

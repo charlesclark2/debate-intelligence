@@ -395,27 +395,23 @@ describe('the content this site actually ships', () => {
       consent,
       announcements: announcementFields(),
     })
-    const stillOwed = errors.filter(
-      (error) => !error.message.includes('placeholder') && !error.message.includes('still unset'),
-    )
-    expect(stillOwed).toEqual([])
+    expect(errors).toEqual([])
   })
 
   /**
-   * The one finding this task expects to see, and the reason a prod build cannot succeed until
-   * Charlie supplies the room. When he does, this test says so by failing, which is the point: it
-   * is the launch gate, not a tolerated warning.
+   * This began life as a tripwire asserting the room was still missing, on the reasoning that it
+   * should fail the day Charlie supplied it. It has now fired and been turned around: the room
+   * carries "To be announced", a decision rather than a gap, and the gate this test guards is that
+   * no announcement fact goes back to being silently unset before October 1.
    */
-  it('still owes the October 1 room, which is what stops a prod build today', () => {
+  it('leaves no October 1 announcement fact unset', () => {
     const { errors } = checkPublishingPolicy({
       pages,
       settings,
       consent,
       announcements: announcementFields(),
     })
-    expect(errors.map((error) => error.message).join('\n')).toMatch(
-      /the Room of the "Parent information session" announcement is still unset/,
-    )
+    expect(errors.map((error) => error.message).join('\n')).not.toMatch(/still unset/)
   })
 
   it('puts every content file that carries copy through the guard', () => {

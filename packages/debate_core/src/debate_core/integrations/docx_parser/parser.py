@@ -203,6 +203,12 @@ class _ReadSection:
     read: ReadParagraph
     match: ParagraphStyleMatch
     in_text_box: bool
+    occupies_tag_level: bool = False
+    """True for a paragraph written as a tag that the assembly demoted to an analytic.
+
+    It is no longer a tag, but it still sits where one sat: the next paragraph is its sibling,
+    not its child, and no tag is open beneath it.
+    """
 
 
 class DebateDocxParser:
@@ -332,6 +338,7 @@ class DebateDocxParser:
                         confidence=min(section.match.confidence, 0.7),
                     ),
                     in_text_box=section.in_text_box,
+                    occupies_tag_level=True,
                 )
             )
         return demoted
@@ -357,14 +364,24 @@ class DebateDocxParser:
 
         for section in read_sections:
             unit = section.match.unit
-            path = tuple(text for text in open_headings if text is not None)
             deletions_dropped += section.read.deletions_dropped
 
             if unit in HEADING_UNITS:
+                # A heading's path is the headings *above* it, so the one it replaces at its own
+                # level is already out of it: a second tag under a block is a sibling of the first,
+                # not a child of it.
                 level = HEADING_UNITS.index(unit)
+                path = tuple(text for text in open_headings[:level] if text is not None)
                 open_headings[level] = section.read.text
                 for lower in range(level + 1, len(open_headings)):
                     open_headings[lower] = None
+            elif section.occupies_tag_level:
+                level = HEADING_UNITS.index(StructuralUnit.TAG)
+                path = tuple(text for text in open_headings[:level] if text is not None)
+                for lower in range(level, len(open_headings)):
+                    open_headings[lower] = None
+            else:
+                path = tuple(text for text in open_headings if text is not None)
 
             sections.append(
                 FileSection(

@@ -1,0 +1,60 @@
+{
+  "fixture": "tracked-changes-and-comments.docx",
+  "family": "verbatim",
+  "corpus": "team",
+  "summary": "A card edited with track changes on, in a package that also carries comments and `docProps` authorship. The insertion is in the card and the deletion is not — a card is what the file would read as, not what it used to read as — and nothing from the comment or the authorship parts reaches the output, because neither part is opened.",
+  "profile_version": "2026.09.20-verbatim-1",
+  "parser_version": "2026.09.20-docx-1",
+  "warnings_contain": [
+    "tracked deletion"
+  ],
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "Data centre demand collapses the reserve margin",
+      "unit": "TAG",
+      "rule_id": "verbatim-style-id:Heading4",
+      "match_source": "VERBATIM",
+      "section_path": [],
+      "note": ""
+    },
+    {
+      "index": 1,
+      "text": "Okonkwo 26 (Adaeze Okonkwo, Professor of Energy Policy, invented for this fixture), Reserve Margins Under Load Growth, Journal of Grid Studies, 14 March 2026.",
+      "unit": "CITE",
+      "rule_id": "verbatim-cite-run-style",
+      "match_source": "VERBATIM_ALIAS",
+      "section_path": [
+        "Data centre demand collapses the reserve margin"
+      ],
+      "note": ""
+    },
+    {
+      "index": 2,
+      "text": "Grid operators reported that demand rose sharply last year across every planning scenario the utility had on file.",
+      "unit": "EVIDENCE",
+      "rule_id": "heuristic-marked-up-body-text",
+      "match_source": "HEURISTIC",
+      "section_path": [
+        "Data centre demand collapses the reserve margin"
+      ],
+      "note": ""
+    }
+  ],
+  "cards": [
+    {
+      "tag": "Data centre demand collapses the reserve margin",
+      "short_cite": "Okonkwo 26",
+      "full_cite": "Okonkwo 26 (Adaeze Okonkwo, Professor of Energy Policy, invented for this fixture), Reserve Margins Under Load Growth, Journal of Grid Studies, 14 March 2026.",
+      "undertag": "",
+      "evidence_text": "Grid operators reported that demand rose sharply last year across every planning scenario the utility had on file.",
+      "completeness": "FULL",
+      "section_path": [],
+      "first_element_index": 0,
+      "last_element_index": 2,
+      "underlined_text": [
+        "last year across every planning scenario the utility had on file."
+      ]
+    }
+  ]
+}

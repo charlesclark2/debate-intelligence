@@ -106,7 +106,7 @@ spec:
         single words, per the v1-e36-t07 ruling, and split at a lower-case "and" the way the existing
         National Speech / Debate Association entries are.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

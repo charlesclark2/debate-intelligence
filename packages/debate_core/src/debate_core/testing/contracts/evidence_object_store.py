@@ -115,9 +115,7 @@ class EvidenceObjectStoreContract(AdapterContract):
 
         assert destination.read_bytes() == CASELIST_MANIFEST
 
-    async def test_an_empty_object_round_trips(
-        self, store: EvidenceObjectStore, tmp_path: Path
-    ) -> None:
+    async def test_an_empty_object_round_trips(self, store: EvidenceObjectStore, tmp_path: Path) -> None:
         """An empty manifest is an empty manifest, not a failed write."""
         empty = tmp_path / "empty.jsonl"
         empty.write_bytes(b"")
@@ -248,9 +246,7 @@ class EvidenceObjectStoreContract(AdapterContract):
 
         assert await store.list_objects("exports/") == ()
 
-    async def test_listing_an_empty_store_is_an_empty_listing(
-        self, store: EvidenceObjectStore
-    ) -> None:
+    async def test_listing_an_empty_store_is_an_empty_listing(self, store: EvidenceObjectStore) -> None:
         assert await store.list_objects("") == ()
 
     # ----------------------------------------------------------------------------------------

@@ -164,9 +164,7 @@ class TestAFileBelowTheThreshold:
         assert created == []
         assert await multipart_store.get(key) == disclosure.read_bytes()
 
-    async def test_an_empty_file_round_trips(
-        self, multipart_store: S3SnapshotStore, tmp_path: Path
-    ) -> None:
+    async def test_an_empty_file_round_trips(self, multipart_store: S3SnapshotStore, tmp_path: Path) -> None:
         """A zero-length retrieval is a legitimate one — a blocked page, a stripped PDF."""
         empty = tmp_path / "empty-file"
         empty.write_bytes(b"")

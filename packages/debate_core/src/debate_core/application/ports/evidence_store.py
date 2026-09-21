@@ -119,9 +119,7 @@ def validate_object_key(key: str) -> ObjectKey:
             f"with no leading or trailing '/' and no '.' or '..' segment): {key!r}"
         )
     if len(key.encode()) > MAX_OBJECT_KEY_BYTES:
-        raise ValueError(
-            f"evidence object key is longer than {MAX_OBJECT_KEY_BYTES} bytes: {key[:80]!r}…"
-        )
+        raise ValueError(f"evidence object key is longer than {MAX_OBJECT_KEY_BYTES} bytes: {key[:80]!r}…")
     return key
 
 

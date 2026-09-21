@@ -34,9 +34,14 @@ anticipate. Goal criteria `ac1`–`ac5` all pass. The `fixtures-and-gates` node 
 `docs/policies/caselist-data-use.md` prohibitions 1 and 9 forbid publishing caselist or camp data
 "or any file built from them" to a git repository. That covers the team's own files too — teams
 read cards other teams cut and disclosed, so essentially every real debate file contains another
-program's evidence. Deviation 3 has the evidence. The other gap is `uv run lint-imports`, whose
-tool is not installed yet. See **Deviations** and **Follow-up work**; there is nothing outstanding
-for the operator to run.
+program's evidence. Deviation 3 has the evidence, and the PM withdrew the criterion rather than
+failing it.
+
+That withdrawal is now the *only* thing keeping the session at PARTIAL. The second gap —
+`uv run lint-imports`, which had no tool to run — closed when this branch was rebased onto
+`origin/dev` and picked up import-linter from `v1-e29-t04`; it passes. Whether PARTIAL still fits
+a session whose one remaining gap is a criterion the PM deliberately removed is the PM's call; the
+status field is left as ruled. There is nothing outstanding for the operator to run.
 
 ## Plan nodes
 
@@ -64,12 +69,19 @@ for the operator to run.
 | Node `fixtures-and-gates` — Style fixture manifest exists (`contentMatch: "scrubbed"`) | **PASS** | `tests/fixtures/debate_files/style_profile/MANIFEST.md` exists; `grep -c "scrubbed"` → `2`. |
 | Node `fixtures-and-gates` — Coach reviews scrubbed excerpts | **NOT RUN — criterion withdrawn** | No scrubbed excerpts are committed, so there is nothing to review, and none should be: see Deviation 3. Committing one would publish another program's disclosed evidence to a public repository, which `caselist-data-use.md` prohibitions 1 and 9 forbid and which scrubbing does not cure. Confirmed by the coach on 2026-09-20. `MANIFEST.md` records the reasoning in place of the slots. |
 | Node `fixtures-and-gates` — Type check passes for `debate_core` | **PASS** | `uv run pyright packages/debate_core` → `0 errors, 0 warnings, 0 informations`. |
-| Node `fixtures-and-gates` — Import boundaries hold | **NOT RUN** | `uv run lint-imports` → `error: Failed to spawn: lint-imports / No such file or directory (os error 2)`. import-linter is not a dependency yet: it arrives with `v1-e02-t06-import-boundary-guard`, whose Goal is `Pending`. Equivalent checks run instead: `test_the_style_profile_model_imports_no_io_library` asserts `debate_core.domain.style_profile` imports nothing matching `docx`, `lxml`, `yaml`, `boto3`, `botocore`, `httpx`, `typer` or `fastapi`, and `test_style_classification_reaches_no_model` asserts the classifier's source mentions no model router or provider; both pass, and `uv run pyright packages/debate_core` is clean. See Deviations. |
+| Node `fixtures-and-gates` — Import boundaries hold | **PASS** | `uv run lint-imports` → `Analyzed 94 files, 329 dependencies. … Contracts: 1 kept, 0 broken.` It could not run when this report was first written; rebasing onto `origin/dev` picked up `v1-e29-t04-s3-blob-store`, which added import-linter and the first contract. **What it proves is narrower than its name:** the single contract forbids `boto3`/`botocore` outside `debate_core.integrations.s3`, so it confirms this task's modules import no AWS SDK and nothing more. The boundary this task actually cares about is still held by its own tests — `test_the_style_profile_model_imports_no_io_library` (no `docx`, `lxml`, `yaml`, `boto3`, `botocore`, `httpx`, `typer` or `fastapi` in `domain/style_profile.py`) and `test_style_classification_reaches_no_model`. `v1-e02-t06` still owes the contracts that would make those tests redundant. |
 
-Whole-suite check, after the work: `uv run pytest` → **`985 passed`**, 99% coverage
-(`style_classifier.py` and `style_profile_loader.py` at 100%, `style_profile.py` at 99%).
-`uv run ruff check .` → `All checks passed!`; `uv run ruff format --check .` → `179 files already
-formatted`; `uv run scripts/validate_specs.py` → `OK: 281 files, 38 epics, 223 tasks, 20 releases`.
+Whole-suite check, re-run after rebasing onto `origin/dev` (which brought `v1-e02-t04`,
+`v1-e29-t04` and `v1-e36-t06` with it): `uv run pytest` → **`1316 passed`**, 98% coverage overall,
+with `style_classifier.py` and `style_profile_loader.py` at 100% and `style_profile.py` at 99%.
+`uv run ruff check .` → `All checks passed!`; `uv run ruff format --check .` → `210 files already
+formatted`; `uv run pyright packages/debate_core` → `0 errors`; `uv run lint-imports` →
+`1 kept, 0 broken`; `uv run scripts/validate_specs.py` → `OK: 281 files, 38 epics, 223 tasks,
+20 releases`.
+
+One merge conflict during the rebase, in `packages/debate_core/README.md`: `v1-e29-t04` and this
+task each added a section immediately before `### schemas/`. Both belong; resolved by keeping both,
+with the S3 adapter section beside the other adapters and the style profile after it.
 
 ## Files changed
 
@@ -113,12 +125,16 @@ in `docs/README.md`). `packages/debate_core/README.md` gains a section on the pr
    corpus are in Operator follow-ups so the run is reproducible, and the report's own "Refreshing
    this report" section documents it.
 
-2. **`uv run lint-imports` could not be run.** import-linter is not a dependency of this workspace;
-   it is introduced by `v1-e02-t06-import-boundary-guard`, whose Goal is `Pending`. This is the same
-   gap `v1-e30-t02-caselist-domain-model` reported, and the same substitute applies: two tests in
-   `test_style_profile.py` assert the boundary directly for the modules this task adds, and
-   `pyright` is clean. Nothing was added to `pyproject.toml`, because the import-linter contracts
-   are `v1-e02-t06`'s to design.
+2. **`uv run lint-imports` could not be run — since resolved by the rebase, and no longer a
+   deviation.** When this report was first written import-linter was not a dependency of the
+   workspace, exactly as `v1-e30-t02-caselist-domain-model` had reported, and two tests in
+   `test_style_profile.py` stood in for it. Rebasing onto `origin/dev` before opening the PR picked
+   up `v1-e29-t04-s3-blob-store`, which added import-linter and the first contract, and
+   `uv run lint-imports` now passes. PM ruling 3 accepted the substitute; it turned out not to be
+   needed. The substitute tests stay, because the one existing contract only forbids the AWS SDK
+   outside `integrations.s3` and says nothing about the domain layer importing `lxml` — which is
+   the boundary this task's `forbidden` list actually names. Nothing was added to
+   `pyproject.toml`; the remaining contracts are still `v1-e02-t06`'s to design.
 
 3. **The 4-6 scrubbed excerpts are withdrawn, not merely outstanding.** The `fixtures-and-gates`
    node asks for them alongside the synthetic fixtures. They should not be committed, and the
@@ -292,10 +308,13 @@ changes the risk but not the policy, and the policy is the thing that would have
   does read magenta, that shows up in `v1-e31-t05-parser-eval` as a per-unit recall miss, which is
   the right place to find out rather than guessing now.
 
-* **`v1-e02-t06-import-boundary-guard` is now blocking a fourth task's criterion.** `v1-e30-t02`
-  reported the same gap. When import-linter lands, its contracts should cover
-  `debate_core.evidence` (no `docx`, no `lxml`, no provider SDK) as well as `domain` and
-  `application`.
+* **`v1-e02-t06-import-boundary-guard` should absorb this task's two substitute tests.**
+  import-linter now exists, via `v1-e29-t04`, with one contract covering the AWS SDK. When `t06`
+  writes the full set, they should cover `debate_core.domain` importing no I/O library at all and
+  `debate_core.evidence` importing no provider SDK — at which point
+  `test_the_style_profile_model_imports_no_io_library` and `test_style_classification_reaches_no_model`
+  become redundant and should be deleted rather than left to rot as a second, weaker copy of the
+  same rule.
 
 * **The full aggregate is where new aliases will be found, and nothing yet schedules a re-read.**
   PM ruling 6 made it unconditional and gitignored, so it is always on disk beside the report

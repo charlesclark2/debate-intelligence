@@ -96,7 +96,7 @@ spec:
         smoke check, what to do if it looks wrong), and Charlie has ticked the pre-publication checklist
         in docs/policies/website-publishing.md for the launch commit.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -63,3 +63,9 @@ infrastructure/**/backend_override.tf
 # names every style id in the corpus, including ones a team named after a person, which is exactly
 # what the committed report withholds.
 docs/data/debate-file-style-survey.full.json
+
+# The operator's OpenCaselist caselist_token (v1-e34-t01-caselist-api-client). Its file fallback
+# lives at <storage.data_dir>/secrets/caselist_token, normally outside any checkout; these two
+# patterns keep it out of the repository even when a data directory is pointed inside one.
+secrets/
+caselist_token

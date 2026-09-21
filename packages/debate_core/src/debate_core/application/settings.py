@@ -104,6 +104,8 @@ __all__ = [
     "PROFILE_DIRECTORY_VARIABLE",
     "PROFILE_SUBDIRECTORY",
     "SECRET_PLACEHOLDER",
+    "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
+    "CaselistTokenBackend",
     "ConfigurationError",
     "Environment",
     "HttpSettings",
@@ -384,6 +386,21 @@ class ProviderSettings(SettingsGroup):
     )
 
 
+MAX_CASELIST_DOWNLOADS_PER_MINUTE: Final = 10
+"""The OpenCaselist maintainer's rate limit: file downloads per minute (policy clause 12)."""
+
+
+class CaselistTokenBackend(StrEnum):
+    """Where the operator's caselist_token is kept between runs."""
+
+    AUTO = "auto"
+    """The OS keychain when one is usable, otherwise the file."""
+    KEYRING = "keyring"
+    """The OS keychain (the macOS login keychain on the operator's Mac), through `keyring`."""
+    FILE = "file"
+    """A 0600 file under a gitignored `secrets/` directory."""
+
+
 class CaselistSettings(SettingsGroup):
     """What the caselist importers will read, and how large an archive they will open.
 
@@ -414,6 +431,102 @@ class CaselistSettings(SettingsGroup):
             "the zip's directory before any member is extracted."
         ),
     )
+
+    # --- The OpenCaselist API client (v1-e34-t01-caselist-api-client) ---------------------------
+    #
+    # docs/policies/caselist-data-use.md governs every value below. The API is off until an
+    # operator turns it on; the download rate is the maintainer's, not ours to raise; and the
+    # token itself is never a setting in a committed file (see `providers.caselist_token`).
+
+    api_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether this installation may call the OpenCaselist API at all. Off by default: the "
+            "data-use policy's E34 gate is a decision an operator makes, and an installation that "
+            "has not made it refuses rather than reaching the network."
+        ),
+    )
+    api_base_url: str = Field(
+        default="https://api.opencaselist.com/v1",
+        min_length=1,
+        description="Root of the documented OpenCaselist API. Never the opencaselist.com site.",
+    )
+    downloads_per_minute: int = Field(
+        default=8,
+        ge=1,
+        description=(
+            "File downloads (archives and OpenEv files together) allowed in any rolling 60 "
+            "seconds. The maintainer's limit is 10 (policy clause 12); the default stays under it "
+            "and anything above it is refused."
+        ),
+    )
+    min_request_interval_seconds: float = Field(
+        default=1.0,
+        ge=0.5,
+        le=600,
+        description="Minimum wait between the start of any two requests to OpenCaselist.",
+    )
+    max_attempts: int = Field(
+        default=4,
+        ge=1,
+        le=8,
+        description="Attempts for a request answered 429, 502, 503 or 504, the first included.",
+    )
+    backoff_base_seconds: float = Field(
+        default=2.0,
+        gt=0,
+        le=60,
+        description="First backoff wait when the server gives no Retry-After; doubles per retry.",
+    )
+    max_retry_wait_seconds: float = Field(
+        default=300.0,
+        gt=0,
+        le=3600,
+        description=(
+            "Longest single wait the client will sit through. A Retry-After longer than this is "
+            "reported as a rate-limit failure immediately instead of being slept on."
+        ),
+    )
+    token_backend: CaselistTokenBackend = Field(
+        default=CaselistTokenBackend.AUTO,
+        description=(
+            "Where `caselist auth login` keeps the caselist_token: the OS keychain, a 0600 file, "
+            "or `auto` (the keychain when one is usable, otherwise the file)."
+        ),
+    )
+    secret_file: Path | None = Field(
+        default=None,
+        description=(
+            "The token file for the `file` backend. Unset means `<storage.data_dir>/secrets/"
+            "caselist_token`. Any path named `caselist_token`, or under a `secrets/` directory, is "
+            "gitignored."
+        ),
+    )
+
+    @field_validator("downloads_per_minute")
+    @classmethod
+    def _within_the_maintainers_limit(cls, value: int) -> int:
+        if value > MAX_CASELIST_DOWNLOADS_PER_MINUTE:
+            raise ValueError(
+                f"the OpenCaselist maintainer's limit is {MAX_CASELIST_DOWNLOADS_PER_MINUTE} file "
+                "downloads per minute (docs/policies/caselist-data-use.md, clause 12); "
+                f"{value} is above it"
+            )
+        return value
+
+    @field_validator("api_base_url")
+    @classmethod
+    def _must_be_https(cls, value: str) -> str:
+        if not value.startswith("https://"):
+            raise ValueError("must be an https:// URL; the caselist_token is never sent in clear")
+        return value.rstrip("/")
+
+    @field_validator("secret_file")
+    @classmethod
+    def _expand_secret_file(cls, value: Path | None) -> Path | None:
+        if value is None:
+            return None
+        return Path(os.path.expandvars(str(value))).expanduser().absolute()
 
 
 class ModelSettings(SettingsGroup):

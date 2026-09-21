@@ -66,7 +66,7 @@ v2.3's extension work.
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 17 | 8 | 141 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 17 | 9 | 141 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 11 | 0 | 109 |
@@ -298,7 +298,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Deploy flow: dev preview then prod](plan_specs/v1/e36-team-website/t05-site-deploy.yaml) `v1-e36-t05-site-deploy` | Succeeded | 2 | 5.5 |
 | [Visual design pass: layout system and home page](plan_specs/v1/e36-team-website/t06-visual-design-pass.yaml) `v1-e36-t06-visual-design-pass` | Succeeded | 1 | 7.0 |
 | [Scannable structure for the FAQ, events and remaining pages](plan_specs/v1/e36-team-website/t07-page-structure-pass.yaml) `v1-e36-t07-page-structure-pass` | Succeeded | 1 | 9.5 |
-| [Pre-launch visual QA and launch readiness](plan_specs/v1/e36-team-website/t08-prelaunch-visual-qa.yaml) `v1-e36-t08-prelaunch-visual-qa` | InProgress | 2 | 6.5 |
+| [Pre-launch visual QA and launch readiness](plan_specs/v1/e36-team-website/t08-prelaunch-visual-qa.yaml) `v1-e36-t08-prelaunch-visual-qa` | Succeeded | 2 | 6.5 |
 | [Home page: the academic case for debate](plan_specs/v1/e36-team-website/t09-home-academic-case.yaml) `v1-e36-t09-home-academic-case` | Succeeded | 1 | 5.0 |
 
 #### [E37 — Calendar & Announcements (Coach-Editable)](plan_specs/v1/e37-calendar-and-announcements/epic.yaml)

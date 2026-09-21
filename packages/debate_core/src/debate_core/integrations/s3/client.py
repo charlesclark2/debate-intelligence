@@ -88,7 +88,11 @@ def build_s3_client(*, region: str | None = None, profile: str | None = None) ->
     when something is actually asked of the store.
     """
     session = boto3.session.Session(profile_name=profile, region_name=region)
-    return session.client("s3")
+    # `Session.client` is overloaded once per AWS service, and boto3-stubs only types the services
+    # whose stub package is installed — `s3` here. The overloads for every other service therefore
+    # return Unknown, which strict mode reports on the symbol as a whole even though the call this
+    # module makes resolves to `S3Client`. Narrowed to this one line rather than turned off.
+    return session.client("s3")  # pyright: ignore[reportUnknownMemberType]
 
 
 def build_transfer_config(

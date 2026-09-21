@@ -77,10 +77,11 @@ cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/
 
 | Module | Contents |
 |---|---|
-| `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable`, `ProviderRateLimited`) |
+| `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `StoreError` (`StoreAccessDenied`, `StoreCredentialsExpired`, `StoreUnavailable`), `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable`, `ProviderRateLimited`) |
 | `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository`, and the `Page` returned by every listing |
 | `ports/providers.py` | `SearchProvider`, `ArticleFetcher`, `ContentExtractor`, `ModelRouter`, `Clock`, `IdGenerator`, and the value objects they exchange |
 | `ports/caselist.py` | `CaselistRepository`, the boundary the E30 importers, publisher and removal command store through (v1-e30-t02) |
+| `ports/evidence_store.py` | `EvidenceObjectStore` and `ObjectInfo`: evidence stored under a *name* rather than a digest — manifests, reports — plus the key validation both its adapters share (v1-e29-t04) |
 | `services/article_registration.py` | The worked example of the constructor-injection pattern every service follows |
 
 Things worth knowing before you write a service:
@@ -113,12 +114,14 @@ they never read settings:
 ```
 <data_dir>/
   blobs/sha256/ab/cd/abcd1234…def0   immutable snapshot bytes, by digest (FsSnapshotStore)
+  objects/manifests/hsld26/….jsonl   evidence objects by name (FsEvidenceObjectStore)
   debate.sqlite3                     articles, snapshots, cards, searches (SqliteDatabase)
 ```
 
 | Module | Contents |
 |---|---|
 | `fs_blob_store.py` | `FsSnapshotStore`: content-addressed blobs, atomic temp+rename writes, read-only once written, `BlobIntegrityError` on a read whose bytes no longer hash to their key |
+| `fs_object_store.py` | `FsEvidenceObjectStore`: named objects under `objects/`, the local side of every `debate-research store sync` (v1-e29-t04) |
 | `sqlite_db.py` | `SqliteDatabase.open(data_dir)`: the shared connection, its pragmas, and the migration runner |
 | `migrations/` | Numbered `.sql` files, applied in order and exactly once each |
 | `sqlite_repos.py` | `SqliteArticleRepository`, `SqliteCardRepository`, `SqliteSearchRepository` |
@@ -144,6 +147,45 @@ Things worth knowing before you add an adapter or a field:
   that reversible without a caller changing.
 * **Migrations are append-only.** A released migration is never edited; databases already record
   its version. Add the next one.
+
+### `integrations/s3/` — the evidence bucket (v1-e29-t04-s3-blob-store)
+
+The same two evidence ports as `integrations/local/`, against the environment's S3 bucket. **The only
+place in the platform that imports boto3**, which an import-linter contract in the workspace root
+enforces; boto3 is an optional dependency, so this package needs the `aws` extra:
+
+```bash
+uv sync --extra aws        # or: pip install 'debate-core[aws]'
+```
+
+| Module | Contents |
+|---|---|
+| `client.py` | `build_s3_client(region=…, profile=…)` on botocore's standard credential chain, and the multipart thresholds |
+| `snapshot_store.py` | `S3SnapshotStore`: keys `<prefix>/sha256/<ab>/<cd>/<digest>`, head-before-put idempotency, SHA-256 additional checksums, the full-object digest in object metadata, verification on read, `put_file`/`get_file` for objects too big to hold in memory |
+| `object_store.py` | `S3EvidenceObjectStore`: paginated listing, head, and atomic file transfers for `manifests/` and `reports/` |
+| `errors.py` | Where every `ClientError` stops: `NotFound`, `StoreAccessDenied`, `StoreCredentialsExpired` with the `aws sso login` command, `StoreUnavailable` |
+
+```python
+client = build_s3_client(region=region, profile=profile)  # profile: the environment's SSO profile
+blobs = S3SnapshotStore(bucket=bucket, prefix="raw/caselist/hsld26", client=client)
+objects = S3EvidenceObjectStore(bucket=bucket, client=client)
+```
+
+Things worth knowing before you use or extend these:
+
+* **No adapter here names a bucket or reads settings.** The bucket name and the KMS key ARN come from
+  the environment root's `evidence_bucket_name` and `evidence_kms_key_arn` Terraform outputs, resolved
+  per `DEBATE_ENV` by `v1-e29-t05-evidence-sync-cli` and passed to a constructor. A bucket name in
+  Python is how dev evidence ends up in prod.
+* **A repeat `put` of identical bytes issues no `PutObject`.** The buckets are versioned, and a
+  content-addressed key with two versions is a signal that something went wrong, not routine noise.
+* **The digest in object metadata is the full-object SHA-256, and S3's `ChecksumSHA256` is not.** For a
+  multipart object the latter is a composite of the part digests, so only the metadata entry can be
+  compared with a blob key.
+* **Blocking calls run in a worker thread** (`asyncio.to_thread`), unlike the local adapters, because
+  here the I/O really is a network round trip.
+* **Tests use `moto`, never an account.** The fixtures are in `packages/debate_core/tests/conftest.py`
+  and the suite runs with `--disable-socket`.
 
 ### `schemas/` — published JSON Schemas
 

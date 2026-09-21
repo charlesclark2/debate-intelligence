@@ -146,14 +146,17 @@ class S3EvidenceObjectStore:
     def _list_objects(self, prefix: str) -> tuple[ObjectInfo, ...]:
         found: list[ObjectInfo] = []
         with mapped_s3_errors(self._call("ListObjectsV2", prefix)):
-            pages = self._client.get_paginator("list_objects_v2").paginate(
-                Bucket=self._bucket, Prefix=prefix
-            )
+            pages = self._client.get_paginator("list_objects_v2").paginate(Bucket=self._bucket, Prefix=prefix)
             for page in pages:
-                found.extend(
-                    ObjectInfo(key=stored["Key"], size=stored["Size"])
-                    for stored in page.get("Contents", [])
-                )
+                for stored in page.get("Contents", []):
+                    key = stored.get("Key")
+                    size = stored.get("Size")
+                    if key is None or size is None:
+                        # Both are optional in the API's schema and always present in practice. An
+                        # entry missing either is not something a sync could transfer, so it is left
+                        # out of the listing rather than turned into an ObjectInfo that lies.
+                        continue
+                    found.append(ObjectInfo(key=key, size=size))
         return tuple(sorted(found, key=lambda info: info.key))
 
     def _head_or_raise(self, key: ObjectKey) -> ObjectInfo:
@@ -201,9 +204,7 @@ class S3EvidenceObjectStore:
         stored = self._head_or_raise(key)
         # The digest is this call's own, not the one just read back: what was uploaded is what the
         # caller is owed, and `_head` would report `None` for a bucket that dropped the metadata.
-        return ObjectInfo(
-            key=key, size=source.stat().st_size, sha256=digest, version_id=stored.version_id
-        )
+        return ObjectInfo(key=key, size=source.stat().st_size, sha256=digest, version_id=stored.version_id)
 
     def _get_file(self, key: ObjectKey, destination: Path) -> ObjectInfo:
         recorded = self._head_or_raise(key)

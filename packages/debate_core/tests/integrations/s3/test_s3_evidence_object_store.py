@@ -51,16 +51,14 @@ class TestTheKeyAnObjectLandsUnder:
         await store.put_file(MANIFEST_KEY, manifest_file)
 
         listing = s3_client.list_objects_v2(Bucket=evidence_bucket)
-        assert [stored["Key"] for stored in listing.get("Contents", [])] == [MANIFEST_KEY]
+        assert [stored.get("Key") for stored in listing.get("Contents", [])] == [MANIFEST_KEY]
 
     async def test_an_upload_records_the_digest_and_carries_s3s_own_checksum(
         self, store: S3EvidenceObjectStore, manifest_file: Path, s3_client: S3Client, evidence_bucket: str
     ) -> None:
         await store.put_file(MANIFEST_KEY, manifest_file)
 
-        head = s3_client.head_object(
-            Bucket=evidence_bucket, Key=MANIFEST_KEY, ChecksumMode="ENABLED"
-        )
+        head = s3_client.head_object(Bucket=evidence_bucket, Key=MANIFEST_KEY, ChecksumMode="ENABLED")
         assert head["Metadata"] == {SHA256_METADATA_NAME: hashlib.sha256(MANIFEST_ROW).hexdigest()}
         assert "ChecksumSHA256" in head
 

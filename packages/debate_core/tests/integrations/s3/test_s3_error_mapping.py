@@ -11,6 +11,8 @@ response code nobody has written a translation for.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import (
@@ -53,14 +55,17 @@ def call() -> S3Call:
 
 
 def client_error(code: str, *, status: int = 400, operation: str = "GetObject") -> ClientError:
-    """The exception botocore raises when S3 answers with `code`."""
-    return ClientError(
-        {
-            "Error": {"Code": code, "Message": "irrelevant to the mapping"},
-            "ResponseMetadata": {"HTTPStatusCode": status},
-        },
-        operation,
-    )
+    """The exception botocore raises when S3 answers with `code`.
+
+    `response` is deliberately the minimum a real one carries rather than a whole
+    `ResponseMetadata`; botocore types the argument as a private TypedDict whose other keys are
+    required, and filling in a request id and a header block would say nothing about the mapping.
+    """
+    response: Any = {
+        "Error": {"Code": code, "Message": "irrelevant to the mapping"},
+        "ResponseMetadata": {"HTTPStatusCode": status},
+    }
+    return ClientError(response, operation)
 
 
 class TestAMissingObject:
@@ -74,9 +79,8 @@ class TestAMissingObject:
 
     def test_a_head_with_no_response_body_still_becomes_not_found(self, call: S3Call) -> None:
         """A `HEAD` has no body for S3 to put a code in, so botocore reports only the status."""
-        response_without_an_error_block = ClientError(
-            {"ResponseMetadata": {"HTTPStatusCode": 404}}, "HeadObject"
-        )
+        status_only: Any = {"ResponseMetadata": {"HTTPStatusCode": 404}}
+        response_without_an_error_block = ClientError(status_only, "HeadObject")
 
         assert isinstance(translate_s3_error(response_without_an_error_block, call), NotFound)
 
@@ -91,9 +95,7 @@ class TestAMissingObject:
 
 class TestARefusedRequest:
     @pytest.mark.parametrize("code", ["AccessDenied", "403", "AllAccessDisabled", "InvalidAccessKeyId"])
-    def test_a_denial_becomes_store_access_denied_naming_the_operation(
-        self, code: str, call: S3Call
-    ) -> None:
+    def test_a_denial_becomes_store_access_denied_naming_the_operation(self, code: str, call: S3Call) -> None:
         refused = translate_s3_error(client_error(code, status=403), call)
 
         assert isinstance(refused, StoreAccessDenied)
@@ -142,9 +144,7 @@ class TestASessionThatIsNoLongerUsable:
         assert PROFILE in str(refused)
 
     @pytest.mark.parametrize("code", ["ExpiredToken", "RequestExpired", "InvalidClientTokenId"])
-    def test_a_session_that_expired_mid_request_becomes_the_same_hint(
-        self, code: str, call: S3Call
-    ) -> None:
+    def test_a_session_that_expired_mid_request_becomes_the_same_hint(self, code: str, call: S3Call) -> None:
         """A session can expire between signing a request and reading the response."""
         refused = translate_s3_error(client_error(code, status=403), call)
 
@@ -184,9 +184,7 @@ class TestAStoreThatDidNotAnswer:
         ],
         ids=["endpoint-unreachable", "connect-timeout"],
     )
-    def test_never_reaching_s3_at_all_becomes_store_unavailable(
-        self, error: Exception, call: S3Call
-    ) -> None:
+    def test_never_reaching_s3_at_all_becomes_store_unavailable(self, error: Exception, call: S3Call) -> None:
         assert isinstance(translate_s3_error(error, call), StoreUnavailable)
 
     def test_an_unrecognised_response_code_is_still_translated(self, call: S3Call) -> None:
@@ -211,29 +209,23 @@ class TestAFailedMultipartTransfer:
 
         assert isinstance(refused, StoreAccessDenied)
 
-    def test_a_wrapped_failure_with_no_recognisable_code_is_still_translated(
-        self, call: S3Call
-    ) -> None:
+    def test_a_wrapped_failure_with_no_recognisable_code_is_still_translated(self, call: S3Call) -> None:
         refused = translate_s3_error(S3UploadFailedError("the transfer gave up"), call)
 
         assert isinstance(refused, StoreUnavailable)
 
 
 class TestTheContextManagerTheAdaptersUse:
-    def test_it_raises_the_translated_error_and_keeps_the_original_as_the_cause(
-        self, call: S3Call
-    ) -> None:
+    def test_it_raises_the_translated_error_and_keeps_the_original_as_the_cause(self, call: S3Call) -> None:
         """The original exception stays reachable for a log, and only for a log."""
         original = client_error("NoSuchKey", status=404)
 
-        with pytest.raises(NotFound) as refused:
-            with mapped_s3_errors(call):
-                raise original
+        with pytest.raises(NotFound) as refused, mapped_s3_errors(call):
+            raise original
 
         assert refused.value.__cause__ is original
 
     def test_it_leaves_an_error_that_is_not_botocores_alone(self, call: S3Call) -> None:
         """A bug in the adapter must not arrive dressed as a store that is unavailable."""
-        with pytest.raises(ValueError, match="a bug in the adapter"):
-            with mapped_s3_errors(call):
-                raise ValueError("a bug in the adapter")
+        with pytest.raises(ValueError, match="a bug in the adapter"), mapped_s3_errors(call):
+            raise ValueError("a bug in the adapter")

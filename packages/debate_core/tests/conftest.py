@@ -81,7 +81,10 @@ def fake_aws_credentials(monkeypatch: pytest.MonkeyPatch, aws_region: str) -> No
 def s3_client(fake_aws_credentials: None, aws_region: str) -> Iterator[S3Client]:
     """A client onto moto's in-process S3, for the whole of one test."""
     with mock_aws():
-        yield boto3.client("s3", region_name=aws_region)
+        # boto3-stubs types `client` once per AWS service and only for the services whose stub
+        # package is installed, so the symbol is partly Unknown to strict mode even though this call
+        # resolves to `S3Client`. Narrowed to the one line rather than turned off for the suite.
+        yield boto3.client("s3", region_name=aws_region)  # pyright: ignore[reportUnknownMemberType]
 
 
 @pytest.fixture

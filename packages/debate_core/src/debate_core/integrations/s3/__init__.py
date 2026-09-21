@@ -39,13 +39,15 @@ immediately, with the command that fixes it.
 
 from __future__ import annotations
 
-try:
-    import boto3 as _boto3  # noqa: F401  - imported to check it is installed, used via the modules below
-except ModuleNotFoundError as missing:  # pragma: no cover - depends on how the package was installed
+import importlib.util
+
+# Checked before the adapters are imported, so that a missing optional dependency arrives as the
+# command that installs it rather than as `No module named 'boto3'` from somewhere inside an adapter.
+if importlib.util.find_spec("boto3") is None:  # pragma: no cover - depends on how this was installed
     raise ModuleNotFoundError(
         "debate_core.integrations.s3 needs boto3, which is an optional dependency of debate-core: "
         "install it with `uv sync --extra aws` (or `pip install 'debate-core[aws]'`)."
-    ) from missing
+    )
 
 from debate_core.integrations.s3.client import (
     DEFAULT_MULTIPART_PART_SIZE_BYTES,

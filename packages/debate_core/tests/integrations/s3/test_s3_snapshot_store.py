@@ -68,9 +68,7 @@ class TestS3SnapshotStore(SnapshotStoreContract):
         return lambda: S3SnapshotStore(bucket=evidence_bucket, prefix=blob_prefix, client=s3_client)
 
     @pytest.fixture
-    def corrupt_blob(
-        self, evidence_bucket: str, blob_prefix: str, s3_client: S3Client
-    ) -> BlobCorruptor:
+    def corrupt_blob(self, evidence_bucket: str, blob_prefix: str, s3_client: S3Client) -> BlobCorruptor:
         """Overwrite an object's bytes while leaving its key and recorded digest saying otherwise.
 
         This is the damage a bad actor with write access does, and it is the one thing no production
@@ -102,7 +100,7 @@ class TestTheKeyAnObjectLandsUnder:
 
         expected = f"{blob_prefix}/sha256/{key[0:2]}/{key[2:4]}/{key}"
         listing = s3_client.list_objects_v2(Bucket=evidence_bucket)
-        assert [stored["Key"] for stored in listing.get("Contents", [])] == [expected]
+        assert [stored.get("Key") for stored in listing.get("Contents", [])] == [expected]
         assert store.s3_key_for(key) == expected
 
     async def test_the_key_carries_the_digest_and_no_extension_or_name(
@@ -200,9 +198,7 @@ class TestARepeatPutCostsNothingAndChangesNothing:
         resolved by replacing an object in a versioned bucket with one this store happens to prefer.
         """
         key = digest_of(DISCLOSED_FILE)
-        s3_client.put_object(
-            Bucket=evidence_bucket, Key=store.s3_key_for(key), Body=OTHER_DISCLOSED_FILE
-        )
+        s3_client.put_object(Bucket=evidence_bucket, Key=store.s3_key_for(key), Body=OTHER_DISCLOSED_FILE)
 
         assert await store.put(DISCLOSED_FILE) == key
         versions = s3_client.list_object_versions(Bucket=evidence_bucket, Prefix=store.s3_key_for(key))

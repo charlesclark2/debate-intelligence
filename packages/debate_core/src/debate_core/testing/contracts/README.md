@@ -1,11 +1,11 @@
 # Repository contract tests
 
-`debate_core.application.ports.persistence` says in prose what a `SnapshotStore`, an
-`ArticleRepository`, a `CardRepository` and a `SearchRepository` do. This package says it in
+`debate_core.application.ports` says in prose what a `SnapshotStore`, an `ArticleRepository`, a
+`CardRepository`, a `SearchRepository` and an `EvidenceObjectStore` do. This package says it in
 tests, so that swapping V1's SQLite and filesystem adapters for V2's DynamoDB and S3 ones is a
 change of wiring and not a change of behaviour (architecture proposal §16, §17).
 
-There are four contract classes, one per port:
+There are five contract classes, one per port:
 
 | Contract | Port | Factory type |
 |---|---|---|
@@ -13,6 +13,12 @@ There are four contract classes, one per port:
 | `ArticleRepositoryContract` | `ArticleRepository` | `ArticleRepositoryFactory` |
 | `CardRepositoryContract` | `CardRepository` | `CardRepositoryFactory` |
 | `SearchRepositoryContract` | `SearchRepository` | `SearchRepositoryFactory` |
+| `EvidenceObjectStoreContract` | `EvidenceObjectStore` | `EvidenceObjectStoreFactory` |
+
+The last one arrived with the S3 adapters (`v1-e29-t04-s3-blob-store`) and is the first contract
+whose two bindings are a cloud service and a local directory rather than two local implementations.
+Its S3 binding runs against `moto`, through the fixtures in `packages/debate_core/tests/conftest.py`:
+a contract binding for a cloud adapter opts in against a mock or an emulator, never an account.
 
 ## Opting a new adapter in
 

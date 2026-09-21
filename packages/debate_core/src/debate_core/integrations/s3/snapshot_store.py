@@ -74,8 +74,9 @@ from debate_core.integrations.s3.client import (
 )
 from debate_core.integrations.s3.errors import S3Call, mapped_s3_errors
 
-if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
+if TYPE_CHECKING:  # pragma: no cover - imports for the type checker only
     from mypy_boto3_s3.client import S3Client
+    from mypy_boto3_s3.type_defs import PutObjectRequestTypeDef
 
 __all__ = [
     "BLOB_KEY_SEGMENT",
@@ -267,15 +268,18 @@ class S3SnapshotStore:
         s3_key = self.s3_key_for(key)
         if self._stored_digest_matches(key, s3_key):
             return key
+        request: PutObjectRequestTypeDef = {
+            "Bucket": self._bucket,
+            "Key": s3_key,
+            "Body": data,
+            "ChecksumAlgorithm": "SHA256",
+            "Metadata": {SHA256_METADATA_NAME: key},
+        }
+        if self._kms_key_id is not None:
+            request["ServerSideEncryption"] = "aws:kms"
+            request["SSEKMSKeyId"] = self._kms_key_id
         with mapped_s3_errors(self._call("PutObject", key, s3_key)):
-            self._client.put_object(
-                Bucket=self._bucket,
-                Key=s3_key,
-                Body=data,
-                ChecksumAlgorithm="SHA256",
-                Metadata={SHA256_METADATA_NAME: key},
-                **self._encryption_arguments(),
-            )
+            self._client.put_object(**request)
         return key
 
     def _put_file(self, source: Path) -> BlobKey:

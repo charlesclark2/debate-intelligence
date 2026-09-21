@@ -20,6 +20,7 @@ from debate_core.application.ports import (
     CardRepository,
     Clock,
     ContentExtractor,
+    EvidenceObjectStore,
     IdGenerator,
     ModelRouter,
     SearchProvider,
@@ -53,6 +54,19 @@ def test_each_port_is_a_protocol_that_can_be_checked_at_runtime(port: type) -> N
     assert getattr(port, "_is_runtime_protocol", False), f"{port.__name__} is not runtime_checkable"
 
 
+def test_the_evidence_object_store_port_is_a_protocol_like_the_other_ports() -> None:
+    """The eleventh port, added by `v1-e29-t04-s3-blob-store` for manifests and reports.
+
+    Not in `THE_TEN_PORTS`, which is `v1-e02-t02`'s own count of what that task declared. It is held
+    to the same two rules: a Protocol, checkable at runtime, so a binding that wires the wrong kind of
+    store fails at the `isinstance` rather than three assertions later. Its adapters are held to
+    `EvidenceObjectStoreContract` in `tests/contracts/`.
+    """
+    assert getattr(EvidenceObjectStore, "_is_protocol", False)
+    assert getattr(EvidenceObjectStore, "_is_runtime_protocol", False)
+    assert EvidenceObjectStore not in THE_TEN_PORTS
+
+
 def test_every_fake_is_an_instance_of_the_port_it_stands_for() -> None:
     fakes = build_fake_ports()
     supplied = (
@@ -75,7 +89,7 @@ def test_every_fake_is_an_instance_of_the_port_it_stands_for() -> None:
 FORBIDDEN_IN_A_PORT_MODULE = ("boto3", "botocore", "httpx", "sqlite3", "typer", "fastapi")
 
 
-@pytest.mark.parametrize("module_name", ["persistence", "providers", "caselist"])
+@pytest.mark.parametrize("module_name", ["persistence", "providers", "caselist", "evidence_store"])
 def test_port_modules_import_nothing_from_a_provider_library(module_name: str) -> None:
     """The rule the ports exist for; v1-e02-t06-import-boundary-guard enforces it repo-wide."""
     source = inspect.getsource(getattr(ports, module_name))

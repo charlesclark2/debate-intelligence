@@ -32,7 +32,7 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -74,7 +74,7 @@ def sha256_of_file(path: Path) -> str:
 
 
 @contextmanager
-def atomic_replacement(destination: Path) -> Iterator[Path]:
+def atomic_replacement(destination: Path) -> Generator[Path, None, None]:
     """Yield a temporary path to write, and rename it onto `destination` when the block succeeds.
 
     Used like this, so that what lands at `destination` is either the previous file or the whole new

@@ -8,14 +8,16 @@ translated here and nowhere else (architecture proposal §6).
 
 ## What maps to what
 
+Everything in this table is in :mod:`debate_core.application.errors`:
+
 | What S3 or botocore said | What a caller gets |
 |---|---|
-| `NoSuchKey`, `NotFound`, HTTP 404 | :class:`~debate_core.application.errors.NotFound` |
+| `NoSuchKey`, `NotFound`, HTTP 404 | `NotFound` |
 | `NoSuchBucket` | `NotFound`, naming the bucket rather than the key |
-| `AccessDenied`, HTTP 403, `KMS.AccessDeniedException` | :class:`~debate_core.application.errors.StoreAccessDenied` |
-| An expired or absent SSO token, no credentials at all | :class:`~debate_core.application.errors.StoreCredentialsExpired` |
+| `AccessDenied`, HTTP 403, `KMS.AccessDeniedException` | `StoreAccessDenied` |
+| An expired or absent SSO token, no credentials at all | `StoreCredentialsExpired` |
 | `ExpiredToken`, `RequestExpired`, `InvalidClientTokenId` | `StoreCredentialsExpired` |
-| A 5xx, a throttle, a timeout, a connection that never opened | :class:`~debate_core.application.errors.StoreUnavailable` |
+| A 5xx, a throttle, a timeout, a connection that never opened | `StoreUnavailable` |
 | Any other response code | `StoreUnavailable`, carrying the code |
 
 The last row is the one that matters most. An unrecognised code is still translated, because the
@@ -41,7 +43,7 @@ one to pass.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -219,7 +221,7 @@ def translate_s3_error(error: BaseException, call: S3Call) -> DomainError:
 
 
 @contextmanager
-def mapped_s3_errors(call: S3Call) -> Iterator[None]:
+def mapped_s3_errors(call: S3Call) -> Generator[None, None, None]:
     """Run a block of S3 calls, translating anything botocore raises out of it.
 
     The adapters wrap every call in this::

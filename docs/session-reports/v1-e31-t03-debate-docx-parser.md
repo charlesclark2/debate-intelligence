@@ -231,9 +231,12 @@ Expected runtime ~8 s; success looks like `1 passed`.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-21
 
-**Notes:**
+**Notes:** All three deviations upheld. The lxml decision is the right one and is now in the spec
+with its reasoning; the structural-fixtures node wording was a leftover the t02 ruling should have
+caught and has been corrected; the tenth node criterion is correctly NOT APPLICABLE. The
+hand-written expectations are recorded as working agreement 6.

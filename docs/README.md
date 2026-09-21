@@ -20,12 +20,13 @@
 | [runbooks/evidence-store.md](runbooks/evidence-store.md) | Applying the dev and prod evidence buckets and checking the operator and takedown credentials |
 | [runbooks/caselist-removal.md](runbooks/caselist-removal.md) | Removing a caselist or OpenEv source on request |
 | [runbooks/team-website.md](runbooks/team-website.md) | Standing up the team website's hosting, domains and publisher credentials, and deploying, rolling back or taking down the site |
+| [guides/evidence-store-cli.md](guides/evidence-store-cli.md) | Using `debate-research store sync\|ls\|get`: environments, the dry-run default, the production guard, verification and resume |
 | [session-reports/](session-reports/README.md) | One report per completed task |
 | [runbooks/](runbooks/) | Operational procedures run by the operator |
 | [../plan_specs/README.md](../plan_specs/README.md) | PlanSpec conventions |
 | [../ROADMAP.md](../ROADMAP.md) | Releases, epics and tasks with status |
 
-`policies/` and `runbooks/` were added by the caselist data-use policy task, and `data/` by the
-style survey; all three grow with the epics that need them. Still to come as it is needed:
-`guides/` (student and coach guides). See the directory table in
+`policies/` and `runbooks/` were added by the caselist data-use policy task, `data/` by the style
+survey, and `guides/` by `v1-e29-t05-evidence-sync-cli`; each grows with the epics that need it.
+Every directory in the table now exists. See the directory table in
 [working-agreements.md](process/working-agreements.md#3-documentation-lives-in-predictable-places).

@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import typer
 
-from debate_cli.commands import config, doctor
+from debate_cli.commands import config, doctor, store
 
 __all__ = ["command_group", "register_commands"]
 
@@ -51,6 +51,12 @@ def register_commands(app: typer.Typer) -> None:
     configuration = command_group("config", "Inspect the settings this installation runs with.")
     configuration.command("show")(config.show)
     app.add_typer(configuration)
+
+    evidence_store = command_group("store", "Move evidence between this machine and its bucket.")
+    evidence_store.command("sync")(store.sync)
+    evidence_store.command("ls")(store.ls)
+    evidence_store.command("get")(store.get)
+    app.add_typer(evidence_store)
 
 
 def command_group(name: str, help_text: str) -> typer.Typer:

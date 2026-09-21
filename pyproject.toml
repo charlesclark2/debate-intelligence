@@ -121,9 +121,10 @@ root_packages = ["debate_core", "debate_cli", "debate_api", "debate_workers"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "The AWS SDK stays inside debate_core.integrations.s3"
+name = "The AWS SDK never reaches the domain, the application layer or the other adapters"
 type = "forbidden"
-# Every module of every package except the one adapter package that is allowed to import boto3.
+# Not even indirectly: nothing in this list may so much as depend on a module that imports boto3,
+# which is what keeps `debate-core` installable and usable with no AWS SDK present at all.
 # `debate_core.integrations` is named by its subpackages rather than whole, because listing the
 # parent would include `integrations.s3` itself; a new adapter subpackage is added to this list in
 # the PR that creates it.
@@ -133,10 +134,26 @@ source_modules = [
     "debate_core.testing",
     "debate_core.integrations.local",
     "debate_core.integrations.file_streaming",
-    "debate_cli",
     "debate_api",
     "debate_workers",
 ]
+forbidden_modules = ["boto3", "botocore"]
+
+[[tool.importlinter.contracts]]
+name = "The CLI reaches the AWS SDK only through debate_core.integrations.s3"
+type = "forbidden"
+# The delivery packages are held to the *direct* form of the same rule, because a composition root
+# has to be able to construct an adapter: `debate_cli.container` imports
+# `debate_core.integrations.s3` to build the store `debate-research store` syncs with
+# (v1-e29-t05-evidence-sync-cli), and that import is a chain to boto3 by design. What stays
+# forbidden is the CLI reaching for the SDK itself — a `boto3.client(...)` in a command, a
+# `botocore` exception caught outside the adapter that is supposed to translate it — which is the
+# part that would put AWS back into code that is meant not to know about it (ADR-0003, §6).
+#
+# v1-e02-t06-import-boundary-guard owns this section and extends it with the layers contract that
+# also forbids debate_core.application from importing debate_core.integrations at all.
+allow_indirect_imports = true
+source_modules = ["debate_cli"]
 forbidden_modules = ["boto3", "botocore"]
 
 # ---------------------------------------------------------------------------------------------

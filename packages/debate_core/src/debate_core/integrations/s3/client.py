@@ -38,6 +38,8 @@ from typing import TYPE_CHECKING
 import boto3
 from boto3.s3.transfer import TransferConfig
 
+from debate_core.integrations.s3.errors import S3Call, mapped_s3_errors
+
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
 
@@ -82,17 +84,24 @@ def build_s3_client(*, region: str | None = None, profile: str | None = None) ->
     `docs/runbooks/caselist-removal.md` — cannot end up sharing credentials because one of them was
     constructed second.
 
-    Raises :class:`~debate_core.application.errors.StoreCredentialsExpired` through
-    :func:`~debate_core.integrations.s3.errors.mapped_s3_errors` at the adapter's first call, not
-    here: botocore resolves credentials lazily, so a missing profile or an expired session surfaces
-    when something is actually asked of the store.
+    *Credentials* are resolved lazily by botocore, so an expired session surfaces at the adapter's
+    first call rather than here. The *profile* is not: naming one that is not in the shared AWS
+    config raises `ProfileNotFound` from this constructor, which is why the construction is wrapped
+    too. Either way the caller gets
+    :class:`~debate_core.application.errors.StoreCredentialsExpired` with the command that fixes it
+    (`aws configure sso --profile debate-dev-evidence`), and no botocore exception leaves this
+    package — the promise :mod:`debate_core.integrations.s3.errors` exists to keep, which a
+    constructor outside the translation would have quietly excepted itself from.
     """
-    session = boto3.session.Session(profile_name=profile, region_name=region)
-    # `Session.client` is overloaded once per AWS service, and boto3-stubs only types the services
-    # whose stub package is installed — `s3` here. The overloads for every other service therefore
-    # return Unknown, which strict mode reports on the symbol as a whole even though the call this
-    # module makes resolves to `S3Client`. Narrowed to this one line rather than turned off.
-    return session.client("s3")  # pyright: ignore[reportUnknownMemberType]
+    with mapped_s3_errors(
+        S3Call(operation="CreateSession", bucket="", entity="AWS session", key="", profile=profile)
+    ):
+        session = boto3.session.Session(profile_name=profile, region_name=region)
+        # `Session.client` is overloaded once per AWS service, and boto3-stubs only types the services
+        # whose stub package is installed — `s3` here. The overloads for every other service therefore
+        # return Unknown, which strict mode reports on the symbol as a whole even though the call this
+        # module makes resolves to `S3Client`. Narrowed to this one line rather than turned off.
+        return session.client("s3")  # pyright: ignore[reportUnknownMemberType]
 
 
 def build_transfer_config(

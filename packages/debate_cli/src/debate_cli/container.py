@@ -6,8 +6,9 @@ because the moment a command does any of those the CLI stops being replaceable b
 workers, which wire the same services differently (architecture proposal §6, and
 `docs/architecture/ports-and-adapters.md` for the injection pattern the services themselves use).
 
-No service is wired yet: V1's services and their adapters arrive in E02–E08. What exists here is
-the shape they slot into, and — since v1-e02-t05 — the settings they are built from.
+The first service is wired: :meth:`ServiceContainer.evidence_sync`, which `debate-research store`
+runs (`v1-e29-t05-evidence-sync-cli`). The rest of V1's services and their adapters arrive in
+E02–E08 and slot in the same way.
 
 ## Adding a service
 
@@ -37,6 +38,15 @@ because there are none.
 :func:`~debate_core.application.settings.load_settings`. The indirection is what lets a test build
 a container around settings it made up, and it is why loading is lazy: the callable is not run
 until a command actually asks for `settings`, so `--help` and `--version` read no files.
+
+## Why the AWS adapters are imported inside the factory
+
+`debate_core.integrations.s3` is imported where it is used rather than at the top of this module,
+and the reason is not style: boto3 is an *optional* dependency of `debate-core`, under the `aws`
+extra, so a V1 installation running against a local evidence directory does not have it. A
+module-level import here would make `debate-research --help` fail on a machine that has no AWS SDK
+and no use for one. Imported inside the factory, the missing dependency arrives only when someone
+runs `store`, and it arrives as the `uv sync --extra aws` message that package raises.
 """
 
 from __future__ import annotations
@@ -44,12 +54,42 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Final, cast
 
-from debate_core.application.settings import Settings
+from debate_core.application.evidence_sync import (
+    EvidenceSyncService,
+    SyncJournal,
+    SyncKeyspace,
+)
+from debate_core.application.settings import ConfigurationError, Environment, Settings
+from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
 
-__all__ = ["SERVICE_NAMES", "ServiceContainer", "Settings", "SettingsNotConfigured"]
+__all__ = [
+    "SERVICE_NAMES",
+    "EvidenceStoreNotConfigured",
+    "ServiceContainer",
+    "Settings",
+    "SettingsNotConfigured",
+]
 
-SERVICE_NAMES: Final[tuple[str, ...]] = ()
+SERVICE_NAMES: Final[tuple[str, ...]] = ("evidence_sync",)
 """Names of the services this container can build, for `debate-research doctor` to report."""
+
+
+class EvidenceStoreNotConfigured(ConfigurationError):
+    """This environment names no evidence bucket, so there is nothing for `store` to talk to.
+
+    What `DEBATE_ENV=test` gets, and what any environment whose profile has no `storage.s3.bucket`
+    gets. A :class:`~debate_core.application.settings.ConfigurationError`, so the root group
+    reports it as the deterministic failure it is rather than as a bug.
+    """
+
+    def __init__(self, environment: Environment) -> None:
+        super().__init__(
+            f"the {environment.value} environment names no evidence bucket, so `store` has nothing "
+            "to sync with; set DEBATE_ENV to dev or prod, or set storage.s3.bucket for this "
+            "environment (config/profiles/<env>.toml)",
+            field="storage.s3.bucket",
+            source=f"profile:{environment.value}",
+        )
 
 
 class SettingsNotConfigured(RuntimeError):
@@ -106,3 +146,68 @@ class ServiceContainer:
     def override(self, name: str, instance: object) -> None:
         """Register `instance` under `name`, so a test can supply a fake before a command runs."""
         self._instances[name] = instance
+
+    def evidence_sync(self, *, blob_prefix: str | None = None) -> EvidenceSyncService:
+        """Build the sync between this environment's local evidence store and its bucket.
+
+        A method rather than a property because `blob_prefix` is a decision of the run, not of the
+        environment: a content-addressed key carries no record of which archive it belongs to, so
+        the corpus prefix (`raw/caselist/hsld26`, `raw/openev/2026`) comes from the command line
+        and the service refuses to move blobs without one
+        (:class:`~debate_core.application.evidence_sync.UnsyncableKeyspace`). It is still cached
+        per run, keyed by that prefix, so two calls in one command share one S3 client.
+
+        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket.
+        """
+        return self.singleton(
+            f"evidence_sync:{blob_prefix or ''}", lambda: self._build_evidence_sync(blob_prefix)
+        )
+
+    def _build_evidence_sync(self, blob_prefix: str | None) -> EvidenceSyncService:
+        # Imported here, not at module scope: boto3 is an optional dependency and `--help` must
+        # work without it. See this module's docstring.
+        from debate_core.integrations.s3 import S3EvidenceObjectStore, build_s3_client
+
+        settings = self.settings
+        storage = settings.storage
+        if not storage.s3.bucket:
+            raise EvidenceStoreNotConfigured(settings.environment)
+
+        # One client for both keyspaces: one set of credentials, one connection pool, and one
+        # profile name in any `aws sso login` hint the adapters raise.
+        client = build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile)
+
+        def bucket_store() -> S3EvidenceObjectStore:
+            return S3EvidenceObjectStore(
+                bucket=str(storage.s3.bucket),
+                client=client,
+                profile=storage.s3.aws_profile,
+                multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
+            )
+
+        named_objects = FsEvidenceObjectStore(storage.data_dir)
+        blobs = FsEvidenceObjectStore(storage.data_dir, subdirectory=BLOB_DIRECTORY.parent)
+        return EvidenceSyncService(
+            keyspaces=(
+                SyncKeyspace(
+                    name="objects",
+                    local=named_objects,
+                    remote=bucket_store(),
+                    local_path_for=named_objects.path_for,
+                ),
+                SyncKeyspace(
+                    name="blobs",
+                    local=blobs,
+                    remote=bucket_store(),
+                    remote_prefix=blob_prefix or "",
+                    content_addressed=True,
+                    local_path_for=blobs.path_for,
+                ),
+            ),
+            journal=SyncJournal.open(
+                storage.data_dir,
+                environment=settings.environment.value,
+                remote=str(storage.s3.bucket),
+            ),
+            remote_name=str(storage.s3.bucket),
+        )

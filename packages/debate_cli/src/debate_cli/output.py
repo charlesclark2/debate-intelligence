@@ -122,13 +122,22 @@ class CommandFailure:
         `NotFound`, `provider` and `retry_after_seconds` on a `ProviderRateLimited` — which is why
         :mod:`debate_core.application.errors` stores them as attributes rather than only in the
         message. A consumer reads `details["key"]` instead of parsing English.
+
+        An exception that carries its own `hint` supplies one when the caller did not.
+        :class:`~debate_core.application.errors.StoreCredentialsExpired` and
+        :class:`~debate_core.application.errors.StoreAccessDenied` exist to do exactly that: the S3
+        adapter knows which profile it was built with, so it fills in `aws sso login --profile
+        debate-dev-evidence`, and an expired session becomes that one line rather than a wall of
+        botocore traceback (`v1-e29-t05-evidence-sync-cli` ac4). The hint is promoted out of
+        `details` so it renders once, in the place a person looks for what to do next.
         """
+        carried = getattr(exception, "hint", None)
         return cls(
             code=error_code_for(exception),
             message=str(exception) or type(exception).__name__,
             exit_code=exit_code_for(exception),
             details=_details_of(exception),
-            hint=hint,
+            hint=hint if hint is not None else (carried if isinstance(carried, str) else None),
         )
 
 
@@ -300,7 +309,11 @@ def _details_of(exception: BaseException) -> dict[str, JsonValue]:
         return {
             name: value
             for name, value in vars(exception).items()
-            if not name.startswith("_") and isinstance(value, str | int | float | bool | None)
+            # `hint` is promoted to the envelope's own `hint` field by `from_exception`, so
+            # repeating it here would print it twice in the panel and store it twice in the JSON.
+            if not name.startswith("_")
+            and name != "hint"
+            and isinstance(value, str | int | float | bool | None)
         }
     if isinstance(exception, typer.TyperException):
         # A usage error's message is the whole story; its attributes are parser internals.

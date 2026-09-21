@@ -39,11 +39,15 @@ at a temporary directory, and sets the daily model budget to zero.
 
 The *channel* values on top of this mechanism — which models dev routes to, the low dev daily
 budget, and the environment an installed build defaults to — belong to
-`v1-e01-t09-dev-prerelease-channel`, which edits the profile files this task creates. The S3
-bucket, region and SSO profile per environment belong to `v1-e29-t05-evidence-sync-cli`, which
-adds them to `StorageSettings` and the same profile files; they are deliberately absent here
-rather than guessed at, because the real values come from the Terraform outputs
-`evidence_bucket_name` and `evidence_kms_key_arn`.
+`v1-e01-t09-dev-prerelease-channel`, which edits the profile files this task creates.
+
+Each environment also names the evidence bucket it syncs to, in :class:`S3StorageSettings` under
+`storage.s3` (`v1-e29-t05-evidence-sync-cli`). Those values are not invented here: they are the
+environment root's Terraform outputs — `evidence_bucket_name`, `evidence_operator_profile_name`
+and `aws_region` in `infrastructure/envs/<env>/outputs.tf` — written into the committed profile
+files, which is possible only because the bucket suffix is itself a committed constant
+(`docs/architecture/evidence-store-layout.md`). `test` names no bucket at all, so a test that
+reaches for one gets a refusal rather than somebody's real store.
 
 ## Secrets
 
@@ -93,6 +97,7 @@ from debate_core.application.errors import DomainError
 
 __all__ = [
     "BUILTIN_PROFILES",
+    "EVIDENCE_BUCKET_SUFFIX",
     "ENVIRONMENT_VARIABLE",
     "ENV_NESTED_DELIMITER",
     "ENV_PREFIX",
@@ -104,6 +109,7 @@ __all__ = [
     "HttpSettings",
     "ModelSettings",
     "ProviderSettings",
+    "S3StorageSettings",
     "SearchProviderName",
     "Settings",
     "StorageSettings",
@@ -212,16 +218,84 @@ class SettingsGroup(BaseModel):
     )
 
 
-class StorageSettings(SettingsGroup):
-    """Where this environment keeps its local data.
+class S3StorageSettings(SettingsGroup):
+    """The evidence bucket this environment syncs to, and the credential that reaches it.
 
-    Only the root is configured. The layout inside it — the blob store, the SQLite file, exports —
-    is `v1-e02-t03-local-repositories`' to define, and it derives its paths from `data_dir` rather
-    than taking its own setting, so one environment is one directory and nothing escapes it.
+    Read by `debate-research store` (v1-e29-t05) and by nothing else: the S3 adapters take a
+    bucket, a region and a profile as constructor arguments and read no settings of their own
+    (:mod:`debate_core.integrations.s3`). This group is where the composition root gets them.
+
+    **Every value here comes from the environment root's Terraform outputs**, not from a name
+    somebody thought of: `bucket` is `evidence_bucket_name`, `aws_profile` is
+    `evidence_operator_profile_name`, `region` is `aws_region`
+    (`infrastructure/envs/<env>/outputs.tf`). They are written into the committed profile files
+    because the bucket suffix is a committed constant, so a runbook, a takedown and this CLI can
+    name the bucket without reading Terraform state
+    (`docs/architecture/evidence-store-layout.md`) — but the *source* of the name is the apply,
+    and none of it is a literal anywhere in Python.
+
+    Nothing here is a secret. A bucket name and an SSO profile name are not credentials: the
+    credential is the SSO session `aws sso login --profile <aws_profile>` puts in the operator's
+    own AWS config, which this platform never reads, stores or prints.
+
+    The KMS key is deliberately absent. Each evidence bucket has the environment's
+    customer-managed key as its default encryption (`v1-e29-t03`), so an upload that names no key
+    is still encrypted with the right one — and the key's ARN contains the account id, which does
+    not belong in a committed file.
+    """
+
+    bucket: str | None = Field(
+        default=None,
+        description=(
+            "Evidence bucket for this environment, from the evidence_bucket_name Terraform "
+            "output. None means this environment has no bucket configured and `store` commands "
+            "refuse to run rather than guessing at one."
+        ),
+    )
+    region: str = Field(
+        default="us-east-1",
+        description="Region the bucket is in. ADR-0010 pins every environment to us-east-1.",
+    )
+    aws_profile: str | None = Field(
+        default=None,
+        description=(
+            "Profile in the operator's shared AWS config, from the "
+            "evidence_operator_profile_name Terraform output (debate-dev-evidence / "
+            "debate-prod-evidence). None uses botocore's standard credential chain, which is "
+            "what a role on an instance or a task is."
+        ),
+    )
+    multipart_threshold_mb: int = Field(
+        default=64,
+        ge=5,
+        le=4096,
+        description=(
+            "Size above which a transfer is split into parts. Below S3's own 5 MiB minimum part "
+            "size there is nothing to split, so that is the floor."
+        ),
+    )
+
+    @property
+    def multipart_threshold_bytes(self) -> int:
+        """:attr:`multipart_threshold_mb` in the bytes the S3 adapters take."""
+        return self.multipart_threshold_mb * 1024 * 1024
+
+
+class StorageSettings(SettingsGroup):
+    """Where this environment keeps its local data, and which bucket it syncs to.
+
+    Only the root of the local store is configured. The layout inside it — the blob store, the
+    SQLite file, exports — is `v1-e02-t03-local-repositories`' to define, and it derives its paths
+    from `data_dir` rather than taking its own setting, so one environment is one directory and
+    nothing escapes it.
     """
 
     data_dir: Path = Field(
         description="Root directory for this environment's evidence store, database and exports."
+    )
+    s3: S3StorageSettings = Field(
+        default_factory=S3StorageSettings,
+        description="The cloud evidence store for this environment, or the defaults when it has none.",
     )
 
     @field_validator("data_dir")
@@ -434,6 +508,36 @@ def _temporary_data_dir() -> Path:
     return Path(tempfile.gettempdir()) / "debate-research-test"
 
 
+EVIDENCE_BUCKET_SUFFIX: Final = "a7508de8"
+"""Suffix that makes each evidence bucket name unique in S3's global namespace.
+
+The same committed constant `infrastructure/envs/<env>/variables.tf` declares as
+`evidence_bucket_suffix`, repeated here for the same stated reason it is committed there: so that
+a runbook, a takedown and `debate-research store` can name the bucket without an operator first
+running `terraform output` (`docs/architecture/evidence-store-layout.md`). It is not a secret and
+not an account id — it is eight hex characters chosen once so two AWS accounts could not collide.
+
+If the buckets are ever recreated under a new suffix, this constant, the two `variables.tf`
+defaults and the layout document change together, and
+`test_the_committed_profiles_name_the_buckets_terraform_builds` is what fails if they do not.
+"""
+
+
+def _evidence_bucket_for(environment: Environment) -> dict[str, Any]:
+    """The evidence bucket coordinates for one environment, as Terraform builds them.
+
+    Mirrors `module.evidence_store` in `infrastructure/envs/<env>/evidence_store.tf`:
+    `${name_prefix}-${environment}-evidence-${bucket_suffix}` for the bucket, and
+    `debate-<env>-evidence` for the everyday SSO profile (`operator_profile_name`). `test` is
+    absent from this mapping on purpose and gets no bucket.
+    """
+    return {
+        "bucket": f"debate-{environment.value}-evidence-{EVIDENCE_BUCKET_SUFFIX}",
+        "region": "us-east-1",
+        "aws_profile": f"debate-{environment.value}-evidence",
+    }
+
+
 def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
     """The defaults each environment has before any profile file is read.
 
@@ -445,7 +549,10 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
     return {
         Environment.DEV: {
             "allow_network": True,
-            "storage": {"data_dir": Path("~/.debate-research/dev")},
+            "storage": {
+                "data_dir": Path("~/.debate-research/dev"),
+                "s3": _evidence_bucket_for(Environment.DEV),
+            },
             "models": {
                 "routing_file": Path("config/model_routing.dev.yaml"),
                 "budget_usd_daily": 2.0,
@@ -453,7 +560,10 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
         },
         Environment.PROD: {
             "allow_network": True,
-            "storage": {"data_dir": Path("~/.debate-research/prod")},
+            "storage": {
+                "data_dir": Path("~/.debate-research/prod"),
+                "s3": _evidence_bucket_for(Environment.PROD),
+            },
             "models": {
                 "routing_file": Path("config/model_routing.prod.yaml"),
                 "budget_usd_daily": 20.0,

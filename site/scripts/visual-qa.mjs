@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Pre-launch visual QA for the public team site (v1-e36-t08).
  *
@@ -54,14 +53,14 @@ const TOOLS_DIRECTORY = join(SITE_DIRECTORY, 'scripts', 'visual-qa-tools')
  * portrait and the width at which the navigation menu gives way to a row of links; 1280px is the
  * laptop most parents will open it on.
  */
-const WIDTHS = [
+export const WIDTHS = [
   { width: 390, height: 844, label: 'phone' },
   { width: 768, height: 1024, label: 'tablet' },
   { width: 1280, height: 900, label: 'desktop' },
 ]
 
 /** WCAG 2.1 level A and AA, which is what docs/policies/website-publishing.md commits to. */
-const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
+export const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
 
 const LIGHTHOUSE_CATEGORIES = ['performance', 'accessibility', 'best-practices', 'seo']
 
@@ -81,13 +80,13 @@ const CONTENT_TYPES = new Map([
   ['.woff2', 'font/woff2'],
 ])
 
-class VisualQaError extends Error {}
+export class VisualQaError extends Error {}
 
 /* ---------------------------------------------------------------------------------------------
  * Arguments
  * ------------------------------------------------------------------------------------------- */
 
-function parseArguments(argv) {
+export function parseArguments(argv) {
   const options = {
     minAccessibility: 95,
     minBestPractices: 95,
@@ -199,7 +198,7 @@ async function loadQaToolchain() {
  * it. That is also how the S3 origin is configured, so resolving the same way here is what makes
  * these results mean anything about the deployed site.
  */
-function filePathFor(urlPath) {
+export function filePathFor(urlPath) {
   const withoutQuery = urlPath.split(/[?#]/)[0]
   const relative = decodeURIComponent(withoutQuery).replace(/^\/+/, '')
   const candidate = join(EXPORT_DIRECTORY, relative)
@@ -215,7 +214,7 @@ function filePathFor(urlPath) {
   return candidate
 }
 
-async function startStaticServer() {
+export async function startStaticServer() {
   const port = await freePort()
   const server = createServer((request, response) => {
     const path = filePathFor(request.url ?? '/')
@@ -269,7 +268,7 @@ function freePort() {
  * server, so only the path is portable. Reading the sitemap rather than a list written here is
  * what makes "every page" true after someone adds a page.
  */
-async function pagePaths() {
+export async function pagePaths() {
   const sitemap = join(EXPORT_DIRECTORY, 'sitemap.xml')
   if (!existsSync(sitemap)) {
     throw new VisualQaError(
@@ -378,7 +377,7 @@ function formatScore(score) {
   return score === null ? 'not measured' : String(score)
 }
 
-function buildReport({ pages, versions, options, startedAt }) {
+export function buildReport({ pages, versions, options, startedAt }) {
   const lines = []
   lines.push('## Lighthouse scores')
   lines.push('')
@@ -445,7 +444,7 @@ function buildReport({ pages, versions, options, startedAt }) {
   return lines.join('\n')
 }
 
-function findFailures(pages, options) {
+export function findFailures(pages, options) {
   const failures = []
   for (const page of pages) {
     const accessibility = page.scores.accessibility
@@ -541,13 +540,23 @@ async function main(argv) {
   return 0
 }
 
-try {
-  process.exitCode = await main(process.argv.slice(2))
-} catch (error) {
-  if (error instanceof VisualQaError) {
-    console.error(`visual-qa: ${error.message}`)
-    process.exitCode = 2
-  } else {
-    throw error
+/**
+ * Run only when this file is the command, so that tests/visual-qa.test.ts can import the parts
+ * that need no browser (path resolution, the sitemap walk, the report, the floor) and check them
+ * in the offline suite. Everything that needs Chromium stays behind `main`, which no test calls.
+ */
+const invokedDirectly =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+
+if (invokedDirectly) {
+  try {
+    process.exitCode = await main(process.argv.slice(2))
+  } catch (error) {
+    if (error instanceof VisualQaError) {
+      console.error(`visual-qa: ${error.message}`)
+      process.exitCode = 2
+    } else {
+      throw error
+    }
   }
 }

@@ -12,7 +12,8 @@
     "build": "NEXT_TELEMETRY_DISABLED=1 next build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "qa": "node scripts/visual-qa.mjs"
   },
   "dependencies": {
     "gray-matter": "4.0.3",

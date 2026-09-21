@@ -14,12 +14,8 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `SearchRepository` | `persistence` | Searches and their ranked results |
 | `CaselistRepository` | `caselist` | Imported caselist and camp-file records (E30) |
 | `ArchiveMember` / `SkippedMember` | `archive` | What reading a weekly archive yields (E30) |
-<<<<<<< HEAD
-| `CaselistArchiveSource` | `caselist_source` | Listing and downloading OpenCaselist archives and OpenEv files (E34) |
-| `DebateFileParser` | `debate_files` | Reading a debate `.docx` into sections and cards (E31) |
-=======
 | `CaselistArchiveSource` | `caselist_source` | OpenCaselist archive and OpenEv listings and downloads (E34) |
->>>>>>> 5e73363 (Add the polite OpenCaselist client: shared transport, per-resource modules)
+| `DebateFileParser` | `debate_files` | Reading a debate `.docx` into sections and cards (E31) |
 | `SearchProvider` | `providers` | One discovery source |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
 | `ContentExtractor` | `providers` | Readable-text extraction |

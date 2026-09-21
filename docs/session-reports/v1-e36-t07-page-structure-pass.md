@@ -48,7 +48,7 @@ question. Both want the spec amended rather than left implicit.
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| **ac0** Explicit ordered nav, utility pages in the footer, `aria-current`, mobile menu at 390px | PASS, with one deviation | `pnpm --dir site test navigation` → **41 passed**. The nav is six pages, not the seven ac0 enumerates: contact moved to the footer at Charlie's request, which is **deviation 7** below. The nav is `primaryNavigation` in `content/site.yaml`; `navigation.primary.length < pages.length` is asserted, as is that no published page falls out of both lists. Export check: `/accessibility/` and `/contact/` appear in every page's `<footer>` and in no `<header>`. Each page's own nav link carries `aria-current="page"` in the exported HTML; a page outside the nav marks none. 390px: asserted as target sizes (44px on toggle, nav link and footer link), the 48rem breakpoint that decides the menu is a menu at 390px, tab order through every link, and Escape returning focus to the toggle. **The pixel check at 390px is not possible under jsdom** and belongs to v1-e36-t08. |
+| **ac0** Explicit ordered nav, utility pages in the footer, `aria-current`, mobile menu at 390px | PASS, with one deviation | `pnpm --dir site test navigation` → **39 passed**. The nav is six pages, not the seven ac0 enumerates: contact moved to the footer at Charlie's request, which is **deviation 7** below. The nav is `primaryNavigation` in `content/site.yaml`; `navigation.primary.length < pages.length` is asserted, as is that no published page falls out of both lists. Export check: `/accessibility/` and `/contact/` appear in every page's `<footer>` and in no `<header>`. Each page's own nav link carries `aria-current="page"` in the exported HTML; a page outside the nav marks none. 390px: asserted as target sizes (44px on toggle, nav link and footer link), the 48rem breakpoint that decides the menu is a menu at 390px, tab order through every link, and Escape returning focus to the toggle. **The pixel check at 390px is not possible under jsdom** and belongs to v1-e36-t08. |
 | **ac1** FAQ grouped into topic sections, native `<details>` with the question in `<summary>`, in-page index, no `role="button"`/`aria-expanded` | PASS | `pnpm --dir site test faq` → **77 passed**. Five sections, one `<details>` per question, the question in an `<h3>` inside the `<summary>`, an index of five in-page links each resolving to a real section id. `main` contains zero `[aria-expanded]` and zero `[role="button"]`, asserted both in the render and in the exported HTML. |
 | **ac2** Two or three named most-asked questions `open` in the export; every answer's full text present whether open or closed | PASS | `pnpm --dir site test faq` → **77 passed**. The exported `/faq/index.html` carries 17 `<details>` and exactly 3 with `open` (cost, time, judging). Every sentence over 24 characters of every answer is matched in the exported markup with the React payload stripped out, open or closed. |
 | **ac3** Three parallel cards, same four comparison fields, detail beneath; stacks at 390px with no horizontal overflow | PASS | `pnpm --dir site test events` → **79 passed**. The three cards render the same four labels and values in the same order; every field is filled; each field differs across the three, so the comparison says something. The card holds no part of the detail; each links to its own detail section below. 390px: the grid declares one column outside any media query and every multi-column rule is inside a `min-width` query; the field list stacks label above value and declares no fixed width and no `nowrap`. **Again a source-level check, not a pixel one.** |
@@ -65,9 +65,9 @@ question. Both want the spec amended rather than left implicit.
 | FAQ uses native details, opens the named questions and indexes its topics (`pnpm --dir site test faq`) | PASS | **77 passed**. |
 | Events page renders three parallel cards with the same comparison fields (`pnpm --dir site test events`) | PASS | **79 passed**. |
 | Every core page leads with a summary block (`pnpm --dir site test page-structure`) | PASS | **37 passed**. |
-| Nav lists exactly the configured pages, footer carries the utility links (`pnpm --dir site test navigation`) | PASS | **40 passed**. |
+| Nav lists exactly the configured pages, footer carries the utility links (`pnpm --dir site test navigation`) | PASS | **39 passed**. |
 | Restructured pages have no WCAG 2.1 AA violations (`pnpm --dir site test pages-a11y`) | PASS | **42 passed**. |
-| Full site suite passes offline (`pnpm --dir site test`) | PASS | **611 passed**, 0 failed, 5.5s. No network: `tests/setup.ts` turns any `fetch` into a failure. |
+| Full site suite passes offline (`pnpm --dir site test`) | PASS | **610 passed**, 0 failed, ~5s. No network: `tests/setup.ts` turns any `fetch` into a failure. |
 | Static export builds (`pnpm --dir site build`) | PASS | 14 static pages; `/faq` and `/events` are static routes of their own. |
 | Lint passes (`pnpm --dir site lint`) | PASS | Clean. `pnpm --dir site typecheck` also clean. |
 
@@ -97,7 +97,7 @@ block. `layout.css` gains the current-page marker and the footer links.
 
 **`site/tests/`** — `faq`, `events`, `page-structure` and `navigation` suites are new; `content`,
 `content-policy`, `routes`, `layout`, `design-system` and `pages-a11y` were updated. Six new
-fixtures cover the loader and navigation failures. 611 tests, up from 308.
+fixtures cover the loader and navigation failures. 610 tests, up from 308.
 
 ## Deviations from the spec
 

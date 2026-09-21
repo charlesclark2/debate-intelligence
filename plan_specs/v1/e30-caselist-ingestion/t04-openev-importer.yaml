@@ -51,7 +51,8 @@ spec:
         and is reported as DUPLICATE with a reference to the existing SourceDocument.
     - id: ac3
       description: >-
-        <data_dir>/manifests/openev/<year>-<event>.jsonl uses the same schema version and row layout as
+        The object key manifests/openev/<year>-<event>.jsonl in the evidence object store (see v1-e30-t03
+        ac4 for why the local root is <data_dir>/objects/) uses the same schema version and row layout as
         caselist manifests plus camp fields, and re-importing the same archive is a no-op.
     - id: ac4
       description: >-

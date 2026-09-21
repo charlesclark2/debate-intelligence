@@ -26,7 +26,13 @@ spec:
     implementation session; the session prepares the runbook and summary template, and the recorded
     results are committed as aggregate counts only in docs/data/caselist-backfill-2026-09.md (files per
     snapshot, NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts, dedupe rate, PDFs and unparsed names, bytes
-    stored, dev and prod publish results). Source files are never committed and no school, team code or
+    stored, dev and prod publish results). REMOVED must not be published as a takedown count. The
+    v1-e30-t03 run established that a disclosure is keyed by path while the real archives rename files
+    week to week - the numeric token between the side and the tournament is a per-team sequence that
+    increments - so REMOVED means "no longer at that path" and was 685 for one week of HS LD when almost
+    nothing had been taken down. The summary reports that number under a name that says so, and reports
+    beside it the count that does mean withdrawal: sources whose sha256 appeared in an earlier snapshot
+    and appears nowhere in this one. Source files are never committed and no school, team code or
     student name appears in the summary. Boundaries: import/publish code is t03-t05, parsing the
     backfilled sources is v1-e31-t06, and recurring downloads are E34.
   priority: 1
@@ -57,7 +63,11 @@ spec:
       description: >-
         docs/data/caselist-backfill-2026-09.md records per snapshot the member count and the
         NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts, the overall dedupe rate, PDF/.doc and
-        unparsed-filename counts, and total bytes stored, with aggregate numbers only.
+        unparsed-filename counts, and total bytes stored, with aggregate numbers only. REMOVED is labelled
+        as paths no longer present, not as removals, and a separate figure counts sources whose sha256 is
+        absent from the whole snapshot, which is what withdrawal looks like. The summary also states the
+        measured dedupe rate rather than the epic's assumption of a large one: three weeks of HS LD
+        collapsed 2,374 members to 2,107 distinct files, an 11% saving.
     - id: ac3
       description: >-
         manifests/hsld26/2026-09-01.jsonl, 2026-09-08.jsonl and 2026-09-15.jsonl and the OpenEv manifest exist

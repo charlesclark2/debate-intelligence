@@ -1,5 +1,5 @@
 # RELEASE v1.1 — Caselist evidence store
-# Major version: V1. Epics: E29, E30, E31
+# Major version: V1. Epics: E29, E30, E31, E34
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -14,9 +14,12 @@ metadata:
     debate/title: v1.1 — Caselist evidence store
 spec:
   description: >-
-    Weekly OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are imported, deduplicated,
-    parsed into cards and stored in S3 (dev and prod) with manifests; CardMirror is evaluated and ADR-0014
-    records the editor decision.
+    OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are imported, deduplicated,
+    parsed into cards and stored in S3 (dev and prod) with manifests; a daily scheduled sync captures
+    every archive window from the day it ships; CardMirror is evaluated and ADR-0014 records the editor
+    decision. E34 sits in this release rather than v1.2 because of ADR-0016: an OpenCaselist download
+    holds about seven days of modifications and nothing can re-fetch a window that was missed, so the
+    sync has to be running before, not after, the corpus work that depends on it.
   priority: 2
   acceptanceCriteria:
   - id: epic-e29
@@ -28,6 +31,10 @@ spec:
   - id: epic-e31
     description: >-
       Epic E31 (Debate File Parsing) goal is Succeeded.
+  - id: epic-e34
+    description: >-
+      Epic E34 (Scheduled Caselist Sync) goal is Succeeded, and the daily schedule is enabled and has
+      completed at least one unattended run.
   - id: tagged
     description: >-
       Release tag v1.1.0 is pushed and CHANGELOG.md has a v1.1 section.
@@ -90,6 +97,12 @@ spec:
       inputs:
         goalRef: v1-e31-debate-file-parsing
         specRef: plan_specs/v1/e31-debate-file-parsing/epic.yaml
+    - id: e34
+      kind: External
+      name: Epic E34 — Scheduled Caselist Sync
+      inputs:
+        goalRef: v1-e34-caselist-sync
+        specRef: plan_specs/v1/e34-caselist-sync/epic.yaml
     - id: tag-release
       kind: Task
       name: Tag and publish v1.1.0
@@ -99,6 +112,7 @@ spec:
       - e29
       - e30
       - e31
+      - e34
       acceptanceCriteria:
       - type: command_succeeds
         name: Release tag exists

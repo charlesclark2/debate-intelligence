@@ -1,5 +1,5 @@
 # TASK v1-e34-t03-sync-monitoring — Sync run log and staleness warnings
-# Epic: E34 Scheduled Caselist Sync | Release: v1.2 (Argument landscape & file building) | Major: V1
+# Epic: E34 Scheduled Caselist Sync | Release: v1.1 (Caselist evidence store) | Major: V1
 # Architecture refs: §8 provenance, §9 Opponent data (retrieval time), §14, §15 reliability/observability
 ---
 apiVersion: planspec.io/v1alpha1
@@ -10,14 +10,19 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.1
     debate/epic: v1-e34-caselist-sync
   annotations:
     debate/title: Sync run log and staleness warnings
     debate/architecture-refs: §8, §9, §14, §15
 spec:
   description: >-
-    Make an unattended weekly sync impossible to fail silently. Every `caselist pull` run (t02) appends
+    Make an unattended daily sync impossible to fail silently. Under ADR-0016 this is not operational
+    polish: a download holds about seven days of modifications and nothing can re-fetch a window that was
+    missed, so a run that fails quietly is permanent data loss rather than a delayed refresh. The
+    staleness check therefore has to reach the operator without being looked for, and it fires on a run
+    that did not happen at all, not only on one that ran and failed.
+    Make an unattended sync impossible to fail silently. Every `caselist pull` run (t02) appends
     a SyncRunRecord (run id, environment, start/end, caselist slugs, archives seen/downloaded, stage
     outcomes, pending publish work, error class and message) to a local run log and publishes it to
     reports/sync-runs/<yyyy>/<run-id>.json in the environment's evidence bucket; `debate-research caselist
@@ -73,7 +78,7 @@ metadata:
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.2
+    debate/release: v1.1
     debate/epic: v1-e34-caselist-sync
 spec:
   description: >-

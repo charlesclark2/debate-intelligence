@@ -25,8 +25,11 @@ spec:
     adds rounds, so a path-keyed first-seen would report a rename as a fresh disclosure and inflate every
     week's trend. A test covers the rename case explicitly. The weekly archives are also far less cumulative
     than this epic first assumed - deduplication saves about 11%, not most of the corpus - so a snapshot is
-    treated as the export it is rather than as a superset of the one before it, and each position is labeled NEW, RISING, FALLING or STEADY by its change in share of the
-    week's disclosing teams, with a minimum-teams floor so one team does not make a trend. Trends never
+    treated as the seven-day window it is rather than as a superset of the one before it (ADR-0016), and
+    each position is labeled NEW, RISING, FALLING or STEADY by its change in share of the week's
+    disclosing teams, with a minimum-teams floor so one team does not make a trend. A report whose data
+    spans less than a full topic cycle says so on its face, because early history is short by
+    construction and a trend drawn over three windows is not a trend. Trends never
     compare across a topic change (the LD and PF topics rotate). The per-school view lists, for each
     school and team code as disclosed, the positions read on aff and on neg with round counts and the
     last tournament seen, to seed later scouting. Boundaries: base counts and top cards are t03; the CLI
@@ -107,7 +110,9 @@ spec:
         kind: Task
         name: Weekly delta and trend labels
         description: >-
-          Compute weekly disclosing teams from first-seen disclosures, per-position weekly share and delta,
+          Compute weekly disclosing teams from first-seen disclosures in the accumulated store, never
+          from one archive's membership - an archive holds seven days of edits, so its team list is the
+          teams who edited something, not the teams competing (ADR-0016). Per-position weekly share and delta,
           apply threshold and minimum-teams rules, and refuse cross-topic comparisons.
         dependsOn: [fixture-extension]
         outputs: [packages/debate_core/src/debate_core/application/landscape_trends.py]

@@ -125,7 +125,9 @@ spec:
         name: Position aggregation per snapshot
         description: >-
           Join classifications to disclosures, count READS by rounds and distinct teams, split by side,
-          compute first_seen_snapshot and is_new against the previous snapshot, share_of_teams against
+          compute first_seen_snapshot and is_new against the accumulated store rather than against one
+          archive (ADR-0016: an archive is a seven-day window, so a team absent from it has not stopped
+          disclosing), share_of_teams against
           all teams that disclosed, and the unclassified line.
         dependsOn: [synthetic-caselist-fixture, report-model]
         outputs: [packages/debate_core/src/debate_core/application/landscape_report.py]

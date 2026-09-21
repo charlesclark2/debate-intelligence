@@ -22,7 +22,11 @@ spec:
     ~2,342 .docx and 32 .pdf, imported in date order so cumulative dedupe works; the ~106 Policy OpenEv
     camp files; and any HS Policy or PF archives on hand. The operator imports and publishes to dev
     first, checks `caselist status` and spot-checks disclosures there, then publishes the same local
-    store to prod. Because the imports and uploads run well past two minutes, no step runs in CI or in an
+    store to prod. Under ADR-0016 this is the first day of accumulation rather than a backfill: the three
+    downloads are adjacent seven-day windows of editing activity, not a census of HS LD disclosure, and
+    everything last modified before 2026-08-24 and untouched since is already unreachable. The summary
+    says so in those terms, and this task runs after E34's daily sync is enabled, so no further window is
+    lost while it is being written. Because the imports and uploads run well past two minutes, no step runs in CI or in an
     implementation session; the session prepares the runbook and summary template, and the recorded
     results are committed as aggregate counts only in docs/data/caselist-backfill-2026-09.md (files per
     snapshot, NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts, dedupe rate, PDFs and unparsed names, bytes

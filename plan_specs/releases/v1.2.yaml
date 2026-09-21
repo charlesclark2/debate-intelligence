@@ -1,5 +1,5 @@
 # RELEASE v1.2 — Argument landscape & file building
-# Major version: V1. Epics: E05, E32, E33, E34
+# Major version: V1. Epics: E05, E32, E33
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -15,8 +15,9 @@ metadata:
 spec:
   description: >-
     Weekly argument-landscape reports show which positions are being read and with which cards; coaches
-    build Verbatim/CardMirror-compatible files from disclosed cards with provenance; caselist sync can
-    run on a schedule.
+    build Verbatim/CardMirror-compatible files from disclosed cards with provenance. The scheduled sync
+    moved to v1.1 under ADR-0016; what this release adds to it is the parse and landscape stages of the
+    same daily run.
   priority: 3
   acceptanceCriteria:
   - id: epic-e05
@@ -28,9 +29,6 @@ spec:
   - id: epic-e33
     description: >-
       Epic E33 (Evidence File Builder) goal is Succeeded.
-  - id: epic-e34
-    description: >-
-      Epic E34 (Scheduled Caselist Sync) goal is Succeeded.
   - id: tagged
     description: >-
       Release tag v1.2.0 is pushed and CHANGELOG.md has a v1.2 section.
@@ -93,12 +91,6 @@ spec:
       inputs:
         goalRef: v1-e33-file-builder
         specRef: plan_specs/v1/e33-file-builder/epic.yaml
-    - id: e34
-      kind: External
-      name: Epic E34 — Scheduled Caselist Sync
-      inputs:
-        goalRef: v1-e34-caselist-sync
-        specRef: plan_specs/v1/e34-caselist-sync/epic.yaml
     - id: tag-release
       kind: Task
       name: Tag and publish v1.2.0
@@ -108,7 +100,6 @@ spec:
       - e05
       - e32
       - e33
-      - e34
       acceptanceCriteria:
       - type: command_succeeds
         name: Release tag exists

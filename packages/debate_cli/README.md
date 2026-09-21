@@ -13,7 +13,7 @@ $ uv run debate-research --json doctor | jq .data.cli_version
 
 Today the app ships `--version` and `doctor`. The commands this skeleton exists for arrive with
 their own tasks: `verify` (E03), `fetch` (E04), `search` and `cut` (E08), `daily` and `config`,
-`store` (v1-e29-t05), `caselist` (E30, E34), `landscape` (E32), `files` (E33).
+`store` (v1-e29-t05), `caselist` (E30; `caselist auth login|status|logout` from v1-e34-t01), `landscape` (E32), `files` (E33).
 
 ## The modules
 

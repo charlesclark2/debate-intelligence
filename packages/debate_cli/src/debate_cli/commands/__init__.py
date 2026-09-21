@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import typer
 
-from debate_cli.commands import caselist, config, doctor, store
+from debate_cli.commands import caselist, caselist_auth, config, doctor, store
 
 __all__ = ["command_group", "register_commands"]
 
@@ -54,6 +54,11 @@ def register_commands(app: typer.Typer) -> None:
 
     disclosed_evidence = command_group("caselist", "Import and inspect disclosed caselist evidence.")
     disclosed_evidence.command("import")(caselist.import_archive)
+    opencaselist_session = command_group("auth", "Log in to OpenCaselist and manage the stored token.")
+    opencaselist_session.command("login")(caselist_auth.login)
+    opencaselist_session.command("status")(caselist_auth.status)
+    opencaselist_session.command("logout")(caselist_auth.logout)
+    disclosed_evidence.add_typer(opencaselist_session)
     app.add_typer(disclosed_evidence)
 
     evidence_store = command_group("store", "Move evidence between this machine and its bucket.")

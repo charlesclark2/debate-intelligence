@@ -6,9 +6,11 @@ because the moment a command does any of those the CLI stops being replaceable b
 workers, which wire the same services differently (architecture proposal §6, and
 `docs/architecture/ports-and-adapters.md` for the injection pattern the services themselves use).
 
-Two services are wired: :meth:`ServiceContainer.evidence_sync`, which `debate-research store`
-runs (`v1-e29-t05-evidence-sync-cli`), and :meth:`ServiceContainer.caselist_import`, which
-`debate-research caselist import` runs (`v1-e30-t03-archive-importer`). The rest of V1's services
+Four services are wired: :meth:`ServiceContainer.evidence_sync`, which `debate-research store`
+runs (`v1-e29-t05-evidence-sync-cli`); :meth:`ServiceContainer.caselist_import`, which
+`debate-research caselist import` runs (`v1-e30-t03-archive-importer`); and
+:meth:`ServiceContainer.caselist_token_store` and :meth:`ServiceContainer.opencaselist_client`,
+which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`). The rest of V1's services
 and their adapters arrive in E02–E08 and slot in the same way.
 
 ## Adding a service
@@ -53,7 +55,7 @@ runs `store`, and it arrives as the `uv sync --extra aws` message that package r
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
 from debate_core.application.caselist.import_service import CaselistImportService
 from debate_core.application.evidence_sync import (
@@ -70,6 +72,9 @@ from debate_core.integrations.local import (
 )
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 
+if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
+    from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
+
 __all__ = [
     "SERVICE_NAMES",
     "EvidenceStoreNotConfigured",
@@ -78,7 +83,12 @@ __all__ = [
     "SettingsNotConfigured",
 ]
 
-SERVICE_NAMES: Final[tuple[str, ...]] = ("caselist_import", "evidence_sync")
+SERVICE_NAMES: Final[tuple[str, ...]] = (
+    "caselist_import",
+    "caselist_token_store",
+    "evidence_sync",
+    "opencaselist_client",
+)
 """Names of the services this container can build, for `debate-research doctor` to report."""
 
 
@@ -242,4 +252,41 @@ class ServiceContainer:
                 remote=str(storage.s3.bucket),
             ),
             remote_name=str(storage.s3.bucket),
+        )
+
+    def caselist_token_store(self) -> CaselistTokenStore:
+        """Where this environment keeps the operator's caselist_token (v1-e34-t01).
+
+        The keychain item is per environment, and the file fallback lives under this environment's
+        data directory, so a dev login never authenticates a prod run.
+        """
+        return self.singleton("caselist_token_store", self._build_caselist_token_store)
+
+    def _build_caselist_token_store(self) -> CaselistTokenStore:
+        from debate_core.integrations.opencaselist import CaselistTokenStore, default_secret_file
+
+        settings = self.settings
+        return CaselistTokenStore.for_settings(
+            settings.caselist.token_backend,
+            account=settings.environment.value,
+            secret_file=settings.caselist.secret_file or default_secret_file(settings.storage.data_dir),
+        )
+
+    def opencaselist_client(self) -> OpenCaselistClient:
+        """The OpenCaselist API client, or the refusal this installation's settings call for.
+
+        Raises :class:`~debate_core.application.ports.caselist_source.CaselistApiDisabled` unless
+        `caselist.api_enabled` is set, before any prompt is shown or request built.
+        """
+        return self.singleton("opencaselist_client", self._build_opencaselist_client)
+
+    def _build_opencaselist_client(self) -> OpenCaselistClient:
+        # Imported here for the same reason the S3 adapters are: `--help` should not pay for httpx.
+        from debate_cli import package_version
+        from debate_core.integrations.opencaselist import OpenCaselistClient
+
+        return OpenCaselistClient.from_settings(
+            self.settings,
+            token_store=self.caselist_token_store(),
+            user_agent_version=package_version(),
         )

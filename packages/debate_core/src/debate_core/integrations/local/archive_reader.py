@@ -51,11 +51,15 @@ import os
 import stat
 import zipfile
 from collections.abc import Iterator
-from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
-from debate_core.application.errors import DomainError
+from debate_core.application.errors import ArchiveTooLarge, UnreadableArchive
+from debate_core.application.ports.archive import (
+    ArchiveEntry,
+    ArchiveMember,
+    SkippedMember,
+    SkipReason,
+)
 
 __all__ = [
     "ArchiveEntry",
@@ -68,98 +72,6 @@ __all__ = [
     "common_root_to_strip",
     "read_archive",
 ]
-
-
-class SkipReason(StrEnum):
-    """Why a member of an archive was not imported.
-
-    Every one is counted and reported, because "1,597 files, 1,592 imported" is a sentence an
-    operator can check and "1,592 files imported" is not.
-    """
-
-    MACOS_METADATA = "MACOS_METADATA"
-    """`__MACOSX/…` or an AppleDouble `._name` sidecar: the resource fork of a real member."""
-
-    DESKTOP_SERVICES_STORE = "DESKTOP_SERVICES_STORE"
-    """`.DS_Store`: how the Finder remembers a folder's icon positions."""
-
-    WORD_LOCK_FILE = "WORD_LOCK_FILE"
-    """`~$name.docx`: Word's marker for a document somebody had open when the archive was made."""
-
-    SYMLINK = "SYMLINK"
-    """A symbolic link. Never followed: it names a file the archive does not contain."""
-
-    PATH_OUTSIDE_ARCHIVE = "PATH_OUTSIDE_ARCHIVE"
-    """A member naming an absolute path or climbing out with `..` — the zip-slip shape."""
-
-    EMPTY_PATH = "EMPTY_PATH"
-    """A member with no usable name at all."""
-
-
-class ArchiveTooLarge(DomainError):
-    """An archive is larger than this installation will open, so nothing was read from it.
-
-    A :class:`~debate_core.application.errors.DomainError` because it is a deterministic answer
-    the operator has to act on — point at the right file, or raise the ceiling in
-    `settings.caselist` — rather than a bug or a provider being unavailable.
-    """
-
-    def __init__(self, *, measured: str, actual_bytes: int, limit_bytes: int, source: str) -> None:
-        self.measured = measured
-        """Which ceiling was exceeded: `archive` or `unpacked`."""
-        self.actual_bytes = actual_bytes
-        self.limit_bytes = limit_bytes
-        self.source = source
-        """The archive's own filename. Never a member's path."""
-        super().__init__(
-            f"{source} is {actual_bytes} bytes {'on disk' if measured == 'archive' else 'unpacked'}, "
-            f"over this installation's {limit_bytes}-byte ceiling; nothing was read from it"
-        )
-
-
-class UnreadableArchive(DomainError):
-    """The path handed to the importer is neither a readable zip nor a directory."""
-
-    def __init__(self, source: str, reason: str) -> None:
-        self.source = source
-        self.reason = reason
-        super().__init__(f"{source} cannot be read as an archive: {reason}")
-
-
-@dataclass(frozen=True, slots=True)
-class ArchiveMember:
-    """One file from an archive: where it sits, what it weighs, and its bytes."""
-
-    path: str
-    """Its path relative to the archive root, `/`-separated and with any wrapper directory off."""
-
-    sha256: str
-    """The digest of :attr:`data`. The identity of the source document it becomes."""
-
-    byte_size: int
-    data: bytes
-
-    @property
-    def is_skipped(self) -> bool:
-        """False. Present so a caller can branch on one attribute across the union."""
-        return False
-
-
-@dataclass(frozen=True, slots=True)
-class SkippedMember:
-    """A member that was not imported, and why. Never carries the member's bytes."""
-
-    path: str
-    reason: SkipReason
-
-    @property
-    def is_skipped(self) -> bool:
-        """True."""
-        return True
-
-
-type ArchiveEntry = ArchiveMember | SkippedMember
-"""What :func:`read_archive` yields: a member with its bytes, or a skip with its reason."""
 
 #: Directory macOS puts a member's resource fork in.
 _MACOS_METADATA_DIRECTORY = "__MACOSX"

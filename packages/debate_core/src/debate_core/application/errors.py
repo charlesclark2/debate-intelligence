@@ -18,6 +18,8 @@ The hierarchy::
     │   └── RevisionMismatch
     ├── InvalidCursor
     ├── BlobIntegrityError
+    ├── ArchiveTooLarge
+    ├── UnreadableArchive
     ├── StoreError
     │   ├── StoreAccessDenied
     │   ├── StoreCredentialsExpired
@@ -35,6 +37,7 @@ from __future__ import annotations
 
 __all__ = [
     "AlreadyExists",
+    "ArchiveTooLarge",
     "BlobIntegrityError",
     "Conflict",
     "DomainError",
@@ -49,6 +52,7 @@ __all__ = [
     "StoreCredentialsExpired",
     "StoreError",
     "StoreUnavailable",
+    "UnreadableArchive",
 ]
 
 
@@ -170,6 +174,39 @@ class BlobIntegrityError(DomainError):
 # --------------------------------------------------------------------------------------------
 # Reaching the store at all
 # --------------------------------------------------------------------------------------------
+
+
+class ArchiveTooLarge(DomainError):
+    """An archive is larger than this installation will open, so nothing was read from it.
+
+    A deterministic answer the operator has to act on — point at the right file, or raise the
+    ceiling in `settings.caselist` — rather than a bug or a provider being unavailable. It names
+    the archive's own filename and never a member's path, because a member's path carries a school
+    and a team code (`docs/policies/caselist-data-use.md`).
+    """
+
+    def __init__(self, *, measured: str, actual_bytes: int, limit_bytes: int, source: str) -> None:
+        self.measured = measured
+        """Which ceiling was exceeded: `archive` (size on disk) or `unpacked` (declared total)."""
+        self.actual_bytes = actual_bytes
+        self.limit_bytes = limit_bytes
+        self.source = source
+        """The archive's own filename. Never a member's path."""
+        super().__init__(
+            f"{source} is {actual_bytes} bytes "
+            f"{'on disk' if measured == 'archive' else 'unpacked'}, over this installation's "
+            f"{limit_bytes}-byte ceiling; nothing was read from it"
+        )
+
+
+class UnreadableArchive(DomainError):
+    """The path handed to an importer is neither a readable archive nor a directory."""
+
+    def __init__(self, source: str, reason: str) -> None:
+        self.source = source
+        """The archive's own filename. Never a member's path."""
+        self.reason = reason
+        super().__init__(f"{source} cannot be read as an archive: {reason}")
 
 
 class StoreError(DomainError):

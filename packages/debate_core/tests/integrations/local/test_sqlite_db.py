@@ -36,6 +36,11 @@ EXPECTED_TABLES = {
     "search_results",
     "searches",
     "source_snapshots",
+    # Migration 2, the caselist records (v1-e30-t02, v1-e30-t03).
+    "caselist_snapshots",
+    "caselist_sources",
+    "caselist_disclosures",
+    "caselist_camp_files",
     SCHEMA_VERSION_TABLE,
 }
 
@@ -92,6 +97,17 @@ def test_every_lookup_and_sort_key_is_indexed(tmp_path: Path) -> None:
             "searches_by_owner",
             "source_snapshots_by_article",
             "source_snapshots_by_raw_blob_key",
+            # Migration 2: one index per documented listing of the caselist records.
+            "caselist_snapshots_by_date",
+            "caselist_sources_by_sort_key",
+            "caselist_sources_by_caselist",
+            "caselist_sources_by_seen_range",
+            "caselist_disclosures_by_sort_key",
+            "caselist_disclosures_by_team",
+            "caselist_disclosures_by_source",
+            "caselist_camp_files_by_sort_key",
+            "caselist_camp_files_by_release",
+            "caselist_camp_files_by_source",
         }
 
 
@@ -331,13 +347,16 @@ def test_a_migration_that_is_only_comments_is_rejected() -> None:
 
 
 def test_the_shipped_migrations_are_what_build_migrations_makes_of_them() -> None:
-    assert load_migrations() == build_migrations(
-        {
-            "0001_initial_schema.sql": (
-                Path(sqlite_db.__file__).parent / "migrations" / "0001_initial_schema.sql"
-            ).read_text(encoding="utf-8")
-        }
-    )
+    """Every `.sql` file in the package, read off disk, parses into what `load_migrations` returns.
+
+    Read from the directory rather than named one by one, so adding a migration does not mean
+    editing this test — which would be editing the check that the new file is well formed.
+    """
+    directory = Path(sqlite_db.__file__).parent / "migrations"
+    files = {path.name: path.read_text(encoding="utf-8") for path in sorted(directory.glob("*.sql"))}
+
+    assert files, "the migrations package ships no .sql files"
+    assert load_migrations() == build_migrations(files)
 
 
 def test_a_sqlite_too_old_for_the_schema_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -377,3 +377,104 @@
 .event-topic__value .prose > :last-child {
   margin-bottom: 0;
 }
+
+/*
+ * ALIGNING THE THREE COMPARISON CARDS, ROW BY ROW
+ * -----------------------------------------------
+ * A comparison only works if a reader can run their eye across it. With three cards whose
+ * summaries and topics are different lengths, every field below the longest one started at a
+ * different height in each card, so "Team size" in the Policy card sat level with "Speech
+ * pattern" in the other two. Nothing was wrong with any one card; the row was wrong.
+ *
+ * CSS subgrid fixes it properly. The grid defines the rows once, and each card hands its own
+ * rows back to that grid instead of sizing them itself, so every row is as tall as the tallest
+ * of the three and all three cards start each field on the same line. No script, no measuring,
+ * and no fixed heights that a longer topic would overflow next month.
+ *
+ * THE ROW COUNT. Fourteen rows, in reading order:
+ *     1        the event name
+ *     2        the one-line summary
+ *     3 to 4   the current topic: its label, then its value
+ *     5 to 12  the four comparison fields, a label and a value each
+ *     13       a flexible spacer, which is what pushes the action to the foot of every card
+ *     14       the link down to that event's detail section
+ * Twelve of those are content rows sized to their tallest card, hence `repeat(12, auto)`. The
+ * arithmetic depends on there being exactly four comparison fields, so tests/events.test.tsx
+ * recomputes it from EVENT_COMPARISON_FIELDS and fails if a fifth is ever added here.
+ *
+ * WHERE IT APPLIES. Only from 64rem, where all three cards are in one row and there is anything
+ * to align. Below that the cards stack one per row, and a stacked card has nothing to line up
+ * with, so the flex layout in components.css is left alone. The grid is also held to one column
+ * until then rather than going two and then one, which is the ragged shape this page already
+ * fixed once in the band above.
+ *
+ * WHERE IT DOES NOT. Browsers without subgrid (anything older than Chrome 117, Safari 16 or
+ * Firefox 71) skip the @supports block entirely and get the cards exactly as they were: correct,
+ * readable, and not aligned across the row. That is the right thing to lose first.
+ *
+ * The selector is keyed to the comparison band rather than to .card or .card-grid, because those
+ * components belong to v1-e36-t06 and the home page uses both. Nothing outside this band
+ * changes.
+ */
+#compare-the-events .card-grid {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 64rem) {
+  #compare-the-events .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  @supports (grid-template-rows: subgrid) {
+    /* The rows are defined here, once, and every card inherits them. The row gap goes to zero
+       because these rows are now the insides of the cards, not the space between them; the
+       spacing inside a card comes from the margins it already had. */
+    #compare-the-events .card-grid {
+      grid-template-rows: repeat(12, auto) 1fr auto;
+      row-gap: 0;
+      column-gap: var(--space-5);
+    }
+
+    /* The list item and the card itself pass the rows straight through. They are written as two
+       rules rather than one selector list so each can be read, and asserted, on its own. */
+    #compare-the-events .card-grid__item {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 14;
+    }
+
+    #compare-the-events .card {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 14;
+      height: auto;
+    }
+
+    /* Row 1 is the event name; the body takes the other thirteen. */
+    #compare-the-events .card__body {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 13;
+    }
+
+    /* Two rows for the current topic, eight for the four comparison fields. */
+    #compare-the-events .event-topic {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 2;
+    }
+
+    #compare-the-events .event-comparison {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 8;
+    }
+
+    /* The last row, past the flexible spacer above it, so the three actions sit on one line
+       however much copy is in the card. */
+    #compare-the-events .card__body > .link-cta {
+      grid-row: 13 / 14;
+      align-self: end;
+    }
+  }
+}

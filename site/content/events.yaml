@@ -148,9 +148,10 @@ events:
     name: Policy debate
     summary: Asks whether one specific plan should be adopted.
     detailActionLabel: How a Policy round runs
-    # From the approved copy, which names this year's resolution: Policy runs one topic all year,
-    # so this is the only one of the three that is already known.
-    currentTopic: Whether the federal government should establish national health insurance.
+    # Policy runs one resolution all year. This is its formal wording, supplied by Charlie.
+    currentTopic: >-
+      Resolved: The United States federal government should establish national health insurance
+      in the United States.
     comparison:
       teamSize: Two students per side.
       speechPattern: Eight speeches and four cross-examinations, in about 80 minutes plus prep.

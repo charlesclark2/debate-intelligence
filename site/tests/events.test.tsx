@@ -331,6 +331,82 @@ describe('the comparison stacks on a phone with nothing to scroll sideways for',
   })
 })
 
+/**
+ * The three cards line up row by row (the second v1-e36-t07 review note).
+ *
+ * jsdom has no layout engine, so nothing here can measure a pixel. What it can do is hold the
+ * row arithmetic in sections.css to the number of comparison fields the page actually renders,
+ * which is the part that would silently rot: add a fifth field and every card would still look
+ * fine on its own while the row below it slipped out of line in all three. That fails here
+ * instead. The pixels are confirmed by eye and in the v1-e36-t08 screenshot sweep.
+ */
+describe('the three cards share their row heights', () => {
+  const sections = readFileSync(join(process.cwd(), 'src/styles/sections.css'), 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  )
+
+  /** Event name, summary, the topic's label and value, then a label and a value per field. */
+  const contentRows = 1 + 1 + 2 + 2 * EVENT_COMPARISON_FIELDS.length
+  /** Those, plus the flexible spacer that pushes the action down, plus the action. */
+  const totalRows = contentRows + 2
+
+  function ruleBody(selector: string): string | null {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`(?:^|\\}|\\{)\\s*${escaped}\\s*\\{([^}]*)\\}`, 'm').exec(sections)?.[1] ?? null
+  }
+
+  it('hands the rows to the grid with subgrid, rather than measuring anything in script', () => {
+    expect(sections).toContain('@supports (grid-template-rows: subgrid)')
+    expect(sections).toContain(`grid-template-rows: repeat(${contentRows}, auto) 1fr auto`)
+  })
+
+  it.each(['#compare-the-events .card-grid__item', '#compare-the-events .card'])(
+    '%s spans every row and passes them through',
+    (selector) => {
+      const body = ruleBody(selector)
+      expect(body, `${selector} does not pass the rows through`).not.toBeNull()
+      expect(body).toContain('grid-template-rows: subgrid')
+      expect(body).toContain(`grid-row: span ${totalRows}`)
+    },
+  )
+
+  it('gives the body every row but the event name, and the field list two per field', () => {
+    expect(ruleBody('#compare-the-events .card__body')).toContain(
+      `grid-row: span ${totalRows - 1}`,
+    )
+    expect(ruleBody('#compare-the-events .event-comparison')).toContain(
+      `grid-row: span ${2 * EVENT_COMPARISON_FIELDS.length}`,
+    )
+    expect(ruleBody('#compare-the-events .event-topic')).toContain('grid-row: span 2')
+  })
+
+  it('puts the action in the last row, past the spacer, so all three sit on one line', () => {
+    expect(ruleBody('#compare-the-events .card__body > .link-cta')).toContain(
+      `grid-row: ${totalRows - 1} / ${totalRows}`,
+    )
+  })
+
+  it('never lays the three out as two and then one', () => {
+    // The ragged shape this page already fixed once in the band above. One column until all
+    // three fit in a row.
+    expect(ruleBody('#compare-the-events .card-grid')).toContain('grid-template-columns: 1fr')
+  })
+
+  it('degrades to the unaligned cards rather than to a broken layout', () => {
+    // Everything that changes the card sits inside the @supports block, so a browser without
+    // subgrid renders exactly what it rendered before.
+    const supportsAt = sections.indexOf('@supports (grid-template-rows: subgrid)')
+    expect(supportsAt).toBeGreaterThan(-1)
+    for (const selector of ['.card-grid__item', '.card__body', '#compare-the-events .card {']) {
+      const at = sections.indexOf(`#compare-the-events ${selector}`.replace('#compare-the-events #', '#'))
+      if (at > -1) {
+        expect(at, `${selector} is styled outside the @supports block`).toBeGreaterThan(supportsAt)
+      }
+    }
+  })
+})
+
 describe('the events page as a whole', () => {
   it('has one h1, which is the page title from the content file', () => {
     renderEvents()

@@ -550,3 +550,38 @@
     margin-bottom: var(--space-3);
   }
 }
+
+/*
+ * THE ACADEMIC CASE (v1-e36-t09)
+ * ------------------------------
+ * One Card per research claim, on the existing .card-grid: one up on a phone, two up from 48rem.
+ * Nothing here sets a width, a fixed column or white-space: nowrap, so at 390px each card is the
+ * full gutter box and a long citation wraps inside it rather than pushing the page sideways.
+ *
+ * The source line sits at the foot of its card, under a hairline, so the claim reads first and
+ * what it rests on reads second. It is small text, so it is body grey: #55596B on the panel tint
+ * measures 6.01:1 (the contrast table in tokens.css). The muted grey and the warm accent are
+ * large-text and non-text only and never appear here. No transition is added, so there is nothing
+ * for the prefers-reduced-motion block in globals.css to switch off.
+ */
+.source-line {
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-body);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+/* The claim body keeps its gap above the hairline however short it is. */
+#academic-case .card__body > p:not(.source-line) {
+  margin-bottom: var(--space-4);
+}
+
+.source-line cite {
+  font-style: italic;
+}
+
+.source-line__link {
+  color: var(--color-link);
+}

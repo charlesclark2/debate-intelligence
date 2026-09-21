@@ -109,6 +109,16 @@ permittedNamePhrases:
   - Indiana University
   # The country named in the Public Forum resolution in content/events.yaml.
   - United States
+  # The studies and school districts cited in the academic-case band of content/home.yaml, each one
+  # from the approved list in docs/data/academic-case-sources.md. Institutions and journals only;
+  # the researchers are named by surname, which the guard does not read as a run. The journal
+  # names reach the guard in fragments, split by their lower-case "and".
+  - Boston Public Schools
+  - Houston Independent School District
+  - English Language Arts
+  - Educational Evaluation
+  - Policy Analysis
+  - Educational Research
   # The accessibility statement, and the holiday the practice calendar skips.
   - Web Content Accessibility Guidelines
   - Martin Luther King Jr

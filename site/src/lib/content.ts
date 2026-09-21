@@ -156,6 +156,68 @@ const internalHref = z
     'must point inside this site, so start with "/" or "#"',
   )
 
+/**
+ * A link out of this site, which only a source citation may carry. https only: a parent following
+ * a citation should never be sent to a page that can be read or rewritten on the way.
+ */
+const externalHttpsHref = z
+  .string()
+  .min(1)
+  .refine((value) => /^https:\/\/[^\s/]+/.test(value), 'an external source link must start with "https://"')
+
+/** A string that is nothing but a placeholder marker, such as `[[TBD: source]]`. */
+const PLACEHOLDER_ONLY_PATTERN = /^\[\[TBD(?::\s*[^\]]*)?\]\]$/
+
+/**
+ * The source behind one academic-case claim: who published it, where, when, and what they
+ * measured. Every field is shown on the page in the claim's source line, so a parent can see what
+ * a figure rests on without leaving the page, and look it up if they want to.
+ */
+export const claimSourceSchema = z.object({
+  authors: z.string().min(1),
+  publication: z.string().min(1),
+  year: z.number().int().min(1900).max(2100),
+  measured: z.string().min(1),
+  href: externalHttpsHref.optional(),
+})
+
+/**
+ * A claim's source, or, while Charlie has not supplied one, the `[[TBD: source]]` marker in its
+ * place. The key itself is never optional: a claim with no `source` at all fails the build, and
+ * a claim still waiting on one says so out loud, shows as a TBD badge in a dev preview and fails
+ * a prod build naming the claim (src/lib/publishing-policy.ts). There is no third state in which
+ * a research claim reaches the page with nothing under it.
+ */
+export const claimSourceOrMarkerSchema = z.union(
+  [
+    z
+      .string()
+      .regex(
+        PLACEHOLDER_ONLY_PATTERN,
+        'a source written as text must be the [[TBD: source]] marker; a real source is an object',
+      ),
+    claimSourceSchema,
+  ],
+  {
+    error: (issue) => {
+      if (issue.input === undefined) {
+        return 'every claim needs a source (authors, publication, year, measured), or [[TBD: source]] until one is supplied'
+      }
+      // An object that is not a whole source: say which fields it is missing, rather than the
+      // union's "Invalid input", which would leave Charlie to guess.
+      const attempt = claimSourceSchema.safeParse(issue.input)
+      const detail = attempt.success ? '' : ` (${formatIssues(attempt.error)})`
+      return `a source needs authors, publication, year and measured${detail}`
+    },
+  },
+)
+
+export const academicCaseClaimSchema = z.object({
+  title: z.string().min(1),
+  body: z.string().min(1),
+  source: claimSourceOrMarkerSchema,
+})
+
 export const homeActionSchema = z.object({
   label: z.string().min(1),
   href: internalHref,
@@ -223,9 +285,35 @@ export const homeContentSchema = z.object({
     intro: z.string().min(1),
     claims: z.array(z.object({ title: z.string().min(1), body: z.string().min(1) })).min(1),
   }),
+  /**
+   * What published research found, for the parent who asks whether a season is good for a
+   * student academically (v1-e36-t09). Three to five claims at most on the page; the approved
+   * set is in docs/data/academic-case-sources.md. `externalLinkNote` is required as soon as one
+   * source links out, because a link that leaves the team site has to say so.
+   */
+  academicCase: z
+    .object({
+      eyebrow: z.string().min(1),
+      title: z.string().min(1),
+      intro: z.string().min(1),
+      sourceLabel: z.string().min(1),
+      externalLinkNote: z.string().min(1).optional(),
+      claims: z
+        .array(academicCaseClaimSchema)
+        .min(1, 'the academic case needs at least one claim')
+        .max(5, 'more than five claims stops being scannable'),
+    })
+    .refine(
+      (section) =>
+        section.externalLinkNote !== undefined ||
+        section.claims.every((claim) => typeof claim.source === 'string' || !claim.source.href),
+      'a source links to another site, so externalLinkNote must say that the link leaves the team site',
+    ),
 })
 
 export type HomeAction = z.infer<typeof homeActionSchema>
+export type ClaimSource = z.infer<typeof claimSourceSchema>
+export type AcademicCaseClaim = z.infer<typeof academicCaseClaimSchema>
 export type ParentSessionFact = z.infer<typeof parentSessionFactSchema>
 export type HomeContent = z.infer<typeof homeContentSchema>
 
@@ -361,6 +449,58 @@ function assertAcronymsAreExpanded(filePath: string, text: string): void {
         `uses "${acronym}" without spelling it out. Write "${expansion} (${acronym})" the first ` +
           'time it appears.',
       )
+    }
+  }
+}
+
+/**
+ * The evidence category the team brand guide rules out for this audience, by name: graduation
+ * rates, dropout rates and "at risk" framing. In an affluent district those findings answer a
+ * question nobody here is asking, and quoting them reads as condescending, as though these
+ * students would otherwise fail. Test scores, grade point average, college readiness and skill
+ * acquisition are the categories that are in.
+ *
+ * Checked over every file in content/, comments included, because a comment is where a sentence
+ * waits before somebody promotes it into copy. The error names the file, the line and the words.
+ */
+export const EXCLUDED_EVIDENCE_PATTERNS: readonly RegExp[] = [
+  /\bgraduation[\s-]+rates?\b/i,
+  /\bdrop-?outs?\b/i,
+  /\bat[\s-]+risk\b/i,
+]
+
+function contentFiles(directory: string, relativeTo: string): string[] {
+  return readdirSync(directory, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .flatMap((entry) => {
+      const path = join(directory, entry.name)
+      const relative = `${relativeTo}/${entry.name}`
+      if (entry.isDirectory()) {
+        return contentFiles(path, relative)
+      }
+      return /\.(md|ya?ml)$/.test(entry.name) ? [relative] : []
+    })
+}
+
+/** Fails, naming the file, the line and the offending words, on excluded-evidence wording. */
+export function assertNoExcludedEvidence(
+  contentDirectory: string = defaultContentDirectory(),
+): void {
+  for (const filePath of contentFiles(contentDirectory, 'content')) {
+    const lines = readFileSync(join(contentDirectory, filePath.slice('content/'.length)), 'utf8')
+      .split('\n')
+    for (const [index, line] of lines.entries()) {
+      for (const pattern of EXCLUDED_EVIDENCE_PATTERNS) {
+        const match = pattern.exec(line)
+        if (match) {
+          throw new ContentValidationError(
+            filePath,
+            `line ${index + 1} uses "${match[0]}". House style: graduation-rate, dropout and ` +
+              '"at risk" research is not used on this site. Use test scores, grade point ' +
+              'average, college readiness or skill acquisition, from an approved source.',
+          )
+        }
+      }
     }
   }
 }
@@ -557,7 +697,85 @@ function homeContentStrings(content: HomeContent): string[] {
     whatDebateBuilds.title,
     whatDebateBuilds.intro,
     ...whatDebateBuilds.claims.flatMap((claim) => [claim.title, claim.body]),
+    ...academicCaseSectionStrings(content.academicCase),
+    ...content.academicCase.claims.flatMap(academicCaseClaimStrings),
   ]
+}
+
+function academicCaseSectionStrings(section: HomeContent['academicCase']): string[] {
+  return [
+    section.eyebrow,
+    section.title,
+    section.intro,
+    section.sourceLabel,
+    ...(section.externalLinkNote ? [section.externalLinkNote] : []),
+  ]
+}
+
+/** Every string one academic-case claim puts on the page, its source line included. */
+function academicCaseClaimStrings(claim: AcademicCaseClaim): string[] {
+  const { source } = claim
+  return [
+    claim.title,
+    claim.body,
+    ...(typeof source === 'string'
+      ? [source]
+      : [source.authors, source.publication, String(source.year), source.measured]),
+  ]
+}
+
+/**
+ * The placeholder notes left in content/home.yaml, each one saying where it is.
+ *
+ * A marker in a claim's source is named by the claim it belongs to, because "still has an
+ * unfilled placeholder: source" on a file with several claims in it leaves Charlie to work out
+ * which one. Every other marker in the file is reported with its own note, as on any page.
+ */
+function homeContentPlaceholders(content: HomeContent): string[] {
+  const { academicCase } = content
+  const elsewhere = homeContentStrings({
+    ...content,
+    academicCase: { ...academicCase, claims: [] },
+  })
+  return [
+    ...findPlaceholders(elsewhere.join('\n')),
+    ...academicCase.claims.flatMap((claim) =>
+      findPlaceholders(academicCaseClaimStrings(claim).join('\n')).map(
+        (note) => `${note || 'TBD'} for the academic-case claim "${claim.title}"`,
+      ),
+    ),
+  ]
+}
+
+/**
+ * Each entry-point card is labelled with the title of the page it opens, and opens a page that
+ * exists (v1-e36-t09 acceptance criterion 5). A parent who presses "Coaches" should land on a
+ * heading that says Coaches; a card whose label had drifted from its destination, or whose page
+ * had been renamed or unpublished, fails the build naming the card.
+ */
+function assertEntryPointsMatchPages(
+  filePath: string,
+  cards: HomeContent['entryPoints']['cards'],
+  pages: ContentPage[],
+): void {
+  const byRoute = new Map(pages.map((page) => [page.route, page]))
+  for (const card of cards) {
+    const page = byRoute.get(card.href)
+    if (!page) {
+      throw new ContentValidationError(
+        filePath,
+        `the entry-point card "${card.title}" links to ${card.href}, which is not a published ` +
+          'page in content/pages/. Point it at a page, with the trailing slash, such as "/join/".',
+      )
+    }
+    if (card.title !== page.title) {
+      throw new ContentValidationError(
+        filePath,
+        `the entry-point card "${card.title}" links to ${card.href}, whose title is ` +
+          `"${page.title}" (${page.filePath}). Label the card with the title of the page it opens.`,
+      )
+    }
+  }
 }
 
 /**
@@ -588,6 +806,7 @@ export function loadHomeContent(
     throw new ContentValidationError(filePath, `uses an em dash. ${HOUSE_STYLE_REWRITE}`)
   }
   assertAcronymsAreExpanded(filePath, text)
+  assertEntryPointsMatchPages(filePath, content.entryPoints.cards, loadPages(contentDirectory))
   return content
 }
 
@@ -654,7 +873,7 @@ export function homeContentAsPage(
     draft: false,
     html: text,
     guardedHtml: text,
-    placeholders: findPlaceholders(text),
+    placeholders: homeContentPlaceholders(content),
   }
 }
 
@@ -1038,6 +1257,7 @@ export function eventsContentAsPage(
 export function loadGuardedContent(
   contentDirectory: string = defaultContentDirectory(),
 ): ContentPage[] {
+  assertNoExcludedEvidence(contentDirectory)
   return [
     ...loadPages(contentDirectory),
     homeContentAsPage(contentDirectory),

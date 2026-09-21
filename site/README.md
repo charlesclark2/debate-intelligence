@@ -91,6 +91,20 @@ file name, so a page missing a title fails `pnpm --dir site build` instead of sh
    `value`. Both render as a visible gap badge, so a dev preview shows every hole, and both fail a
    prod build until they are filled. "To be announced" is a `value`: deciding not to say is an
    answer, and only an unanswered fact is a gap.
+4. **No graduation-rate, dropout or "at risk" research.** Any of that wording anywhere in
+   `content/`, comments included, fails the build naming the file and the line
+   (`EXCLUDED_EVIDENCE_PATTERNS` in `src/lib/content.ts`). The team brand guide rules this
+   category out by name: in this district those findings answer a question nobody is asking, and
+   quoting them reads as condescending. Test scores, grade point average, college readiness and
+   skill acquisition are the categories that are in.
+5. **Every research claim carries its source.** A claim in the academic-case band of
+   `content/home.yaml` needs a `source` with the authors, the publication, the year and what was
+   measured, all shown on the page; an external link is optional and must be `https://`. A claim
+   whose source has not been supplied yet is written `source: '[[TBD: source]]'`, which shows as
+   a TBD badge in a dev preview and fails a prod build naming the claim. Claims come only from the
+   approved list in [`docs/data/academic-case-sources.md`](../docs/data/academic-case-sources.md).
+6. **Home entry-point cards carry the title of the page they open.** A card whose `href` is not a
+   page in `content/pages/`, or whose `title` differs from that page's title, fails the build.
 
 ## The content guard
 

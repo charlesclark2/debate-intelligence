@@ -119,6 +119,22 @@ describe('every content page, rendered through the site frame', () => {
   })
 })
 
+/**
+ * The sweep above renders the real home route, so the academic-case band v1-e36-t09 added is in
+ * it: its cards, its source lines and, while one is owed, a TBD badge. Asserted so the band cannot
+ * quietly fall out of the page the sweep checks.
+ */
+describe('the home page sweep covers the academic case band', () => {
+  it('renders the band with its source lines and finds no WCAG 2.1 AA violation in it', async () => {
+    await renderPage(HOME_SLUG)
+    const band = document.getElementById('academic-case')
+    expect(band, 'the home page sweep no longer includes the academic case band').not.toBeNull()
+    expect(band?.querySelectorAll('.card .source-line').length).toBeGreaterThan(0)
+    const violations = await findAccessibilityViolations(band as HTMLElement)
+    expect(violations, describeViolations(violations)).toEqual([])
+  })
+})
+
 describe('every page has exactly one h1 and headings in order', () => {
   it.each(pages.map((page) => [page.slug, page] as const))('%s', async (slug, page) => {
     await renderPage(slug)

@@ -7,6 +7,7 @@ import { Card } from '@/components/Card'
 import { CardGrid } from '@/components/CardGrid'
 import { Prose } from '@/components/Prose'
 import { Section } from '@/components/Section'
+import { SourceLine } from '@/components/SourceLine'
 import { HOME_SLUG, loadHomeContent, loadPage } from '@/lib/content'
 import { buildPageMetadata } from '@/lib/page-metadata'
 
@@ -20,8 +21,9 @@ export function generateMetadata(): Metadata {
 /**
  * The home page.
  *
- * Five bands, in the order a parent needs them: the hero, the October 1 parent session, four
- * entry points into the site, what debate actually is, and what a season of it builds. The
+ * Six bands, in the order a parent needs them: the hero, the October 1 parent session, four
+ * entry points into the site, what debate actually is, what a season of it builds, and what the
+ * research says about it academically. The
  * October 1 panel is the only band on navy, which is what makes it the most prominent thing on
  * the page after the hero without giving it a bigger heading than its neighbours.
  *
@@ -31,7 +33,8 @@ export function generateMetadata(): Metadata {
  */
 export default function HomePage() {
   const page = loadPage(HOME_SLUG)
-  const { hero, parentSession, entryPoints, prose, whatDebateBuilds } = loadHomeContent()
+  const { hero, parentSession, entryPoints, prose, whatDebateBuilds, academicCase } =
+    loadHomeContent()
 
   return (
     <>
@@ -117,6 +120,30 @@ export default function HomePage() {
             </li>
           ))}
         </ul>
+      </Section>
+
+      <Section
+        contentWidth="wide"
+        headerAlign="wide"
+        eyebrow={academicCase.eyebrow}
+        id="academic-case"
+        intro={academicCase.intro}
+        title={academicCase.title}
+      >
+        <CardGrid columns={2}>
+          {academicCase.claims.map((claim) => (
+            <Card headingLevel={3} key={claim.title} title={claim.title}>
+              <p>{claim.body}</p>
+              <SourceLine
+                label={academicCase.sourceLabel}
+                source={claim.source}
+                {...(academicCase.externalLinkNote
+                  ? { externalLinkNote: academicCase.externalLinkNote }
+                  : {})}
+              />
+            </Card>
+          ))}
+        </CardGrid>
       </Section>
     </>
   )

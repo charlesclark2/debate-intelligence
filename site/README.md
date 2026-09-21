@@ -184,8 +184,13 @@ asserted against the tokens instead, in `tests/tokens.test.ts`.
 
 **`pnpm test` before `pnpm build` means no export yet**, which is the order CI uses, so the
 suites that read `site/out/` skip themselves when it is absent rather than failing.
-`site/scripts/pre-commit-checks.sh` runs test then build, so the second run of it checks the real
-files. Build first when you want that coverage in one go:
+
+**A stale export is the dangerous case.** An export left over from an earlier commit is not
+absent, so those suites do not skip: they check the old HTML instead of the code in front of you,
+and they can pass. `site/scripts/pre-commit-checks.sh` runs test then build, so every run of it
+after the first reads the export the previous run left, which is only the right one if nothing has
+changed since. Build first, from the same source, whenever the export-reading suites are meant to
+count:
 
 ```bash
 pnpm --dir site build && pnpm --dir site test

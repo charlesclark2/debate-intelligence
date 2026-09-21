@@ -849,10 +849,27 @@ how a page about a child goes out unreviewed.
 |---|---|---|
 | 1 | **The October 1 room is filled in.** `content/home.yaml` gives the Room fact a `value`, not an `unsetNote`. "To be announced" is a value; leaving it unset is not | `SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build` exits 0 |
 | 2 | **The prod build is clean.** No unfilled placeholder, no unreviewed name, no address outside the allowlist, no image without a consent entry | The same build. A failure names the file and the field |
-| 3 | **The offline checks pass** | `site/scripts/pre-commit-checks.sh` |
+| 3 | **The offline checks pass, against an export built from this commit** | Build first, then test, in that order: see the note below the table |
 | 4 | **The browser QA run is green.** Every page at or above 95 on accessibility and best practices, axe clean at 390, 768 and 1280px, nothing scrolling sideways | `pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95` exits 0. The report it writes goes in the session report |
 | 5 | **The pre-publication checklist is ticked** for the commit being promoted | [`docs/policies/website-publishing.md`](../policies/website-publishing.md), Pre-publication checklist, items 1 to 16 (17 and 18 too, on the season's first deploy) |
 | 6 | **You have read the site as a parent would**, on a phone, on the dev preview | Step 2 below |
+
+**Build before you test, every time.** Nine of the site's test suites read the built export in
+`site/out/` from disk. When there is no export they skip, which is harmless. When there is an
+export **from an earlier commit**, they check that old HTML instead of the code in front of you,
+and they can pass. A green run then proves nothing about what is about to be promoted, and nothing
+on screen says so. `site/scripts/pre-commit-checks.sh` runs `test` before `build`, so on its own
+it reads whatever the previous run left behind. For preconditions 2 to 4, run them in this order,
+from the commit you mean to promote, with nothing edited in between:
+
+```bash
+SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build   # preconditions 1 and 2
+pnpm --dir site lint && pnpm --dir site typecheck && pnpm --dir site test   # precondition 3
+pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95         # precondition 4
+```
+
+The QA command reads `site/out/` too, so the same rule applies to it: its scores are evidence for
+the export on disk, and only for that.
 
 ### The promotion
 

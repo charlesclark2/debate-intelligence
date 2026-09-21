@@ -52,8 +52,11 @@ def register_commands(app: typer.Typer) -> None:
     configuration.command("show")(config.show)
     app.add_typer(configuration)
 
-    disclosed_evidence = command_group("caselist", "Import and inspect disclosed caselist evidence.")
+    disclosed_evidence = command_group("caselist", "Import, publish and check disclosed caselist evidence.")
     disclosed_evidence.command("import")(caselist.import_archive)
+    disclosed_evidence.command("publish")(caselist.publish)
+    disclosed_evidence.command("status")(caselist.status)
+
     opencaselist_session = command_group("auth", "Log in to OpenCaselist and manage the stored token.")
     opencaselist_session.command("login")(caselist_auth.login)
     opencaselist_session.command("status")(caselist_auth.status)

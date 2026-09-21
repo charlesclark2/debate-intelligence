@@ -57,12 +57,16 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Final, cast
 
+from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
+from debate_core.application.caselist.publish_service import CaselistPublishService
+from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
     SyncJournal,
     SyncKeyspace,
 )
+from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.application.settings import ConfigurationError, Environment, Settings
 from debate_core.integrations.local import (
     BLOB_DIRECTORY,
@@ -85,6 +89,8 @@ __all__ = [
 
 SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_import",
+    "caselist_publish",
+    "caselist_status",
     "caselist_token_store",
     "evidence_sync",
     "opencaselist_client",
@@ -179,7 +185,7 @@ class ServiceContainer:
         """Build the weekly-archive importer over this environment's local evidence store.
 
         No S3 and no bucket: an import writes to the machine it runs on, and publishing what it
-        wrote is a separate, deliberate `debate-research store sync` (v1-e30-t05).
+        wrote is a separate, deliberate `debate-research caselist publish` (v1-e30-t05).
         """
         return self.singleton("caselist_import", self._build_caselist_import)
 
@@ -252,6 +258,54 @@ class ServiceContainer:
                 remote=str(storage.s3.bucket),
             ),
             remote_name=str(storage.s3.bucket),
+        )
+
+    def caselist_publish(self) -> CaselistPublishService:
+        """Build the publisher from this machine's evidence store to this environment's bucket.
+
+        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket. The
+        suppression list is `v1-e30-t07`'s; until it ships nothing is suppressed here.
+        """
+        return self.singleton(
+            "caselist_publish",
+            lambda: CaselistPublishService(local=self._local_evidence(), remote=self._evidence_bucket()),
+        )
+
+    def caselist_status(self) -> CaselistStatusService:
+        """Build the comparison between this machine's caselist snapshots and the bucket's."""
+        return self.singleton(
+            "caselist_status",
+            lambda: CaselistStatusService(local=self._local_evidence(), remote=self._evidence_bucket()),
+        )
+
+    def _local_evidence(self) -> LocalEvidence:
+        data_dir = self.settings.storage.data_dir
+        objects = FsEvidenceObjectStore(data_dir)
+        blobs = FsEvidenceObjectStore(data_dir, subdirectory=BLOB_DIRECTORY.parent)
+        return LocalEvidence(
+            objects=objects,
+            blobs=blobs,
+            object_path_for=objects.path_for,
+            blob_path_for=blobs.path_for,
+        )
+
+    def _evidence_bucket(self) -> EvidenceObjectStore:
+        """This environment's bucket through the S3 adapter, one per run for both caselist services."""
+        return self.singleton("evidence_bucket", self._build_evidence_bucket)
+
+    def _build_evidence_bucket(self) -> EvidenceObjectStore:
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.s3 import S3EvidenceObjectStore, build_s3_client
+
+        settings = self.settings
+        storage = settings.storage
+        if not storage.s3.bucket:
+            raise EvidenceStoreNotConfigured(settings.environment)
+        return S3EvidenceObjectStore(
+            bucket=str(storage.s3.bucket),
+            client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
+            profile=storage.s3.aws_profile,
+            multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
         )
 
     def caselist_token_store(self) -> CaselistTokenStore:

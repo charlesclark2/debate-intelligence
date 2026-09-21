@@ -1,0 +1,72 @@
+{
+  "caselist": "testcl26",
+  "description": "Expected result of publishing the three synthetic snapshots (build_synthetic_archives.py) to an empty bucket, in snapshot order. Written by hand from the fixture's member tables, not by running the publisher (docs/process/working-agreements.md section 6). Sources are named by DOCUMENT_BODIES entry; a test turns each name into its bucket key from the body's own bytes.",
+  "source_prefix": "raw/caselist/testcl26",
+  "manifest_prefix": "manifests/testcl26/",
+  "snapshots": [
+    {
+      "snapshot": "2026-09-01",
+      "stored_member_rows": 4,
+      "sources": [
+        "grove-round-1-aff",
+        "grove-round-2-neg-first",
+        "harbor-aff",
+        "harbor-octas-neg"
+      ],
+      "first_publish": {"upload": 4, "uploaded_earlier": 0},
+      "notes": ["Four files, four bodies, all uploaded."]
+    },
+    {
+      "snapshot": "2026-09-08",
+      "stored_member_rows": 13,
+      "sources": [
+        "grove-round-1-aff",
+        "grove-round-2-neg-revised",
+        "harbor-aff",
+        "harbor-octas-neg",
+        "harbor-unstructured-notes",
+        "ridgeline-doubles-aff",
+        "ridgeline-round-3-neg",
+        "ridgeline-round-6-neg",
+        "seaside-finals-pro",
+        "seaside-quarters-aff-pdf",
+        "seaside-quarters-neg-doc"
+      ],
+      "first_publish": {"upload": 8, "uploaded_earlier": 3},
+      "notes": [
+        "Thirteen stored rows, eleven bodies: the Round 1 affirmative's bytes appear under three paths.",
+        "The revised Round 2 negative is a different body from the first week's, so it is a new object; the first week's version is not a source of this snapshot.",
+        "Three bodies were uploaded for 2026-09-01 in the same run: grove-round-1-aff, harbor-aff, harbor-octas-neg."
+      ]
+    },
+    {
+      "snapshot": "2026-09-15",
+      "stored_member_rows": 14,
+      "sources": [
+        "bayview-semis-neg",
+        "grove-round-1-aff",
+        "grove-round-2-neg-revised",
+        "harbor-aff",
+        "harbor-unstructured-notes",
+        "ridgeline-doubles-aff",
+        "ridgeline-round-3-neg",
+        "ridgeline-round-6-neg",
+        "seaside-finals-pro",
+        "seaside-quarters-aff-pdf",
+        "seaside-quarters-neg-doc",
+        "seaside-round-5-aff"
+      ],
+      "first_publish": {"upload": 2, "uploaded_earlier": 10},
+      "notes": [
+        "The octafinals negative is REMOVED and is not a source of this snapshot; its object stays, as a source of the two earlier ones.",
+        "The symlink and the ../ member are skipped by the importer and have no row that names a digest."
+      ]
+    }
+  ],
+  "totals": {
+    "source_objects": 14,
+    "manifest_objects": 3,
+    "put_object_calls_first_publish": 17,
+    "put_object_calls_second_publish": 0
+  }
+}

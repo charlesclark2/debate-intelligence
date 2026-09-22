@@ -54,6 +54,7 @@ def register_commands(app: typer.Typer) -> None:
 
     disclosed_evidence = command_group("caselist", "Import, publish and check disclosed caselist evidence.")
     disclosed_evidence.command("import")(caselist.import_archive)
+    disclosed_evidence.command("import-openev")(caselist.import_openev)
     disclosed_evidence.command("publish")(caselist.publish)
     disclosed_evidence.command("status")(caselist.status)
 

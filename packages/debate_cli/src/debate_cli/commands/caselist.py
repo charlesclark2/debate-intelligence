@@ -1,8 +1,9 @@
-"""`debate-research caselist import | publish | status`: archives in, the bucket out, and the check.
+"""`debate-research caselist import | import-openev | publish | status`: archives in, the bucket out.
 
-`import` turns one downloaded archive into the local evidence store (`v1-e30-t03`). `publish` puts
-what was imported into the environment's evidence bucket and `status` says whether the two agree
-(`v1-e30-t05`); both are described under their own headings below, after `import`.
+`import` turns one downloaded archive into the local evidence store (`v1-e30-t03`), and
+`import-openev` does the same for OpenEv camp files (`v1-e30-t04`). `publish` puts what was
+imported into the environment's evidence bucket and `status` says whether the two agree
+(`v1-e30-t05`); each is described under its own heading below, after `import`.
 
 Every decision about what an archive member *is* — new, carried forward, revised, a duplicate,
 taken down, suppressed — belongs to
@@ -46,6 +47,23 @@ deterministic refusals an operator has to act on: an archive over the size ceili
 path, a slug whose event cannot be inferred, or an archive older than one already imported
 without `--allow-out-of-order`. All four arrive as
 :class:`~debate_core.application.errors.DomainError`s and are rendered by the root group.
+
+## `caselist import-openev`
+
+::
+
+    debate-research caselist import-openev ~/Downloads/openev-policy-2026.zip \\
+        --year 2026 --event policy
+    debate-research caselist import-openev ~/Downloads/camp-files --year 2026 --event policy \\
+        --dry-run --camp-aliases ~/camp_aliases.yaml
+
+Every decision — which camp, which title, new or duplicate, what the release manifest becomes —
+is :class:`~debate_core.application.caselist.openev_import_service.OpenEvImportService`'s. This
+command reads the release's existing manifest (`manifests/openev/<year>-<event>.jsonl`) so the
+import merges into it, and writes the merged one back unless `--dry-run`. `--snapshot` is the date
+the import is recorded under, today by default; `--camp-aliases` replaces the packaged alias
+table. A camp nobody listed is not a failure: the file is imported with camp `UNKNOWN` and the
+count is in the summary. Exit codes are `import`'s.
 
 ## `caselist publish`
 
@@ -92,8 +110,16 @@ from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
+from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.caselist.import_service import Classification, ImportReport
-from debate_core.application.caselist.manifest import manifest_key, write_manifest
+from debate_core.application.caselist.manifest import (
+    manifest_key,
+    read_manifest_lines,
+    write_manifest,
+    write_manifest_lines,
+)
+from debate_core.application.caselist.openev_import_service import OpenEvImportReport
+from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
 from debate_core.application.caselist.publish_service import PublishReport, SourceResult
 from debate_core.application.caselist.status_service import CaselistStatusReport, SnapshotStatus
@@ -108,7 +134,9 @@ __all__ = [
     "UnknownCaselistEvent",
     "event_for_caselist",
     "import_archive",
+    "import_openev",
     "import_summary",
+    "openev_import_summary",
     "publish",
     "publish_summary",
     "status",
@@ -210,6 +238,78 @@ def import_archive(
         command_name(ctx),
         import_summary(report, manifest),
         display=_summary_table(report, manifest),
+    )
+
+
+def import_openev(
+    ctx: typer.Context,
+    source: Annotated[
+        Path,
+        typer.Argument(exists=True, help="The OpenEv camp files: a .zip, or a directory of them."),
+    ],
+    year: Annotated[
+        int,
+        typer.Option("--year", min=2000, max=9999, help="Topic year of the camp release, e.g. 2026."),
+    ],
+    event: Annotated[
+        Event,
+        typer.Option("--event", case_sensitive=False, help="Event the files were cut for: ld, policy or pf."),
+    ],
+    snapshot: Annotated[
+        str | None,
+        typer.Option("--snapshot", help="Date to record the import under, as YYYY-MM-DD. Default: today."),
+    ] = None,
+    camp_aliases: Annotated[
+        Path | None,
+        typer.Option(
+            "--camp-aliases",
+            exists=True,
+            dir_okay=False,
+            help="An alias table to use instead of the packaged camp_aliases.yaml.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Classify everything and write nothing at all."),
+    ] = False,
+) -> None:
+    """Import OpenEv camp files, deduplicated against everything already imported."""
+    cli = cli_context(ctx)
+    settings = cli.services.settings
+    imported_on = _snapshot_date(snapshot) if snapshot is not None else date.today()
+    aliases = load_camp_aliases(camp_aliases)
+    manifest_path = FsEvidenceObjectStore(settings.storage.data_dir).path_for(
+        openev_manifest_key(year, event)
+    )
+
+    service = cli.services.openev_import()
+    cli.output.detail(f"reading {source.name}")
+    report = _run(
+        service.import_release(
+            read_archive(
+                source,
+                max_archive_bytes=settings.caselist.max_archive_bytes,
+                max_unpacked_bytes=settings.caselist.max_unpacked_bytes,
+            ),
+            year=year,
+            event=event,
+            imported_on=imported_on,
+            archive_sha256=archive_digest(source),
+            recorded_manifest=read_manifest_lines(manifest_path),
+            aliases=aliases,
+            dry_run=dry_run,
+        )
+    )
+
+    manifest = None
+    if not dry_run:
+        manifest = write_manifest_lines(report.manifest_lines, manifest_path)
+        cli.output.detail(f"wrote {manifest.name}")
+
+    cli.output.success(
+        command_name(ctx),
+        openev_import_summary(report, manifest),
+        display=_openev_summary_table(report, manifest),
     )
 
 
@@ -627,6 +727,62 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
         "warnings": report.warning_count,
         "manifest": str(manifest) if manifest is not None else None,
     }
+
+
+def openev_import_summary(report: OpenEvImportReport, manifest: Path | None) -> dict[str, JsonValue]:
+    """The `--json` envelope's `data` for `caselist import-openev`.
+
+    Shaped like `import`'s, for the same reader (`v1-e34-t02`): every classification counted
+    whether or not it occurred, `applied`, and `manifest` as a path or `null`. `release` is what
+    `caselist publish --caselist openev --snapshot` takes. `unknown_camps` is how many files need a
+    line in the alias table; `caselist_duplicates` how many a team had already disclosed.
+    """
+    return {
+        "release": report.release,
+        "year": report.year,
+        "event": str(report.event),
+        "imported_on": report.imported_on.isoformat(),
+        "applied": report.applied,
+        "archive_sha256": report.archive_sha256,
+        "members": report.member_count,
+        "counts": {str(name): report.count(name) for name in Classification},
+        "skipped": {str(reason): count for reason, count in sorted(report.skipped.items(), key=str)},
+        "skipped_total": sum(report.skipped.values()),
+        "distinct_sha256": report.distinct_digests,
+        "newly_stored_blobs": report.newly_stored_blobs,
+        "warnings": report.warning_count,
+        "unknown_camps": report.unknown_camp_count,
+        "caselist_duplicates": report.caselist_duplicate_count,
+        "manifest_key": report.manifest_key,
+        "manifest": str(manifest) if manifest is not None else None,
+    }
+
+
+def _openev_summary_table(report: OpenEvImportReport, manifest: Path | None) -> TableSpec:
+    """One row per classification an OpenEv import can produce, then the skips."""
+    rows = [
+        [str(name), str(report.count(name))] for name in Classification if name is not Classification.REMOVED
+    ]
+    rows.append(["SKIPPED", str(sum(report.skipped.values()))])
+    unknown = (
+        f", {report.unknown_camp_count} with no camp in the alias table" if report.unknown_camp_count else ""
+    )
+    disclosed = (
+        f", {report.caselist_duplicate_count} already disclosed on a caselist"
+        if report.caselist_duplicate_count
+        else ""
+    )
+    if not report.applied:
+        outcome = "Planned only; nothing was written. Re-run without --dry-run to import it."
+    else:
+        written = manifest.name if manifest else "none"
+        outcome = f"{report.newly_stored_blobs} new file(s) stored; manifest at {written}."
+    return TableSpec(
+        columns=("Classification", "Files"),
+        rows=rows,
+        title=f"openev {report.release} ({'dry run' if not report.applied else 'imported'})",
+        caption=f"{report.member_count} member(s){unknown}{disclosed}. {outcome}",
+    )
 
 
 def _summary_table(report: ImportReport, manifest: Path | None) -> TableSpec:

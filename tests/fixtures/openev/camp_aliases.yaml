@@ -1,0 +1,13 @@
+# The invented camps of the synthetic OpenEv fixture (build_synthetic_openev.py), passed to the
+# importer as --camp-aliases. None of them is a real camp. "Zephyr Scholars" is deliberately
+# absent, so the file that names it is imported with camp UNKNOWN and a warning (ac1).
+camps:
+  QDI:
+    - Quillfeather
+    - Quillfeather Debate Institute
+  TSF:
+    - Tamarack
+    - Tamarack Summer Forum
+  BWW:
+    - Brightwater
+    - Brightwater Workshop

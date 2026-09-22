@@ -90,6 +90,11 @@ STORED_CLASSIFICATIONS = frozenset(
 )
 
 
+#: The classifications an :data:`ExistingSourceLookup` is consulted for. A `NEW` member found there
+#: becomes a `DUPLICATE`; a `CHANGED` one stays `CHANGED` but carries the reference.
+_LOOKED_UP = frozenset({Classification.NEW, Classification.DUPLICATE, Classification.CHANGED})
+
+
 class SourceMetadata(Protocol):
     """What the pipeline needs from an extractor's result. Everything else is the caller's."""
 
@@ -109,8 +114,8 @@ type RecordWriter[MetadataT] = Callable[
 """Files one stored member's records, after its bytes are in the blob store.
 
 Called for every member whose classification is in :data:`STORED_CLASSIFICATIONS`, never under a
-dry run. The last argument is the source document a `DUPLICATE` was matched to, when the
-pipeline was given an :data:`ExistingSourceLookup`, and `None` otherwise.
+dry run. The last argument is the source document the member's bytes were already filed as, when
+the pipeline was given an :data:`ExistingSourceLookup` and it found one, and `None` otherwise.
 """
 
 type ExistingSourceLookup = Callable[[Sha256Hex], Awaitable[SourceDocument | None]]
@@ -143,7 +148,11 @@ class ImportedEntry[MetadataT]:
     """What the metadata extractor read, or `None` for a skipped or removed entry."""
 
     existing_source: SourceDocument | None = None
-    """For a `DUPLICATE` matched by an :data:`ExistingSourceLookup`: the record it duplicates."""
+    """The record these bytes were filed as *before this import*, when a lookup found one.
+
+    `None` for a second copy within one archive, which duplicates the first copy rather than
+    anything filed earlier.
+    """
 
     @property
     def is_skipped(self) -> bool:
@@ -197,8 +206,9 @@ class SourceImportPipeline:
         `entries` is consumed once, in the order it yields, which the reader guarantees is path
         order. `baseline` is `{path: sha256}` for what the previous import held. With
         `report_removed`, each baseline path this archive lacks becomes a `REMOVED` entry. With
-        `find_existing`, a member whose bytes this run and the baseline have never seen is checked
-        against every source already filed, and is a `DUPLICATE` of it if one is found.
+        `find_existing`, every new, duplicate or changed member is checked against the sources
+        already filed by any import: a `NEW` one found there is a `DUPLICATE` of it, and each entry
+        carries the record it matched.
 
         Writes nothing — no blob and no record — when `dry_run` is set.
         """
@@ -231,9 +241,12 @@ class SourceImportPipeline:
                 suppressed=suppressed,
             )
             existing: SourceDocument | None = None
-            if find_existing is not None and classification in (Classification.NEW, Classification.DUPLICATE):
+            # Only bytes this run has not already stored: a second copy within one download
+            # duplicates the first, not a record from before, and a dry run (which stores
+            # nothing) must report the same thing a real run does.
+            if find_existing is not None and classification in _LOOKED_UP and entry.sha256 not in stored_digests:
                 existing = await find_existing(entry.sha256)
-                if existing is not None:
+                if existing is not None and classification is Classification.NEW:
                     classification = Classification.DUPLICATE
             counts[classification] = counts.get(classification, 0) + 1
             if classification is not Classification.SUPPRESSED:

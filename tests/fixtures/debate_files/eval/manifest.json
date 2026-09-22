@@ -1,0 +1,245 @@
+{
+  "description": "Parser evaluation files, held on the operator's machine and never committed. Keyed by SHA-256; no file name, school or team code. Proposed by scripts/select_eval_files.py.",
+  "entries": [
+    {
+      "sha256": "002fe74ed9fb33761d4e6aa05039a305d4a98cf78b682115f04e98bc9ba9926e",
+      "category": "team",
+      "season": "2024-25",
+      "debate_format": "PF",
+      "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "026411e2f9d8ff4a6126d94f75b60b41655cd881ff193356472f7749d85f5fee",
+      "category": "team",
+      "season": "2025-26",
+      "debate_format": "PF",
+      "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "0787bc76a18c2cc512945ab3b2eb9c9172e59302399e44a66ecfba82cb959a6d",
+      "category": "team",
+      "season": "2024-25",
+      "debate_format": "LD",
+      "template_family": "wiki-converted",
+      "pr_subset": false
+    },
+    {
+      "sha256": "130567cd6f4c2d869627987fd24a9f60d9a9d4b2cc6d3808c6187e08bae649d2",
+      "category": "team",
+      "season": "2025-26",
+      "debate_format": "Policy",
+      "template_family": "verbatim",
+      "pr_subset": true
+    },
+    {
+      "sha256": "08c20c5383b924a73eb665466c7543249a3b1abb48af7ebda312b7b5d5ac6630",
+      "category": "team",
+      "season": "2026-27",
+      "debate_format": "PF",
+      "template_family": "verbatim",
+      "pr_subset": false
+    },
+    {
+      "sha256": "02896227b5258b55ddc2406317739adc6a55adfe3dafc6666d4192b280f51288",
+      "category": "team",
+      "season": "2024-25",
+      "debate_format": "LD",
+      "template_family": "verbatim",
+      "pr_subset": false
+    },
+    {
+      "sha256": "033f0e75f4663b3fc9b30b520aefc9bf7c3ba10abc3726115203874be653bfc7",
+      "category": "team",
+      "season": "2025-26",
+      "debate_format": "LD",
+      "template_family": "verbatim",
+      "pr_subset": false
+    },
+    {
+      "sha256": "20441979471f1404c32703a72e408a1c662d1231ba11a27a17e0f39ac636a284",
+      "category": "team",
+      "season": "2024-25",
+      "debate_format": "PF",
+      "template_family": "verbatim",
+      "pr_subset": false
+    },
+    {
+      "sha256": "2629a939544980b32b2e4535df5ec073c05bb9a6bab94b1123f4fec7584644a7",
+      "category": "team",
+      "season": "2025-26",
+      "debate_format": "LD",
+      "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "33f2b03c3f1ae8bca0fd9416573c60925c32761a5ae2cce47684a0c34eb63750",
+      "category": "team",
+      "season": "2025-26",
+      "debate_format": "PF",
+      "template_family": "verbatim",
+      "pr_subset": false
+    },
+    {
+      "sha256": "3561ed9b1ff2bbdb2532af0e621e1934f645b78809fec0c6ebccd0b77b631903",
+      "category": "team",
+      "season": "2024-25",
+      "debate_format": "PF",
+      "template_family": "wiki-converted",
+      "pr_subset": true
+    },
+    {
+      "sha256": "654670a36839df3f941b034fa38c1114662eac5de0d01d0128616cfb3c466fb4",
+      "category": "team",
+      "season": "2024-25",
+      "debate_format": "LD",
+      "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "00e1cfba1fed6be636e52223de92ebf851c4dca230002b4f704168fbea301382",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "05cd6b7e1a0e140a599c2bd3ca1879d7ac5447838608c91e25f99ddfb490b8c1",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "09cf114a0975a01f4df6edb2f605c6ee52667b15de3d9fa9e76107644ab9e97b",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "0b656206e0219bcb24a81a758db585b8fa883a3ae168c1b752e64f141cd8c9d5",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "001c718fb904b5582c47ee4022abd5df64c01ee842e33e0ebf7caada377f9041",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "wiki-converted",
+      "pr_subset": false
+    },
+    {
+      "sha256": "02469e600c35b35f5bcdb1b7e221cd5a0ce78faadd77a1eb6d2bfdcee0301798",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "wiki-converted",
+      "pr_subset": true
+    },
+    {
+      "sha256": "0014a46118fad7e7ab4be6f7326807a4869d9d45677c5981a0c648f75eac588d",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "cardmirror",
+      "pr_subset": false
+    },
+    {
+      "sha256": "00541c0d85e81e49f5ab0c3d479e80c74b0babc244317a181860df981951f862",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "cardmirror",
+      "pr_subset": false
+    },
+    {
+      "sha256": "007dd1116e1ac77cfc687c7ab179a18d267a089d6ef6cc232bc03dbb17e448a8",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "cardmirror",
+      "pr_subset": false
+    },
+    {
+      "sha256": "04e0dfabbb9234f10b6da108f8150ca3fad3e357d1de88a25153d68ad7d97ab7",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "verbatim",
+      "pr_subset": false
+    },
+    {
+      "sha256": "059de018742508372e71114f00792c64ac4939b98e3984e1a892e0dedc91e8bf",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "verbatim",
+      "pr_subset": true
+    },
+    {
+      "sha256": "05b52cfcd66b325baf5fa8da5daf1582b20e2195d7cd095ddaec21f969e6aa50",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "verbatim",
+      "pr_subset": false
+    },
+    {
+      "sha256": "064cca568eabc8cb0a020c46518bb1f04b1206a68341d34f06f620923701068c",
+      "category": "camp",
+      "season": "2026-27",
+      "debate_format": "Policy",
+      "template_family": "cardmirror",
+      "pr_subset": false
+    },
+    {
+      "sha256": "0671fb02f4dc37b0d132f093c73e8e411f4f9e88d65d8f9ef764ded9d71fd6bd",
+      "category": "camp",
+      "season": "2026-27",
+      "debate_format": "Policy",
+      "template_family": "cardmirror",
+      "pr_subset": false
+    },
+    {
+      "sha256": "296384935261f77d86817208399f4541145c07b48f145c7131298e830f3c1647",
+      "category": "camp",
+      "season": "2026-27",
+      "debate_format": "Policy",
+      "template_family": "verbatim",
+      "pr_subset": true
+    },
+    {
+      "sha256": "2f6060b31b5c57d02990bd3722e0e0c565c607941857043123f28a4d7f48a424",
+      "category": "camp",
+      "season": "2026-27",
+      "debate_format": "Policy",
+      "template_family": "verbatim",
+      "pr_subset": false
+    },
+    {
+      "sha256": "3640a41b4e6b60009db1b097bd656ca2abb9b9a70cbf66b139ed9d3227ca436c",
+      "category": "camp",
+      "season": "2026-27",
+      "debate_format": "Policy",
+      "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "cca8ddcc1cf1ac623341e59c5bf58640ec26e71ab61563f28e10bce5c216bbc2",
+      "category": "camp",
+      "season": "2026-27",
+      "debate_format": "Policy",
+      "template_family": "other-heuristic",
+      "pr_subset": true
+    }
+  ]
+}

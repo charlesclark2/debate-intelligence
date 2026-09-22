@@ -102,7 +102,7 @@ spec:
         An operator-run corpus health report for the hsld26 snapshots and camp files is committed under
         docs/data/ with parse success rate at least 0.98 of .docx files and every failure reason counted.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

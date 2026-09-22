@@ -17,8 +17,16 @@ metadata:
     debate/architecture-refs: §4, §17, §18
 spec:
   description: >-
-    The private remote already exists: Charlie created https://github.com/charlesclark2/debate-intelligence
-    and pushed main and dev over HTTPS on 2026-09-17. This task puts the repository-level guardrails from
+    The remote already exists: Charlie created https://github.com/charlesclark2/debate-intelligence and
+    pushed main and dev over HTTPS on 2026-09-17. **It is public, by decision**, so that GitHub Actions
+    minutes are free - which is what makes the v1-e01-t04 CI pipeline affordable to run on every PR. That
+    decision rests on a control this spec originally anticipated as a risk: no real debate file, excerpt,
+    school, team code or student name may enter the repository at all, scrubbed or otherwise. The
+    v1-e31-t02, t03 and t05 rulings enforce it in the specs, docs/policies/caselist-data-use.md
+    prohibitions 1, 9 and 10 enforce it in policy, and v1-e30-t03's and v1-e31-t03's tests assert it in
+    code. Fixtures are synthetic with invented schools and team codes. A public repository is safe
+    precisely because there is nothing in it to expose; if that ever stops being true, visibility is the
+    wrong lever and the file is. This task puts the repository-level guardrails from
     docs/process/branching-and-environments.md (ADR-0013: main = prod, dev = development environment)
     in place: dev as the GitHub default branch so task PRs target it, the protect-main ruleset (PR with
     1 approval, dismiss stale approvals, conversation resolution, no force-push or deletion, pushes
@@ -33,7 +41,9 @@ spec:
   constraints:
     packages: [.github, CONTRIBUTING.md, repo settings]
     forbidden:
-      - Public repository visibility while student or scouting data could land in fixtures
+      - >-
+        Any real debate file, excerpt, school name, team code or student name entering the repository.
+        This, not visibility, is the control that makes a public repository safe, and it is absolute
       - Committing secrets, tokens or .env files (enable GitHub secret scanning/push protection)
       - Allowing force-push, deletion or direct pushes to main or dev
       - Leaving main as the default branch (task PRs must target dev by default)
@@ -44,8 +54,10 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        The private repository charlesclark2/debate-intelligence has main and dev with the full local
-        history, `origin` is configured locally, and the default branch is dev.
+        The repository charlesclark2/debate-intelligence has main and dev with the full local history,
+        `origin` is configured locally, and the default branch is dev. Visibility is public, and secret
+        scanning and push protection are enabled - on a public repository a committed token is exposed the
+        moment it lands, so these are not optional here.
     - id: ac2
       description: >-
         Ruleset protect-main (target main) requires a PR with 1 approval, dismisses stale approvals,
@@ -87,9 +99,10 @@ spec:
         kind: Task
         name: Confirm remote, branches and default branch
         description: >-
-          The remote was created and pushed on 2026-09-17; add `origin` locally if missing, confirm
-          visibility is private and both main and dev exist, and set dev as the default branch
-          (Settings → General, UI only).
+          The remote was created and pushed on 2026-09-17; add `origin` locally if missing, confirm both
+          main and dev exist, and set dev as the default branch (Settings → General, UI only). Visibility
+          is public and stays public; confirm secret scanning and push protection are on, which matter
+          more here than on a private repository.
         estimatedEffort: 0.5h
         acceptanceCriteria:
           - type: command_succeeds
@@ -97,10 +110,12 @@ spec:
             command: git
             args: [remote, get-url, origin]
           - type: command_succeeds
-            name: Repository is private
+            name: Repository is public, with secret scanning and push protection on
             command: bash
             args: [-c, "gh repo view charlesclark2/debate-intelligence --json visibility
-                   | jq -e '.visibility == \"PRIVATE\"'"]
+                   | jq -e '.visibility == \"PUBLIC\"' && gh api repos/charlesclark2/debate-intelligence
+                   | jq -e '.security_and_analysis.secret_scanning.status == \"enabled\"
+                   and .security_and_analysis.secret_scanning_push_protection.status == \"enabled\"'"]
           - type: command_succeeds
             name: Default branch is dev
             command: bash

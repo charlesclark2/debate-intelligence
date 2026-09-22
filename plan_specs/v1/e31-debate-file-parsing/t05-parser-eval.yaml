@@ -38,8 +38,9 @@ spec:
     packages: [tests/evals, tests/fixtures, scripts, docs/data]
     forbidden:
       - >-
-        Committing unscrubbed team, caselist or camp files to tests/fixtures (student or debater names, team
-        codes, docProps author/lastModifiedBy, comments, tracked-change authors)
+        Committing any team, caselist or camp file, or any excerpt of one, anywhere in the repository -
+        scrubbed or otherwise. Scrubbing removes authorship metadata; it does not remove another program's
+        cards from a file our team cut from them
       - Running the full-corpus health run in CI or a session (operator-run only)
       - Editing fixture text to make labels line up
       - Updating the baseline without a coach-reviewed report in the same PR
@@ -51,10 +52,12 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        At least 30 scrubbed files are labeled: at least 12 team files (all three formats and seasons, at least
+        At least 30 files are labeled, every one of them left where it is on the operator's machine and
+        none of them committed in any form: at least 12 team files (all three formats and seasons, at least
         3 not built on the Verbatim template), at least 12 caselist files (at least 4 non-Verbatim and 2
-        wiki-converted) and at least 6 camp files, listed in a manifest by category, season and format; the
-        coach has reviewed the labels.
+        wiki-converted) and at least 6 camp files, listed in a manifest by sha256, category, season and
+        format - never by file name, which carries a school and a team code - and the coach has reviewed
+        the labels.
     - id: ac2
       description: >-
         The eval writes JSON and Markdown reports with per-unit (POCKET, HAT, BLOCK, TAG, CITE, EVIDENCE,
@@ -89,7 +92,7 @@ metadata:
     debate/epic: v1-e31-debate-file-parsing
 spec:
   description: >-
-    Select and scrub files, build label tooling, label with the coach, add metrics and the tiered gates, then
+    Select files in place, build label tooling, label with the coach, add metrics and the tiered gates, then
     have the operator run the full-corpus health check and commit its report.
   goalRef:
     name: v1-e31-t05-parser-eval
@@ -97,11 +100,16 @@ spec:
     nodes:
       - id: collect-files
         kind: Task
-        name: Select and scrub the evaluation files
+        name: Select the evaluation files, in place
         description: >-
           Choose team, caselist and camp files per category from the local folders (stratified by template
-          family seen in the t02 style survey), scrub with scripts/scrub_docx_fixture.py and record them in the
-          manifest; mark the 6-file PR subset.
+          family seen in the t02 style survey) and record them in the manifest by sha256, category, season
+          and format; mark the 6-file PR subset. The files stay on the operator's machine and none is
+          copied into the repository, scrubbed or otherwise: a team file can carry another program's cutter
+          marks, so "our own work product" is not a safe category (the v1-e31-t02 and v1-e31-t03 rulings,
+          and caselist-data-use.md prohibitions 1, 9 and 10). The manifest lists no file name, school or
+          team code. This is a manifest of files held elsewhere, not a fixture directory, and a later
+          reader who finds no .docx beside it is looking at it working correctly.
         outputs: [tests/fixtures/debate_files/eval/MANIFEST.md]
         estimatedEffort: 3h
         acceptanceCriteria:

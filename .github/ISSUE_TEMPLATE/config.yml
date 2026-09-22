@@ -1,0 +1,7 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask for something to be removed from the evidence corpus
+    url: https://github.com/charlesclark2/debate-intelligence/blob/dev/docs/policies/caselist-data-use.md#removal
+    about: >-
+      Removal requests go by email, never in an issue. This repository is public, and a removal
+      request names a school, team code or file that must not be posted here.

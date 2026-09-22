@@ -1,0 +1,7 @@
+# Code owners for charlesclark2/debate-intelligence.
+# Later, more specific patterns override earlier ones. Charlie owns everything; the specs and the
+# repository settings files are listed explicitly so that stays true if a broader owner is added.
+
+*             @charlesclark2
+/plan_specs/  @charlesclark2
+/.github/     @charlesclark2

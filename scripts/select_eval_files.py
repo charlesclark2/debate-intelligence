@@ -66,7 +66,6 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from survey_docx_styles import read_file_usage  # noqa: E402
-
 from tests.evals.parser.corpus import path_map_location  # noqa: E402
 from tests.evals.parser.labels_schema import (  # noqa: E402
     MANIFEST_PATH,
@@ -92,6 +91,10 @@ _FORMAT_PATTERNS: tuple[tuple[re.Pattern[str], DebateFormat], ...] = (
 
 #: Files longer than this are hard to label by hand in one sitting. Adjustable with --max-paragraphs.
 DEFAULT_MAX_PARAGRAPHS = 600
+
+#: A file shorter than this has too little structure to measure anything; a one-paragraph document
+#: would otherwise be the first pick for the PR subset, which prefers short files.
+DEFAULT_MIN_PARAGRAPHS = 20
 
 
 def infer_season(folders: Sequence[str]) -> str | None:
@@ -153,6 +156,7 @@ def iter_candidates(
     *,
     exclude_dirs: frozenset[str],
     skipped: Counter[str],
+    min_paragraphs: int = DEFAULT_MIN_PARAGRAPHS,
 ) -> Iterator[Candidate]:
     seen: set[str] = set()
     for category, root in inputs:
@@ -184,6 +188,9 @@ def iter_candidates(
             if paragraphs is None or paragraphs == 0:
                 skipped["no document body"] += 1
                 continue
+            if paragraphs < min_paragraphs:
+                skipped[f"under {min_paragraphs} paragraphs"] += 1
+                continue
             yield Candidate(
                 path=path,
                 sha256=sha256,
@@ -200,10 +207,10 @@ Requirement = tuple[Callable[[Candidate], bool], int]
 
 def _requirements(category: Category) -> tuple[int, list[Requirement]]:
     """How many files a category gets, and the strata it must reach first (ac1)."""
-    non_verbatim: Callable[[Candidate], bool] = lambda c: c.template_family not in (  # noqa: E731
-        TemplateFamily.VERBATIM,
-        TemplateFamily.CARDMIRROR,
-    )
+
+    def non_verbatim(candidate: Candidate) -> bool:
+        return candidate.template_family not in (TemplateFamily.VERBATIM, TemplateFamily.CARDMIRROR)
+
     if category is Category.TEAM:
         requirements: list[Requirement] = [(non_verbatim, 3)]
         for debate_format in DebateFormat:
@@ -224,7 +231,9 @@ def _requirements(category: Category) -> tuple[int, list[Requirement]]:
     ]
 
 
-def _select_category(candidates: Sequence[Candidate], category: Category, max_paragraphs: int) -> list[Candidate]:
+def _select_category(
+    candidates: Sequence[Candidate], category: Category, max_paragraphs: int
+) -> list[Candidate]:
     """Meet each stratum first, then fill. Files over `max_paragraphs` are used only as a last
     resort, shortest first, for a stratum no shorter file can meet."""
     total, requirements = _requirements(category)
@@ -246,7 +255,9 @@ def _select_category(candidates: Sequence[Candidate], category: Category, max_pa
         remaining = [c for c in pool if c not in chosen]
         if not remaining:
             break
-        chosen.append(min(remaining, key=lambda c: (taken[(c.debate_format, c.season, c.template_family)], c.sha256)))
+        chosen.append(
+            min(remaining, key=lambda c: (taken[(c.debate_format, c.season, c.template_family)], c.sha256))
+        )
     return chosen
 
 
@@ -256,7 +267,9 @@ def _pr_subset(selected: Sequence[Candidate]) -> set[str]:
     per_category = PR_SUBSET_SIZE // len(Category)
     for category in Category:
         pool = sorted((c for c in selected if c.category is category), key=lambda c: (c.paragraphs, c.sha256))
-        verbatim = [c for c in pool if c.template_family in (TemplateFamily.VERBATIM, TemplateFamily.CARDMIRROR)]
+        verbatim = [
+            c for c in pool if c.template_family in (TemplateFamily.VERBATIM, TemplateFamily.CARDMIRROR)
+        ]
         others = [c for c in pool if c not in verbatim]
         picks = [*verbatim[:1], *others[:1]]
         picks += [c for c in pool if c not in picks][: per_category - len(picks)]
@@ -291,6 +304,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--input", action="append", type=_parse_input, required=True, help="CATEGORY=PATH")
     parser.add_argument("--exclude-dir", action="append", default=[], help="Folder name to skip.")
     parser.add_argument("--max-paragraphs", type=int, default=DEFAULT_MAX_PARAGRAPHS)
+    parser.add_argument("--min-paragraphs", type=int, default=DEFAULT_MIN_PARAGRAPHS)
     parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
     parser.add_argument("--path-map", type=Path, default=None, help="Defaults to the evaluation's path map.")
     args = parser.parse_args(argv)
@@ -309,17 +323,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.input,
             exclude_dirs=frozenset(args.exclude_dir),
             skipped=skipped,
+            min_paragraphs=args.min_paragraphs,
         )
     )
     manifest, path_map = propose_selection(candidates, max_paragraphs=args.max_paragraphs)
     by_sha = {c.sha256: c for c in candidates}
     oversized = sum(1 for sha in path_map if by_sha[sha].paragraphs > args.max_paragraphs)
-    labelling_rows = sum(by_sha[sha].paragraphs for sha in path_map)
+    labeling_rows = sum(by_sha[sha].paragraphs for sha in path_map)
 
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
     path_map_path.parent.mkdir(parents=True, exist_ok=True)
-    path_map_path.write_text(json.dumps({sha: str(p) for sha, p in path_map.items()}, indent=2), encoding="utf-8")
+    path_map_path.write_text(
+        json.dumps({sha: str(p) for sha, p in path_map.items()}, indent=2), encoding="utf-8"
+    )
 
     by_stratum = Counter(
         (e.category.value, e.template_family.value, e.debate_format.value, e.season) for e in manifest.entries
@@ -327,7 +344,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"candidates: {len(candidates)}; skipped: {dict(sorted(skipped.items()))}")
     print(
         f"selected {len(manifest.entries)} files, {len(manifest.pr_subset)} in the PR subset; "
-        f"{labelling_rows} paragraphs to label; {oversized} over {args.max_paragraphs} paragraphs "
+        f"{labeling_rows} paragraphs to label; {oversized} over {args.max_paragraphs} paragraphs "
         "(taken only for a stratum no shorter file meets)"
     )
     for (category, family, debate_format, season), count in sorted(by_stratum.items()):

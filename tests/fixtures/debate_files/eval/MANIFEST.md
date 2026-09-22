@@ -16,7 +16,7 @@ What the repository holds instead:
 | File | What it is |
 |---|---|
 | [`manifest.json`](manifest.json) | Each evaluation file by SHA-256, category, season, format and template family, and whether it is in the PR subset. The machine-readable manifest; the table below is its summary. |
-| [`labels/`](labels/) | One `<sha256>.jsonl` per file once it is labelled: each paragraph's unit and card, keyed by paragraph index and the SHA-256 of its text. No text. The [labelling guide](labels/README.md) says how. |
+| [`labels/`](labels/) | One `<sha256>.jsonl` per file once it is labeled: each paragraph's unit and card, keyed by paragraph index and the SHA-256 of its text. No text. The [labeling guide](labels/README.md) says how. |
 | [`../../../evals/baselines/parser.json`](../../../evals/baselines/parser.json) | The scores the regression gate holds the parser to. |
 
 **No file name, path, school or team code appears in any of them.** A caselist file name is
@@ -41,14 +41,17 @@ bytes and style references only, never text, and printed counts only.
 * Files over 600 paragraphs are passed over, because every paragraph is corrected by hand. The one
   exception: every 2026-27 team file is longer than that, so the shortest of them was taken to
   cover the season.
+* Files under 20 paragraphs are passed over too: they have too little structure to measure, and
+  the PR subset, which prefers short files, would otherwise pick a one-paragraph document.
 * The PR subset is two files per category, the shortest, one Verbatim-family and one not where the
   category allows.
 
-1,851 files were candidates (109 byte-identical duplicates, 1 unreadable file and 1 file with no
-season or format folder were skipped). The 30 selected files hold 5,512 paragraphs.
+1,827 files were candidates (109 byte-identical duplicates, 24 files under 20 paragraphs, 1
+unreadable file and 1 file with no season or format folder were skipped). The 30 selected files
+hold 5,788 paragraphs, and all 30 parse.
 
 **Status: proposed, awaiting the coach's approval** (the `collect-files` node's manual criterion).
-Until the coach approves it, nothing is labelled.
+Until the coach approves it, nothing is labeled.
 
 ## The selection
 
@@ -59,14 +62,14 @@ Until the coach approves it, nothing is labelled.
 | `654670a36839df3f` | team | 2024-25 | LD | other-heuristic |  |
 | `02896227b5258b55` | team | 2024-25 | LD | verbatim |  |
 | `0787bc76a18c2cc5` | team | 2024-25 | LD | wiki-converted |  |
-| `002fe74ed9fb3376` | team | 2024-25 | PF | other-heuristic |  |
-| `20441979471f1404` | team | 2024-25 | PF | verbatim |  |
-| `3561ed9b1ff2bbdb` | team | 2024-25 | PF | wiki-converted | yes |
+| `002fe74ed9fb3376` | team | 2024-25 | PF | other-heuristic | yes |
+| `20441979471f1404` | team | 2024-25 | PF | verbatim | yes |
 | `2629a939544980b3` | team | 2025-26 | LD | other-heuristic |  |
 | `033f0e75f4663b3f` | team | 2025-26 | LD | verbatim |  |
+| `6cff3aec913a711e` | team | 2025-26 | LD | wiki-converted |  |
 | `026411e2f9d8ff4a` | team | 2025-26 | PF | other-heuristic |  |
 | `33f2b03c3f1ae8bc` | team | 2025-26 | PF | verbatim |  |
-| `130567cd6f4c2d86` | team | 2025-26 | Policy | verbatim | yes |
+| `68330aca9c306e5e` | team | 2025-26 | Policy | verbatim |  |
 | `08c20c5383b924a7` | team | 2026-27 | PF | verbatim |  |
 | `0014a46118fad7e7` | caselist | 2026-27 | LD | cardmirror |  |
 | `00541c0d85e81e49` | caselist | 2026-27 | LD | cardmirror |  |
@@ -92,8 +95,8 @@ Until the coach approves it, nothing is labelled.
 | Requirement | Selected |
 |---|---|
 | At least 30 files | 30 |
-| At least 12 team files, all three formats | 12: LD 5, PF 6, Policy 1 |
-| Team files across all three seasons | 2024-25 6, 2025-26 5, 2026-27 1 |
+| At least 12 team files, all three formats | 12: LD 6, PF 5, Policy 1 |
+| Team files across all three seasons | 2024-25 5, 2025-26 6, 2026-27 1 |
 | At least 3 team files not on the Verbatim template | 6 (4 other-heuristic, 2 wiki-converted) |
 | At least 12 caselist files, 4 non-Verbatim, 2 wiki-converted | 12: 4 other-heuristic, 2 wiki-converted, 6 Verbatim-family |
 | At least 6 camp files | 6 |

@@ -7,7 +7,7 @@
       "season": "2024-25",
       "debate_format": "PF",
       "template_family": "other-heuristic",
-      "pr_subset": false
+      "pr_subset": true
     },
     {
       "sha256": "026411e2f9d8ff4a6126d94f75b60b41655cd881ff193356472f7749d85f5fee",
@@ -26,12 +26,12 @@
       "pr_subset": false
     },
     {
-      "sha256": "130567cd6f4c2d869627987fd24a9f60d9a9d4b2cc6d3808c6187e08bae649d2",
+      "sha256": "68330aca9c306e5ebf94a2b261d8ed566d4f4658ac448adb1a0b0782909efa6c",
       "category": "team",
       "season": "2025-26",
       "debate_format": "Policy",
       "template_family": "verbatim",
-      "pr_subset": true
+      "pr_subset": false
     },
     {
       "sha256": "08c20c5383b924a73eb665466c7543249a3b1abb48af7ebda312b7b5d5ac6630",
@@ -63,7 +63,7 @@
       "season": "2024-25",
       "debate_format": "PF",
       "template_family": "verbatim",
-      "pr_subset": false
+      "pr_subset": true
     },
     {
       "sha256": "2629a939544980b32b2e4535df5ec073c05bb9a6bab94b1123f4fec7584644a7",
@@ -82,19 +82,19 @@
       "pr_subset": false
     },
     {
-      "sha256": "3561ed9b1ff2bbdb2532af0e621e1934f645b78809fec0c6ebccd0b77b631903",
-      "category": "team",
-      "season": "2024-25",
-      "debate_format": "PF",
-      "template_family": "wiki-converted",
-      "pr_subset": true
-    },
-    {
       "sha256": "654670a36839df3f941b034fa38c1114662eac5de0d01d0128616cfb3c466fb4",
       "category": "team",
       "season": "2024-25",
       "debate_format": "LD",
       "template_family": "other-heuristic",
+      "pr_subset": false
+    },
+    {
+      "sha256": "6cff3aec913a711e920ab8314d207d56b81c2af100df393d88aa8f1e816f48aa",
+      "category": "team",
+      "season": "2025-26",
+      "debate_format": "LD",
+      "template_family": "wiki-converted",
       "pr_subset": false
     },
     {

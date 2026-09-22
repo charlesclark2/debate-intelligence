@@ -100,7 +100,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Final
 
@@ -276,7 +276,8 @@ def import_openev(
     """Import OpenEv camp files, deduplicated against everything already imported."""
     cli = cli_context(ctx)
     settings = cli.services.settings
-    imported_on = _snapshot_date(snapshot) if snapshot is not None else date.today()
+    # UTC, because that is the calendar the domain's no-future-dates rule reads.
+    imported_on = _snapshot_date(snapshot) if snapshot is not None else datetime.now(UTC).date()
     aliases = load_camp_aliases(camp_aliases)
     manifest_path = FsEvidenceObjectStore(settings.storage.data_dir).path_for(
         openev_manifest_key(year, event)

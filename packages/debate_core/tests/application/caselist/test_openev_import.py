@@ -46,6 +46,7 @@ from debate_core.application.caselist.manifest import manifest_lines
 from debate_core.application.caselist.openev_import_service import (
     OpenEvImportReport,
     OpenEvImportService,
+    UnrecordableImportDate,
 )
 from debate_core.application.caselist.openev_manifest import CAMP_FIELDS
 from debate_core.application.caselist.publish_plan import (
@@ -555,3 +556,11 @@ def test_a_recorded_manifest_that_cannot_be_read_is_refused_not_overwritten(harn
 
     with pytest.raises(UnreadableManifest, match="line 2"):
         harness.import_openev(FIRST)
+
+
+def test_a_future_import_date_is_refused_before_anything_is_written(harness: Harness) -> None:
+    with pytest.raises(UnrecordableImportDate, match="in the future"):
+        harness.import_openev(FIRST, imported_on=date(2999, 1, 1))
+
+    assert harness.blob_count == 0
+    assert harness.camp_files() == []

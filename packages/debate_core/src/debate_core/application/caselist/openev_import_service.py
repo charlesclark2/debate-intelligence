@@ -49,6 +49,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 
+from pydantic import TypeAdapter, ValidationError
+
 from debate_core.application.caselist.camp_metadata import (
     CampAliases,
     ParsedCampPath,
@@ -67,6 +69,7 @@ from debate_core.application.caselist.pipeline import (
     SourceImportPipeline,
     file_source,
 )
+from debate_core.application.errors import DomainError
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.evidence_store import ObjectKey
@@ -79,9 +82,23 @@ from debate_core.domain.caselist import (
     SourceOrigin,
 )
 
-__all__ = ["OpenEvImportReport", "OpenEvImportService"]
+__all__ = ["OpenEvImportReport", "OpenEvImportService", "UnrecordableImportDate"]
 
 logger = logging.getLogger(__name__)
+
+_SNAPSHOT_DATE: TypeAdapter[date] = TypeAdapter(SnapshotDate)
+
+
+class UnrecordableImportDate(DomainError):
+    """The date to record the import under is one the domain refuses — a date in the future.
+
+    Checked before anything is read or written, so a mistyped `--snapshot` stores nothing rather
+    than failing on the first record after the first blob is already in the store.
+    """
+
+    def __init__(self, imported_on: date, reason: str) -> None:
+        self.imported_on = imported_on
+        super().__init__(f"cannot record an OpenEv import under {imported_on.isoformat()}: {reason}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,8 +190,13 @@ class OpenEvImportService:
         `camp_aliases.yaml`. `suppressed_hashes` is the removal suppression list (v1-e30-t07).
 
         Writes nothing — no blob, no record — when `dry_run` is set; the report still carries the
-        manifest a real run would write.
+        manifest a real run would write. Raises :class:`UnrecordableImportDate`, before reading or
+        writing anything, for an `imported_on` in the future.
         """
+        try:
+            _SNAPSHOT_DATE.validate_python(imported_on)
+        except ValidationError as refused:
+            raise UnrecordableImportDate(imported_on, refused.errors()[0]["msg"]) from None
         key = openev_manifest_key(year, event)
         recorded = read_recorded_release(key, recorded_manifest)
         table = aliases if aliases is not None else load_camp_aliases()

@@ -111,6 +111,24 @@ copied from output.
    often instructors' names. So I did not widen the entity. The manifest row already carries the
    same information in its `path`. If the PM wants `lab` on the record, that is a deliberate edit
    to the entity and to that guard.
+4. **Docstrings edited in two packages outside the declared package list.** These are
+   `debate_core.integrations`
+   (`integrations/local/sqlite_caselist_repository.py`: the module docstring and `_widened`) and
+   `debate_core.testing` (`testing/fakes.py`: one clause of the fake repository's docstring).
+   - **The change is docstring-only, with no change in behaviour.**
+   - **What was wrong.** Each file gave its own reason for `put_source`'s `Conflict`, and two of
+     them said a differing origin means "two different files under one hash". This task's premise
+     is the opposite: the same bytes disclosed on a caselist and released by a camp are one file.
+   - **What they say now.** A differing size or format is a real contradiction. A differing
+     origin is refused only as a defence against a caller that skips `file_source`. Each file then
+     points at the port.
+   - **Where the rule lives.** The port's `put_source` docstring (corrected in the port in
+     `f8fe45f`) is the one place the reasoning lives, so the rule is explained once rather than
+     four times. Four separate explanations are how the wording drifted in the first place.
+   - **Why the PM allowed it.** The same false reason standing in three files is a worse outcome
+     than a narrow scope extension.
+   - **Collision risk.** Neither of the tasks running at the same time (v1-e31-t05, v1-e01-t02)
+     touches either package, so there is none.
 
 ## Decisions and assumptions
 

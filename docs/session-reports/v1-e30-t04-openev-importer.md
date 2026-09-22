@@ -163,15 +163,17 @@ copied from output.
 
 ## Operator follow-ups
 
-The full test suite was not run by the session (working agreements §2). The neighbouring suites
-above passed.
+None for this task. The full suite was run by the session at the operator's request, after the
+docstring corrections: `uv run pytest` → `2171 passed in 28.55s`, total coverage 97%.
 
-**Operator command** (expected runtime about 1–3 min)
-Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e30-t04-openev-importer`
-```bash
-uv run pytest
-```
-Success looks like: no failures. Paste the last 5 lines back.
+The other gates at the same commit:
+- `uv run ruff check .` → All checks passed.
+- `uv run pyright packages/debate_core packages/debate_cli` → 0 errors.
+- `uv run lint-imports` → 5 kept, 0 broken.
+- `uv run ruff format --check .` → 1 file would be reformatted: `tests/scripts/test_site_smoke.py`.
+  This branch does not touch that file. It is byte-identical to `origin/dev` and has been
+  unformatted there since #53 (v1-e36-t08). It was left alone to keep this task's scope where the
+  PM set it.
 
 For v1-e30-t06 (not this task): run the 106 real Policy files with `--dry-run` first and look at
 `unknown_camps` in the `--json` output. Any camp it reports belongs in `camp_aliases.yaml`, or in a
@@ -189,6 +191,9 @@ table passed with `--camp-aliases`, before the real import.
   could prefer over path parsing. That would be a change to that task, not this one.
 - **v1-e30-t07.** `import_release` takes `suppressed_hashes` (default empty), as `import_archive`
   does. Neither command has a flag for it yet. The suppression list port is t07's.
+- **`tests/scripts/test_site_smoke.py` fails `ruff format --check .` on `dev`** (since #53). A
+  one-line `uv run ruff format tests/scripts/test_site_smoke.py` fixes it. That belongs to
+  v1-e36 or a housekeeping PR, not this task.
 - **`caselist import`** probably has the same future-`--snapshot` behaviour, since
   `ArchiveSnapshot` uses the same `SnapshotDate`. I did not check that, and changing it is outside
   this task.

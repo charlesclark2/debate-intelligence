@@ -244,7 +244,11 @@ class SourceImportPipeline:
             # Only bytes this run has not already stored: a second copy within one download
             # duplicates the first, not a record from before, and a dry run (which stores
             # nothing) must report the same thing a real run does.
-            if find_existing is not None and classification in _LOOKED_UP and entry.sha256 not in stored_digests:
+            if (
+                find_existing is not None
+                and classification in _LOOKED_UP
+                and entry.sha256 not in stored_digests
+            ):
                 existing = await find_existing(entry.sha256)
                 if existing is not None and classification is Classification.NEW:
                     classification = Classification.DUPLICATE

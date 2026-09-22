@@ -179,9 +179,48 @@ table passed with `--camp-aliases`, before the real import.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-22
 
 **Notes:**
+
+All three deviations upheld; amendments are `24a44c1` on `specs/openev-rulings`.
+
+**The cross-origin fix was required, not a liberty.** t04's own description asks for content identical
+to a caselist source to be stored once and linked from both records, and `put_source` would have
+raised `Conflict` on the second origin instead - so the spec asked for a thing the port refused to
+do. Changing the caller rather than the port is the right half to change, and updating
+`SourceDocument.origin` to "which import **first** stored these bytes" and `.caselist` to "first seen
+in" is the part that matters most: it makes the order-dependence visible in the model instead of
+leaving it as a surprise for whoever builds on it. `v1-e30-t02` now records the consequence - which
+origin a shared hash carries depends on import order, so the authoritative cross-origin picture is
+the set of disclosure and camp-file records sharing a sha256, never the origin field alone, and E31
+and E32 read it that way.
+
+**The lab decision was verified rather than taken on trust**, because "kept in the manifest, kept out
+of the model" could easily have been a distinction without a difference. It is not:
+`common_member_fields` already writes `path`, and an OpenEv path is `<year>/<camp>/<lab>/<file>`, so
+the manifest's `lab` restates something the row carries anyway, while `CampFile` - which E31 and E32
+query and report on - stays free of a field that is sometimes an instructor's name. Redundant where
+it is already exposed, absent where it would be newly queryable, is exactly the right shape.
+
+**Both new flags are right.** `--snapshot` defaulting to today is the correct answer for a release
+that has no weekly date of its own, and because neither flag is required, `v1-e34-t02` calls this
+command without either. Both are now in the spec's signature.
+
+**Hand-written expectations earning their keep again**, per working agreement 6: they matched the
+implementation except in one field, and that one mismatch was a real inconsistency the dry-run path
+exposed. An expectation generated from the implementation would have agreed with the bug. Same for
+refusing a future `--snapshot` before the first blob is written rather than after - found by running
+the command, which unit tests would not have surfaced.
+
+**One correction wanted before the PR**, and it is a docstring rather than behaviour. `put_source`
+still says it raises `Conflict` on a differing origin "which would mean two different files are being
+filed under one hash". That rationale is now false, and it is the sentence a future adapter author or
+caller will read: identical bytes under two origins are the same file, which is the premise of this
+whole task. Keep the defensive refusal, correct the reason - it should say no caller should reach it
+because the importer links to the existing record, and point at v1-e30-t04.
+
+Full-suite run is the operator's, as filed.

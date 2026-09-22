@@ -6,53 +6,289 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t05-parser-eval` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL |
 
 ## Summary
 
-<!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
+All the machinery this evaluation needs is built, tested and committed. What's left is human work
+that the spec reserves for Charlie: approving the file selection, correcting the labels, the coach
+spot-check, establishing the baseline, and the full-corpus health run. **The Goal stays
+`InProgress`**, because ac1, ac3 and ac5 cannot be met until that work is done. Nothing was
+labeled in this session, and no pre-label was accepted as a label.
+
+What's built:
+
+- a proposed selection of 30 files, keyed by SHA-256, that meets every ac1 stratum;
+- a label schema with a structural validator and a validator that fails when a file changes under
+  its labels;
+- a pre-labeling and correction workflow that cannot turn a pre-label into a label without a
+  person checking every row;
+- the ac2 metrics and ac3 targets;
+- a baseline gate that fails rather than passing against nothing;
+- an operator-run corpus health script;
+- a labeling guide.
+
+**No debate file, excerpt, file name, path, school or team code is committed.** The only link from
+a SHA-256 to a file is the path map, which is outside the repository at
+`~/.debate-intelligence/parser-eval-paths.json`, and every tool refuses to write it, or a
+correction worksheet, inside the repository.
+
+The PM should look at Deviation 1 first. The spec asks for the labeled subset to run "in the PR
+`ci` check", but the policy says the real corpus never reaches a CI runner. The two cannot both
+hold. The PR subset therefore runs in the default `pytest` run on the machine that holds the
+files, and CI runs the whole harness on an invented file instead.
 
 ## Plan nodes
 
-<!-- One row per Plan graph node, in the order they were completed. -->
-
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `collect-files` | DONE, awaiting coach approval | [`scripts/select_eval_files.py`](../../scripts/select_eval_files.py) proposed 30 files (5,788 paragraphs) from 1,827 candidates, reading bytes and style references only and printing counts only. [`manifest.json`](../../tests/fixtures/debate_files/eval/manifest.json) and [`MANIFEST.md`](../../tests/fixtures/debate_files/eval/MANIFEST.md) are committed. Approval is a hand-off (Operator follow-up 1). |
+| `label-tooling` | DONE | [`labels_schema.py`](../../tests/evals/parser/labels_schema.py) and [`scripts/prelabel_docx.py`](../../scripts/prelabel_docx.py) (`prelabel`, `worksheet`, `import`, `mark-reviewed`). |
+| `labeling` | NOT STARTED (human work); guide written | The [labeling guide](../../tests/fixtures/debate_files/eval/labels/README.md) is written and awaits sign-off. The correction and spot-checks are hand-offs (Operator follow-ups 2 and 3). No label file is committed. |
+| `metrics-and-gates` | DONE (code); baseline NOT ESTABLISHED | [`metrics.py`](../../tests/evals/parser/metrics.py), [`corpus.py`](../../tests/evals/parser/corpus.py), [`test_parser_eval.py`](../../tests/evals/parser/test_parser_eval.py) and [`scripts/run_parser_eval.py`](../../scripts/run_parser_eval.py). [`baseline parser.json`](../../tests/evals/baselines/parser.json) is committed as `NOT_ESTABLISHED`: no labels means no numbers, and a baseline number that was never measured would be exactly the kind of number working agreement 6 forbids. |
+| `corpus-health-run` | Script DONE; run NOT RUN (operator-only) | [`scripts/parser_corpus_health.py`](../../scripts/parser_corpus_health.py), tested on an invented corpus. The spec forbids the real run in a session; the command is Operator follow-up 5. |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
+Commands run from the task worktree. The counts come from the named file with `--no-cov`.
+
+### Goal criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1 — at least 30 files labeled, none committed; at least 12 team (all formats and seasons, at least 3 non-Verbatim), at least 12 caselist (at least 4 non-Verbatim, at least 2 wiki-converted), at least 6 camp; manifest by sha256/category/season/format; coach reviewed the labels | **NOT MET**: selection done, labeling not started | Selection: `uv run python scripts/select_eval_files.py …` (command in the script's docstring) → `selected 30 files, 6 in the PR subset; 5788 paragraphs to label`, no `SHORTFALL`, in about 22 s. `test_the_committed_manifest_meets_ac1` passes (`coverage_shortfalls()` is empty). `test_nothing_in_the_eval_directory_names_a_file` passes. **0 of 30 files labeled; coach review not done.** |
+| ac2 — JSON and Markdown reports with per-unit P/R/F1 for all 8 units, card-boundary exact match, completeness accuracy and character-level underline/highlight F1, by source, template family and format | **PASS** (machinery); no real report yet | `uv run pytest tests/evals/parser/test_metrics.py` → `20 passed`. `test_reports_carry_every_breakdown_and_no_file_detail_in_markdown` checks every section. `test_the_harness_scores_the_invented_file_against_its_hand_written_labels` runs the whole path from `.docx` to report. |
+| ac3 — targets recorded and met or ticketed (Verbatim: TAG/CITE/EVIDENCE ≥ 0.97, POCKET/HAT/BLOCK ≥ 0.95, ANALYTIC ≥ 0.85, span ≥ 0.99; non-Verbatim and wiki-converted: TAG/CITE/EVIDENCE ≥ 0.90) | Targets recorded: PASS. Met or ticketed: **NOT RUN** | `test_the_targets_are_the_ones_ac3_states` pins all 11 targets as written. Whether they are met can only be known from corrected labels. |
+| ac4 — the labeled subset runs in the default PR pytest run in under 30 s; the full suite (`eval` and `slow`) fails when any unit F1 drops more than 0.01 below the baseline; a label validator fails when a fixture changes under its labels | **PASS as amended** (Deviation 1), **FAIL as written** (it cannot run in the PR `ci` check). Gate behavior: PASS. Real tiers: **NOT RUN** | The gate: `test_a_drop_within_tolerance_passes` (0.9749 against 0.98), `test_a_drop_of_more_than_one_point_fails` (0.96), `test_a_tier_with_no_baseline_fails_rather_than_passing_vacuously`, and end to end in `test_the_harness_gate_fails_when_the_labels_and_parser_disagree`. The fixture validator: `test_an_edited_paragraph_fails`, `test_different_bytes_fail`, `test_a_paragraph_added_or_lost_fails` and `test_the_harness_refuses_a_file_that_changed_under_its_labels`. The real tiers on this machine: `-m "eval and not slow"` → `1 skipped` ("6 of 6 pr-subset files are not yet corrected by a person"); `-m "eval and slow"` → `1 skipped` ("30 of 30"). The 30 s budget is asserted in the test but has not run against real labels. |
+| ac5 — operator-run corpus health report committed under docs/data/ with parse success rate ≥ 0.98 and every failure reason counted | **NOT RUN** (operator-only) | `uv run pytest tests/scripts/test_parser_corpus_health.py` → `6 passed`, which covers counting, deduplication across snapshots, failures by reason, crashes by exception type, and no names or text in the report. `docs/data/parser-corpus-health.md` does not exist yet. |
+
+### Node criteria
+
+| Criterion | Status | Evidence (command → result) |
+|---|---|---|
+| `collect-files` — manifest lists caselist and camp files (`contentMatch: caselist`) | PASS | `grep -c caselist tests/fixtures/debate_files/eval/MANIFEST.md` → `17` |
+| `collect-files` — **custom:** coach approves the file selection | **NOT RUN** (hand-off) | Operator follow-up 1 |
+| `label-tooling` — label schema validation tests pass | PASS | `uv run pytest tests/evals/parser/test_labels_schema.py` → `26 passed in 1.57s`. Also `test_prelabel.py` → `15 passed` (pre-label, markup and worksheet refusals). |
+| `labeling` — labeling guide exists (`contentMatch: labeling guide`) | PASS | `grep -c "labeling guide" tests/fixtures/debate_files/eval/labels/README.md` → `2` |
+| `labeling` — **custom:** coach spot-checks at least 3 labeled files and signs off the guide | **NOT RUN** (hand-off) | Operator follow-ups 2 and 3 |
+| `metrics-and-gates` — metric unit tests pass | PASS | `uv run pytest tests/evals/parser/test_metrics.py` → `20 passed in 1.45s` |
+| `metrics-and-gates` — labeled PR subset passes against the baseline | **NOT RUN** | `uv run pytest tests/evals/parser -m "eval and not slow"` exits 0 but only because the one test skipped (`1 skipped`), so it is not recorded as a pass. It needs corrected labels and an established baseline. |
+| `metrics-and-gates` — parser baseline committed (`contentMatch: parser_version`) | PASS (placeholder) | `grep -c parser_version tests/evals/baselines/parser.json` → `1`. The file is `"status": "NOT_ESTABLISHED"` with no scores, deliberately. |
+| `corpus-health-run` — corpus health report committed (`contentMatch: parse success rate`) | **NOT RUN** | Operator follow-up 5 |
+
+Also run, though not a criterion:
+
+| Check | Result |
+|---|---|
+| Whole repository suite | `uv run pytest` → `2180 passed, 1 skipped in 32.17s` (the skip is the real PR-subset tier) |
+| Lint and format | `uv run ruff check` and `ruff format --check` over every new file → `All checks passed!` |
+| Spec validation | `uv run scripts/validate_specs.py` → `OK: 282 files, 38 epics, 224 tasks, 20 releases` |
+| Pre-labeling works on the real selection | `prelabel --all` into the session scratchpad, not the repository → all 30 files parse, 29 to 1,020 paragraphs each, in under a second. The scratch labels were discarded; none were committed. |
+| Runner refusals | `run_parser_eval.py --tier pr-subset` → exit 1, "no label file" × 6. `--write-baseline --report docs/data/x.md` → exit 2, "0 file(s) are COACH_REVIEWED". |
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+**Evaluation library and tests (`tests/evals/parser/`)**: all new.
+
+- `labels_schema.py`: manifest and label models, both validators, the ac1 coverage check.
+- `metrics.py`: scoring, groups, targets, gate, reports.
+- `corpus.py`: path map, loading a file by SHA-256, running a tier.
+- `synthetic.py`: an invented file and its hand-written labels.
+- Test modules: `test_labels_schema.py`, `test_prelabel.py`, `test_metrics.py`, `test_parser_eval.py`.
+
+**Baseline**: `tests/evals/baselines/parser.json`, a `NOT_ESTABLISHED` placeholder.
+
+**Manifest and guide (`tests/fixtures/debate_files/eval/`)**: `manifest.json`, `MANIFEST.md` and
+`labels/README.md` (the labeling guide). There are no label files yet.
+
+**Scripts**, all new:
+
+- `select_eval_files.py`: proposes the selection and writes the path map outside the repository.
+- `prelabel_docx.py`: pre-labels, worksheets and import.
+- `run_parser_eval.py`: runs the evaluation and writes the baseline.
+- `parser_corpus_health.py`: the operator-run health report.
+
+**Other**: `tests/scripts/test_parser_corpus_health.py` (new), and one paragraph in
+`tests/README.md` about `evals/`.
 
 ## Deviations from the spec
 
-None.
+1. **The labeled PR subset cannot run in the PR `ci` check.** The spec description says "a small
+   labeled subset (about 6 files, marker `eval`) in the PR `ci` check within seconds", ac4 says
+   "runs in the default PR pytest run", and the `metrics-and-gates` node's criterion runs it with
+   `-m "eval and not slow"`. But the same spec, like ac1 and the policy, keeps every evaluation
+   file on the operator's machine. `caselist-data-use.md`'s dev-environment exception, limit 4,
+   says "the real corpus never reaches a CI runner". A CI runner has no files to parse.
+
+   What I built instead:
+
+   - the real PR-subset tier is marked `eval`, not `slow`, so it runs in the default `pytest` run
+     wherever the path map and corrected labels exist, and asserts the 30 s budget;
+   - everywhere else it **skips**, naming how many files are missing labels;
+   - what CI runs on every PR is the label and manifest validation, plus the full harness end to
+     end on an invented file with hand-written labels, covering the gate, the refusal of changed
+     files and the refusal of pre-labels.
+
+   ac4 is **FAIL as written, PASS as amended**. The PM may want to reword ac4 and the description
+   to "the default `pytest` run on the operator's machine".
+
+2. **The same applies to the full tier "in the validate-dev slow tier and nightly".** If
+   validate-dev runs on a CI runner, it can't reach the corpus either. The full tier runs with
+   `uv run pytest tests/evals/parser -m "eval and slow"` on the operator's machine, or through
+   `scripts/run_parser_eval.py`. Scheduling it nightly on Charlie's Mac, or deciding it runs only
+   before a promotion, is a PM call.
+
+3. **`manifest.json` sits beside `MANIFEST.md`.** The node lists only `MANIFEST.md` as output. The
+   tools need a machine-readable manifest, so `MANIFEST.md` is its human summary, and
+   `test_the_manifest_summary_table_matches_manifest_json` keeps the two identical.
+
+4. **Two scripts the spec does not name**, both within the `scripts` package:
+   `select_eval_files.py` (the `collect-files` node needs something to choose files without a
+   person copying file names around) and `run_parser_eval.py` (the only path by which the
+   baseline changes, and it enforces the coach-review rule). The evaluation library lives in
+   `tests/evals/parser/` next to `metrics.py`, where the spec puts it.
+
+5. **The baseline is a placeholder, not scores.** The node's criterion is met by the file's
+   existence. Committing numbers before any label exists would have been inventing a measurement.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+- **A pre-label can't become a label without a person.** The evaluation refuses `PRELABELED`
+  files. `import` refuses a worksheet with any unchecked row, any edited text, or edited text
+  under span markup. It records `rows_changed_from_prelabel`, so a file corrected with zero
+  changes is at least visible. `test_an_uncorrected_worksheet_nobody_checked_is_refused` is the
+  test that holds the line.
+- **The baseline can't change without the coach.** `--write-baseline` refuses unless three files
+  covering team, caselist and camp are `COACH_REVIEWED`, and unless a `--report` path under
+  `docs/data/` is given. That path is recorded in the baseline.
+- **The gate fails when there is no baseline**, instead of passing because there's nothing to
+  compare against. It gates unit F1 overall and in the Verbatim and non-Verbatim groups
+  separately, so a regression on the non-Verbatim minority can't hide in the average. A baseline
+  recorded for an older `parser_version` still gates a newer parser; the report notes the
+  mismatch.
+- **Scores are micro-averaged** (counts summed, then divided). "Verbatim files" in ac3 means the
+  `verbatim` and `cardmirror` families, and "non-Verbatim and wiki-converted" means the rest.
+- **Card boundaries are compared as exact (first paragraph, last paragraph) ranges.** Card
+  precision is reported beside boundary exact match so that a split card shows up in both.
+  Completeness is scored only on cards whose boundaries matched.
+- **Underline includes Verbatim's `Emphasis` style**, which is underlined as well as bold. The
+  highlight colour is ignored. Both are written into the labeling guide.
+- **Span sample**: a stable hash of (file SHA-256, paragraph index) picks about 20% of non-empty
+  paragraphs. The test measures 1,850 to 2,150 out of 10,000.
+- **Selection details**:
+  - Files over 600 paragraphs are passed over, except as a last resort for a stratum. Every
+    2026-27 team file is long, and the shortest, 1,020 paragraphs, was taken.
+  - Files under 20 paragraphs are passed over. My first run's shortest-first PR-subset pick chose
+    a one-paragraph document; I caught this from the pre-label counts and re-ran.
+  - Caselist and camp files take format and season only from the input folder, never from the
+    school and team-code folders below it.
+- **Text hashes are plain SHA-256**, as the spec says. For a very short paragraph, someone who
+  already holds the manifest could confirm a guess of its exact text. That's a low exposure (no
+  text can be recovered, only a guess confirmed), but the PM may prefer an HMAC with a key kept
+  beside the path map. That would cost nothing in CI, which never checks text hashes.
+- **Team files are parsed as `OPENEV` with camp `team-files`**, because `SourceOrigin` has no value
+  for a team's own file. Parsing doesn't depend on origin. See Follow-up work.
+- **Worksheets open in Numbers or LibreOffice.** Excel rewrites some CSV text on import, and
+  `import` would refuse the result, so the guide says so.
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
+**1. Approve the file selection (coach, about 15 minutes).** Read
+[`MANIFEST.md`](../../tests/fixtures/debate_files/eval/MANIFEST.md): 30 files, their strata, and
+two caveats (caselist is all LD and camp all Policy, because that's what the corpus holds; 2026-27
+team files are represented by one long file). To look at the six PR-subset files:
 
-None.
+```bash
+uv run python -c "
+import json, subprocess, pathlib
+m = json.load(open('tests/fixtures/debate_files/eval/manifest.json'))
+p = json.load(open(pathlib.Path.home() / '.debate-intelligence/parser-eval-paths.json'))
+for e in m['entries']:
+    if e['pr_subset']: subprocess.run(['open', p[e['sha256']]])
+"
+```
+
+Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e31-t05-parser-eval`.
+Success looks like: you confirm the selection covers team, caselist (Verbatim, non-Verbatim,
+wiki-converted) and camp formatting, or you name the files to swap. A re-run of
+`scripts/select_eval_files.py` with different options produces a different proposal
+deterministically.
+
+**2. Correct the labels (human work, many hours).** 5,788 paragraphs across 30 files. The spec
+estimates 6 h, which works out to about 4 s a row. Budget more; the six PR-subset files, which
+unblock the PR tier first, are 435 rows. Follow the [labeling guide](../../tests/fixtures/debate_files/eval/labels/README.md):
+
+```bash
+uv run python scripts/prelabel_docx.py prelabel --all
+uv run python scripts/prelabel_docx.py worksheet <sha-prefix> --out-dir ~/parser-eval-worksheets
+# correct in Numbers, tick every row, save as CSV, then:
+uv run python scripts/prelabel_docx.py import <sha-prefix> \
+    --worksheet ~/parser-eval-worksheets/<sha16>.csv --corrected-by coach
+```
+
+Success looks like: `CORRECTED by coach; N of M rows changed from the pre-labels` for each file.
+Delete each worksheet after its import succeeds. Commit only `labels/*.jsonl`.
+
+**3. Coach spot-check and guide sign-off.** Check at least three corrected files end to end (one
+team, one caselist, one camp) against the `.docx`, sign off the labeling guide, then:
+
+```bash
+uv run python scripts/prelabel_docx.py mark-reviewed <sha-prefix> --reviewer coach
+```
+
+**4. Establish the baseline (seconds).**
+
+```bash
+uv run python scripts/run_parser_eval.py --write-baseline --report docs/data/parser-eval-2026-10.md
+uv run pytest tests/evals/parser -m eval
+```
+
+Success looks like: `baseline written for parser 2026.09.20-docx-1`, then `2 passed`. The coach
+reads `docs/data/parser-eval-2026-10.md` before it's committed with `tests/evals/baselines/parser.json`.
+Every ac3 target marked MISSED gets a ticket against `v1-e31-t03`.
+
+**5. Full-corpus health run** (the spec expects 10 to 20 minutes; operator-only by the spec's
+forbidden list)
+
+Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e31-t05-parser-eval`
+
+```bash
+uv run python scripts/parser_corpus_health.py \
+  --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0901" \
+  --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0908" \
+  --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0915" \
+  --input "camp=$HOME/Documents/debate/2026-2027/Policy Debate/Camp Files" \
+  --output docs/data/parser-corpus-health.md
+```
+
+Success looks like: `parsed N of M distinct .docx files (parse success rate 0.98xx)` and exit 0.
+It exits 1 below 0.98, after writing the report. Paste back the last 15 lines. Then:
+
+- `grep -c "parse success rate" docs/data/parser-corpus-health.md` should return at least `1`;
+- skim the report for anything that looks like a name (there should be none);
+- commit it, with a line in `docs/README.md`'s data table;
+- file each failure reason against `v1-e31-t03`.
+
+**6. Close the task.** Once 1 to 5 are done: `uv run scripts/task_helper.py set-phase
+v1-e31-t05-parser-eval Succeeded`, `uv run scripts/validate_specs.py`, and update this report's
+ac1, ac3, ac4 and ac5 rows with the measured results.
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+- **For `v1-e31-t03` (to check during labeling, not yet a finding):** pre-labeling showed 4 of the
+  30 selected files with **zero cards**, including a 55-paragraph wiki-converted caselist file in
+  the PR subset (`02469e60…`). That may be correct (a file of analytics) or a missed card format.
+  The labels will say which. Nothing in the parser was changed.
+- **Domain model gap (the owner of `v1-e30-t02` / `v1-e31-t06`):** `SourceOrigin` has no value for
+  a team's own file, so the evaluation parses team files under a placeholder `OPENEV` origin.
+  Harmless here, but t06 or V3 uploads will need a real one.
+- **`pyproject.toml` marker description:** `eval` is described as "LLM evaluation suite, run
+  outside the PR CI path". This spec uses `eval` without `slow` for a tier that is in the default
+  run. The description is outside this task's packages and was left alone; the owner of
+  `v1-e01-t03` may want to reword it.
+- **`tests/README.md`** still describes `golden_cards/` as "curated, scrubbed copies of team files",
+  which predates the no-real-files ruling. Left as is; a PM wording fix.
+- **The text-hash exposure** noted under Decisions, if the PM wants the HMAC variant.
 
 ## PM review
 

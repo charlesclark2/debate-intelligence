@@ -13,10 +13,6 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-
-from debate_core.domain.debate_files import CardCompleteness
-from debate_core.domain.style_profile import StructuralUnit
-
 from tests.evals.parser.labels_schema import (
     EVAL_FIXTURE_DIRECTORY,
     LABELS_DIRECTORY,
@@ -27,7 +23,6 @@ from tests.evals.parser.labels_schema import (
     LabelStatus,
     Manifest,
     ManifestEntry,
-    ParagraphLabel,
     ReviewerRole,
     SpanLabel,
     TemplateFamily,
@@ -41,6 +36,9 @@ from tests.evals.parser.labels_schema import (
     write_label_file,
 )
 from tests.evals.parser.synthetic import build_synthetic_file
+
+from debate_core.domain.debate_files import CardCompleteness
+from debate_core.domain.style_profile import StructuralUnit
 
 SHA = "a" * 64
 
@@ -107,7 +105,9 @@ def test_a_card_needs_a_cite() -> None:
 
 def test_completeness_must_agree_with_the_card_body() -> None:
     labels = build_synthetic_file().labels
-    cite_only = replace(labels, cards=(CardLabel(card=0, completeness=CardCompleteness.CITE_ONLY), labels.cards[1]))
+    cite_only = replace(
+        labels, cards=(CardLabel(card=0, completeness=CardCompleteness.CITE_ONLY), labels.cards[1])
+    )
     assert "card 0 is CITE_ONLY but has EVIDENCE paragraphs" in validate_label_file(cite_only)
     no_body = _with_paragraph(labels, 10, unit=StructuralUnit.OTHER, card=None)
     assert "card 1 is FULL but has no EVIDENCE paragraph" in validate_label_file(no_body)
@@ -134,7 +134,9 @@ def test_spans_must_fit_their_paragraph_and_not_overlap() -> None:
 
 
 def test_card_rules_are_skipped_for_pre_labels_only(tmp_path: Path) -> None:
-    broken = _with_paragraph(build_synthetic_file(LabelStatus.PRELABELED).labels, 4, unit=StructuralUnit.EVIDENCE)
+    broken = _with_paragraph(
+        build_synthetic_file(LabelStatus.PRELABELED).labels, 4, unit=StructuralUnit.EVIDENCE
+    )
     assert validate_label_file(broken, check_cards=False) == []
     write_label_file(broken, tmp_path, check_cards=False)
     corrected = _with_paragraph(build_synthetic_file().labels, 4, unit=StructuralUnit.EVIDENCE)
@@ -143,7 +145,10 @@ def test_card_rules_are_skipped_for_pre_labels_only(tmp_path: Path) -> None:
 
 
 def test_labels_for_a_file_the_manifest_does_not_list_are_flagged() -> None:
-    assert any("does not list" in problem for problem in validate_label_file(build_synthetic_file().labels, Manifest()))
+    assert any(
+        "does not list" in problem
+        for problem in validate_label_file(build_synthetic_file().labels, Manifest())
+    )
 
 
 # --------------------------------------------------------------------------------------------
@@ -161,7 +166,9 @@ def test_a_prelabel_names_no_reviewer() -> None:
 
 def test_a_corrected_file_says_who_corrected_it() -> None:
     with pytest.raises(ValidationError, match="which role corrected it"):
-        FileLabelHeader(sha256=SHA, paragraph_count=0, status=LabelStatus.CORRECTED, prelabel_parser_version="p")
+        FileLabelHeader(
+            sha256=SHA, paragraph_count=0, status=LabelStatus.CORRECTED, prelabel_parser_version="p"
+        )
 
 
 def test_only_the_coach_can_have_reviewed_a_file() -> None:
@@ -177,12 +184,18 @@ def test_only_the_coach_can_have_reviewed_a_file() -> None:
 # --------------------------------------------------------------------------------------------
 
 _TEXTS = [
-    "Maple Grove Negative", "Grid Reliability", "AT: Reserve Margin Turn", "Moratoria collapse the reserve margin",
+    "Maple Grove Negative",
+    "Grid Reliability",
+    "AT: Reserve Margin Turn",
+    "Moratoria collapse the reserve margin",
     "Okonkwo 26, Grid Analyst, Fictional Energy Review",
-    "Grid operators warn that reserve margins fall below safe levels within two summers.", "",
-    "Their turn is non-unique", "Older plants fail first", "Lindqvist 25, Professor, Invented University",
+    "Grid operators warn that reserve margins fall below safe levels within two summers.",
+    "",
+    "Their turn is non-unique",
+    "Older plants fail first",
+    "Lindqvist 25, Professor, Invented University",
     "Moratoria shift load to older plants and raise outage risk.",
-]  # fmt: skip
+]
 
 
 def test_the_unchanged_file_matches_its_labels() -> None:
@@ -239,18 +252,33 @@ def test_a_manifest_meeting_ac1_has_no_shortfalls() -> None:
     n = 0
     for season in ("2024-25", "2025-26", "2026-27"):
         for debate_format in DebateFormat:
-            for family in (TemplateFamily.VERBATIM,) if season != "2024-25" else (TemplateFamily.OTHER_HEURISTIC,):
-                entries.append(_entry(n, Category.TEAM, season=season, debate_format=debate_format, template_family=family))
+            for family in (
+                (TemplateFamily.VERBATIM,) if season != "2024-25" else (TemplateFamily.OTHER_HEURISTIC,)
+            ):
+                entries.append(
+                    _entry(
+                        n, Category.TEAM, season=season, debate_format=debate_format, template_family=family
+                    )
+                )
                 n += 1
     for _ in range(3):
-        entries.append(_entry(n, Category.TEAM)); n += 1  # fmt: skip
-    families = [TemplateFamily.OTHER_HEURISTIC] * 4 + [TemplateFamily.WIKI_CONVERTED] * 2 + [TemplateFamily.CARDMIRROR] * 6
+        entries.append(_entry(n, Category.TEAM))
+        n += 1
+    families = (
+        [TemplateFamily.OTHER_HEURISTIC] * 4
+        + [TemplateFamily.WIKI_CONVERTED] * 2
+        + [TemplateFamily.CARDMIRROR] * 6
+    )
     for family in families:
-        entries.append(_entry(n, Category.CASELIST, template_family=family)); n += 1  # fmt: skip
+        entries.append(_entry(n, Category.CASELIST, template_family=family))
+        n += 1
     for _ in range(6):
-        entries.append(_entry(n, Category.CAMP)); n += 1  # fmt: skip
+        entries.append(_entry(n, Category.CAMP))
+        n += 1
     subset = {0, 1, 12, 13, 24, 25}
-    manifest = Manifest(entries=tuple(e.model_copy(update={"pr_subset": i in subset}) for i, e in enumerate(entries)))
+    manifest = Manifest(
+        entries=tuple(e.model_copy(update={"pr_subset": i in subset}) for i, e in enumerate(entries))
+    )
     assert coverage_shortfalls(manifest) == []
 
     without_wiki = Manifest(
@@ -285,9 +313,19 @@ def test_the_manifest_summary_table_matches_manifest_json() -> None:
         (EVAL_FIXTURE_DIRECTORY / "MANIFEST.md").read_text(encoding="utf-8"),
         flags=re.MULTILINE,
     )
-    table = {(sha, category, season, fmt, family, bool(subset)) for sha, category, season, fmt, family, subset in rows}
+    table = {
+        (sha, category, season, fmt, family, bool(subset))
+        for sha, category, season, fmt, family, subset in rows
+    }
     manifest = {
-        (e.sha256[:16], e.category.value, e.season, e.debate_format.value, e.template_family.value, e.pr_subset)
+        (
+            e.sha256[:16],
+            e.category.value,
+            e.season,
+            e.debate_format.value,
+            e.template_family.value,
+            e.pr_subset,
+        )
         for e in load_manifest().entries
     }
     assert table == manifest

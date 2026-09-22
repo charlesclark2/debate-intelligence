@@ -39,6 +39,7 @@ from debate_core.domain.style_profile import RunEmphasis, StructuralUnit
 
 __all__ = [
     "EVALUATED_UNITS",
+    "GATED_GROUPS",
     "GATE_TOLERANCE",
     "SPAN_KINDS",
     "TARGETS",

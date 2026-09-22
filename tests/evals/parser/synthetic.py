@@ -13,10 +13,6 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from debate_core.domain.debate_files import CardCompleteness
-from debate_core.domain.style_profile import StructuralUnit
-from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
-
 from tests.evals.parser.labels_schema import (
     CardLabel,
     FileLabelHeader,
@@ -27,6 +23,10 @@ from tests.evals.parser.labels_schema import (
     SpanLabel,
     text_sha256,
 )
+
+from debate_core.domain.debate_files import CardCompleteness
+from debate_core.domain.style_profile import StructuralUnit
+from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
 __all__ = ["SyntheticFile", "build_synthetic_file"]
 
@@ -50,26 +50,63 @@ def _evidence() -> str:
 
 #: (paragraph markup, text, unit, card) in body order, written together so they cannot drift apart.
 _PARAGRAPHS: tuple[tuple[str, str, StructuralUnit, int | None], ...] = (
-    (paragraph_xml(run_xml("Maple Grove Negative"), style="Heading1"), "Maple Grove Negative",
-     StructuralUnit.POCKET, None),
-    (paragraph_xml(run_xml("Grid Reliability"), style="Heading2"), "Grid Reliability", StructuralUnit.HAT, None),
-    (paragraph_xml(run_xml("AT: Reserve Margin Turn"), style="Heading3"), "AT: Reserve Margin Turn",
-     StructuralUnit.BLOCK, None),
-    (paragraph_xml(run_xml("Moratoria collapse the reserve margin"), style="Heading4"),
-     "Moratoria collapse the reserve margin", StructuralUnit.TAG, 0),
-    (_cite("Okonkwo 26", ", Grid Analyst, Fictional Energy Review"),
-     "Okonkwo 26, Grid Analyst, Fictional Energy Review", StructuralUnit.CITE, 0),
+    (
+        paragraph_xml(run_xml("Maple Grove Negative"), style="Heading1"),
+        "Maple Grove Negative",
+        StructuralUnit.POCKET,
+        None,
+    ),
+    (
+        paragraph_xml(run_xml("Grid Reliability"), style="Heading2"),
+        "Grid Reliability",
+        StructuralUnit.HAT,
+        None,
+    ),
+    (
+        paragraph_xml(run_xml("AT: Reserve Margin Turn"), style="Heading3"),
+        "AT: Reserve Margin Turn",
+        StructuralUnit.BLOCK,
+        None,
+    ),
+    (
+        paragraph_xml(run_xml("Moratoria collapse the reserve margin"), style="Heading4"),
+        "Moratoria collapse the reserve margin",
+        StructuralUnit.TAG,
+        0,
+    ),
+    (
+        _cite("Okonkwo 26", ", Grid Analyst, Fictional Energy Review"),
+        "Okonkwo 26, Grid Analyst, Fictional Energy Review",
+        StructuralUnit.CITE,
+        0,
+    ),
     (_evidence(), OPENING + UNDERLINED + CLOSING, StructuralUnit.EVIDENCE, 0),
     (paragraph_xml(""), "", StructuralUnit.OTHER, None),
-    (paragraph_xml(run_xml("Their turn is non-unique"), style="Heading4"), "Their turn is non-unique",
-     StructuralUnit.ANALYTIC, None),
-    (paragraph_xml(run_xml("Older plants fail first"), style="Heading4"), "Older plants fail first",
-     StructuralUnit.TAG, 1),
-    (_cite("Lindqvist 25", ", Professor, Invented University"), "Lindqvist 25, Professor, Invented University",
-     StructuralUnit.CITE, 1),
-    (paragraph_xml(run_xml(SECOND_BODY, character_style="StyleUnderline", underline="single")), SECOND_BODY,
-     StructuralUnit.EVIDENCE, 1),
-)  # fmt: skip
+    (
+        paragraph_xml(run_xml("Their turn is non-unique"), style="Heading4"),
+        "Their turn is non-unique",
+        StructuralUnit.ANALYTIC,
+        None,
+    ),
+    (
+        paragraph_xml(run_xml("Older plants fail first"), style="Heading4"),
+        "Older plants fail first",
+        StructuralUnit.TAG,
+        1,
+    ),
+    (
+        _cite("Lindqvist 25", ", Professor, Invented University"),
+        "Lindqvist 25, Professor, Invented University",
+        StructuralUnit.CITE,
+        1,
+    ),
+    (
+        paragraph_xml(run_xml(SECOND_BODY, character_style="StyleUnderline", underline="single")),
+        SECOND_BODY,
+        StructuralUnit.EVIDENCE,
+        1,
+    ),
+)
 
 
 @dataclass(frozen=True)

@@ -8,11 +8,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
-from debate_core.domain.debate_files import ParsedDocument
-from debate_core.domain.style_profile import StructuralUnit
-from debate_core.integrations.docx_parser import DebateDocxParser
-
 from tests.evals.parser.corpus import parse_evaluation_file
 from tests.evals.parser.labels_schema import (
     REPOSITORY_ROOT,
@@ -25,6 +20,10 @@ from tests.evals.parser.labels_schema import (
     validate_label_file,
 )
 from tests.evals.parser.synthetic import CLOSING, OPENING, UNDERLINED, build_synthetic_file
+
+from debate_core.domain.debate_files import ParsedDocument
+from debate_core.domain.style_profile import StructuralUnit
+from debate_core.integrations.docx_parser import DebateDocxParser
 
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
@@ -72,7 +71,9 @@ def test_prelabel_card_membership_follows_each_card_range(document: ParsedDocume
 def test_the_span_sample_is_a_stable_fifth_of_paragraphs() -> None:
     sampled = sum(prelabel.is_sampled("c" * 64, index) for index in range(10_000))
     assert 1_850 < sampled < 2_150
-    assert [prelabel.is_sampled("c" * 64, i) for i in range(50)] == [prelabel.is_sampled("c" * 64, i) for i in range(50)]
+    assert [prelabel.is_sampled("c" * 64, i) for i in range(50)] == [
+        prelabel.is_sampled("c" * 64, i) for i in range(50)
+    ]
 
 
 # --------------------------------------------------------------------------------------------
@@ -131,7 +132,10 @@ def test_an_unchecked_row_is_refused(document: ParsedDocument, tmp_path: Path) -
     rows[4] = {**rows[4], "checked": ""}
     with pytest.raises(prelabel.WorksheetError, match="row 6: not marked checked"):
         prelabel.import_worksheet(
-            rows, prelabels=labels, texts=[s.text for s in document.sections], corrected_by=ReviewerRole.OPERATOR
+            rows,
+            prelabels=labels,
+            texts=[s.text for s in document.sections],
+            corrected_by=ReviewerRole.OPERATOR,
         )
 
 
@@ -141,7 +145,10 @@ def test_an_uncorrected_worksheet_nobody_checked_is_refused(document: ParsedDocu
     rows = _rows(prelabel.write_worksheet(labels, document, tmp_path))
     with pytest.raises(prelabel.WorksheetError, match=f"{len(rows)} problem"):
         prelabel.import_worksheet(
-            rows, prelabels=labels, texts=[s.text for s in document.sections], corrected_by=ReviewerRole.OPERATOR
+            rows,
+            prelabels=labels,
+            texts=[s.text for s in document.sections],
+            corrected_by=ReviewerRole.OPERATOR,
         )
 
 
@@ -151,7 +158,10 @@ def test_edited_text_is_refused(document: ParsedDocument, tmp_path: Path) -> Non
     rows[3] = {**rows[3], "text": rows[3]["text"] + "!"}
     with pytest.raises(prelabel.WorksheetError, match="row 5: the text was edited"):
         prelabel.import_worksheet(
-            rows, prelabels=labels, texts=[s.text for s in document.sections], corrected_by=ReviewerRole.OPERATOR
+            rows,
+            prelabels=labels,
+            texts=[s.text for s in document.sections],
+            corrected_by=ReviewerRole.OPERATOR,
         )
 
 
@@ -160,7 +170,10 @@ def test_reordered_or_dropped_rows_are_refused(document: ParsedDocument, tmp_pat
     rows = _checked(_rows(prelabel.write_worksheet(labels, document, tmp_path)))
     with pytest.raises(prelabel.WorksheetError, match="rows"):
         prelabel.import_worksheet(
-            rows[:-1], prelabels=labels, texts=[s.text for s in document.sections], corrected_by=ReviewerRole.COACH
+            rows[:-1],
+            prelabels=labels,
+            texts=[s.text for s in document.sections],
+            corrected_by=ReviewerRole.COACH,
         )
 
 

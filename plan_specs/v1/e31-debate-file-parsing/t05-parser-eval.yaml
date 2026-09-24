@@ -64,11 +64,21 @@ spec:
         checks these digests, the fixture-changed validator still works because an HMAC over changed
         content differs, and the operator can still verify because the operator holds the key. The coach
         has reviewed the labels.
+        Labeling is sampled, because labeling every paragraph of all 30 files is about 5,800 rows and the
+        coach is a volunteer with a season starting. The 6-file PR subset is labeled in full - it gates
+        every pull request, so it cannot be sampled - and the other 24 files are labeled over contiguous
+        paragraph blocks covering about 25% of each file. Contiguous, not scattered rows: per-unit
+        precision and recall are sound on any sample, but card-boundary exact match needs unbroken runs,
+        and a card straddling a sampling gap cannot be scored at all. Every file still contributes, so the
+        per-stratum breakdowns still mean something.
     - id: ac2
       description: >-
         The eval writes JSON and Markdown reports with per-unit (POCKET, HAT, BLOCK, TAG, CITE, EVIDENCE,
         ANALYTIC, UNDERTAG) precision/recall/F1, card-boundary exact-match rate, completeness accuracy and
-        character-level underline/highlight F1, broken down by source, template family and format.
+        character-level underline/highlight F1, broken down by source, template family and format. Every
+        metric carries the sampling rate and the labeled-row count it was computed over, in both the JSON
+        and the Markdown: a precision figure over a quarter of a corpus is a different claim from one over
+        all of it, and a reader six months from now must not have to work out which they are looking at.
     - id: ac3
       description: >-
         Targets are recorded and met or ticketed: on Verbatim files TAG, CITE and EVIDENCE F1 at least 0.97,
@@ -84,7 +94,9 @@ spec:
         scoring, reporting and gate paths are covered on every PR even though no real file is. Both tiers
         fail when any unit F1 drops more than 0.01 below the baseline for the current parser_version, and
         fail rather than pass when no baseline exists; a label validator fails when a file changes under
-        its labels.
+        its labels. The baseline records the sampling plan it was measured over, and the gate refuses -
+        rather than comparing - when the current plan differs, because a metric from one sample and a
+        metric from another are not a regression, they are two different measurements.
     - id: ac5
       description: >-
         An operator-run corpus health report for the hsld26 snapshots and camp files is committed under
@@ -151,11 +163,18 @@ spec:
         kind: Task
         name: Label the set
         description: >-
-          Correct pre-labels for every file, label spans on a 20% paragraph sample, and write a short labeling
-          guide for ambiguous conventions (undertags, analytics between cards, cite-only disclosures).
+          Correct pre-labels over the sampling plan - the PR subset in full, about 25% of every other file
+          in contiguous blocks - label spans on a 20% sample of the labeled paragraphs, and write a short
+          labeling guide for ambiguous conventions (undertags, analytics between cards, cite-only
+          disclosures). The plan is generated once, before any labeling begins, and committed: blocks are
+          at least 20 paragraphs so card boundaries stay evaluable, chosen deterministically from each
+          file's keyed digest so a re-run selects the same blocks, and **weighted toward blocks whose
+          pre-labels contain the rare units** - POCKET, UNDERTAG and ANALYTIC - because those are both the
+          sparsest and the ones the parser is weakest on, and an even sample leaves their F1 too noisy to
+          gate on. Weighting changes which blocks are picked, not how many.
         dependsOn: [collect-files, label-tooling]
         outputs: [tests/fixtures/debate_files/eval/labels/README.md]
-        estimatedEffort: 6h
+        estimatedEffort: 5h
         acceptanceCriteria:
           - type: artifact_exists
             name: Labeling guide exists

@@ -46,7 +46,8 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
-from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
+from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES, build_download_zips
+from tests.fixtures.openev.build_synthetic_openev import expected as expected_openev
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
@@ -66,6 +67,7 @@ from debate_core.application.caselist_sync import (
     LandscapeStageResult,
     NoCaselistsConfigured,
     ParseStageResult,
+    PendingWork,
     RunLock,
     SelectionDecision,
     StageOutcome,
@@ -921,3 +923,116 @@ async def test_a_run_with_no_caselist_refuses_rather_than_doing_nothing_quietly(
 
     with pytest.raises(NoCaselistsConfigured):
         await service.run([])
+
+
+# ------------------------------------------------------------------------------------------------
+# The listings themselves, and the OpenEv shapes
+# ------------------------------------------------------------------------------------------------
+
+
+async def test_a_rate_limited_listing_ends_the_run_without_calling_it_a_failure(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """Nothing had been fetched yet, so nothing is at risk: the run says why and waits a week."""
+    await import_first_week(data_dir, archives)
+
+    async def refuse(caselist: str) -> list[ArchiveListing]:
+        raise ProviderRateLimited("opencaselist", "listing is rate limited", retry_after_seconds=86_400.0)
+
+    source.list_archives = refuse  # type: ignore[method-assign]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    select = summary.stage(SyncStage.SELECT)
+    assert select is not None and select.outcome is StageOutcome.SKIPPED
+    assert "rate limiting" in (select.reason or "")
+    assert summary.archives_downloaded == 0
+    assert summary.succeeded
+
+
+async def test_an_openev_release_that_is_a_zip_is_read_as_one(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path], tmp_path: Path
+) -> None:
+    """OpenEv publishes single documents and whole camp releases; both reach the same importer.
+
+    The synthetic release `openev-2026-policy` holds eleven files and two pieces of macOS junk
+    (`tests/fixtures/openev/`). Its hand-written expectations are in
+    `expected_openev_import.json`, under `after_caselist` — the case where the caselist archives
+    were imported first, which is what this run does: 9 NEW and 2 DUPLICATE, 2 skipped.
+
+    Added to the two weeklies (13 + 14 stored members, 3 + 5 skips, from
+    `expected_summary.json`), this run must report 38 files imported and 10 skipped.
+    """
+    await import_first_week(data_dir, archives)
+    releases = build_download_zips(tmp_path / "camp")
+    release = releases["openev-2026-policy"]
+    source.openev_files = [
+        (
+            OpenEvFile(
+                openev_id=901,
+                path=f"openev/{OPENEV_YEAR}/releases/openev-2026-policy.zip",
+                filename="openev-2026-policy.zip",
+                year=OPENEV_YEAR,
+                tags=("policy",),
+            ),
+            release.read_bytes(),
+        )
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    release_counts = expected_openev()["first_download"]["after_caselist"]
+    assert summary.openev_downloaded == 1
+    assert "openev 2026-policy" in summary.snapshots_imported
+    assert release_counts["counts"]["NEW"] + release_counts["counts"]["DUPLICATE"] == 11
+    assert release_counts["skipped_total"] == 2
+    assert summary.files_imported == 38
+    assert summary.files_skipped == 10
+
+
+async def test_a_camp_file_whose_event_nobody_states_is_listed_and_left_alone(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """Filing it under a guess would put it in the wrong release manifest for the season."""
+    await import_first_week(data_dir, archives)
+    listed, body = source.openev_files[0]
+    source.openev_files = [(listed.model_copy(update={"tags": ("kritiks",)}), body)]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert [one.decision for one in summary.openev] == [SelectionDecision.NO_EVENT_CONFIGURED]
+    assert source.openev_fetches == []
+    assert summary.succeeded
+
+
+async def test_a_caselist_whose_event_this_build_does_not_know_is_not_imported_under_a_guess(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The event decides which sides are legal; the wrong one would mis-file a whole archive."""
+    await import_first_week(data_dir, archives)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    def no_event_is_known(_slug: str) -> Event | None:
+        return None
+
+    service._event_for_caselist = no_event_is_known  # pyright: ignore[reportPrivateUsage]
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    stage = summary.stage(SyncStage.IMPORT)
+    assert stage is not None and stage.outcome is StageOutcome.FAILED
+    assert "does not know which event" in (stage.reason or "")
+    assert not any(one.startswith(SYNTHETIC_CASELIST) for one in summary.snapshots_imported)
+    assert not summary.succeeded
+    assert summary.archives_downloaded == 2, "the bytes are in the inbox either way"
+
+
+def test_an_unreadable_pending_work_file_reads_as_nothing_owed(tmp_path: Path) -> None:
+    """A state file this module wrote and something else corrupted must not stop a run."""
+    path = tmp_path / PENDING_WORK_FILENAME
+    path.write_text("{not json at all", encoding="utf-8")
+
+    assert PendingWork(path).read() == ()

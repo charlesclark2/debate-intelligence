@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import typer
 
-from debate_cli.commands import caselist, caselist_auth, config, doctor, store
+from debate_cli.commands import caselist, caselist_auth, caselist_pull, config, doctor, store
 
 __all__ = ["command_group", "register_commands"]
 
@@ -56,6 +56,7 @@ def register_commands(app: typer.Typer) -> None:
     disclosed_evidence.command("import")(caselist.import_archive)
     disclosed_evidence.command("import-openev")(caselist.import_openev)
     disclosed_evidence.command("publish")(caselist.publish)
+    disclosed_evidence.command("pull")(caselist_pull.pull)
     disclosed_evidence.command("status")(caselist.status)
 
     opencaselist_session = command_group("auth", "Log in to OpenCaselist and manage the stored token.")

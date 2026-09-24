@@ -36,7 +36,8 @@ spec:
     with nothing new downloads nothing and exits 0), holds a lock file so two runs never overlap, and
     writes a structured per-run summary. Local stages (download, import, parse) need no AWS credentials;
     if the AWS SSO session has expired the S3 publish and report steps are recorded as pending and
-    retried on the next run or by `caselist pull --publish-pending`. `debate-research caselist pull
+    retried on the next run or by `caselist pull --publish-pending`. The report step confirms in the
+    bucket the snapshots this run published and writes nothing there; storing the run log is t03's. `debate-research caselist pull
     --caselist <slug> [--caselist <slug> ...] [--dry-run]` is the entry point; --dry-run lists what
     would be downloaded and processed without writing anything. The launchd agent (plist template,
     wrapper script and install script under ops/launchd/) runs pull weekly and runs a missed job on
@@ -68,9 +69,11 @@ spec:
     - id: ac1
       description: >-
         With a fake source exposing two new synthetic archives and one new OpenEv file, `caselist
-        pull` downloads, imports (archive and OpenEv importers), parses, publishes (moto) and reports
-        them, archives oldest-first, and an immediate re-run
-        performs no downloads and reports "nothing new" with exit code 0.
+        pull` downloads, imports (archive and OpenEv importers), publishes (moto) and reports them in
+        that order, archives oldest-first. Parse and landscape are attempted after publish and, while
+        v1-e31-t06 and v1-e32-t05 have not shipped, are recorded as skipped with a named reason; the
+        skip path is the normal case this criterion is tested against and does not change the exit
+        code. An immediate re-run performs no downloads and reports "nothing new" with exit code 0.
     - id: ac2
       description: >-
         `caselist pull --dry-run` prints the archives it would download and the stages it would run, and
@@ -90,7 +93,7 @@ spec:
         DEBATE_ENV and the AWS profile, and an install script with a --dry-run mode that renders the plist
         without loading it; the operator has recorded the dev validation run and the first scheduled run.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

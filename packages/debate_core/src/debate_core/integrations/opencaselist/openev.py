@@ -8,9 +8,7 @@ lines — and never into a log record or an error of this package's. Those name 
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
-from typing import Final
 
 from pydantic import ValidationError
 
@@ -19,21 +17,15 @@ from debate_core.application.ports.caselist_source import (
     OpenEvFile,
     UnexpectedCaselistResponse,
     UnsafeDownloadName,
+    openev_inbox_name,
 )
 from debate_core.integrations.opencaselist.models import OpenEvRecord
 from debate_core.integrations.opencaselist.redaction import logger
 from debate_core.integrations.opencaselist.transport import OpenCaselistTransport
 
 __all__ = ["OpenEvResource", "openev_inbox_name"]
-
-_UNSAFE_CHARACTERS: Final = re.compile(r"[^A-Za-z0-9._-]+")
-
-
-def openev_inbox_name(file: OpenEvFile) -> str:
-    """`openev-<id>-<file name>`, reduced to characters that are safe in any filesystem."""
-    base = Path(file.filename or file.path.rsplit("/", 1)[-1]).name
-    cleaned = _UNSAFE_CHARACTERS.sub("_", base).strip("._") or "file"
-    return f"openev-{file.openev_id}-{cleaned}"
+"""`openev_inbox_name` moved to the port with `v1-e34-t02`, which needs it before a download;
+it stays exported here because that is where it has been imported from since `v1-e34-t01`."""
 
 
 class OpenEvResource:

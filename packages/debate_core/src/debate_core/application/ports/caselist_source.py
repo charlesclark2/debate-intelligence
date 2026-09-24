@@ -6,14 +6,18 @@ The one implementation is :class:`~debate_core.integrations.opencaselist.OpenCas
 the documented API at `api.opencaselist.com/v1`, used only as
 `docs/policies/caselist-data-use.md` permits.
 
-## A download is a window, and a dropped one is gone
+## Everything here fails loudly
 
-ADR-0016: an archive holds roughly the last seven days of modifications, nothing returns a complete
-caselist, and consecutive weekly archives barely overlap. A download this port fails to deliver is
-not retried later by anything — so every method here **fails loudly**. A partial file never reaches
-the inbox, a byte count that does not match is an error rather than a warning, and a listing entry
-whose name does not say what it is comes back marked :attr:`ArchiveKind.UNRECOGNISED` with no date
-rather than with a guessed one.
+ADR-0017: the site publishes a complete archive as well as a weekly one and keeps a back-catalogue
+of the weeklies, so a download that fails is a delay rather than a loss. That is a reason to fetch
+it again later, never a reason to accept a partial one — a truncated week recorded as the archive
+of record is the mistake nothing downstream can detect. So a partial file never reaches the inbox,
+a byte count that does not match is an error rather than a warning, and a listing entry whose name
+does not say what it is comes back marked :attr:`ArchiveKind.UNRECOGNISED` with no date rather than
+with a guessed one.
+
+(This section rested on ADR-0016, which ADR-0017 supersedes. The conclusion is unchanged; the
+reason for it is.)
 
 ## What the API actually lists
 
@@ -35,6 +39,7 @@ file name from inside an archive (`docs/policies/caselist-data-use.md`).
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
@@ -65,6 +70,7 @@ __all__ = [
     "OpenEvFile",
     "UnexpectedCaselistResponse",
     "UnsafeDownloadName",
+    "openev_inbox_name",
 ]
 
 OPENCASELIST_PROVIDER: Final = "opencaselist"
@@ -127,6 +133,25 @@ class OpenEvFile(DomainModel):
     camp: str | None = None
     lab: str | None = None
     tags: tuple[str, ...] = Field(default=(), description="The tag names set on the file.")
+
+
+#: Characters an OpenEv file name is reduced to before it is written into the inbox.
+_UNSAFE_INBOX_CHARACTERS: Final = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def openev_inbox_name(file: OpenEvFile) -> str:
+    """`openev-<id>-<file name>`, reduced to characters that are safe in any filesystem.
+
+    Part of the port rather than of the client, because two sides need to agree on it: the client
+    writes the file under this name, and the scheduled sync (`v1-e34-t02`) checks the inbox for it
+    *before* asking for the bytes — a download of a file already held still spends one of
+    OpenCaselist's five bulk downloads a day. The camp-metadata parser knows to take the
+    `openev-<id>-` prefix off again
+    (:mod:`debate_core.application.caselist.camp_metadata`).
+    """
+    base = Path(file.filename or file.path.rsplit("/", 1)[-1]).name
+    cleaned = _UNSAFE_INBOX_CHARACTERS.sub("_", base).strip("._") or "file"
+    return f"openev-{file.openev_id}-{cleaned}"
 
 
 class DownloadedFile(DomainModel):

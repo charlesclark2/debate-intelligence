@@ -12,8 +12,10 @@ runs (`v1-e29-t05-evidence-sync-cli`); :meth:`ServiceContainer.caselist_import`,
 :meth:`ServiceContainer.openev_import`, which `debate-research caselist import-openev` runs
 (`v1-e30-t04-openev-importer`); and
 :meth:`ServiceContainer.caselist_token_store` and :meth:`ServiceContainer.opencaselist_client`,
-which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`). The rest of V1's services
-and their adapters arrive in E02–E08 and slot in the same way.
+which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`);
+and :meth:`ServiceContainer.caselist_sync`, which `debate-research caselist pull` and the weekly
+launchd agent run (`v1-e34-t02-scheduled-sync`). The rest of V1's services and their adapters
+arrive in E02–E08 and slot in the same way.
 
 ## Adding a service
 
@@ -64,6 +66,7 @@ from debate_core.application.caselist.import_service import CaselistImportServic
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.status_service import CaselistStatusService
+from debate_core.application.caselist_sync import CaselistSyncService
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
     SyncJournal,
@@ -71,6 +74,7 @@ from debate_core.application.evidence_sync import (
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.application.settings import ConfigurationError, Environment, Settings
+from debate_core.domain.caselist import Event
 from debate_core.integrations.local import (
     BLOB_DIRECTORY,
     FsEvidenceObjectStore,
@@ -83,6 +87,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see 
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
 
 __all__ = [
+    "DEFAULT_INBOX_DIRECTORY",
     "SERVICE_NAMES",
     "EvidenceStoreNotConfigured",
     "ServiceContainer",
@@ -94,12 +99,21 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_import",
     "caselist_publish",
     "caselist_status",
+    "caselist_sync",
     "caselist_token_store",
     "evidence_sync",
     "openev_import",
     "opencaselist_client",
 )
 """Names of the services this container can build, for `debate-research doctor` to report."""
+
+DEFAULT_INBOX_DIRECTORY: Final = "inbox"
+"""Where `caselist pull` puts its downloads when `caselist.inbox_dir` is unset: `<data_dir>/inbox`.
+
+Inside the data directory so that one environment is one directory, exactly as the blob store and
+the SQLite file are (`debate_core.integrations.local`): a dev pull can never drop an archive where
+a prod import would read it.
+"""
 
 
 class EvidenceStoreNotConfigured(ConfigurationError):
@@ -324,6 +338,56 @@ class ServiceContainer:
             client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
             profile=storage.s3.aws_profile,
             multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
+        )
+
+    def caselist_sync(self, *, event_for_caselist: Callable[[str], Event | None]) -> CaselistSyncService:
+        """Build the weekly pull: the source, both importers, the publisher and the status check.
+
+        `event_for_caselist` is the command's, not this container's: which event a caselist slug
+        debates is a table `debate_cli.commands.caselist` keeps, and a composition root that
+        imported a command module to reach it would have the dependency the wrong way round.
+
+        The publisher and the status check are `None` when this environment names no bucket, which
+        is what `test` is and what a half-configured installation is. The run then records its
+        publish stage as skipped, with the reason, instead of failing: the archives are already on
+        this machine and `caselist publish` completes them later. Parse (`v1-e31-t06`) and
+        landscape (`v1-e32-t05`) are `None` because neither service exists yet.
+
+        Raises :class:`~debate_core.application.ports.caselist_source.CaselistApiDisabled` unless
+        the operator has turned the API on, which is the data-use policy's E34 gate.
+        """
+        return self.singleton("caselist_sync", lambda: self._build_caselist_sync(event_for_caselist))
+
+    def _build_caselist_sync(self, event_for_caselist: Callable[[str], Event | None]) -> CaselistSyncService:
+        from debate_core.integrations.local.archive_reader import read_archive
+
+        settings = self.settings
+        caselist = settings.caselist
+        repository = SqliteCaselistRepository(self.database)
+        blobs = FsSnapshotStore(settings.storage.data_dir)
+        publisher: CaselistPublishService | None = None
+        status: CaselistStatusService | None = None
+        if settings.storage.s3.bucket:
+            publisher = self.caselist_publish()
+            status = self.caselist_status()
+        return CaselistSyncService(
+            source=self.opencaselist_client(),
+            archive_importer=CaselistImportService(caselists=repository, blobs=blobs),
+            openev_importer=OpenEvImportService(caselists=repository, blobs=blobs),
+            local=self._local_evidence(),
+            read_archive=lambda path: read_archive(
+                path,
+                max_archive_bytes=caselist.max_archive_bytes,
+                max_unpacked_bytes=caselist.max_unpacked_bytes,
+            ),
+            event_for_caselist=event_for_caselist,
+            inbox=caselist.inbox_dir or settings.storage.data_dir / DEFAULT_INBOX_DIRECTORY,
+            state_dir=settings.storage.data_dir,
+            publisher=publisher,
+            status=status,
+            openev_event=caselist.openev_event,
+            openev_year=caselist.openev_year,
+            bulk_downloads_per_day=caselist.bulk_downloads_per_day,
         )
 
     def caselist_token_store(self) -> CaselistTokenStore:

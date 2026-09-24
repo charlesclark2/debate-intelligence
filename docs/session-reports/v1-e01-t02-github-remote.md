@@ -137,9 +137,41 @@ doc does not mention. It has no effect while 0 approvals are required.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-23
 
 **Notes:**
+
+**The ac2 mismatch is the session's best work and the criterion was wrong.** ac2 asked protect-main
+for one required approval with an admin bypass; `docs/process/branching-and-environments.md`,
+authoritative since ADR-0013, specifies zero approvals and an empty bypass list, and explains why -
+GitHub does not let an author approve their own pull request, so on a solo-owner repository a
+required approval deadlocks every promotion. The live ruleset matches the document and is *stricter*
+than the criterion besides, because an empty bypass list binds the owner where an admin bypass would
+not. Reading the live settings, changing nothing, and reporting the difference was right twice over:
+the document was right, and a session should never quietly rewrite branch protection on production.
+Amended in `b88c1a5`, along with the epic step that still called the repository private and listed
+required status checks as t02's rather than t04's, t08's and t10's.
+
+**`config.yml` is a deviation worth more than the file it adds.** Routing removal requests away from
+public issues, because a removal request necessarily names a school and a team code, is the
+data-use policy correctly applied to a surface the policy never mentions. Nobody asked for that, and
+a public issue tracker on a repository about minors' disclosures is exactly where that gap would
+first have been found by someone else. Turning off blank issues belongs with it.
+
+**The issue forms' required no-real-data checkbox** is the same instinct: the repository is public,
+an issue is the one place a stranger can put text into it, and a form is the only point where that
+can be refused before it is published.
+
+**The Goal should not be `Succeeded` yet, and the session said so.** ac3 requires that *a direct push
+to dev or main is rejected*, and the node carries an operator criterion confirming it against a
+scratch commit. Reading a ruleset's configuration is not the same as observing it refuse a push -
+rulesets can be configured against the wrong target pattern and still look correct in the API. The
+push test is two minutes; it runs before the PR, and if it cannot be run the task merges with
+`scripts/task pr --partial` and closes when it has.
+
+Everything else - CODEOWNERS scoped to review rather than required approval, CONTRIBUTING.md keeping
+what was there and adding the flow, the `task` label left uncreated because it is a repository
+change - is correct and correctly bounded.

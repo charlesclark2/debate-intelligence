@@ -46,6 +46,10 @@ spec:
       A failed, skipped or stale run is impossible to miss: the run log, a staleness check the operator
       sees without going looking, and a warning in any report built on stale data. Under ADR-0017 a
       missed run is a delay rather than a loss, because the weekly back-catalogue can be fetched late.
+  - id: ac4
+    description: >-
+      The complete archive is refreshed on a rotation, at most one per run and never at the cost of
+      that run's weeklies, so a withdrawn disclosure is visible within a month rather than never.
 status:
   phase: Pending
 ---
@@ -115,6 +119,14 @@ spec:
       inputs:
         goalRef: v1-e32-t05-landscape-cli
         specRef: plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml
+    - id: ext-v1-e30-t06-initial-backfill
+      kind: External
+      name: 'Prerequisite from E30: Initial caselist and camp-file backfill'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t06-initial-backfill
+        specRef: plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml
     - id: t01
       kind: Task
       name: OpenCaselist API client
@@ -181,5 +193,27 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t03-sync-monitoring
+    - id: t04
+      kind: Task
+      name: Periodic full-archive refresh
+      description: >-
+        A monthly per-caselist rotation that fetches `<slug>-all-<date>.zip`, at most one per run and
+        budgeted after the weeklies, so withdrawals are visible against the complete archive without
+        exceeding the 5-per-day cap.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t04-full-archive-refresh.yaml
+        goalRef: v1-e34-t04-full-archive-refresh
+      dependsOn:
+      - t02
+      - ext-v1-e30-t06-initial-backfill
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t04-full-archive-refresh reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t04-full-archive-refresh
 status:
   phase: Pending

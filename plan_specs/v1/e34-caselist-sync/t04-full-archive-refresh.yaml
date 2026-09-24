@@ -1,0 +1,167 @@
+# TASK v1-e34-t04-full-archive-refresh — Periodic full-archive refresh
+# Epic: E34 Scheduled Caselist Sync | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §9 Opponent data, §15 reliability
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t04-full-archive-refresh
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: Periodic full-archive refresh
+    debate/architecture-refs: §9, §15
+spec:
+  description: >-
+    The weekly run of v1-e34-t02 lists `<slug>-all-<date>.zip` and deliberately never fetches it
+    (`FULL_ARCHIVE_NOT_PULLED_WEEKLY`). This task decides when it does. ADR-0017 makes the complete
+    archive the corpus and the weeklies a history of edits, and decision 5 of that ADR is the reason
+    this matters: `REMOVED` is only meaningful against the full archive, so a disclosure withdrawn
+    between two complete archives is invisible to a run that only ever takes weeklies, and the store
+    slowly accumulates files no longer disclosed anywhere. Fetching one weekly is not an alternative;
+    a weekly filename carries a per-team sequence number, so a path missing from one weekly is a
+    rename as often as a withdrawal (v1-e30-t06 ac2). What stops a weekly full-archive fetch is the
+    cap: upstream allows 5 bulk downloads per user per day, a weekly run of three caselists already
+    spends three, and a full archive is the largest file the site serves. The cadence is therefore
+    monthly per caselist on a rotation - at most one full archive in any single run, each caselist
+    refreshed within a month, no special case against the cap and no second schedule. Content
+    addressing means the overlap with what is already held costs nothing on disk; it costs the
+    allowance, which is what the rotation budgets. This is not a compliance deadline: removal under
+    docs/policies/caselist-data-use.md is request-driven by email with its clock running from the
+    request, and the policy is explicit that taking a disclosure off OpenCaselist is the site's act
+    and not a request to us. A withdrawal found this way is an analytical signal; whether it should
+    additionally suppress the source is v1-e30-t07's question and a policy amendment, not this
+    task's. Out of scope: the one-time back-catalogue and first full-archive fetch (v1-e30-t06),
+    changing the weekly cadence or the cap (E34 gate 4 of the approved policy fixes both), the
+    suppression list (v1-e30-t07), and run-log storage (v1-e34-t03).
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli.commands]
+    forbidden:
+      - More than one full-archive download in a single run, whatever the rotation says
+      - Any schedule, cadence or cap not permitted by docs/policies/caselist-data-use.md E34 gate 4
+      - A second launchd agent or any schedule outside the weekly run v1-e34-t02 installs
+      - Fetching a full archive when it would leave no allowance for that day's weeklies
+      - Live network or AWS calls in CI tests (respx, moto and fakes only)
+  context:
+    - kind: TaskRef
+      name: v1-e34-t02-scheduled-sync
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t06-initial-backfill
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A caselist whose full archive was last imported more than the configured interval ago (default
+        30 days) is selected for a full-archive fetch; one whose was imported inside it is not, and the
+        decision reason is recorded in the run summary either way. The interval and the rotation are
+        settings, not constants.
+    - id: ac2
+      description: >-
+        At most one full archive is fetched per run regardless of how many caselists are due. When two
+        or more are due, the one least recently refreshed goes first and the others wait for the next
+        run, which is what makes the rotation self-correcting after a missed week.
+    - id: ac3
+      description: >-
+        The full-archive fetch is budgeted after the run's weeklies, never before: with a fake source
+        where the day's remaining allowance is exactly the number of new weeklies, no full archive is
+        fetched and the deferral is named in the summary.
+    - id: ac4
+      description: >-
+        A full archive imports as its own snapshot through the same importer as a weekly, and a sha256
+        present in an earlier snapshot and absent from the complete archive is counted and reported as
+        a withdrawal, separately from the weeklies' path-level REMOVED count (v1-e30-t06 ac2 defines
+        both). The count carries no school, team code or filename.
+    - id: ac5
+      description: >-
+        `caselist pull --full-archive <slug>` fetches one on demand outside the rotation, spending from
+        the same daily ledger and refusing when the allowance is gone; `--dry-run` reports what the
+        rotation would do without fetching anything.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t04-full-archive-refresh-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Add the rotation to selection, make the withdrawal count fall out of the import it already does,
+    then expose the on-demand flag.
+  goalRef:
+    name: v1-e34-t04-full-archive-refresh
+  graph:
+    nodes:
+      - id: rotation-selection
+        kind: Task
+        name: Rotation and budget in selection
+        description: >-
+          Extend CaselistSyncService.plan with a full-archive decision: last-refreshed per caselist read
+          from the manifests, the interval and rotation settings, at most one per run, budgeted after the
+          weeklies against the same DownloadLedger. Replaces FULL_ARCHIVE_NOT_PULLED_WEEKLY with the
+          reason that actually applied.
+        outputs:
+          - packages/debate_core/src/debate_core/application/caselist_sync.py
+          - packages/debate_core/tests/application/test_caselist_sync_full_archive.py
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Rotation, one-per-run and budget-order tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_caselist_sync_full_archive.py
+      - id: withdrawal-count
+        kind: Task
+        name: Withdrawals counted against the complete archive
+        description: >-
+          When the imported snapshot is a full archive, report sha256 values present in an earlier
+          snapshot of that caselist and absent from this one as withdrawals, in the run summary, distinct
+          from the weeklies' path-level REMOVED. Counts only.
+        dependsOn: [rotation-selection]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Withdrawal count tests pass
+            command: uv
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/application/test_caselist_sync_full_archive.py
+              - -k
+              - withdrawal
+      - id: on-demand-flag
+        kind: Task
+        name: --full-archive flag
+        description: >-
+          Thin Typer option on `caselist pull` fetching one full archive outside the rotation, sharing
+          the ledger and refusing when the day's allowance is spent; --dry-run reports the rotation's
+          decision. Runbook section on when to reach for it.
+        dependsOn: [withdrawal-count]
+        outputs:
+          - packages/debate_cli/src/debate_cli/commands/caselist_pull.py
+          - docs/runbooks/caselist-scheduled-sync.md
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Flag tests pass offline
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_caselist_pull.py, -k, full_archive]
+          - type: command_succeeds
+            name: pull help lists the flag
+            command: uv
+            args: [run, debate-research, caselist, pull, --help]
+status:
+  phase: Pending

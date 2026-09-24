@@ -81,7 +81,7 @@ spec:
       description: >-
         Secret scanning and push protection are enabled on the repository.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

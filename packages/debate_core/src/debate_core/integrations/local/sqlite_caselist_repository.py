@@ -18,11 +18,11 @@ file up?" is a range that has to survive being written to out of order: importin
 widening write happen inside one `BEGIN IMMEDIATE` transaction, so two importers cannot each read
 the old range and each write half of it.
 
-What it will not do is accept a *contradiction*. A second source document claiming a SHA-256
-already stored, with a different size, format or origin, means two different files are being
-filed under one hash — a bug in a caller, or a digest that has come apart from its bytes — and it
-raises :class:`~debate_core.application.errors.Conflict` rather than overwriting the record every
-disclosure and manifest row already points at.
+What it will not do is overwrite a stored record with one that differs. A different size or
+format under a stored SHA-256 is a real contradiction; a different origin is refused only as a
+defence, since the importers link to the existing record instead. Both raise
+:class:`~debate_core.application.errors.Conflict`, for the reasons
+:meth:`~debate_core.application.ports.caselist.CaselistRepository.put_source` gives.
 
 ## Ordering and cursors
 
@@ -488,8 +488,13 @@ def _camp_file_sort_key(camp_file: CampFile) -> str:
 def _widened(stored: SourceDocument, incoming: SourceDocument) -> SourceDocument:
     """The stored record with its seen range widened to cover the incoming one.
 
-    Refuses a contradiction first: size, format and origin are facts about the bytes, and two
-    different answers under one digest mean the hash and the bytes have come apart.
+    Raises :class:`~debate_core.application.errors.Conflict` first when the two differ in size,
+    format or origin. Size and format are facts about the bytes, so a difference there means the
+    hash and the bytes have come apart. Origin is not: it records which import brought the bytes in
+    first, and the same file under two origins is normal. It is refused only as a defence against
+    a caller that skips :func:`~debate_core.application.caselist.pipeline.file_source`, which the
+    importers never do. The rule is stated in full on
+    :meth:`~debate_core.application.ports.caselist.CaselistRepository.put_source`.
     """
     unchanged = (stored.byte_size, stored.source_format, stored.origin)
     arriving = (incoming.byte_size, incoming.source_format, incoming.origin)

@@ -6,9 +6,11 @@ because the moment a command does any of those the CLI stops being replaceable b
 workers, which wire the same services differently (architecture proposal §6, and
 `docs/architecture/ports-and-adapters.md` for the injection pattern the services themselves use).
 
-Four services are wired: :meth:`ServiceContainer.evidence_sync`, which `debate-research store`
+The wired services include :meth:`ServiceContainer.evidence_sync`, which `debate-research store`
 runs (`v1-e29-t05-evidence-sync-cli`); :meth:`ServiceContainer.caselist_import`, which
-`debate-research caselist import` runs (`v1-e30-t03-archive-importer`); and
+`debate-research caselist import` runs (`v1-e30-t03-archive-importer`);
+:meth:`ServiceContainer.openev_import`, which `debate-research caselist import-openev` runs
+(`v1-e30-t04-openev-importer`); and
 :meth:`ServiceContainer.caselist_token_store` and :meth:`ServiceContainer.opencaselist_client`,
 which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`). The rest of V1's services
 and their adapters arrive in E02–E08 and slot in the same way.
@@ -59,6 +61,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
+from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.evidence_sync import (
@@ -93,6 +96,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_status",
     "caselist_token_store",
     "evidence_sync",
+    "openev_import",
     "opencaselist_client",
 )
 """Names of the services this container can build, for `debate-research doctor` to report."""
@@ -191,6 +195,20 @@ class ServiceContainer:
 
     def _build_caselist_import(self) -> CaselistImportService:
         return CaselistImportService(
+            caselists=SqliteCaselistRepository(self.database),
+            blobs=FsSnapshotStore(self.settings.storage.data_dir),
+        )
+
+    def openev_import(self) -> OpenEvImportService:
+        """Build the OpenEv camp-file importer over the same local store as `caselist_import`.
+
+        Same repository, same blob store: that is what lets a camp file and a disclosure with
+        identical bytes resolve to one source document (`v1-e30-t04-openev-importer`).
+        """
+        return self.singleton("openev_import", self._build_openev_import)
+
+    def _build_openev_import(self) -> OpenEvImportService:
+        return OpenEvImportService(
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
         )

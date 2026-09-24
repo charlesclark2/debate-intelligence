@@ -59,7 +59,7 @@ spec:
         The shared import pipeline is used by both `caselist import` and `caselist import-openev`, and the
         t03 test suite still passes unchanged.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -1,0 +1,32 @@
+# The camps the OpenEv importer recognises, and every spelling that names each one.
+#
+# Read by debate_core.application.caselist.camp_metadata when `debate-research caselist
+# import-openev` runs without --camp-aliases. Edit it freely: add a camp, or add a spelling that a
+# file or folder uses. A file whose folder and filename prefix match nothing here is still imported,
+# with camp UNKNOWN and a warning, so a missing camp is something to add here, not an error.
+#
+# Shape: the canonical camp name (what gets recorded) maps to its spellings. The canonical name is
+# always one of its own spellings, so it need not be repeated. Matching ignores case and treats
+# spaces, hyphens, underscores and dots alike, so "Spartan Debate Institute" also matches
+# "spartan-debate-institute" and "SPARTAN_DEBATE_INSTITUTE". A spelling matches whole words only:
+# "SDI" matches "SDI - Politics DA" but not "SDIX Politics DA".
+#
+# No two camps may share a spelling; the loader refuses a table where they do.
+camps:
+  DDI:
+    - Dartmouth
+    - Dartmouth Debate Institute
+  Michigan:
+    - Michigan7
+    - MNDI
+    - Michigan National Debate Institute
+  Gonzaga:
+    - GDI
+    - Gonzaga Debate Institute
+  SDI:
+    - Spartan
+    - Spartan Debate Institute
+  NHSI:
+    - Northwestern
+  UTNIF:
+    - UT National Institute of Forensics

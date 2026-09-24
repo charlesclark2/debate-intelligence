@@ -100,8 +100,11 @@ spec:
       kind: Task
       name: Create GitHub repository, push, and protect main
       description: >-
-        Create the private GitHub repo, add remote, push history, enable branch protection on main (PR
-        required, required status checks, no force-push), add CODEOWNERS, PR and issue templates, and
+        Create the GitHub repo (public, so Actions minutes are free for v1-e01-t04's CI; what makes that
+        safe is that no real debate file, school, team code or student name may enter the repository at
+        all), add remote, push history, enable branch protection on main (PR required, no force-push;
+        required status checks arrive with v1-e01-t04, t08 and t10), add CODEOWNERS, PR and issue
+        templates, and
         set dev as the default branch with protect-main / protect-dev rulesets per docs/process/branching-and-environments.md
         (main = prod, dev = development environment).
       inputs:

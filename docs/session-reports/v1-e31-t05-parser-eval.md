@@ -294,9 +294,48 @@ ac1, ac3, ac4 and ac5 rows with the measured results.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-23
 
 **Notes:**
+
+Accepted as the session's work, which is complete. The Goal stays `InProgress`, correctly: ac1, ac3,
+ac4 and ac5 all need a human with the corpus, and no session can close them.
+
+**Two spec corrections, both mine** (`298f7ad`, `specs/parser-eval-keyed-digests`).
+
+The first is the important one, and this session found the weaker form of it and proposed the right
+fix. My earlier amendment said to list files "by sha256 ... never by file name, which carries a
+school and a team code". Removing the name and leaving a plain SHA-256 achieves nothing: **this
+repository is public and the OpenCaselist archives are public**, so anyone can hash the same corpus
+and read the committed digests straight back to `<School>/<TeamCode>/<filename>`. That is a direct
+join, not a brute-force guess at a short paragraph, and it publishes exactly what removing the names
+was meant to withhold. The session scoped the concern to text hashes and called the exposure low; it
+is neither confined to text nor low. File and paragraph digests become an HMAC under a key kept
+beside the path map and never committed - which is the fix this report proposed, applied wider.
+
+The second: ac4 asked for the labeled subset to run in the PR `ci` check while the same spec keeps
+every real file off every runner. Those cannot both hold, and Deviation 1 resolves it the right way
+round. ac4 now describes what was built.
+
+**What is best here is what was refused.** `baseline parser.json` committed as `NOT_ESTABLISHED`
+rather than a plausible number, a gate that fails when no baseline exists rather than passing
+against nothing, a pre-label that cannot become a label until a person ticks every row, and edited
+text refused outright. The vacuous-pass failure - a check reporting success because it had nothing
+to check - is the same one found in `scripts/site_smoke.py` last week, caught here independently and
+designed out rather than papered over. Catching the one-paragraph PR-subset pick from the pre-label
+counts and re-running is the same instinct.
+
+**Ordering matters for what comes next.** The manifest must be re-keyed before any labeling begins,
+because labels carry the same digests: 435 corrected rows under plain SHA-256 would have to be
+remapped afterwards. Re-key first, then label.
+
+**Not a finding against the parser yet, and right not to be.** Four of thirty files pre-labeling to
+zero cards, including a 55-paragraph wiki-converted file in the PR subset, is exactly what this task
+exists to find out about - and it is unknowable until the labels say so. Keep that file in the PR
+subset rather than swapping it for an easier one; it is the most informative file in the set.
+
+Follow-ups accepted as filed. The `SourceOrigin` gap for a team's own file is real and goes to
+whoever owns `v1-e30-t02`/`v1-e31-t06`. `tests/README.md` is corrected in the same commit above.

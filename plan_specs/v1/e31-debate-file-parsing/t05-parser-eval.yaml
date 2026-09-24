@@ -55,9 +55,15 @@ spec:
         At least 30 files are labeled, every one of them left where it is on the operator's machine and
         none of them committed in any form: at least 12 team files (all three formats and seasons, at least
         3 not built on the Verbatim template), at least 12 caselist files (at least 4 non-Verbatim and 2
-        wiki-converted) and at least 6 camp files, listed in a manifest by sha256, category, season and
-        format - never by file name, which carries a school and a team code - and the coach has reviewed
-        the labels.
+        wiki-converted) and at least 6 camp files, listed in a manifest by category, season, format and a
+        **keyed digest** - never by file name, and never by a plain SHA-256. A plain digest is a join key,
+        not an anonymiser: this repository is public, the OpenCaselist archives are public, so anyone can
+        hash the same corpus and read our digests straight back to `<School>/<TeamCode>/<filename>`, which
+        is precisely what removing the names was for. File and paragraph digests are therefore an HMAC
+        under a key kept beside the path map in ~/.debate-intelligence/ and never committed. CI never
+        checks these digests, the fixture-changed validator still works because an HMAC over changed
+        content differs, and the operator can still verify because the operator holds the key. The coach
+        has reviewed the labels.
     - id: ac2
       description: >-
         The eval writes JSON and Markdown reports with per-unit (POCKET, HAT, BLOCK, TAG, CITE, EVIDENCE,
@@ -70,9 +76,15 @@ spec:
         wiki-converted files TAG/CITE/EVIDENCE F1 at least 0.90.
     - id: ac4
       description: >-
-        The labeled subset runs in the default PR pytest run in under 30 s; the full labeled suite (`eval` and
-        `slow`) fails in the validate-dev slow tier and nightly when any unit F1 drops more than 0.01 below the
-        baseline for the current parser_version; a label validator fails when a fixture changes under its labels.
+        Two tiers, split by where the files are. The real-file tiers - the PR subset in the default pytest
+        run in under 30 s, and the full labeled suite under `eval` and `slow` in validate-dev and nightly -
+        run on the machine that holds the corpus and **skip elsewhere with a stated reason**, because this
+        spec keeps the files off every runner and a CI check cannot read what CI does not have. What CI
+        runs instead is the whole harness end to end over an invented file with hand-written labels, so the
+        scoring, reporting and gate paths are covered on every PR even though no real file is. Both tiers
+        fail when any unit F1 drops more than 0.01 below the baseline for the current parser_version, and
+        fail rather than pass when no baseline exists; a label validator fails when a file changes under
+        its labels.
     - id: ac5
       description: >-
         An operator-run corpus health report for the hsld26 snapshots and camp files is committed under

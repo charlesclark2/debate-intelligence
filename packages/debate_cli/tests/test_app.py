@@ -141,6 +141,7 @@ def test_doctor_reports_the_environment_as_json() -> None:
         "caselist_import",
         "caselist_publish",
         "caselist_status",
+        "caselist_sync",
         "caselist_token_store",
         "evidence_sync",
         "openev_import",

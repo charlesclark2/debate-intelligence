@@ -524,7 +524,9 @@ class CaselistSettings(SettingsGroup):
         description=(
             "Caselist slugs `caselist pull` covers when no --caselist is given. Empty by default: "
             "which caselists this installation follows is the operator's decision, and a hardcoded "
-            "slug in a committed file would make it ours."
+            "slug in a committed file would make it ours. A list in a profile file; JSON in the "
+            "environment, as every list setting is: "
+            'DEBATE_CASELIST__SYNC_CASELISTS=["hsld26","hspolicy26"].'
         ),
     )
     inbox_dir: Path | None = Field(
@@ -569,7 +571,11 @@ class CaselistSettings(SettingsGroup):
     @field_validator("sync_caselists", mode="before")
     @classmethod
     def _one_slug_or_many(cls, value: object) -> object:
-        """Accept a single slug as well as a list, so `DEBATE_CASELIST__SYNC_CASELISTS=hsld26` works."""
+        """Accept a bare slug as well as a list, so `sync_caselists = "hsld26"` in a profile works.
+
+        The environment still takes JSON: pydantic-settings decodes a list-valued variable before
+        any validator here sees it, which is true of every list setting in this module.
+        """
         return (value,) if isinstance(value, str) else value
 
     @field_validator("inbox_dir")

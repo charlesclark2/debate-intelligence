@@ -1,0 +1,448 @@
+{
+  "plan_id": "792cad9c0f3fa456",
+  "generated_on": "2026-09-23",
+  "parser_version": "2026.09.20-docx-1",
+  "target_rate": 0.25,
+  "minimum_block": 20,
+  "rare_units": [
+    "ANALYTIC",
+    "POCKET",
+    "UNDERTAG"
+  ],
+  "files": [
+    {
+      "digest": "06e05b7abae54eb2ae1b66a6bc6e3c3e1a6c16395f2693ca36ac3031b6388058",
+      "paragraphs": 68,
+      "blocks": [
+        [
+          0,
+          67
+        ]
+      ],
+      "full": true
+    },
+    {
+      "digest": "0bf568786e7dc6bb66e181a97d8a2f05fc0e1a51d23b9f07ffa4d586eb0f96ea",
+      "paragraphs": 62,
+      "blocks": [
+        [
+          0,
+          19
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "1538bd64e454894e91a803ca7e2d533f7f482748f3ff47e54322b356874c3044",
+      "paragraphs": 49,
+      "blocks": [
+        [
+          0,
+          19
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "15be67df9cfaa27217bd5d97bf6501fb2125fc937a994cca7c42a04a17c83cea",
+      "paragraphs": 77,
+      "blocks": [
+        [
+          0,
+          19
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "18346891306c5a9d7cba0300544998f8867f17ab5602f1132f94ee849f0b677b",
+      "paragraphs": 321,
+      "blocks": [
+        [
+          100,
+          119
+        ],
+        [
+          140,
+          179
+        ],
+        [
+          280,
+          299
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "3a4b7d47179046245ca5afb3a803eddbdc89ecdfd3335bb2b6acb06980e4bd37",
+      "paragraphs": 79,
+      "blocks": [
+        [
+          20,
+          39
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "4b11269583a946212569b811437a1b7ce40f11cc15edbb131ef71f732513217b",
+      "paragraphs": 55,
+      "blocks": [
+        [
+          0,
+          54
+        ]
+      ],
+      "full": true
+    },
+    {
+      "digest": "4e5d4ca9ceb8217bc81f0494a7592dd4cc312d94c82a537f1851a589ec933ef2",
+      "paragraphs": 119,
+      "blocks": [
+        [
+          0,
+          19
+        ],
+        [
+          40,
+          59
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "4f9115e33c3dbad3f7403d4b5f6c0250df73c42a87e05f90c0866fe7e0e46f39",
+      "paragraphs": 196,
+      "blocks": [
+        [
+          20,
+          39
+        ],
+        [
+          160,
+          195
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "569327e939db86f6b1085b8a971ab1fe6d7387b941ff42f7ee2bb21e9872978b",
+      "paragraphs": 143,
+      "blocks": [
+        [
+          20,
+          39
+        ],
+        [
+          120,
+          142
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "56f3905d5fe679e3051b0ce76a824723e65afd555560a0e2928c8d78aef6eb7a",
+      "paragraphs": 149,
+      "blocks": [
+        [
+          40,
+          59
+        ],
+        [
+          80,
+          99
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "71ce5ee012203a7e8ebfbacc4573cca4891061f19b7d77fc6338e341dcbf89a1",
+      "paragraphs": 466,
+      "blocks": [
+        [
+          0,
+          23
+        ],
+        [
+          120,
+          143
+        ],
+        [
+          168,
+          191
+        ],
+        [
+          288,
+          311
+        ],
+        [
+          408,
+          431
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "7847cb0097628fff436e78829e6eb93133a68b1e4d26ccdfa5f05141b3aabf94",
+      "paragraphs": 315,
+      "blocks": [
+        [
+          0,
+          19
+        ],
+        [
+          60,
+          79
+        ],
+        [
+          140,
+          159
+        ],
+        [
+          220,
+          239
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "90ee056b8f95296a8d87855b469b31ec61c7b30f6fb54e99cb528dfa79125669",
+      "paragraphs": 550,
+      "blocks": [
+        [
+          0,
+          55
+        ],
+        [
+          336,
+          419
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "90fe3d84f2ba99e9c0eac278287654a808f14a9871ac1153b493b3d9b6daee23",
+      "paragraphs": 178,
+      "blocks": [
+        [
+          0,
+          19
+        ],
+        [
+          100,
+          119
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "930a44726db7648878a555185be92eb0eaeaf8353d224ce4fc25559edd30ee6a",
+      "paragraphs": 108,
+      "blocks": [
+        [
+          0,
+          19
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "93c9db239ccfd360e1c574b0e7f41533d3b5a23b50b3d292da4e8d1bda70b4c9",
+      "paragraphs": 62,
+      "blocks": [
+        [
+          40,
+          61
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "9d0a74b95ccf92691e549c1b275ef91681ea779956a99a68309d1eaa5406216e",
+      "paragraphs": 29,
+      "blocks": [
+        [
+          0,
+          28
+        ]
+      ],
+      "full": true
+    },
+    {
+      "digest": "a888a5db954882183847a6db22bc32b90931c36d43c232779e66037f3242efac",
+      "paragraphs": 31,
+      "blocks": [
+        [
+          0,
+          30
+        ]
+      ],
+      "full": true
+    },
+    {
+      "digest": "a8afd234413032f4723e0dc5b38ea90f332f738e3c8e21fcd84189664fd382dc",
+      "paragraphs": 1020,
+      "blocks": [
+        [
+          0,
+          50
+        ],
+        [
+          102,
+          152
+        ],
+        [
+          459,
+          560
+        ],
+        [
+          918,
+          968
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "a99a55d4d1d282f290de3738700dc8cefb3ce7d7bf97cfdc71ff2e7ebd22373d",
+      "paragraphs": 198,
+      "blocks": [
+        [
+          0,
+          197
+        ]
+      ],
+      "full": true
+    },
+    {
+      "digest": "b02c230aa4f3e1b98fcb3b9825626cc8abfba66e7bb29fcab8dc6ed5e31286a8",
+      "paragraphs": 96,
+      "blocks": [
+        [
+          20,
+          39
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "bad8c9119196b60a31b6302ef356935764ec5d1aae5a97193aded00dce8a02ce",
+      "paragraphs": 54,
+      "blocks": [
+        [
+          0,
+          53
+        ]
+      ],
+      "full": true
+    },
+    {
+      "digest": "bcfba63d8d9d6a29afb39ea129758806fcc3f7f07a84e506edce6401052d61af",
+      "paragraphs": 129,
+      "blocks": [
+        [
+          0,
+          19
+        ],
+        [
+          100,
+          128
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "cfe852ee3f4e49d9fb88da427ae546918e5c99ec21c0493a4d1e6f2bc1dd9332",
+      "paragraphs": 128,
+      "blocks": [
+        [
+          80,
+          127
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "d493ea2573ca9a1d1e9aff3dc21460ef48c10349672c458aefbdc3e5ea63de46",
+      "paragraphs": 162,
+      "blocks": [
+        [
+          0,
+          19
+        ],
+        [
+          140,
+          161
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "d52fdcceb45b789c88eadfe1237dd052a12d61c6ed11dd12bad1072745a1b22c",
+      "paragraphs": 283,
+      "blocks": [
+        [
+          40,
+          59
+        ],
+        [
+          100,
+          139
+        ],
+        [
+          180,
+          199
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "f2e5e7ea9706807a60536bf0798b28ade6260002063e7d960f0ed03a3a397fb1",
+      "paragraphs": 91,
+      "blocks": [
+        [
+          60,
+          90
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "f3442236bb398f4b5c95aa474cf274e04a9b32a165ee214e71c12bd464bf9025",
+      "paragraphs": 457,
+      "blocks": [
+        [
+          0,
+          22
+        ],
+        [
+          184,
+          206
+        ],
+        [
+          230,
+          252
+        ],
+        [
+          345,
+          367
+        ],
+        [
+          414,
+          456
+        ]
+      ],
+      "full": false
+    },
+    {
+      "digest": "f897900ef90160ac7c4bdd5dacfde0e66fd5b06ef413ce88155d735b02782669",
+      "paragraphs": 113,
+      "blocks": [
+        [
+          40,
+          59
+        ]
+      ],
+      "full": false
+    }
+  ]
+}

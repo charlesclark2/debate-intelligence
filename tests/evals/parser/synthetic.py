@@ -6,14 +6,18 @@ below**, not produced by running the parser: they say what each paragraph is bec
 was written to be exactly that (working agreements §6).
 
 The school, the tag lines and the cites are fictional.
+
+The digests are keyed like the real ones, under a fixed test key: nothing here is corpus content,
+so the key is a constant rather than a secret, and the shape stays the same as production's.
 """
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 
+from tests.evals.parser.digests import keyed_digest, text_digest
 from tests.evals.parser.labels_schema import (
+    Block,
     CardLabel,
     FileLabelHeader,
     LabelFile,
@@ -21,14 +25,16 @@ from tests.evals.parser.labels_schema import (
     ParagraphLabel,
     ReviewerRole,
     SpanLabel,
-    text_sha256,
 )
 
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.domain.style_profile import StructuralUnit
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
-__all__ = ["SyntheticFile", "build_synthetic_file"]
+__all__ = ["TEST_DIGEST_KEY", "SyntheticFile", "build_synthetic_file"]
+
+#: Not a secret: this file is invented, so its digests protect nothing. Fixed so tests are stable.
+TEST_DIGEST_KEY = bytes.fromhex("5e" * 32)
 
 OPENING = "Grid operators warn that "
 UNDERLINED = "reserve margins fall below safe levels"
@@ -113,38 +119,71 @@ _PARAGRAPHS: tuple[tuple[str, str, StructuralUnit, int | None], ...] = (
 class SyntheticFile:
     content: bytes
     labels: LabelFile
+    key: bytes = TEST_DIGEST_KEY
 
     @property
-    def sha256(self) -> str:
-        return hashlib.sha256(self.content).hexdigest()
+    def digest(self) -> str:
+        return keyed_digest(self.content, self.key)
 
 
-def build_synthetic_file(status: LabelStatus = LabelStatus.CORRECTED) -> SyntheticFile:
-    """The invented file, and labels for it in the given review status."""
+def build_synthetic_file(
+    status: LabelStatus = LabelStatus.CORRECTED,
+    *,
+    key: bytes = TEST_DIGEST_KEY,
+    blocks: tuple[Block, ...] | None = None,
+    plan_id: str = "",
+) -> SyntheticFile:
+    """The invented file, and labels for it in the given review status.
+
+    `blocks` labels only part of the file, the way the sampling plan does outside the PR subset;
+    the default labels all eleven paragraphs, as the PR subset is labeled.
+    """
     content = build_docx("".join(markup for markup, _, _, _ in _PARAGRAPHS))
-    sha256 = hashlib.sha256(content).hexdigest()
+    digest = keyed_digest(content, key)
+    labeled = blocks if blocks is not None else ((0, len(_PARAGRAPHS) - 1),)
+    indices = [index for first, last in labeled for index in range(first, last + 1)]
     paragraphs = tuple(
-        ParagraphLabel(index=index, length=len(text), text_sha256=text_sha256(text), unit=unit, card=card)
-        for index, (_, text, unit, card) in enumerate(_PARAGRAPHS)
+        ParagraphLabel(
+            index=index,
+            length=len(_PARAGRAPHS[index][1]),
+            text_digest=text_digest(_PARAGRAPHS[index][1], key),
+            unit=_PARAGRAPHS[index][2],
+            card=_PARAGRAPHS[index][3],
+        )
+        for index in indices
+    )
+    whole_cards = {
+        card
+        for card in {p.card for p in paragraphs if p.card is not None}
+        if all(any(first <= p.index <= last for first, last in labeled) for p in paragraphs if p.card == card)
+        and len([i for i, (_, _, _, c) in enumerate(_PARAGRAPHS) if c == card])
+        == len([p for p in paragraphs if p.card == card])
+    }
+    paragraphs = tuple(
+        p if p.card in whole_cards else p.model_copy(update={"card": None}) for p in paragraphs
     )
     underlined = (len(OPENING), len(OPENING) + len(UNDERLINED))
+    spans = tuple(
+        span
+        for span in (
+            SpanLabel(index=3),
+            SpanLabel(index=5, underline=(underlined,), highlight=(underlined,)),
+            SpanLabel(index=10, underline=((0, len(SECOND_BODY)),)),
+        )
+        if span.index in indices
+    )
     labels = LabelFile(
         header=FileLabelHeader(
-            sha256=sha256,
-            paragraph_count=len(paragraphs),
+            digest=digest,
+            paragraph_count=len(_PARAGRAPHS),
+            blocks=labeled,
+            plan_id=plan_id,
             status=status,
             prelabel_parser_version="hand-written",
             corrected_by=None if status is LabelStatus.PRELABELED else ReviewerRole.OPERATOR,
         ),
         paragraphs=paragraphs,
-        cards=(
-            CardLabel(card=0, completeness=CardCompleteness.FULL),
-            CardLabel(card=1, completeness=CardCompleteness.FULL),
-        ),
-        spans=(
-            SpanLabel(index=5, underline=(underlined,), highlight=(underlined,)),
-            SpanLabel(index=10, underline=((0, len(SECOND_BODY)),)),
-            SpanLabel(index=3),
-        ),
+        cards=tuple(CardLabel(card=card, completeness=CardCompleteness.FULL) for card in sorted(whole_cards)),
+        spans=spans,
     )
-    return SyntheticFile(content=content, labels=labels)
+    return SyntheticFile(content=content, labels=labels, key=key)

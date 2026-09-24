@@ -45,18 +45,24 @@ SHA = "d" * 64
 def _labels(
     units: list[tuple[StructuralUnit, int | None]], lengths: dict[int, int] | None = None, **kw
 ) -> LabelFile:  # type: ignore[no-untyped-def]
+    """Labels over a whole invented file, unless `blocks` says otherwise."""
     lengths = lengths or {}
+    blocks = kw.get("blocks", ((0, len(units) - 1),))
+    indices = [i for first, last in blocks for i in range(first, last + 1)]
     return LabelFile(
         header=FileLabelHeader(
-            sha256=SHA,
+            digest=SHA,
+            blocks=blocks,
             paragraph_count=len(units),
             status=LabelStatus.CORRECTED,
             prelabel_parser_version="p",
             corrected_by=ReviewerRole.OPERATOR,
         ),  # fmt: skip
         paragraphs=tuple(
-            ParagraphLabel(index=i, length=lengths.get(i, 0), text_sha256=SHA, unit=unit, card=card)
-            for i, (unit, card) in enumerate(units)
+            ParagraphLabel(
+                index=i, length=lengths.get(i, 0), text_digest=SHA, unit=units[i][0], card=units[i][1]
+            )
+            for i in indices
         ),
         cards=kw.get("cards", ()),
         spans=kw.get("spans", ()),
@@ -166,13 +172,73 @@ def test_spans_on_unsampled_paragraphs_are_not_scored() -> None:
 
 
 # --------------------------------------------------------------------------------------------
+# Sampling: a score says what it was computed over, and judges only what it can see
+# --------------------------------------------------------------------------------------------
+
+
+#: The same six paragraphs, but only 0-3 are labeled: the card (1-3) is inside, the analytic is not.
+SAMPLED = _labels(
+    [(U.BLOCK, None), (U.TAG, 0), (U.CITE, 0), (U.EVIDENCE, 0), (U.OTHER, None), (U.ANALYTIC, None)],
+    cards=(CardLabel(card=0, completeness=CardCompleteness.FULL),),
+    blocks=((0, 3),),
+)
+
+
+def test_a_score_records_the_rows_it_was_computed_over() -> None:
+    score = score_file(SAMPLED, PREDICTION)
+    assert (score.labeled_rows, score.total_rows) == (4, 6)
+    assert score.sampling_rate == pytest.approx(4 / 6)
+    assert score.units[U.ANALYTIC].support == 0  # paragraph 5 is outside the block, so not counted
+
+
+def test_a_card_the_parser_found_outside_the_labeled_block_is_not_a_false_positive() -> None:
+    """The parser's second card (5-5) sits in unlabeled text. It is unjudged, not wrong."""
+    score = score_file(SAMPLED, PREDICTION)
+    assert (score.labeled_cards, score.predicted_cards, score.boundary_matches) == (1, 1, 1)
+    assert score.card_precision == 1.0
+
+
+def test_a_card_only_half_inside_a_block_is_not_counted_either() -> None:
+    half = _labels(
+        [
+            (U.BLOCK, None),
+            (U.TAG, None),
+            (U.CITE, None),
+            (U.EVIDENCE, None),
+            (U.OTHER, None),
+            (U.ANALYTIC, None),
+        ],
+        blocks=((0, 2),),
+    )
+    score = score_file(half, PREDICTION)
+    assert (score.labeled_cards, score.predicted_cards) == (0, 0)
+    assert score.boundary_exact_match is None
+
+
+def test_group_sampling_counts_add_up() -> None:
+    groups = group_scores(
+        [
+            (_entry(TemplateFamily.VERBATIM), score_file(SAMPLED, PREDICTION)),
+            (_entry(TemplateFamily.CARDMIRROR), score_file(LABELS, PREDICTION)),
+        ]
+    )
+    overall = groups["overall"].score
+    assert (overall.labeled_rows, overall.total_rows) == (10, 12)
+    assert groups["overall"].as_json()["sampling"] == {
+        "labeled_rows": 10,
+        "total_rows": 12,
+        "rate": 0.8333,
+    }
+
+
+# --------------------------------------------------------------------------------------------
 # Groups: counts are summed, then divided
 # --------------------------------------------------------------------------------------------
 
 
 def _entry(family: TemplateFamily, category: Category = Category.CASELIST) -> ManifestEntry:
     return ManifestEntry(
-        sha256=SHA, category=category, season="2026-27", debate_format=DebateFormat.LD, template_family=family
+        digest=SHA, category=category, season="2026-27", debate_format=DebateFormat.LD, template_family=family
     )
 
 
@@ -264,32 +330,49 @@ def _groups_with_tag_f1(tp: int, fp: int, fn: int):  # type: ignore[no-untyped-d
     )
 
 
-BASELINE = {"parser_version": "v1", "tiers": {"full": {"overall": {"TAG": 0.98}}}}
+BASELINE = {
+    "parser_version": "v1",
+    "sampling_plan_id": "plan0001",
+    "tiers": {"full": {"overall": {"TAG": 0.98}}},
+}
+
+
+def _check(groups, baseline=BASELINE, *, tier="full", parser_version="v1", plan_id="plan0001"):  # type: ignore[no-untyped-def]
+    return check_against_baseline(groups, baseline, tier=tier, parser_version=parser_version, plan_id=plan_id)
 
 
 def test_a_drop_within_tolerance_passes() -> None:
     groups = _groups_with_tag_f1(tp=97, fp=3, fn=2)  # F1 = 194 / 199 = 0.9749, 0.0051 below
-    assert check_against_baseline(groups, BASELINE, tier="full", parser_version="v1") == ([], [])
+    assert _check(groups) == ([], [])
 
 
 def test_a_drop_of_more_than_one_point_fails() -> None:
     groups = _groups_with_tag_f1(tp=96, fp=4, fn=4)  # F1 = 192 / 200 = 0.96, 0.02 below
-    failures, _ = check_against_baseline(groups, BASELINE, tier="full", parser_version="v1")
+    failures, _ = _check(groups)
     assert failures == ["overall TAG: F1 0.9600 is more than 0.01 below the baseline 0.9800"]
 
 
 def test_a_tier_with_no_baseline_fails_rather_than_passing_vacuously() -> None:
-    failures, _ = check_against_baseline(
-        _groups_with_tag_f1(1, 0, 0), BASELINE, tier="pr-subset", parser_version="v1"
-    )
+    failures, _ = _check(_groups_with_tag_f1(1, 0, 0), tier="pr-subset")
     assert "no baseline is established for the pr-subset tier" in failures[0]
 
 
 def test_a_newer_parser_is_still_held_to_the_old_baseline() -> None:
-    failures, notes = check_against_baseline(
-        _groups_with_tag_f1(96, 4, 4), BASELINE, tier="full", parser_version="v2"
-    )
+    failures, notes = _check(_groups_with_tag_f1(96, 4, 4), parser_version="v2")
     assert failures and "recorded for parser v1" in notes[0]
+
+
+def test_a_different_sampling_plan_refuses_rather_than_comparing() -> None:
+    """Two samples are two measurements. Comparing them would report a regression that is not one."""
+    failures, _ = _check(_groups_with_tag_f1(tp=100, fp=0, fn=0), plan_id="plan0002")
+    assert len(failures) == 1
+    assert "two samples are two measurements" in failures[0]
+
+
+def test_a_baseline_with_no_plan_recorded_still_compares() -> None:
+    """An older baseline that predates the plan is not refused; there is nothing to disagree with."""
+    older = {"parser_version": "v1", "tiers": BASELINE["tiers"]}
+    assert _check(_groups_with_tag_f1(tp=97, fp=3, fn=2), older) == ([], [])
 
 
 # --------------------------------------------------------------------------------------------
@@ -301,15 +384,17 @@ def test_reports_carry_every_breakdown_and_no_file_detail_in_markdown() -> None:
     score = score_file(LABELS, PREDICTION)
     groups = group_scores([(_entry(TemplateFamily.VERBATIM), score)])
     report = report_json(
-        tier="full", parser_version="v1", profile_version="p1", groups=groups, per_file={SHA: score},
-        gate_failures=[], gate_notes=[], label_status={"CORRECTED": 1},
+        tier="full", parser_version="v1", profile_version="p1", plan_id="plan0001", groups=groups,
+        per_file={SHA: score}, gate_failures=[], gate_notes=[], label_status={"CORRECTED": 1},
     )  # fmt: skip
+    assert report["sampling"] == {"plan_id": "plan0001", "labeled_rows": 6, "total_rows": 6, "rate": 1.0}
     assert set(report["groups"]["overall"]["units"]) == {u.value for u in StructuralUnit}
     assert report["groups"]["overall"]["cards"]["boundary_exact_match"] == 1.0
     assert report["groups"]["overall"]["spans"]["underline"]["f1"] == 0.8
     markdown = render_markdown(report)
     for heading in ("## Targets", "## Unit F1 by group", "## Cards and spans by group"):
         assert heading in markdown
+    assert "Labeled rows" in markdown and "6 labeled paragraphs" in markdown
     assert "source:caselist" in markdown and "family:verbatim" in markdown and "format:LD" in markdown
     assert SHA[:12] not in markdown
 

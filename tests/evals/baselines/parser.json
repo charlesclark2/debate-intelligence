@@ -2,8 +2,9 @@
   "parser_version": "2026.09.20-docx-1",
   "profile_version": null,
   "status": "NOT_ESTABLISHED",
-  "note": "No baseline yet: the labeled set has not been corrected and coach-reviewed. scripts/run_parser_eval.py --write-baseline establishes it from a run over corrected labels, alongside a coach-reviewed report under docs/data/. Until then the eval-tier gate fails rather than passing against nothing.",
+  "note": "No baseline yet: the labeled set has not been corrected and coach-reviewed. scripts/run_parser_eval.py --write-baseline establishes it from a run over corrected labels, alongside a coach-reviewed report under docs/data/. Until then the eval-tier gate fails rather than passing against nothing. It also records the sampling plan it was measured over: two samples are two measurements, so the gate refuses rather than comparing when the plan differs.",
   "established_by_report": null,
   "label_status": {},
-  "tiers": {}
+  "tiers": {},
+  "sampling_plan_id": null
 }

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from tests.evals.parser.digests import text_digest
 from tests.evals.parser.labels_schema import (
     EVAL_FIXTURE_DIRECTORY,
     LABELS_DIRECTORY,
@@ -30,17 +31,21 @@ from tests.evals.parser.labels_schema import (
     load_label_file,
     load_label_files,
     load_manifest,
-    text_sha256,
+    load_sampling_plan,
     validate_against_texts,
     validate_label_file,
     write_label_file,
 )
-from tests.evals.parser.synthetic import build_synthetic_file
+from tests.evals.parser.synthetic import TEST_DIGEST_KEY, build_synthetic_file
 
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.domain.style_profile import StructuralUnit
 
 SHA = "a" * 64
+
+
+def _digest_of(text: str) -> str:
+    return text_digest(text, TEST_DIGEST_KEY)
 
 
 def _with_paragraph(labels, index, **changes):  # type: ignore[no-untyped-def]
@@ -61,7 +66,7 @@ def test_the_hand_written_synthetic_labels_are_valid() -> None:
 def test_a_label_file_round_trips_through_jsonl(tmp_path: Path) -> None:
     labels = build_synthetic_file().labels
     path = write_label_file(labels, tmp_path)
-    assert path.name == f"{labels.sha256}.jsonl"
+    assert path.name == f"{labels.digest}.jsonl"
     assert load_label_file(path) == labels
     first = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
     assert first["record"] == "file"
@@ -75,9 +80,13 @@ def test_a_label_file_holds_no_text(tmp_path: Path) -> None:
         assert text not in written
 
 
-def test_text_hash_is_sha256_of_the_utf8_text() -> None:
-    # sha256("abc"), the FIPS 180-2 test vector.
-    assert text_sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+def test_a_text_digest_is_keyed_not_a_plain_hash() -> None:
+    """The point of the key: the same text digests differently, so a public corpus cannot be joined."""
+    import hashlib
+
+    assert _digest_of("abc") != hashlib.sha256(b"abc").hexdigest()
+    assert _digest_of("abc") == text_digest("abc", TEST_DIGEST_KEY)
+    assert _digest_of("abc") != text_digest("abc", bytes.fromhex("11" * 32))
 
 
 # --------------------------------------------------------------------------------------------
@@ -88,7 +97,7 @@ def test_text_hash_is_sha256_of_the_utf8_text() -> None:
 def test_paragraph_indices_must_be_complete_and_in_order() -> None:
     labels = build_synthetic_file().labels
     missing_one = replace(labels, paragraphs=labels.paragraphs[:-1])
-    assert any("indices 0..10" in problem for problem in validate_label_file(missing_one))
+    assert any("labeled indices" in problem for problem in validate_label_file(missing_one))
     swapped = replace(labels, paragraphs=(labels.paragraphs[1], labels.paragraphs[0], *labels.paragraphs[2:]))
     assert validate_label_file(swapped)
 
@@ -159,7 +168,7 @@ def test_labels_for_a_file_the_manifest_does_not_list_are_flagged() -> None:
 def test_a_prelabel_names_no_reviewer() -> None:
     with pytest.raises(ValidationError, match="has not been corrected"):
         FileLabelHeader(
-            sha256=SHA, paragraph_count=0, status=LabelStatus.PRELABELED, prelabel_parser_version="p",
+            digest=SHA, paragraph_count=0, status=LabelStatus.PRELABELED, prelabel_parser_version="p",
             corrected_by=ReviewerRole.COACH,
         )  # fmt: skip
 
@@ -167,14 +176,14 @@ def test_a_prelabel_names_no_reviewer() -> None:
 def test_a_corrected_file_says_who_corrected_it() -> None:
     with pytest.raises(ValidationError, match="which role corrected it"):
         FileLabelHeader(
-            sha256=SHA, paragraph_count=0, status=LabelStatus.CORRECTED, prelabel_parser_version="p"
+            digest=SHA, paragraph_count=0, status=LabelStatus.CORRECTED, prelabel_parser_version="p"
         )
 
 
 def test_only_the_coach_can_have_reviewed_a_file() -> None:
     with pytest.raises(ValidationError, match="reviewed_by the coach"):
         FileLabelHeader(
-            sha256=SHA, paragraph_count=0, status=LabelStatus.COACH_REVIEWED, prelabel_parser_version="p",
+            digest=SHA, paragraph_count=0, status=LabelStatus.COACH_REVIEWED, prelabel_parser_version="p",
             corrected_by=ReviewerRole.OPERATOR, reviewed_by=ReviewerRole.OPERATOR,
         )  # fmt: skip
 
@@ -200,26 +209,26 @@ _TEXTS = [
 
 def test_the_unchanged_file_matches_its_labels() -> None:
     synthetic = build_synthetic_file()
-    assert validate_against_texts(synthetic.labels, synthetic.sha256, _TEXTS) == []
+    assert validate_against_texts(synthetic.labels, synthetic.digest, _TEXTS, _digest_of) == []
 
 
 def test_different_bytes_fail() -> None:
     labels = build_synthetic_file().labels
-    assert "labels are for" in validate_against_texts(labels, "b" * 64, _TEXTS)[0]
+    assert "labels are for" in validate_against_texts(labels, "b" * 64, _TEXTS, _digest_of)[0]
 
 
 def test_an_edited_paragraph_fails() -> None:
     synthetic = build_synthetic_file()
     edited = [*_TEXTS]
     edited[8] = "Older plants fail first."
-    assert validate_against_texts(synthetic.labels, synthetic.sha256, edited) == [
+    assert validate_against_texts(synthetic.labels, synthetic.digest, edited, _digest_of) == [
         "paragraph 8: text changed under its label"
     ]
 
 
 def test_a_paragraph_added_or_lost_fails() -> None:
     synthetic = build_synthetic_file()
-    problems = validate_against_texts(synthetic.labels, synthetic.sha256, _TEXTS[:-1])
+    problems = validate_against_texts(synthetic.labels, synthetic.digest, _TEXTS[:-1], _digest_of)
     assert "file has 10 paragraphs, labels have 11" in problems
 
 
@@ -230,7 +239,7 @@ def test_a_paragraph_added_or_lost_fails() -> None:
 
 def _entry(n: int, category: Category, **fields: object) -> ManifestEntry:
     values: dict[str, object] = {
-        "sha256": f"{n:064x}",
+        "digest": f"{n:064x}",
         "category": category,
         "season": "2025-26",
         "debate_format": DebateFormat.LD,
@@ -319,7 +328,7 @@ def test_the_manifest_summary_table_matches_manifest_json() -> None:
     }
     manifest = {
         (
-            e.sha256[:16],
+            e.digest[:16],
             e.category.value,
             e.season,
             e.debate_format.value,
@@ -338,11 +347,19 @@ def test_nothing_in_the_eval_directory_names_a_file() -> None:
     raw = (EVAL_FIXTURE_DIRECTORY / "manifest.json").read_text(encoding="utf-8")
     assert ".docx" not in raw and "/" not in raw.replace("scripts/select_eval_files.py", "")
     for entry in json.loads(raw)["entries"]:
-        assert set(entry) == {"sha256", "category", "season", "debate_format", "template_family", "pr_subset"}
+        assert set(entry) == {
+            "digest",
+            "category",
+            "season",
+            "debate_format",
+            "template_family",
+            "pr_subset",
+        }
 
 
 def test_every_committed_label_file_is_valid_and_listed() -> None:
     manifest = load_manifest()
-    for sha, labels in load_label_files(LABELS_DIRECTORY).items():
+    plan = load_sampling_plan()
+    for digest, labels in load_label_files(LABELS_DIRECTORY).items():
         check_cards = labels.header.status is not LabelStatus.PRELABELED
-        assert validate_label_file(labels, manifest, check_cards=check_cards) == [], sha[:12]
+        assert validate_label_file(labels, manifest, plan, check_cards=check_cards) == [], digest[:12]

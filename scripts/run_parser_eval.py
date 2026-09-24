@@ -34,11 +34,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from tests.evals.parser.corpus import EvaluationSetupError, load_path_map, run_evaluation  # noqa: E402
+from tests.evals.parser.digests import require_key  # noqa: E402
 from tests.evals.parser.labels_schema import (  # noqa: E402
     Category,
     LabelStatus,
     load_label_files,
     load_manifest,
+    load_sampling_plan,
 )
 from tests.evals.parser.metrics import GATED_GROUPS, render_markdown  # noqa: E402
 
@@ -64,9 +66,9 @@ def _baseline_tier(report: dict[str, Any]) -> dict[str, dict[str, float]]:
 
 def _coach_review_shortfall(manifest_categories: dict[str, Category], labels: dict[str, Any]) -> str | None:
     reviewed = {
-        manifest_categories[sha]
-        for sha, label in labels.items()
-        if label.header.status is LabelStatus.COACH_REVIEWED and sha in manifest_categories
+        manifest_categories[digest]
+        for digest, label in labels.items()
+        if label.header.status is LabelStatus.COACH_REVIEWED and digest in manifest_categories
     }
     count = sum(1 for label in labels.values() if label.header.status is LabelStatus.COACH_REVIEWED)
     missing = sorted(category.value for category in set(Category) - reviewed)
@@ -93,7 +95,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "no evaluation path map on this machine; run scripts/select_eval_files.py first", file=sys.stderr
         )
         return 2
+    key = require_key()
     manifest = load_manifest()
+    plan = load_sampling_plan()
     labels = load_label_files()
     baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
 
@@ -105,7 +109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
-        shortfall = _coach_review_shortfall({e.sha256: e.category for e in manifest.entries}, labels)
+        shortfall = _coach_review_shortfall({e.digest: e.category for e in manifest.entries}, labels)
         if shortfall:
             print(f"refusing to write a baseline: {shortfall}", file=sys.stderr)
             return 2
@@ -116,7 +120,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     for tier in tiers:
         try:
             reports[tier] = run_evaluation(
-                tier=tier, manifest=manifest, labels=labels, path_map=path_map, baseline=baseline
+                tier=tier,
+                manifest=manifest,
+                labels=labels,
+                path_map=path_map,
+                plan=plan,
+                key=key,
+                baseline=baseline,
             )
         except EvaluationSetupError as error:
             print(f"{tier}: {error}", file=sys.stderr)
@@ -140,6 +150,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "parser_version": full["parser_version"],
         "profile_version": full["profile_version"],
         "status": "ESTABLISHED",
+        # The gate refuses rather than compares when this moves: a metric over one sample and a
+        # metric over another are two measurements, not a regression (ac4).
+        "sampling_plan_id": plan.plan_id,
+        "labeled_rows": full["sampling"]["labeled_rows"],
+        "total_rows": full["sampling"]["total_rows"],
         "established_on": date.today().isoformat(),
         "established_by_report": str(report_path.relative_to(REPO_ROOT)),
         "label_status": full["label_status"],

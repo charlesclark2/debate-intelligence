@@ -4,10 +4,31 @@ This labeling guide says how to label a debate file for the parser evaluation
 (`v1-e31-t05-parser-eval`), and how to settle the cases where two careful people could disagree.
 The coach signs it off before it is used (the `labeling` node's manual criterion).
 
-Each file here is `<sha256>.jsonl` and labels one file listed in [`../manifest.json`](../manifest.json).
-It holds **no text**: a unit and a card for each paragraph, keyed by paragraph index and the
-SHA-256 of the paragraph's text. The format is documented in
+Each file here is `<digest>.jsonl` and labels one file listed in [`../manifest.json`](../manifest.json).
+It holds **no text**: a unit and a card for each labeled paragraph, keyed by paragraph index and a
+**keyed digest** of the paragraph's text — an HMAC under the operator's key, never a plain
+SHA-256, which over a public corpus in a public repository would join straight back to the file.
+The format is documented in
 [`tests/evals/parser/labels_schema.py`](../../../../evals/parser/labels_schema.py).
+
+## What you label: the sampling plan
+
+You do not label every paragraph of every file. [`../sampling-plan.json`](../sampling-plan.json)
+says which ones, and the tooling only ever shows you those:
+
+* the **six PR-subset files in full** (435 rows) — they gate every pull request, so they cannot be
+  partial;
+* about **a quarter of every other file** (1,441 of 5,353 rows), in contiguous blocks of at least
+  20 paragraphs.
+
+That is 1,876 rows rather than 5,788. Blocks are contiguous because card-boundary accuracy needs
+unbroken runs: a card split by a sampling gap cannot be scored at all. Which blocks were chosen is
+fixed and recorded; it is not yours to change, and the worksheet simply starts and stops where the
+plan does. **Row indices therefore jump** — a worksheet may run 0-19 and then 100-128. That is the
+plan working, not a missing row.
+
+If the plan is ever regenerated, every label made under the old one stops matching it, and the
+baseline has to be re-measured. That is why it is generated once, before labeling starts.
 
 ## The one rule
 
@@ -28,19 +49,24 @@ bug is filed against `v1-e31-t03`'s parser. Nobody patches the parser inside thi
 ## Workflow
 
 ```bash
-# 1. Seed pre-labels (no text; safe to keep in the repository while they are corrected)
+# 1. Seed pre-labels over the plan's rows (no text; kept in the repository while being corrected)
 uv run python scripts/prelabel_docx.py prelabel --all
 
 # 2. Write one file's worksheet OUTSIDE the repository; it holds paragraph text
-uv run python scripts/prelabel_docx.py worksheet 002fe74e --out-dir ~/parser-eval-worksheets
+uv run python scripts/prelabel_docx.py worksheet 9d0a74b9 --out-dir ~/parser-eval-worksheets
 
 # 3. Correct it in Numbers or LibreOffice, save as CSV, then import it
-uv run python scripts/prelabel_docx.py import 002fe74e \
-    --worksheet ~/parser-eval-worksheets/002fe74ed9fb3376.csv --corrected-by coach
+uv run python scripts/prelabel_docx.py import 9d0a74b9 \
+    --worksheet ~/parser-eval-worksheets/9d0a74b95ccf9269.csv --corrected-by coach
 
 # 4. After the coach's end-to-end spot-check of a corrected file
-uv run python scripts/prelabel_docx.py mark-reviewed 002fe74e --reviewer coach
+uv run python scripts/prelabel_docx.py mark-reviewed 9d0a74b9 --reviewer coach
 ```
+
+A file is named by any unambiguous prefix of its keyed digest — the first column of the table in
+[`../MANIFEST.md`](../MANIFEST.md). Everything needs the digest key at
+`~/.debate-intelligence/parser-eval-digest.key`; without it the tooling stops rather than falling
+back to a plain digest.
 
 Open the `.docx` beside the worksheet: the worksheet shows text, but a paragraph's *style*, its
 underlining and highlighting are only visible in Word.
@@ -79,6 +105,10 @@ within a file; they need not be consecutive.
 * **Where a card starts**: at its `TAG`. A card with no tag (common in wiki-converted disclosures)
   starts at its `CITE`.
 * **Where a card ends**: at its last `EVIDENCE` paragraph. For a cite-only card, at its `CITE`.
+* **A card cut by the end of a block is left unnumbered.** Label each paragraph's unit as usual,
+  but leave `card` blank unless the whole card — tag, cite and body — lies inside the block you
+  are labeling. A half-card cannot be scored, and numbering it would count as a miss something
+  nobody can see. Import refuses a card that crosses a block edge.
 * **Blank paragraphs** inside a card are `OTHER` with a blank `card`. The card's boundary is still
   its first and last numbered paragraph, so a blank line in the middle does not split it.
 * **Headings and analytics are never inside a card.** An `ANALYTIC` between two cards ends the
@@ -126,8 +156,8 @@ case down here, so the next file is labeled the same way.
 
 ## Spans
 
-About one paragraph in five carries `underline` and `highlight` columns. Which ones is decided by a
-hash of the file and paragraph index, not by anyone's choice. Each column shows the paragraph text
+About one labeled paragraph in five carries `underline` and `highlight` columns. Which ones is
+decided by a hash of the file's digest and the paragraph index, not by anyone's choice. Each column shows the paragraph text
 with `⟦` and `⟧` around every underlined or highlighted stretch. Move the marks until they match
 the file. Do not change any other character.
 
@@ -137,6 +167,7 @@ the file. Do not change any other character.
 * **Highlight** is any highlight colour. The colour is not labeled.
 * Mark exactly the characters. Whether a space at the edge of a stretch is underlined is visible in
   Word with the cursor on it. Where it genuinely is not visible, leave the space out.
+* The one-in-five sample is taken from the rows you are labeling, not from the whole file.
 * A sampled row with no underline or highlight keeps its text with no marks. That is a label too:
   "nothing here".
 

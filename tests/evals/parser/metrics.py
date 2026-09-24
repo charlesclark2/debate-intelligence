@@ -12,7 +12,8 @@ What is measured, per Goal criterion ac2:
   called `ANALYTIC` is a missed tag and a false analytic.
 * **Card-boundary exact match**: the share of labeled cards whose first and last paragraph the
   parser got exactly right. Card precision is reported beside it, so a parser that splits one card
-  into two is seen twice over.
+  into two is seen twice over. Only cards lying wholly inside a labeled block count, on both
+  sides: a card the parser found in an unlabeled stretch is not a false positive, it is unjudged.
 * **Completeness accuracy**: of the cards whose boundaries matched, how many carry the right
   `FULL` / `ABBREVIATED` / `CITE_ONLY`.
 * **Character-level underline and highlight F1**, on the sampled paragraphs only.
@@ -20,6 +21,11 @@ What is measured, per Goal criterion ac2:
 Counts are summed before a ratio is taken (micro-averaging), so a group's score is the score of
 its paragraphs, not the average of its files' scores — a two-paragraph file does not weigh as much
 as a two-hundred-paragraph one.
+
+**Every score states what it was computed over.** Labeling is sampled (the PR subset in full, about
+a quarter of every other file), so each group carries its labeled-row count, the file's total rows
+and the rate. A precision figure over a quarter of a corpus is a different claim from one over all
+of it, and a reader six months from now must not have to work that out (ac2).
 """
 
 from __future__ import annotations
@@ -30,6 +36,7 @@ from typing import Any, Final
 
 from tests.evals.parser.labels_schema import (
     VERBATIM_FAMILIES,
+    Block,
     LabelFile,
     ManifestEntry,
 )
@@ -181,6 +188,10 @@ class FileScore:
     completeness_correct: int = 0
     spans: dict[str, Counts] = field(default_factory=lambda: {kind: Counts() for kind in SPAN_KINDS})
     span_paragraphs: int = 0
+    labeled_rows: int = 0
+    """Paragraphs a person labeled: what every count here was computed over."""
+    total_rows: int = 0
+    """Paragraphs in the files, labeled or not."""
 
     def __iadd__(self, other: FileScore) -> FileScore:
         for unit in SCORED_UNITS:
@@ -192,7 +203,14 @@ class FileScore:
         self.boundary_matches += other.boundary_matches
         self.completeness_correct += other.completeness_correct
         self.span_paragraphs += other.span_paragraphs
+        self.labeled_rows += other.labeled_rows
+        self.total_rows += other.total_rows
         return self
+
+    @property
+    def sampling_rate(self) -> float | None:
+        """The share of the group's paragraphs that were labeled."""
+        return self.labeled_rows / self.total_rows if self.total_rows else None
 
     @property
     def boundary_exact_match(self) -> float | None:
@@ -215,6 +233,11 @@ class FileScore:
 
     def as_json(self) -> dict[str, Any]:
         return {
+            "sampling": {
+                "labeled_rows": self.labeled_rows,
+                "total_rows": self.total_rows,
+                "rate": _round(self.sampling_rate),
+            },
             "units": {unit.value: self.units[unit].as_json() for unit in SCORED_UNITS},
             "cards": {
                 "labeled": self.labeled_cards,
@@ -237,9 +260,14 @@ def _characters(ranges: Iterable[tuple[int, int]]) -> set[int]:
     return {offset for start, end in ranges for offset in range(start, end)}
 
 
+def _inside_a_block(blocks: Sequence[Block], first: int, last: int) -> bool:
+    return any(start <= first and last <= end for start, end in blocks)
+
+
 def score_file(labels: LabelFile, prediction: Prediction) -> FileScore:
-    """Compare one file's labels with what the parser said about it."""
-    score = FileScore()
+    """Compare one file's labels with what the parser said about it, over the labeled blocks only."""
+    score = FileScore(labeled_rows=len(labels.paragraphs), total_rows=labels.header.paragraph_count)
+    blocks = labels.blocks or ((0, labels.header.paragraph_count - 1),)
 
     for paragraph in labels.paragraphs:
         predicted = prediction.units.get(paragraph.index)
@@ -250,11 +278,16 @@ def score_file(labels: LabelFile, prediction: Prediction) -> FileScore:
         if predicted is not None:
             score.units[predicted].false_positive += 1
 
+    # A card is judged only where the labels can judge it: wholly inside a labeled block. One the
+    # parser found in an unlabeled stretch is not wrong, it is unseen.
     labeled_ranges = labels.card_ranges()
     completeness = {card.card: card.completeness for card in labels.cards}
-    predicted_by_range = {(first, last): kind for first, last, kind in prediction.cards}
+    judged = [
+        (first, last, kind) for first, last, kind in prediction.cards if _inside_a_block(blocks, first, last)
+    ]
+    predicted_by_range = {(first, last): kind for first, last, kind in judged}
     score.labeled_cards = len(labeled_ranges)
-    score.predicted_cards = len(prediction.cards)
+    score.predicted_cards = len(judged)
     for card, card_range in labeled_ranges.items():
         predicted_completeness = predicted_by_range.get(card_range)
         if predicted_completeness is None:
@@ -408,11 +441,17 @@ def check_against_baseline(
     *,
     tier: str,
     parser_version: str,
+    plan_id: str = "",
 ) -> tuple[list[str], list[str]]:
     """Regressions against the committed baseline for one tier, and notes that are not failures.
 
-    Returns `(failures, notes)`. A tier with no established baseline is a failure: a gate that
-    passes because there is nothing to compare against is not a gate.
+    Returns `(failures, notes)`. Two things make this refuse rather than compare, because both
+    would otherwise produce a number that looks like a regression and is not one:
+
+    * **no baseline for the tier** — a gate that passes because there is nothing to compare
+      against is not a gate;
+    * **a different sampling plan** — a metric over one sample and a metric over another are two
+      measurements, not a change in the parser. Re-baseline deliberately instead (ac4).
     """
     tier_baseline = (baseline.get("tiers") or {}).get(tier)
     if not tier_baseline:
@@ -420,6 +459,16 @@ def check_against_baseline(
             [
                 f"no baseline is established for the {tier} tier; run scripts/run_parser_eval.py "
                 "--write-baseline and commit it with a coach-reviewed report"
+            ],
+            [],
+        )
+    recorded_plan = baseline.get("sampling_plan_id", "")
+    if plan_id and recorded_plan and recorded_plan != plan_id:
+        return (
+            [
+                f"the baseline was measured over sampling plan {recorded_plan!r} and this run used "
+                f"{plan_id!r}; two samples are two measurements, not a regression. Re-baseline with "
+                "a coach-reviewed report instead of comparing across plans"
             ],
             [],
         )
@@ -455,6 +504,7 @@ def report_json(
     tier: str,
     parser_version: str,
     profile_version: str,
+    plan_id: str,
     groups: Mapping[str, GroupScore],
     per_file: Mapping[str, FileScore],
     gate_failures: Sequence[str],
@@ -462,11 +512,18 @@ def report_json(
     label_status: Mapping[str, int],
 ) -> dict[str, Any]:
     """The machine-readable report. Keyed by SHA-256; no file name, school or text appears."""
+    overall = groups.get("overall")
     return {
         "tier": tier,
         "parser_version": parser_version,
         "profile_version": profile_version,
         "files": len(per_file),
+        "sampling": {
+            "plan_id": plan_id,
+            "labeled_rows": overall.score.labeled_rows if overall else 0,
+            "total_rows": overall.score.total_rows if overall else 0,
+            "rate": _round(overall.score.sampling_rate) if overall else None,
+        },
         "label_status": dict(label_status),
         "groups": {name: group.as_json() for name, group in groups.items()},
         "targets": evaluate_targets(groups),
@@ -489,6 +546,9 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"| Parser version | `{report['parser_version']}` |",
         f"| Profile version | `{report['profile_version']}` |",
         f"| Files | {report['files']} |",
+        f"| Labeled rows | {report['sampling']['labeled_rows']} of {report['sampling']['total_rows']} "
+        f"paragraphs ({_cell(report['sampling']['rate'])} of the corpus), sampling plan "
+        f"`{report['sampling']['plan_id'] or 'none'}` |",
         "| Label status | "
         + ", ".join(f"{status} {count}" for status, count in report["label_status"].items())
         + " |",
@@ -496,6 +556,10 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         "",
         "Scores are micro-averaged: counts are summed over every paragraph in a group before a ratio is",
         "taken. `—` means nothing to measure (no labels and no predictions of that kind).",
+        "",
+        "**Labeling is sampled**, so every row below states the labeled rows it was computed over: the",
+        "six-file PR subset is labeled in full, and about a quarter of every other file in contiguous",
+        "blocks. A card is scored only where it lies wholly inside a labeled block.",
         "",
         "## Targets",
         "",
@@ -515,15 +579,30 @@ def render_markdown(report: Mapping[str, Any]) -> str:
 
     groups: Mapping[str, Any] = report["groups"]
     unit_names = [unit.value for unit in SCORED_UNITS]
-    lines += ["", "## Unit F1 by group", "", "| Group | Files | " + " | ".join(unit_names) + " |"]
-    lines.append("|---|---|" + "---|" * len(unit_names))
+    lines += [
+        "",
+        "## Unit F1 by group",
+        "",
+        "| Group | Files | Labeled rows | Rate | " + " | ".join(unit_names) + " |",
+    ]
+    lines.append("|---|---|---|---|" + "---|" * len(unit_names))
     for name, group in groups.items():
         cells = [_cell(group["units"][unit]["f1"]) for unit in unit_names]
-        lines.append(f"| {name} | {group['files']} | " + " | ".join(cells) + " |")
+        sampling = group["sampling"]
+        lines.append(
+            f"| {name} | {group['files']} | {sampling['labeled_rows']} of {sampling['total_rows']} | "
+            f"{_cell(sampling['rate'])} | " + " | ".join(cells) + " |"
+        )
 
-    lines += ["", "## Precision and recall, overall", "", "| Unit | Support | Precision | Recall | F1 |"]
-    lines.append("|---|---|---|---|---|")
     overall = groups.get("overall")
+    labeled = overall["sampling"]["labeled_rows"] if overall else 0
+    lines += [
+        "",
+        f"## Precision and recall, overall ({labeled} labeled paragraphs)",
+        "",
+        "| Unit | Support | Precision | Recall | F1 |",
+    ]
+    lines.append("|---|---|---|---|---|")
     if overall is not None:
         for unit in unit_names:
             counts = overall["units"][unit]
@@ -536,14 +615,15 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         "",
         "## Cards and spans by group",
         "",
-        "| Group | Labeled cards | Boundary exact match | Card precision | Completeness accuracy "
-        "| Span paragraphs | Underline F1 | Highlight F1 | Span F1 |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| Group | Labeled rows | Labeled cards | Boundary exact match | Card precision "
+        "| Completeness accuracy | Span paragraphs | Underline F1 | Highlight F1 | Span F1 |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for name, group in groups.items():
         cards, spans = group["cards"], group["spans"]
         lines.append(
-            f"| {name} | {cards['labeled']} | {_cell(cards['boundary_exact_match'])} | "
+            f"| {name} | {group['sampling']['labeled_rows']} | {cards['labeled']} | "
+            f"{_cell(cards['boundary_exact_match'])} | "
             f"{_cell(cards['card_precision'])} | {_cell(cards['completeness_accuracy'])} | "
             f"{spans['paragraphs']} | {_cell(spans['underline']['f1'])} | "
             f"{_cell(spans['highlight']['f1'])} | "

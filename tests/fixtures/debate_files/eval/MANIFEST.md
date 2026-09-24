@@ -25,6 +25,15 @@ that holds it is in the **path map**, `~/.debate-intelligence/parser-eval-paths.
 `$DEBATE_PARSER_EVAL_PATHS`), which is outside the repository and which the tooling refuses to
 write inside it.
 
+**And no plain SHA-256 either.** A plain digest is not an anonymiser, it is a join key: this
+repository is public and the OpenCaselist archives are public, so anyone could hash the same corpus
+and read a committed digest straight back to `<School>/<TeamCode>/<filename>` — exactly what
+leaving the names out was for. Every digest here is an **HMAC-SHA256** under a key kept beside the
+path map at `~/.debate-intelligence/parser-eval-digest.key`, never committed. CI never checks these
+digests (it has no files), the fixture-changed validator still works because an HMAC over changed
+content differs, and the operator holds the key. See
+[`digests.py`](../../../evals/parser/digests.py).
+
 ## How the files were chosen
 
 [`scripts/select_eval_files.py`](../../../../scripts/select_eval_files.py) proposed the selection on
@@ -33,8 +42,8 @@ write inside it.
 snapshot (the newest; the snapshots are cumulative) and the 2026-27 Policy camp files. It read
 bytes and style references only, never text, and printed counts only.
 
-* Candidates are ordered by SHA-256, so the choice is reproducible and has nothing to do with who
-  wrote a file or what it is called.
+* Candidates are ordered by their keyed digest, so the choice is reproducible and has nothing to do
+  with who wrote a file or what it is called.
 * Each category meets the strata Goal criterion ac1 names first, then fills across
   format × season × template family.
 * Template family is `scripts/survey_docx_styles.py`'s classifier, the one the style survey used.
@@ -55,40 +64,40 @@ Until the coach approves it, nothing is labeled.
 
 ## The selection
 
-`sha256` is the first 16 hex digits; `manifest.json` has the full value.
+`digest` is the first 16 hex digits of the keyed digest; `manifest.json` has the full value.
 
-| sha256 | Category | Season | Format | Template family | PR subset |
+| digest | Category | Season | Format | Template family | PR subset |
 |---|---|---|---|---|---|
-| `654670a36839df3f` | team | 2024-25 | LD | other-heuristic |  |
-| `02896227b5258b55` | team | 2024-25 | LD | verbatim |  |
-| `0787bc76a18c2cc5` | team | 2024-25 | LD | wiki-converted |  |
-| `002fe74ed9fb3376` | team | 2024-25 | PF | other-heuristic | yes |
-| `20441979471f1404` | team | 2024-25 | PF | verbatim | yes |
-| `2629a939544980b3` | team | 2025-26 | LD | other-heuristic |  |
-| `033f0e75f4663b3f` | team | 2025-26 | LD | verbatim |  |
-| `6cff3aec913a711e` | team | 2025-26 | LD | wiki-converted |  |
-| `026411e2f9d8ff4a` | team | 2025-26 | PF | other-heuristic |  |
-| `33f2b03c3f1ae8bc` | team | 2025-26 | PF | verbatim |  |
-| `68330aca9c306e5e` | team | 2025-26 | Policy | verbatim |  |
-| `08c20c5383b924a7` | team | 2026-27 | PF | verbatim |  |
-| `0014a46118fad7e7` | caselist | 2026-27 | LD | cardmirror |  |
-| `00541c0d85e81e49` | caselist | 2026-27 | LD | cardmirror |  |
-| `007dd1116e1ac77c` | caselist | 2026-27 | LD | cardmirror |  |
-| `00e1cfba1fed6be6` | caselist | 2026-27 | LD | other-heuristic |  |
-| `05cd6b7e1a0e140a` | caselist | 2026-27 | LD | other-heuristic |  |
-| `09cf114a0975a01f` | caselist | 2026-27 | LD | other-heuristic |  |
-| `0b656206e0219bcb` | caselist | 2026-27 | LD | other-heuristic |  |
-| `04e0dfabbb9234f1` | caselist | 2026-27 | LD | verbatim |  |
-| `059de01874250837` | caselist | 2026-27 | LD | verbatim | yes |
-| `05b52cfcd66b325b` | caselist | 2026-27 | LD | verbatim |  |
-| `001c718fb904b558` | caselist | 2026-27 | LD | wiki-converted |  |
-| `02469e600c35b35f` | caselist | 2026-27 | LD | wiki-converted | yes |
-| `064cca568eabc8cb` | camp | 2026-27 | Policy | cardmirror |  |
-| `0671fb02f4dc37b0` | camp | 2026-27 | Policy | cardmirror |  |
-| `3640a41b4e6b6000` | camp | 2026-27 | Policy | other-heuristic |  |
-| `cca8ddcc1cf1ac62` | camp | 2026-27 | Policy | other-heuristic | yes |
-| `296384935261f77d` | camp | 2026-27 | Policy | verbatim | yes |
-| `2f6060b31b5c57d0` | camp | 2026-27 | Policy | verbatim |  |
+| `93c9db239ccfd360` | team | 2024-25 | LD | other-heuristic |  |
+| `569327e939db86f6` | team | 2024-25 | LD | verbatim |  |
+| `b02c230aa4f3e1b9` | team | 2024-25 | LD | wiki-converted |  |
+| `9d0a74b95ccf9269` | team | 2024-25 | PF | other-heuristic | yes |
+| `a888a5db95488218` | team | 2024-25 | PF | verbatim | yes |
+| `cfe852ee3f4e49d9` | team | 2025-26 | LD | other-heuristic |  |
+| `1538bd64e454894e` | team | 2025-26 | LD | verbatim |  |
+| `f2e5e7ea9706807a` | team | 2025-26 | LD | wiki-converted |  |
+| `d52fdcceb45b789c` | team | 2025-26 | PF | other-heuristic |  |
+| `90ee056b8f95296a` | team | 2025-26 | PF | verbatim |  |
+| `4f9115e33c3dbad3` | team | 2025-26 | Policy | verbatim |  |
+| `a8afd234413032f4` | team | 2026-27 | PF | verbatim |  |
+| `4e5d4ca9ceb8217b` | caselist | 2026-27 | LD | cardmirror |  |
+| `7847cb0097628fff` | caselist | 2026-27 | LD | cardmirror |  |
+| `d493ea2573ca9a1d` | caselist | 2026-27 | LD | cardmirror |  |
+| `3a4b7d4717904624` | caselist | 2026-27 | LD | other-heuristic |  |
+| `56f3905d5fe679e3` | caselist | 2026-27 | LD | other-heuristic |  |
+| `90fe3d84f2ba99e9` | caselist | 2026-27 | LD | other-heuristic |  |
+| `f897900ef90160ac` | caselist | 2026-27 | LD | other-heuristic |  |
+| `06e05b7abae54eb2` | caselist | 2026-27 | LD | verbatim | yes |
+| `15be67df9cfaa272` | caselist | 2026-27 | LD | verbatim |  |
+| `bcfba63d8d9d6a29` | caselist | 2026-27 | LD | verbatim |  |
+| `0bf568786e7dc6bb` | caselist | 2026-27 | LD | wiki-converted |  |
+| `4b11269583a94621` | caselist | 2026-27 | LD | wiki-converted | yes |
+| `71ce5ee012203a7e` | camp | 2026-27 | Policy | cardmirror |  |
+| `930a44726db76488` | camp | 2026-27 | Policy | cardmirror |  |
+| `18346891306c5a9d` | camp | 2026-27 | Policy | other-heuristic |  |
+| `a99a55d4d1d282f2` | camp | 2026-27 | Policy | other-heuristic | yes |
+| `bad8c9119196b60a` | camp | 2026-27 | Policy | verbatim | yes |
+| `f3442236bb398f4b` | camp | 2026-27 | Policy | verbatim |  |
 
 ### Against Goal criterion ac1
 
@@ -103,6 +112,54 @@ Until the coach approves it, nothing is labeled.
 
 `coverage_shortfalls()` in [`labels_schema.py`](../../../evals/parser/labels_schema.py) checks the
 same list, and `test_labels_schema.py` runs it against `manifest.json` on every PR.
+
+### The sampling plan
+
+Labeling all thirty files in full is about 5,800 rows of judgment work. Plan `792cad9c0f3fa456`
+(generated 2026-09-23 by [`scripts/plan_eval_sampling.py`](../../../../scripts/plan_eval_sampling.py))
+labels **1,876 of 5,788 paragraphs, 32.4%**: the six PR-subset files in full (435 rows, because they
+gate every pull request and cannot be partial) and 1,441 of the other 5,353 rows, 26.9%, in
+contiguous blocks.
+
+Blocks are at least 20 paragraphs, chosen deterministically from each file's keyed digest, and
+weighted toward blocks whose pre-labels hold `POCKET`, `UNDERTAG` or `ANALYTIC` — the sparsest units
+and the ones the parser is weakest on. The weighting changes *which* blocks are picked, never how
+many, so the rate does not move. A short file whose quarter would be under 20 paragraphs is labeled
+whole instead; that is why some rates below are well above 25%.
+
+| digest | Category | Paragraphs | Labeled | Rate | Blocks |
+|---|---|---|---|---|---|
+| `93c9db239ccfd360` | team | 62 | 22 | 35% | 40-61 |
+| `569327e939db86f6` | team | 143 | 43 | 30% | 20-39, 120-142 |
+| `b02c230aa4f3e1b9` | team | 96 | 20 | 21% | 20-39 |
+| `9d0a74b95ccf9269` | team | 29 | 29 | 100% | whole file |
+| `a888a5db95488218` | team | 31 | 31 | 100% | whole file |
+| `cfe852ee3f4e49d9` | team | 128 | 48 | 38% | 80-127 |
+| `1538bd64e454894e` | team | 49 | 20 | 41% | 0-19 |
+| `f2e5e7ea9706807a` | team | 91 | 31 | 34% | 60-90 |
+| `d52fdcceb45b789c` | team | 283 | 80 | 28% | 40-59, 100-139, 180-199 |
+| `90ee056b8f95296a` | team | 550 | 140 | 25% | 0-55, 336-419 |
+| `4f9115e33c3dbad3` | team | 196 | 56 | 29% | 20-39, 160-195 |
+| `a8afd234413032f4` | team | 1020 | 255 | 25% | 0-50, 102-152, 459-560, 918-968 |
+| `4e5d4ca9ceb8217b` | caselist | 119 | 40 | 34% | 0-19, 40-59 |
+| `7847cb0097628fff` | caselist | 315 | 80 | 25% | 0-19, 60-79, 140-159, 220-239 |
+| `d493ea2573ca9a1d` | caselist | 162 | 42 | 26% | 0-19, 140-161 |
+| `3a4b7d4717904624` | caselist | 79 | 20 | 25% | 20-39 |
+| `56f3905d5fe679e3` | caselist | 149 | 40 | 27% | 40-59, 80-99 |
+| `90fe3d84f2ba99e9` | caselist | 178 | 40 | 22% | 0-19, 100-119 |
+| `f897900ef90160ac` | caselist | 113 | 20 | 18% | 40-59 |
+| `06e05b7abae54eb2` | caselist | 68 | 68 | 100% | whole file |
+| `15be67df9cfaa272` | caselist | 77 | 20 | 26% | 0-19 |
+| `bcfba63d8d9d6a29` | caselist | 129 | 49 | 38% | 0-19, 100-128 |
+| `0bf568786e7dc6bb` | caselist | 62 | 20 | 32% | 0-19 |
+| `4b11269583a94621` | caselist | 55 | 55 | 100% | whole file |
+| `71ce5ee012203a7e` | camp | 466 | 120 | 26% | 0-23, 120-143, 168-191, 288-311, 408-431 |
+| `930a44726db76488` | camp | 108 | 20 | 19% | 0-19 |
+| `18346891306c5a9d` | camp | 321 | 80 | 25% | 100-119, 140-179, 280-299 |
+| `a99a55d4d1d282f2` | camp | 198 | 198 | 100% | whole file |
+| `bad8c9119196b60a` | camp | 54 | 54 | 100% | whole file |
+| `f3442236bb398f4b` | camp | 457 | 135 | 30% | 0-22, 184-206, 230-252, 345-367, 414-456 |
+
 
 Two things the coach may want to weigh when approving: the caselist files are all LD and the camp
 files all Policy, because that is what the local corpus holds (hsld26 snapshots, Policy camp

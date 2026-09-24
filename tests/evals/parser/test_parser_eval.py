@@ -28,25 +28,42 @@ from tests.evals.parser.corpus import (
     load_path_map,
     run_evaluation,
 )
+from tests.evals.parser.digests import load_key
 from tests.evals.parser.labels_schema import (
     REPOSITORY_ROOT,
     Category,
     DebateFormat,
+    FileSamplingPlan,
     LabelStatus,
     Manifest,
     ManifestEntry,
+    SamplingPlan,
     TemplateFamily,
     load_label_files,
     load_manifest,
+    load_sampling_plan,
 )
 from tests.evals.parser.metrics import render_markdown
-from tests.evals.parser.synthetic import build_synthetic_file
+from tests.evals.parser.synthetic import TEST_DIGEST_KEY, build_synthetic_file
 
 from debate_core.domain.style_profile import StructuralUnit
 
 BASELINE_PATH = REPOSITORY_ROOT / "tests" / "evals" / "baselines" / "parser.json"
 REPORT_DIRECTORY = REPOSITORY_ROOT / "build" / "eval-reports"
 PR_SUBSET_BUDGET_SECONDS = 30.0
+SYNTHETIC_PLAN_ID = "abcdef0123456789"
+
+
+def _run(manifest, labels, path_map, plan, *, tier="full", baseline=None):  # type: ignore[no-untyped-def]
+    return run_evaluation(
+        tier=tier,
+        manifest=manifest,
+        labels=labels,
+        path_map=path_map,
+        plan=plan,
+        key=TEST_DIGEST_KEY,
+        baseline=PERFECT_BASELINE if baseline is None else baseline,
+    )
 
 
 # --------------------------------------------------------------------------------------------
@@ -54,25 +71,48 @@ PR_SUBSET_BUDGET_SECONDS = 30.0
 # --------------------------------------------------------------------------------------------
 
 
-def _synthetic_setup(
-    tmp_path: Path, content: bytes | None = None, status: LabelStatus = LabelStatus.CORRECTED
-):  # type: ignore[no-untyped-def]
-    synthetic = build_synthetic_file(status)
+def _synthetic_setup(  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    content: bytes | None = None,
+    status: LabelStatus = LabelStatus.CORRECTED,
+    blocks: tuple[tuple[int, int], ...] | None = None,
+):
+    """A manifest, labels, path map and plan for the invented file, shaped like the real ones."""
+    synthetic = build_synthetic_file(status, blocks=blocks, plan_id=SYNTHETIC_PLAN_ID)
     path = tmp_path / "evaluation-file.docx"
     path.write_bytes(synthetic.content if content is None else content)
     entry = ManifestEntry(
-        sha256=synthetic.sha256,
+        digest=synthetic.digest,
         category=Category.TEAM,
         season="2025-26",
         debate_format=DebateFormat.LD,
         template_family=TemplateFamily.VERBATIM,
         pr_subset=True,
     )
-    return Manifest(entries=(entry,)), {synthetic.sha256: synthetic.labels}, {synthetic.sha256: path}
+    plan = SamplingPlan(
+        plan_id=SYNTHETIC_PLAN_ID,
+        generated_on="2026-09-23",
+        parser_version="hand-written",
+        files=(
+            FileSamplingPlan(
+                digest=synthetic.digest,
+                paragraphs=synthetic.labels.header.paragraph_count,
+                blocks=synthetic.labels.blocks,
+                full=blocks is None,
+            ),
+        ),
+    )
+    return (
+        Manifest(entries=(entry,)),
+        {synthetic.digest: synthetic.labels},
+        {synthetic.digest: path},
+        plan,
+    )
 
 
 PERFECT_BASELINE: dict[str, Any] = {
     "parser_version": "2026.09.20-docx-1",
+    "sampling_plan_id": SYNTHETIC_PLAN_ID,
     "tiers": {
         "full": {
             "overall": {
@@ -90,9 +130,15 @@ PERFECT_BASELINE: dict[str, Any] = {
 
 
 def test_the_harness_scores_the_invented_file_against_its_hand_written_labels(tmp_path: Path) -> None:
-    manifest, labels, path_map = _synthetic_setup(tmp_path)
+    manifest, labels, path_map, plan = _synthetic_setup(tmp_path)
     report = run_evaluation(
-        tier="full", manifest=manifest, labels=labels, path_map=path_map, baseline=PERFECT_BASELINE
+        tier="full",
+        manifest=manifest,
+        labels=labels,
+        path_map=path_map,
+        plan=plan,
+        key=TEST_DIGEST_KEY,
+        baseline=PERFECT_BASELINE,
     )
     overall = report["groups"]["overall"]
     for unit in ("POCKET", "HAT", "BLOCK", "TAG", "CITE", "EVIDENCE", "ANALYTIC", "OTHER"):
@@ -109,14 +155,20 @@ def test_the_harness_scores_the_invented_file_against_its_hand_written_labels(tm
 
 def test_the_harness_gate_fails_when_the_labels_and_parser_disagree(tmp_path: Path) -> None:
     """Label the analytic a tag: the parser's (correct) ANALYTIC now scores as a missed TAG."""
-    manifest, labels, path_map = _synthetic_setup(tmp_path)
-    ((sha, label_file),) = labels.items()
+    manifest, labels, path_map, plan = _synthetic_setup(tmp_path)
+    ((digest, label_file),) = labels.items()
     paragraphs = list(label_file.paragraphs)
     paragraphs[7] = paragraphs[7].model_copy(update={"unit": StructuralUnit.TAG})
 
-    mislabeled = {sha: replace(label_file, paragraphs=tuple(paragraphs))}
+    mislabeled = {digest: replace(label_file, paragraphs=tuple(paragraphs))}
     report = run_evaluation(
-        tier="full", manifest=manifest, labels=mislabeled, path_map=path_map, baseline=PERFECT_BASELINE
+        tier="full",
+        manifest=manifest,
+        labels=mislabeled,
+        path_map=path_map,
+        plan=plan,
+        key=TEST_DIGEST_KEY,
+        baseline=PERFECT_BASELINE,
     )
     assert report["groups"]["overall"]["units"]["TAG"]["f1"] == 0.8  # tp 2, fn 1: 4 / 5
     assert report["gate"]["passed"] is False
@@ -124,33 +176,70 @@ def test_the_harness_gate_fails_when_the_labels_and_parser_disagree(tmp_path: Pa
 
 
 def test_the_harness_refuses_a_file_that_changed_under_its_labels(tmp_path: Path) -> None:
-    manifest, labels, path_map = _synthetic_setup(tmp_path, content=build_synthetic_file().content + b"\0")
+    manifest, labels, path_map, plan = _synthetic_setup(
+        tmp_path, content=build_synthetic_file().content + b"\0"
+    )
     with pytest.raises(EvaluationSetupError, match="labels are for"):
-        run_evaluation(
-            tier="full", manifest=manifest, labels=labels, path_map=path_map, baseline=PERFECT_BASELINE
-        )
+        _run(manifest, labels, path_map, plan)
 
 
 def test_the_harness_refuses_uncorrected_prelabels(tmp_path: Path) -> None:
-    manifest, labels, path_map = _synthetic_setup(tmp_path, status=LabelStatus.PRELABELED)
+    manifest, labels, path_map, plan = _synthetic_setup(tmp_path, status=LabelStatus.PRELABELED)
     with pytest.raises(EvaluationSetupError, match="the parser cannot grade itself"):
-        run_evaluation(
-            tier="full", manifest=manifest, labels=labels, path_map=path_map, baseline=PERFECT_BASELINE
-        )
+        _run(manifest, labels, path_map, plan)
 
 
 def test_the_harness_refuses_a_missing_file(tmp_path: Path) -> None:
-    manifest, labels, _ = _synthetic_setup(tmp_path)
+    manifest, labels, _, plan = _synthetic_setup(tmp_path)
     with pytest.raises(EvaluationSetupError, match="not found on this machine"):
-        run_evaluation(tier="full", manifest=manifest, labels=labels, path_map={}, baseline=PERFECT_BASELINE)
+        _run(manifest, labels, {}, plan)
 
 
 def test_the_harness_fails_a_tier_with_no_baseline(tmp_path: Path) -> None:
-    manifest, labels, path_map = _synthetic_setup(tmp_path)
-    report = run_evaluation(
-        tier="pr-subset", manifest=manifest, labels=labels, path_map=path_map, baseline={}
-    )
+    manifest, labels, path_map, plan = _synthetic_setup(tmp_path)
+    report = _run(manifest, labels, path_map, plan, tier="pr-subset", baseline={})
     assert report["gate"]["passed"] is False
+
+
+def test_the_harness_scores_a_sampled_file_over_its_blocks_only(tmp_path: Path) -> None:
+    """Blocks 0-7 hold the first card and the analytic; the second card (8-10) is outside them."""
+    manifest, labels, path_map, plan = _synthetic_setup(tmp_path, blocks=((0, 7),))
+    report = _run(manifest, labels, path_map, plan)
+    assert report["sampling"] == {
+        "plan_id": SYNTHETIC_PLAN_ID,
+        "labeled_rows": 8,
+        "total_rows": 11,
+        "rate": 0.7273,
+    }
+    overall = report["groups"]["overall"]
+    assert overall["units"]["ANALYTIC"]["support"] == 1
+    assert overall["units"]["TAG"]["support"] == 1  # the tag at 8 is outside the block
+    # One card labeled and one judged: the card at 8-10 is unlabeled and unjudged, not a false positive.
+    assert overall["cards"]["labeled"] == 1
+    assert overall["cards"]["predicted"] == 1
+    assert overall["cards"]["boundary_exact_match"] == 1.0
+    assert report["gate"]["passed"] is True
+
+
+def test_the_harness_refuses_labels_made_under_a_different_plan(tmp_path: Path) -> None:
+    """Relabeling under a new plan without re-baselining would compare two different samples."""
+    manifest, labels, path_map, plan = _synthetic_setup(tmp_path)
+    moved = SamplingPlan(
+        plan_id="0123456789abcdef",
+        generated_on=plan.generated_on,
+        parser_version=plan.parser_version,
+        files=plan.files,
+    )
+    with pytest.raises(EvaluationSetupError, match="were made under plan"):
+        _run(manifest, labels, path_map, moved)
+
+
+def test_the_gate_refuses_when_the_baseline_was_measured_over_another_plan(tmp_path: Path) -> None:
+    manifest, labels, path_map, plan = _synthetic_setup(tmp_path)
+    baseline = {**PERFECT_BASELINE, "sampling_plan_id": "0123456789abcdef"}
+    report = _run(manifest, labels, path_map, plan, baseline=baseline)
+    assert report["gate"]["passed"] is False
+    assert "two samples are two measurements" in report["gate"]["failures"][0]
 
 
 def test_the_path_map_is_refused_inside_the_repository() -> None:
@@ -174,20 +263,30 @@ def test_the_committed_baseline_names_a_parser_version() -> None:
 
 def _run_real_tier(tier: str) -> dict[str, Any]:
     path_map = load_path_map()
-    if path_map is None:
-        pytest.skip("no evaluation path map on this machine; the real corpus never reaches CI")
+    key = load_key()
+    if path_map is None or key is None:
+        pytest.skip("no evaluation path map or digest key on this machine; the corpus never reaches CI")
     manifest = load_manifest()
+    plan = load_sampling_plan()
     labels = load_label_files()
     entries = manifest.pr_subset if tier == "pr-subset" else manifest.entries
     not_ready = [
         e
         for e in entries
-        if e.sha256 not in labels or labels[e.sha256].header.status is LabelStatus.PRELABELED
+        if e.digest not in labels or labels[e.digest].header.status is LabelStatus.PRELABELED
     ]
     if not_ready:
         pytest.skip(f"{len(not_ready)} of {len(entries)} {tier} files are not yet corrected by a person")
     baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
-    report = run_evaluation(tier=tier, manifest=manifest, labels=labels, path_map=path_map, baseline=baseline)
+    report = run_evaluation(
+        tier=tier,
+        manifest=manifest,
+        labels=labels,
+        path_map=path_map,
+        plan=plan,
+        key=key,
+        baseline=baseline,
+    )
     REPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
     stem = "parser" if tier == "full" else "parser-pr-subset"
     (REPORT_DIRECTORY / f"{stem}.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
@@ -209,3 +308,25 @@ def test_the_labeled_pr_subset_holds_the_baseline() -> None:
 def test_the_full_labeled_set_holds_the_baseline() -> None:
     report = _run_real_tier("full")
     assert report["gate"]["passed"], "\n".join(report["gate"]["failures"])
+
+
+# --------------------------------------------------------------------------------------------
+# The committed sampling plan
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_committed_plan_covers_every_manifest_file_and_samples_what_ac1_asks() -> None:
+    manifest = load_manifest()
+    plan = load_sampling_plan()
+    assert {file.digest for file in plan.files} == {entry.digest for entry in manifest.entries}
+    for entry in manifest.pr_subset:
+        assert plan.of(entry.digest).full, "the PR subset gates every PR, so it is labeled in full"
+    for file in plan.files:
+        assert file.blocks, "every file contributes rows"
+        for first, last in file.blocks:
+            assert (
+                last - first + 1 >= plan.minimum_block or file.full or file.paragraphs <= plan.minimum_block
+            )
+    sampled = [file for file in plan.files if not file.full]
+    rate = sum(file.labeled_rows for file in sampled) / sum(file.paragraphs for file in sampled)
+    assert 0.20 <= rate <= 0.35, f"about a quarter of every non-subset file; got {rate:.1%}"

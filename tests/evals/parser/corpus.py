@@ -1,12 +1,15 @@
 """Finding the evaluation files where they live, and running the evaluation over them.
 
 The evaluation files are never in the repository (see `labels_schema`). On the operator's machine
-a **path map** — a JSON object from SHA-256 to an absolute path — says where each one is. The
+a **path map** — a JSON object from keyed digest to an absolute path — says where each one is. The
 path map is written by `scripts/select_eval_files.py`, lives **outside the repository**
 (`~/.debate-intelligence/parser-eval-paths.json` by default, or `$DEBATE_PARSER_EVAL_PATHS`), and
 is refused if it is pointed inside it: a path carries a school and a team code.
 
-Where there is no path map — a CI runner, a fresh clone — the evaluation has nothing to run
+The digest key sits beside it (see `digests`), and neither is committed: a path names a school and
+a team code, and a key would turn every committed digest back into a join key.
+
+Where there is no path map or no key — a CI runner, a fresh clone — the evaluation has nothing to run
 against, and the tests that need it skip with a message saying so. The policy is explicit that the
 real corpus never reaches a CI runner (`caselist-data-use.md`, dev environment exception, limit 4).
 """
@@ -21,6 +24,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Final
 
+from tests.evals.parser.digests import keyed_digest, text_digest
 from tests.evals.parser.labels_schema import (
     REPOSITORY_ROOT,
     Category,
@@ -28,6 +32,7 @@ from tests.evals.parser.labels_schema import (
     LabelStatus,
     Manifest,
     ManifestEntry,
+    SamplingPlan,
     status_counts,
     validate_against_texts,
     validate_label_file,
@@ -88,7 +93,7 @@ def _inside_repository(path: Path) -> bool:
 
 
 def load_path_map(location: Path | None = None) -> dict[str, Path] | None:
-    """SHA-256 → local path, or None when this machine has no evaluation corpus."""
+    """Keyed digest → local path, or None when this machine has no evaluation corpus."""
     location = location if location is not None else path_map_location()
     if _inside_repository(location):
         raise EvaluationSetupError(
@@ -97,13 +102,15 @@ def load_path_map(location: Path | None = None) -> dict[str, Path] | None:
     if not location.is_file():
         return None
     raw: dict[str, str] = json.loads(location.read_text(encoding="utf-8"))
-    return {sha: Path(path) for sha, path in raw.items()}
+    return {digest: Path(path) for digest, path in raw.items()}
 
 
 def _source_for(entry: ManifestEntry, content: bytes) -> tuple[SourceDocument, str | None]:
     caselist = entry.category is Category.CASELIST
     source = SourceDocument(
-        sha256=entry.sha256,
+        # The parser records a source sha256 in provenance. The evaluation never reads it back, and
+        # it never reaches a committed file: the manifest, plan and labels carry keyed digests.
+        sha256=hashlib.sha256(content).hexdigest(),
         byte_size=len(content),
         source_format=SourceFormat.DOCX,
         origin=SourceOrigin.CASELIST_ARCHIVE if caselist else SourceOrigin.OPENEV,
@@ -118,22 +125,25 @@ def _source_for(entry: ManifestEntry, content: bytes) -> tuple[SourceDocument, s
 def parse_evaluation_file(parser: DebateDocxParser, entry: ManifestEntry, content: bytes) -> ParsedDocument:
     """Parse one evaluation file. A refusal is an error here: every evaluation file is readable."""
     source, camp = _source_for(entry, content)
-    result = parser.parse(content, source, source_path=f"eval/{entry.sha256}.docx", camp=camp)
+    result = parser.parse(content, source, source_path=f"eval/{entry.digest}.docx", camp=camp)
     if not isinstance(result, ParsedDocument):
-        raise EvaluationSetupError(f"{entry.sha256[:12]}…: the parser refused the file ({result.reason})")
+        raise EvaluationSetupError(f"{entry.digest[:12]}…: the parser refused the file ({result.reason})")
     return result
 
 
 def load_evaluation_document(
-    entry: ManifestEntry, path_map: Mapping[str, Path], parser: DebateDocxParser | None = None
+    entry: ManifestEntry,
+    path_map: Mapping[str, Path],
+    key: bytes,
+    parser: DebateDocxParser | None = None,
 ) -> ParsedDocument:
     """Read one evaluation file from where the path map says it is, check its bytes, and parse it."""
-    path = path_map.get(entry.sha256)
+    path = path_map.get(entry.digest)
     if path is None or not path.is_file():
-        raise EvaluationSetupError(f"{entry.sha256[:12]}…: not found on this machine (see the path map)")
+        raise EvaluationSetupError(f"{entry.digest[:12]}…: not found on this machine (see the path map)")
     content = path.read_bytes()
-    if hashlib.sha256(content).hexdigest() != entry.sha256:
-        raise EvaluationSetupError(f"{entry.sha256[:12]}…: the file at its mapped path has changed")
+    if keyed_digest(content, key) != entry.digest:
+        raise EvaluationSetupError(f"{entry.digest[:12]}…: the file at its mapped path has changed")
     return parse_evaluation_file(parser if parser is not None else DebateDocxParser(), entry, content)
 
 
@@ -143,15 +153,17 @@ def run_evaluation(
     manifest: Manifest,
     labels: Mapping[str, LabelFile],
     path_map: Mapping[str, Path],
+    plan: SamplingPlan,
+    key: bytes,
     baseline: Mapping[str, Any],
     parser: DebateDocxParser | None = None,
 ) -> dict[str, Any]:
     """Parse, check and score every file in one tier, and return the report.
 
     Raises :class:`EvaluationSetupError` listing every problem at once — a missing label file, a
-    pre-label nobody corrected, a file that is not where the path map says, or a file that has
-    changed under its labels — rather than scoring what it could and reporting a number that
-    silently covers less than it claims to.
+    pre-label nobody corrected, labels that do not match the sampling plan, a file that is not
+    where the path map says, or a file that has changed under its labels — rather than scoring
+    what it could and reporting a number that silently covers less than it claims to.
     """
     if tier not in TIERS:
         raise ValueError(f"unknown tier {tier!r}; expected one of {TIERS}")
@@ -164,44 +176,50 @@ def run_evaluation(
     scored: list[tuple[ManifestEntry, FileScore]] = []
     per_file: dict[str, FileScore] = {}
     for entry in entries:
-        short = f"{entry.sha256[:12]}…"
-        label_file = labels.get(entry.sha256)
+        short = f"{entry.digest[:12]}…"
+        label_file = labels.get(entry.digest)
         if label_file is None:
             problems.append(f"{short}: no label file")
             continue
         if label_file.header.status is LabelStatus.PRELABELED:
             problems.append(f"{short}: labels are uncorrected pre-labels; the parser cannot grade itself")
             continue
-        problems += [f"{short}: {problem}" for problem in validate_label_file(label_file, manifest)]
-        path = path_map.get(entry.sha256)
+        problems += [f"{short}: {problem}" for problem in validate_label_file(label_file, manifest, plan)]
+        path = path_map.get(entry.digest)
         if path is None or not path.is_file():
             problems.append(f"{short}: not found on this machine (see the path map)")
             continue
         content = path.read_bytes()
         document = parse_evaluation_file(parser, entry, content)
         mismatches = validate_against_texts(
-            label_file, hashlib.sha256(content).hexdigest(), [section.text for section in document.sections]
+            label_file,
+            keyed_digest(content, key),
+            [section.text for section in document.sections],
+            lambda text: text_digest(text, key),
         )
         if mismatches:
             problems += [f"{short}: {problem}" for problem in mismatches]
             continue
         score = score_file(label_file, prediction_from_document(document))
         scored.append((entry, score))
-        per_file[entry.sha256] = score
+        per_file[entry.digest] = score
     if problems:
         raise EvaluationSetupError("the evaluation cannot run:\n  " + "\n  ".join(problems))
 
     groups = group_scores(scored)
-    failures, notes = check_against_baseline(groups, baseline, tier=tier, parser_version=DOCX_PARSER_VERSION)
+    failures, notes = check_against_baseline(
+        groups, baseline, tier=tier, parser_version=DOCX_PARSER_VERSION, plan_id=plan.plan_id
+    )
     return report_json(
         tier=tier,
         parser_version=DOCX_PARSER_VERSION,
         profile_version=parser.profile.profile_version,
+        plan_id=plan.plan_id,
         groups=groups,
         per_file=per_file,
         gate_failures=failures,
         gate_notes=notes,
         label_status={
-            status.value: count for status, count in status_counts(labels[e.sha256] for e in entries).items()
+            status.value: count for status, count in status_counts(labels[e.digest] for e in entries).items()
         },
     )

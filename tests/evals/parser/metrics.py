@@ -511,7 +511,7 @@ def report_json(
     gate_notes: Sequence[str],
     label_status: Mapping[str, int],
 ) -> dict[str, Any]:
-    """The machine-readable report. Keyed by SHA-256; no file name, school or text appears."""
+    """The machine-readable report. Keyed by keyed digest; no file name, school or text appears."""
     overall = groups.get("overall")
     return {
         "tier": tier,

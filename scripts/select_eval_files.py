@@ -97,8 +97,8 @@ _FORMAT_PATTERNS: tuple[tuple[re.Pattern[str], DebateFormat], ...] = (
     (re.compile(r"policy|^hspolicy\d", re.IGNORECASE), DebateFormat.POLICY),
 )
 
-#: What the manifest says about itself. One constant, so a re-key cannot carry a stale claim
-#: ("keyed by SHA-256") forward into a manifest that is no longer keyed that way.
+#: What the manifest says about itself. One constant, so a re-key cannot carry a stale description
+#: naming plain hashes forward into a manifest that is no longer keyed that way.
 MANIFEST_DESCRIPTION = (
     "Parser evaluation files, held on the operator's machine and never committed. Keyed by an "
     "HMAC digest under the operator's key, never a plain SHA-256, which over a public corpus "

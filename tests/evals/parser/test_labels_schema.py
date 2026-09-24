@@ -341,7 +341,7 @@ def test_the_manifest_summary_table_matches_manifest_json() -> None:
 
 
 def test_nothing_in_the_eval_directory_names_a_file() -> None:
-    """No .docx, no path, no file name: the manifest is SHA-256 and metadata only."""
+    """No .docx, no path, no file name: the manifest is keyed digests and metadata only."""
     for path in EVAL_FIXTURE_DIRECTORY.rglob("*"):
         assert path.suffix.lower() not in {".docx", ".doc", ".docm", ".pdf", ".csv"}, path.name
     raw = (EVAL_FIXTURE_DIRECTORY / "manifest.json").read_text(encoding="utf-8")

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -151,6 +152,70 @@ def test_nothing_committed_holds_a_plain_digest_of_a_corpus_file() -> None:
         plain = hashlib.sha256(content).hexdigest()
         assert plain not in committed, f"a plain digest of a corpus file is committed ({plain[:12]}…)"
         assert entry.digest == keyed_digest(content, key)
+
+
+#: Phrasings that *claim* the digests are plain hashes. "never a plain SHA-256" and "HMAC-SHA256"
+#: are the correct wording and do not match. Ordinary uses of `hashlib.sha256` in code do not either.
+_PLAIN_DIGEST_CLAIMS = (
+    re.compile(r"keyed by (a |an )?sha-?256", re.IGNORECASE),
+    re.compile(r"\bby sha-?256[,;.]", re.IGNORECASE),
+    re.compile(r"<sha256>"),
+    re.compile(r"(?<!hmac-)(?<!hmac)sha-?256 of (its|the paragraph|the file)", re.IGNORECASE),
+)
+
+_DOCUMENTED = (
+    "tests/fixtures/debate_files/eval/MANIFEST.md",
+    "tests/fixtures/debate_files/eval/labels/README.md",
+    "tests/evals/parser",
+    "scripts/prelabel_docx.py",
+    "scripts/select_eval_files.py",
+    "scripts/plan_eval_sampling.py",
+    "scripts/run_parser_eval.py",
+)
+
+
+def test_nothing_documents_the_digests_as_plain_hashes() -> None:
+    """The lines a future reader follows must not contradict the code.
+
+    Two lines of `MANIFEST.md` survived the re-key still saying files were listed "by SHA-256" and
+    labels keyed by "the SHA-256 of its text". The code was keyed the whole time; the documentation
+    was the part that would have talked someone into reintroducing the join key. This fails if that
+    wording comes back anywhere it would be read as the rule.
+    """
+    offenders: list[str] = []
+    for entry in _DOCUMENTED:
+        path = REPOSITORY_ROOT / entry
+        files = sorted(path.rglob("*.py")) if path.is_dir() else [path]
+        for file in files:
+            if file.name == "test_digests.py":
+                continue  # this module quotes the wrong wording in order to forbid it
+            for number, line in enumerate(file.read_text(encoding="utf-8").splitlines(), start=1):
+                if any(pattern.search(line) for pattern in _PLAIN_DIGEST_CLAIMS):
+                    offenders.append(f"{file.relative_to(REPOSITORY_ROOT)}:{number}: {line.strip()}")
+    assert not offenders, "documentation claims plain-SHA-256 keying:\n  " + "\n  ".join(offenders)
+
+
+def test_the_wording_guard_catches_the_lines_it_was_written_for() -> None:
+    """Otherwise the guard above could pass by matching nothing at all.
+
+    These two lines are verbatim what `MANIFEST.md` carried after the re-key, when the code was
+    already keyed.
+    """
+    survived_the_rekey = (
+        "| [`manifest.json`](manifest.json) | Each evaluation file by SHA-256, category, season, "
+        "format and template family, and whether it is in the PR subset. |",
+        "| [`labels/`](labels/) | One `<sha256>.jsonl` per file once it is labeled: each paragraph's "
+        "unit and card, keyed by paragraph index and the SHA-256 of its text. |",
+    )
+    for line in survived_the_rekey:
+        assert any(pattern.search(line) for pattern in _PLAIN_DIGEST_CLAIMS), line
+    for correct in (
+        "Each evaluation file by keyed digest, category, season, format and template family.",
+        "Every digest here is an **HMAC-SHA256** under a key kept beside the path map.",
+        "keyed by paragraph index and a keyed digest of its text",
+        "never a plain SHA-256, which over a public corpus would join straight back to the file",
+    ):
+        assert not any(pattern.search(correct) for pattern in _PLAIN_DIGEST_CLAIMS), correct
 
 
 def test_the_committed_manifest_and_plan_agree_on_their_digests() -> None:

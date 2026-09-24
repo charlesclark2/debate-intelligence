@@ -17,7 +17,8 @@ writes the report there, records that path in the baseline, and refuses to run u
 three label files — one team, one caselist, one camp — are `COACH_REVIEWED`. The coach reads the
 written report before it is committed.
 
-Nothing it writes names a file: groups and scores, keyed by SHA-256 in the JSON only.
+Nothing it writes names a file: groups and scores, keyed by the files' keyed digests in the JSON
+only (see `tests/evals/parser/digests.py`).
 """
 
 from __future__ import annotations

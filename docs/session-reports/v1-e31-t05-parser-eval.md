@@ -19,7 +19,7 @@ labeled in this session, and no pre-label was accepted as a label.
 
 What's built:
 
-- a proposed selection of 30 files, keyed by SHA-256, that meets every ac1 stratum;
+- a proposed selection of 30 files, keyed by a keyed digest, that meets every ac1 stratum;
 - a label schema with a structural validator and a validator that fails when a file changes under
   its labels;
 - a pre-labeling and correction workflow that cannot turn a pre-label into a label without a
@@ -101,7 +101,7 @@ Also run, though not a criterion:
 
 - `labels_schema.py`: manifest and label models, both validators, the ac1 coverage check.
 - `metrics.py`: scoring, groups, targets, gate, reports.
-- `corpus.py`: path map, loading a file by SHA-256, running a tier.
+- `corpus.py`: path map, loading a file by its keyed digest, running a tier.
 - `synthetic.py`: an invented file and its hand-written labels.
 - Test modules: `test_labels_schema.py`, `test_prelabel.py`, `test_metrics.py`, `test_parser_eval.py`.
 
@@ -184,6 +184,18 @@ them. Deviations 6 and 7 are the amendments' own work.
    - the manifest was re-keyed in place with `select_eval_files.py --rekey`, keeping the same
      thirty files, the same PR subset and the same metadata, so the zero-card wiki-converted file
      the PM asked to keep is still in the subset.
+
+   **A follow-up from the PM's review of this change:** two lines of `MANIFEST.md` still described
+   files "by SHA-256" and labels as `<sha256>.jsonl` keyed by "the SHA-256 of its text". The code
+   was keyed throughout, so nothing was exposed, but those are the lines a reader would have
+   followed to put the join key back. They were stale because a documentation edit in the re-keying
+   commit silently matched nothing and I did not check it. Corrected, along with three more the
+   same edit missed (`metrics.py`, `run_parser_eval.py`, `prelabel_docx.py`), the two rows now
+   point at one statement of the rule rather than repeating it, and the missing
+   `sampling-plan.json` row — dropped by the same failed edit — was restored.
+   `test_nothing_documents_the_digests_as_plain_hashes` now fails if that wording returns anywhere
+   it would be read as the rule, and a companion test proves the guard matches the exact lines that
+   survived, so it cannot pass by matching nothing.
 
    The cost is nothing CI needs: CI has no files to check digests against, and the
    fixture-changed validator still works because an HMAC over changed content differs. The cost to

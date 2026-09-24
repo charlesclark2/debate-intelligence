@@ -15,8 +15,9 @@ What the repository holds instead:
 
 | File | What it is |
 |---|---|
-| [`manifest.json`](manifest.json) | Each evaluation file by SHA-256, category, season, format and template family, and whether it is in the PR subset. The machine-readable manifest; the table below is its summary. |
-| [`labels/`](labels/) | One `<sha256>.jsonl` per file once it is labeled: each paragraph's unit and card, keyed by paragraph index and the SHA-256 of its text. No text. The [labeling guide](labels/README.md) says how. |
+| [`manifest.json`](manifest.json) | Each evaluation file by [keyed digest](#why-the-digests-are-keyed), category, season, format and template family, and whether it is in the PR subset. The machine-readable manifest; the table below is its summary. |
+| [`sampling-plan.json`](sampling-plan.json) | Which paragraphs of each file are labeled: the PR subset in full, contiguous blocks covering about a quarter of every other file. Generated once, before labeling. |
+| [`labels/`](labels/) | One `<digest>.jsonl` per file once it is labeled: each labeled paragraph's unit and card, keyed by paragraph index and a [keyed digest](#why-the-digests-are-keyed) of its text. No text. The [labeling guide](labels/README.md) says how. |
 | [`../../../evals/baselines/parser.json`](../../../evals/baselines/parser.json) | The scores the regression gate holds the parser to. |
 
 **No file name, path, school or team code appears in any of them.** A caselist file name is
@@ -25,7 +26,9 @@ that holds it is in the **path map**, `~/.debate-intelligence/parser-eval-paths.
 `$DEBATE_PARSER_EVAL_PATHS`), which is outside the repository and which the tooling refuses to
 write inside it.
 
-**And no plain SHA-256 either.** A plain digest is not an anonymiser, it is a join key: this
+### Why the digests are keyed
+
+**No plain SHA-256 either.** A plain digest is not an anonymiser, it is a join key: this
 repository is public and the OpenCaselist archives are public, so anyone could hash the same corpus
 and read a committed digest straight back to `<School>/<TeamCode>/<filename>` — exactly what
 leaving the names out was for. Every digest here is an **HMAC-SHA256** under a key kept beside the

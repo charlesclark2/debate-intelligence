@@ -20,7 +20,7 @@ without being looked at:
    label file as `CORRECTED`, recording which role corrected it and how many rows changed.
 4. **`mark-reviewed`** records that the coach spot-checked a corrected file end to end.
 
-What it prints is counts and SHA-256 prefixes, never text or paths.
+What it prints is counts and keyed-digest prefixes, never text or paths.
 
 ## Worksheet columns
 

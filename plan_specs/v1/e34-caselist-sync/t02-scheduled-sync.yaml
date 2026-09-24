@@ -90,7 +90,7 @@ spec:
         DEBATE_ENV and the AWS profile, and an install script with a --dry-run mode that renders the plist
         without loading it; the operator has recorded the dev validation run and the first scheduled run.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

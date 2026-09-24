@@ -5,9 +5,11 @@ does is small; the order it does it in is the whole design.
 
 ## Why the order is the point
 
-An OpenCaselist download is a window of roughly a week's edits, not a cumulative archive, and
-nothing outside our own store can re-fetch one that was missed (ADR-0016). The local evidence store
-is the archive of record, and publishing is what stops it being a single laptop.
+An OpenCaselist weekly download is a window of roughly a week's edits. The site keeps a
+back-catalogue of them and a regenerated complete archive (ADR-0017), so a window missed today can
+be fetched later — but only for as long as the site keeps it, and retention is undocumented. The
+local evidence store is the archive of record, and publishing is what stops it being a single
+laptop.
 
 The bucket's `manifests/<caselist>/<snapshot>.jsonl` is what everything downstream trusts:
 `caselist status` reads a manifest's presence as "this snapshot is published", and the scheduled

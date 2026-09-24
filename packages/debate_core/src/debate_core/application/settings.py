@@ -94,6 +94,7 @@ from pydantic_settings import (
 )
 
 from debate_core.application.errors import DomainError
+from debate_core.domain.caselist import Event
 
 __all__ = [
     "BUILTIN_PROFILES",
@@ -104,6 +105,7 @@ __all__ = [
     "PROFILE_DIRECTORY_VARIABLE",
     "PROFILE_SUBDIRECTORY",
     "SECRET_PLACEHOLDER",
+    "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
     "CaselistTokenBackend",
     "ConfigurationError",
@@ -389,6 +391,14 @@ class ProviderSettings(SettingsGroup):
 MAX_CASELIST_DOWNLOADS_PER_MINUTE: Final = 10
 """The OpenCaselist maintainer's rate limit: file downloads per minute (policy clause 12)."""
 
+MAX_CASELIST_BULK_DOWNLOADS_PER_DAY: Final = 5
+"""OpenCaselist's own ceiling on bulk archive downloads per user per day.
+
+Found in the upstream source by `v1-e34-t01` (`weeklyLimiter`), separate from the per-minute limit
+above. The scheduled sync budgets for it across the configured caselists (`v1-e34-t02`), and this
+is a ceiling rather than a default: a setting above it would only be refused by the server.
+"""
+
 
 class CaselistTokenBackend(StrEnum):
     """Where the operator's caselist_token is kept between runs."""
@@ -502,6 +512,72 @@ class CaselistSettings(SettingsGroup):
             "gitignored."
         ),
     )
+
+    # --- The weekly scheduled sync (v1-e34-t02-scheduled-sync) ----------------------------------
+    #
+    # Which caselists the weekly pull covers, where its downloads land, and how many bulk downloads
+    # it may spend in a day. No slug is a default: a caselist is a decision an operator records in
+    # a profile or types on the command line, not something a release of this package ships.
+
+    sync_caselists: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Caselist slugs `caselist pull` covers when no --caselist is given. Empty by default: "
+            "which caselists this installation follows is the operator's decision, and a hardcoded "
+            "slug in a committed file would make it ours."
+        ),
+    )
+    inbox_dir: Path | None = Field(
+        default=None,
+        description=(
+            "Where `caselist pull` puts what it downloads, and where it reads archives from. Unset "
+            "means `<storage.data_dir>/inbox`."
+        ),
+    )
+    bulk_downloads_per_day: int = Field(
+        default=MAX_CASELIST_BULK_DOWNLOADS_PER_DAY,
+        ge=1,
+        description=(
+            "Bulk archive downloads one run may spend in a day, budgeted across the configured "
+            "caselists. OpenCaselist's own ceiling is 5; anything above it is refused."
+        ),
+    )
+    openev_event: Event | None = Field(
+        default=None,
+        description=(
+            "Which event to file an OpenEv camp file under when its own tags do not say. Unset "
+            "means such a file is listed and left alone rather than filed under a guess."
+        ),
+    )
+    openev_year: int | None = Field(
+        default=None,
+        ge=2000,
+        le=9999,
+        description="Topic year of the OpenEv release to pull. Unset means the API's current year.",
+    )
+
+    @field_validator("bulk_downloads_per_day")
+    @classmethod
+    def _within_the_sites_daily_limit(cls, value: int) -> int:
+        if value > MAX_CASELIST_BULK_DOWNLOADS_PER_DAY:
+            raise ValueError(
+                f"OpenCaselist allows {MAX_CASELIST_BULK_DOWNLOADS_PER_DAY} bulk downloads per user "
+                f"per day (upstream `weeklyLimiter`, found by v1-e34-t01); {value} is above it"
+            )
+        return value
+
+    @field_validator("sync_caselists", mode="before")
+    @classmethod
+    def _one_slug_or_many(cls, value: object) -> object:
+        """Accept a single slug as well as a list, so `DEBATE_CASELIST__SYNC_CASELISTS=hsld26` works."""
+        return (value,) if isinstance(value, str) else value
+
+    @field_validator("inbox_dir")
+    @classmethod
+    def _expand_inbox(cls, value: Path | None) -> Path | None:
+        if value is None:
+            return None
+        return Path(os.path.expandvars(str(value))).expanduser().absolute()
 
     @field_validator("downloads_per_minute")
     @classmethod

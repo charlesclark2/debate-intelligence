@@ -17,8 +17,10 @@ name is taken to be a complete file. This module is what makes that true:
    is removed before the exception leaves this module.
 
 A process killed outright cannot clean up after itself, so each new download first sweeps `.part`
-files older than an hour out of `.partial/`. Under ADR-0016 a stray partial is not harmless: an
-importer that mistook it for a window would record a truncated week as the archive of record.
+files older than an hour out of `.partial/`. A stray partial is not harmless: an importer that
+mistook it for a week's archive would record a truncated window as the archive of record, and
+nothing downstream could tell. The scheduled sync (`v1-e34-t02`) skips this directory for the same
+reason.
 """
 
 from __future__ import annotations

@@ -58,8 +58,10 @@ spec:
     - id: ac4
       description: >-
         pre-commit runs the validator whenever plan_specs/ changes. The ROADMAP staleness check is
-        deliberately not a hook or CI gate: ROADMAP.md is refreshed by the PM in separate PRs so
-        parallel task PRs don't conflict on it.
+        deliberately not a hook and not a gate on the PR path into dev: ROADMAP.md is refreshed by the PM
+        in separate PRs so parallel task PRs don't conflict on it. v1-e01-t04 runs `spec_index.py --check`
+        in CI only on pull requests whose base branch is main, which is consistent with this: that PR is
+        raised by the PM, one at a time.
     - id: ac5
       description: >-
         `uv run scripts/check_links.py` walks every tracked Markdown file, verifies that each relative

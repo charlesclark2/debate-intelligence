@@ -60,9 +60,15 @@ spec:
         moment it lands, so these are not optional here.
     - id: ac2
       description: >-
-        Ruleset protect-main (target main) requires a PR with 1 approval, dismisses stale approvals,
-        requires conversation resolution, blocks force-push and deletion, and restricts pushes with bypass
-        only for the repo admin.
+        Ruleset protect-main (target main) requires a pull request with **0** required approvals and an
+        **empty bypass list**, dismisses stale approvals, requires conversation resolution, blocks
+        force-push and deletion, and allows the **Merge** method only. Zero, not one: GitHub does not let
+        an author approve their own pull request, so on a solo-owner repository a required approval would
+        deadlock every promotion to main. The human approval is the promotion checklist in
+        docs/policies/website-publishing.md and, from V2, the `production` environment approval. This is
+        what docs/process/branching-and-environments.md has specified since ADR-0013; an earlier draft of
+        this criterion said one approval with an admin bypass, which contradicted that document and would
+        have been weaker besides, since an empty bypass list binds the owner too.
     - id: ac3
       description: >-
         Ruleset protect-dev (target dev) requires a PR and blocks force-push and deletion; a direct push to

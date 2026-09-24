@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd agent for the weekly caselist sync (v1-e34-t02-scheduled-sync).
+
+  A template, not a plist: the placeholders below are filled in by ops/launchd/install.sh on the
+  machine the agent runs on. Nothing here names a caselist, a home directory or an AWS account,
+  because this file is committed and none of those three are decisions this repository makes
+  (docs/process/working-agreements.md, and the task spec's "no hardcoded caselist slugs or
+  absolute user paths in committed files").
+
+  StartCalendarInterval, not StartInterval. Two reasons, and the first is the important one:
+
+  * The cadence is weekly because docs/policies/caselist-data-use.md E34 gate 4 permits "weekly
+    cadence at most, no polling faster than archives are published", which was agreed with the
+    OpenCaselist maintainer. A calendar entry states that plainly; an interval in seconds is a
+    number somebody would eventually halve.
+  * launchd runs a missed StartCalendarInterval job when the machine next wakes, so a laptop that
+    was shut on Wednesday morning runs the job on Wednesday evening rather than skipping the week.
+    Under ADR-0017 a late run is a delay and not a loss in any case, because the site keeps a
+    back-catalogue of the weekly archives — but there is no reason to take even the delay.
+
+  The agent runs the wrapper and nothing else. All the logic is in `debate-research caselist
+  pull`; the wrapper sets DEBATE_ENV and the AWS profile and execs it.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>@LABEL@</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>@WRAPPER@</string>
+@CASELIST_ARGUMENTS@
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>@WEEKDAY@</integer>
+        <key>Hour</key>
+        <integer>@HOUR@</integer>
+        <key>Minute</key>
+        <integer>@MINUTE@</integer>
+    </dict>
+
+    <!-- Loading the agent must not start a pull. The first real run is a deliberate operator
+         step, after one DEBATE_ENV=dev run has validated the pipeline
+         (docs/runbooks/caselist-scheduled-sync.md). -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DEBATE_ENV</key>
+        <string>@DEBATE_ENV@</string>
+        <key>AWS_PROFILE</key>
+        <string>@AWS_PROFILE@</string>
+        <key>HOME</key>
+        <string>@HOME_DIRECTORY@</string>
+        <!-- launchd gives an agent a minimal PATH, which would not find the console script or
+             the AWS CLI. The installer writes the PATH of the shell it was run from. -->
+        <key>PATH</key>
+        <string>@PATH_VALUE@</string>
+    </dict>
+
+    <!-- The run's JSON summary on stdout, one object per run: this is what v1-e34-t03's run log
+         reads. Diagnostics and any failure panel go to the error log. -->
+    <key>StandardOutPath</key>
+    <string>@LOG_DIRECTORY@/caselist-sync.jsonl</string>
+    <key>StandardErrorPath</key>
+    <string>@LOG_DIRECTORY@/caselist-sync.err.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>@WORKING_DIRECTORY@</string>
+
+    <!-- A weekly download that competes with nothing the operator is doing. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+</dict>
+</plist>

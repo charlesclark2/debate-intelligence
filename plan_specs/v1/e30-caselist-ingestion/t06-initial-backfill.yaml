@@ -47,8 +47,14 @@ spec:
     nothing had been taken down. The summary reports that number under a name that says so, and reports
     beside it the count that does mean withdrawal: sources whose sha256 appeared in an earlier snapshot
     and appears nowhere in this one. Source files are never committed and no school, team code or
-    student name appears in the summary. Boundaries: import/publish code is t03-t05, parsing the
-    backfilled sources is v1-e31-t06, and recurring downloads are E34.
+    student name appears in the summary. The dev store is no longer empty: the v1-e34-t02 validation run
+    on 2026-09-24 fetched and imported five hsld26 weeklies and published 242 objects to the dev bucket,
+    because `caselist pull` on a store with no manifest for a caselist selects every weekly it lists and
+    the daily cap then truncated the result. The runbook plans around what is already imported rather
+    than assuming a virgin store: an archive already held re-imports as a no-op and would report zeroes,
+    so the summary's per-snapshot counts for those five come from the run summaries under
+    `<data_dir>/caselist-sync-runs/` rather than from a re-import. Boundaries: import/publish code is
+    t03-t05, parsing the backfilled sources is v1-e31-t06, and recurring downloads are E34.
   priority: 1
   constraints:
     packages: [docs/data, docs/runbooks, docs/session-reports]

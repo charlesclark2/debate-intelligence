@@ -64,9 +64,33 @@ spec:
         banner and its CSV metadata has stale=true; at seven days no banner appears.
     - id: ac4
       description: >-
-        `debate-research caselist runs --last 5` shows run id, start time, outcome, archives downloaded
-        and pending publish work, and a redaction test proves no fixture token or synthetic student name
-        appears in records or notifications.
+        `debate-research caselist runs --last 5` shows run id, start time, outcome, archives downloaded,
+        archives deferred by the daily cap, and pending publish work, and a redaction test proves no
+        fixture token or synthetic student name appears in records or notifications.
+    - id: ac5
+      description: >-
+        A run the daily bulk-download cap truncated is visibly different from one that captured
+        everything. v1-e34-t02 records OVER_DAILY_BUDGET per archive in the run summary, but its stage
+        table and caption report "N to fetch" and "N downloaded" whether N was everything wanted or
+        only what the allowance permitted, so a week where the cap bites reads exactly like a clean
+        week - the silent-empty-run failure the UNRECOGNISED count was given a number to prevent. The
+        select stage's detail, the caption and the run record each state how many archives were wanted
+        and how many were deferred whenever the two differ, and a deferred archive is carried as a
+        backlog the next run reports rather than a fact only a JSON file holds. Measured on a real dev
+        run of three caselists before the notification thresholds are chosen: a backlog that clears
+        itself next week is not a notification, one that grows for two runs is.
+    - id: ac6
+      description: >-
+        `nothing_new` distinguishes "there was nothing to fetch" from "this run was not allowed to
+        fetch". RunSummary.nothing_new is currently `archives_downloaded == 0 and openev_downloaded ==
+        0 and not snapshots_imported and not pending_publish`, so a run whose every candidate was
+        re-decided OVER_DAILY_BUDGET reports `nothing_new: true`, `succeeded: true` and the caption
+        "none newer than what this machine already holds" - a false statement, not merely an
+        incomplete one. Measured on 2026-09-24 in dev: hsld26 held no snapshots, 12 weeklies were
+        wanted, 5 were fetched and 7 were deferred, and the two runs that followed the same day
+        reported "Nothing new" with an empty store. A run with deferred candidates is never
+        `nothing_new`, its caption says how many are waiting, and the staleness check of ac3 treats a
+        cap-bound run as not-current rather than as a successful no-op.
 status:
   phase: Pending
 ---

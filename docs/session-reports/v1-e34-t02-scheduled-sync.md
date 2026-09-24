@@ -343,9 +343,70 @@ with one listing call and no download.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-23
 
 **Notes:**
+
+Accepted, and merging with `--partial`: ac5's second half and both `operator-enable` criteria are
+genuinely operator-only, so the Goal stays `InProgress` until the two runs are recorded.
+
+**Spec amended in this branch, three changes.**
+
+1. **ac1 was wrong and the implementation is right.** ac1 listed `parse` between import and publish;
+   the spec's own description says publish comes before anything optional, "because those are the
+   stages that put bytes somewhere durable", and `v1-e31-t06` does not exist, so ac1 as written was
+   unsatisfiable. ac1 now names the implemented order and says the skip path is the case it is
+   tested against. Deviation 3 is closed — the session read the description correctly and flagged
+   the clash instead of quietly passing either way, which is what should have happened.
+2. **Deviation 2 accepted as the reading.** The description now says the report step confirms the
+   run's published snapshots in the bucket and writes nothing there, so it can pend with publish
+   under ac3 without stepping on t03. Checking by snapshot name rather than caselist-wide is right
+   for the same reason: drift from an earlier run is not this run's to report.
+3. `status.phase` returned to `InProgress` (see above).
+
+**Deviation 1 — the full archive — decided, and it is not this task's.**
+
+No policy interval governs it. Removal under `docs/policies/caselist-data-use.md` is
+**request-driven by email**, with the 7-day clock running from the request, and the policy is
+explicit that taking a disclosure off OpenCaselist is the site's act, not a request to us. So
+`REMOVED` detected by diffing a full archive is an analytical signal, not a compliance obligation,
+and the interval is a cost question against the 5-per-day cap rather than a deadline.
+
+The session's proposal is accepted: **monthly, one caselist per week on a rotation**, which is one
+extra download in any given run and bounds how long a withdrawal goes unnoticed at about a month.
+It goes to **`v1-e30-t06-initial-backfill`**, not here and not a new task — t06 already fetches the
+full archive for the back-catalogue, and there is nothing to refresh until it has run once. The
+shipped `FULL_ARCHIVE_NOT_PULLED_WEEKLY` decision is the correct placeholder meanwhile: listed,
+counted, named in every summary, never fetched.
+
+Separately, and not blocking: whether a disclosure withdrawn from OpenCaselist should itself trigger
+suppression on our side is a **policy question**, not an engineering one. The policy says withdrawal
+is respected but routes it through email only. If the answer turns out to be yes, the refresh
+interval stops being a cost question and this decision gets revisited. Raised against
+`v1-e30-t07-source-removal`.
+
+**Deviations 4, 5 and 6 accepted without change.** Rewriting three docstrings off the withdrawn
+ADR-0016 (Deviation 4) is working agreement 7 applied correctly, and the diff is prose only. The
+`openev_inbox_name` move to the port (Deviation 5) is forced by the import-linter contract and is a
+pure move with the old export kept. None of the out-of-scope files exceed what the work required:
+`settings.py` and `ports/` are inside `debate_core.application`, and `container.py` is the only
+place a command may obtain a service.
+
+**Checks I ran rather than took on the report's word.**
+
+* `_log_summary` emits counts, caselist slugs, dates and stage names only, and says so in its
+  docstring. Policy rule 4 holds; the slug is permitted by rule 3's own key format.
+* The inbox is read once in `plan()` and passed into selection, so `ALREADY_IN_INBOX` is a
+  selection decision taken **before** any download. That is the fix the t01 review asked for — the
+  client reporting `already_present` after streaming the file would have spent one of the five.
+* The out-of-scope diff is 12 insertions and 16 deletions across three files, all prose plus the
+  one function move.
+
+**Backlog raised by this review, not against this task:** the kickoff prompt in
+`scripts/task_helper.py` tells every session to finish by setting the phase to `Succeeded`, with no
+mention of the partial case, which is why a task with two operator-only criteria arrived marked
+`Succeeded`. `scripts/` is being rewritten by `v1-e01-t05` right now, so this waits for that to
+merge.

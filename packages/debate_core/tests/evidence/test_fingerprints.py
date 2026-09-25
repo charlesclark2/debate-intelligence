@@ -25,6 +25,12 @@ from debate_core.domain.debate_files import (
     ParsedCard,
 )
 from debate_core.domain.style_profile import RunEmphasis, StyleMatchSource
+from debate_core.evidence.abbreviated_links import (
+    FullCardWords,
+    abbreviation_anchor,
+    link_abbreviated,
+    short_cite_key,
+)
 from debate_core.evidence.fingerprints import (
     FINGERPRINT_VERSION,
     card_fingerprint,
@@ -32,6 +38,7 @@ from debate_core.evidence.fingerprints import (
     fingerprint_text,
     normalize_for_matching,
 )
+from debate_core.evidence.near_duplicates import matching_words
 
 SOURCE_SHA256 = "a" * 64
 
@@ -250,3 +257,163 @@ def test_cutter_mark_is_read_verbatim_from_the_cite_tail(full_cite: str, mark: s
 )
 def test_cutter_mark_is_not_guessed(full_cite: str) -> None:
     assert extract_cutter_mark(full_cite) is None
+
+
+# ------------------------------------------------------------------------------------------------
+# ac3: abbreviated and cite-only cards link to a full card's cluster, or stay unlinked
+# ------------------------------------------------------------------------------------------------
+
+FULL_BODY = (
+    "Cities that pave over their green space do not merely lose shade; they lose the evening. "
+    "Blocks with the fewest trees recorded night-time temperatures four degrees above the regional "
+    "average. The commission concluded that canopy loss is a public health problem before it is an "
+    "aesthetic one."
+)
+#: A second card by the same author, same year, with the same first three and last three words.
+LOOKALIKE_BODY = (
+    "Cities that pave their medians lose more than shade: they lose runoff capacity, and the "
+    "commission treated drainage as a problem before it is an aesthetic one."
+)
+
+EVENING_CLUSTER = "1" * 64
+LOOKALIKE_CLUSTER = "2" * 64
+OTHER_AUTHOR_CLUSTER = "3" * 64
+
+
+def full_card(cluster_id: str, body: str, short_cite: str | None = "Pellam 26") -> FullCardWords:
+    return FullCardWords(
+        cluster_id=cluster_id, short_cite_key=short_cite_key(short_cite), words=tuple(matching_words(body))
+    )
+
+
+def abbreviated_card(body: str, short_cite: str | None = "Pellam '26") -> ParsedCard:
+    return parsed_card(body, short_cite=short_cite, completeness=CardCompleteness.ABBREVIATED)
+
+
+def cite_only_card(full_cite: str, short_cite: str | None = "Pellam 26") -> ParsedCard:
+    return parsed_card(
+        "", short_cite=short_cite, full_cite=full_cite, completeness=CardCompleteness.CITE_ONLY
+    )
+
+
+@pytest.mark.parametrize(
+    ("short_cite", "key"),
+    [
+        ("Pellam 26", "pellam 26"),
+        ("Pellam '26", "pellam 26"),
+        ("Pellam ’26", "pellam 26"),
+        ("PELLAM 2026", "pellam 26"),
+        ("Pellam and Quenby 26", "pellam and quenby 26"),
+        ("  ", None),
+        (None, None),
+    ],
+)
+def test_abbreviated_short_cite_key(short_cite: str | None, key: str | None) -> None:
+    assert short_cite_key(short_cite) == key
+
+
+def test_abbreviated_body_links_to_the_full_cards_cluster() -> None:
+    card = abbreviated_card("Cities that pave over … before it is an aesthetic one.")
+    anchor = abbreviation_anchor(card, markers=("…", "..."))
+
+    assert anchor is not None
+    assert anchor.opening_words == ("cities", "that", "pave", "over")
+    assert anchor.closing_words == ("before", "it", "is", "an", "aesthetic", "one")
+    assert not anchor.from_cite_line
+    assert link_abbreviated(anchor, [full_card(EVENING_CLUSTER, FULL_BODY)]) == EVENING_CLUSTER
+
+
+def test_abbreviated_marker_from_the_default_style_profile_is_recognised() -> None:
+    card = abbreviated_card("Cities that pave over [...] before it is an aesthetic one.")
+    anchor = abbreviation_anchor(card)
+    assert anchor is not None
+    assert link_abbreviated(anchor, [full_card(EVENING_CLUSTER, FULL_BODY)]) == EVENING_CLUSTER
+
+
+def test_abbreviated_cite_only_card_links_through_words_in_its_cite_line() -> None:
+    card = cite_only_card(
+        "Pellam 26 (Oriel Pellam, Fictional Review of Urban Climate) Cities that pave over "
+        "… before it is an aesthetic one. //zzTEST"
+    )
+    anchor = abbreviation_anchor(card, markers=("…",))
+
+    assert anchor is not None
+    assert anchor.from_cite_line
+    assert link_abbreviated(anchor, [full_card(EVENING_CLUSTER, FULL_BODY)]) == EVENING_CLUSTER
+
+
+def test_abbreviated_links_when_every_match_is_in_the_same_cluster() -> None:
+    card = abbreviated_card("Cities that pave over … before it is an aesthetic one.")
+    anchor = abbreviation_anchor(card, markers=("…",))
+    assert anchor is not None
+    retagged_copy = full_card(EVENING_CLUSTER, FULL_BODY.replace("’", "'"), short_cite="Pellam 2026")
+    assert link_abbreviated(anchor, [full_card(EVENING_CLUSTER, FULL_BODY), retagged_copy]) == EVENING_CLUSTER
+
+
+@pytest.mark.parametrize(
+    ("body", "short_cite"),
+    [
+        # Short cite differs: a different author's card with these words is not this card.
+        ("Cities that pave over … before it is an aesthetic one.", "Quenby 25"),
+        # Same author, a year off.
+        ("Cities that pave over … before it is an aesthetic one.", "Pellam 25"),
+        # Opening words are not how the full card opens.
+        ("Towns that pave over … before it is an aesthetic one.", "Pellam 26"),
+        # Closing words are not how the full card ends.
+        ("Cities that pave over … before it is a fiscal one.", "Pellam 26"),
+    ],
+)
+def test_abbreviated_card_stays_unlinked_when_its_key_does_not_match(body: str, short_cite: str) -> None:
+    anchor = abbreviation_anchor(abbreviated_card(body, short_cite=short_cite), markers=("…",))
+    assert anchor is not None
+    candidates = [
+        full_card(EVENING_CLUSTER, FULL_BODY),
+        full_card(OTHER_AUTHOR_CLUSTER, FULL_BODY.replace("Cities", "Towns"), short_cite="Quenby 25"),
+    ]
+    assert link_abbreviated(anchor, candidates) is None
+
+
+def test_abbreviated_card_is_not_guessed_between_two_clusters() -> None:
+    """Same author, same year, same first three and last three words: two cards, no link."""
+    card = abbreviated_card("Cities that pave … an aesthetic one.")
+    anchor = abbreviation_anchor(card, markers=("…",))
+    assert anchor is not None
+    evening = full_card(EVENING_CLUSTER, FULL_BODY)
+    lookalike = full_card(LOOKALIKE_CLUSTER, LOOKALIKE_BODY)
+
+    assert link_abbreviated(anchor, [evening]) == EVENING_CLUSTER
+    assert link_abbreviated(anchor, [lookalike]) == LOOKALIKE_CLUSTER
+    assert link_abbreviated(anchor, [evening, lookalike]) is None
+
+
+@pytest.mark.parametrize(
+    "card",
+    [
+        # No short cite the parser could read.
+        parsed_card(
+            "Cities that pave over … before it is an aesthetic one.",
+            short_cite=None,
+            completeness=CardCompleteness.ABBREVIATED,
+        ),
+        # Too few words either side of the marker to say which card it is.
+        parsed_card("Cities that … aesthetic one.", completeness=CardCompleteness.ABBREVIATED),
+        # A cite-only card whose cite carries no words of the card at all.
+        parsed_card(
+            "",
+            full_cite="Pellam 26 (Oriel Pellam, Fictional Review of Urban Climate, 2026)",
+            completeness=CardCompleteness.CITE_ONLY,
+        ),
+        # A full card is clustered by its text, never linked.
+        parsed_card(FULL_BODY),
+    ],
+)
+def test_abbreviated_card_without_a_usable_key_has_no_anchor(card: ParsedCard) -> None:
+    assert abbreviation_anchor(card, markers=("…",)) is None
+
+
+def test_abbreviated_cite_line_anchor_needs_three_words_at_each_end() -> None:
+    card = cite_only_card("Pellam 26 (Oriel Pellam) Cities … an aesthetic one.")
+    anchor = abbreviation_anchor(card, markers=("…",))
+    assert anchor is not None
+    # Only one word ("cities") of the cite line's opening fragment lines up with the body.
+    assert link_abbreviated(anchor, [full_card(EVENING_CLUSTER, FULL_BODY)]) is None

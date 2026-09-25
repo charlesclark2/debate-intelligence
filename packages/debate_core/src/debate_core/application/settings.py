@@ -95,6 +95,7 @@ from pydantic_settings import (
 
 from debate_core.application.errors import DomainError
 from debate_core.domain.caselist import Event
+from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 
 __all__ = [
     "BUILTIN_PROFILES",
@@ -107,6 +108,7 @@ __all__ = [
     "SECRET_PLACEHOLDER",
     "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
+    "CardFingerprintSettings",
     "CaselistTokenBackend",
     "ConfigurationError",
     "Environment",
@@ -642,6 +644,37 @@ class CaselistSettings(SettingsGroup):
         return Path(os.path.expandvars(str(value))).expanduser().absolute()
 
 
+class CardFingerprintSettings(SettingsGroup):
+    """When two card bodies count as one card (`v1-e31-t04-card-fingerprints`).
+
+    Only the confirmation thresholds are settings. Shingle size, the number of MinHash functions and
+    the LSH banding are constants of :mod:`debate_core.evidence.near_duplicates`, because they decide
+    which pairs are ever compared and belong with the code that is versioned alongside them.
+    """
+
+    near_duplicate_jaccard: float = Field(
+        default=0.8,
+        gt=0.0,
+        le=1.0,
+        description="A candidate pair is one card when its shingle Jaccard similarity reaches this.",
+    )
+    near_duplicate_containment: float = Field(
+        default=0.9,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Or when this share of the shorter body's shingles is inside the longer one: what keeps a "
+            "card cut a paragraph shorter in its cluster."
+        ),
+    )
+
+    def thresholds(self) -> NearDuplicateThresholds:
+        """The thresholds as the clusterer takes them."""
+        return NearDuplicateThresholds(
+            jaccard=self.near_duplicate_jaccard, containment=self.near_duplicate_containment
+        )
+
+
 class ModelSettings(SettingsGroup):
     """What the ModelRouter is allowed to do and which file tells it where to route.
 
@@ -699,6 +732,7 @@ class Settings(BaseSettings):
     providers: ProviderSettings = Field(default_factory=ProviderSettings)
     models: ModelSettings
     caselist: CaselistSettings = Field(default_factory=CaselistSettings)
+    fingerprints: CardFingerprintSettings = Field(default_factory=CardFingerprintSettings)
 
     @classmethod
     def settings_customise_sources(

@@ -1036,3 +1036,121 @@ def test_an_unreadable_pending_work_file_reads_as_nothing_owed(tmp_path: Path) -
     path.write_text("{not json at all", encoding="utf-8")
 
     assert PendingWork(path).read() == ()
+
+
+# ------------------------------------------------------------------------------------------------
+# A run the daily bulk-download cap truncated (v1-e34-t03 ac5 and ac6)
+# ------------------------------------------------------------------------------------------------
+#
+# The condition measured in dev on 2026-09-24 (docs/data/caselist-sync-runs.md): the first run of
+# the day spent the five and deferred the rest; the runs after it had nothing left to spend and
+# reported "Nothing new" against a store that held none of the archives they had deferred. Here
+# the scenario is the table at the top of this module: 2026-09-01 is held, so exactly two weeklies
+# are wanted — 2026-09-08 and 2026-09-15. Every count below is those two, split by hand.
+
+
+def spend_todays_allowance(data_dir: Path, downloads: int = DEFAULT_BULK_DOWNLOADS_PER_DAY) -> None:
+    """Record `downloads` bulk downloads as already spent today, as an earlier run would have."""
+    DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME).record(RUN_CLOCK.date(), downloads)
+
+
+async def test_a_run_the_cap_blocked_entirely_is_not_nothing_new(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The second and third dev runs of 2026-09-24: nothing fetched because nothing was allowed."""
+    source.openev_files = []  # none were listed on the dev day either
+    await import_first_week(data_dir, archives)
+    spend_todays_allowance(data_dir)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == []
+    assert summary.archives_wanted == 2
+    assert summary.archives_deferred == 2
+    assert not summary.nothing_new, "a run that was not allowed to fetch must not say nothing was new"
+    assert summary.succeeded, "the cap is a delay, not a failure (ADR-0017)"
+    select = summary.stage(SyncStage.SELECT)
+    assert select is not None
+    assert "2 wanted" in (select.reason or "")
+    assert "2 deferred by the daily download cap" in (select.reason or "")
+    download = summary.stage(SyncStage.DOWNLOAD)
+    assert download is not None
+    assert "nothing new" not in (download.reason or "")
+    assert "2 archive(s) deferred by the daily download cap" in (download.reason or "")
+    body = summary.as_json()
+    assert body["nothing_new"] is False
+    assert body["archives_wanted"] == 2
+    assert body["archives_deferred"] == 2
+
+
+async def test_a_run_the_cap_truncated_states_wanted_and_deferred(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The first dev run of 2026-09-24, in miniature: one of two fetched, one left for later."""
+    source.openev_files = []  # none were listed on the dev day either
+    await import_first_week(data_dir, archives)
+    spend_todays_allowance(data_dir, DEFAULT_BULK_DOWNLOADS_PER_DAY - 1)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8))]
+    assert summary.archives_downloaded == 1
+    assert summary.archives_wanted == 2
+    assert summary.archives_deferred == 1
+    assert not summary.nothing_new
+    select = summary.stage(SyncStage.SELECT)
+    assert select is not None
+    assert "1 to fetch of 2 wanted" in (select.reason or "")
+    assert "1 deferred by the daily download cap" in (select.reason or "")
+
+
+async def test_a_run_that_fetched_everything_wanted_says_nothing_about_a_cap(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The clean week: wanted and fetched are the same number, so no deferral is mentioned."""
+    source.openev_files = []  # none were listed on the dev day either
+    await import_first_week(data_dir, archives)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert summary.archives_wanted == 2
+    assert summary.archives_deferred == 0
+    select = summary.stage(SyncStage.SELECT)
+    assert select is not None
+    assert "deferred" not in (select.reason or "")
+
+
+async def test_a_day_long_retry_after_counts_as_deferred_by_the_cap(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The server's own limiter is the same cap seen from the other side: deferred, and counted."""
+    source.openev_files = []  # none were listed on the dev day either
+    await import_first_week(data_dir, archives)
+    source.rate_limit_after = 1
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert summary.archives_downloaded == 1
+    assert summary.archives_wanted == 2
+    assert summary.archives_deferred == 1
+    assert not summary.nothing_new
+
+
+async def test_an_immediate_re_run_with_nothing_deferred_is_still_nothing_new(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The fix must not break the true case: everything held, nothing wanted, nothing new."""
+    source.openev_files = []  # none were listed on the dev day either
+    await import_first_week(data_dir, archives)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+    await service.run([SYNTHETIC_CASELIST])
+
+    again = await service.run([SYNTHETIC_CASELIST])
+
+    assert again.archives_wanted == 0
+    assert again.archives_deferred == 0
+    assert again.nothing_new

@@ -305,6 +305,15 @@ class ArchiveSelection:
     def wanted(self) -> bool:
         return self.decision is SelectionDecision.DOWNLOAD
 
+    @property
+    def deferred_by_cap(self) -> bool:
+        """Wanted, and left for a later run by the daily bulk-download cap (`v1-e34-t03` ac5).
+
+        Both ways the cap shows up count: the budget this run planned against
+        (`OVER_DAILY_BUDGET`) and the server's own limiter mid-run (`DEFERRED_BY_RATE_LIMIT`).
+        """
+        return self.decision in _DEFERRED_BY_CAP
+
     def deferred(self) -> ArchiveSelection:
         """The same selection, marked as left for a later run by the daily limiter."""
         return ArchiveSelection(
@@ -383,7 +392,12 @@ class SyncPlan:
 
     @property
     def nothing_new(self) -> bool:
-        return not self.archives_to_download and not self.openev_to_download
+        """Nothing to fetch *and* nothing the cap held back: see :attr:`RunSummary.nothing_new`."""
+        return (
+            not self.archives_to_download
+            and not self.openev_to_download
+            and not any(one.deferred_by_cap for one in self.archives)
+        )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -674,6 +688,21 @@ class RunSummary:
         return len(self.archives)
 
     @property
+    def archives_deferred(self) -> int:
+        """Archives this run wanted and the daily bulk-download cap left for a later run."""
+        return sum(1 for one in self.archives if one.deferred_by_cap)
+
+    @property
+    def archives_wanted(self) -> int:
+        """Archives newer than what this machine held: those fetched plus those the cap deferred.
+
+        The number `archives_downloaded` is to be read against. When the two differ the run was
+        truncated by the cap, which a caption reporting only "N downloaded" cannot show
+        (`v1-e34-t03` ac5).
+        """
+        return sum(1 for one in self.archives if one.wanted or one.deferred_by_cap)
+
+    @property
     def duration_seconds(self) -> float:
         return (self.finished_at - self.started_at).total_seconds()
 
@@ -691,10 +720,17 @@ class RunSummary:
 
     @property
     def nothing_new(self) -> bool:
-        """True when the run found nothing to download and nothing waiting to be published."""
+        """True when there was nothing to fetch and nothing waiting to be published.
+
+        Not true of a run that *was not allowed* to fetch. A run whose every candidate the daily
+        cap deferred downloads nothing, imports nothing and owes no publish, and used to report
+        "none newer than what this machine already holds" against a store that held none of them
+        — measured in dev on 2026-09-24 (`v1-e34-t03` ac6, `docs/data/caselist-sync-runs.md`).
+        """
         return (
             self.archives_downloaded == 0
             and self.openev_downloaded == 0
+            and self.archives_deferred == 0
             and not self.snapshots_imported
             and not self.pending_publish
         )
@@ -715,7 +751,9 @@ class RunSummary:
             "caselists": list(self.caselists),
             "stages": [record.as_json() for record in self.stages],
             "archives_seen": self.archives_seen,
+            "archives_wanted": self.archives_wanted,
             "archives_downloaded": self.archives_downloaded,
+            "archives_deferred": self.archives_deferred,
             "openev_seen": len(self.openev),
             "openev_downloaded": self.openev_downloaded,
             "files_imported": self.files_imported,
@@ -959,13 +997,18 @@ class CaselistSyncService:
         tally.archives, tally.openev = plan.archives, plan.openev
         tally.bulk_downloads_allowed = plan.bulk_downloads_allowed
         tally.bulk_downloads_spent_today = plan.bulk_downloads_spent_today
-        wanted = len(plan.archives_to_download) + len(plan.openev_to_download)
-        tally.record(
-            SyncStage.SELECT,
-            StageOutcome.COMPLETED,
-            f"{len(plan.archives)} archive(s) and {len(plan.openev)} OpenEv file(s) listed; "
-            f"{wanted} to fetch",
-        )
+        fetch = len(plan.archives_to_download) + len(plan.openev_to_download)
+        deferred = sum(1 for one in plan.archives if one.deferred_by_cap)
+        listed = f"{len(plan.archives)} archive(s) and {len(plan.openev)} OpenEv file(s) listed; "
+        if deferred:
+            wanted = fetch + deferred
+            detail = (
+                f"{listed}{fetch} to fetch of {wanted} wanted, {deferred} deferred by the daily "
+                f"download cap ({plan.bulk_downloads_allowed} of today's allowance left)"
+            )
+        else:
+            detail = f"{listed}{fetch} to fetch"
+        tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, detail)
         return plan
 
     async def _select_archives(self, caselist: str, *, inbox_names: frozenset[str]) -> list[ArchiveSelection]:
@@ -1125,7 +1168,14 @@ class CaselistSyncService:
         wanted = list(plan.archives_to_download)
         openev_wanted = list(plan.openev_to_download)
         if not wanted and not openev_wanted:
-            tally.record(SyncStage.DOWNLOAD, StageOutcome.SKIPPED, "nothing new to download")
+            deferred = sum(1 for one in plan.archives if one.deferred_by_cap)
+            tally.record(
+                SyncStage.DOWNLOAD,
+                StageOutcome.SKIPPED,
+                f"nothing fetched: {deferred} archive(s) deferred by the daily download cap"
+                if deferred
+                else "nothing new to download",
+            )
             return
 
         deferred_from: int | None = None
@@ -1503,6 +1553,10 @@ class CaselistSyncService:
 # ------------------------------------------------------------------------------------------------
 # Selection rules
 # ------------------------------------------------------------------------------------------------
+
+_DEFERRED_BY_CAP: Final = frozenset(
+    {SelectionDecision.OVER_DAILY_BUDGET, SelectionDecision.DEFERRED_BY_RATE_LIMIT}
+)
 
 _NO_BUCKET: Final = "this environment names no evidence bucket, so nothing is published from here"
 _NO_PARSE_PIPELINE: Final = "no parse pipeline is installed (v1-e31-t06 has not shipped)"

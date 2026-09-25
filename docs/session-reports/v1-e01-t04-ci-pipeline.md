@@ -28,11 +28,35 @@ Three things for the PM to look at first, all under **Deviations**:
 * the `site` job is added, although this spec doesn't mention it;
 * `lint` and `spec-validate` run on every trigger, with no path filter.
 
+**After CI's first run: the test fix.** The PM fixed the `uv sync` step (`--all-packages`), and
+three CLI tests then still failed on the runner. They are not tests this task wrote. They come from
+tasks that are already merged and `Succeeded`, so this is a fix to their work:
+* `test_help_lists_the_global_options_and_the_commands` is from `v1-e01-t07-cli-skeleton`;
+* `test_the_command_is_registered` is from `v1-e30-t03-archive-importer`;
+* `test_the_help_names_the_three_things_a_run_can_be_asked_to_do` is from
+  `v1-e34-t02-scheduled-sync`.
+
+The briefing had all three as E30 and E34 work; the first is E01's.
+
+The cause is **colour, not width**. `COLUMNS=80 uv run pytest -q` passes everything on this machine
+(2629 passed, before the fix). Under pytest, stdout is not a TTY, so Rich already falls back to 80
+columns locally. What differs on the runner is `GITHUB_ACTIONS=true`: Typer reads it at import and
+forces a terminal, so help panels arrive full of ANSI escapes. `GITHUB_ACTIONS=true uv run pytest -q`
+reproduces exactly CI's 3 failures.
+
+**Measured, 16 tests in 9 modules depended on the terminal; CI caught 3 of them.** The measurement
+covered forced colour and widths from 20 to 400 columns. The 16 include one smoke check, and they come
+from nine tasks across E01, E02, E29, E30, E31 and E34 (listed under Deviations).
+
+One autouse fixture in the root `conftest.py` now pins every test to plain text at 200 columns.
+`test_help_rendering.py` proves it holds at 20 and at 400 columns with colour forced. Neither ci.yml
+nor the CLI changed.
+
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `workflow` — CI workflow with stable job names | Done | Commit `5bf8b31`. All 7 node criteria pass. |
+| `workflow` — CI workflow with stable job names | Done | Commit `c58349c` (after the rebase onto #88). All 7 node criteria pass. The PM's `uv sync --locked --all-packages` fix is `f53f37f`. |
 | `caching` — uv caching and Python setup | Done | Same commit. `astral-sh/setup-uv` with `enable-cache: true` and `cache-dependency-glob: uv.lock`; `uv python install` reads `.python-version`; `uv sync --locked` in every Python job. |
 | `green-run` — Green run on dev | NOT RUN | Needs ci.yml on `dev`, which only happens when this PR merges. Operator follow-ups, steps 1–2. |
 | `gate-proof` — Prove required checks block bad PRs | NOT RUN | Needs a throwaway PR and a ruleset change (GitHub settings). Operator follow-ups, steps 3–4. |
@@ -67,11 +91,18 @@ Three things for the PM to look at first, all under **Deviations**:
 
 ## Files changed
 
-* `.github/workflows/ci.yml` (new): the whole task.
+* `.github/workflows/ci.yml` (new): the whole task. After this session wrote it, the only change
+  is the PM's `--all-packages` line.
+* `conftest.py` (root): an autouse fixture that pins rendering for every test, added below the
+  existing `sys.path` setup, which is unchanged. The module docstring's first line now names both
+  jobs.
+* `packages/debate_cli/tests/test_help_rendering.py` (new): three tests that hold the pin.
+* `plan_specs/v1/e01-repo-foundation/t04-ci-pipeline.yaml`: the PM's widening of
+  `constraints.packages`, committed as written (`8f33388`).
 * `docs/session-reports/v1-e01-t04-ci-pipeline.md`: this report.
 
-No other file is touched. `status.phase` stays `InProgress`, so the spec is unchanged apart from the
-kickoff commit.
+None of the 16 terminal-sensitive tests was edited, and nothing under `tests/smoke` was either. The
+one fixture covers both trees, so no module needed a change. `status.phase` stays `InProgress`.
 
 ## Deviations from the spec
 
@@ -105,6 +136,60 @@ kickoff commit.
    runs "over every tracked file", and `validate_specs.py` runs "on every trigger". A filtered lint
    job would have skipped the Markdown-table conflict markers of #56 on a PR that touched only
    Markdown. Both jobs finish in seconds after setup.
+
+4. **This task now touches test code outside `.github/workflows`:** the root `conftest.py` and
+   `packages/debate_cli/tests/test_help_rendering.py`. The PM widened `constraints.packages` to
+   `[.github/workflows, conftest.py, packages/debate_cli/tests, tests/smoke]` after CI's first run.
+   The scope used is **2 files**: one modified (`conftest.py`), one new (`test_help_rendering.py`).
+   None of the 9 affected test modules and none of `tests/smoke` needed an edit.
+
+   *Why.* A hermetic gate needs hermetic tests. Before the fix, these 16 tests passed or failed
+   depending on the terminal:
+
+   | Test | From | Fails when |
+   |---|---|---|
+   | `test_app.py::test_help_lists_the_global_options_and_the_commands` | v1-e01-t07 | **CI** (`GITHUB_ACTIONS`), `FORCE_COLOR`, ≤ 30 cols |
+   | `test_caselist_import.py::test_the_command_is_registered` | v1-e30-t03 | **CI**, `FORCE_COLOR`, ≤ 40 cols |
+   | `commands/test_caselist_pull.py::test_the_help_names_the_three_things_a_run_can_be_asked_to_do` | v1-e34-t02 | **CI**, `FORCE_COLOR`, ≤ 50 cols |
+   | `test_caselist_import.py::test_a_dry_run_says_so_in_the_table` | v1-e30-t03 | `FORCE_COLOR`, ≤ 20 cols |
+   | `commands/test_caselist_runs.py::test_runs_calls_out_a_schedule_that_has_stopped` | v1-e34-t03 | `FORCE_COLOR` |
+   | `commands/test_caselist_runs.py::test_a_truncated_pull_states_wanted_and_deferred_and_the_next_run_carries_the_backlog` | v1-e34-t03 | `FORCE_COLOR` |
+   | `test_caselist_cards.py::test_cards_prints_totals_and_the_top_clusters` | v1-e31-t04 (#88) | ≤ 60 cols |
+   | `tests/smoke/test_caselist_cards.py::test_caselist_cards_by_team_and_table` | v1-e31-t04 (#88) | ≤ 60 cols |
+   | `commands/test_store.py::TestListing::test_ls_lists_the_bucket` | v1-e29-t05 | ≤ 40 cols |
+   | `commands/test_store.py::TestFailures::test_an_expired_sso_session_is_one_line_and_not_a_traceback` | v1-e29-t05 | ≤ 40 cols |
+   | `commands/test_store.py::TestFailures::test_a_person_still_sees_the_table_when_the_run_failed` | v1-e29-t05 | ≤ 30 cols |
+   | `test_config_command.py::test_config_show_renders_a_table` | v1-e02-t05 | ≤ 50 cols |
+   | `commands/test_caselist_auth.py::test_status_after_login_reports_the_token_without_printing_it` | v1-e34-t01 | ≤ 30 cols |
+   | `test_app.py::test_doctor_renders_a_table` | v1-e01-t07 | 20 cols |
+   | `test_caselist_import.py::test_importing_one_week_succeeds_and_prints_a_summary_table` | v1-e30-t03 | 20 cols |
+   | `test_caselist_import.py::test_an_older_archive_is_refused_with_a_domain_failure` | v1-e30-t03 | 20 cols |
+
+   *Method.* Unfixed tree, rebased onto dev with #88. Runs:
+   * the full suite under `COLUMNS=80` (0 failed), `GITHUB_ACTIONS=true` (3), `FORCE_COLOR=1` (6),
+     60 columns (2) and 40 columns (7), each run once;
+   * the CLI and smoke trees at 20, 30, 50, 70, 90 and 120 columns, with and without
+     `FORCE_COLOR=1`.
+
+   Width runs set both `COLUMNS` and `TERMINAL_WIDTH`. The union is 16. So, of the tests that
+   depended on the terminal, CI's runner tripped **3 of 16**. The other 13 were latent: they
+   would have fired on the first runner, laptop or narrow editor pane that differed the right way.
+
+   *Against the briefing's list.* `test_caselist_import.py:357` is
+   `test_an_older_archive_is_refused_with_a_domain_failure`, and it fails at 20 columns.
+   `test_caselist_import.py:444` and `:484` (`--event` and `--snapshot` in a domain-failure hint)
+   have the same shape but did not fail in any environment measured. They are covered by the pin
+   anyway. `test_caselist_cards.py:243` (`--snapshot` in help) did not fail by itself.
+   `test_caselist_cards.py::test_cards_prints_totals_and_the_top_clusters`, a table-width
+   assertion in the same module, did.
+
+   *Why the root conftest and every test.* This follows the amended spec: one fixture covers both
+   trees, and no test should depend on the terminal. Measured cost: none. The full suite is
+   2632 passed, 1 skipped in 33s either way.
+
+   *Correction to the spec's comment.* The comment on `constraints.packages` says the tests hold
+   "only on a wide terminal". The cause CI hit was forced colour (`GITHUB_ACTIONS`); width is the
+   second, latent cause. The spec text is the PM's, so I have not edited it.
 
 ## Decisions and assumptions
 
@@ -143,7 +228,42 @@ kickoff commit.
 * **Not run locally:** `terraform-checks`. This machine has Terraform 1.7.3, while the repository
   pins 1.16.3 and needs ≥ 1.10. v1-e29-t02 verified the script itself. Its first CI run is this PR's.
 
+* **How the pin works.** The fixture deletes `FORCE_COLOR`, `PY_COLORS`, `TTY_COMPATIBLE`,
+  `TTY_INTERACTIVE` and `TERMINAL_WIDTH`, and sets `NO_COLOR=1` and `COLUMNS=200`: that is what
+  Rich reads when `debate_cli.output.CliOutput` builds a console with no width. It also
+  monkeypatches `typer.rich_utils.FORCE_TERMINAL = False`, `COLOR_SYSTEM = None` and
+  `MAX_WIDTH = 200`.
+  * Typer reads its environment variables once, at import, so setting the environment alone would
+    come too late for help output. The module attributes are what it reads each time it builds a
+    help console.
+  * `monkeypatch.setattr` raises if a Typer upgrade renames them, so the pin cannot silently stop
+    applying.
+  * 200 columns is wide enough that nothing the tests look for wraps. With colour off, every option
+    name in all 19 commands is intact from 80 columns up.
+* **The proof has to run in a fresh process.** `test_help_rendering.py` runs the 16 tests in a
+  nested pytest with `GITHUB_ACTIONS=true FORCE_COLOR=1` at `COLUMNS=TERMINAL_WIDTH=20` and at `400`.
+  * In-process it could not show anything, because Typer has already been imported.
+  * With the pin removed, the narrow run fails 15 of the 16 and the wide run 6. With it, both
+    pass: about 4.7s each, run in parallel under xdist.
+  * A third test renders `--help` for all 19 commands and asserts that every option name appears
+    intact and that there is no escape code. A new long flag is covered without anyone editing a
+    list.
+* **Sync without the push.** `scripts/task sync` rebases and then force-pushes a branch that is
+  already on the remote. CLAUDE.md keeps pushes with the operator, and a push mid-fix would have run
+  CI on a half-finished tree. The session therefore did the local half: it fetched `origin/dev` and
+  rebased onto it (#88 and #89, no conflicts). It did not push; see Operator follow-ups, step 0.
+
 ## Operator follow-ups
+
+0. **Push the rebased branch.** Where: the task worktree. Runtime: seconds.
+
+   ```bash
+   scripts/task sync v1-e01-t04-ci-pipeline
+   ```
+
+   The rebase is already done, so this only force-pushes with lease. Success looks like this: the
+   PR's CI run starts on `fd134b2` or the later report commit, `test` is green, and every other job
+   is green as before.
 
 1. **Merge this task partially** after PM review (`--partial`, because `green-run` and `gate-proof`
    are open by design). Where: your Mac, main clone.

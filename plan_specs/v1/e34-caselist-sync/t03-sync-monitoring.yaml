@@ -92,7 +92,7 @@ spec:
         `nothing_new`, its caption says how many are waiting, and the staleness check of ac3 treats a
         cap-bound run as not-current rather than as a successful no-op.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

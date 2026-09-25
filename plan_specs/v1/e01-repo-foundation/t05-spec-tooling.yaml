@@ -73,7 +73,7 @@ spec:
         Release order comes from plan_specs/releases/*.yaml (no hardcoded list in the validator), and
         `uv run ruff check scripts` passes with no `scripts/` exclusion left in the ruff config.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -60,8 +60,8 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 10 | 150 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 21 | 13 | 227 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 12 | 150 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 23 | 15 | 234 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -92,10 +92,10 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [Initialize local git repository and monorepo skeleton](plan_specs/v1/e01-repo-foundation/t01-init-local-repo.yaml) `v1-e01-t01-init-local-repo` | Succeeded | 0 | 6.0 |
-| [Create GitHub repository, push, and protect main](plan_specs/v1/e01-repo-foundation/t02-github-remote.yaml) `v1-e01-t02-github-remote` | Pending | 1 | 2.5 |
+| [Create GitHub repository, push, and protect main](plan_specs/v1/e01-repo-foundation/t02-github-remote.yaml) `v1-e01-t02-github-remote` | Succeeded | 1 | 2.5 |
 | [uv workspace, Python 3.12 and quality tooling](plan_specs/v1/e01-repo-foundation/t03-uv-workspace-tooling.yaml) `v1-e01-t03-uv-workspace-tooling` | Succeeded | 1 | 5.5 |
 | [GitHub Actions CI pipeline](plan_specs/v1/e01-repo-foundation/t04-ci-pipeline.yaml) `v1-e01-t04-ci-pipeline` | Pending | 3 | 4.0 |
-| [PlanSpec validation and index tooling](plan_specs/v1/e01-repo-foundation/t05-spec-tooling.yaml) `v1-e01-t05-spec-tooling` | Pending | 2 | 9.5 |
+| [PlanSpec validation and index tooling](plan_specs/v1/e01-repo-foundation/t05-spec-tooling.yaml) `v1-e01-t05-spec-tooling` | Succeeded | 2 | 9.5 |
 | [Architecture proposal and ADR records](plan_specs/v1/e01-repo-foundation/t06-adr-docs.yaml) `v1-e01-t06-adr-docs` | Succeeded | 1 | 4.5 |
 | [debate_cli Typer + Rich skeleton](plan_specs/v1/e01-repo-foundation/t07-cli-skeleton.yaml) `v1-e01-t07-cli-skeleton` | Succeeded | 1 | 6.0 |
 | [dev→main promotion workflow and guards](plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml) `v1-e01-t08-branch-promotion-workflow` | Pending | 2 | 7.5 |
@@ -147,7 +147,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Caselist and OpenEv data-use policy](plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml) `v1-e30-t01-caselist-data-use-policy` | Succeeded | 0 | 9.0 |
 | [Caselist domain model](plan_specs/v1/e30-caselist-ingestion/t02-caselist-domain-model.yaml) `v1-e30-t02-caselist-domain-model` | Succeeded | 2 | 7.0 |
 | [Weekly archive importer](plan_specs/v1/e30-caselist-ingestion/t03-archive-importer.yaml) `v1-e30-t03-archive-importer` | Succeeded | 4 | 15.0 |
-| [OpenEv camp-file importer](plan_specs/v1/e30-caselist-ingestion/t04-openev-importer.yaml) `v1-e30-t04-openev-importer` | Pending | 1 | 8.0 |
+| [OpenEv camp-file importer](plan_specs/v1/e30-caselist-ingestion/t04-openev-importer.yaml) `v1-e30-t04-openev-importer` | Succeeded | 1 | 8.0 |
 | [Publish sources and manifests to S3](plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml) `v1-e30-t05-caselist-publish` | Succeeded | 2 | 9.0 |
 | [Initial caselist and camp-file backfill](plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml) `v1-e30-t06-initial-backfill` | Pending | 3 | 5.0 |
 | [Source removal and suppression list](plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml) `v1-e30-t07-source-removal` | Pending | 2 | 12.5 |
@@ -160,7 +160,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Verbatim/CardMirror style profile](plan_specs/v1/e31-debate-file-parsing/t02-verbatim-style-profile.yaml) `v1-e31-t02-verbatim-style-profile` | Succeeded | 2 | 13.0 |
 | [Debate .docx parser](plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml) `v1-e31-t03-debate-docx-parser` | Succeeded | 2 | 15.0 |
 | [Card fingerprints and occurrences](plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml) `v1-e31-t04-card-fingerprints` | Pending | 1 | 13.0 |
-| [Parser accuracy evaluation](plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) `v1-e31-t05-parser-eval` | Pending | 1 | 17.0 |
+| [Parser accuracy evaluation](plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) `v1-e31-t05-parser-eval` | InProgress | 1 | 16.0 |
 | [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | Pending | 4 | 12.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
@@ -168,8 +168,10 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [OpenCaselist API client](plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml) `v1-e34-t01-caselist-api-client` | Succeeded | 2 | 11.0 |
-| [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Pending | 3 | 11.5 |
+| [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Succeeded | 3 | 11.0 |
 | [Sync run log and staleness warnings](plan_specs/v1/e34-caselist-sync/t03-sync-monitoring.yaml) `v1-e34-t03-sync-monitoring` | Pending | 1 | 9.0 |
+| [Periodic full-archive refresh](plan_specs/v1/e34-caselist-sync/t04-full-archive-refresh.yaml) `v1-e34-t04-full-archive-refresh` | Pending | 2 | 6.5 |
+| [Install and enable the weekly agent](plan_specs/v1/e34-caselist-sync/t05-enable-schedule.yaml) `v1-e34-t05-enable-schedule` | Pending | 2 | 1.5 |
 
 
 ### v1.2 — Argument landscape & file building

@@ -39,6 +39,38 @@ repos:
         entry: uv run --frozen check-merge-conflict --assume-in-merge
         language: unsupported
         types: [text]
+      # The PlanSpec validator (v1-e01-t05). Both scripts run through the project environment
+      # (`python scripts/...`) rather than their PEP 723 headers, because `uv run --frozen` refuses a
+      # script that has no lockfile of its own, and because the project environment is already
+      # installed and reaches no network. The headers are what makes them runnable on their own.
+      #
+      # It reads the whole plan_specs/ tree rather than the
+      # files that changed, because most of what it checks is between documents: a prerequisite
+      # that names a task in a later release, an epic Plan that has stopped listing one of its
+      # task files, a duplicated metadata.name. It takes about a second, so it runs only when
+      # plan_specs/ or the validator itself changed.
+      - id: validate-specs
+        name: validate PlanSpecs
+        entry: uv run --frozen python scripts/validate_specs.py
+        language: unsupported
+        files: ^(plan_specs/|scripts/validate_specs\.py$)
+        pass_filenames: false
+        require_serial: true
+      # The offline Markdown link and anchor checker (v1-e01-t05). Also whole-repository rather
+      # than per-file: renaming a heading breaks links in files the commit never touched, which is
+      # exactly the case the ad-hoc linkcheckmd run in v1-e01-t06 could not see.
+      #
+      # `scripts/spec_index.py --check` is deliberately NOT a hook. ROADMAP.md is refreshed by the
+      # PM in a PR of its own so that parallel task PRs do not conflict on it, which means a task
+      # branch is expected to leave it stale; v1-e01-t04 requires the check only on pull requests
+      # into main, which the PM raises one at a time.
+      - id: check-links
+        name: check Markdown links and anchors
+        entry: uv run --frozen python scripts/check_links.py
+        language: unsupported
+        types: [markdown]
+        pass_filenames: false
+        require_serial: true
       # Terraform is not a uv dependency: it and tflint come from the operator's machine
       # (`brew install hashicorp/tap/terraform tflint`) and from the CI runner's setup steps, and
       # the script says so if either is missing. It runs only when infrastructure/ or the script

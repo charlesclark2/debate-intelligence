@@ -16,6 +16,7 @@ Every subcommand reads the specs of the checkout it is run from.
   verdict <task>                 print the PM verdict recorded in the session report
   pr-body <task>                 render the pull request body
 """
+
 from __future__ import annotations
 
 import re
@@ -67,15 +68,27 @@ def phase_of(g: dict) -> str:
 
 
 def prereq_names(g: dict) -> list[str]:
-    return [c["name"] for c in (g["spec"].get("context") or [])
-            if c.get("kind") == "TaskRef" and c.get("relation") == "dependsOn"]
+    return [
+        c["name"]
+        for c in (g["spec"].get("context") or [])
+        if c.get("kind") == "TaskRef" and c.get("relation") == "dependsOn"
+    ]
 
 
 def cmd_info(task: str) -> None:
     path, g = find(task)
     labels = g["metadata"]["labels"]
-    print("\t".join([path.relative_to(ROOT).as_posix(), g["metadata"]["annotations"]["debate/title"],
-                     labels["debate/epic"], labels["debate/release"], phase_of(g)]))
+    print(
+        "\t".join(
+            [
+                path.relative_to(ROOT).as_posix(),
+                g["metadata"]["annotations"]["debate/title"],
+                labels["debate/epic"],
+                labels["debate/release"],
+                phase_of(g),
+            ]
+        )
+    )
 
 
 def cmd_prereqs(task: str) -> None:
@@ -100,8 +113,9 @@ def cmd_ready() -> None:
         if phase_of(g) not in ("Pending", "Ready"):
             continue
         if all(phase_of(goals[p]) == "Succeeded" for p in prereq_names(g) if p in goals):
-            rows.append((g["metadata"]["labels"]["debate/release"], n,
-                         g["metadata"]["annotations"]["debate/title"]))
+            rows.append(
+                (g["metadata"]["labels"]["debate/release"], n, g["metadata"]["annotations"]["debate/title"])
+            )
     order = lambda r: tuple(int(x) for x in r[0][1:].split("."))  # noqa: E731
     for rel, n, title in sorted(rows, key=lambda r: (order(r), r[1])):
         print(f"{rel}\t{n}\t{title}")
@@ -128,10 +142,13 @@ def cmd_new_report(task: str) -> None:
         return
     text = TEMPLATE.read_text()
     text = text.split("<!-- TEMPLATE START -->", 1)[-1].lstrip()
-    for k, v in {"{{TASK}}": task, "{{TITLE}}": g["metadata"]["annotations"]["debate/title"],
-                 "{{SPEC}}": path.relative_to(ROOT).as_posix(),
-                 "{{EPIC}}": g["metadata"]["labels"]["debate/epic"],
-                 "{{RELEASE}}": g["metadata"]["labels"]["debate/release"]}.items():
+    for k, v in {
+        "{{TASK}}": task,
+        "{{TITLE}}": g["metadata"]["annotations"]["debate/title"],
+        "{{SPEC}}": path.relative_to(ROOT).as_posix(),
+        "{{EPIC}}": g["metadata"]["labels"]["debate/epic"],
+        "{{RELEASE}}": g["metadata"]["labels"]["debate/release"],
+    }.items():
         text = text.replace(k, v)
     out.write_text(text)
     print(out.relative_to(ROOT))
@@ -156,18 +173,24 @@ def cmd_pr_body(task: str) -> None:
     rep = REPORTS / f"{task}.md"
     text = rep.read_text() if rep.exists() else ""
     rel = path.relative_to(ROOT).as_posix()
+    labels = g["metadata"]["labels"]
+    report = REPORTS.relative_to(ROOT).as_posix() + f"/{task}.md"
     parts = [
         f"Implements **{task}** — {g['metadata']['annotations']['debate/title']}",
-        f"Release `{g['metadata']['labels']['debate/release']}` · epic `{g['metadata']['labels']['debate/epic']}`",
-        f"Spec: [`{rel}`]({rel}) · Session report: [`docs/session-reports/{task}.md`](docs/session-reports/{task}.md)",
+        f"Release `{labels['debate/release']}` · epic `{labels['debate/epic']}`",
+        f"Spec: [`{rel}`]({rel}) · Session report: [`{report}`]({report})",
         "",
-        "## Summary", section(text, "Summary") or "_See session report._",
+        "## Summary",
+        section(text, "Summary") or "_See session report._",
         "",
-        "## Acceptance criteria", section(text, "Acceptance criteria") or "_See session report._",
+        "## Acceptance criteria",
+        section(text, "Acceptance criteria") or "_See session report._",
         "",
-        "## Operator follow-ups", section(text, "Operator follow-ups") or "None.",
+        "## Operator follow-ups",
+        section(text, "Operator follow-ups") or "None.",
         "",
-        "## PM review", section(text, "PM review") or "_Missing._",
+        "## PM review",
+        section(text, "PM review") or "_Missing._",
         "",
         "---",
         "- [ ] CI (`ci`) is green",
@@ -221,17 +244,32 @@ If you cannot finish, still write the report with status BLOCKED or PARTIAL and 
 def cmd_prompt(task: str, worktree: str) -> None:
     path, g = find(task)
     labels = g["metadata"]["labels"]
-    print(PROMPT.format(task=task, title=g["metadata"]["annotations"]["debate/title"],
-                        spec=path.relative_to(ROOT).as_posix(), major=labels["debate/major-version"],
-                        epic_dir=path.parent.name, epic=labels["debate/epic"],
-                        release=labels["debate/release"], worktree=worktree).rstrip())
+    print(
+        PROMPT.format(
+            task=task,
+            title=g["metadata"]["annotations"]["debate/title"],
+            spec=path.relative_to(ROOT).as_posix(),
+            major=labels["debate/major-version"],
+            epic_dir=path.parent.name,
+            epic=labels["debate/epic"],
+            release=labels["debate/release"],
+            worktree=worktree,
+        ).rstrip()
+    )
 
 
 def main() -> None:
     a = sys.argv[1:]
-    cmds = {"info": (cmd_info, 1), "prereqs": (cmd_prereqs, 1), "ready": (cmd_ready, 0),
-            "set-phase": (cmd_set_phase, 2), "prompt": (cmd_prompt, 2), "new-report": (cmd_new_report, 1),
-            "verdict": (cmd_verdict, 1), "pr-body": (cmd_pr_body, 1)}
+    cmds = {
+        "info": (cmd_info, 1),
+        "prereqs": (cmd_prereqs, 1),
+        "ready": (cmd_ready, 0),
+        "set-phase": (cmd_set_phase, 2),
+        "prompt": (cmd_prompt, 2),
+        "new-report": (cmd_new_report, 1),
+        "verdict": (cmd_verdict, 1),
+        "pr-body": (cmd_pr_body, 1),
+    }
     if not a or a[0] not in cmds or len(a) - 1 != cmds[a[0]][1]:
         die(__doc__)
     cmds[a[0]][0](*a[1:])

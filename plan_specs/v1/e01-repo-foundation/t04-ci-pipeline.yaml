@@ -100,7 +100,7 @@ spec:
         excludes the `slow` and `live` markers, and no heavy suite (LLM evals, browser end-to-end, live
         canaries, terraform plan/apply, load tests, long security scans) runs on PRs into dev.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

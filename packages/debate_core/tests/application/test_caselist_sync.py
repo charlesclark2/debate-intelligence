@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -82,15 +82,25 @@ from debate_core.application.errors import (
 from debate_core.application.ports.caselist_source import (
     ArchiveKind,
     ArchiveListing,
+    CaselistAuthExpired,
     CaselistInfo,
     DownloadedFile,
     OpenEvFile,
     openev_inbox_name,
 )
 from debate_core.application.ports.evidence_store import ObjectInfo, ObjectKey
+from debate_core.application.ports.notifier import Notification, RecordingNotifier
+from debate_core.application.sync_runs import (
+    SYNC_RUN_LOG_FILENAME,
+    SyncRunLog,
+    SyncRunMonitor,
+    SyncRunOutcome,
+    SyncRunRecord,
+)
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore, SqliteDatabase
 from debate_core.integrations.local.archive_reader import read_archive
+from debate_core.integrations.local.macos_notifier import MacOsNotifier
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
@@ -1154,3 +1164,217 @@ async def test_an_immediate_re_run_with_nothing_deferred_is_still_nothing_new(
     assert again.archives_wanted == 0
     assert again.archives_deferred == 0
     assert again.nothing_new
+
+
+# ------------------------------------------------------------------------------------------------
+# Run records and notifications around a real pull (v1-e34-t03 ac1, ac2, ac4)
+# ------------------------------------------------------------------------------------------------
+#
+# `SyncRunMonitor` wraps the service from outside. These run the real pipeline under it, with a
+# RecordingNotifier: no notification and no AWS call leaves the test (moto only).
+
+DEV_LOGIN = "aws sso login --profile debate-dev-evidence"
+FIXTURE_TOKEN = "fixture-token-8c2d41f07ab9"
+SYNTHETIC_STUDENT = "Juniper Okafor"
+"""An invented debater's name, planted where a real one could leak: a disclosure path."""
+
+
+def sync_monitor(data_dir: Path, notifier: RecordingNotifier, remote: object | None = None) -> SyncRunMonitor:
+    return SyncRunMonitor(
+        state_dir=data_dir,
+        environment="dev",
+        notifier=notifier,
+        remote=remote,  # type: ignore[arg-type]
+        aws_login_command=DEV_LOGIN,
+        secrets=lambda: [FIXTURE_TOKEN],
+        clock=lambda: RUN_CLOCK,
+    )
+
+
+def run_log(data_dir: Path) -> list[SyncRunRecord]:
+    return SyncRunLog(data_dir / SYNC_RUN_LOG_FILENAME).read()
+
+
+async def test_a_successful_pull_leaves_one_run_record_and_notifies_nobody(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    await import_first_week(data_dir, archives)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+    notifier = RecordingNotifier()
+
+    monitored = await sync_monitor(data_dir, notifier).watch(
+        lambda: service.run([SYNTHETIC_CASELIST]), caselists=[SYNTHETIC_CASELIST], mode="run"
+    )
+
+    [record] = run_log(data_dir)
+    assert record == monitored.record
+    assert record.outcome is SyncRunOutcome.COMPLETED
+    assert (record.archives_wanted, record.archives_downloaded, record.archives_deferred) == (2, 2, 0)
+    assert record.openev_downloaded == 1
+    assert notifier.sent == []
+
+
+async def test_a_failed_download_stage_leaves_a_run_record_and_one_notify_naming_the_rerun(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    await import_first_week(data_dir, archives)
+    source.rate_limit_after = 0
+    source.rate_limit_retry_after = 30.0  # a burst limit, not the daily one: a real failure
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+    notifier = RecordingNotifier()
+
+    monitored = await sync_monitor(data_dir, notifier).watch(
+        lambda: service.run([SYNTHETIC_CASELIST]), caselists=[SYNTHETIC_CASELIST], mode="run"
+    )
+
+    assert not monitored.summary.succeeded
+    [record] = run_log(data_dir)
+    assert record.outcome is SyncRunOutcome.FAILED
+    [notification] = notifier.sent
+    assert notification.title == "caselist pull failed"
+    assert "download" in notification.message
+    assert notification.fix_command == "debate-research caselist pull"
+
+
+async def test_an_expired_caselist_token_leaves_a_run_record_and_one_notify_naming_auth_login(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """CaselistAuthExpired escapes the run (policy E34 gate 5); the monitor records it anyway."""
+    await import_first_week(data_dir, archives)
+
+    async def refuse(caselist: str) -> list[ArchiveListing]:
+        raise CaselistAuthExpired(401, f"list archives for {caselist}")
+
+    source.list_archives = refuse  # type: ignore[method-assign]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+    notifier = RecordingNotifier()
+
+    with pytest.raises(CaselistAuthExpired):
+        await sync_monitor(data_dir, notifier).watch(
+            lambda: service.run([SYNTHETIC_CASELIST]), caselists=[SYNTHETIC_CASELIST], mode="run"
+        )
+
+    [record] = run_log(data_dir)
+    assert record.outcome is SyncRunOutcome.FAILED
+    assert record.error_class == "CaselistAuthExpired"
+    [notification] = notifier.sent
+    assert notification.fix_command == "debate-research caselist auth login"
+
+
+async def test_an_expired_sso_session_leaves_a_run_record_and_one_notify_naming_sso_login(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """Publish pends, the record's own upload pends, and the operator hears about it once."""
+    await import_first_week(data_dir, archives)
+    service = build_service(
+        source=source,
+        data_dir=data_dir,
+        inbox=inbox,
+        publisher=CaselistPublishService(local=local_evidence(data_dir), remote=ExpiredBucket()),
+        status=CaselistStatusService(local=local_evidence(data_dir), remote=ExpiredBucket()),
+    )
+    notifier = RecordingNotifier()
+
+    monitored = await sync_monitor(data_dir, notifier, remote=ExpiredBucket()).watch(
+        lambda: service.run([SYNTHETIC_CASELIST]), caselists=[SYNTHETIC_CASELIST], mode="run"
+    )
+
+    assert monitored.summary.succeeded, "an expired session is a delay, not a failed run"
+    [record] = run_log(data_dir)
+    assert record.outcome is SyncRunOutcome.PUBLISH_PENDING
+    assert not monitored.record_published
+    [notification] = notifier.sent
+    assert notification.fix_command.startswith(DEV_LOGIN)
+    assert "caselist pull --publish-pending" in notification.fix_command
+
+
+async def test_a_cap_blocked_run_record_is_cap_deferred_and_does_not_notify(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """ac5: a backlog that has not grown for two runs is recorded, not announced."""
+    source.openev_files = []
+    await import_first_week(data_dir, archives)
+    spend_todays_allowance(data_dir)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+    notifier = RecordingNotifier()
+
+    await sync_monitor(data_dir, notifier).watch(
+        lambda: service.run([SYNTHETIC_CASELIST]), caselists=[SYNTHETIC_CASELIST], mode="run"
+    )
+
+    [record] = run_log(data_dir)
+    assert record.outcome is SyncRunOutcome.CAP_DEFERRED
+    assert record.deferred_by_caselist == {SYNTHETIC_CASELIST: 2}
+    assert notifier.sent == []
+
+
+async def test_redact_no_fixture_token_or_student_name_reaches_a_record_or_a_notification(
+    source: FakeCaselistSource,
+    data_dir: Path,
+    inbox: Path,
+    archives: dict[date, Path],
+    bucket: S3EvidenceObjectStore,
+) -> None:
+    """ac4's redaction test: plant both where a careless message would carry them, and look.
+
+    The parse stage fails with an `OSError` naming a disclosure path that holds a synthetic
+    student's name and the fixture token; the run then records a parse failure and notifies. The
+    local log, the object in the (moto) bucket and every notification are searched for both.
+    """
+    await import_first_week(data_dir, archives)
+    planted = OSError(
+        2,
+        f"No such file or directory (caselist_token={FIXTURE_TOKEN})",
+        f"inbox/Maple Grove/ZaLu/{SYNTHETIC_STUDENT}-Aff-Harbor Classic-Round 1.docx",
+    )
+    service = build_service(
+        source=source, data_dir=data_dir, inbox=inbox, parse=RecordingParseStage(failure=planted)
+    )
+    notifier = RecordingNotifier()
+
+    monitored = await sync_monitor(data_dir, notifier, remote=bucket).watch(
+        lambda: service.run([SYNTHETIC_CASELIST]), caselists=[SYNTHETIC_CASELIST], mode="run"
+    )
+
+    assert monitored.record.outcome is SyncRunOutcome.INCOMPLETE
+    assert monitored.record_published
+    published = data_dir / "published-record.json"
+    await bucket.get_file(monitored.record.object_key, published)
+    notified = [f"{one.title} {one.message} {one.fix_command}" for one in notifier.sent]
+    assert notified, "a failed stage must notify"
+    for text in (
+        (data_dir / SYNC_RUN_LOG_FILENAME).read_text(encoding="utf-8"),
+        published.read_text(encoding="utf-8"),
+        *notified,
+    ):
+        for forbidden in (FIXTURE_TOKEN, SYNTHETIC_STUDENT, "Juniper", "Okafor", "ZaLu", "Maple Grove"):
+            assert forbidden not in text, f"{forbidden!r} reached a record or a notification"
+
+
+def test_notify_through_osascript_passes_the_text_as_arguments_not_script() -> None:
+    """A quote in the text cannot end an AppleScript string, because it is never in the script."""
+    ran: list[list[str]] = []
+
+    def record_command(command: Sequence[str]) -> int:
+        ran.append(list(command))
+        return 0
+
+    hostile = 'done" & (do shell script "touch /tmp/owned") & "'
+    MacOsNotifier(run=record_command, executable="/usr/bin/osascript").notify(
+        Notification(
+            title="caselist pull failed", message=hostile, fix_command="debate-research caselist pull"
+        )
+    )
+
+    [command] = ran
+    script = [command[index + 1] for index, part in enumerate(command) if part == "-e"]
+    assert all(hostile not in line and "touch" not in line for line in script)
+    assert command[-3].startswith('done" & (do shell script')
+    assert command[-2:] == ["caselist pull failed", "debate-research caselist pull"]
+
+
+def test_notify_failure_of_osascript_does_not_raise() -> None:
+    def broken(command: Sequence[str]) -> int:
+        raise FileNotFoundError("osascript")
+
+    MacOsNotifier(run=broken).notify(Notification(title="t", message="m", fix_command="f"))

@@ -81,8 +81,10 @@ __all__ = [
     "SYNC_RUN_KEY_PREFIX",
     "SYNC_RUN_LOG_FILENAME",
     "MonitoredRun",
+    "NoRemoteRunLog",
     "RunMode",
     "StageEntry",
+    "SyncRunHistory",
     "SyncRunLog",
     "SyncRunMonitor",
     "SyncRunOutcome",
@@ -733,3 +735,60 @@ class SyncRunMonitor:
 
     def _secret_values(self) -> list[str]:
         return [value for value in self._secrets() if value]
+
+
+# ------------------------------------------------------------------------------------------------
+# Reading the history back: `caselist runs`
+# ------------------------------------------------------------------------------------------------
+
+
+class SyncRunHistory:
+    """Recent runs from the local log or the bucket, and whether the schedule has gone quiet.
+
+    The second half is what makes a run that *did not happen* visible. A run that failed leaves a
+    record and a notification; a launchd agent that stopped firing leaves nothing, and the only
+    sign is that the newest record keeps getting older.
+    """
+
+    def __init__(
+        self,
+        *,
+        log: SyncRunLog,
+        remote: Callable[[], EvidenceObjectStore] | None,
+        scratch_dir: Path,
+        overdue_after_days: int,
+    ) -> None:
+        self._log = log
+        self._remote = remote
+        self._scratch_dir = Path(scratch_dir)
+        self.overdue_after_days = overdue_after_days
+
+    async def recent(self, last: int, *, remote: bool = False) -> list[SyncRunRecord]:
+        """The `last` most recent records, newest first, from the log or (`remote`) the bucket."""
+        if not remote:
+            return self._log.last(last)
+        if self._remote is None:
+            raise NoRemoteRunLog
+        return await read_remote_records(self._remote(), last=last, scratch_dir=self._scratch_dir)
+
+    def days_since_last_run(self, records: Sequence[SyncRunRecord], now: datetime) -> int | None:
+        """Whole days since the newest of `records` started, or `None` when there are none."""
+        if not records:
+            return None
+        newest = max(record.started_at for record in records)
+        return (now - newest).days
+
+    def overdue(self, records: Sequence[SyncRunRecord], now: datetime) -> bool:
+        """No run at all, or none for longer than a weekly schedule plus a day of grace."""
+        days = self.days_since_last_run(records, now)
+        return days is None or days > self.overdue_after_days
+
+
+class NoRemoteRunLog(DomainError):
+    """`--remote` was asked for in an environment that names no evidence bucket."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "this environment names no evidence bucket, so there is no remote run log to read; "
+            "drop --remote to read this machine's log"
+        )

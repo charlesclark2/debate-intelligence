@@ -94,6 +94,8 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{AWS_PROFILE_NAME}"\n'
         "[caselist]\n"
         "api_enabled = true\n"
+        # A dev profile would pick the macOS notifier on a Mac; no check may notify (v1-e34-t03).
+        'notifier = "none"\n'
         f'api_base_url = "{API}"\n'
         f'sync_caselists = ["{SYNTHETIC_CASELIST}"]\n'
         # The floor the settings allow. What this check is about is the run, not the pacing, and

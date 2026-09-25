@@ -229,10 +229,17 @@ How to work:
    touch dev/main; the operator does that with scripts/task after PM review.
 
 When the work is complete:
-- Set the task Goal status.phase to Succeeded
-  (`uv run scripts/task_helper.py set-phase {task} Succeeded`) and run
-  `uv run scripts/validate_specs.py`. Do NOT regenerate ROADMAP.md (no scripts/spec_index.py): the
-  PM refreshes it separately, because every task touching it makes parallel PRs conflict.
+- Set the task Goal status.phase to Succeeded ONLY if every acceptance criterion actually passed
+  (`uv run scripts/task_helper.py set-phase {task} Succeeded`). If any criterion is one no session
+  can close - a run needing credentials or a device, a GitHub setting, a sign-off, a measurement
+  that can only be taken after this branch merges - leave the phase InProgress, say so in the
+  report's summary, and mark those criteria NOT RUN with the reason. The phase is the Goal's
+  completion, not your verdict on your own work: a task can be finished, reviewed and merged
+  `--partial` while staying InProgress. Reporting Succeeded with an open criterion is the one
+  mistake that gets past both the PM and `scripts/task pr`.
+  Then run `uv run scripts/validate_specs.py`. Do NOT regenerate ROADMAP.md (no
+  scripts/spec_index.py) unless ROADMAP.md is in this task's constraints.packages: the PM refreshes
+  it separately, because every task touching it makes parallel PRs conflict.
 - Fill in the session report at docs/session-reports/{task}.md (already created from the template).
   Every acceptance criterion gets PASS/FAIL/NOT RUN with the evidence (command + result). Leave the
   "PM review" section exactly as it is; the PM fills it in.

@@ -262,9 +262,68 @@ has no reason to conflict here.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**
 
 **Notes:**
+
+Accepted. One thing to do before the PR, in section 3 below.
+
+**Checked directly rather than from the report.**
+
+* `release_order` sorts on `(int(major), int(minor))` parsed out of the file stem, not on the stem
+  itself. "Read from the file names" could have meant a lexical sort, which would put `v1.10`
+  before `v1.2` and silently misorder every roll-up the day a tenth minor release exists. The
+  docstring says `v1.2 before v1.10` in as many words. This is the detail I went looking for and it
+  was already right.
+* `scripts/check_links.py` declares `requires-python` and **no** dependencies, so it is standard
+  library only as the spec's `forbidden` list requires. `validate_specs.py` and `spec_index.py`
+  each declare `pyyaml>=6` and nothing else.
+* Both hooks are wired, and the comment above them says `spec_index.py --check` is deliberately not
+  one, with the reason and the pointer to `v1-e01-t04` requiring it only on pull requests into
+  `main`. That is ac4 and the amendment behind it, honoured rather than paraphrased.
+* The `scripts/` exclusion is gone from `[tool.ruff]`, with a comment saying which task removed it
+  and why.
+* `uv run scripts/spec_index.py --check` exits 0 on the branch as it stands, and
+  `validate_specs.py --status` prints the per-release and per-epic roll-up, correctly showing the
+  one `InProgress` task in v1.1.
+
+**The ROADMAP fixture is the best thing in this task.** ac3 asks for a deterministic generator, and
+the obvious way to test that is to run the generator twice and compare — which proves only that the
+code is deterministic, not that it is right. Writing the fixture tree's generated section by hand
+from the specs beside it makes `--check` a comparison against an independent expectation instead of
+against the renderer's own output. That is working agreement 6 applied where it was least
+convenient, and the three bugs the tests-first order turned up — the `KeyError` on a spec missing
+`metadata.name`, duplicate node ids counted once per occurrence, and anchors built after code spans
+were blanked — are the return on it.
+
+**One correction: regenerate ROADMAP.md after the sync, not after the merge.**
+
+The report frames the post-sync staleness as "the designed PM-refresh behaviour rather than a
+regression." That is right for every *other* task's branch and wrong for this one. This task owns
+`ROADMAP.md` (it is in `constraints.packages`), and the `spec-index` node carries a
+`command_succeeds` criterion that `uv run scripts/spec_index.py --check` passes. Leaving the branch
+with that check failing ships a PR whose own acceptance criterion is red. The designed behaviour
+begins with the *next* task branch, not this one. So: sync, regenerate, confirm `--check` exits 0,
+commit, then open the PR.
+
+Note the branch is behind by **four** commits, not three — a fourth spec PR
+(`specs/split-schedule-enablement`, which added `v1-e34-t04` and `v1-e34-t05`) merged after the
+report was written, so the regenerated table will carry two tasks the session never saw.
+
+**`scripts/task_helper.py` — accepted, and there is no conflict to manage.**
+`v1-e01-t11-task-workflow-cli` is `Succeeded` with no branch and no worktree, so nobody is editing
+that file. `scripts/` is in this task's own `constraints.packages`, the changes are
+formatting-only, and the session ran every subcommand to confirm identical output. Flagging it was
+the right instinct; the risk was nil.
+
+**Concurrency.** `v1-e34-t03-sync-monitoring` is running in the other worktree, in
+`debate_core.application` and `debate_cli`. No overlap with this task's packages except the
+possibility of `pyproject.toml` and `uv.lock`, both on the conflict table in
+`docs/process/task-workflow.md`.
+
+**Outstanding at the time of this verdict:** the full `uv run pytest` run, correctly left to the
+operator under the two-minute rule. The five suites touching this task's code came to 405 passed, 1
+skipped. This verdict stands unless the post-sync full run is red.

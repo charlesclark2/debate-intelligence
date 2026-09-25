@@ -181,9 +181,67 @@ None. Everything ran in the session; the longest step was the full suite, at 48 
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**
 
 **Notes:**
+
+Accepted, phase stays `Succeeded`. One spec amendment on this branch, one follow-up filed
+elsewhere, nothing to send back.
+
+**Deviation 1 is right and the spec was wrong.** ac4 asks for two things that its own stated key
+cannot both deliver: the same disclosure across three cumulative snapshots collapsing to one
+occurrence, and cluster counts that "count distinct teams, not files". Keyed by source sha256 plus
+element index alone, one file disclosed by two teams is one occurrence and the distinct-team count
+is 1 — ac4's second half made untrue by ac4's own key. Adding the disclosing team and round keeps
+the first half intact (the same team's disclosure in a later snapshot still collapses) and makes
+the second half true. The description and the `occurrence-table` node are amended here. Noticing
+that a criterion contradicts itself, and saying so rather than picking the half that was easier to
+implement, is the thing I most want from these sessions.
+
+**ac2 was done the way it needed to be done.** 35 variants written, labelled by hand, and committed
+*before the clusterer existed*, so `--check` on the numbers compares against an independent
+expectation rather than against the algorithm's own output. The hard negatives are genuinely hard —
+two cards from one article, the same author on adjacent pages, two authors opening with the same
+statute quote, two short cards sharing eleven opening words — and precision 1.000 with zero false
+merges across those is a real result rather than an easy one. This is working agreement 6 applied
+where it was least convenient, for the second task running.
+
+**The four misses are reported honestly and one of them is interesting.** A containment of 0.81 on
+an OCR-split word is the algorithm behaving as specified. The other is not: containment 1.0 on a
+trimmed copy that the 32x4 banding never paired for comparison, so the confirmation step never ran.
+Declining to retune banding the spec prescribes, and listing it as follow-up instead, is correct.
+Recall 0.947 clears the 0.90 bar with the miss disclosed rather than tuned away.
+
+I have filed the consequence against **`v1-e31-t06-parse-pipeline`**, which is where the clustering
+meets real data: it must now measure short-card recall separately and report it. The reason is not
+the four misses themselves but what they are made of — an ABBREVIATED disclosure is first and last
+words by construction, and those dominate wiki-converted caselists, so a banding weak on short
+documents would undercount precisely the format the corpus mostly consists of. That is a landscape
+correctness question, not a tuning preference, and it should be measured before anyone acts on a
+cluster count.
+
+**Checked directly rather than from the report.**
+
+* `CardOccurrence.cutter_mark` carries `repr=False`, a 16-character ceiling, and an
+  `AfterValidator` that *rejects* a whitespace-separated value because "that is a name, not a
+  mark". The spec asked for opacity and minimisation; making it structurally hard to fit a full
+  name in the field was not asked for and is better.
+* Cite-only fingerprints are domain-separated with a `_CITE_LINE_DOMAIN` prefix and carry an
+  explicit `basis` of `CITE_LINE` versus `EVIDENCE_BODY`. Without the prefix a body that happened
+  to equal some card's cite line would have collided across two different meanings of the same
+  hash. This was the second thing I went looking for and it was already handled.
+
+**The smaller deviations are all accepted.** SHAKE-128 as the seeded hash family is a reasonable
+reading of "128 seeded permutations" and satisfies the determinism the forbidden list demands —
+the shuffled-input, reversed-input and varied-`PYTHONHASHSEED` tests are the evidence that matters.
+Reading cutter marks only from the trailing `//mark` form is the conservative choice: a narrower
+recogniser under-collects provenance, where a looser one would start capturing text that is not a
+mark, and only one of those two errors is a privacy problem.
+
+**One operational note, not a defect.** `.github/workflows/ci.yml` is not on dev yet — `v1-e01-t04`
+is still open — so this pull request gets no CI run. The full suite at 2,629 passed is the only
+gate this change goes through. That is the status quo for every task so far and is exactly what
+t04 exists to end.

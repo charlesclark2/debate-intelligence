@@ -50,6 +50,10 @@ spec:
     description: >-
       The complete archive is refreshed on a rotation, at most one per run and never at the cost of
       that run's weeklies, so a withdrawn disclosure is visible within a month rather than never.
+  - id: ac5
+    description: >-
+      The schedule is installed on the coach's Mac and running unattended, against an installed build
+      rather than a working checkout, with its first unattended run recorded.
 status:
   phase: Pending
 ---
@@ -119,6 +123,15 @@ spec:
       inputs:
         goalRef: v1-e32-t05-landscape-cli
         specRef: plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml
+    - id: ext-v1-e01-t09-dev-prerelease-channel
+      kind: External
+      name: 'Prerequisite from E01: installable dev pre-release channel'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0). The launchd agent needs a
+        `debate-research` on PATH that does not move with a working checkout.
+      inputs:
+        goalRef: v1-e01-t09-dev-prerelease-channel
+        specRef: plan_specs/v1/e01-repo-foundation/t09-dev-prerelease-channel.yaml
     - id: ext-v1-e30-t06-initial-backfill
       kind: External
       name: 'Prerequisite from E30: Initial caselist and camp-file backfill'
@@ -215,5 +228,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t04-full-archive-refresh
+    - id: t05
+      kind: Task
+      name: Install and enable the weekly agent
+      description: >-
+        Operator-only: install the console script from a release, put the launchd agent on the coach's
+        Mac, and record the first run the schedule makes by itself.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t05-enable-schedule.yaml
+        goalRef: v1-e34-t05-enable-schedule
+      dependsOn:
+      - t02
+      - ext-v1-e01-t09-dev-prerelease-channel
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t05-enable-schedule reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t05-enable-schedule
 status:
   phase: Pending

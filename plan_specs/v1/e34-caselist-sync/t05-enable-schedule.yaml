@@ -1,0 +1,135 @@
+# TASK v1-e34-t05-enable-schedule — Install and enable the weekly agent
+# Epic: E34 Scheduled Caselist Sync | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §15 reliability
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t05-enable-schedule
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: Install and enable the weekly agent
+spec:
+  description: >-
+    Operator-only. v1-e34-t02 built and validated the weekly run and shipped `ops/launchd/`; this task
+    puts the schedule on the coach's Mac and records the first run it makes by itself. It is separate
+    from t02 because it has a prerequisite t02 does not: the launchd wrapper `exec`s `debate-research`
+    by name, without `uv run`, so the agent needs a console script on PATH that does not move with a
+    working checkout. The only `debate-research` on the machine today is `.venv/bin/debate-research`
+    inside the repo, which `uv sync` deletes and recreates and which tracks whatever is merged to dev -
+    a prod schedule pointed at it would run a different build every week. v1-e01-t09 ships
+    `scripts/install_channel.sh`, which installs a tagged pre-release with `uv tool install
+    --find-links`; that is the binary the agent runs. Fusing this into t02 held v1-e34-t03 and
+    v1-e34-t04 behind an unrelated blocker three tasks away, which is why it is its own task.
+    Out of scope: any change to the sync service, the wrapper, the plist template or the installer
+    (t02), run records and notifications (t03), and the full-archive rotation (t04). If installing
+    reveals a defect in any of those, it is reported against that task and not fixed here.
+  priority: 3
+  constraints:
+    packages: [docs/data, docs/runbooks, docs/session-reports]
+    forbidden:
+      - Any change to ops/launchd/, the sync service or the CLI (defects go to their own task)
+      - Enabling the schedule from an agent session; every step here is the operator's
+      - Pointing the agent at a console script inside a git working tree or a project .venv
+      - Enabling prod before one DEBATE_ENV=dev run has completed end to end
+      - School names, team codes or student names in the recorded summaries
+  context:
+    - kind: TaskRef
+      name: v1-e34-t02-scheduled-sync
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t09-dev-prerelease-channel
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `debate-research` resolves on PATH to an installed build outside every git working tree and
+        every project `.venv`, and `debate-research --version` names the tag it was installed from.
+        `ops/launchd/install.sh --dry-run` renders a plist whose PATH finds that binary.
+    - id: ac2
+      description: >-
+        The agent is installed and loaded: `launchctl print gui/$UID/com.debate-intelligence.caselist-sync`
+        shows the job, its program arguments and a weekly StartCalendarInterval, and nothing ran at load.
+    - id: ac3
+      description: >-
+        The first run the schedule makes by itself is recorded in docs/data/caselist-sync-runs.md with
+        "How it started" = scheduled, its counts agree with `caselist status` for the caselists it
+        covers, and its `succeeded` is true. Counts only; no school, team code or file name.
+    - id: ac4
+      description: >-
+        A run that the daily bulk cap truncated is recorded as such rather than as a clean run
+        (v1-e34-t03 ac5 and ac6 make that visible). If the first scheduled run is cap-bound, the row
+        says how many archives were deferred and the next week's row shows the backlog shrinking.
+    - id: ac5
+      description: >-
+        docs/runbooks/caselist-scheduled-sync.md names the installed-build prerequisite in its
+        "Before you install anything" list, with the install_channel.sh command, so the next person to
+        install the agent does not point it at a checkout.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t05-enable-schedule-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Install the build, install the agent, load it, wait a week, record what it did.
+  goalRef:
+    name: v1-e34-t05-enable-schedule
+  graph:
+    nodes:
+      - id: installed-build
+        kind: Task
+        name: Operator installs the console script from a release
+        description: >-
+          Operator-run: scripts/install_channel.sh <tag>, then confirm `which debate-research` is outside
+          the repo and `--version` names the tag. Add the prerequisite to the runbook.
+        outputs: [docs/runbooks/caselist-scheduled-sync.md]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Runbook names the installed-build prerequisite
+            path: docs/runbooks/caselist-scheduled-sync.md
+            contentMatch: "install_channel.sh"
+      - id: install-and-load
+        kind: Task
+        name: Operator installs and loads the agent
+        description: >-
+          Operator-run: ops/launchd/install.sh --dry-run, read it, install it, launchctl bootstrap,
+          launchctl print. Nothing runs at load.
+        dependsOn: [installed-build]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: custom
+            name: Operator confirms the agent is loaded
+            description: >-
+              Charlie pastes `launchctl print gui/$UID/com.debate-intelligence.caselist-sync` showing the
+              job, its program arguments and its calendar interval.
+      - id: first-scheduled-run
+        kind: Task
+        name: Record the first run the schedule made
+        description: >-
+          Operator-run, the following week: read the run summary from the log, compare it with `caselist
+          status`, and record the row. A cap-truncated run is recorded as truncated.
+        dependsOn: [install-and-load]
+        outputs: [docs/data/caselist-sync-runs.md]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: First scheduled run is recorded
+            path: docs/data/caselist-sync-runs.md
+            contentMatch: "scheduled"
+status:
+  phase: Pending

@@ -91,9 +91,11 @@ spec:
       description: >-
         ops/launchd/ contains a plist template that passes `plutil -lint`, a wrapper setting
         DEBATE_ENV and the AWS profile, and an install script with a --dry-run mode that renders the plist
-        without loading it; the operator has recorded the dev validation run and the first scheduled run.
+        without loading it; the operator has recorded the dev validation run. Installing the agent and
+        recording the first scheduled run are v1-e34-t05: they need a `debate-research` on PATH that does
+        not move with a working checkout, which is v1-e01-t09's installable build.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -194,25 +196,20 @@ spec:
             name: Installer dry-run renders a lint-clean plist (skipped off macOS)
             command: uv
             args: [run, pytest, tests/integration/test_launchd_install.py]
-      - id: operator-enable
+      - id: operator-validate
         kind: Task
-        name: Operator validates in dev and enables the schedule
+        name: Operator validates the pipeline in dev
         description: >-
-          Operator-run: one manual `DEBATE_ENV=dev debate-research caselist pull --caselist hsld26`, then
-          install.sh and `launchctl bootstrap` for the prod schedule; after the first scheduled run,
-          record both run summaries (counts only) in the data log.
+          Operator-run: `DEBATE_ENV=dev debate-research caselist pull --caselist hsld26`, end to end
+          against the live site, and the run's counts recorded in the data log. Enabling the schedule is
+          v1-e34-t05.
         dependsOn: [launchd-agent]
         outputs: [docs/data/caselist-sync-runs.md]
-        estimatedEffort: 1h
+        estimatedEffort: 0.5h
         acceptanceCriteria:
           - type: artifact_exists
-            name: First scheduled run is recorded
+            name: Dev validation run is recorded
             path: docs/data/caselist-sync-runs.md
-            contentMatch: "scheduled"
-          - type: custom
-            name: Operator confirms the agent is loaded
-            description: >-
-              Charlie confirms `launchctl print gui/$UID/com.debate-intelligence.caselist-sync` shows the
-              agent and that the first scheduled run's summary matches the S3 manifests.
+            contentMatch: "dev"
 status:
   phase: Pending

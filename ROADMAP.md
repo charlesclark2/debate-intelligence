@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 12 | 150 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 21 | 14 | 226 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 23 | 15 | 234 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -168,8 +168,10 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [OpenCaselist API client](plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml) `v1-e34-t01-caselist-api-client` | Succeeded | 2 | 11.0 |
-| [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Pending | 3 | 11.5 |
+| [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Succeeded | 3 | 11.0 |
 | [Sync run log and staleness warnings](plan_specs/v1/e34-caselist-sync/t03-sync-monitoring.yaml) `v1-e34-t03-sync-monitoring` | Pending | 1 | 9.0 |
+| [Periodic full-archive refresh](plan_specs/v1/e34-caselist-sync/t04-full-archive-refresh.yaml) `v1-e34-t04-full-archive-refresh` | Pending | 2 | 6.5 |
+| [Install and enable the weekly agent](plan_specs/v1/e34-caselist-sync/t05-enable-schedule.yaml) `v1-e34-t05-enable-schedule` | Pending | 2 | 1.5 |
 
 
 ### v1.2 — Argument landscape & file building

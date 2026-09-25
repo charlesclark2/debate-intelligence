@@ -109,6 +109,22 @@ wakes, so a laptop that was shut at 06:00 on Wednesday runs it that evening.
 
 ## Watching it
 
+You should not have to go looking. A failed stage, an expired `caselist_token`, an expired SSO
+session, and a cap backlog that has grown for two runs in a row each post a macOS notification
+naming the command that fixes it (`caselist.notifier`, `auto` by default). Every run also appends
+one record to the run log, `<data_dir>/caselist-sync-runs.jsonl`, and publishes it to
+`reports/sync-runs/<yyyy>/<run-id>.json` in the bucket (`v1-e34-t03`):
+
+```bash
+debate-research caselist runs --last 5            # this machine's log
+debate-research caselist runs --last 5 --remote   # the bucket's copy
+```
+
+Its caption says how long ago the newest run started, and says the schedule may have stopped when
+that is more than eight days — the one failure that leaves no record and sends no notification.
+
+The raw output of each run is still there:
+
 ```bash
 tail -n 1 ~/Library/Logs/debate-research/caselist-sync.jsonl | jq .data
 tail -n 40 ~/Library/Logs/debate-research/caselist-sync.err.log
@@ -119,8 +135,9 @@ One JSON object per run on stdout. The fields to read first:
 | Field | What it says |
 |---|---|
 | `succeeded` | Whether every stage that puts bytes somewhere durable finished |
-| `nothing_new` | A normal week with no new archive published yet |
-| `archives_downloaded`, `openev_downloaded` | What was fetched |
+| `nothing_new` | A normal week with no new archive published yet. Never true when the cap deferred anything |
+| `archives_wanted`, `archives_downloaded`, `archives_deferred` | Newer than what was held; fetched; left by the daily cap for a later run |
+| `openev_downloaded` | Camp files fetched |
 | `files_imported`, `blobs_stored` | What the importers filed, and how much of it was new |
 | `objects_published` | What reached the bucket |
 | `pending_publish` | Snapshots waiting for an AWS session |
@@ -153,7 +170,8 @@ maintainer, not to work around it.
 command again — an archive already in the inbox is not fetched a second time, which matters
 because each fetch spends one of the day's five.
 
-**The run says `over_daily_budget` week after week.** There is more back-catalogue than a weekly
+**The run says `over_daily_budget` week after week** (a *caselist backlog growing* notification,
+or `archives_deferred` rising in `caselist runs`). There is more back-catalogue than a weekly
 run will ever catch up on. That is the one-off fetch in `v1-e30-t06`, not a reason to raise the
 ceiling.
 

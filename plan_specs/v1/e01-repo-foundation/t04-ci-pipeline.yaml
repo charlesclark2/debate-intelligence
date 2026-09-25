@@ -23,12 +23,21 @@ spec:
     needs all of them and is the single required status check on both the protect-dev and protect-main
     rulesets (so adding jobs later never requires ruleset edits). CI is hermetic — no live network or
     model calls, no cloud credentials — and light (docs/process/working-agreements.md §1): a `changes`
-    job (dorny/paths-filter) computes path filters (python: packages/, tests/, pyproject.toml, uv.lock;
-    web: web/ or clients/; infrastructure: infrastructure/; api: packages/debate_api/, openapi/,
-    clients/) so each job runs only when its area changed. Every PR check lives as a job in this one
+    job (dorny/paths-filter) computes path filters so each job runs only when its area changed. The
+    `python` filter is wider than the Python source tree, because the default pytest selection is:
+    packages/, tests/, pyproject.toml, uv.lock, and also plan_specs/, ROADMAP.md, scripts/, ops/,
+    config/ and every tracked Markdown file, since the suite validates specs, checks links and anchors
+    across the whole repository, lints the shell under ops/ and reads the profile TOMLs. A narrower
+    filter lets a docs-only pull request merge green and then fail the next Python one, which is how a
+    gate stops being believed. The other filters are web (web/ or clients/), infrastructure
+    (infrastructure/) and api (packages/debate_api/, openapi/, clients/).
+    `lint` and `spec-validate` carry no path filter at all: ac1 requires `check-merge-conflict` over
+    every tracked file and `validate_specs.py` on every trigger, and a filtered job cannot honour
+    either. Every PR check lives as a job in this one
     ci.yml, including the ones later tasks add (web in v2-e14-t01, terraform-checks in v1-e29-t02 —
     if v1-e29-t02 merged first, this task adds the `terraform-checks` job that calls
-    scripts/terraform_checks.sh,
+    scripts/terraform_checks.sh; the `site` job that v1-e36-t03 hands to this task by name, running
+    the jsdom and axe-core checks over site/;
     api-contract in v2-e12-t06), and each new job is appended to the aggregate `ci` job's needs, so
     path-filtered checks still gate merges; separate workflows are only for non-PR work. The test job
     runs the default pytest selection that excludes `slow` and `live` markers, and heavy suites (LLM
@@ -126,10 +135,12 @@ spec:
         description: >-
           ci.yml triggered on pull_request and push for [dev, main] with a `changes` job (dorny/paths-filter)
           exposing path filter outputs (python, web, infrastructure, api), jobs lint (ruff check + format
-          --check), typecheck (pyright), test (pytest -n auto --cov -m "not slow and not live"),
+          --check, plus check-merge-conflict over every tracked file), typecheck (pyright), test
+          (pytest -n auto --cov -m "not slow and not live"),
           import-boundaries (lint-imports), spec-validate (validate_specs.py always, plus
-          spec_index.py --check guarded by `github.base_ref == 'main'`)
-          gated on those outputs, and an
+          spec_index.py --check guarded by `github.base_ref == 'main'`) and site (v1-e36-t03's jsdom
+          and axe-core checks). typecheck, test, import-boundaries and site are gated on the filter
+          outputs; lint and spec-validate are not, per ac1. And an
           aggregate `ci` job (needs: all, if: always(), fails unless every need succeeded or was skipped by
           its path filter, i.e. result success, or skipped with its filter output false); jobs later tasks add
           to the PR path (web, terraform-checks, api-contract) go in this file, gated on

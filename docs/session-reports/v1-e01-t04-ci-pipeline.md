@@ -245,9 +245,51 @@ kickoff commit.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**
 
 **Notes:**
+
+Accepted, merging `--partial`. `green-run` and `gate-proof` are correctly NOT RUN: the first needs
+ci.yml to exist on dev, the second needs a ruleset change, and neither is a session's to make. This
+is the first session to reach that conclusion on its own rather than reporting `Succeeded` with
+criteria open — the kickoff template now names the partial case, and it worked.
+
+**All three deviations are accepted, and two of them are my spec being wrong.**
+
+1. **The wider `python` filter is the important one, and the reasoning is exactly right.** The
+   default pytest selection validates every spec, checks links and anchors across every tracked
+   Markdown file, lints the shell under `ops/` and reads the profile TOMLs under `config/`. The four
+   paths the spec named would have let a docs-only pull request merge green and fail the next Python
+   one — which is how a gate stops being believed, and this repository already has the scar: a
+   `ruff format --check` failure rode on dev from #53 to #70 because pre-commit only sees staged
+   files. Amended.
+2. **The `site` job.** I checked `v1-e36-t03`: it says the site job in `.github/workflows/ci.yml`
+   "is added by v1-e01-t04 (or by this task if ci.yml exists)". The hand-off was written down; t04's
+   spec just never mentioned it. Amended to name it alongside `terraform-checks`.
+3. **`lint` and `spec-validate` unfiltered.** ac1 requires `check-merge-conflict` over every tracked
+   file and `validate_specs.py` on every trigger; a path-filtered job cannot honour either. The
+   description generalised "each job runs only when its area changed" one step too far. Amended, with
+   the exception stated rather than left to be rediscovered.
+
+In all three the session read the criteria against the description, found the description weaker,
+and implemented the criteria while writing the conflict up. That is the right order every time.
+
+**Verified rather than taken on trust.** actionlint 1.7.12 with shellcheck; the aggregate `ci`
+job's logic exercised against seven simulated outcomes, which is the part most likely to be subtly
+wrong — an `if: always()` aggregate that treats "skipped" as "passed" is a gate that passes when a
+job crashes before its filter is evaluated. `spec_index.py --check` guarded on `github.base_ref`,
+not `github.ref`, which is the amendment from `v1-e01-t05` ac4 honoured correctly.
+
+**`terraform-checks` not run locally is fine and correctly disclosed** — the machine has Terraform
+1.7.3 against a pinned 1.16.3. That job is path-filtered on `infrastructure/`, so it will not run
+on this PR either; its first real exercise is the next infrastructure change, and that is worth
+knowing rather than papering over.
+
+**What remains, in order, and the order matters.** Merge first, because GitHub only offers `ci` as
+a required check once it has run at least once — requiring it before then is not possible, not
+merely awkward. Then the two `gh run list` checks on dev, then the rulesets, then the throwaway PR.
+The throwaway PR is the only one of the four that proves the gate rather than the workflow: a green
+`ci` proves the jobs run, and only a blocked merge proves they matter.

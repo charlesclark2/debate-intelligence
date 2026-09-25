@@ -235,9 +235,76 @@ runs from `scripts/`.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**
 
 **Notes:**
+
+Accepted. ac5's measurement has been taken and the phase stays `Succeeded`.
+
+**ac5 is closed, and the criterion was wrong rather than the session.** I wrote "measured on a real
+dev run of three caselists", which collides with `v1-e30-t06` owning the outstanding weeklies — the
+session was right to stop and ask rather than spend a day's allowance on another task's work. A
+`--dry-run` measures the same thing for nothing: `within_daily_budget` runs during `plan()`, so the
+clamp shows without a download. ac5 now says so, and says it must not be a real pull. The
+measurement is recorded in `docs/data/caselist-sync-runs.md`:
+
+| Caselist | Listed | Already imported | Wanted | Granted | Deferred |
+|---|---|---|---|---|---|
+| `hsld26` | 13 | 5 | 7 | 2 | 5 |
+| `hspolicy26` | 12 | 0 | 11 | 2 | 9 |
+| `hspf26` | 12 | 0 | 11 | 1 | 10 |
+
+An allowance of 5 split 2/2/1 across queues of 7, 11 and 11 — the round-robin behaving exactly as
+its docstring claims, oldest-first within each caselist so what is deferred is always the newest.
+**The measurement supports the threshold the session chose.** In steady state three caselists
+publish about three weeklies a week against an allowance of five, so an ordinary run defers nothing
+and a backlog that has grown twice running is genuinely abnormal. A backlog that is merely large is
+not, which is why "grown two runs in a row" is the right trigger and "non-empty" would have cried
+wolf every day of the backfill.
+
+**Item 2 was my defect, not a selection bug, and the session handled it correctly.**
+`20260924T042401Z` is `hspolicy26`, not `hsld26` — a different caselist with an empty store, which
+is why it wanted 11 and not 7. The decisions in its JSON (`over_daily_budget: 11` plus one full
+archive = 12 listed, against `hsld26`'s 13) settle it. My table carried a "Caselists" column with
+the *count* and never the slug, so three rows for three caselists read as one caselist's history.
+Slugs are not identifying information — they are the value the object keys already carry under
+policy rule 3 — so there was no reason to omit them, and the table now names them. Flagging an
+inconsistency and declining to conclude which side was wrong without the raw JSON is exactly right.
+
+**Deviations, all accepted.**
+
+* Changing `caselist_sync.py` and `caselist_pull.py` for ac5 and ac6 only is what the kickoff
+  authorised; the report names the files, which is what was asked.
+* Wrapping the recording around the pull rather than inside the sync service is the better of the
+  two: it keeps `v1-e34-t02`'s module to orchestration and means a recording failure cannot lose a
+  run that captured bytes.
+* Treating a cap-bound run as not-current for the staleness banner is the right call and the
+  reasoning is right — each deferred archive is a published week the landscape is missing. The
+  report says the decision was made deliberately, which ac3 asked for.
+
+**Two spec amendments the session correctly could not make itself.**
+
+1. **The exit-code rule in `forbidden` was too broad.** It read "every failure yields a non-zero
+   exit", which contradicts `v1-e34-t02`'s design that parse and landscape cannot fail a run whose
+   bytes are already captured. The session flagged the conflict instead of changing code to match a
+   line it doubted. Now scoped: every failure yields a record and a notification, and a failed
+   *mandatory* stage (download, import, publish) also yields a non-zero exit. Exiting 1 every week
+   over an optional stage would teach the operator to ignore the exit code, which is the failure
+   this epic exists to prevent.
+2. **`v1-e32-t03-landscape-report` and `v1-e32-t05-landscape-cli`** now each require calling the
+   staleness hook — a report that cannot say how old its newest snapshot is does not ship. Without
+   this the hook would have sat unused and ac3 would have been true of nothing.
+
+**Accepted as a limitation, not a gap.** Nothing can push a notification about a run that never
+started; the banner catches it at the point of use, because a missed run ages the snapshots and the
+next report says so. Whether the schedule *itself* stopping deserves a push belongs to
+`v1-e34-t05-enable-schedule`, which is what puts the agent on the machine.
+
+**What the measurement also established, and it is not this task's.** The cap is five downloads a
+day and the schedule runs weekly, so one run takes at most five while about three new archives
+arrive — a net drain of roughly two a week against a backlog of 29. The weekly schedule keeps a
+current store current; it cannot build one. `v1-e30-t06-initial-backfill` is what builds it, over
+several days, and the decision not to pull ad hoc holds.

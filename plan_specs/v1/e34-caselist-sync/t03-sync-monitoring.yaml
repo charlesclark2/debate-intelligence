@@ -41,7 +41,12 @@ spec:
     packages: [debate_core.application, debate_core.integrations, debate_cli.commands]
     forbidden:
       - Tokens, credentials, file contents, card text or student names in run records or notifications
-      - Swallowing a failed stage (every failure yields a non-zero exit, a run record and a notification)
+      - >-
+        Swallowing a failed stage. Every failure yields a run record and a notification, and a failed
+        mandatory stage (download, import, publish) also yields a non-zero exit. Parse and landscape
+        are optional by v1-e34-t02's design and do not change the exit code of a run whose bytes are
+        already captured - recorded and notified is not swallowed, and exiting 1 every week over an
+        optional stage teaches the operator to ignore the exit code.
       - Notification or AWS calls in CI tests (null notifier and moto only)
       - Changing landscape report content beyond the staleness banner and metadata flag
   context:
@@ -76,9 +81,12 @@ spec:
         week - the silent-empty-run failure the UNRECOGNISED count was given a number to prevent. The
         select stage's detail, the caption and the run record each state how many archives were wanted
         and how many were deferred whenever the two differ, and a deferred archive is carried as a
-        backlog the next run reports rather than a fact only a JSON file holds. Measured on a real dev
-        run of three caselists before the notification thresholds are chosen: a backlog that clears
-        itself next week is not a notification, one that grows for two runs is.
+        backlog the next run reports rather than a fact only a JSON file holds. The thresholds are
+        chosen against a measurement, and the measurement is a `--dry-run` of the three configured
+        caselists: a dry run lists and plans, so it shows what each caselist wants and what the cap
+        would defer without spending a download. It must not be a real pull - the outstanding weeklies
+        are v1-e30-t06's and are not fetched ad hoc. A backlog that clears itself next week is not a
+        notification; one that grows for two runs is.
     - id: ac6
       description: >-
         `nothing_new` distinguishes "there was nothing to fetch" from "this run was not allowed to

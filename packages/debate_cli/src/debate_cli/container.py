@@ -69,6 +69,7 @@ from debate_core.application.caselist.import_service import CaselistImportServic
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.status_service import CaselistStatusService
+from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_sync import CaselistSyncService
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
@@ -210,6 +211,19 @@ class ServiceContainer:
         the transaction boundary singular (see `debate_core.integrations.local.sqlite_db`).
         """
         return self.singleton("database", lambda: SqliteDatabase.open(self.settings.storage.data_dir))
+
+    def caselist_card_stats(self) -> CaselistCardStatsService:
+        """Build the card statistics over this machine's recorded disclosures (`v1-e31-t04`).
+
+        Reads only: the local caselist repository for disclosures, and the fingerprint thresholds
+        from `settings.fingerprints`.
+        """
+        return self.singleton(
+            "caselist_card_stats",
+            lambda: CaselistCardStatsService(
+                SqliteCaselistRepository(self.database), self.settings.fingerprints.thresholds()
+            ),
+        )
 
     def caselist_import(self) -> CaselistImportService:
         """Build the weekly-archive importer over this environment's local evidence store.

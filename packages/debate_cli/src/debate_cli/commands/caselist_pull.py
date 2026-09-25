@@ -50,12 +50,14 @@ from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist_sync import (
+    CaselistSyncService,
     NoCaselistsConfigured,
     RunSummary,
     StageOutcome,
     SyncStage,
 )
 from debate_core.application.settings import Settings
+from debate_core.application.sync_runs import SyncRunRecord
 
 __all__ = ["pull", "pull_summary"]
 
@@ -86,20 +88,41 @@ def pull(
     settings = cli.services.settings
     if publish_pending and dry_run:
         raise ConflictingPullMode
-    service = cli.services.caselist_sync(event_for_caselist=event_for_caselist)
+    slugs = [] if publish_pending else list(caselist) if caselist else list(settings.caselist.sync_caselists)
 
-    if publish_pending:
-        cli.output.detail("completing the publishes an earlier run deferred")
-        summary = _run(service.publish_pending())
-    else:
-        slugs = list(caselist) if caselist else list(settings.caselist.sync_caselists)
+    def sync_service() -> CaselistSyncService:
+        return cli.services.caselist_sync(event_for_caselist=event_for_caselist)
+
+    record: SyncRunRecord | None = None
+    if dry_run:
+        # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
         if not slugs:
             raise NoCaselistsConfigured
-        cli.output.detail(f"pulling {', '.join(slugs)}" + (" (dry run)" if dry_run else ""))
-        summary = _run(service.run(slugs, dry_run=dry_run))
+        cli.output.detail(f"pulling {', '.join(slugs)} (dry run)")
+        summary = _run(sync_service().run(slugs, dry_run=True))
+    else:
 
-    payload = pull_summary(summary, settings, service.summary_path(summary) if not summary.dry_run else None)
-    display = _pull_table(summary, settings)
+        async def one_run() -> RunSummary:
+            # Inside the monitor, so that a refusal — no caselist, the API not turned on, an
+            # expired token, another run holding the lock — is recorded and announced too.
+            if publish_pending:
+                cli.output.detail("completing the publishes an earlier run deferred")
+                return await sync_service().publish_pending()
+            if not slugs:
+                raise NoCaselistsConfigured
+            cli.output.detail(f"pulling {', '.join(slugs)}")
+            return await sync_service().run(slugs)
+
+        monitored = _run(
+            cli.services.caselist_sync_monitor().watch(
+                one_run, caselists=slugs, mode="publish_pending" if publish_pending else "run"
+            )
+        )
+        summary, record = monitored.summary, monitored.record
+
+    written_to = sync_service().summary_path(summary) if not summary.dry_run else None
+    payload = pull_summary(summary, settings, written_to, record)
+    display = _pull_table(summary, settings, record)
     if summary.succeeded:
         cli.output.success(command_name(ctx), payload, display=display)
         return
@@ -124,7 +147,9 @@ class ConflictingPullMode(typer.BadParameter):
 # ------------------------------------------------------------------------------------------------
 
 
-def pull_summary(summary: RunSummary, settings: Settings, written_to: Any = None) -> dict[str, JsonValue]:
+def pull_summary(
+    summary: RunSummary, settings: Settings, written_to: Any = None, record: SyncRunRecord | None = None
+) -> dict[str, JsonValue]:
     """The `--json` envelope's `data`: the run summary, plus where it was written.
 
     The run summary itself is
@@ -138,10 +163,12 @@ def pull_summary(summary: RunSummary, settings: Settings, written_to: Any = None
     body["environment"] = settings.environment.value
     body["bucket"] = settings.storage.s3.bucket
     body["summary_written_to"] = str(written_to) if written_to is not None else None
+    # The run log's record of this run (v1-e34-t03), or `None` for a dry run, which records nothing.
+    body["run_record"] = cast("JsonValue", record.model_dump(mode="json")) if record is not None else None
     return body
 
 
-def _pull_table(summary: RunSummary, settings: Settings) -> TableSpec:
+def _pull_table(summary: RunSummary, settings: Settings, record: SyncRunRecord | None = None) -> TableSpec:
     """One row per stage: what it was asked to do, what happened, and the sentence that says why."""
     rows = [[str(record.stage), str(record.outcome), record.reason or ""] for record in summary.stages]
     kind = "dry run" if summary.dry_run else "run"
@@ -152,33 +179,66 @@ def _pull_table(summary: RunSummary, settings: Settings) -> TableSpec:
             f"caselist pull {kind} {summary.run_id} "
             f"({', '.join(summary.caselists) or 'pending publishes'}, {settings.environment.value})"
         ),
-        caption=_caption(summary),
+        caption=_caption(summary, record),
     )
 
 
-def _caption(summary: RunSummary) -> str:
-    """The numbers an operator checks the week against, in the one line under the table."""
+def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
+    """The numbers an operator checks the week against, in the one line under the table.
+
+    Whenever the daily cap deferred anything, the caption says how many archives were wanted and
+    how many are waiting, so a truncated week never reads like a clean one (v1-e34-t03 ac5, ac6).
+    """
+    deferred = summary.archives_deferred
+    backlog = _backlog_sentence(record)
     if summary.dry_run:
         wanted = sum(1 for one in summary.archives if one.wanted)
         camp = sum(1 for one in summary.openev if one.wanted)
+        over_cap = f" ({deferred} more wanted, over today's download cap)" if deferred else ""
         return (
-            f"{summary.archives_seen} archive(s) listed; would download {wanted} archive(s) and "
-            f"{camp} OpenEv file(s). Nothing was written. Re-run without --dry-run to do it."
+            f"{summary.archives_seen} archive(s) listed; would download {wanted} archive(s){over_cap} "
+            f"and {camp} OpenEv file(s). Nothing was written. Re-run without --dry-run to do it."
         )
     if summary.nothing_new:
         return (
             f"Nothing new: {summary.archives_seen} archive(s) listed, none newer than what this "
             f"machine already holds. {summary.duration_seconds:.1f}s."
         )
+    if deferred and summary.archives_downloaded == 0 and summary.openev_downloaded == 0:
+        return (
+            f"Nothing fetched: {summary.archives_wanted} archive(s) wanted and all {deferred} deferred "
+            f"by the daily download cap; a later run fetches them.{backlog} "
+            f"{summary.duration_seconds:.1f}s."
+        )
     pending = (
         f", {len(summary.pending_publish)} snapshot(s) pending publish" if summary.pending_publish else ""
     )
+    archives = (
+        f"{summary.archives_downloaded} of {summary.archives_wanted} wanted archive(s)"
+        if deferred
+        else f"{summary.archives_downloaded} archive(s)"
+    )
+    waiting = (
+        f" {deferred} archive(s) deferred by the daily download cap wait for a later run." if deferred else ""
+    )
     return (
-        f"{summary.archives_downloaded} archive(s) and {summary.openev_downloaded} OpenEv file(s) "
+        f"{archives} and {summary.openev_downloaded} OpenEv file(s) "
         f"downloaded; {summary.files_imported} file(s) imported, {summary.blobs_stored} new; "
-        f"{summary.objects_published} object(s) published{pending}. "
+        f"{summary.objects_published} object(s) published{pending}.{waiting}{backlog} "
         f"{summary.duration_seconds:.1f}s."
     )
+
+
+def _backlog_sentence(record: SyncRunRecord | None) -> str:
+    """What the previous run left to the cap, when it left anything, as a leading-space sentence."""
+    if record is None or not record.backlog_carried:
+        return ""
+    growing = (
+        f" It has grown for two runs in a row ({', '.join(record.backlog_growing)})."
+        if record.backlog_growing
+        else ""
+    )
+    return f" Carried from the previous run: {record.backlog_carried} deferred.{growing}"
 
 
 def _pull_failure(summary: RunSummary, payload: dict[str, JsonValue]) -> CommandFailure:

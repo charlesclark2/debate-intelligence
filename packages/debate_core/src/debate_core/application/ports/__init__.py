@@ -16,6 +16,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `ArchiveMember` / `SkippedMember` | `archive` | What reading a weekly archive yields (E30) |
 | `CaselistArchiveSource` | `caselist_source` | OpenCaselist archive and OpenEv listings and downloads (E34) |
 | `DebateFileParser` | `debate_files` | Reading a debate `.docx` into sections and cards (E31) |
+| `Notifier` | `notifier` | Telling the operator an unattended run needs attention (E34) |
 | `SearchProvider` | `providers` | One discovery source |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
 | `ContentExtractor` | `providers` | Readable-text extraction |
@@ -58,6 +59,7 @@ from debate_core.application.ports.evidence_store import (
     ObjectKey,
     validate_object_key,
 )
+from debate_core.application.ports.notifier import Notification, Notifier
 from debate_core.application.ports.persistence import (
     DEFAULT_PAGE_SIZE,
     ArticleRepository,
@@ -115,6 +117,8 @@ __all__ = [
     "ModelInvocationMetadata",
     "ModelRouter",
     "ModelTaskClass",
+    "Notification",
+    "Notifier",
     "ObjectInfo",
     "ObjectKey",
     "OpenEvFile",

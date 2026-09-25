@@ -14,8 +14,10 @@ runs (`v1-e29-t05-evidence-sync-cli`); :meth:`ServiceContainer.caselist_import`,
 :meth:`ServiceContainer.caselist_token_store` and :meth:`ServiceContainer.opencaselist_client`,
 which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`);
 and :meth:`ServiceContainer.caselist_sync`, which `debate-research caselist pull` and the weekly
-launchd agent run (`v1-e34-t02-scheduled-sync`). The rest of V1's services and their adapters
-arrive in E02–E08 and slot in the same way.
+launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
+:meth:`ServiceContainer.caselist_sync_monitor` and read back by
+:meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`). The rest of V1's
+services and their adapters arrive in E02–E08 and slot in the same way.
 
 ## Adding a service
 
@@ -58,6 +60,7 @@ runs `store`, and it arrives as the `uv sync --extra aws` message that package r
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Final, cast
 
@@ -73,7 +76,14 @@ from debate_core.application.evidence_sync import (
     SyncKeyspace,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
-from debate_core.application.settings import ConfigurationError, Environment, Settings
+from debate_core.application.ports.notifier import Notifier, NullNotifier
+from debate_core.application.settings import ConfigurationError, Environment, Settings, SyncNotifierKind
+from debate_core.application.sync_runs import (
+    SYNC_RUN_LOG_FILENAME,
+    SyncRunHistory,
+    SyncRunLog,
+    SyncRunMonitor,
+)
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import (
     BLOB_DIRECTORY,
@@ -100,6 +110,8 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_publish",
     "caselist_status",
     "caselist_sync",
+    "caselist_sync_history",
+    "caselist_sync_monitor",
     "caselist_token_store",
     "evidence_sync",
     "openev_import",
@@ -389,6 +401,63 @@ class ServiceContainer:
             openev_year=caselist.openev_year,
             bulk_downloads_per_day=caselist.bulk_downloads_per_day,
         )
+
+    def caselist_sync_monitor(self) -> SyncRunMonitor:
+        """Build what records and announces every `caselist pull` (`v1-e34-t03-sync-monitoring`).
+
+        The run log lives in this environment's data directory, and the record goes to its bucket
+        when it names one. The caselist_token, when it is in the settings, is registered as a
+        secret to scrub from every message, as a backstop to messages that never carry it.
+        """
+        return self.singleton("caselist_sync_monitor", self._build_caselist_sync_monitor)
+
+    def _build_caselist_sync_monitor(self) -> SyncRunMonitor:
+        settings = self.settings
+        token = settings.providers.caselist_token
+        return SyncRunMonitor(
+            state_dir=settings.storage.data_dir,
+            environment=settings.environment.value,
+            notifier=self.sync_notifier(),
+            remote=self._evidence_bucket() if settings.storage.s3.bucket else None,
+            aws_login_command=self._aws_login_command(),
+            secrets=lambda: [token.get_secret_value()] if token is not None else [],
+        )
+
+    def caselist_sync_history(self) -> SyncRunHistory:
+        """Recent `caselist pull` runs, from this machine's log or (`--remote`) the bucket."""
+        return self.singleton("caselist_sync_history", self._build_caselist_sync_history)
+
+    def _build_caselist_sync_history(self) -> SyncRunHistory:
+        settings = self.settings
+        data_dir = settings.storage.data_dir
+        return SyncRunHistory(
+            log=SyncRunLog(data_dir / SYNC_RUN_LOG_FILENAME),
+            remote=self._evidence_bucket if settings.storage.s3.bucket else None,
+            scratch_dir=data_dir,
+            overdue_after_days=settings.caselist.stale_after_days,
+        )
+
+    def sync_notifier(self) -> Notifier:
+        """macOS Notification Centre on the operator's Mac; nothing in `test` or anywhere else.
+
+        `caselist.notifier = "auto"` never notifies in the `test` environment, so no test run can
+        put a banner on a developer's screen even with a profile that forgot to say `none`.
+        """
+        settings = self.settings
+        kind = settings.caselist.notifier
+        if kind is SyncNotifierKind.NONE:
+            return NullNotifier()
+        if kind is SyncNotifierKind.AUTO and (
+            settings.environment is Environment.TEST or sys.platform != "darwin"
+        ):
+            return NullNotifier()
+        from debate_core.integrations.local.macos_notifier import MacOsNotifier
+
+        return MacOsNotifier()
+
+    def _aws_login_command(self) -> str:
+        profile = self.settings.storage.s3.aws_profile
+        return f"aws sso login --profile {profile}" if profile else "aws sso login"
 
     def caselist_token_store(self) -> CaselistTokenStore:
         """Where this environment keeps the operator's caselist_token (v1-e34-t01).

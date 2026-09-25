@@ -119,7 +119,11 @@ jobs:
         run: uv python install
       - &uv-sync
         name: Install the locked workspace
-        run: uv sync --locked
+        # --all-packages is required, not tidiness. The workspace root is `package = false` with
+        # `dependencies = []`, so a plain `uv sync` installs the dev group and none of the four
+        # members; pyright, pytest and lint-imports then all fail on an unimportable debate_core.
+        # scripts/task start uses the same flag when it creates a worktree, for the same reason.
+        run: uv sync --locked --all-packages
       - name: ruff check
         run: uv run --frozen ruff check --output-format=github .
       - name: ruff format --check

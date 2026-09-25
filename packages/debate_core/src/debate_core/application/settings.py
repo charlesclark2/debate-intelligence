@@ -118,6 +118,7 @@ __all__ = [
     "SearchProviderName",
     "Settings",
     "StorageSettings",
+    "SyncNotifierKind",
     "find_repository_root",
     "load_settings",
     "profile_path_for",
@@ -411,6 +412,17 @@ class CaselistTokenBackend(StrEnum):
     """A 0600 file under a gitignored `secrets/` directory."""
 
 
+class SyncNotifierKind(StrEnum):
+    """How an unattended `caselist pull` tells the operator it needs attention (v1-e34-t03)."""
+
+    AUTO = "auto"
+    """macOS Notification Centre on a Mac, nothing elsewhere. Never notifies in `test`."""
+    MACOS = "macos"
+    """Always `osascript` `display notification`."""
+    NONE = "none"
+    """Nothing: the run log and `caselist runs` only."""
+
+
 class CaselistSettings(SettingsGroup):
     """What the caselist importers will read, and how large an archive they will open.
 
@@ -556,6 +568,25 @@ class CaselistSettings(SettingsGroup):
         ge=2000,
         le=9999,
         description="Topic year of the OpenEv release to pull. Unset means the API's current year.",
+    )
+
+    # --- Monitoring the weekly sync (v1-e34-t03-sync-monitoring) ------------------------------
+
+    notifier: SyncNotifierKind = Field(
+        default=SyncNotifierKind.AUTO,
+        description=(
+            "Where a failed or stuck `caselist pull` is announced: `macos` (Notification Centre), "
+            "`none`, or `auto` (macOS on a Mac, never in the test environment)."
+        ),
+    )
+    stale_after_days: int = Field(
+        default=8,
+        ge=1,
+        le=366,
+        description=(
+            "A landscape report is stale when the newest snapshot of its caselist is more than "
+            "this many days older than the report. Eight: one weekly archive, plus a day of grace."
+        ),
     )
 
     @field_validator("bulk_downloads_per_day")

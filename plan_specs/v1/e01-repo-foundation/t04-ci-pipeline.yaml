@@ -61,7 +61,16 @@ spec:
     Container build/ECR push and deploy workflows belong to V2 and are out of scope.
   priority: 1
   constraints:
-    packages: [.github/workflows]
+    packages: [.github/workflows, conftest.py, packages/debate_cli/tests, tests/smoke]
+    # packages/debate_cli/tests was added by the PM after CI's first run: the workflow is correct and
+    # three CLI help tests are not. They assert an option name appears in Rich-rendered help, which
+    # holds only on a wide terminal, so they passed on every laptop and failed on the first runner
+    # with no TTY. Making a hermetic gate work requires the tests it runs to be hermetic; the fix
+    # belongs here rather than in a task of its own, and belongs in the tests rather than in ci.yml.
+    # Widened again once the count was known: sixteen modules build a bare CliRunner, nine under
+    # packages/debate_cli/tests and seven under tests/smoke, and the smoke checks are deliberately
+    # unmarked so they run on the PR path too. One autouse fixture in the root conftest.py covers
+    # both trees; two copies would drift.
     forbidden:
       - Live network, search-provider or Bedrock calls from CI jobs
       - Long-lived AWS credentials or provider API keys in repository secrets for the test workflow

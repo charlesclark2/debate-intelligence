@@ -52,7 +52,7 @@ The session ran its checks from the task worktree on 2026-09-26.
 | Node: Summary template exists (`contentMatch: Dedupe rate`) | PASS | `grep -c "Dedupe rate" docs/data/caselist-backfill-2026-09.md` → `1` |
 | Node: Local import counts recorded (`contentMatch: 2026-09-15`) | NOT RUN | The template deliberately does **not** contain `2026-09-15`: `grep -c` → `0`. With it, this criterion would pass before any import happened. The same goes for `dev status: in sync` and `prod status: in sync` (both `0`). |
 | Node: Dev publish recorded (`dev status: in sync`) | NOT RUN | Operator. |
-| Node: Latest LD manifest in the dev bucket (`store ls manifests/hsld26/2026-09-15.jsonl`) | NOT RUN | Not imported yet, and the dev SSO session had expired: a read-only `caselist status --caselist hsld26` returned `STORE_CREDENTIALS_EXPIRED`. |
+| Node: Latest LD manifest in the dev bucket (`store ls manifests/hsld26/2026-09-15.jsonl`) | NOT RUN | Not imported yet. Baseline, after Charlie re-authenticated: `DEBATE_ENV=dev uv run debate-research --json caselist status` → exit 0, `in_sync: true`, five hsld26 snapshots (07-07 to 08-04), sources/published 4/4, 35/35, 3/3, 1/1, 200/200, 0 missing, 0 mismatches. `store ls manifests/` → exactly those five keys. `store ls reports/` → empty (the 09-24 runs predate `v1-e34-t03`'s run-record publishing). |
 | Node: Coach accepts the dev spot check | NOT RUN | Coach. |
 | Node: Prod publish recorded (`prod status: in sync`) | NOT RUN | Operator. |
 | Node: Latest LD manifest in the prod bucket | NOT RUN | Operator. |

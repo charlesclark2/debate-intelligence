@@ -116,6 +116,13 @@ The 2026-09-24 validation runs are in `docs/data/caselist-sync-runs.md` and not 
 
 ## Dev publish
 
+**Starting point, 2026-09-26, before the backfill.** `DEBATE_ENV=dev caselist status` exited `0`:
+all five held hsld26 snapshots agree between the local store and the dev bucket. Per snapshot, the
+sources and published sources are 4/4, 35/35, 3/3, 1/1 and 200/200, with no missing sources and
+no checksum mismatches. `store ls manifests/` lists those five manifests and nothing else, so the
+bucket holds no hspolicy26, hspf26 or OpenEv manifest yet. This is a baseline reading, not the
+post-backfill check this section records below.
+
 | Date | Caselist | Snapshots | Uploaded | Skipped | Failed | Bytes |
 |---|---|---|---|---|---|---|
 | | | | | | | |

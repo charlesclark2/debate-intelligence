@@ -51,6 +51,16 @@ spec:
         `debate-research` resolves on PATH to an installed build outside every git working tree and
         every project `.venv`, and `debate-research --version` names the tag it was installed from.
         `ops/launchd/install.sh --dry-run` renders a plist whose PATH finds that binary.
+    - id: ac1b
+      description: >-
+        The agent reads the same store the backfill built. `ops/launchd/install.sh --env prod` renders
+        a plist whose profile resolves `~/.debate-research/prod`, while v1-e30-t05 and v1-e30-t06
+        settled on one store at `~/.debate-research/dev` and the backfill builds it there. Installed as
+        the scheduled-sync runbook currently reads, the agent would start an empty second store and
+        re-download the entire back-catalogue into it, at five downloads a day, against the same cap.
+        Settle it - pass `DEBATE_STORAGE__DATA_DIR`, or move the store, or change the profile - and
+        prove it by showing the first scheduled run's `caselist status` against the store the backfill
+        filled, not an empty one.
     - id: ac2
       description: >-
         The agent is installed and loaded: `launchctl print gui/$UID/com.debate-intelligence.caselist-sync`

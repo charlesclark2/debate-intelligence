@@ -80,8 +80,8 @@ build or run to link. Write that on the line, with what was checked instead: the
 blank line, not an honest one.
 
 **After a hotfix merges**, [`back-merge.yml`](../../.github/workflows/back-merge.yml) opens a
-"Back-merge main → dev" pull request whose head is `main` itself. Merge it into `dev` the same day
-with **Create a merge commit**: a squash leaves `main`'s commits unreachable from `dev`, and
+"Back-merge main → dev" pull request, labelled `back-merge`, whose head is `main` itself. Merge it
+into `dev` the same day with **Create a merge commit**, never squash: a squash leaves `main`'s commits unreachable from `dev`, and
 `back-merge` stays red on every promotion until they are. A promotion puts only a merge commit on
 `main`, which the check ignores, so promotions never open a back-merge PR.
 

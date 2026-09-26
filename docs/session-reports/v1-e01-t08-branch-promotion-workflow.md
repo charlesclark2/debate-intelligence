@@ -83,18 +83,19 @@ this worktree → `OK`, exit 0. A promotion from the current `dev` passes `back-
 
 ## Deviations from the spec
 
-1. **`ruleset-wiring` asks for "strict: branch must be up to date" on protect-main. I recommend
-   against it and have not written it into the operator steps.** A promotion merges `dev` into
+1. **Resolved by the PM in 086c798 (strict off).** `ruleset-wiring` asked for "strict: branch must
+   be up to date" on protect-main. I recommended against it and did not write it into the operator steps. A promotion merges `dev` into
    `main` with a merge commit, and `dev` never receives that commit. So after the first promotion,
    GitHub reports every later promotion PR as out of date with `main`. The only way to clear that
    is "Update branch", which pushes a merge commit to `dev`, and protect-dev forbids direct pushes.
    The deadlock only breaks with a back-merge after every promotion. The `back-merge` check already
    does what strict mode was meant to do, without the deadlock: it requires every *non-merge*
    commit on `main` to be in `dev`. Strict mode is off today
-   (`strict_required_status_checks_policy: false`). **PM ruling needed:** amend `ruleset-wiring`
-   to say not strict, or say why strict is wanted.
-2. **`back-merge.yml` holds `pull-requests: write` and `contents: read`, not the `contents: write`
-   the spec grants, and the PR's head is `main` itself rather than a branch copied from it.**
+   (`strict_required_status_checks_policy: false`). The PM amended `ruleset-wiring` to say strict
+   is OFF.
+2. **Resolved by the PM in 086c798 (the spec now grants `pull-requests: write` only).**
+   `back-merge.yml` holds `pull-requests: write` and `contents: read`, not the `contents: write`
+   the spec originally granted, and the PR's head is `main` itself rather than a branch copied from it.**
    * *Why not a copied branch:* pushing a copy with the workflow token is refused whenever the new
      commits touch `.github/workflows/`, and that permission can never be given to the token.
    * *What head `main` gains:* the head commit already carries the green `ci` from the push to
@@ -103,11 +104,14 @@ this worktree → `OK`, exit 0. A promotion from the current `dev` passes `back-
    * *Why merging can't delete `main`:* protect-main restricts deletion with an empty bypass list.
      I still ask the operator to confirm this in the sandbox, because `delete_branch_on_merge` is on.
    * *In short:* less privilege than the spec allows, not more.
-3. **The spec says "with gh using the hotfix template label". No label is applied.** The spec
-   doesn't name a label, and none exists. `gh pr create --label` fails outright on a missing
-   label, and creating labels needs `issues: write`. The workflow finds its own PR by
-   `--base dev --head main` and uses the fixed title "Back-merge main → dev". If a label is
-   wanted, the PM names it; the operator creates it once, and the workflow adds `--label`.
+3. **Resolved by the PM in 086c798, and now implemented.** The original spec said "with gh using
+   the hotfix template label" without naming one, so the first version applied none. The amended
+   spec names a `back-merge` label, created if absent. The workflow runs
+   `gh label create back-merge --force` (idempotent; the labels API accepts `pull-requests: write`,
+   so no `issues: write` is needed). It passes `--label back-merge` on create and adds the label to
+   an already-open back-merge PR. The label description, the PR body and
+   branching-and-environments.md all say to use a merge commit and never squash. The sandbox run
+   (operator follow-up 4c) is the first real check that the token can create the label.
 4. **The `back-merge` subcommand checks every non-hotfix head, not only `dev`.** The spec
    describes `dev` heads. A `task/*` head into `main` is already stopped by `promotion-source`, and
    reporting `back-merge` for it too costs nothing. The hotfix exemption is exactly as specified:
@@ -249,6 +253,10 @@ gh pr create --repo "$SANDBOX" --base main --head dev --title "Sandbox promotion
 gh pr checks --repo "$SANDBOX" dev --watch    # expect back-merge red, naming the "Sandbox hotfix" SHA
 ```
 
+The back-merge PR must carry the `back-merge` label. If the job failed at `gh label create` with a
+403, the token cannot create labels: create it once with `gh label create back-merge --repo "$SANDBOX"`
+(and in the real repository), re-run the job, and tell the PM.
+
 Then merge the back-merge PR in the sandbox with **Create a merge commit**. Expect four things:
 
 * its `ci` requirement is already satisfied by the push run on `main`'s head commit (Deviation 2
@@ -265,8 +273,6 @@ Once Charlie confirms steps 2 and 4, set the Goal to `Succeeded`:
 
 ## Follow-up work
 
-* **PM: rule on Deviation 1 (strict mode) and Deviation 3 (label)** and amend `ruleset-wiring` /
-  `guard-workflows` to match.
 * **PM: the ruleset JSON exports** (`docs/process/rulesets/*.json`) are outputs of this task that
   can only exist after step 2. They need a follow-up PR if this task merges `--partial`.
 * **v1-e01-t09 / v1-e01-t10:** once pre-releases and `validate-dev` exist, `template` could

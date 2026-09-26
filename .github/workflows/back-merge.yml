@@ -71,9 +71,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
+          # The label is the warning on the pull request list: a squashed back-merge leaves main's
+          # commits unreachable from dev and the `back-merge` check red for good. --force makes this
+          # an idempotent create-or-update; the labels API accepts pull-requests: write.
+          gh label create back-merge --repo "$REPO" --force --color B60205 \
+            --description "Merge with a merge commit, never squash: a squash keeps back-merge red"
           open_pr=$(gh pr list --repo "$REPO" --base dev --head main --state open \
             --json number --jq '.[0].number // empty')
           if [ -n "$open_pr" ]; then
+            gh pr edit "$open_pr" --repo "$REPO" --add-label back-merge
             echo "Back-merge pull request #$open_pr is open; its head is main, so it already has these commits."
             exit 0
           fi
@@ -91,5 +97,5 @@ jobs:
             echo
             echo "Opened by .github/workflows/back-merge.yml."
           } > body.md
-          gh pr create --repo "$REPO" --base dev --head main \
+          gh pr create --repo "$REPO" --base dev --head main --label back-merge \
             --title "Back-merge main → dev" --body-file body.md

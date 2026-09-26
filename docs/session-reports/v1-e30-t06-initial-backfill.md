@@ -198,6 +198,15 @@ operator's machine, each finishing in seconds (working agreements §2):
   the inbox name (`openev-<id>-…`), not on sha256. Setting `caselist.openev_event` would therefore
   re-download all 498 listed files, which would go into the manifest as `DUPLICATE` rows beside the
   105 imported here.
+* **E30 (`v1-e30-t03` code or docs): a weekly import's NEW means "not in the previous week", not
+  "never stored".** `CaselistImportService` does not pass `find_existing` to the pipeline (the
+  OpenEv importer does), so a file stored in an earlier, non-adjacent week is NEW again. The
+  module docstring says NEW is "bytes not seen before, under this path or any other", which is
+  true only against the week before. Measured on backfill day 1: 08-11 to 08-25 reported 25 NEW
+  and stored 16 new blobs. The summary therefore adds a *First seen here* table, from the
+  runbook's `first_seen_rows`, and says NEW is not new evidence. Adjacent-window comparison is what
+  ADR-0016 and the epic asked for, so the fix may only be the docstring. Either way, a later
+  report that sums NEW across weeks would overstate new evidence.
 * **`v1-e34-t04`**: see Deviation 1.
 
 ## PM review

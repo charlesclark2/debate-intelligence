@@ -318,12 +318,35 @@ dedupe_row() {
     | "| " + (map(tostring) | join(" | ")) + " |"' "$DATA/objects/manifests/$1"/*.jsonl
 }
 
+# One row per snapshot: distinct files it holds, and how many of them no earlier snapshot of the
+# same caselist held. NEW cannot answer that question: it is measured against the week before only.
+first_seen_rows() {
+  jq -rn --arg cl "$1" '
+    reduce inputs as $r ({}; .[input_filename] += [$r])
+    | to_entries | sort_by(.key)
+    | reduce .[] as $f ({seen: {}, rows: []};
+        ($f.value | map(select(.kind == "summary"))[0].snapshot) as $snap
+        | ([$f.value[] | select(.kind == "member" and (.classification | IN("NEW","UNCHANGED","CHANGED","DUPLICATE"))) | .sha256] | unique) as $d
+        | .seen as $s
+        | ([$d[] | select($s[.] | not)]) as $fresh
+        | .rows += [[$cl, $snap, ($d | length), ($fresh | length)]]
+        | .seen += ($fresh | map({(.): true}) | add // {}))
+    | .rows[] | "| " + (map(tostring) | join(" | ")) + " |"' "$DATA/objects/manifests/$1"/*.jsonl
+}
+
 for cl in hsld26 hspolicy26 hspf26; do snapshot_rows $cl; done
+for cl in hsld26 hspolicy26 hspf26; do first_seen_rows $cl; done
 for cl in hsld26 hspolicy26 hspf26; do dedupe_row $cl; done
 du -sk "$DATA/blobs"                                   # bytes on disk, every source kind together
 ```
 
-Both functions were checked against the synthetic test archives
+**NEW is not "new to the store".** The weekly importer classifies each archive against the week
+before only. A file that was in July, missing from the next few windows, and back in August is
+NEW again. On backfill day 1, the three August weeks reported 25 NEW, but only 16 had never been
+stored. `first_seen_rows` gives the number that means new evidence, and it matches the run's
+`blobs_stored`.
+
+All three functions were checked against the synthetic test archives
 (`tests/fixtures/caselist/build_synthetic_archives.py`) and against the five weeklies already
 held. For the five, their totals match the 2026-09-24 run summary: 255 imported, 12 duplicate,
 242 new blobs.

@@ -39,7 +39,7 @@ ADR-0017's assumption for hspolicy26 and hspf26.
 | `hsld26` | 13 | 5 | 7 | 3 | 4 | 1 listed, not fetched |
 | `hspolicy26` | 12 | 0 | 11 | 0 | 11 | 1 listed, not fetched |
 | `hspf26` | 12 | 0 | 11 | 0 | 11 | 1 listed, not fetched |
-| Day 1 rehearsal (listed / wanted) | _not yet run_ | | | | | |
+| **Day 1 rehearsal, 2026-09-26** (all three) | 37 | 5 | 29 | | 5 of 29 allowed today, 24 deferred by the cap | 0 OpenEv of 498 selected |
 
 ## Per snapshot
 
@@ -55,6 +55,9 @@ junk: macOS metadata, `.DS_Store`, Word lock files, unsafe paths.
 | hsld26 | 2026-07-21 | 2026-07-14 | 3 | 3 | 0 | 0 | 0 | 36 | 0 | 0 | 3 | 3 | 0 | 0 | 0 | 0 |
 | hsld26 | 2026-07-28 | 2026-07-21 | 1 | 1 | 0 | 0 | 0 | 3 | 0 | 0 | 1 | 0 | 0 | 0 | 1 | 0 |
 | hsld26 | 2026-08-04 | 2026-07-28 | 211 | 200 | 0 | 0 | 11 | 1 | 0 | 0 | 200 | 203 | 0 | 1 | 7 | 5 |
+| hsld26 | 2026-08-11 | 2026-08-04 | 6 | 4 | 1 | 0 | 1 | 210 | 0 | 0 | 5 | 6 | 0 | 0 | 0 | 0 |
+| hsld26 | 2026-08-18 | 2026-08-11 | 16 | 15 | 1 | 0 | 0 | 5 | 0 | 0 | 16 | 16 | 0 | 0 | 0 | 0 |
+| hsld26 | 2026-08-25 | 2026-08-18 | 7 | 6 | 0 | 0 | 1 | 16 | 0 | 0 | 6 | 5 | 0 | 2 | 0 | 0 |
 
 The five rows above are the weeklies the `v1-e34-t02` validation run pulled on 2026-09-24 (run
 `20260924T042300Z`, dev). A re-import would be a no-op that writes nothing new, so the counts were
@@ -65,8 +68,32 @@ member rows. They were read by the implementation session on 2026-09-26 with the
 to 243, so exactly one file appears in two different weeks. All three agree with the run's
 `files_imported`, `files_duplicate` and `blobs_stored`.
 
+The 08-11 to 08-25 rows are backfill day 1, step 2 (run `20260926T213447Z`), read the same way
+from their manifests. Cross-check against the run summary: 29 members imported (6 + 16 + 7),
+2 duplicate (1 + 0 + 1), 0 skipped.
+
 Rows for the remaining snapshots are appended in date order, per caselist, as the operator
 records them.
+
+### New to the caselist, per snapshot
+
+**NEW does not mean new evidence.** The weekly importer classifies each archive against the week
+before only, so a file stored in July, absent for a few windows, and back in August counts as NEW
+again. The column that means never stored before is *First seen here*: distinct files in the
+snapshot that no earlier snapshot of the same caselist held. It comes from the runbook's
+`first_seen_rows`, and per run it equals the run's `blobs_stored`: 242 for the five July-August
+weeks, and 16 for 08-11 to 08-25, against 25 NEW.
+
+| Caselist | Snapshot | Distinct files | First seen here |
+|---|---|---|---|
+| hsld26 | 2026-07-07 | 4 | 4 |
+| hsld26 | 2026-07-14 | 35 | 35 |
+| hsld26 | 2026-07-21 | 3 | 3 |
+| hsld26 | 2026-07-28 | 1 | 1 |
+| hsld26 | 2026-08-04 | 200 | 199 |
+| hsld26 | 2026-08-11 | 5 | 4 |
+| hsld26 | 2026-08-18 | 16 | 10 |
+| hsld26 | 2026-08-25 | 6 | 2 |
 
 ## OpenEv camp files
 
@@ -112,7 +139,7 @@ The 2026-09-24 validation runs are in `docs/data/caselist-sync-runs.md` and not 
 
 | Day | Run id | Caselists | Allowance | Downloaded | Deferred by the cap | Files imported | New blobs | Objects published | Duration |
 |---|---|---|---|---|---|---|---|---|---|
-| | | | | | | | | | |
+| 1 | `20260926T213447Z` | hsld26 | 3 (lowered for this run) | 3 (08-11, 08-18, 08-25) | 4 | 29 | 16 | 16 | 9.1 s |
 
 ## Dev publish
 

@@ -413,3 +413,64 @@ a required check once it has run at least once — requiring it before then is n
 merely awkward. Then the two `gh run list` checks on dev, then the rulesets, then the throwaway PR.
 The throwaway PR is the only one of the four that proves the gate rather than the workflow: a green
 `ci` proves the jobs run, and only a blocked merge proves they matter.
+
+### PM re-review, 2026-09-26 — the test fix and the close-out
+
+The rendering fix is accepted and the task is now `Succeeded`. Every criterion is closed.
+
+**The session corrected my diagnosis, and the correction was the whole job.** I attributed the
+three failures to terminal width and handed over `COLUMNS=80 uv run pytest -q` as the
+reproduction. It reproduced nothing, because under pytest stdout is not a TTY and Rich already
+renders at 80 locally. The real cause is forced colour: GitHub Actions sets `GITHUB_ACTIONS`,
+Typer reads it once at import and forces terminal output, and the help panel then arrives full of
+ANSI escapes — the option name is absent from the content, not wrapped out of it. That distinction
+is not academic; it decided the shape of the fix. Setting environment variables alone arrives after
+Typer's import and does nothing, so the pin had to override Typer's settings objects directly. A
+fix built on my diagnosis would have gone green in CI for the wrong reason and stayed broken under
+`FORCE_COLOR`.
+
+The instruction that caught this was "if it does not reproduce, your model of the cause is wrong
+and you should say so rather than proceeding." It did not reproduce and the session said so. I have
+corrected the wrong attribution in the spec's own scope comment, which is the copy that outlives
+this report.
+
+**The census is the number worth keeping: 16 colour- or width-dependent tests across 9 modules
+from 8 already-merged, Succeeded tasks. CI caught 3.** The other 13 were latent — six under
+`FORCE_COLOR`, two at 60 columns, the rest between 20 and 50. The fix touches two files and edits
+none of the 16: one autouse fixture in the root `conftest.py`, and a new guard that re-runs all 16
+in a fresh process under forced colour at 20 and 400 columns, plus a third test that renders
+`--help` for all 19 commands and asserts no escapes and intact option names. That third test is the
+durable part — it covers flags nobody has written yet, with no list to maintain.
+
+**Operator results, recorded here because they are the evidence for `green-run` and `gate-proof`:**
+
+| Check | Result |
+|---|---|
+| PR run 36261625337, head `b4c4298` | 9 jobs green, 2m01s, pytest 2630 passed / 3 skipped |
+| `green-run` — latest dev run | `conclusion: success`, 2026-09-26T18:15:07Z |
+| `green-run` — latest PR run under 5 minutes | true (121s against a 300s bar) |
+| `gate-proof` — `ci` required on both rulesets | protect-dev (23638856) and protect-main (23638829), one context each, exactly `ci` |
+| `gate-proof` — a bad PR is blocked | PR #90: `mergeStateStatus: BLOCKED`, `ci: FAILURE` |
+
+The rollup on #90 is worth reading rather than just counting: `lint`, `spec-validate`, `typecheck`
+and `test` FAILURE, `import-boundaries` SUCCESS, `terraform-checks` and `site` SKIPPED, `ci`
+FAILURE. The aggregate distinguished skipped-by-filter from failed from passed in a single live
+run. An aggregate that read skips as failures would block every path-filtered PR; one that read
+them as passes would let a crashed job through. Both holes are now closed against reality rather
+than against seven simulated outcomes.
+
+`test` also failed on #90, which I had not predicted — the throwaway introduced only an unused
+import and an invalid `phase:` value. Something in the suite validates the live `plan_specs/` tree,
+so v1-e01-t05's tooling is exercised against real specs and not only fixtures. Worth knowing.
+
+**Follow-ups accepted from the session's list.** `site/README.md`'s "Continuous integration"
+section said the workflow did not exist; corrected in this PR. The optional `docs-links` job that
+would let `**/*.md` out of the `python` filter, Terraform provider caching, and moving the rulesets
+into code are all real but none is urgent — filed as notes here rather than as tasks, to be raised
+if the PR budget starts drifting toward five minutes.
+
+**One process note against myself.** Three of the merge frictions in this task were mine: a plain
+`uv sync` I did not catch when reviewing the workflow, a wrong diagnosis handed over as fact, and
+repeated stale git locks in the operator's clone from running ref-moving git commands I had said I
+would stop running. The first was caught by CI, the second by the session, the third by the
+operator. None was caught by me.

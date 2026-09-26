@@ -239,6 +239,7 @@ spec:
         goalRef: v1-e34-t05-enable-schedule
       dependsOn:
       - t02
+      - t06
       - ext-v1-e01-t09-dev-prerelease-channel
       acceptanceCriteria:
       - type: command_succeeds
@@ -249,5 +250,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t05-enable-schedule
+    - id: t06
+      kind: Task
+      name: Defects found by operating the sync
+      description: >-
+        Three `caselist pull` defects that only appear on a second day, after a failed import, or
+        beside a hand-imported camp file. The unattended schedule must not be enabled before the
+        retry fix.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t06-sync-defects.yaml
+        goalRef: v1-e34-t06-sync-defects
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t06-sync-defects reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t06-sync-defects
 status:
   phase: Pending

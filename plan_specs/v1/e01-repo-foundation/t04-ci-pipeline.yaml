@@ -39,7 +39,13 @@ spec:
     scripts/terraform_checks.sh; the `site` job that v1-e36-t03 hands to this task by name, running
     the jsdom and axe-core checks over site/;
     api-contract in v2-e12-t06), and each new job is appended to the aggregate `ci` job's needs, so
-    path-filtered checks still gate merges; separate workflows are only for non-PR work. The test job
+    path-filtered checks still gate merges; separate workflows are only for non-PR work, with one
+    carve-out: v1-e01-t08's `promotion-source` and `back-merge` live in their own promotion-guard.yml
+    and are required checks on protect-main in their own right, not jobs inside `ci`. They run only on
+    pull requests whose base is main, they need a full-depth checkout that the `ci` jobs do not, and
+    keeping the promotion gate visibly separate from the build gate is the point of them - a red
+    `promotion-source` says the wrong branch is being promoted, which is a different fact from a red
+    `ci`. Folding them into the aggregate would hide that distinction behind one check name. The test job
     runs the default pytest selection that excludes `slow` and `live` markers, and heavy suites (LLM
     evals, browser end-to-end, live canaries, terraform plan/apply, load tests, long security scans) are
     never part of the PR path into dev; they run in validate-dev, on a nightly schedule or by

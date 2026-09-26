@@ -71,6 +71,16 @@ spec:
         The full-archive fetch is budgeted after the run's weeklies, never before: with a fake source
         where the day's remaining allowance is exactly the number of new weeklies, no full archive is
         fetched and the deferral is named in the summary.
+    - id: ac0
+      description: >-
+        A full archive imports into a snapshot namespace of its own, not into the dated weekly series.
+        A `<slug>-all-<date>.zip` shares its date with that week's weekly, so under the importer as
+        v1-e30-t06 found it the two collide on one snapshot key, and a current-dated full archive also
+        raises `_latest_imported_snapshot` above every un-imported weekly and strands the
+        back-catalogue behind `ALREADY_IMPORTED`. Importing a full archive must leave the weekly series
+        and its `previous_snapshot` diffs untouched, and a weekly imported afterwards must still be
+        diffed against the weekly before it rather than against the whole corpus. This is the
+        precondition for everything else here (ADR-0017, revision of 2026-09-26).
     - id: ac4
       description: >-
         A full archive imports as its own snapshot through the same importer as a weekly, and a sha256

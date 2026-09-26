@@ -287,9 +287,60 @@ Once Charlie confirms steps 2 and 4, set the Goal to `Succeeded`:
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**
 
 **Notes:**
+
+Accepted. Merging `--partial`: `ruleset-wiring` and `negative-proof` are a GitHub settings change
+and throwaway pull requests, so the Goal stays `InProgress` until the operator has run them. The
+verdict is my review of the session's work, which is complete; the phase is the Goal's completion,
+which is not. They disagree here on purpose.
+
+**All three decisions go the session's way, and one of them corrects the spec.**
+
+1. **"Require branches to be up to date" stays OFF on protect-main.** The spec's `ruleset-wiring`
+   node asked for strict and the session found it unusable: a dev-to-main promotion leaves a merge
+   commit on main that dev never receives, so GitHub calls every subsequent promotion out of date,
+   and its "Update branch" button pushes straight to dev, which protect-dev forbids. `back-merge` is
+   the better guarantee anyway - it asks whether main holds real content dev lacks and ignores the
+   promotion merge commits that are inherent to the flow. Amended, with the reasoning, so nobody
+   turns it on later thinking it was an oversight.
+2. **`pull-requests: write` alone, no `contents: write`.** A PR whose head is `main` creates no
+   branch. The sharper half of the argument is the one I would not have thought of: the workflow
+   token cannot push a commit touching `.github/workflows/`, so a copied-branch design would fail on
+   exactly the hotfixes most likely to touch CI. Asking for less than the spec grants is the right
+   instinct and I want more of it.
+3. **Yes to a `back-merge` label, and not for the reason the question implied.** The label is a
+   warning sign, not organisation. A back-merge must be completed with a merge commit and never
+   squashed: a squash writes a new SHA into dev while main's original commit stays unreachable from
+   it, so the `back-merge` check goes permanently red and every future promotion is blocked with no
+   obvious cause. protect-dev allows both merge methods, so nothing mechanical prevents it. The
+   label, the PR body and branching-and-environments.md now all say so.
+
+**Two additions beyond the spec, both accepted and both the right kind.** Rejecting a fork pull
+request whose branch is named `dev` closes the hole the `source` check would otherwise wave
+through - the repository is public, so that is a live attack and not a hypothetical. Refusing a
+shallow clone with exit 2 rather than returning a silent wrong answer is the same instinct that
+made the `uv sync` defect visible on the first CI run: a check that is quietly wrong is worse than
+one that fails.
+
+**One thing added to `negative-proof` for the operator to confirm.** The session observed that
+workflow-token pull requests do not start new workflow runs, and concluded the green `ci` already
+attached to main's head SHA covers the back-merge PR. That is probably right, since required checks
+are evaluated against the head SHA whatever event produced it. But if it is wrong, the back-merge PR
+is unmergeable: `ci` is required on dev and protect-dev's bypass list is empty, so there would be no
+way to land it. Cheap to confirm in the sandbox, expensive to discover during a real hotfix.
+
+**The operator ordering is right and worth preserving.** Promote this task to main *before* making
+the new checks required. Hotfix branches are cut from main, main does not carry the guard workflows
+yet, and a required check that never runs would block the next hotfix - which is precisely the
+moment nobody wants to be debugging branch protection.
+
+**Honest note on the guard's self-reference.** The session flagged that a pull request changing the
+guard's own files can turn its checks green. That is inherent to `pull_request` triggers and the
+alternative - `pull_request_target` - is the privilege escalation this task's forbidden list exists
+to prevent. What protects main is that only the repository owner merges into it and the edit is
+visible in the diff. Accepted as a documented property rather than a defect.

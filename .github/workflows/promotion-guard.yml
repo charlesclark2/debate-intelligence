@@ -1,0 +1,93 @@
+# The promotion gate on pull requests into main (v1-e01-t08-branch-promotion-workflow).
+#
+# main is production and dev is the development environment (ADR-0013,
+# docs/process/branching-and-environments.md). Two jobs, each its own required status check on the
+# protect-main ruleset, and deliberately not jobs inside ci.yml's aggregate `ci`: a red
+# `promotion-source` says the wrong thing is being promoted, which is a different fact from a red
+# build (the carve-out is recorded in v1-e01-t04's spec).
+#
+#   promotion-source  the head is `dev` or `hotfix/<slug>` from this repository, and the description
+#                     fills in the "Dev build:" and "validate-dev run:" lines of the promotion or
+#                     hotfix template. `edited` is a trigger so that filling them in re-runs it.
+#   back-merge        main holds no non-merge commit that dev lacks, i.e. every hotfix was
+#                     back-merged. Passes for hotfix/* heads so a second fix is never blocked.
+#
+# SECURITY: this repository is public, so anyone can open a pull request from a fork, and on a
+# `pull_request` event the code that runs is the pull request's own. Nothing here may hold a write
+# token or a secret: the workflow and both jobs are `contents: read`, checkout does not persist the
+# token, and no step reads a secret. Do not add write permissions here, and do not switch the trigger
+# to `pull_request_target`; the back-merge pull request is opened by back-merge.yml, on push to main.
+# Untrusted strings (branch names, the description) reach the script through env, never through
+# `${{ }}` inside a run block.
+
+name: Promotion guard
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promotion-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  promotion-source:
+    # The job name is the required status check's name on protect-main. Do not rename it.
+    name: promotion-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # The script is standard library only, so the runner's own python3 runs it; no uv, no sync.
+      - name: The head branch may merge into main
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          # Empty when the fork behind the pull request has been deleted; the script fails on that.
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: >-
+          python3 scripts/check_promotion_source.py source
+          --base "$BASE_REF" --head "$HEAD_REF" --head-repo "$HEAD_REPO" --base-repo "$BASE_REPO"
+      - name: The Dev build and validate-dev run lines are filled in
+        # Runs after a failed source check too, so one run reports everything that is wrong.
+        if: ${{ !cancelled() }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$PR_BODY" | python3 scripts/check_promotion_source.py template --body-file -
+
+  back-merge:
+    # The job name is the required status check's name on protect-main. Do not rename it.
+    name: back-merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      # Full depth is required, not tidiness. On checkout's default depth of 1, rev-list stops at the
+      # graft and answers "nothing missing" instead of failing; the script refuses a shallow clone
+      # for that reason, so a depth change here turns this check red rather than silently green.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # Checkout of a pull request is its merge ref; fetch both branch tips explicitly so the
+      # comparison is between the branches as they are now. The repository is public, so this
+      # needs no token.
+      - name: Fetch main and dev
+        run: >-
+          git fetch --no-tags origin
+          +refs/heads/main:refs/remotes/origin/main
+          +refs/heads/dev:refs/remotes/origin/dev
+      - name: main holds nothing that dev lacks
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: python3 scripts/check_promotion_source.py back-merge --head "$HEAD_REF"

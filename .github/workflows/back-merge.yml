@@ -1,0 +1,95 @@
+# Opens the main → dev back-merge pull request after a hotfix (v1-e01-t08-branch-promotion-workflow).
+#
+# A hotfix merges into main from hotfix/<slug>, so main then holds commits dev lacks, and the
+# `back-merge` check in promotion-guard.yml fails every promotion until dev has them. This workflow
+# runs on every push to main, asks scripts/check_promotion_source.py whether dev lacks anything, and
+# if it does, opens a "Back-merge main → dev" pull request, or leaves the open one in place (its head
+# is main itself, so it already carries the new commits). A promotion from dev puts only a merge
+# commit on main, which the check ignores, so after a promotion this does nothing.
+#
+# The pull request's head is `main`, not a branch copied from it. That needs no write to the
+# repository's contents: pushing a copy with the workflow token would be refused whenever the new
+# commits touch .github/workflows/, which the token can never be granted. It also means the head
+# commit already carries the green `ci` from the push to main, which matters because pull requests
+# opened with the workflow token start no workflows of their own. Merging it cannot delete main:
+# protect-main restricts deletion and has an empty bypass list.
+#
+# Needs the repository setting Settings → Actions → General → "Allow GitHub Actions to create and
+# approve pull requests"; without it `gh pr create` is refused and this job fails, which is the
+# signal to back-merge by hand.
+#
+# Runs only on push to main, never on a pull request, so no fork's code ever runs with the write
+# permission below; it is scoped to the one job that needs it.
+
+name: Back-merge main into dev
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: back-merge
+  cancel-in-progress: false
+
+jobs:
+  open-back-merge-pull-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write # open the back-merge pull request
+    steps:
+      # Full depth for the same reason as promotion-guard.yml's back-merge job: a shallow clone
+      # would answer "nothing missing" and no pull request would open.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fetch main and dev
+        run: >-
+          git fetch --no-tags origin
+          +refs/heads/main:refs/remotes/origin/main
+          +refs/heads/dev:refs/remotes/origin/dev
+      - name: Find the commits on main that dev lacks
+        id: compare
+        # Exit 1 means dev lacks commits, which is this job's reason to act; exit 2 means the check
+        # could not run, which fails the job.
+        run: |
+          status=0
+          python3 scripts/check_promotion_source.py back-merge --head dev > compare.txt || status=$?
+          cat compare.txt
+          case "$status" in
+            0) echo "needed=false" >> "$GITHUB_OUTPUT" ;;
+            1) echo "needed=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+      - name: Open the back-merge pull request unless one is open
+        if: steps.compare.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          open_pr=$(gh pr list --repo "$REPO" --base dev --head main --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$open_pr" ]; then
+            echo "Back-merge pull request #$open_pr is open; its head is main, so it already has these commits."
+            exit 0
+          fi
+          {
+            echo "main holds commits that dev lacks, so a hotfix has not been back-merged yet."
+            echo "Until this merges, the \`back-merge\` check fails on every promotion from dev."
+            echo
+            echo '```'
+            sed -n 's/^FAILED: //p; /^  [0-9a-f]\{40\} /p' compare.txt
+            echo '```'
+            echo
+            echo "- [ ] Merge into \`dev\` with **Create a merge commit**. A squash leaves main's commits"
+            echo "      unreachable from dev and the \`back-merge\` check stays red."
+            echo "- [ ] Merge it the same day as the hotfix (docs/process/branching-and-environments.md)."
+            echo
+            echo "Opened by .github/workflows/back-merge.yml."
+          } > body.md
+          gh pr create --repo "$REPO" --base dev --head main \
+            --title "Back-merge main → dev" --body-file body.md

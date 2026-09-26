@@ -6,26 +6,42 @@
 | Spec | [`plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml`](../../plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml) |
 | Epic / release | `v1-e30-caselist-ingestion` / `v1.1` |
 | Branch | `task/v1-e30-t06-initial-backfill` |
-| Session status | PARTIAL: session deliverables done; the backfill is operator-run, and the complete-archive step is blocked on a PM decision |
+| Session status | PARTIAL: runbook and template done; backfill day 1 of 6 run by the operator on 2026-09-26; the complete-archive step is blocked on a PM decision |
 
 
 ## Summary
 
 This session wrote the backfill runbook (`docs/runbooks/caselist-backfill.md`) and the summary
-template (`docs/data/caselist-backfill-2026-09.md`). It ran no pull, import or publish, and made
-no call to the live site. The runbook is built around `caselist pull`, which now exists: `pull`
-does every download and handles the 5-per-day cap, and `caselist import` / `import-openev` handle
-only what is already on the Mac. That brings the plan to **29 downloads over six days**, three
-fewer than the spec's arithmetic, because the three HS LD weeklies on hand are imported rather than
-downloaded again. HS LD goes first and finishes on day 1, at the operator's request, because the
-first tournament is 3 October.
+(`docs/data/caselist-backfill-2026-09.md`). The runbook is built around `caselist pull`, which
+shipped after the spec was written. `pull` does every download and handles the 5-per-day cap;
+`caselist import` / `import-openev` handle only files already on the Mac. That brings the plan to
+**29 downloads over six days**, three fewer than the spec's arithmetic, because the three HS LD
+weeklies on hand are imported instead of downloaded again. The session itself ran no pull, import
+or publish. Every download, import and publish below was the operator's, and the session read the
+results back with read-only commands.
 
-**The PM should look first at the first Deviation.** The complete archive, which ADR-0017 says the
-backfill starts from, cannot be imported correctly by any code that exists today. At Charlie's
-direction the runbook stops at that point and leaves the decision to the PM.
+**Where the backfill stands (day 1 of 6, run 2026-09-26).** HS LD goes first, at the operator's
+request, because the first tournament is 3 October, and it is **complete through 09-22**: 12
+weeklies, 3,629 stored members, 3,036 distinct files (a 16.3% saving), 409 MB. The first Policy
+weekly and the 105 Policy camp files are in. Dev `caselist status` agreed on all 14 snapshots,
+and the dev bucket holds the 09-15 manifest the node criterion names. Policy (10 weeklies left)
+and PF (11 left), plus one new weekly per caselist on 29 September, go in over days 2–6. PF should
+finish on 1 October.
 
-**The Goal stays `InProgress`.** Every criterion except the runbook, the template and this report
-needs the operator's runs. The ac2 withdrawal figure also needs the PM's ruling.
+**Three things for the PM, in order:**
+
+1. **Deviation 1 needs a ruling.** The complete archive, which ADR-0017 says the backfill starts
+   from, cannot be imported correctly by any code that exists today. At Charlie's direction the
+   runbook stops there, and the withdrawal half of ac2 waits on the ruling. The weekly backfill
+   does not depend on the ruling and is going ahead.
+2. **The camp files all imported as camp `UNKNOWN`** (Follow-up work). The bytes and manifest are
+   correct; the importer reads the camp from the wrong end of the filename.
+3. **A weekly import's NEW is not "new evidence"** (Follow-up work). It is measured against the
+   week before only: day 1's three August weeks reported 25 NEW but stored 16. The summary reports
+   files first seen instead.
+
+**The Goal stays `InProgress`.** Days 2–6, the final dev check, the coach's spot check and the prod
+publish are still to run, and ac2's withdrawal figure needs the ruling on Deviation 1.
 
 ## Plan nodes
 
@@ -33,18 +49,19 @@ needs the operator's runs. The ac2 withdrawal figure also needs the PM's ruling.
 |---|---|---|
 | `runbook-and-template` — Backfill runbook and summary template | Done | Both files, plus the five hsld26 weeks already held, read from their manifests and pre-filled. The runbook's reporting commands were tested against the synthetic fixture archives in a scratch data directory. |
 | `local-import` — Operator-run local import | In progress (operator) | Day 1 run 2026-09-26: HS LD complete through 09-22 (the three on-hand weeklies imported in order 0901 → 0908 → 0915), Policy camp files imported, first Policy weekly pulled. Policy and PF weeklies continue on days 2–6. |
-| `dev-publish` — Operator-run publish to dev and drift check | In progress (operator) | `pull` publishes as it goes; runbook steps 4, 6 and 7 cover the manual imports and `status`. |
+| `dev-publish` — Operator-run publish to dev and drift check | In progress (operator) | `pull` publishes as it goes; the hand imports were published on day 1 (steps 4 and 6: 2,097 HS LD sources and 102 camp files uploaded, 0 failed). Day 1 `status`: 14 of 14 snapshots agree. The final check follows day 6. |
 | `dev-spot-check` — Coach spot check in dev | Not started (operator) | Runbook, *Spot check in dev*. |
 | `prod-publish` — Operator-run publish to prod | Not started (operator) | Runbook, *Publish the same store to prod*. |
 
 ## Acceptance criteria
 
-The session ran its checks from the task worktree on 2026-09-26.
+The session ran its checks from the task worktree on 2026-09-26. Operator results are from the
+day 1 run the same afternoon (21:34–21:40 UTC), pasted into the session.
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | **ac1** — the runbook gives the exact operator commands (import order 0901 → 0908 → 0915, OpenEv import, dev publish, status, prod publish with `--confirm-prod`) and expected durations | PASS, with Deviation 2 | Every item is in `docs/runbooks/caselist-backfill.md`. The 0901 → 0908 → 0915 imports are day 1 step 3; `pull` fetches 08-11 to 08-25 before them, because the importer enforces order (Deviation 2). The durations are estimates scaled from the measured 34 s, five-weekly run of 2026-09-24 and marked as estimates. |
-| **ac2** — per-snapshot member and classification counts, dedupe rate, PDF/.doc and unparsed counts, bytes stored; path-level REMOVED labelled as such; withdrawals against the full archive reported separately; the measured 11% stated | NOT RUN | Needs the operator's imports. The template has every column, heads the path-level REMOVED column **Paths no longer present**, and states the 11% measurement. Five of the per-snapshot rows are already filled in from a run that happened (below). The withdrawal figure is also blocked on Deviation 1. |
+| **ac2** — per-snapshot member and classification counts, dedupe rate, PDF/.doc and unparsed counts, bytes stored; path-level REMOVED labelled as such; withdrawals against the full archive reported separately; the measured 11% stated | NOT RUN (partly recorded) | Recorded from real runs so far: 13 per-snapshot rows (hsld26 07-07 to 09-22, hspolicy26 07-07) with every required column, the OpenEv row, the hsld26 dedupe rate (3,629 → 3,036, 16.3%), and bytes on disk after day 1 (460,988 KiB). The path-level column is headed **Paths no longer present** and never called removals (685 for 09-15, matching `v1-e30-t03`; 1,462 for 09-22). The 11% measurement is stated. Still to come: Policy/PF rows (days 2–6), final bytes, and the withdrawal figure, which is blocked on Deviation 1. |
 | **ac3** — hsld26 09-01/09-08/09-15 and OpenEv manifests in the dev bucket; dev `caselist status` shows no drift | NOT RUN (evidence in hand, final check after day 6) | Day 1, 2026-09-26, operator: `caselist status` → exit 0, **Every snapshot agrees**, 14 snapshots including hsld26 09-01 (59/59), 09-08 (678/678), 09-15 (1,487/1,487) and openev 2026-policy (102/102), 0 missing, 0 mismatches. Left NOT RUN until the whole backfill is published and checked again, which is when the summary records its status line. |
 | **ac4** — coach spot-checked at least 20 disclosures in dev | NOT RUN | Coach. |
 | **ac5** — the same manifests in prod; prod `caselist status` shows no drift, with the date | NOT RUN | Operator, after ac3 and ac4. |
@@ -52,7 +69,7 @@ The session ran its checks from the task worktree on 2026-09-26.
 | Node: Summary template exists (`contentMatch: Dedupe rate`) | PASS | `grep -c "Dedupe rate" docs/data/caselist-backfill-2026-09.md` → `1` |
 | Node: Local import counts recorded (`contentMatch: 2026-09-15`) | PASS (the match); node still in progress | The template left out `2026-09-15` until the import ran, so the match could not pass early. After day 1, step 3 (2026-09-26), the 09-15 row is recorded from the operator's import: `grep -c 2026-09-15 docs/data/caselist-backfill-2026-09.md` → `3`. The node's Policy/PF weeklies are still to come. `dev status: in sync` and `prod status: in sync` are still deliberately absent (both `0`). |
 | Node: Dev publish recorded (`dev status: in sync`) | NOT RUN | Operator. |
-| Node: Latest LD manifest in the dev bucket (`store ls manifests/hsld26/2026-09-15.jsonl`) | NOT RUN | Not imported yet. Baseline, after Charlie re-authenticated: `DEBATE_ENV=dev uv run debate-research --json caselist status` → exit 0, `in_sync: true`, five hsld26 snapshots (07-07 to 08-04), sources/published 4/4, 35/35, 3/3, 1/1, 200/200, 0 missing, 0 mismatches. `store ls manifests/` → exactly those five keys. `store ls reports/` → empty (the 09-24 runs predate `v1-e34-t03`'s run-record publishing). |
+| Node: Latest LD manifest in the dev bucket (`store ls manifests/hsld26/2026-09-15.jsonl`) | PASS | `DEBATE_ENV=dev uv run debate-research store ls manifests/hsld26/2026-09-15.jsonl` → exit 0, `1 object(s), 930.7 KB`, run by the session on 2026-09-26 after day 1. The bucket's `manifests/` now holds 12 hsld26, 1 hspolicy26 and 1 openev manifest. The baseline before day 1 was 5 hsld26 manifests only, all in sync. |
 | Node: Coach accepts the dev spot check | NOT RUN | Coach. |
 | Node: Prod publish recorded (`prod status: in sync`) | NOT RUN | Operator. |
 | Node: Latest LD manifest in the prod bucket | NOT RUN | Operator. |
@@ -75,9 +92,11 @@ operator's machine, each finishing in seconds (working agreements §2):
 
 ## Files changed
 
-* `docs/runbooks/caselist-backfill.md` (new): the operator's runbook.
-* `docs/data/caselist-backfill-2026-09.md` (new): the summary template, with the five held
-  weeks filled in.
+* `docs/runbooks/caselist-backfill.md` (new): the operator's runbook. After day 1 it also has
+  `first_seen_rows`, and a recovery row for a failed import inside `pull`.
+* `docs/data/caselist-backfill-2026-09.md` (new): the summary. The five held weeks were filled in
+  by the session; day 1's results (8 more snapshots, the camp files, two pull runs, the dev publish
+  and a mid-backfill status check) from the operator's run.
 * `docs/README.md`: an index line for each (Deviation 3).
 * `docs/session-reports/v1-e30-t06-initial-backfill.md`: this report.
 * `plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml`: unchanged. The Goal stays
@@ -148,8 +167,9 @@ operator's machine, each finishing in seconds (working agreements §2):
 * **The on-hand HS LD weeklies are taken to be the site's 09-01, 09-08 and 09-15 weeklies.** Their
   dates and file counts match the spec and ADR-0017's listing. Comparing their bytes with the
   site's would cost three downloads, and those are what the plan saves.
-* **The day-by-day table assumes day 1 is Sunday 27 September** and the 09-29 weeklies are listed
-  by day 3's run. Either shift only moves the table; the total of 29 downloads is the same.
+* **The day-by-day table assumes day 1 is Sunday 27 September.** Day 1 was actually Saturday 26
+  September, which moves every row a day earlier: the 09-29 weeklies join on day 4, and PF should
+  finish on Thursday 1 October. The total of 29 downloads is unchanged.
 * **Durations are estimates**, from the measured 2026-09-24 run (34 s for five weeklies, 255
   files, with the publish) and the local synthetic imports (about 0.7 s per archive). The operator
   records the real ones.
@@ -158,23 +178,25 @@ operator's machine, each finishing in seconds (working agreements §2):
 
 ## Operator follow-ups
 
-1. **Before day 1:** read the runbook's *Before day 1* section and run its checks. That section
-   covers the dev SSO login, `caselist auth status --check`, no `DEBATE_CASELIST__*` variables
-   set, and the launchd agent not installed.
-2. **Day 1, about 45 minutes, in one sitting that does not cross midnight UTC:** runbook day 1,
-   steps 1–7. Paste back the dry-run counts, the output of `snapshot_rows hsld26`, the
-   `import-openev` JSON counts, and `caselist status`.
-3. **Days 2–6, a few minutes each:** one `caselist pull --caselist hsld26 --caselist hspolicy26
-   --caselist hspf26` a day. Paste back `caselist runs --last 1` after each.
-4. **After day 6:** the dry run that wants nothing, `snapshot_rows` and `dedupe_row` for all three
-   caselists, `du -sk ~/.debate-research/dev/blobs`, and `caselist status`. Record
-   `dev status: in sync`.
-5. **Coach spot check:** 20 disclosures, tallies only.
-6. **Prod publish:** runbook section, with `DEBATE_STORAGE__DATA_DIR` naming the dev store and
+1. ~~Before day 1~~ and ~~day 1, steps 0–7~~: **done 2026-09-26.** All results match the plan.
+2. **Days 2–6, a few minutes each.** One run a day, each on a new UTC date and no earlier in the
+   day than the last (day 2: Sunday 27 September after about 21:40 UTC):
+
+   ```bash
+   export DEBATE_ENV=dev
+   uv run debate-research caselist pull --caselist hsld26 --caselist hspolicy26 --caselist hspf26
+   uv run debate-research caselist runs --last 1
+   ```
+
+   Day 2 expects 3 Policy + 2 PF. Paste back the run table after each.
+3. **After day 6:** the dry run that wants nothing, `snapshot_rows`, `first_seen_rows` and
+   `dedupe_row` for all three caselists, `du -sk ~/.debate-research/dev/blobs`, and
+   `caselist status`. Record `dev status: in sync`.
+4. **Coach spot check:** 20 disclosures, tallies only.
+5. **Prod publish:** runbook section, with `DEBATE_STORAGE__DATA_DIR` naming the dev store and
    `--confirm-prod`. Record `prod status: in sync` and the date.
-7. **Set the Goal to `Succeeded`** only once every criterion above has passed and the PM has
-   ruled on Deviation 1: `uv run scripts/task_helper.py set-phase v1-e30-t06-initial-backfill
-   Succeeded`.
+6. **Set the Goal to `Succeeded`** only once every criterion has passed and the PM has ruled on
+   Deviation 1: `uv run scripts/task_helper.py set-phase v1-e30-t06-initial-backfill Succeeded`.
 
 ## Follow-up work
 

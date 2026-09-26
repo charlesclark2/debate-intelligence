@@ -58,6 +58,11 @@ junk: macOS metadata, `.DS_Store`, Word lock files, unsafe paths.
 | hsld26 | 2026-08-11 | 2026-08-04 | 6 | 4 | 1 | 0 | 1 | 210 | 0 | 0 | 5 | 6 | 0 | 0 | 0 | 0 |
 | hsld26 | 2026-08-18 | 2026-08-11 | 16 | 15 | 1 | 0 | 0 | 5 | 0 | 0 | 16 | 16 | 0 | 0 | 0 | 0 |
 | hsld26 | 2026-08-25 | 2026-08-18 | 7 | 6 | 0 | 0 | 1 | 16 | 0 | 0 | 6 | 5 | 0 | 2 | 0 | 0 |
+| hsld26 | 2026-09-01 | 2026-08-25 | 64 | 58 | 0 | 0 | 6 | 7 | 0 | 0 | 59 | 55 | 0 | 8 | 1 | 1 |
+| hsld26 | 2026-09-08 | 2026-09-01 | 745 | 666 | 5 | 0 | 74 | 59 | 0 | 0 | 678 | 722 | 0 | 6 | 17 | 29 |
+| hsld26 | 2026-09-15 | 2026-09-08 | 1597 | 1387 | 58 | 2 | 148 | 685 | 0 | 2 | 1487 | 1565 | 0 | 18 | 12 | 74 |
+| hsld26 | 2026-09-22 | 2026-09-15 | 941 | 698 | 129 | 4 | 110 | 1462 | 0 | 0 | 883 | 925 | 0 | 12 | 4 | 14 |
+| hspolicy26 | 2026-07-07 | none | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 2 | 0 | 0 | 0 | 0 |
 
 The five rows above are the weeklies the `v1-e34-t02` validation run pulled on 2026-09-24 (run
 `20260924T042300Z`, dev). A re-import would be a no-op that writes nothing new, so the counts were
@@ -72,6 +77,17 @@ The 08-11 to 08-25 rows are backfill day 1, step 2 (run `20260926T213447Z`), rea
 from their manifests. Cross-check against the run summary: 29 members imported (6 + 16 + 7),
 2 duplicate (1 + 0 + 1), 0 skipped.
 
+The 09-01, 09-08 and 09-15 rows are the weeklies already on the operator's Mac, imported by hand
+on day 1, step 3. Each `previous_snapshot` is the week before it, and each import's `--json`
+output agrees with its manifest (members 64 / 745 / 1,597; NEW 58 / 666 / 1,387). The two skipped
+members in 09-15 are `.DS_Store` files, as `v1-e30-t03` found. The 09-22 hsld26 and 07-07
+hspolicy26 rows are day 1, step 5 (run `20260926T213709Z`): 943 imported (941 + 2), 110 duplicate,
+683 new blobs.
+
+The 09-15 row's 685 paths no longer present is the same figure `v1-e30-t03` measured, and 09-22's
+1,462 is larger still. Neither is a takedown count: with the complete archive not yet imported,
+this document has no withdrawal figure (below).
+
 Rows for the remaining snapshots are appended in date order, per caselist, as the operator
 records them.
 
@@ -82,7 +98,8 @@ before only, so a file stored in July, absent for a few windows, and back in Aug
 again. The column that means never stored before is *First seen here*: distinct files in the
 snapshot that no earlier snapshot of the same caselist held. It comes from the runbook's
 `first_seen_rows`, and per run it equals the run's `blobs_stored`: 242 for the five July-August
-weeks, and 16 for 08-11 to 08-25, against 25 NEW.
+weeks, and 16 for 08-11 to 08-25, against 25 NEW. For the three hand imports it equals each
+import's own `newly_stored_blobs` (58, 659, 1,380).
 
 | Caselist | Snapshot | Distinct files | First seen here |
 |---|---|---|---|
@@ -94,16 +111,30 @@ weeks, and 16 for 08-11 to 08-25, against 25 NEW.
 | hsld26 | 2026-08-11 | 5 | 4 |
 | hsld26 | 2026-08-18 | 16 | 10 |
 | hsld26 | 2026-08-25 | 6 | 2 |
+| hsld26 | 2026-09-01 | 59 | 58 |
+| hsld26 | 2026-09-08 | 678 | 659 |
+| hsld26 | 2026-09-15 | 1487 | 1380 |
+| hsld26 | 2026-09-22 | 883 | 681 |
+| hspolicy26 | 2026-07-07 | 2 | 2 |
 
 ## OpenEv camp files
 
 | Release | Members | NEW | DUPLICATE | Skipped | Distinct sha256 | Unknown camp | Already disclosed on a caselist | New blobs |
 |---|---|---|---|---|---|---|---|---|
-| `2026-policy` | _not yet run_ | | | | | | | |
+| `2026-policy` | 106 | 102 | 3 | 1 (`.DS_Store`) | 102 | **105 of 105** | 0 | 102 |
 
 From `import-openev --json` (`members`, `counts`, `skipped_total`, `distinct_sha256`,
 `unknown_camps`, `caselist_duplicates`, `newly_stored_blobs`). 105 `.docx` and one `.DS_Store` are on
-hand; the `.DS_Store` should show as skipped.
+hand; the `.DS_Store` was skipped. Imported 2026-09-26, day 1, step 6.
+
+**Every camp file is recorded with camp `UNKNOWN`.** This is not a gap in the alias table. The
+table has the camps these files name. The files name their camp at the *end* of the filename,
+after the title and before the year, and sit in folders named for argument type. The importer
+reads a camp only from the folder name or from the *start* of the filename, so it never looks
+where the camp is. The bytes are stored and published correctly; the camp label is what is
+missing. This is recorded as a follow-up for the OpenEv importer (session report) and not
+patched here. The three DUPLICATEs are identical files present under two names within the
+release; none duplicates a caselist disclosure.
 
 ## Dedupe rate
 
@@ -119,12 +150,13 @@ when `v1-e30-t03` measured them (its session report): an **11% saving**. The fiv
 | Caselist | Weeklies | Stored members | Distinct files | Saving | Bytes of distinct files |
 |---|---|---|---|---|---|
 | hsld26 (the five held weeks only, 07-07 to 08-04) | 5 | 255 | 242 | 5.1% | 49,107,328 |
-| hsld26 (all) | _not yet run_ | | | | |
+| hsld26 (all, 07-07 to 09-22, complete as of the 09-22 listing) | 12 | 3,629 | 3,036 | 16.3% | 408,918,566 |
 | hspolicy26 | _not yet run_ | | | | |
 | hspf26 | _not yet run_ | | | | |
 
-**Bytes stored**, all sources on disk (`du -sk` of the store's `blobs/`): _not yet run_. It was
-48,428 KiB for the five held weeks before the backfill began.
+**Bytes stored**, all sources on disk (`du -sk` of the store's `blobs/`): _not yet run_ for the
+finished backfill. It was 48,428 KiB for the five held weeks before the backfill began, and
+460,988 KiB after day 1 (HS LD complete, one Policy week, the camp files).
 
 ## Withdrawals against the complete archive
 
@@ -140,6 +172,7 @@ The 2026-09-24 validation runs are in `docs/data/caselist-sync-runs.md` and not 
 | Day | Run id | Caselists | Allowance | Downloaded | Deferred by the cap | Files imported | New blobs | Objects published | Duration |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | `20260926T213447Z` | hsld26 | 3 (lowered for this run) | 3 (08-11, 08-18, 08-25) | 4 | 29 | 16 | 16 | 9.1 s |
+| 1 | `20260926T213709Z` | all three | 2 left | 2 (hsld26 09-22, hspolicy26 07-07) | 21 | 943 | 683 | 683 | 65.0 s |
 
 ## Dev publish
 
@@ -152,7 +185,15 @@ post-backfill check this section records below.
 
 | Date | Caselist | Snapshots | Uploaded | Skipped | Failed | Bytes |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 2026-09-26 | hsld26 (step 4, hand imports) | 11 complete of 11 | 2,097 (58 + 659 + 1,380) | 392 already present | 0 | not recorded (table output only) |
+| 2026-09-26 | openev `2026-policy` (step 6) | 1 of 1 | 102 | 0 | 0 | not recorded |
+
+The pull runs published their own imports (the pull runs table: 16, then 683 objects).
+
+**Check after day 1, 2026-09-26.** `caselist status` exited `0`, **Every snapshot agrees**:
+14 snapshots (hsld26 07-07 to 09-22, hspolicy26 07-07, openev 2026-policy), every one with local
+files equal to published, 0 missing, 0 mismatches. This is a mid-backfill reading. The status
+line below is recorded when the backfill is finished.
 
 dev status: _not yet run_
 

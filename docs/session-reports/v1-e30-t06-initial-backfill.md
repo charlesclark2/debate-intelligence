@@ -32,8 +32,8 @@ needs the operator's runs. The ac2 withdrawal figure also needs the PM's ruling.
 | Node | Status | Notes |
 |---|---|---|
 | `runbook-and-template` — Backfill runbook and summary template | Done | Both files, plus the five hsld26 weeks already held, read from their manifests and pre-filled. The runbook's reporting commands were tested against the synthetic fixture archives in a scratch data directory. |
-| `local-import` — Operator-run local import | Not started (operator) | Runbook day 1, steps 2–6, then days 2–6. |
-| `dev-publish` — Operator-run publish to dev and drift check | Not started (operator) | `pull` publishes as it goes; runbook steps 4, 6 and 7 cover the manual imports and `status`. |
+| `local-import` — Operator-run local import | In progress (operator) | Day 1 run 2026-09-26: HS LD complete through 09-22 (the three on-hand weeklies imported in order 0901 → 0908 → 0915), Policy camp files imported, first Policy weekly pulled. Policy and PF weeklies continue on days 2–6. |
+| `dev-publish` — Operator-run publish to dev and drift check | In progress (operator) | `pull` publishes as it goes; runbook steps 4, 6 and 7 cover the manual imports and `status`. |
 | `dev-spot-check` — Coach spot check in dev | Not started (operator) | Runbook, *Spot check in dev*. |
 | `prod-publish` — Operator-run publish to prod | Not started (operator) | Runbook, *Publish the same store to prod*. |
 
@@ -45,12 +45,12 @@ The session ran its checks from the task worktree on 2026-09-26.
 |---|---|---|
 | **ac1** — the runbook gives the exact operator commands (import order 0901 → 0908 → 0915, OpenEv import, dev publish, status, prod publish with `--confirm-prod`) and expected durations | PASS, with Deviation 2 | Every item is in `docs/runbooks/caselist-backfill.md`. The 0901 → 0908 → 0915 imports are day 1 step 3; `pull` fetches 08-11 to 08-25 before them, because the importer enforces order (Deviation 2). The durations are estimates scaled from the measured 34 s, five-weekly run of 2026-09-24 and marked as estimates. |
 | **ac2** — per-snapshot member and classification counts, dedupe rate, PDF/.doc and unparsed counts, bytes stored; path-level REMOVED labelled as such; withdrawals against the full archive reported separately; the measured 11% stated | NOT RUN | Needs the operator's imports. The template has every column, heads the path-level REMOVED column **Paths no longer present**, and states the 11% measurement. Five of the per-snapshot rows are already filled in from a run that happened (below). The withdrawal figure is also blocked on Deviation 1. |
-| **ac3** — hsld26 09-01/09-08/09-15 and OpenEv manifests in the dev bucket; dev `caselist status` shows no drift | NOT RUN | Operator. |
+| **ac3** — hsld26 09-01/09-08/09-15 and OpenEv manifests in the dev bucket; dev `caselist status` shows no drift | NOT RUN (evidence in hand, final check after day 6) | Day 1, 2026-09-26, operator: `caselist status` → exit 0, **Every snapshot agrees**, 14 snapshots including hsld26 09-01 (59/59), 09-08 (678/678), 09-15 (1,487/1,487) and openev 2026-policy (102/102), 0 missing, 0 mismatches. Left NOT RUN until the whole backfill is published and checked again, which is when the summary records its status line. |
 | **ac4** — coach spot-checked at least 20 disclosures in dev | NOT RUN | Coach. |
 | **ac5** — the same manifests in prod; prod `caselist status` shows no drift, with the date | NOT RUN | Operator, after ac3 and ac4. |
 | Node: Backfill runbook exists (`contentMatch: --confirm-prod`) | PASS | `grep -c -- "--confirm-prod" docs/runbooks/caselist-backfill.md` → `4` |
 | Node: Summary template exists (`contentMatch: Dedupe rate`) | PASS | `grep -c "Dedupe rate" docs/data/caselist-backfill-2026-09.md` → `1` |
-| Node: Local import counts recorded (`contentMatch: 2026-09-15`) | NOT RUN | The template deliberately does **not** contain `2026-09-15`: `grep -c` → `0`. With it, this criterion would pass before any import happened. The same goes for `dev status: in sync` and `prod status: in sync` (both `0`). |
+| Node: Local import counts recorded (`contentMatch: 2026-09-15`) | PASS (the match); node still in progress | The template left out `2026-09-15` until the import ran, so the match could not pass early. After day 1, step 3 (2026-09-26), the 09-15 row is recorded from the operator's import: `grep -c 2026-09-15 docs/data/caselist-backfill-2026-09.md` → `3`. The node's Policy/PF weeklies are still to come. `dev status: in sync` and `prod status: in sync` are still deliberately absent (both `0`). |
 | Node: Dev publish recorded (`dev status: in sync`) | NOT RUN | Operator. |
 | Node: Latest LD manifest in the dev bucket (`store ls manifests/hsld26/2026-09-15.jsonl`) | NOT RUN | Not imported yet. Baseline, after Charlie re-authenticated: `DEBATE_ENV=dev uv run debate-research --json caselist status` → exit 0, `in_sync: true`, five hsld26 snapshots (07-07 to 08-04), sources/published 4/4, 35/35, 3/3, 1/1, 200/200, 0 missing, 0 mismatches. `store ls manifests/` → exactly those five keys. `store ls reports/` → empty (the 09-24 runs predate `v1-e34-t03`'s run-record publishing). |
 | Node: Coach accepts the dev spot check | NOT RUN | Coach. |
@@ -207,6 +207,14 @@ operator's machine, each finishing in seconds (working agreements §2):
   runbook's `first_seen_rows`, and says NEW is not new evidence. Adjacent-window comparison is what
   ADR-0016 and the epic asked for, so the fix may only be the docstring. Either way, a later
   report that sums NEW across weeks would overstate new evidence.
+* **E30 (`v1-e30-t04` OpenEv importer): no camp is recognised in the real camp files.** On
+  2026-09-26 all 105 on-hand Policy camp files imported with camp `UNKNOWN` (`unknown_camps 105`).
+  The alias table has the camps they name. The files carry the camp at the end of the filename,
+  after the title and before the year, with the lab's initials after it, in folders named for
+  argument type. `camp_metadata` reads the camp only from the folder or the start of the filename.
+  The bytes and manifest are correct; the camp and title fields are not. The fix belongs in the
+  importer, followed by a re-import of the release. How a re-import rewrites rows already in the
+  release manifest needs checking first. No filename is quoted here, per policy rule 5.
 * **`v1-e34-t04`**: see Deviation 1.
 
 ## PM review

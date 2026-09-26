@@ -270,8 +270,10 @@ Enforced by `tests/offline.test.ts` and by the constraints in the task spec:
 
 ## Continuous integration
 
-There is no `.github/workflows/ci.yml` in the repository yet. The `site` job belongs to
-`v1-e01-t04`, which creates that workflow. It should run, on changes to `site/`:
+`.github/workflows/ci.yml` exists and carries the `site` job, added by `v1-e01-t04` and gated on
+the `site` path filter. It runs `site/scripts/pre-commit-checks.sh` on Node 22 with pnpm taken from
+`package.json`, and took 44 seconds on the run that introduced it. The rest of this section
+describes what that job does:
 
 ```yaml
 - run: pnpm --dir site install --frozen-lockfile

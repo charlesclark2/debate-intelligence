@@ -63,10 +63,15 @@ spec:
   constraints:
     packages: [.github/workflows, conftest.py, packages/debate_cli/tests, tests/smoke]
     # packages/debate_cli/tests was added by the PM after CI's first run: the workflow is correct and
-    # three CLI help tests are not. They assert an option name appears in Rich-rendered help, which
-    # holds only on a wide terminal, so they passed on every laptop and failed on the first runner
-    # with no TTY. Making a hermetic gate work requires the tests it runs to be hermetic; the fix
-    # belongs here rather than in a task of its own, and belongs in the tests rather than in ci.yml.
+    # three CLI help tests are not. They assert an option name appears in Rich-rendered help. The PM
+    # first attributed that to terminal width; the session measured it and the cause is forced
+    # COLOUR - GitHub Actions sets GITHUB_ACTIONS, Typer reads it once at import and forces terminal
+    # output, and the help panel then arrives full of ANSI escapes, so the substring is absent from
+    # the content rather than wrapped out of it. Width is a real second cause but a latent one. The
+    # distinction decided the fix: setting environment variables alone is too late, so the pin has to
+    # override Typer's settings objects directly. Making a hermetic gate work requires the tests it
+    # runs to be hermetic; the fix belongs here rather than in a task of its own, and belongs in the
+    # tests rather than in ci.yml.
     # Widened again once the count was known: sixteen modules build a bare CliRunner, nine under
     # packages/debate_cli/tests and seven under tests/smoke, and the smoke checks are deliberately
     # unmarked so they run on the PR path too. One autouse fixture in the root conftest.py covers
@@ -118,7 +123,7 @@ spec:
         excludes the `slow` and `live` markers, and no heavy suite (LLM evals, browser end-to-end, live
         canaries, terraform plan/apply, load tests, long security scans) runs on PRs into dev.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -224,6 +224,8 @@ operator's machine, each finishing in seconds (working agreements §2):
   the inbox name (`openev-<id>-…`), not on sha256. Setting `caselist.openev_event` would therefore
   re-download all 498 listed files, which would go into the manifest as `DUPLICATE` rows beside the
   105 imported here.
+* **Filed by the PM as `v1-e30-t08-import-metadata-defects` (#102, 2026-09-26)**, which owns the
+  next two items, including the metadata re-import of the 105 camp files from the local store:
 * **E30 (`v1-e30-t03` code or docs): a weekly import's NEW means "not in the previous week", not
   "never stored".** `CaselistImportService` does not pass `find_existing` to the pipeline (the
   OpenEv importer does), so a file stored in an earlier, non-adjacent week is NEW again. The

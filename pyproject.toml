@@ -108,12 +108,12 @@ strict = ["packages/debate_core"]
 # ---------------------------------------------------------------------------------------------
 # import-linter: the ports-and-adapters boundaries, checked by `uv run lint-imports`
 # ---------------------------------------------------------------------------------------------
-# v1-e02-t06-import-boundary-guard owns this section and the full set of contracts (no httpx, typer
-# or fastapi in the domain and application layers; a layers contract for domain < application <
-# integrations; the CI job that runs them). It has not run yet, and v1-e29-t04-s3-blob-store is the
-# task that first brings an AWS SDK into the repository, so it adds the one contract its own
-# acceptance criterion names and leaves the rest to t06, which extends this section rather than
-# replacing it.
+# v1-e02-t06-import-boundary-guard owns this section. The first five contracts keep a named library
+# inside its adapter (v1-e29-t04, v1-e34-t01, v1-e31-t03 added them with their adapters); the rest
+# are the shape of the architecture. tests/architecture/test_import_contracts.py breaks every
+# contract here on purpose and fails if one does not report itself BROKEN, or if a contract is
+# added without a case there. What import-linter cannot see, how much a CLI command or API route
+# does, is checked by scripts/check_thin_handlers.py; CI's import-boundaries job runs both.
 [tool.importlinter]
 root_packages = ["debate_core", "debate_cli", "debate_api", "debate_workers"]
 # Required for a contract that forbids a module from outside the repository, such as boto3.

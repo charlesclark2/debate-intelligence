@@ -176,6 +176,9 @@ jobs:
       - *uv-sync
       - name: lint-imports
         run: uv run --frozen lint-imports
+      # What lint-imports cannot see: how much a CLI command or API route does (v1-e02-t06).
+      - name: check_thin_handlers.py
+        run: uv run --frozen python scripts/check_thin_handlers.py
 
   # Runs on every trigger. The validator reads the whole plan_specs/ tree in about a second.
   spec-validate:

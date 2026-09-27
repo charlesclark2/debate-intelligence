@@ -84,7 +84,7 @@ spec:
         A manual workflow_dispatch for a hotfix/* head publishes a pre-release for exactly that head's
         SHA (patch-target version, channel dev) that t10 can install and validate.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

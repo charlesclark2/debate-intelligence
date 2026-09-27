@@ -50,6 +50,9 @@ spec:
     - kind: TaskRef
       name: v1-e30-t03-archive-importer
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t06-initial-backfill
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -61,9 +64,10 @@ spec:
     - id: ac2
       description: >-
         Re-importing the 105 camp files already in the dev store corrects `camp` and `title` in place,
-        changes no sha256 and no manifest key, and downloads nothing. The operator runs it; the task
-        supplies the exact command and the before/after counts to record in
-        docs/data/caselist-backfill-2026-09.md.
+        changes no sha256 and no manifest key, and downloads nothing. The operator runs it; this task
+        supplies the exact command and the before/after counts, and v1-e30-t06 records them in
+        docs/data/caselist-backfill-2026-09.md. That file belongs to t06 and the two tasks must not
+        edit it at once.
     - id: ac3
       description: >-
         NEW is documented and reported as what it is. The archive importer's docstring and every

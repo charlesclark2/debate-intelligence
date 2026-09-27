@@ -7,7 +7,9 @@
 # Every check a pull request needs lives in this file, including the ones later tasks add (web in
 # v2-e14-t01, api-contract in v2-e12-t06). A new job is gated on a `changes` output and appended to
 # the `ci` job's needs and to its PATH_FILTER_OF_JOB map. Separate workflows are only for work that is
-# not on the PR path: validate-dev, nightly schedules and manual dispatches.
+# not on the PR path: validate-dev, nightly schedules and manual dispatches. The one carve-out is
+# promotion-guard.yml (v1-e01-t08): `promotion-source` and `back-merge` run only on pull requests into
+# main and are required checks on protect-main in their own right. Do not add them to `ci`.
 #
 # CI stays light (docs/process/working-agreements.md §1): the `ci` check on a PR into dev should
 # finish in under 5 minutes. Nothing here reaches a model, a search provider or an AWS account, and

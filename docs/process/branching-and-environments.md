@@ -55,9 +55,39 @@ A promotion PR (`dev` → `main`) can merge only when **all** of these hold:
 5. **Your approval**: Charlie signs off the promotion checklist on the PR, and (V2+) approves the
    `production` GitHub Environment deployment.
 
-The promotion PR uses the promotion template: the release/tasks included, the dev build or
-deploy id, the `validate-dev` run link, and a manual check note for anything automation cannot
-cover yet.
+The promotion PR uses the [promotion template](../../.github/PULL_REQUEST_TEMPLATE/promotion.md):
+the release/tasks included, the dev build or deploy id, the `validate-dev` run link, evaluation
+results, a manual check note for anything automation cannot cover yet, and a rollback note. A
+hotfix PR uses the [hotfix template](../../.github/PULL_REQUEST_TEMPLATE/hotfix.md): the incident,
+the dev build of the hotfix head, its `validate-dev` run link and the back-merge reminder. Open
+either by adding `?template=promotion.md` or `?template=hotfix.md` to the compare URL. Task PRs into
+`dev` use the [default template](../../.github/pull_request_template.md), which `scripts/task pr`
+fills in for you.
+
+## Guards on pull requests into `main`
+
+[`promotion-guard.yml`](../../.github/workflows/promotion-guard.yml) posts two checks on every pull
+request into `main`, both required by **protect-main**. Both run
+[`scripts/check_promotion_source.py`](../../scripts/check_promotion_source.py).
+
+| Check | Fails when |
+|---|---|
+| `promotion-source` | The head is not `dev` or `hotfix/<slug>` from this repository (a fork can name its branch `dev` too), or the description leaves the `Dev build:` or `validate-dev run:` line blank. Editing the description re-runs it. |
+| `back-merge` | `main` holds a non-merge commit that `dev` lacks: a hotfix that was never back-merged. A `hotfix/*` head always passes it, so a second urgent fix is never blocked by the first one's back-merge. |
+
+Before `v1-e01-t09` (dev pre-releases) and `v1-e01-t10` (`validate-dev`) have merged there is no
+build or run to link. Write that on the line, with what was checked instead: the check refuses a
+blank line, not an honest one.
+
+**After a hotfix merges**, [`back-merge.yml`](../../.github/workflows/back-merge.yml) opens a
+"Back-merge main → dev" pull request, labelled `back-merge`, whose head is `main` itself. Merge it
+into `dev` the same day with **Create a merge commit**, never squash: a squash leaves `main`'s commits unreachable from `dev`, and
+`back-merge` stays red on every promotion until they are. A promotion puts only a merge commit on
+`main`, which the check ignores, so promotions never open a back-merge PR.
+
+Guard workflows run on `pull_request` with `contents: read` and no secrets, because this repository
+is public and a fork's pull request runs its own code. Only `back-merge.yml`, which runs on push to
+`main`, holds a write permission (`pull-requests: write`, on its one job).
 
 ## GitHub settings
 
@@ -69,16 +99,22 @@ Set now:
   approve your own PR; the manual approval is the promotion checklist and, from V2, the
   `production` environment approval), dismiss stale approvals, require conversation resolution,
   allowed merge method **Merge** only. No linear-history rule (promotions are merge commits).
+  Required status checks `ci`, `promotion-source` and `back-merge`, **not** "require branches to be
+  up to date": every promotion leaves a merge commit on `main` that `dev` never receives, so that
+  setting would report every later promotion out of date. `back-merge` checks what it was meant to.
 * Ruleset **protect-dev** (target: pattern `dev`, empty bypass list): restrict deletions, block
   force pushes, require a pull request with 0 approvals and conversation resolution, allowed merge
   methods **Squash** (task PRs) and **Merge** (hotfix back-merges). No linear-history rule.
+  Required status check `ci`.
 * Settings → General → Pull Requests: enable **Automatically delete head branches**.
 
 Added as the tasks land:
 
 * `v1-e01-t04-ci-pipeline` → require status check `ci` on `dev` and `main`.
-* `v1-e01-t08-branch-promotion-workflow` → `promotion-source` check (fails any PR to `main`
-  whose head is not `dev` or `hotfix/*`) and the promotion PR template.
+* `v1-e01-t08-branch-promotion-workflow` → require `promotion-source` and `back-merge` on `main`
+  (see [Guards on pull requests into `main`](#guards-on-pull-requests-into-main)), the task,
+  promotion and hotfix PR templates, and Settings → Actions → General → **Allow GitHub Actions to
+  create and approve pull requests**, which `back-merge.yml` needs to open its pull request.
 * `v1-e01-t10-validate-dev-gate` → require `validate-dev` on `main`.
 * `v2-e12-t07-promotion-pipeline` → `development` / `production` GitHub Environments with
   branch-scoped deploy rules and Charlie as required reviewer on `production`.

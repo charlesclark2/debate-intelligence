@@ -68,18 +68,10 @@ dev = [
 [tool.ruff]
 line-length = 110
 target-version = "py312"
-# The spec and task tooling in scripts/ predates this config and is owned by v1-e01-t05-spec-tooling
-# and v1-e01-t11-task-workflow-cli; it comes under ruff when that tooling is brought into line, and
-# is named file by file rather than by directory so that scripts written since then are linted.
-# The `./` prefix anchors each pattern to the repository root, so tests/scripts/ is still linted.
-extend-exclude = [
-    "./scripts/compare_docx_roundtrip.py",
-    "./scripts/export_schemas.py",
-    "./scripts/spec_index.py",
-    "./scripts/task_helper.py",
-    "./scripts/validate_specs.py",
-]
-force-exclude = true  # honour the excludes when pre-commit passes file names explicitly
+# Nothing in scripts/ is excluded any more: v1-e01-t05-spec-tooling removed the temporary list
+# v1-e01-t03 added and fixed what ruff reported, so every script is linted and formatted like the
+# rest of the repository.
+force-exclude = true  # honour ruff's own excludes when pre-commit passes file names explicitly
 src = [
     "packages/debate_core/src",
     "packages/debate_cli/src",

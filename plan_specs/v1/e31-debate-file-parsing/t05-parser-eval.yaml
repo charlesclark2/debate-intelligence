@@ -38,8 +38,9 @@ spec:
     packages: [tests/evals, tests/fixtures, scripts, docs/data]
     forbidden:
       - >-
-        Committing unscrubbed team, caselist or camp files to tests/fixtures (student or debater names, team
-        codes, docProps author/lastModifiedBy, comments, tracked-change authors)
+        Committing any team, caselist or camp file, or any excerpt of one, anywhere in the repository -
+        scrubbed or otherwise. Scrubbing removes authorship metadata; it does not remove another program's
+        cards from a file our team cut from them
       - Running the full-corpus health run in CI or a session (operator-run only)
       - Editing fixture text to make labels line up
       - Updating the baseline without a coach-reviewed report in the same PR
@@ -51,15 +52,33 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        At least 30 scrubbed files are labeled: at least 12 team files (all three formats and seasons, at least
+        At least 30 files are labeled, every one of them left where it is on the operator's machine and
+        none of them committed in any form: at least 12 team files (all three formats and seasons, at least
         3 not built on the Verbatim template), at least 12 caselist files (at least 4 non-Verbatim and 2
-        wiki-converted) and at least 6 camp files, listed in a manifest by category, season and format; the
-        coach has reviewed the labels.
+        wiki-converted) and at least 6 camp files, listed in a manifest by category, season, format and a
+        **keyed digest** - never by file name, and never by a plain SHA-256. A plain digest is a join key,
+        not an anonymiser: this repository is public, the OpenCaselist archives are public, so anyone can
+        hash the same corpus and read our digests straight back to `<School>/<TeamCode>/<filename>`, which
+        is precisely what removing the names was for. File and paragraph digests are therefore an HMAC
+        under a key kept beside the path map in ~/.debate-intelligence/ and never committed. CI never
+        checks these digests, the fixture-changed validator still works because an HMAC over changed
+        content differs, and the operator can still verify because the operator holds the key. The coach
+        has reviewed the labels.
+        Labeling is sampled, because labeling every paragraph of all 30 files is about 5,800 rows and the
+        coach is a volunteer with a season starting. The 6-file PR subset is labeled in full - it gates
+        every pull request, so it cannot be sampled - and the other 24 files are labeled over contiguous
+        paragraph blocks covering about 25% of each file. Contiguous, not scattered rows: per-unit
+        precision and recall are sound on any sample, but card-boundary exact match needs unbroken runs,
+        and a card straddling a sampling gap cannot be scored at all. Every file still contributes, so the
+        per-stratum breakdowns still mean something.
     - id: ac2
       description: >-
         The eval writes JSON and Markdown reports with per-unit (POCKET, HAT, BLOCK, TAG, CITE, EVIDENCE,
         ANALYTIC, UNDERTAG) precision/recall/F1, card-boundary exact-match rate, completeness accuracy and
-        character-level underline/highlight F1, broken down by source, template family and format.
+        character-level underline/highlight F1, broken down by source, template family and format. Every
+        metric carries the sampling rate and the labeled-row count it was computed over, in both the JSON
+        and the Markdown: a precision figure over a quarter of a corpus is a different claim from one over
+        all of it, and a reader six months from now must not have to work out which they are looking at.
     - id: ac3
       description: >-
         Targets are recorded and met or ticketed: on Verbatim files TAG, CITE and EVIDENCE F1 at least 0.97,
@@ -67,15 +86,23 @@ spec:
         wiki-converted files TAG/CITE/EVIDENCE F1 at least 0.90.
     - id: ac4
       description: >-
-        The labeled subset runs in the default PR pytest run in under 30 s; the full labeled suite (`eval` and
-        `slow`) fails in the validate-dev slow tier and nightly when any unit F1 drops more than 0.01 below the
-        baseline for the current parser_version; a label validator fails when a fixture changes under its labels.
+        Two tiers, split by where the files are. The real-file tiers - the PR subset in the default pytest
+        run in under 30 s, and the full labeled suite under `eval` and `slow` in validate-dev and nightly -
+        run on the machine that holds the corpus and **skip elsewhere with a stated reason**, because this
+        spec keeps the files off every runner and a CI check cannot read what CI does not have. What CI
+        runs instead is the whole harness end to end over an invented file with hand-written labels, so the
+        scoring, reporting and gate paths are covered on every PR even though no real file is. Both tiers
+        fail when any unit F1 drops more than 0.01 below the baseline for the current parser_version, and
+        fail rather than pass when no baseline exists; a label validator fails when a file changes under
+        its labels. The baseline records the sampling plan it was measured over, and the gate refuses -
+        rather than comparing - when the current plan differs, because a metric from one sample and a
+        metric from another are not a regression, they are two different measurements.
     - id: ac5
       description: >-
         An operator-run corpus health report for the hsld26 snapshots and camp files is committed under
         docs/data/ with parse success rate at least 0.98 of .docx files and every failure reason counted.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -89,7 +116,7 @@ metadata:
     debate/epic: v1-e31-debate-file-parsing
 spec:
   description: >-
-    Select and scrub files, build label tooling, label with the coach, add metrics and the tiered gates, then
+    Select files in place, build label tooling, label with the coach, add metrics and the tiered gates, then
     have the operator run the full-corpus health check and commit its report.
   goalRef:
     name: v1-e31-t05-parser-eval
@@ -97,11 +124,16 @@ spec:
     nodes:
       - id: collect-files
         kind: Task
-        name: Select and scrub the evaluation files
+        name: Select the evaluation files, in place
         description: >-
           Choose team, caselist and camp files per category from the local folders (stratified by template
-          family seen in the t02 style survey), scrub with scripts/scrub_docx_fixture.py and record them in the
-          manifest; mark the 6-file PR subset.
+          family seen in the t02 style survey) and record them in the manifest by sha256, category, season
+          and format; mark the 6-file PR subset. The files stay on the operator's machine and none is
+          copied into the repository, scrubbed or otherwise: a team file can carry another program's cutter
+          marks, so "our own work product" is not a safe category (the v1-e31-t02 and v1-e31-t03 rulings,
+          and caselist-data-use.md prohibitions 1, 9 and 10). The manifest lists no file name, school or
+          team code. This is a manifest of files held elsewhere, not a fixture directory, and a later
+          reader who finds no .docx beside it is looking at it working correctly.
         outputs: [tests/fixtures/debate_files/eval/MANIFEST.md]
         estimatedEffort: 3h
         acceptanceCriteria:
@@ -131,11 +163,18 @@ spec:
         kind: Task
         name: Label the set
         description: >-
-          Correct pre-labels for every file, label spans on a 20% paragraph sample, and write a short labeling
-          guide for ambiguous conventions (undertags, analytics between cards, cite-only disclosures).
+          Correct pre-labels over the sampling plan - the PR subset in full, about 25% of every other file
+          in contiguous blocks - label spans on a 20% sample of the labeled paragraphs, and write a short
+          labeling guide for ambiguous conventions (undertags, analytics between cards, cite-only
+          disclosures). The plan is generated once, before any labeling begins, and committed: blocks are
+          at least 20 paragraphs so card boundaries stay evaluable, chosen deterministically from each
+          file's keyed digest so a re-run selects the same blocks, and **weighted toward blocks whose
+          pre-labels contain the rare units** - POCKET, UNDERTAG and ANALYTIC - because those are both the
+          sparsest and the ones the parser is weakest on, and an even sample leaves their F1 too noisy to
+          gate on. Weighting changes which blocks are picked, not how many.
         dependsOn: [collect-files, label-tooling]
         outputs: [tests/fixtures/debate_files/eval/labels/README.md]
-        estimatedEffort: 6h
+        estimatedEffort: 5h
         acceptanceCriteria:
           - type: artifact_exists
             name: Labeling guide exists

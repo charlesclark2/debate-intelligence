@@ -1,0 +1,75 @@
+name: Bug
+description: Something in the platform behaves differently from its spec or its docs.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This repository is public.** Do not paste, attach or link any real debate file,
+        disclosure, card or excerpt, and do not name a real school, team code or debater, even
+        partly or "scrubbed". If the bug only shows up on a real file, describe its shape (for
+        example "a tag with two nested cites") and reproduce it with invented text. See
+        [prohibited use 9](https://github.com/charlesclark2/debate-intelligence/blob/dev/docs/policies/caselist-data-use.md#prohibited-uses).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The behaviour you saw, including any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened, and where that is written down if you know.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: Commands and inputs, using synthetic data with invented schools and team codes.
+      placeholder: |
+        1. debate-research ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `debate-research --version`, or the commit you ran.
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - dev
+        - prod
+        - local checkout
+        - not sure
+    validations:
+      required: true
+  - type: input
+    id: spec-path
+    attributes:
+      label: Related task spec (optional)
+      description: The PlanSpec task the behaviour belongs to, if you know it.
+      placeholder: plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output (optional)
+      description: >-
+        Remove file paths, file names and anything else that would identify a real disclosure,
+        school, team or debater before pasting.
+      render: text
+  - type: checkboxes
+    id: no-real-data
+    attributes:
+      label: Public repository check
+      options:
+        - label: >-
+            This issue contains no real debate file, excerpt, disclosure path, school name, team
+            code or debater name.
+          required: true

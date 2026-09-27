@@ -313,9 +313,7 @@ def _run_formatting(run: etree._Element) -> RunFormatting:
             size = None
     highlight = None if highlight_element is None else highlight_element.get(w("val"))
     return RunFormatting(
-        character_style=normalize_style_id(
-            None if style_element is None else style_element.get(w("val"))
-        ),
+        character_style=normalize_style_id(None if style_element is None else style_element.get(w("val"))),
         bold=_attr_is_on(properties.find(w("b"))),
         underline=None if underline_element is None else (underline_element.get(w("val")) or "single"),
         highlight=None if highlight in (None, "none") else highlight,
@@ -351,9 +349,7 @@ def _snapshot_run(run: etree._Element) -> RunSnapshot:
 def _snapshot_paragraph(paragraph: etree._Element) -> ParagraphSnapshot:
     style_id, outline_level = _paragraph_style(paragraph)
     runs = tuple(
-        _snapshot_run(run)
-        for run in paragraph.iter(w("r"))
-        if not _is_dropped_revision(run, paragraph)
+        _snapshot_run(run) for run in paragraph.iter(w("r")) if not _is_dropped_revision(run, paragraph)
     )
     return ParagraphSnapshot(
         structural_unit=structural_unit_for(style_id, outline_level),
@@ -559,7 +555,9 @@ def compare_file(original_path: Path, roundtripped_path: Path, file_category: st
     )
 
 
-def summarize(comparisons: Iterable[FileComparison], *, cardmirror_commit: str | None = None) -> dict[str, Any]:
+def summarize(
+    comparisons: Iterable[FileComparison], *, cardmirror_commit: str | None = None
+) -> dict[str, Any]:
     """Aggregate per file category. Contains no document text, file names or paths."""
     comparisons = list(comparisons)
     categories: dict[str, dict[str, Any]] = {}
@@ -622,7 +620,9 @@ def _pairs_from_manifest(manifest_path: Path) -> tuple[list[tuple[Path, Path, st
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument(
         "--manifest",
@@ -651,7 +651,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         pairs = [(original, roundtripped, arguments.category)]
         cardmirror_commit = None
 
-    comparisons = [compare_file(original, roundtripped, category) for original, roundtripped, category in pairs]
+    comparisons = [
+        compare_file(original, roundtripped, category) for original, roundtripped, category in pairs
+    ]
     summary = summarize(comparisons, cardmirror_commit=cardmirror_commit)
     rendered = json.dumps(summary, indent=2)
     if arguments.output is not None:

@@ -51,3 +51,11 @@ request_timeout_seconds = 30.0
 routing_file = "config/model_routing.dev.yaml"
 # Low cap; v1-e01-t09 owns the documented dev value and the E05 BudgetGuard enforces it.
 budget_usd_daily = 2.0
+
+[caselist]
+# The E34 gate of docs/policies/caselist-data-use.md. Off by default in
+# debate_core.application.settings: an installation that has not made this decision refuses to
+# reach the API rather than asking. Turned on for the v1-e34-t02 validation run, after the policy was approved and the
+# weekly cadence was agreed with the OpenCaselist maintainer. The cadence, the 8-per-minute
+# download rate and the 5-per-day bulk cap are the maintainer's and are not raised here.
+api_enabled = true

@@ -24,9 +24,11 @@ archive a no-op rather than a duplicate.
 *Writes are idempotent, except where the bytes disagree.* `put_source`, `record_disclosure` and
 `record_camp_file` may all be called again with the same record and change nothing. What they will
 not do is quietly accept a *contradiction*: a second source document claiming the same SHA-256
-with a different size, format or origin means the hash and the bytes have come apart, and that
-raises :class:`~debate_core.application.errors.Conflict` rather than overwriting the record that
-every disclosure and manifest row already points at.
+with a different size or format means the hash and the bytes have come apart, and that raises
+:class:`~debate_core.application.errors.Conflict` rather than overwriting the record that every
+disclosure and manifest row already points at. A different *origin* also raises, but only as a
+defence: the same bytes from a caselist and from OpenEv are one file, and the importers link to
+the existing record rather than re-filing it (v1-e30-t04; see `put_source`).
 
 *Listing order.* Snapshots list newest first. Sources, disclosures and camp files list newest
 snapshot first, then by their remaining key parts ascending, which is a total order and therefore
@@ -113,8 +115,16 @@ class CaselistRepository(Protocol):
         file up?", and it must survive archives being imported out of order.
 
         Raises :class:`~debate_core.application.errors.Conflict` when the incoming record claims
-        the same SHA-256 with a different `byte_size`, `source_format` or `origin`, which would
-        mean two different files are being filed under one hash.
+        the same SHA-256 with a different `byte_size`, `source_format` or `origin`. The three are
+        not the same kind of disagreement. A different size or format means the hash and the bytes
+        have come apart, and two different files are being filed under one hash. A different
+        origin does not: identical bytes arriving from a caselist archive and from an OpenEv
+        release are one file, stored once and linked from both a disclosure and a camp-file record
+        (v1-e30-t04). No caller should reach the refusal for that case, because the importers
+        write through :func:`~debate_core.application.caselist.pipeline.file_source`, which keeps
+        the record already filed under the other origin instead of calling this. The refusal
+        stays as a defence: `origin` records which import first brought the bytes in, and a caller
+        that bypassed `file_source` must not silently rewrite it.
         """
         ...
 

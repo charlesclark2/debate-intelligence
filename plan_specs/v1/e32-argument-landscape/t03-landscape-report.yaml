@@ -28,7 +28,8 @@ spec:
     Output is a Markdown report plus positions.csv and top_cards.csv with a header block recording
     caselist, snapshot, topic id, taxonomy_version, parser_version, prompt version and classification
     coverage. Every card is labeled FILE_IMPORT (disclosed, not platform-verified). Boundaries:
-    week-over-week trends and per-school views are t04; the CLI, local output paths and S3 publishing are
+    week-over-week trends and per-school views are t04; the CLI, local output paths and S3 publishing are Every generated report calls the staleness hook v1-e34-t03 exposes and carries its banner and
+    its `stale` metadata flag; a report that cannot say how old its newest snapshot is does not ship.
     t05; "files suggest" drafting from top cards is v1-e33-t03.
   priority: 1
   constraints:

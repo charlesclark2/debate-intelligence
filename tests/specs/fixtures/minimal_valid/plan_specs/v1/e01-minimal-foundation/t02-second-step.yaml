@@ -1,0 +1,71 @@
+# TASK v1-e01-t02-second-step (test fixture, not part of the real roadmap)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t02-second-step
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-minimal-foundation
+  annotations:
+    debate/title: Second step
+spec:
+  description: >-
+    A task whose prerequisite is the first step in the same epic.
+  priority: 2
+  context:
+  - kind: TaskRef
+    name: v1-e01-t01-first-step
+    relation: dependsOn
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      The second step is done.
+status:
+  phase: InProgress
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t02-second-step-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-minimal-foundation
+spec:
+  description: >-
+    Two nodes, the second depending on the first.
+  goalRef:
+    name: v1-e01-t02-second-step
+  graph:
+    nodes:
+    - id: write-the-code
+      kind: Task
+      name: Write the code
+      description: >-
+        The first node of the second fixture task.
+      estimatedEffort: 30m
+      acceptanceCriteria:
+      - type: artifact_exists
+        name: The file exists
+        path: README.md
+    - id: test-the-code
+      kind: Task
+      name: Test the code
+      description: >-
+        The second node of the second fixture task.
+      dependsOn:
+      - write-the-code
+      estimatedEffort: 1.5h
+      acceptanceCriteria:
+      - type: test_passes
+        name: The tests pass
+        command: 'true'
+        args: []
+status:
+  phase: Pending

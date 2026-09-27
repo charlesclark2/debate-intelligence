@@ -1,0 +1,145 @@
+# TASK v1-e34-t06-sync-defects — Defects found by operating the sync
+# Epic: E34 Scheduled Caselist Sync | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §15 reliability
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t06-sync-defects
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: Defects found by operating the sync
+spec:
+  description: >-
+    Three defects in `caselist pull` that only appeared once someone planned a real multi-day run
+    against it (v1-e30-t06). None was visible to the test suite, because each needs either a second
+    day, a failed import, or a hand-imported file to show itself. They are grouped because they are
+    one class - the run's bookkeeping disagreeing with the world it is bookkeeping about - and because
+    the unattended schedule of v1-e34-t05 must not be enabled until at least the retry defect is
+    fixed: an agent that cannot recover from one failed import fails silently every week thereafter.
+    Out of scope: the full-archive namespace (v1-e34-t04 ac0), notifications and run records (t03),
+    and anything about the cadence or the cap, which are the maintainer's and are fixed by the policy.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_cli.commands, docs/runbooks]
+    forbidden:
+      - Raising the daily bulk-download ceiling, the per-minute rate or the weekly cadence
+      - Live network or AWS calls in CI tests (respx, moto and fakes only)
+      - Fixing a defect by documenting it in the runbook instead of in the code
+  context:
+    - kind: TaskRef
+      name: v1-e34-t03-sync-monitoring
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An archive whose import failed is retried by the next run. It stays in the inbox, and today
+        the next run decides `ALREADY_IN_INBOX` while `_import_stage` imports only what that same run
+        downloaded, so it is never fetched and never imported again - a permanent silent gap that
+        re-running does not close, contrary to what docs/runbooks/caselist-scheduled-sync.md tells the
+        operator to do. A run imports what is in the inbox and not yet in a manifest, whether this run
+        downloaded it or not, spending no download to do so. Tested with a failed import followed by a
+        clean re-run.
+    - id: ac2
+      description: >-
+        The download ledger's day and its documentation agree, and the choice is justified against the
+        upstream cap rather than assumed. `DownloadLedger`'s docstring says local time; the service
+        defaults its clock to `datetime.now(UTC)` and the CLI container passes none, so the ledger
+        rolls at midnight UTC. That is 7pm CDT, which means two runs twenty minutes apart on the same
+        evening each get a fresh allowance of five and can spend ten against a cap of five. Whichever
+        day boundary is chosen, the docstring, the CLI and the runbooks say the same thing, and the
+        summary reports the ledger's day explicitly so an operator can see which day a run counted
+        against.
+    - id: ac3
+      description: >-
+        OpenEv selection recognises a camp file already imported by hand. It matches on the inbox name
+        `openev-<id>-...` rather than on content, so a file imported through `caselist import-openev`
+        is invisible to it: setting `caselist.openev_event` today would re-download all 498 listed
+        files and write them into the manifest as DUPLICATE rows beside the ones already held. Match on
+        what the manifest records, so an already-held camp file is decided `ALREADY_IMPORTED` and costs
+        no download.
+    - id: ac4
+      description: >-
+        Each of the three has a regression test that fails on the current code and passes after, and
+        docs/runbooks/caselist-scheduled-sync.md no longer tells the operator to recover a failed
+        import by re-running the same command.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t06-sync-defects-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Reproduce each defect as a failing test first, then fix it, then correct the runbook.
+  goalRef:
+    name: v1-e34-t06-sync-defects
+  graph:
+    nodes:
+      - id: retry-failed-import
+        kind: Task
+        name: A failed import is retried by the next run
+        description: >-
+          Import stage works from the inbox against the manifests rather than from this run's
+          downloads. Reproduce first: a run whose import raises, then a clean run that must import the
+          archive still sitting in the inbox without spending a download.
+        outputs: [packages/debate_core/src/debate_core/application/caselist_sync.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Retry tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_sync.py, -k, retry]
+      - id: ledger-day
+        kind: Task
+        name: The ledger's day is stated and consistent
+        description: >-
+          Settle the day boundary, make the docstring, the container and the runbooks agree, and report
+          the ledger's day in the run summary.
+        dependsOn: [retry-failed-import]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Ledger day tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_sync.py, -k, ledger]
+      - id: openev-already-held
+        kind: Task
+        name: OpenEv selection sees hand-imported camp files
+        description: >-
+          Decide OpenEv candidates against the manifest rather than the inbox name, so a hand-imported
+          camp file is ALREADY_IMPORTED.
+        dependsOn: [ledger-day]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: OpenEv selection tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_sync.py, -k, openev]
+      - id: runbook-correction
+        kind: Task
+        name: Correct the scheduled-sync runbook
+        description: >-
+          Remove the "run the same command again" recovery advice and describe what the fixed run does.
+        dependsOn: [openev-already-held]
+        outputs: [docs/runbooks/caselist-scheduled-sync.md]
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Repository links still resolve
+            command: uv
+            args: [run, scripts/check_links.py]
+status:
+  phase: Pending

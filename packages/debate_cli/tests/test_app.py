@@ -133,15 +133,20 @@ def test_doctor_reports_the_environment_as_json() -> None:
     assert data["settings_configured"] is True
     # The services the container can build, which `evidence_sync` (v1-e29-t05) was the first of,
     # `caselist_import` (v1-e30-t03) the second, the publisher and the status comparison
-    # (v1-e30-t05) the next, and the OpenCaselist token store and client (v1-e34-t01) the last.
+    # (v1-e30-t05) the next, the OpenCaselist token store and client (v1-e34-t01) after them, and
+    # the OpenEv importer (v1-e30-t04), and the sync run monitor and history (v1-e34-t03) the last.
     # A later epic adding one adds it here too: this is the list an operator reads to find out
     # what this installation is wired for.
     assert data["services"] == [
         "caselist_import",
         "caselist_publish",
         "caselist_status",
+        "caselist_sync",
+        "caselist_sync_history",
+        "caselist_sync_monitor",
         "caselist_token_store",
         "evidence_sync",
+        "openev_import",
         "opencaselist_client",
     ]
 

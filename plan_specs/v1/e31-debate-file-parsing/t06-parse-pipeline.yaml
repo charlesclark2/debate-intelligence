@@ -31,7 +31,15 @@ spec:
     malformed, oversized, macro-enabled) by sha256 prefix and caselist path. Parsing the full downloaded
     corpus is an operator step (well over 2 minutes), run first against dev and then prod, with counts
     recorded in docs/data/. Boundaries: importing and raw publishing are E30 (t03-t05); parser behavior is
-    t03, fingerprints t04, accuracy t05; the weekly schedule and API download are E34; OpenSearch indexing is
+    t03, fingerprints t04, accuracy t05; the weekly schedule and API download are E34; OpenSearch indexing is Measure near-duplicate recall on short cards at scale and report it separately. v1-e31-t04's
+    hand-labelled variant set reached precision 1.000 and recall 0.947, and every one of the four
+    misses was on a single short card: one a genuine containment miss, one a card whose containment
+    was 1.0 that the 32x4 LSH banding never paired for comparison at all. Short cards are not an edge
+    case here - an ABBREVIATED disclosure is first and last words by construction, and those dominate
+    wiki-converted caselists - so a banding that misses them would undercount exactly the format the
+    corpus is mostly made of. If the measured short-card recall is materially below the overall
+    figure, say so in the report; changing the banding is a spec change and belongs to a task of its
+    own, not to this one.
     V2 and derived from this store.
   priority: 1
   constraints:

@@ -31,7 +31,10 @@ spec:
     occurrence as an opaque cutter mark, subject to the same minimization as a team code (caselist-data-use.md
     prohibition 6) — never expanded to a name, never joined to any roster or Tabroom entry, never shown in a
     report beyond school plus team code, and absent from fixtures and logs. Because weekly archives are cumulative, an occurrence is keyed by source sha256
-    plus element index, so the same disclosure in later snapshots is counted once. `debate-research caselist
+    plus element index plus the disclosing team and round, so the same disclosure in later snapshots
+    is counted once while one file disclosed by two teams stays two occurrences. Source sha256 plus
+    element index alone would collapse those two into one and make ac4's "count distinct teams, not
+    files" untrue of its own key; the synthetic archives already contain that case. `debate-research caselist
     cards` reads parsed-card JSONL (the ParsedCard schema t03 defines) and prints statistics: cards, exact
     unique cards, clusters, duplicate rate, and the most-read cards by distinct teams with short cite and tag.
     The fingerprint normalization is for matching only; stored and displayed evidence text is never altered.
@@ -74,7 +77,7 @@ spec:
         `debate-research caselist cards --caselist hsld26 --parsed <dir> [--snapshot] [--top N] [--json]`
         prints totals and the top clusters by distinct teams; a smoke check covers it on fixture JSONL.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -143,7 +146,7 @@ spec:
         kind: Task
         name: Occurrence table and statistics service
         description: >-
-          CardOccurrence keyed by source sha256 + element index with disclosure metadata from the E30
+          CardOccurrence keyed by source sha256 + element index + disclosing team + round, with metadata from the E30
           SourceDocument/Disclosure and first/last seen snapshots; CaselistCardStatsService builds the table
           from parsed-card JSONL and computes totals, duplicate rate and top clusters by distinct teams.
         dependsOn: [abbreviated-linking]

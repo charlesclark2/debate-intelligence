@@ -12,6 +12,7 @@ Usage:
   uv run scripts/export_schemas.py            # write the schema files
   uv run scripts/export_schemas.py --check    # exit 1 if any committed file is stale
 """
+
 from __future__ import annotations
 
 import argparse

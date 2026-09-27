@@ -1,0 +1,78 @@
+# RELEASE v1.1 — Minimal follow-up (test fixture, not part of the real roadmap)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v1-1
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.1
+  annotations:
+    debate/title: v1.1 — Minimal follow-up
+spec:
+  description: >-
+    The second release of the fixture tree.
+  priority: 1
+  acceptanceCriteria:
+  - id: epic-e02
+    description: >-
+      Epic E02 (Minimal Follow-up) goal is Succeeded.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v1-1-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.1
+spec:
+  description: >-
+    Review gate for the fixture release.
+  acceptanceCriteria:
+  - id: reviewed
+    description: >-
+      The release has been reviewed.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v1-1-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.1
+spec:
+  description: >-
+    Epic graph for the fixture release v1.1.
+  goalRef:
+    name: release-v1-1
+  graph:
+    nodes:
+    - id: epic-e02
+      kind: External
+      name: E02 — Minimal Follow-up
+      description: >-
+        The only epic in the second fixture release.
+      inputs:
+        goalRef: v1-e02-minimal-followup
+        specRef: plan_specs/v1/e02-minimal-followup/epic.yaml
+    - id: gate
+      kind: Gate
+      name: Release review
+      description: >-
+        Approve the fixture release.
+      dependsOn:
+      - epic-e02
+      gateRef:
+        name: release-v1-1-gate
+status:
+  phase: Pending

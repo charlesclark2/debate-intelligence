@@ -1,0 +1,80 @@
+# EPIC E01 — Minimal Foundation (test fixture, not part of the real roadmap)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-minimal-foundation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-minimal-foundation
+  annotations:
+    debate/title: E01 — Minimal Foundation
+spec:
+  description: >-
+    Two tasks, the second depending on the first.
+  priority: 1
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      Both tasks are Succeeded.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-minimal-foundation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-minimal-foundation
+spec:
+  description: >-
+    Task graph for the fixture epic E01.
+  goalRef:
+    name: v1-e01-minimal-foundation
+  graph:
+    nodes:
+    - id: t01
+      kind: Task
+      name: First step
+      description: >-
+        The first task of the fixture epic.
+      inputs:
+        specRef: plan_specs/v1/e01-minimal-foundation/t01-first-step.yaml
+        goalRef: v1-e01-t01-first-step
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t01-first-step reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t01-first-step
+    - id: t02
+      kind: Task
+      name: Second step
+      description: >-
+        The second task of the fixture epic.
+      inputs:
+        specRef: plan_specs/v1/e01-minimal-foundation/t02-second-step.yaml
+        goalRef: v1-e01-t02-second-step
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t02-second-step reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t02-second-step
+status:
+  phase: Pending

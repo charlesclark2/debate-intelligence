@@ -387,8 +387,9 @@ class InMemoryCaselistRepository:
     when archives are imported out of order. A fake that simply overwrote would let an importer
     test pass while the real thing lost the range that `caselist status` and the E32 reports read.
 
-    It refuses a contradiction just as SQLite's unique constraint will: two different files cannot
-    be filed under one SHA-256.
+    It refuses a differing record under a stored SHA-256 just as SQLite's does: on size and format
+    because the bytes have come apart, and on origin as the defence
+    :meth:`~debate_core.application.ports.caselist.CaselistRepository.put_source` describes.
     """
 
     def __init__(self) -> None:

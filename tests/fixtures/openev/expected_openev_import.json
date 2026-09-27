@@ -1,0 +1,91 @@
+{
+  "_comment": "Written by hand from the tables in build_synthetic_openev.py, never by running the importer (working-agreements.md section 6). 'after_caselist' means the synthetic caselist's 2026-09-01 week was imported first, so the borrowed Grove file is already a caselist source. existing_origin names the record the bytes had before this import, so a second copy within one download has none. Members are in path order, which is Python string order: '.' < upper case < '_' < lower case.",
+  "year": 2026,
+  "event": "POLICY",
+  "release": "2026-policy",
+  "manifest_key": "manifests/openev/2026-policy.jsonl",
+  "first_download": {
+    "name": "openev-2026-policy",
+    "members": [
+      {"path": ".DS_Store", "skip_reason": "DESKTOP_SERVICES_STORE"},
+      {"path": "Brightwater Workshop - Orchard Kritik.docx", "classification": "NEW", "camp": "BWW", "lab": null, "file_title": "Orchard Kritik", "format": "DOCX", "warnings": 0},
+      {"path": "Brightwater/QDI-Tidewater Impact Turns.docx", "classification": "NEW", "camp": "BWW", "lab": null, "file_title": "Tidewater Impact Turns", "format": "DOCX", "warnings": 1},
+      {"path": "Quillfeather/Juniors Lab/QDI - Harbor Tariffs Aff.docx", "classification": "NEW", "camp": "QDI", "lab": "Juniors Lab", "file_title": "Harbor Tariffs Aff", "format": "DOCX", "warnings": 0},
+      {"path": "Quillfeather/Juniors Lab/QDI - Harbor Tariffs Neg.docx", "classification": "NEW", "camp": "QDI", "lab": "Juniors Lab", "file_title": "Harbor Tariffs Neg", "format": "DOCX", "warnings": 0},
+      {"path": "Quillfeather/Seniors Lab/Lighthouse Politics DA.docx", "classification": "NEW", "camp": "QDI", "lab": "Seniors Lab", "file_title": "Lighthouse Politics DA", "format": "DOCX", "warnings": 0},
+      {"path": "Tamarack/TSF-Borrowed Grove Aff.docx", "classification": "DUPLICATE", "classification_without_caselist": "NEW", "camp": "TSF", "lab": null, "file_title": "Borrowed Grove Aff", "format": "DOCX", "warnings": 0, "existing_origin": "CASELIST_ARCHIVE", "existing_caselist": "testcl26"},
+      {"path": "Tamarack/TSF-Canal Subsidies Counterplan.docx", "classification": "NEW", "camp": "TSF", "lab": null, "file_title": "Canal Subsidies Counterplan", "format": "DOCX", "warnings": 0},
+      {"path": "Tamarack/TSF-Canal Subsidies Counterplan_v2.docx", "classification": "DUPLICATE", "camp": "TSF", "lab": null, "file_title": "Canal Subsidies Counterplan_v2", "format": "DOCX", "warnings": 0, "existing_origin": null, "existing_caselist": null},
+      {"path": "Tamarack/TSF-Reservoir Topicality.pdf", "classification": "NEW", "camp": "TSF", "lab": null, "file_title": "Reservoir Topicality", "format": "PDF", "warnings": 0},
+      {"path": "Zephyr Scholars - Glacier Case Neg.docx", "classification": "NEW", "camp": "UNKNOWN", "lab": null, "file_title": "Zephyr Scholars - Glacier Case Neg", "format": "DOCX", "warnings": 1},
+      {"path": "__MACOSX/Tamarack/._TSF-Canal Subsidies Counterplan.docx", "skip_reason": "MACOS_METADATA"},
+      {"path": "openev-417-TSF-Spillway Advantage.docx", "classification": "NEW", "camp": "TSF", "lab": null, "file_title": "Spillway Advantage", "format": "DOCX", "warnings": 0}
+    ],
+    "after_caselist": {
+      "counts": {"NEW": 9, "UNCHANGED": 0, "CHANGED": 0, "DUPLICATE": 2, "REMOVED": 0, "SUPPRESSED": 0},
+      "skipped": {"DESKTOP_SERVICES_STORE": 1, "MACOS_METADATA": 1},
+      "skipped_total": 2,
+      "members": 13,
+      "distinct_sha256": 10,
+      "newly_stored_blobs": 9,
+      "warnings": 2,
+      "unknown_camps": 1,
+      "caselist_duplicates": 1
+    },
+    "without_caselist": {
+      "counts": {"NEW": 10, "UNCHANGED": 0, "CHANGED": 0, "DUPLICATE": 1, "REMOVED": 0, "SUPPRESSED": 0},
+      "newly_stored_blobs": 10,
+      "caselist_duplicates": 0
+    },
+    "camp_files": [
+      {"camp": "BWW", "file_title": "Orchard Kritik"},
+      {"camp": "BWW", "file_title": "Tidewater Impact Turns"},
+      {"camp": "QDI", "file_title": "Harbor Tariffs Aff"},
+      {"camp": "QDI", "file_title": "Harbor Tariffs Neg"},
+      {"camp": "QDI", "file_title": "Lighthouse Politics DA"},
+      {"camp": "TSF", "file_title": "Borrowed Grove Aff"},
+      {"camp": "TSF", "file_title": "Canal Subsidies Counterplan"},
+      {"camp": "TSF", "file_title": "Reservoir Topicality"},
+      {"camp": "TSF", "file_title": "Spillway Advantage"},
+      {"camp": "UNKNOWN", "file_title": "Zephyr Scholars - Glacier Case Neg"}
+    ],
+    "manifest_summary": {
+      "members": 13,
+      "distinct_sha256": 10,
+      "warnings": 2,
+      "classifications": {"DUPLICATE": 2, "NEW": 9},
+      "skipped": {"DESKTOP_SERVICES_STORE": 1, "MACOS_METADATA": 1},
+      "archives": 1
+    },
+    "re_import": {
+      "counts": {"NEW": 0, "UNCHANGED": 11, "CHANGED": 0, "DUPLICATE": 0, "REMOVED": 0, "SUPPRESSED": 0},
+      "newly_stored_blobs": 0
+    }
+  },
+  "addendum": {
+    "name": "openev-2026-policy-addendum",
+    "members": [
+      {"path": ".DS_Store", "skip_reason": "DESKTOP_SERVICES_STORE"},
+      {"path": "Quillfeather/Juniors Lab/QDI - Harbor Tariffs Aff.docx", "classification": "UNCHANGED"},
+      {"path": "Tamarack/TSF-Canal Subsidies Counterplan.docx", "classification": "CHANGED"},
+      {"path": "Tamarack/TSF-Estuary Solvency Advocate.docx", "classification": "NEW"},
+      {"path": "Tamarack/TSF-Lighthouse Politics DA copy.docx", "classification": "DUPLICATE"}
+    ],
+    "counts": {"NEW": 1, "UNCHANGED": 1, "CHANGED": 1, "DUPLICATE": 1, "REMOVED": 0, "SUPPRESSED": 0},
+    "members_count": 5,
+    "newly_stored_blobs": 2,
+    "camp_files_after": 12,
+    "manifest_summary": {
+      "members": 15,
+      "distinct_sha256": 12,
+      "warnings": 2,
+      "classifications": {"CHANGED": 1, "DUPLICATE": 3, "NEW": 9},
+      "skipped": {"DESKTOP_SERVICES_STORE": 1, "MACOS_METADATA": 1},
+      "archives": 2
+    },
+    "rows_kept_from_first_download": [
+      ".DS_Store",
+      "Quillfeather/Juniors Lab/QDI - Harbor Tariffs Aff.docx"
+    ]
+  }
+}

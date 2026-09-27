@@ -1,8 +1,12 @@
-"""`debate-research caselist import` end to end, as `validate-dev` runs it before a promotion.
+"""`debate-research caselist import` and `import-openev` end to end, as `validate-dev` runs them.
 
 The whole user-facing surface in one check: an operator's three weekly archives, imported in
 order through the installed command, into a data directory that did not exist a moment ago —
 and the counts they produce compared against `tests/fixtures/caselist/expected_summary.json`.
+Then the OpenEv camp files (`v1-e30-t04`) into the same data directory, against
+`tests/fixtures/openev/expected_openev_import.json`: the camp file a team already disclosed is a
+duplicate stored once, the release manifest lands where `caselist publish --caselist openev`
+looks, and a re-run changes nothing.
 
 **This one is offline, unlike the rest of `tests/smoke/`.** The other checks here need a deployed
 environment because what they verify is that a bucket exists and a session can reach it. What
@@ -34,6 +38,12 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_zips,
     written_expected_summary,
 )
+from tests.fixtures.openev.build_synthetic_openev import (
+    CAMP_ALIASES_PATH,
+    DOWNLOADS,
+    build_download_zips,
+)
+from tests.fixtures.openev.build_synthetic_openev import expected as expected_openev
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -168,6 +178,93 @@ def test_an_import_writes_only_inside_the_data_directory(
     # mode so a reader never blocks the writer (`debate_core.integrations.local.sqlite_db`).
     written = {entry.name.removesuffix("-wal").removesuffix("-shm") for entry in installation.iterdir()}
     assert written == {"blobs", "debate.sqlite3", "objects"}
+
+
+# ------------------------------------------------------------------------------------------------
+# caselist import-openev
+# ------------------------------------------------------------------------------------------------
+
+#: The first synthetic OpenEv download, and the date the smoke check records it under.
+_OPENEV_DOWNLOAD = DOWNLOADS[0].name
+_OPENEV_IMPORTED_ON = "2026-09-14"
+
+
+@pytest.fixture
+def camp_files(tmp_path: Path) -> Path:
+    return build_download_zips(tmp_path / "openev")[_OPENEV_DOWNLOAD]
+
+
+def import_camp_files(download: Path, *extra: str) -> Result:
+    """Run `import-openev` as an operator types it, with the fixture's invented-camp table."""
+    return runner.invoke(
+        create_app(),
+        [
+            "--json",
+            "caselist",
+            "import-openev",
+            str(download),
+            "--year",
+            "2026",
+            "--event",
+            "policy",
+            "--snapshot",
+            _OPENEV_IMPORTED_ON,
+            "--camp-aliases",
+            str(CAMP_ALIASES_PATH),
+            *extra,
+        ],
+    )
+
+
+def test_camp_files_import_beside_the_caselist_and_the_disclosed_one_is_stored_once(
+    installation: Path, archives: dict[date, Path], camp_files: Path
+) -> None:
+    """The first caselist week, then the camp files: counts, one shared blob, and the manifest."""
+    import_week(archives[SNAPSHOTS[0].snapshot], SNAPSHOTS[0].snapshot)
+    blobs_before = _blob_count(installation)
+
+    data = reported(import_camp_files(camp_files))
+
+    wanted = expected_openev()["first_download"]["after_caselist"]
+    assert data["counts"] == wanted["counts"]
+    assert data["skipped_total"] == wanted["skipped_total"]
+    assert data["warnings"] == wanted["warnings"]
+    assert data["unknown_camps"] == wanted["unknown_camps"]
+    assert data["caselist_duplicates"] == wanted["caselist_duplicates"]
+    assert data["release"] == expected_openev()["release"]
+    assert data["applied"] is True
+    assert _blob_count(installation) == blobs_before + wanted["newly_stored_blobs"]
+
+    manifest = installation / "objects" / "manifests" / "openev" / "2026-policy.jsonl"
+    assert data["manifest"] == str(manifest)
+    rows = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines()]
+    assert rows[-1]["kind"] == "summary"
+    assert rows[-1]["snapshot"] == "2026-policy"
+
+
+def test_running_the_camp_file_import_again_changes_nothing_on_disk(
+    installation: Path, camp_files: Path
+) -> None:
+    reported(import_camp_files(camp_files))
+    before = _tree_of(installation)
+    manifest = installation / "objects" / "manifests" / "openev" / "2026-policy.jsonl"
+    manifest_bytes = manifest.read_bytes()
+
+    data = reported(import_camp_files(camp_files))
+
+    assert data["newly_stored_blobs"] == 0
+    assert data["counts"] == expected_openev()["first_download"]["re_import"]["counts"]
+    assert _tree_of(installation) == before
+    assert manifest.read_bytes() == manifest_bytes
+
+
+def test_a_camp_file_dry_run_writes_nothing(installation: Path, camp_files: Path) -> None:
+    data = reported(import_camp_files(camp_files, "--dry-run"))
+
+    assert data["applied"] is False
+    assert data["manifest"] is None
+    assert _blob_count(installation) == 0
+    assert not (installation / "objects" / "manifests" / "openev").exists()
 
 
 def _blob_count(data_dir: Path) -> int:

@@ -73,7 +73,7 @@ spec:
         scripts/check_promotion_source.py is covered by offline unit tests for every allowed and rejected
         head/base combination and the empty-template-field cases.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -147,7 +147,14 @@ spec:
           promotion-guard.yml on pull_request (opened, edited, synchronize, reopened) into main with jobs
           named `promotion-source` and `back-merge` (full-depth checkout, contents: read only). back-merge.yml
           on push to main: if main has commits dev lacks, open (or update) a "Back-merge main → dev" PR
-          with gh using the hotfix template label; contents/pull-requests write scoped to that job.
+          with gh. `pull-requests: write` only, scoped to that job: the PR's head is `main` itself, so
+          no branch is created and `contents: write` buys nothing - and the workflow token cannot push a
+          commit touching `.github/workflows/` anyway, so a copied branch would fail on exactly the
+          hotfixes most likely to touch CI. The PR carries a `back-merge` label, created if absent.
+          The label is not decoration: a back-merge must be completed with a MERGE COMMIT and never
+          squashed, because a squash writes a new SHA into dev while main's original commit stays
+          unreachable from it, leaving the `back-merge` check permanently red and every future
+          promotion blocked. The label, the PR body and branching-and-environments.md all say so.
         dependsOn: [guard-script, pr-templates]
         outputs: [.github/workflows/promotion-guard.yml, .github/workflows/back-merge.yml]
         estimatedEffort: 2h
@@ -165,7 +172,12 @@ spec:
         name: Tighten protect-main and protect-dev rulesets
         description: >-
           In the GitHub UI: protect-main allowed merge methods = merge commit only, required status
-          checks `ci`, `promotion-source`, `back-merge` (strict: branch must be up to date); protect-dev
+          checks `ci`, `promotion-source`, `back-merge`, with "require branches to be up to date" OFF -
+          a dev-to-main promotion leaves a merge commit on main that dev never receives, so GitHub calls
+          every subsequent promotion out of date, and its "Update branch" button would push straight to
+          dev, which protect-dev forbids. The strict setting is unusable in this flow and the
+          `back-merge` check is the better substitute: it asks whether main holds real content dev
+          lacks, and ignores the promotion merge commits that are inherent to the flow; protect-dev
           requires `ci` with squash and merge commits allowed. Export both rulesets as JSON for review.
         dependsOn: [guard-workflows]
         outputs: [docs/process/rulesets/protect-main.json, docs/process/rulesets/protect-dev.json]
@@ -184,6 +196,10 @@ spec:
         kind: Task
         name: Prove the guards with throwaway PRs
         description: >-
+          Confirm the auto-opened back-merge PR shows a green `ci`: it is opened by the workflow token,
+          which does not start new workflow runs, so it relies on the check already attached to main's
+          head SHA by the push. If that does not satisfy the required check, the PR is unmergeable and
+          the design needs revisiting before the schedule depends on it.
           Open a PR task/* → main (expect red promotion-source), a promotion PR dev → main with a blank
           validate-dev line (expect red), and simulate an un-back-merged hotfix on a scratch fork or
           sandbox repo (expect red back-merge and an auto-opened back-merge PR); close them all.

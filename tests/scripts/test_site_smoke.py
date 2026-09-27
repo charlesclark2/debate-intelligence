@@ -65,9 +65,7 @@ FAQ_BODY = (
 
 #: What a page renders where a fact nobody has supplied would go. A prod build refuses to export
 #: one, so seeing it on prod means the build guard was bypassed.
-HOME_BODY_WITH_A_GAP = HOME_BODY.replace(
-    "<dd>Room 214</dd>", '<dd><span class="placeholder">TBD</span></dd>'
-)
+HOME_BODY_WITH_A_GAP = HOME_BODY.replace("<dd>Room 214</dd>", '<dd><span class="placeholder">TBD</span></dd>')
 
 
 class DeployedSite:

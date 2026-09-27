@@ -13,7 +13,13 @@ $ uv run debate-research --json doctor | jq .data.cli_version
 
 Today the app ships `--version` and `doctor`. The commands this skeleton exists for arrive with
 their own tasks: `verify` (E03), `fetch` (E04), `search` and `cut` (E08), `daily` and `config`,
-`store` (v1-e29-t05), `caselist` (E30; `caselist auth login|status|logout` from v1-e34-t01), `landscape` (E32), `files` (E33).
+`store` (v1-e29-t05), `caselist` (E30; `caselist auth login|status|logout` from v1-e34-t01 and
+`caselist pull` from v1-e34-t02), `landscape` (E32), `files` (E33).
+
+`caselist pull` is the one command something other than a person runs: the weekly launchd
+agent in [`ops/launchd/`](../../ops/launchd/) invokes it with `--json` and collects one object
+per run ([`docs/runbooks/caselist-scheduled-sync.md`](../../docs/runbooks/caselist-scheduled-sync.md)).
+That is why the envelope below is a contract rather than a convenience.
 
 ## The modules
 

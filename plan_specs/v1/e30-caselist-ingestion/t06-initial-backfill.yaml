@@ -22,9 +22,11 @@ spec:
     ~2,342 .docx and 32 .pdf, imported in date order so cumulative dedupe works; the ~106 Policy OpenEv
     camp files; and any HS Policy or PF archives on hand. The operator imports and publishes to dev
     first, checks `caselist status` and spot-checks disclosures there, then publishes the same local
-    store to prod. Under ADR-0017 the baseline is the complete archive: the run downloads
-    <caselist>-all-<date>.zip first and imports it as the corpus, then imports the dated weekly archives
-    for the history they carry - the three already on the operator's machine, plus the back-catalogue the
+    store to prod. ADR-0017's revision of 2026-09-26 removes the full archive from this task: a
+    `<slug>-all-<date>.zip` shares its date with that week's weekly, so the two are one snapshot key,
+    and importing a current-dated one strands every older weekly behind `ALREADY_IMPORTED`. No full
+    archive is downloaded or imported here; v1-e34-t04-full-archive-refresh designs the separate
+    snapshot namespace that makes one importable. The backfill is the dated weekly archives alone - the three already on the operator's machine, plus the back-catalogue the
     site still lists, which reaches 2026-07-07 for hsld26. The weeklies are adjacent seven-day windows of
     editing activity and are reported as such; the full archive is what the coverage numbers come from.
     Bulk downloads are capped at 5 per user per day, so fetching the back-catalogue and the full archive
@@ -44,11 +46,18 @@ spec:
     v1-e30-t03 run established that a disclosure is keyed by path while the real archives rename files
     week to week - the numeric token between the side and the tournament is a per-team sequence that
     increments - so REMOVED means "no longer at that path" and was 685 for one week of HS LD when almost
-    nothing had been taken down. The summary reports that number under a name that says so, and reports
-    beside it the count that does mean withdrawal: sources whose sha256 appeared in an earlier snapshot
-    and appears nowhere in this one. Source files are never committed and no school, team code or
-    student name appears in the summary. Boundaries: import/publish code is t03-t05, parsing the
-    backfilled sources is v1-e31-t06, and recurring downloads are E34.
+    nothing had been taken down. The summary reports that number under a name that says so. The count that
+    does mean withdrawal needs a complete archive to compare against, which this task no longer
+    imports, so it is deferred to v1-e34-t04 and the summary says so rather than leaving a blank that
+    reads as zero. Source files are never committed and no school, team code or
+    student name appears in the summary. The dev store is no longer empty: the v1-e34-t02 validation run
+    on 2026-09-24 fetched and imported five hsld26 weeklies and published 242 objects to the dev bucket,
+    because `caselist pull` on a store with no manifest for a caselist selects every weekly it lists and
+    the daily cap then truncated the result. The runbook plans around what is already imported rather
+    than assuming a virgin store: an archive already held re-imports as a no-op and would report zeroes,
+    so the summary's per-snapshot counts for those five come from the run summaries under
+    `<data_dir>/caselist-sync-runs/` rather than from a re-import. Boundaries: import/publish code is
+    t03-t05, parsing the backfilled sources is v1-e31-t06, and recurring downloads are E34.
   priority: 1
   constraints:
     packages: [docs/data, docs/runbooks, docs/session-reports]
@@ -79,9 +88,9 @@ spec:
         NEW/UNCHANGED/CHANGED/DUPLICATE/REMOVED counts, the overall dedupe rate, PDF/.doc and
         unparsed-filename counts, and total bytes stored, with aggregate numbers only. Between two weekly
         archives, REMOVED is labelled as paths no longer present rather than as removals, because a
-        filename carries a per-team sequence number that increments. Against the full archive it means
-        what it says: a sha256 present in an earlier snapshot and absent from the complete archive is a
-        withdrawal, and that figure is reported separately. The summary states the measured dedupe rate
+        filename carries a per-team sequence number that increments. The withdrawal figure - a sha256 present in an earlier
+        snapshot and absent from the complete archive - is out of scope here and named as deferred to
+        v1-e34-t04, because no full archive is imported by this task. The summary states the measured dedupe rate
         across the weeklies rather than assuming a large one: three weeks of HS LD collapsed 2,374
         members to 2,107 distinct files, an 11% saving.
     - id: ac3

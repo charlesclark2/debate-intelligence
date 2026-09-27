@@ -1,0 +1,54 @@
+name: Task
+description: Track a unit of work that has, or needs, a PlanSpec task.
+labels: [task]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Work on this project is specified in a PlanSpec task under `plan_specs/` before it is
+        built; see [plan_specs/README.md](https://github.com/charlesclark2/debate-intelligence/blob/dev/plan_specs/README.md). This issue points at
+        that spec. It does not replace it.
+
+        **This repository is public.** Describe the work with invented examples only: no real
+        debate file, excerpt, school, team code or debater name.
+  - type: input
+    id: spec-path
+    attributes:
+      label: Task spec path
+      description: >-
+        The task's file under plan_specs/, or "none yet" if the spec still has to be written.
+      placeholder: plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml
+    validations:
+      required: true
+  - type: input
+    id: task-name
+    attributes:
+      label: Task name
+      description: The task Goal's metadata.name; the branch will be task/<task-name>.
+      placeholder: v1-e04-t02-http-fetcher
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What is true when this is done, in terms someone can check.
+    validations:
+      required: true
+  - type: textarea
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Tasks that must be Succeeded first (the spec's spec.context entries).
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Scope questions, open decisions, links to ADRs.
+  - type: checkboxes
+    id: no-real-data
+    attributes:
+      label: Public repository check
+      options:
+        - label: >-
+            This issue contains no real debate file, excerpt, disclosure path, school name, team
+            code or debater name.
+          required: true

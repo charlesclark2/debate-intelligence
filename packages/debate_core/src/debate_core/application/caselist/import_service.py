@@ -43,6 +43,15 @@ last week's as new — the deduplication run backwards. So it is refused unless 
 `allow_out_of_order`, which exists for the real case it happens in: an operator who downloaded
 three weeks and imported them in the order the Finder listed them.
 
+## What is shared with the OpenEv importer
+
+The per-member work — hash, store, classify, count — is
+:class:`~debate_core.application.caselist.pipeline.SourceImportPipeline`'s, which the OpenEv
+importer (`v1-e30-t04`) runs too. :class:`Classification`, :data:`STORED_CLASSIFICATIONS` and
+:class:`ImportedEntry` are defined there and re-exported here. What this module keeps is what is
+particular to a weekly archive: the previous snapshot as the baseline, disclosures as the records,
+and the snapshot row.
+
 ## What is written, and when
 
 Nothing at all under `dry_run`. Otherwise, per member: the bytes to the
@@ -67,11 +76,17 @@ import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
-from enum import StrEnum
 
 from debate_core.application.caselist.path_parser import (
     ParsedDisclosurePath,
     parse_disclosure_path,
+)
+from debate_core.application.caselist.pipeline import (
+    STORED_CLASSIFICATIONS,
+    Classification,
+    ImportedEntry,
+    SourceImportPipeline,
+    file_source,
 )
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
@@ -85,11 +100,11 @@ from debate_core.domain.caselist import (
     Event,
     SnapshotDate,
     SourceDocument,
-    SourceFormat,
     SourceOrigin,
 )
 
 __all__ = [
+    "STORED_CLASSIFICATIONS",
     "CaselistImportService",
     "Classification",
     "ImportReport",
@@ -98,33 +113,6 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
-
-
-class Classification(StrEnum):
-    """What one member of an archive turned out to be, relative to the archives already imported.
-
-    The six outcomes the importer reports counts for. `REMOVED` is the one that describes a member
-    that is *not* in this archive — the path the previous one had and this one does not.
-    """
-
-    NEW = "NEW"
-    UNCHANGED = "UNCHANGED"
-    CHANGED = "CHANGED"
-    DUPLICATE = "DUPLICATE"
-    REMOVED = "REMOVED"
-    SUPPRESSED = "SUPPRESSED"
-
-
-#: The classifications that describe a file present in the archive being imported. `REMOVED` is
-#: not one of them, and `SUPPRESSED` is present but deliberately not stored.
-STORED_CLASSIFICATIONS = frozenset(
-    {
-        Classification.NEW,
-        Classification.UNCHANGED,
-        Classification.CHANGED,
-        Classification.DUPLICATE,
-    }
-)
 
 
 class SnapshotOutOfOrder(DomainError):
@@ -147,36 +135,6 @@ class SnapshotOutOfOrder(DomainError):
 
 
 @dataclass(frozen=True, slots=True)
-class ImportedEntry:
-    """One row of what an import saw: a member, or a path that has gone.
-
-    Carries everything the manifest records and everything a summary counts, so the manifest
-    writer does no parsing of its own and the two cannot disagree about what happened.
-    """
-
-    path: str
-    """The member's path relative to the archive root."""
-
-    classification: Classification | None
-    """What it was, or `None` for a member that was skipped before it was ever classified."""
-
-    skip_reason: SkipReason | None = None
-    """Why it was skipped, or `None` for a member that was not."""
-
-    sha256: str | None = None
-    """The digest of its bytes; `None` for a skipped member, which was never read."""
-
-    byte_size: int | None = None
-    source_format: SourceFormat | None = None
-    parsed: ParsedDisclosurePath | None = None
-    """What the path parser read, or `None` for a skipped member."""
-
-    @property
-    def is_skipped(self) -> bool:
-        return self.skip_reason is not None
-
-
-@dataclass(frozen=True, slots=True)
 class ImportReport:
     """Everything one import did, in the shape both the manifest and the summary table read."""
 
@@ -187,7 +145,7 @@ class ImportReport:
     applied: bool
     """False for a dry run, which classifies everything and writes nothing."""
 
-    entries: tuple[ImportedEntry, ...]
+    entries: tuple[ImportedEntry[ParsedDisclosurePath], ...]
     """Every member and every removed path, in path order."""
 
     counts: Mapping[Classification, int] = field(default_factory=lambda: {})
@@ -241,7 +199,7 @@ class CaselistImportService:
 
     def __init__(self, *, caselists: CaselistRepository, blobs: SnapshotStore) -> None:
         self._caselists = caselists
-        self._blobs = blobs
+        self._pipeline = SourceImportPipeline(blobs=blobs)
 
     async def import_archive(
         self,
@@ -268,50 +226,22 @@ class CaselistImportService:
         previous = await self._previous_snapshot(caselist, snapshot, allow_out_of_order=allow_out_of_order)
         baseline = await self._disclosures_in(caselist, previous)
 
-        imported: list[ImportedEntry] = []
-        skipped: dict[SkipReason, int] = {}
-        counts: dict[Classification, int] = {}
-        stored_digests: set[str] = set()
-        newly_stored: set[str] = set()
-        seen_paths: set[str] = set()
-        member_count = 0
+        async def write(
+            member: ArchiveMember,
+            parsed: ParsedDisclosurePath,
+            _classification: Classification,
+            _existing: SourceDocument | None,
+        ) -> None:
+            await self._store(member, parsed, caselist=caselist, snapshot=snapshot, event=event)
 
-        for entry in entries:
-            if not isinstance(entry, ArchiveMember):
-                skipped[entry.reason] = skipped.get(entry.reason, 0) + 1
-                # Counted as a member: `ArchiveSnapshot.file_count` is how many members the
-                # archive held, which is the number an operator can check against `unzip -l`.
-                member_count += 1
-                imported.append(ImportedEntry(path=entry.path, classification=None, skip_reason=entry.reason))
-                continue
-
-            member_count += 1
-            seen_paths.add(entry.path)
-            parsed = parse_disclosure_path(entry.path, event=event)
-            classification = self._classify(
-                entry, baseline=baseline, known=stored_digests, suppressed=suppressed_hashes
-            )
-            counts[classification] = counts.get(classification, 0) + 1
-            if classification is not Classification.SUPPRESSED:
-                if entry.sha256 not in stored_digests and not await self._blobs.exists(entry.sha256):
-                    newly_stored.add(entry.sha256)
-                stored_digests.add(entry.sha256)
-            imported.append(
-                ImportedEntry(
-                    path=entry.path,
-                    classification=classification,
-                    sha256=entry.sha256,
-                    byte_size=entry.byte_size,
-                    source_format=parsed.source_format,
-                    parsed=parsed,
-                )
-            )
-            if not dry_run and classification in STORED_CLASSIFICATIONS:
-                await self._store(entry, parsed, caselist=caselist, snapshot=snapshot, event=event)
-
-        for gone in sorted(baseline.keys() - seen_paths):
-            counts[Classification.REMOVED] = counts.get(Classification.REMOVED, 0) + 1
-            imported.append(ImportedEntry(path=gone, classification=Classification.REMOVED))
+        run = await self._pipeline.run(
+            entries,
+            extract=lambda path: parse_disclosure_path(path, event=event),
+            write=write,
+            baseline=baseline,
+            suppressed=suppressed_hashes,
+            dry_run=dry_run,
+        )
 
         if not dry_run:
             await self._caselists.upsert_snapshot(
@@ -320,7 +250,7 @@ class CaselistImportService:
                     snapshot=snapshot,
                     archive_sha256=archive_sha256,
                     acquisition=acquisition,
-                    file_count=member_count,
+                    file_count=run.member_count,
                 )
             )
 
@@ -330,43 +260,19 @@ class CaselistImportService:
             event=event,
             archive_sha256=archive_sha256,
             applied=not dry_run,
-            entries=tuple(sorted(imported, key=lambda one: one.path)),
-            counts=counts,
-            skipped=skipped,
-            distinct_digests=len(stored_digests),
-            newly_stored_blobs=len(newly_stored),
+            entries=run.entries,
+            counts=run.counts,
+            skipped=run.skipped,
+            distinct_digests=run.distinct_digests,
+            newly_stored_blobs=run.newly_stored_blobs,
             previous_snapshot=previous,
         )
         _log_counts(report)
         return report
 
     # ------------------------------------------------------------------------------------
-    # Classification
+    # The baseline
     # ------------------------------------------------------------------------------------
-
-    def _classify(
-        self,
-        member: ArchiveMember,
-        *,
-        baseline: Mapping[str, str],
-        known: set[str],
-        suppressed: frozenset[str],
-    ) -> Classification:
-        """Decide what one member is, against last week's archive and what this run has stored.
-
-        `known` is the set of digests this run has already stored, which is what makes the second
-        of two identical members in one archive a `DUPLICATE` rather than a second `NEW`.
-        """
-        if member.sha256 in suppressed:
-            return Classification.SUPPRESSED
-        previously = baseline.get(member.path)
-        if previously == member.sha256:
-            return Classification.UNCHANGED
-        if previously is not None:
-            return Classification.CHANGED
-        if member.sha256 in known or member.sha256 in baseline.values():
-            return Classification.DUPLICATE
-        return Classification.NEW
 
     async def _previous_snapshot(
         self, caselist: CaselistSlug, snapshot: SnapshotDate, *, allow_out_of_order: bool
@@ -420,15 +326,17 @@ class CaselistImportService:
         snapshot: SnapshotDate,
         event: Event,
     ) -> None:
-        """Write one member's bytes, its source document and what this archive said about it.
+        """Write one stored member's source document and what this archive said about it.
 
-        The blob store is content-addressed, so a `DUPLICATE` or an `UNCHANGED` member writes no
-        bytes; `put_source` widens the seen range rather than replacing it; and the disclosure is
+        The pipeline has already put the bytes in the content-addressed blob store, so a
+        `DUPLICATE` or an `UNCHANGED` member wrote none. `put_source` widens the seen range rather
+        than replacing it, and a file an OpenEv import brought in first keeps that record
+        (:func:`~debate_core.application.caselist.pipeline.file_source`). The disclosure is
         recorded for every stored member, because two paths holding one file are two things the
         archive said about it.
         """
-        await self._blobs.put(member.data)
-        await self._caselists.put_source(
+        await file_source(
+            self._caselists,
             SourceDocument(
                 sha256=member.sha256,
                 byte_size=member.byte_size,
@@ -437,7 +345,7 @@ class CaselistImportService:
                 caselist=caselist,
                 first_seen_snapshot=snapshot,
                 last_seen_snapshot=snapshot,
-            )
+            ),
         )
         await self._caselists.record_disclosure(
             Disclosure(

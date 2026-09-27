@@ -94,6 +94,8 @@ from pydantic_settings import (
 )
 
 from debate_core.application.errors import DomainError
+from debate_core.domain.caselist import Event
+from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 
 __all__ = [
     "BUILTIN_PROFILES",
@@ -104,7 +106,9 @@ __all__ = [
     "PROFILE_DIRECTORY_VARIABLE",
     "PROFILE_SUBDIRECTORY",
     "SECRET_PLACEHOLDER",
+    "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
+    "CardFingerprintSettings",
     "CaselistTokenBackend",
     "ConfigurationError",
     "Environment",
@@ -116,6 +120,7 @@ __all__ = [
     "SearchProviderName",
     "Settings",
     "StorageSettings",
+    "SyncNotifierKind",
     "find_repository_root",
     "load_settings",
     "profile_path_for",
@@ -389,6 +394,14 @@ class ProviderSettings(SettingsGroup):
 MAX_CASELIST_DOWNLOADS_PER_MINUTE: Final = 10
 """The OpenCaselist maintainer's rate limit: file downloads per minute (policy clause 12)."""
 
+MAX_CASELIST_BULK_DOWNLOADS_PER_DAY: Final = 5
+"""OpenCaselist's own ceiling on bulk archive downloads per user per day.
+
+Found in the upstream source by `v1-e34-t01` (`weeklyLimiter`), separate from the per-minute limit
+above. The scheduled sync budgets for it across the configured caselists (`v1-e34-t02`), and this
+is a ceiling rather than a default: a setting above it would only be refused by the server.
+"""
+
 
 class CaselistTokenBackend(StrEnum):
     """Where the operator's caselist_token is kept between runs."""
@@ -399,6 +412,17 @@ class CaselistTokenBackend(StrEnum):
     """The OS keychain (the macOS login keychain on the operator's Mac), through `keyring`."""
     FILE = "file"
     """A 0600 file under a gitignored `secrets/` directory."""
+
+
+class SyncNotifierKind(StrEnum):
+    """How an unattended `caselist pull` tells the operator it needs attention (v1-e34-t03)."""
+
+    AUTO = "auto"
+    """macOS Notification Centre on a Mac, nothing elsewhere. Never notifies in `test`."""
+    MACOS = "macos"
+    """Always `osascript` `display notification`."""
+    NONE = "none"
+    """Nothing: the run log and `caselist runs` only."""
 
 
 class CaselistSettings(SettingsGroup):
@@ -503,6 +527,97 @@ class CaselistSettings(SettingsGroup):
         ),
     )
 
+    # --- The weekly scheduled sync (v1-e34-t02-scheduled-sync) ----------------------------------
+    #
+    # Which caselists the weekly pull covers, where its downloads land, and how many bulk downloads
+    # it may spend in a day. No slug is a default: a caselist is a decision an operator records in
+    # a profile or types on the command line, not something a release of this package ships.
+
+    sync_caselists: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Caselist slugs `caselist pull` covers when no --caselist is given. Empty by default: "
+            "which caselists this installation follows is the operator's decision, and a hardcoded "
+            "slug in a committed file would make it ours. A list in a profile file; JSON in the "
+            "environment, as every list setting is: "
+            'DEBATE_CASELIST__SYNC_CASELISTS=["hsld26","hspolicy26"].'
+        ),
+    )
+    inbox_dir: Path | None = Field(
+        default=None,
+        description=(
+            "Where `caselist pull` puts what it downloads, and where it reads archives from. Unset "
+            "means `<storage.data_dir>/inbox`."
+        ),
+    )
+    bulk_downloads_per_day: int = Field(
+        default=MAX_CASELIST_BULK_DOWNLOADS_PER_DAY,
+        ge=1,
+        description=(
+            "Bulk archive downloads one run may spend in a day, budgeted across the configured "
+            "caselists. OpenCaselist's own ceiling is 5; anything above it is refused."
+        ),
+    )
+    openev_event: Event | None = Field(
+        default=None,
+        description=(
+            "Which event to file an OpenEv camp file under when its own tags do not say. Unset "
+            "means such a file is listed and left alone rather than filed under a guess."
+        ),
+    )
+    openev_year: int | None = Field(
+        default=None,
+        ge=2000,
+        le=9999,
+        description="Topic year of the OpenEv release to pull. Unset means the API's current year.",
+    )
+
+    # --- Monitoring the weekly sync (v1-e34-t03-sync-monitoring) ------------------------------
+
+    notifier: SyncNotifierKind = Field(
+        default=SyncNotifierKind.AUTO,
+        description=(
+            "Where a failed or stuck `caselist pull` is announced: `macos` (Notification Centre), "
+            "`none`, or `auto` (macOS on a Mac, never in the test environment)."
+        ),
+    )
+    stale_after_days: int = Field(
+        default=8,
+        ge=1,
+        le=366,
+        description=(
+            "A landscape report is stale when the newest snapshot of its caselist is more than "
+            "this many days older than the report. Eight: one weekly archive, plus a day of grace."
+        ),
+    )
+
+    @field_validator("bulk_downloads_per_day")
+    @classmethod
+    def _within_the_sites_daily_limit(cls, value: int) -> int:
+        if value > MAX_CASELIST_BULK_DOWNLOADS_PER_DAY:
+            raise ValueError(
+                f"OpenCaselist allows {MAX_CASELIST_BULK_DOWNLOADS_PER_DAY} bulk downloads per user "
+                f"per day (upstream `weeklyLimiter`, found by v1-e34-t01); {value} is above it"
+            )
+        return value
+
+    @field_validator("sync_caselists", mode="before")
+    @classmethod
+    def _one_slug_or_many(cls, value: object) -> object:
+        """Accept a bare slug as well as a list, so `sync_caselists = "hsld26"` in a profile works.
+
+        The environment still takes JSON: pydantic-settings decodes a list-valued variable before
+        any validator here sees it, which is true of every list setting in this module.
+        """
+        return (value,) if isinstance(value, str) else value
+
+    @field_validator("inbox_dir")
+    @classmethod
+    def _expand_inbox(cls, value: Path | None) -> Path | None:
+        if value is None:
+            return None
+        return Path(os.path.expandvars(str(value))).expanduser().absolute()
+
     @field_validator("downloads_per_minute")
     @classmethod
     def _within_the_maintainers_limit(cls, value: int) -> int:
@@ -527,6 +642,37 @@ class CaselistSettings(SettingsGroup):
         if value is None:
             return None
         return Path(os.path.expandvars(str(value))).expanduser().absolute()
+
+
+class CardFingerprintSettings(SettingsGroup):
+    """When two card bodies count as one card (`v1-e31-t04-card-fingerprints`).
+
+    Only the confirmation thresholds are settings. Shingle size, the number of MinHash functions and
+    the LSH banding are constants of :mod:`debate_core.evidence.near_duplicates`, because they decide
+    which pairs are ever compared and belong with the code that is versioned alongside them.
+    """
+
+    near_duplicate_jaccard: float = Field(
+        default=0.8,
+        gt=0.0,
+        le=1.0,
+        description="A candidate pair is one card when its shingle Jaccard similarity reaches this.",
+    )
+    near_duplicate_containment: float = Field(
+        default=0.9,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Or when this share of the shorter body's shingles is inside the longer one: what keeps a "
+            "card cut a paragraph shorter in its cluster."
+        ),
+    )
+
+    def thresholds(self) -> NearDuplicateThresholds:
+        """The thresholds as the clusterer takes them."""
+        return NearDuplicateThresholds(
+            jaccard=self.near_duplicate_jaccard, containment=self.near_duplicate_containment
+        )
 
 
 class ModelSettings(SettingsGroup):
@@ -586,6 +732,7 @@ class Settings(BaseSettings):
     providers: ProviderSettings = Field(default_factory=ProviderSettings)
     models: ModelSettings
     caselist: CaselistSettings = Field(default_factory=CaselistSettings)
+    fingerprints: CardFingerprintSettings = Field(default_factory=CardFingerprintSettings)
 
     @classmethod
     def settings_customise_sources(

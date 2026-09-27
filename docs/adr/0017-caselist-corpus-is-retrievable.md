@@ -94,3 +94,26 @@ listing call would have disproved.
 **Move E34 back to v1.2.** Rejected as churn. The move to v1.1 was made for a reason that turned out
 to be wrong, but the position is still defensible on its own merits and t01 has already shipped
 against it. The justification is corrected rather than the membership.
+
+## Revision, 2026-09-26 — the backfill does not start from the full archive
+
+Decision 5 said the complete archive is the corpus and the backfill starts there. That is not
+implementable against the importer as built, and `v1-e30-t06` found it before spending a download.
+
+A snapshot is a date per caselist (`snapshot: SnapshotDate`), and each import is diffed against the
+snapshot before it. `<slug>-all-<date>.zip` carries the same date as that week's weekly, so the two
+are the same snapshot key and collide. Worse, `_latest_imported_snapshot` is the maximum imported
+date, so importing a current-dated full archive marks every older weekly `ALREADY_IMPORTED` and
+strands the whole back-catalogue, and the next weekly imported after it would be diffed against the
+entire corpus and report almost everything as REMOVED.
+
+**Revised:** the initial backfill is built from the weekly series alone, oldest first. The complete
+archive still is the corpus conceptually, and withdrawal detection against it is still the reason
+to fetch one — but importing one needs a snapshot namespace of its own, separate from the dated
+weekly series, and designing that belongs to `v1-e34-t04-full-archive-refresh`. Until t04 ships, no
+full archive is downloaded or imported in any environment.
+
+What this costs: the withdrawal count (a sha256 present in an earlier snapshot and absent from the
+complete archive) is unavailable until t04. The path-level REMOVED figure, which means "no longer at
+that path" and not "taken down", is unaffected and is what the backfill reports. Nothing about the
+weekly cadence, ADR-0017's other decisions, or E34 gate 4 changes.

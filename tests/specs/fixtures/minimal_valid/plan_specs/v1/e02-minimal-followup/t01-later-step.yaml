@@ -1,0 +1,58 @@
+# TASK v1-e02-t01-later-step (test fixture, not part of the real roadmap)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e02-t01-later-step
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e02-minimal-followup
+  annotations:
+    debate/title: Later step
+spec:
+  description: >-
+    A task in v1.1 whose prerequisite ships in the earlier release v1.0.
+  priority: 1
+  context:
+  - kind: TaskRef
+    name: v1-e01-t01-first-step
+    relation: dependsOn
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      The later step is done.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e02-t01-later-step-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e02-minimal-followup
+spec:
+  description: >-
+    One node.
+  goalRef:
+    name: v1-e02-t01-later-step
+  graph:
+    nodes:
+    - id: do-the-later-thing
+      kind: Task
+      name: Do the later thing
+      description: >-
+        The only node of the later fixture task.
+      estimatedEffort: 1d
+      acceptanceCriteria:
+      - type: endpoint_responds
+        name: The endpoint answers
+        url: http://localhost:8000/health
+status:
+  phase: Pending

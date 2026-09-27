@@ -39,3 +39,8 @@ max_retries = 0
 [models]
 routing_file = "config/model_routing.example.yaml"
 budget_usd_daily = 0.0
+
+[caselist]
+# v1-e34-t03: no test may put a notification on a developer's screen. `auto` already never
+# notifies in `test`; this says so where a reader of the profile will look.
+notifier = "none"

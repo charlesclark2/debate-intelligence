@@ -28,7 +28,8 @@ spec:
     LandscapeRunService in debate_core.application so the E34 scheduled sync can call the same use case.
     It exits non-zero on an unknown caselist or snapshot, a missing taxonomy mapping, or an exceeded model
     budget. The first real runs over the corpus are operator-run in dev. Boundaries: the scheduled weekly
-    run and staleness banner are E34; S3 bucket and sync mechanics are E29; review-queue editing stays the
+    run and staleness banner are E34; S3 bucket and sync mechanics are E29; review-queue editing stays the The command calls the staleness hook v1-e34-t03 exposes before writing, so a report built on a
+    stale or cap-bound store says so at the top rather than reading as current.
     t02 decisions-CSV workflow.
   priority: 1
   constraints:

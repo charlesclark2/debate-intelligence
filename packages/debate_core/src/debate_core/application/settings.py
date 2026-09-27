@@ -37,9 +37,18 @@ resolves to `dev`: nothing a developer runs by accident should touch the product
 directory. `test` is for CI and unit tests — it enables no network provider, points `data_dir`
 at a temporary directory, and sets the daily model budget to zero.
 
-The *channel* values on top of this mechanism — which models dev routes to, the low dev daily
-budget, and the environment an installed build defaults to — belong to
-`v1-e01-t09-dev-prerelease-channel`, which edits the profile files this task creates.
+## Build channels (`v1-e01-t09-dev-prerelease-channel`)
+
+An installed build knows which channel it came from, and with `DEBATE_ENV` unset that decides the
+environment: a dev pre-release (`vX.Y.Z-dev.N`) runs as `dev`, a stable release as `prod`
+(:func:`environment_for_build_channel`). An explicit `DEBATE_ENV`, or one in `.env`, still wins.
+A source checkout is channel `local` and keeps the `dev` default above.
+
+An installed build also carries the committed `config/` files inside its wheel, and
+`load_settings(bundled_config_root=...)` reads its profiles and routing files from there rather
+than from whichever checkout the working directory happens to be in. That is what makes a
+scheduled job that runs from `$HOME` get the `[caselist]` gate and budget its build was tested
+with. `DEBATE_PROFILE_DIR` still overrides both.
 
 Each environment also names the evidence bucket it syncs to, in :class:`S3StorageSettings` under
 `storage.s3` (`v1-e29-t05-evidence-sync-cli`). Those values are not invented here: they are the
@@ -99,6 +108,7 @@ from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 
 __all__ = [
     "BUILTIN_PROFILES",
+    "DEV_DAILY_BUDGET_CAP_USD",
     "EVIDENCE_BUCKET_SUFFIX",
     "ENVIRONMENT_VARIABLE",
     "ENV_NESTED_DELIMITER",
@@ -121,6 +131,7 @@ __all__ = [
     "Settings",
     "StorageSettings",
     "SyncNotifierKind",
+    "environment_for_build_channel",
     "find_repository_root",
     "load_settings",
     "profile_path_for",
@@ -144,6 +155,16 @@ PROFILE_SUBDIRECTORY: Final = Path("config") / "profiles"
 
 SECRET_PLACEHOLDER: Final = "***"
 """What a secret renders as. The real value never leaves this module."""
+
+DEV_DAILY_BUDGET_CAP_USD: Final = 2.0
+"""The documented ceiling on the dev environment's daily model spend, in USD.
+
+Dev is where untested prompts run, so its budget is small by policy
+(`docs/process/branching-and-environments.md`, "Model spend"). The committed dev profile and the
+built-in dev profile both stay at or under it, which `test_settings_environments.py` checks; an
+operator can still set a lower value, or a higher one through `DEBATE_MODELS__BUDGET_USD_DAILY` on
+their own machine, and `config show` names where it came from.
+"""
 
 type SourceLabeller = Callable[[str], str]
 """A layer that labels itself per field, given the field's dotted path."""
@@ -837,8 +858,8 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
 
     These exist so that `dev`, `prod` and `test` differ in the values that matter — data
     directory, routing file, budget, whether the network may be used — on a machine where
-    `config/profiles/` is not present at all, which is every installed build until
-    `v1-e01-t09-dev-prerelease-channel` ships the files with the wheel.
+    `config/profiles/` is not present at all: a wheel built without the bundled configuration
+    that `v1-e01-t09-dev-prerelease-channel` stamps into published builds.
     """
     return {
         Environment.DEV: {
@@ -849,7 +870,7 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
             },
             "models": {
                 "routing_file": Path("config/model_routing.dev.yaml"),
-                "budget_usd_daily": 2.0,
+                "budget_usd_daily": DEV_DAILY_BUDGET_CAP_USD,
             },
         },
         Environment.PROD: {
@@ -897,11 +918,13 @@ def find_repository_root(start: Path | None = None) -> Path | None:
     return None
 
 
-def _profile_directory(explicit: Path | None) -> Path | None:
+def _profile_directory(explicit: Path | None, config_root: Path | None = None) -> Path | None:
     """Where to look for profile files, or `None` when there is nowhere to look.
 
-    `None` is an ordinary outcome, not a failure: an installed build without profile files runs
-    on :data:`BUILTIN_PROFILES`.
+    In order: `explicit`, then `DEBATE_PROFILE_DIR`, then `config_root` (an installed build's
+    bundled configuration), then the source checkout around the working directory. `None` is an
+    ordinary outcome, not a failure: a build without profile files runs on
+    :data:`BUILTIN_PROFILES`.
     """
     if explicit is not None:
         if not explicit.is_dir():
@@ -916,21 +939,46 @@ def _profile_directory(explicit: Path | None) -> Path | None:
                 source=PROFILE_DIRECTORY_VARIABLE,
             )
         return directory
-    root = find_repository_root()
+    root = config_root if config_root is not None else find_repository_root()
     return root / PROFILE_SUBDIRECTORY if root is not None else None
 
 
-def profile_path_for(environment: Environment, directory: Path | None = None) -> Path | None:
-    """The profile file for `environment`, or `None` if there is none to read."""
-    resolved = _profile_directory(directory)
+def profile_path_for(
+    environment: Environment, directory: Path | None = None, *, config_root: Path | None = None
+) -> Path | None:
+    """The profile file for `environment`, or `None` if there is none to read.
+
+    `config_root` is a directory laid out like a checkout (`config/profiles/<env>.toml`) to use
+    in place of the checkout around the working directory; see :func:`load_settings`.
+    """
+    resolved = _profile_directory(directory, config_root)
     if resolved is None:
         return None
     candidate = resolved / f"{environment.value}.toml"
     return candidate if candidate.is_file() else None
 
 
+def environment_for_build_channel(channel: str | None) -> Environment | None:
+    """The environment an installed build of `channel` runs as when `DEBATE_ENV` is unset.
+
+    `dev` (a `vX.Y.Z-dev.N` pre-release) runs as dev and `stable` (a `vX.Y.Z` release) as prod.
+    Anything else — `local` for a source checkout, `None` when the caller does not know — has no
+    opinion, and the ordinary default applies.
+    """
+    return _ENVIRONMENT_OF_BUILD_CHANNEL.get((channel or "").strip().lower())
+
+
+_ENVIRONMENT_OF_BUILD_CHANNEL: Final[Mapping[str, Environment]] = {
+    "dev": Environment.DEV,
+    "stable": Environment.PROD,
+}
+
+
 def resolve_environment(
-    explicit: str | Environment | None = None, *, env_file: Path | None = None
+    explicit: str | Environment | None = None,
+    *,
+    env_file: Path | None = None,
+    build_channel: str | None = None,
 ) -> tuple[Environment, str]:
     """Decide which environment this run is, and say where that decision came from.
 
@@ -938,6 +986,9 @@ def resolve_environment(
     `environment` like the source of any other setting, and "you are writing to the prod data
     directory because of a variable exported in your shell profile" is the kind of thing a person
     needs told rather than left to deduce.
+
+    `build_channel` is the channel of the installed build doing the asking. It is consulted only
+    when nothing else names an environment, and is reported as `build-channel:<channel>`.
     """
     if explicit is not None:
         value = explicit.value if isinstance(explicit, Environment) else explicit
@@ -948,6 +999,9 @@ def resolve_environment(
     from_dotenv_file, dotenv_path = _environment_from_dotenv(env_file)
     if from_dotenv_file is not None:
         return Environment.parse(from_dotenv_file, source=str(dotenv_path)), f"dotenv:{dotenv_path}"
+    from_channel = environment_for_build_channel(build_channel)
+    if from_channel is not None:
+        return from_channel, f"build-channel:{(build_channel or '').strip().lower()}"
     # A local checkout is a developer's machine, and a developer who has said nothing has not
     # asked to touch production.
     return Environment.DEV, "default"
@@ -986,6 +1040,8 @@ def load_settings(
     environment: str | Environment | None = None,
     profile_dir: Path | None = None,
     env_file: Path | None = None,
+    build_channel: str | None = None,
+    bundled_config_root: Path | None = None,
 ) -> Settings:
     """Load the settings for this run, applying every layer in order.
 
@@ -994,12 +1050,21 @@ def load_settings(
     overrides `DEBATE_ENV` the same way. `profile_dir` and `env_file` exist so a test can point
     the loader at its own fixtures instead of at whatever the machine happens to have.
 
+    `build_channel` and `bundled_config_root` are what an installed build passes
+    (`debate_cli.build_info`): the channel it was published on, which picks the environment when
+    nothing else does, and the directory its wheel carries the committed `config/` in. With a
+    bundled root, profiles and relative routing files are read from it instead of from a checkout
+    around the working directory; `profile_dir` and `DEBATE_PROFILE_DIR` still win.
+
     Raises :class:`ConfigurationError` if any layer is unreadable or any value is invalid.
     """
-    resolved_environment, environment_source = resolve_environment(environment, env_file=env_file)
+    resolved_environment, environment_source = resolve_environment(
+        environment, env_file=env_file, build_channel=build_channel
+    )
     dotenv_path = env_file if env_file is not None else _default_dotenv_path()
-    profile_file = profile_path_for(resolved_environment, profile_dir)
     repository_root = find_repository_root()
+    config_root = bundled_config_root if bundled_config_root is not None else repository_root
+    profile_file = profile_path_for(resolved_environment, profile_dir, config_root=config_root)
 
     layers: list[tuple[str | SourceLabeller, Mapping[str, Any]]] = [
         # The environment was resolved once, above, and that decision is final: a stray
@@ -1018,7 +1083,7 @@ def load_settings(
     for label, values in layers:
         _merge_into(merged, values)
         _record_sources(sources, values, label)
-    _anchor_relative_paths(merged, repository_root)
+    _anchor_relative_paths(merged, config_root)
 
     try:
         settings = Settings(**merged)
@@ -1029,16 +1094,16 @@ def load_settings(
     return settings
 
 
-def _anchor_relative_paths(merged: dict[str, Any], repository_root: Path | None) -> None:
-    """Make a relative `models.routing_file` mean "relative to the repository", not to the shell.
+def _anchor_relative_paths(merged: dict[str, Any], config_root: Path | None) -> None:
+    """Make a relative `models.routing_file` mean "relative to the configuration", not to the shell.
 
     `config/model_routing.dev.yaml` in a profile file is written relative to the checkout it is
     committed in, so it has to keep meaning that from whatever directory the command was run in.
-    Outside a checkout the value is left alone and is resolved against the working directory,
-    which is all an installed build can do until `v1-e01-t09-dev-prerelease-channel` ships the
-    config files alongside the wheel.
+    `config_root` is that checkout, or the configuration an installed build carries in its wheel,
+    which is laid out the same way. With neither, the value is left alone and is resolved against
+    the working directory.
     """
-    if repository_root is None:
+    if config_root is None:
         return
     group = merged.get("models")
     if not isinstance(group, dict):
@@ -1049,7 +1114,7 @@ def _anchor_relative_paths(merged: dict[str, Any], repository_root: Path | None)
         return
     candidate = Path(os.path.expandvars(str(routing_file))).expanduser()
     if not candidate.is_absolute():
-        models["routing_file"] = repository_root / candidate
+        models["routing_file"] = config_root / candidate
 
 
 def _environment_layer() -> dict[str, Any]:

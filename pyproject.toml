@@ -179,8 +179,8 @@ type = "forbidden"
 # `botocore` exception caught outside the adapter that is supposed to translate it — which is the
 # part that would put AWS back into code that is meant not to know about it (ADR-0003, §6).
 #
-# v1-e02-t06-import-boundary-guard owns this section and extends it with the layers contract that
-# also forbids debate_core.application from importing debate_core.integrations at all.
+# The layers contract below is what forbids debate_core.application from importing
+# debate_core.integrations at all.
 allow_indirect_imports = true
 source_modules = ["debate_cli"]
 forbidden_modules = ["boto3", "botocore"]
@@ -204,6 +204,80 @@ source_modules = [
     "debate_workers",
 ]
 forbidden_modules = ["lxml", "docx"]
+
+# v1-e02-t06-import-boundary-guard. The contracts from here down are the shape of the architecture
+# itself (§1, §2): the ones above keep a named library inside its adapter, these keep each layer
+# in its place. tests/architecture/test_import_contracts.py breaks each one on purpose and checks
+# that lint-imports names it, so a contract here that stops biting fails that suite.
+
+[[tool.importlinter.contracts]]
+name = "debate_core layers: integrations and testing above application above evidence above domain"
+type = "layers"
+# Each layer may import the ones below it and never the ones above: the domain model imports
+# nothing else in debate_core, the evidence algorithms see only the domain, the application layer
+# reaches adapters only through its ports, and an adapter never serves a use case by importing
+# the shared test fakes. `|` makes integrations and testing independent: neither may import the
+# other. `exhaustive` means a new debate_core subpackage fails this contract until it is placed in
+# a layer here, rather than slipping in unconstrained.
+containers = ["debate_core"]
+layers = [
+    "integrations | testing",
+    "application",
+    "evidence",
+    "domain",
+]
+exhaustive = true
+
+[[tool.importlinter.contracts]]
+name = "The domain and application layers never import a delivery framework"
+type = "forbidden"
+# typer and rich belong to debate_cli, fastapi to debate_api: a use case that knows about any of
+# them can no longer be called from the other front end or a worker (§1). boto3, botocore and
+# httpx are forbidden to the same modules by the contracts above; `click` is here because typer
+# is built on it and a use case that reaches for it has the same problem.
+source_modules = [
+    "debate_core.domain",
+    "debate_core.evidence",
+    "debate_core.application",
+]
+forbidden_modules = ["typer", "click", "rich", "fastapi", "starlette"]
+
+[[tool.importlinter.contracts]]
+name = "debate_core never imports a delivery package"
+type = "forbidden"
+# The core is what every front end calls; the dependency never points back.
+source_modules = ["debate_core"]
+forbidden_modules = ["debate_cli", "debate_api", "debate_workers"]
+
+[[tool.importlinter.contracts]]
+name = "The delivery packages are independent of one another"
+type = "independence"
+# Something the CLI and the API both need belongs in debate_core, not in one of them.
+modules = ["debate_cli", "debate_api", "debate_workers"]
+
+[[tool.importlinter.contracts]]
+name = "Delivery packages reach debate_core.integrations only through their composition root"
+type = "forbidden"
+# A command, route or job calls use cases in debate_core.application; which adapter implements a
+# port is decided in one place per front end, the composition root (`debate_cli.container` for the
+# CLI; debate_api and debate_workers add theirs to ignore_imports when they get one). Indirect
+# chains through that root are the design, so only direct imports are checked.
+#
+# The four other entries are the imports that existed when this contract was written, named edge
+# by edge so that nothing else in the same modules is exempt. Each is a command constructing or
+# typing an adapter itself; moving that into debate_cli.container is the fix, and each line goes
+# in the PR that makes it. They cannot be quietly left behind: an entry that no longer matches an
+# import fails lint-imports (unmatched_ignore_imports_alerting defaults to error).
+allow_indirect_imports = true
+source_modules = ["debate_cli", "debate_api", "debate_workers"]
+forbidden_modules = ["debate_core.integrations"]
+ignore_imports = [
+    "debate_cli.container -> debate_core.integrations.**",
+    "debate_cli.commands.caselist -> debate_core.integrations.local.archive_reader",
+    "debate_cli.commands.caselist -> debate_core.integrations.local.fs_object_store",
+    "debate_cli.commands.caselist_auth -> debate_core.integrations.opencaselist",
+    "debate_cli.commands.caselist_auth -> debate_core.integrations.opencaselist.auth",
+]
 
 # ---------------------------------------------------------------------------------------------
 # pytest: every project marker is registered here, once. Later tasks use them, never add their own.

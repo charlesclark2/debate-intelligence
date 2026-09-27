@@ -171,9 +171,12 @@ commit SHA, build time and workflow run id. The same values are stamped into the
 `debate-research --version --json` reports them with the environment the build will run as.
 
 **Installing one.** `scripts/install_channel.sh <tag>` downloads the assets with `gh`, refuses
-anything not matching `SHA256SUMS`, and runs `uv tool install --force --find-links <dir>
-debate-cli==<version>`. The result lives in uv's tool directory (`uv tool dir --bin`), outside every
-checkout and project `.venv`, and stays that build until another tag is installed. Anything that
+anything not matching `SHA256SUMS`, and installs `debate-cli` and `debate-core` **by the file URLs of
+those verified wheels**, so no index can supply either name. Neither is registered on PyPI, and a
+`--find-links` install would let anyone who registers `debate-core` there take the install over,
+even at the exact pinned version. Third-party dependencies still come from PyPI. The result lives in
+uv's tool directory (`uv tool dir --bin`), outside every checkout and project `.venv`, and stays that
+build until another tag is installed. Anything that
 runs on a schedule (the caselist launchd agent, v1-e34-t05) should run an installed tag, never a
 checkout's `.venv/bin/debate-research`, which `uv sync` rebuilds from whatever `dev` holds.
 
@@ -181,6 +184,9 @@ checkout's `.venv/bin/debate-research`, which `uv sync` rebuilds from whatever `
 stable build as `prod`, a source checkout as `dev`. An explicit `DEBATE_ENV` (or one in `.env`)
 always wins. An installed build reads the `config/profiles/` and model-routing files bundled in its
 wheel, the ones it was built and validated with, from any working directory; `DEBATE_PROFILE_DIR`
-overrides them. Dev and prod never share a data directory (`~/.debate-research/dev` and `…/prod`),
+overrides them. That includes the E34 `[caselist] api_enabled` gate: it is fixed per build, so
+turning the API off for an installed build means installing a build whose profile says so, or
+setting `DEBATE_CASELIST__API_ENABLED=false` in its environment. Editing `config/` in a checkout
+does not reach it. Dev and prod never share a data directory (`~/.debate-research/dev` and `…/prod`),
 a model-routing file (`config/model_routing.dev.yaml` routes to cheaper models) or a daily model
 budget. The dev budget is capped at **$2/day** (`DEV_DAILY_BUDGET_CAP_USD`), prod's is $20.

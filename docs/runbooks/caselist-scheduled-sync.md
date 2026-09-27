@@ -40,6 +40,12 @@ Two more ceilings the site sets, both handled in code rather than here:
 
 1. **The policy gate.** `caselist.api_enabled` must be on for the environment you are installing
    for. It is off by default on purpose: turning it on is the decision the E34 gate describes.
+   The agent runs an *installed* build (`scripts/install_channel.sh <tag>`, v1-e01-t09), and an
+   installed build reads the gate from the `config/profiles/<env>.toml` **bundled into its wheel
+   when it was built**, not from any checkout. Editing the profile in a checkout changes nothing
+   for the agent until a new build is installed. `debate-research --json config show` run as the
+   agent runs (same `DEBATE_ENV`, from `$HOME`) shows the value and, under `sources`, which
+   bundled file it came from.
 2. **A token.** `debate-research caselist auth login`, once, for that environment
    (`v1-e34-t01`). `caselist auth status --check` confirms it.
 3. **An AWS session**, if you want the run to publish: `aws sso login --profile
@@ -189,6 +195,12 @@ rm ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
 
 Nothing already captured is affected: the archives, the manifests and the bucket are all
 independent of the schedule.
+
+**Turning the API off without stopping the agent.** Because the gate is baked into the installed
+build, there are two ways: install a build whose committed profile says `api_enabled = false`, or
+add `DEBATE_CASELIST__API_ENABLED=false` to the agent's `EnvironmentVariables` in the plist and
+reload it. The environment variable beats the bundled profile, and the next run refuses to reach
+the network. Editing `config/profiles/*.toml` in a checkout is **not** a way to turn it off.
 
 ## Related
 

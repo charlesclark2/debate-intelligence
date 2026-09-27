@@ -238,3 +238,16 @@ def test_config_show_differs_between_dev_and_prod_in_an_installed_build(
     assert data["storage.data_dir"] == str(Path(f"~/.debate-research/{environment}").expanduser())
     assert data["models.routing_file"] == str(bundled / "config" / f"model_routing.{environment}.yaml")
     assert data["models.budget_usd_daily"] == budget
+
+
+def test_the_environment_turns_the_bundled_caselist_gate_off(
+    bundled: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gate is baked into a build; the documented way to turn it off is the environment."""
+    stamp_dev_prerelease(monkeypatch)
+    monkeypatch.setenv("DEBATE_CASELIST__API_ENABLED", "false")
+
+    data = envelope_of(runner.invoke(create_app(), ["--json", "config", "show"]))["data"]
+
+    assert data["settings"]["caselist.api_enabled"] is False
+    assert data["sources"]["caselist.api_enabled"] == "env:DEBATE_CASELIST__API_ENABLED"

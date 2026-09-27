@@ -1,0 +1,134 @@
+# TASK v1-e01-t12-promotion-guard-rerun — Re-run the promotion guards when main moves
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §4 (GitHub Actions), §17 (guardrails)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t12-promotion-guard-rerun
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: Re-run the promotion guards when main moves
+spec:
+  description: >-
+    Close the one gap v1-e01-t08's sandbox found. A promotion pull request opened before a hotfix
+    lands keeps a stale green `back-merge`, because merging into `main` does not re-run checks on
+    pull requests already open against it, GitHub has no "base branch moved" event, and "require
+    branches to be up to date" is deliberately off - it would block every promotion after the first,
+    since a promotion leaves a merge commit on `main` that `dev` never receives. The stale promotion
+    can then merge and put a combination on prod that `dev` never validated, which is exactly what
+    the check exists to prevent. No content is lost and the next promotion catches it, but by then it
+    is in production. The process workaround is written into the hotfix template and
+    branching-and-environments.md; this task replaces the habit with a mechanism, because the moment
+    the workaround is needed is the middle of an incident, which is the worst moment to rely on
+    anyone remembering a checklist item. back-merge.yml's push-to-main job gains `actions: write` and
+    re-runs promotion-guard.yml for every open pull request whose base is `main`. That job is
+    triggered by `push`, never by `pull_request`, and it never checks out or executes pull-request
+    code, so the permission does not reopen the privilege-escalation hole t08's forbidden list
+    closes. Out of scope: anything about `ci`, the guards' own logic, and the `validate-dev` status
+    (v1-e01-t10).
+  priority: 2
+  constraints:
+    packages: [.github/workflows, docs/process]
+    forbidden:
+      - Granting write permissions of any kind to a `pull_request`-triggered workflow
+      - Checking out or executing pull-request code in the job that holds `actions: write`
+      - Turning on "require branches to be up to date" as an alternative
+      - Re-running anything on a pull request whose base is not `main`
+  context:
+    - kind: TaskRef
+      name: v1-e01-t08-branch-promotion-workflow
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        When a commit lands on `main`, every open pull request whose base is `main` has
+        promotion-guard.yml re-run against it within one workflow run, and pull requests based on any
+        other branch are untouched.
+    - id: ac2
+      description: >-
+        The `actions: write` permission is scoped to the single push-to-main job that performs the
+        re-run, the workflow's top-level permissions stay `contents: read`, and no job in either
+        promotion-guard.yml or back-merge.yml checks out pull-request code. actionlint is clean.
+    - id: ac3
+      description: >-
+        Reproduced then fixed, in a sandbox repository: a promotion pull request open before a hotfix
+        merges shows `back-merge` green beforehand and red afterwards without anyone touching it, and
+        GitHub reports merging is blocked. The before-state is demonstrated first, so the test proves
+        the fix rather than assuming the gap.
+    - id: ac4
+      description: >-
+        The hotfix template's manual re-run checklist item and the corresponding section of
+        docs/process/branching-and-environments.md are updated to describe what now happens
+        automatically, with the manual step kept as the fallback if the re-run itself fails.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t12-promotion-guard-rerun-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Add the re-run to the push-to-main job, prove it in a sandbox against a reproduced gap, then
+    update the two documents that currently describe the manual workaround.
+  goalRef:
+    name: v1-e01-t12-promotion-guard-rerun
+  graph:
+    nodes:
+      - id: rerun-job
+        kind: Task
+        name: Re-run promotion-guard for open PRs into main
+        description: >-
+          In back-merge.yml's push-to-main job, list open pull requests with base `main` and re-run
+          promotion-guard.yml for each. `actions: write` on that job only.
+        outputs: [.github/workflows/back-merge.yml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Workflows pass actionlint
+            command: actionlint
+            args: [.github/workflows/promotion-guard.yml, .github/workflows/back-merge.yml]
+      - id: sandbox-proof
+        kind: Task
+        name: Operator proves it in the sandbox
+        description: >-
+          Operator-run in a sandbox repository: open a promotion PR, merge a hotfix, and observe
+          `back-merge` turn red on the open promotion without intervention. Show the stale-green
+          before-state first.
+        dependsOn: [rerun-job]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Stale green is reproduced, then fixed
+            description: >-
+              Charlie confirms the promotion PR showed `back-merge` green before the hotfix and red
+              after it, with no manual re-run, and that GitHub reported merging is blocked.
+      - id: docs-update
+        kind: Task
+        name: Update the template and the process doc
+        description: >-
+          Describe the automatic re-run; keep the manual step as the fallback.
+        dependsOn: [sandbox-proof]
+        outputs:
+          - .github/PULL_REQUEST_TEMPLATE/hotfix.md
+          - docs/process/branching-and-environments.md
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Repository links still resolve
+            command: uv
+            args: [run, scripts/check_links.py]
+status:
+  phase: Pending

@@ -319,5 +319,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t11-task-workflow-cli
+    - id: t12
+      kind: Task
+      name: Re-run the promotion guards when main moves
+      description: >-
+        A promotion PR open before a hotfix lands keeps a stale green `back-merge` and can merge a
+        combination onto prod that dev never validated. back-merge.yml re-runs promotion-guard.yml
+        for open PRs into main.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t12-promotion-guard-rerun.yaml
+        goalRef: v1-e01-t12-promotion-guard-rerun
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t12-promotion-guard-rerun reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t12-promotion-guard-rerun
 status:
   phase: Pending

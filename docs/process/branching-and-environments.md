@@ -89,6 +89,22 @@ Guard workflows run on `pull_request` with `contents: read` and no secrets, beca
 is public and a fork's pull request runs its own code. Only `back-merge.yml`, which runs on push to
 `main`, holds a write permission (`pull-requests: write`, on its one job).
 
+### A hotfix makes every open promotion's `back-merge` stale
+
+Merging a hotfix into `main` does not re-run checks on pull requests already open against it.
+GitHub has no "base branch moved" event, and "require branches to be up to date" is deliberately
+off, because a promotion leaves a merge commit on `main` that `dev` never receives and the setting
+would block every subsequent promotion.
+
+So an open promotion pull request keeps whatever `back-merge` verdict it had before the hotfix
+landed. It can then merge, putting a combination on prod that `dev` never validated — which is the
+one thing the check exists to prevent. No content is lost, and the *next* promotion catches it, but
+by then it is on prod.
+
+**After any hotfix merges into `main`, re-run the checks on every promotion pull request still open
+against it** — re-run the job, or edit the description to retrigger. The hotfix template carries
+this as a checklist item. `v1-e01-t12-promotion-guard-rerun` replaces the habit with a mechanism.
+
 ## GitHub settings
 
 Set now:

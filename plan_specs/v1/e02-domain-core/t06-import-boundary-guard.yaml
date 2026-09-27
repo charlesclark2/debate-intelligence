@@ -47,8 +47,12 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        import-linter forbidden and layers contracts are configured and `uv run lint-imports` passes on
-        main.
+        import-linter forbidden and layers contracts are configured and `uv run lint-imports` passes
+        against the real package tree - not only against test fixtures - and is enforced on every pull
+        request by the `import-boundaries` job inside the required `ci` check. "on main" in the
+        original wording predates the branching model: `dev` is the integration branch and `main` is a
+        release pointer that nothing reaches except through a green `ci`, so measuring this after a
+        promotion would test older code and hold the task open for weeks to learn nothing.
     - id: ac2
       description: >-
         A fixture branch adding `import boto3` to debate_core.application makes lint-imports fail with

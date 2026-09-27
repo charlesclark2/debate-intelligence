@@ -115,6 +115,10 @@ strict = ["packages/debate_core"]
 # added without a case there. What import-linter cannot see, how much a CLI command or API route
 # does, is checked by scripts/check_thin_handlers.py; CI's import-boundaries job runs both.
 [tool.importlinter]
+# Stated rather than inherited: both exception lists in this file are ratchets, and the property
+# that makes them safe is that an ignore_imports entry matching nothing is an error, not a shrug.
+# That is import-linter's default today; a default is not a guarantee, and this one is load-bearing.
+unmatched_ignore_imports_alerting = "error"
 root_packages = ["debate_core", "debate_cli", "debate_api", "debate_workers"]
 # Required for a contract that forbids a module from outside the repository, such as boto3.
 include_external_packages = true

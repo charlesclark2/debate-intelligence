@@ -1,0 +1,116 @@
+# TASK v1-e01-t13-composition-root-cleanup — Empty the import-boundary exception lists
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §6 thin CLI, §17 guardrails
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t13-composition-root-cleanup
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: Empty the import-boundary exception lists
+spec:
+  description: >-
+    v1-e02-t06 made the ports-and-adapters architecture mechanically enforced and, in doing so,
+    found the codebase already violating it in five places. It recorded them as named exceptions
+    rather than weakening the contracts, which was right: the lists are ratchets - a violation
+    cannot grow, a new one fails, and an entry that stops matching is itself an error, so they can
+    only shrink. But a ratchet with no one turning it stays where it is, and these five are the
+    architecture this project chose, not a style preference. Four are CLI commands
+    (`debate_cli.commands.caselist` and `caselist_auth`) importing adapters from
+    `debate_core.integrations` directly instead of receiving them from `debate_cli.container`, which
+    is the composition root's whole reason to exist. The fifth is `caselist pull` at 33 statements
+    against a 25 budget - a command that sequences `--dry-run`, `--publish-pending` and the run
+    monitor, which is run-mode selection and belongs in CaselistSyncService. This task empties both
+    lists. Out of scope: changing the budget, the contracts or the checks themselves (v1-e02-t06),
+    and any behaviour change - this is a move of construction, not of logic.
+  priority: 3
+  constraints:
+    packages: [debate_cli, debate_core.application, pyproject.toml, scripts]
+    forbidden:
+      - Raising the statement budget, relaxing a contract, or adding an exception rather than removing one
+      - Any behaviour change - the CLI's output, exit codes and flags are identical before and after
+      - Moving logic into the container; it builds adapters and wires them, it does not decide
+  context:
+    - kind: TaskRef
+      name: v1-e02-t06-import-boundary-guard
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `debate_cli.container` builds the four adapters that `debate_cli.commands.caselist` and
+        `caselist_auth` import directly today, the commands receive them, and
+        KNOWN_INTEGRATIONS_IMPORTS in scripts/check_thin_handlers.py and the matching
+        `ignore_imports` entries in pyproject.toml are removed entirely, not shortened.
+    - id: ac2
+      description: >-
+        `caselist pull` is at or under the 25-statement budget with its run-mode sequencing moved
+        behind CaselistSyncService, and KNOWN_THICK_HANDLERS is empty. If the honest shape of that
+        command turns out to be above 25, say so with the reasoning and leave the entry lowered to
+        its real size rather than forcing it - but the default expectation is that it comes down.
+    - id: ac3
+      description: >-
+        Behaviour is unchanged: the existing CLI tests pass untouched, and `caselist pull --help`,
+        `--dry-run` and `--publish-pending` produce the same output as before the change.
+    - id: ac4
+      description: >-
+        `uv run lint-imports` reports every contract kept with no ignore_imports for these cases, and
+        `uv run scripts/check_thin_handlers.py` passes with both exception lists empty.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t13-composition-root-cleanup-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Move adapter construction into the container, then thin the pull command, removing each
+    exception as its cause goes away.
+  goalRef:
+    name: v1-e01-t13-composition-root-cleanup
+  graph:
+    nodes:
+      - id: adapters-to-container
+        kind: Task
+        name: The container builds the four adapters
+        description: >-
+          Move the four direct integration imports out of the two command modules and into
+          debate_cli.container, removing the ignore_imports and KNOWN_INTEGRATIONS_IMPORTS entries.
+        outputs: [packages/debate_cli/src/debate_cli/container.py, pyproject.toml]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Contracts kept with no exceptions for these imports
+            command: uv
+            args: [run, lint-imports]
+      - id: thin-the-pull-command
+        kind: Task
+        name: caselist pull under budget
+        description: >-
+          Move run-mode sequencing into CaselistSyncService so the command selects and prints only;
+          empty KNOWN_THICK_HANDLERS.
+        dependsOn: [adapters-to-container]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Thin-handler check passes with empty exception lists
+            command: uv
+            args: [run, scripts/check_thin_handlers.py]
+          - type: test_passes
+            name: CLI behaviour is unchanged
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/]
+status:
+  phase: Pending

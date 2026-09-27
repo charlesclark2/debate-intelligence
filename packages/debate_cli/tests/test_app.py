@@ -73,7 +73,10 @@ def test_version_in_json_mode_is_an_envelope() -> None:
     envelope = envelope_of(result)
     assert envelope["status"] == "ok"
     assert envelope["command"] == "version"
-    assert envelope["data"] == {"package": "debate-cli", "version": __version__}
+    assert envelope["data"]["package"] == "debate-cli"
+    assert envelope["data"]["version"] == __version__
+    # Channel, environment and commit are v1-e01-t09's; tests/test_version.py covers them.
+    assert {"channel", "environment", "commit"} <= set(envelope["data"])
 
 
 def test_help_lists_the_global_options_and_the_commands() -> None:

@@ -27,14 +27,15 @@ from typing import Annotated, Any
 import typer
 from typer.core import TyperGroup
 
-from debate_cli import DISTRIBUTION_NAME, package_version
+from debate_cli import DISTRIBUTION_NAME
+from debate_cli.build_info import current_build_info, settings_loader
 from debate_cli.commands import register_commands
 from debate_cli.container import ServiceContainer
 from debate_cli.context import CliContext, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, OutputMode
 from debate_core.application.errors import DomainError
-from debate_core.application.settings import load_settings
+from debate_core.application.settings import resolve_environment
 
 __all__ = ["APP_NAME", "DebateResearchGroup", "app", "create_app", "main"]
 
@@ -146,22 +147,39 @@ def root_callback(
     ] = False,
     show_version: Annotated[
         bool,
-        typer.Option("--version", help="Show the installed version and exit.", is_eager=True),
+        typer.Option(
+            "--version",
+            help="Show the installed version, release channel, environment and commit, and exit.",
+            is_eager=True,
+        ),
     ] = False,
 ) -> None:
     """Runs before every command: turns the global options into this run's CliContext."""
     output = CliOutput(OutputMode.JSON if json_output else OutputMode.RICH, verbose=verbose)
     # The loader is passed, not called: the container runs it the first time a command asks for
-    # settings, so `--help` and `--version` never read a profile file (v1-e02-t05).
-    ctx.obj = CliContext(output=output, services=ServiceContainer(settings_loader=load_settings))
+    # settings, so `--help` and `--version` never read a profile file (v1-e02-t05). It knows this
+    # build's channel and bundled configuration (v1-e01-t09, debate_cli.build_info).
+    ctx.obj = CliContext(output=output, services=ServiceContainer(settings_loader=settings_loader()))
 
     if show_version:
         # Handled here rather than in an option callback so that `--json --version` gets the
-        # envelope like any other result.
+        # envelope like any other result. The environment is resolved the way a command would
+        # resolve it (DEBATE_ENV, .env, then the build channel) without loading any profile.
+        build = current_build_info()
+        environment, environment_source = resolve_environment(build_channel=build.channel)
+        commit = build.commit[:12] if build.commit else "unknown commit"
         output.success(
             "version",
-            {"package": DISTRIBUTION_NAME, "version": package_version()},
-            display=f"{APP_NAME} {package_version()}",
+            {
+                "package": DISTRIBUTION_NAME,
+                **build.as_dict(),
+                "environment": environment.value,
+                "environment_source": environment_source,
+            },
+            display=(
+                f"{APP_NAME} {build.version} "
+                f"({build.channel} channel, {environment.value} environment, {commit})"
+            ),
         )
         raise typer.Exit(code=ExitCode.OK)
 

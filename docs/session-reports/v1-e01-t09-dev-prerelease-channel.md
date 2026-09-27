@@ -24,6 +24,15 @@ install) and ac5 (hotfix dispatch) need the workflow merged to `dev`, a clean ma
 — a promotion to `main` first. All three are marked NOT RUN, and ac2 is PASS offline only. Merge
 with `scripts/task pr --partial`.
 
+**After PM review (ac2b, added to the spec):** `install_channel.sh` no longer installs with
+`--find-links … debate-cli==<version>`. It installs both first-party wheels by the file URLs of the
+verified release assets, so no index can supply `debate-core` or `debate-cli`, while third-party
+dependencies still come from PyPI. The old command was exploitable *despite* the exact pin: a
+squatter publishing `debate-core` at the same, predictable dev version with a `cp312-none-any` wheel
+won the resolution. `tests/scripts/test_install_channel.py` shows the old command taking that decoy
+and the script refusing it. The caselist gate being fixed per build is now documented in the script,
+the runbook and the branching doc.
+
 **PM, look first at:** the bundled configuration (Decisions §1). Without it, an installed build run
 from `$HOME` (the launchd agent's working directory) found no profile and fell back to the built-in
 one, where `caselist.api_enabled` is false. Also look at the per-commit concurrency group, which
@@ -36,7 +45,7 @@ replaces the spec's single serial group (Deviations §1).
 | `env-profiles` — Dev and prod channel values | Done | `config/model_routing.{dev,prod}.yaml` written (dev one tier cheaper); `budget_usd_daily` 2.0 / 20.0 already present from v1-e02-t05 and kept; `DEV_DAILY_BUDGET_CAP_USD = 2.0`; build-channel default and bundled config root in `debate_core.application.settings`. `[caselist] api_enabled = true` untouched in both profiles and now guarded by a test. |
 | `versioning` — Dev version computation and build info | Done | `scripts/release_version.py`, `scripts/stamp_build.py`, `debate_cli/build_info.py`; `--version` wired in `app.py`. |
 | `prerelease-workflow` — dev-prerelease workflow | Done | `.github/workflows/dev-prerelease.yml`. Separate workflow, not in `ci.yml` or the `ci` aggregate. |
-| `install-script` — Channel install script and docs | Done | `scripts/install_channel.sh`; channel docs in `docs/process/branching-and-environments.md` and `packages/debate_cli/README.md`. Rehearsed locally end-to-end (see ac3). |
+| `install-script` — Channel install script and docs | Done | `scripts/install_channel.sh`; channel docs in `docs/process/branching-and-environments.md` and `packages/debate_cli/README.md`. Rehearsed locally end-to-end (see ac3). After review: installs by wheel URL for ac2b, with a provenance check on `direct_url.json`, and documents the per-build caselist gate. |
 | `first-prerelease` — First dev pre-release installed cleanly | NOT RUN | Needs this branch merged to `dev`; see Operator follow-ups. |
 
 ## Acceptance criteria
@@ -45,6 +54,7 @@ replaces the spec's single serial group (Deviations §1).
 |---|---|---|
 | **ac1** — after a merge to dev with green `ci`, a pre-release `vX.Y.Z-dev.N` exists at the merge commit with both wheels, SHA256SUMS and build-info.json | NOT RUN | Needs a merge to `dev` to trigger the workflow; no session can produce it. The steps it depends on were each exercised locally: stamp + `uv build` (×2) + `check-wheels` on a `git archive HEAD` export → `wheels in dist are publishable as 0.1.0.dev1`, and the dist held exactly `debate_cli-0.1.0.dev1-py3-none-any.whl`, `debate_core-0.1.0.dev1-py3-none-any.whl`, `build-info.json`, `SHA256SUMS`. |
 | **ac2** — consecutive merges get dev.N and dev.N+1, never reused even when runs overlap; wheel is PEP 440 `X.Y.Z.devN` sorting before `X.Y.Z` | PASS (offline) / live check NOT RUN | `uv run pytest tests/scripts/test_release_version.py` → `37 passed`. Against a real bare git remote: `test_two_consecutive_merges_get_n_and_n_plus_one`; `test_overlapping_runs_never_reuse_a_number` (B lists tags, A claims B's N, B's push is rejected, B gets N+1); `test_many_simultaneous_runs_get_distinct_consecutive_numbers` (8 threads, one barrier → dev.1…dev.8, no duplicates). That test and the overlap test were looped 25× → `failures: 0 / 25`. `test_the_pep440_form_sorts_before_the_release_and_numerically_between_builds` uses `packaging.version`. The live two-merge check is in Operator follow-ups. |
+| **ac2b** — an installed build cannot resolve `debate-core` or `debate-cli` from a public index; third-party dependencies still come from PyPI; a decoy on a second index is never taken | PASS | `uv run pytest tests/scripts/test_install_channel.py` → `4 passed`. The real `scripts/install_channel.sh` and real `uv` run against a release directory of synthetic first-party wheels, with a decoy PEP 503 index (a `file://` URL) set as uv's **default** index. That index holds the only copy of the third-party `thirdparty-dep` plus squatted `debate-core`/`debate-cli`: at the same dev version with a more specific `cp312-none-any` tag, and at `99.0.0`. For both squat variants, the installed `debate-research` reports `"cli": "release", "core": "release"` and imports `thirdparty_dep` from the index. With the release's `debate_core` wheel missing, the script fails (`has no debate_core wheel …`) and installs nothing. **Control:** the previous command (`uv tool install --find-links <dir> debate-cli==<version>`) installs the decoy CLI and core, so the decoy is live and the passing tests are not vacuous. **Mutation check:** putting the old command back into the script turns both script tests red (`the installed debate_cli did not come from …/release/…; refusing to trust this install`). Also re-rehearsed with the real stamped wheels: both first-party packages installed `(from file:///…)`, the `opencaselist` extra (`httpx`, `keyring`) from the index, and the `direct_url.json` check passed through both `/tmp/…` and `/private/tmp/…` spellings. |
 | **ac3** — on a clean machine, `install_channel.sh <tag>` installs `debate-research`, and `--version --json` reports that version, channel dev, env dev and the tagged SHA | NOT RUN (clean machine) — local rehearsal PASS | Needs a published tag and a clean machine. **Rehearsal** on this Mac: wheels stamped for HEAD `21e186f`, then `install_channel.sh --dir <dist> v0.1.0-dev.1` into a scratch `UV_TOOL_DIR`/`UV_TOOL_BIN_DIR`, with a PATH free of any `.venv` → installed in 25 s. The script's own check printed `{"version": "0.1.0.dev1", "channel": "dev", "commit": "21e186f0197362c90c5c494b87b7f519b794346f", "tag": "v0.1.0-dev.1", …, "environment": "dev", "environment_source": "build-channel:dev"}`, and `command -v debate-research` resolved to the scratch tool bin. Refusals: a tampered wheel → `SHA256SUMS verification failed`; an extra unlisted wheel → `… is not listed in SHA256SUMS; refusing to install it`; tag `v0.1` → `not a release tag`. Nothing was installed in any refusal case. |
 | **ac4** — `config show --json` with DEBATE_ENV=dev / prod reports different data_dir, routing file and budget; dev budget ≤ $2 cap | PASS | Source checkout: `test_the_committed_dev_and_prod_profiles_differ_in_config_show[dev/prod]` (in `test_config_command.py`) → dev `~/.debate-research/dev`, `config/model_routing.dev.yaml`, 2.0; prod `…/prod`, `model_routing.prod.yaml`, 20.0. Installed build: `test_config_show_differs_between_dev_and_prod_in_an_installed_build` (`test_version.py`), same values from the bundled config. The rehearsal install run from a scratch `$HOME` printed `dev build-channel:dev ~/.debate-research/dev …_bundled_config/config/model_routing.dev.yaml 2.0 api_enabled=True` and `prod env:DEBATE_ENV ~/.debate-research/prod …model_routing.prod.yaml 20.0 api_enabled=True`. |
 | **ac5** — a manual workflow_dispatch for a `hotfix/*` head publishes a pre-release for exactly that SHA (patch target, channel dev) | NOT RUN | Needs a manual dispatch, and `workflow_dispatch` only offers workflows that exist on the chosen branch. A `hotfix/*` branch is cut from `main`, so this can run only after a promotion carries this workflow to `main`. Patch-target logic is covered offline: `test_a_hotfix_head_is_tagged_with_its_patch_target` (release `v0.1.0`, hotfix commit → `v0.1.1-dev.1` at the hotfix SHA on the remote). |
@@ -60,11 +70,12 @@ replaces the spec's single serial group (Deviations §1).
 
 Whole-repo checks, run at the end:
 
-* `uv run pytest -q` → `2843 passed, 1 skipped in 121.71s`, no failures. It took **2m21s wall-clock**
+* After the ac2b change: `uv run pytest tests/scripts packages/debate_cli/tests packages/debate_core/tests/application/test_settings_environments.py packages/debate_core/tests/application/test_settings.py tests/docs -q` → `692 passed in 111.26s`. The full suite was not re-run: it now exceeds the 2-minute hand-off line, so it is an operator command below.
+* Before the ac2b change: `uv run pytest -q` → `2843 passed, 1 skipped in 121.71s`, no failures. It took **2m21s wall-clock**
   on this machine, not the ~42 s the kickoff notes gave, so it crossed the 2-minute hand-off line
   (see Follow-up work). The four known ledger day-boundary failures did not appear.
 * `uv run ruff check .` → `All checks passed!`; `uv run ruff format --check .` → `390 files already formatted`
-* `uv run pyright` (CI's invocation) → `0 errors`
+* `uv run pyright` (CI's invocation) → `0 errors`; `shellcheck scripts/install_channel.sh` → clean
 * `uv run lint-imports` → `Contracts: 5 kept, 0 broken.`
 * `uv run pytest tests/docs` → `51 passed` (links in the edited docs)
 * `uv run scripts/validate_specs.py` → `OK: 287 files, 38 epics, 229 tasks, 20 releases`
@@ -84,7 +95,12 @@ Whole-repo checks, run at the end:
   `tests/test_version.py`. `test_app.py` relaxes an exact-payload assertion to the fields it owns.
   `test_config_command.py` gains the ac4 checkout test. `README.md` documents the channels.
 * **`scripts/`**: new `release_version.py`, `stamp_build.py` and `install_channel.sh`.
-  **`tests/scripts/`**: new `test_release_version.py` and `test_stamp_build.py`.
+  **`tests/scripts/`**: new `test_release_version.py`, `test_stamp_build.py` and
+  `test_install_channel.py` (ac2b).
+* **`docs/runbooks/caselist-scheduled-sync.md`**: the gate is read from the installed build's
+  bundled profile; how to turn the API off for an installed build.
+* **`plan_specs/…/t09-dev-prerelease-channel.yaml`**: the PM's amendment (ac2b and two forbidden-list
+  entries), committed as given in its own commit. This task made no other spec edit.
 * **`.github/workflows/dev-prerelease.yml`**: new.
 * **`.gitignore`**: the two stamp outputs (`debate_cli/_build_info.py`, `debate_cli/_bundled_config/`).
 * **`docs/process/branching-and-environments.md`**: new section "The V1 CLI channels: dev
@@ -120,6 +136,13 @@ was re-based onto mid-session; this task did not edit any spec.)
    This task kept that key and added no second one.
 6. **`actionlint` run through `uvx --from actionlint-py`** rather than a system install, to avoid
    changing the operator's machine. It is the upstream actionlint 1.7.12 binary.
+7. **`install_channel.sh` no longer uses `--find-links`.** The `install-script` node describes
+   `uv tool install --force --find-links <dir> debate-cli==<pep440>`, which the amended forbidden
+   list ("Resolving `debate-core` or `debate-cli` from any public index during an install") and
+   ac2b now rule out. It installs `"debate-cli @ file://…whl" --with "debate-core @ file://…whl"`
+   instead. The node's description could be updated to match.
+8. **`docs/runbooks/caselist-scheduled-sync.md` edited**, outside the task's package list, at the
+   PM's invitation, to record that the caselist gate is fixed per installed build.
 
 ## Decisions and assumptions
 
@@ -166,8 +189,33 @@ was re-based onto mid-session; this task did not edit any spec.)
 11. **The dev cap is documented, not enforced by validation.** `DEV_DAILY_BUDGET_CAP_USD` bounds
     the committed and built-in dev budgets through tests. An operator can still raise it on their
     own machine with `DEBATE_MODELS__BUDGET_USD_DAILY`, and `config show` names the source.
+12. **First-party packages come only from the release's own wheels.** A requirement given as a URL
+    is never looked up on an index, and uv uses it for every reference to that name, including
+    `debate-cli`'s own `debate-core[opencaselist]==<version>`. The spec's premise that
+    `debate-core` was unpinned was not the gap. The stamped wheel already pinned it to the exact
+    version, and that did not help: dev versions are predictable from public tags, and uv prefers
+    a `cp312-none-any` wheel over our `py3-none-any` wheel at the same version. The URL install
+    closes that, and the `direct_url.json` check is a second, independent refusal. After a
+    squat, the old command's outcome depended on what was published. A same-version squat won
+    outright. A higher *stable* version made uv refuse the transitive pre-release, a denial of
+    service that anyone adding `--prerelease=allow` to "fix" would have turned into a takeover.
+13. **The caselist gate is fixed per build.** An installed build reads `[caselist] api_enabled` from
+    the profile bundled into its wheel at build time. Turning the API off for the scheduled agent
+    means installing a build whose profile says so, or setting `DEBATE_CASELIST__API_ENABLED=false`
+    in the agent's plist environment, which beats the bundled profile
+    (`test_the_environment_turns_the_bundled_caselist_gate_off`). Editing `config/` in a checkout
+    does not reach an installed build. Documented in `install_channel.sh`, the caselist runbook
+    and the branching doc.
 
 ## Operator follow-ups
+
+**0. Full suite after the ac2b change** (about 2.5 min, so handed over per working-agreements §2).
+Where: this worktree.
+```bash
+uv run pytest -q
+```
+Success looks like: `2848 passed, 1 skipped` (2843 before, plus the 4 ac2b tests and the gate-override
+test), apart from the four known ledger day-boundary failures if run after 19:00 CDT.
 
 **1. After this PR merges to dev: the first pre-release (ac1, first-prerelease node).** Takes about
 3 min once `ci` on dev is green.
@@ -217,14 +265,21 @@ the pyproject version) whose tag SHA equals the hotfix head. Delete the branch a
 * **Point the launchd agent at an installed tag** (v1-e34-t05). `ops/launchd/install.sh` should
   resolve `debate-research` from `uv tool dir --bin` (or take `--debate-research` pointing there),
   never from a checkout's `.venv/bin`.
-* **Package-name squatting on PyPI** (v1-e09-t06). `--find-links` merges the release directory with
-  PyPI. `debate-core` is pinned to the exact dev version, so a squatter would have to publish that
-  same version. That is unlikely but possible. Reserving `debate-core`/`debate-cli` on PyPI, or
-  installing by wheel path, would close it. The spec prescribes `--find-links`, so this task kept it.
+* **Registering `debate-core` and `debate-cli` on PyPI defensively (operator's call).** Worth doing,
+  but not for this install path, which no longer depends on it: ac2b holds whoever owns the
+  names. The case for registering is every *other* way these names get resolved: someone typing
+  `uv tool install debate-cli` or `pip install debate-core` by hand, a future script or CI job
+  that forgets to install by URL, or a `uv add debate-core` in another project. Each of those
+  would silently fetch a squatter's package, and nothing in this repo can prevent it. The cost is
+  small: a PyPI account with 2FA and one minimal `0.0.0` upload per name that installs nothing
+  useful and points at this repository. Two caveats. PyPI's PEP 541 lets it reclaim names held by
+  placeholders, so this is a deterrent rather than a guarantee. And the forbidden list's
+  "never publish dev builds to PyPI" still applies, so the placeholders must never carry real
+  code.
 * **No `actionlint` in CI** (v1-e01-t04 owns `ci.yml`). A change to `dev-prerelease.yml` gets no
   lint on its PR, and the workflow's first real run is after merge. A small `actionlint` job in the
   `ci` aggregate would catch syntax errors earlier.
-* **Full-suite runtime.** `uv run pytest -q` took 2m21s wall-clock here (`--numprocesses=auto`,
+* **Full-suite runtime** (kept here per the PM; not to be fixed in this task). `uv run pytest -q` took 2m21s wall-clock here (`--numprocesses=auto`,
   coverage on), against the ~42 s quoted in the kickoff notes. Worth checking whether that is this
   machine's load or a real regression on dev.
 * **validate-dev (v1-e01-t10)** can reuse `scripts/install_channel.sh --dir <assets> <tag>` after

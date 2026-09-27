@@ -19,9 +19,11 @@ spec:
   description: >-
     Make the ports-and-adapters architecture mechanically enforced with import-linter contracts run by
     `uv run lint-imports` (v1-e29-t04 bootstrapped [tool.importlinter] with the AWS contract only and
-    added import-linter to the dev group; this task owns the section and extends it. There is no
-    .github/ in the repo yet, so nothing runs it automatically: if v1-e01-t04 has landed, add the job
-    to ci.yml; if not, wire it into pre-commit and hand the CI job to v1-e01-t04):
+    added import-linter to the dev group; this task owns the section and extends it. Since this was
+    written, v1-e01-t04 has landed: .github/workflows/ci.yml already carries an `import-boundaries`
+    job running `lint-imports`, already in the aggregate `ci` job's needs, and it currently passes
+    against five contracts. Nothing needs wiring; what is missing is contracts that bite and the
+    thin-handler check):
     debate_core.domain and
     debate_core.application may not import boto3/botocore, httpx, typer, rich or fastapi; domain may
     not import application or integrations; debate_core may never import debate_cli, debate_api or
@@ -57,7 +59,13 @@ spec:
         the configured statement budget or imports from debate_core.integrations directly.
     - id: ac4
       description: >-
-        The import-boundaries CI job runs both checks and is a required status check.
+        The import-boundaries CI job runs both checks. It is NOT added as a required status check of
+        its own: `ci` is the single required check on protect-dev and protect-main, and it passes only
+        when every job succeeded or was skipped by its own path filter. A path-filtered job made
+        required in its own right would be reported skipped on any pull request outside its filter and
+        would block that pull request forever (v1-e01-t04 ac1, and the reason the aggregate exists).
+        import-boundaries is already a job in ci.yml and already in `ci`'s needs; this task fills it
+        with contracts that bite rather than wiring it up.
 status:
   phase: Pending
 ---

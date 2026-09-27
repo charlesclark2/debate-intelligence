@@ -266,5 +266,27 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t07-source-removal
+    - id: t08
+      kind: Task
+      name: Importer metadata defects found by the backfill
+      description: >-
+        Camp attribution reads the camp by position and missed it on all 105 real camp files; NEW is a
+        week-over-week diff documented as new-to-the-corpus, overstating by 56% on the backfill's first
+        day. Bytes and manifests are correct in both cases; what the store says about them is not.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml
+        goalRef: v1-e30-t08-import-metadata-defects
+      dependsOn:
+      - t03
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t08-import-metadata-defects reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t08-import-metadata-defects
 status:
   phase: Pending

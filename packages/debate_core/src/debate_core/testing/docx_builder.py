@@ -23,6 +23,7 @@ from __future__ import annotations
 import zipfile
 from collections.abc import Iterable, Mapping
 from io import BytesIO
+from typing import Final
 from xml.sax.saxutils import escape, quoteattr
 
 __all__ = [
@@ -169,6 +170,11 @@ def paragraph_xml(
     return f"<w:p>{paragraph_properties}{runs}</w:p>"
 
 
+#: The DOS epoch, the earliest a zip entry can carry. Any constant would do; what matters is that
+#: it is not the clock, so the same logical document always hashes the same.
+_FIXED_TIMESTAMP: Final = (1980, 1, 1, 0, 0, 0)
+
+
 def build_docx(
     body: str,
     *,
@@ -203,5 +209,13 @@ def build_docx(
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", compression) as archive:
         for name, data in parts.items():
-            archive.writestr(name, data)
+            # A fixed timestamp, not the clock. `writestr` with a bare name stamps
+            # `time.localtime()`, so building the same logical document twice produced different
+            # bytes whenever the two calls straddled a second - and this project deduplicates by
+            # sha256 everywhere, so any content-addressed test using this builder was one slow
+            # machine away from counting one file as two. It bit
+            # tests/scripts/test_parser_corpus_health.py on a loaded run.
+            entry = zipfile.ZipInfo(name, date_time=_FIXED_TIMESTAMP)
+            entry.compress_type = compression
+            archive.writestr(entry, data)
     return buffer.getvalue()

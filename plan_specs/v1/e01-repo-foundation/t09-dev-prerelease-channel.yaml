@@ -39,7 +39,11 @@ spec:
     guards are t08.
   priority: 1
   constraints:
-    packages: [.github/workflows, scripts, debate_core.application.settings, debate_cli]
+    packages: [.github/workflows, scripts, config, debate_core.application.settings, debate_cli]
+    # `config` added by the PM: the env-profiles node writes config/model_routing.dev.yaml and edits
+    # config/profiles/{dev,prod}.toml, which the original package list did not cover. Those profiles
+    # also now carry a `[caselist] api_enabled = true` section that is the E34 policy gate decision -
+    # edit around it, never remove it.
     forbidden:
       - Publishing dev builds as non-pre-release GitHub Releases or to PyPI
       - Rebuilding or re-tagging an existing vX.Y.Z-dev.N (tags are immutable once published)

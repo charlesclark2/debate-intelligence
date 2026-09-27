@@ -60,8 +60,8 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 23 | 13 | 150 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 24 | 17 | 240 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 24 | 14 | 154 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 25 | 17 | 248 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -98,10 +98,11 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [PlanSpec validation and index tooling](plan_specs/v1/e01-repo-foundation/t05-spec-tooling.yaml) `v1-e01-t05-spec-tooling` | Succeeded | 2 | 9.5 |
 | [Architecture proposal and ADR records](plan_specs/v1/e01-repo-foundation/t06-adr-docs.yaml) `v1-e01-t06-adr-docs` | Succeeded | 1 | 4.5 |
 | [debate_cli Typer + Rich skeleton](plan_specs/v1/e01-repo-foundation/t07-cli-skeleton.yaml) `v1-e01-t07-cli-skeleton` | Succeeded | 1 | 6.0 |
-| [dev→main promotion workflow and guards](plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml) `v1-e01-t08-branch-promotion-workflow` | InProgress | 2 | 7.5 |
+| [dev→main promotion workflow and guards](plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml) `v1-e01-t08-branch-promotion-workflow` | Succeeded | 2 | 7.5 |
 | [Dev pre-release channel and environment profiles for the CLI](plan_specs/v1/e01-repo-foundation/t09-dev-prerelease-channel.yaml) `v1-e01-t09-dev-prerelease-channel` | Pending | 3 | 9.0 |
 | [validate-dev smoke gate for promotions](plan_specs/v1/e01-repo-foundation/t10-validate-dev-gate.yaml) `v1-e01-t10-validate-dev-gate` | Pending | 2 | 9.0 |
 | [Task lifecycle CLI and session workflow](plan_specs/v1/e01-repo-foundation/t11-task-workflow-cli.yaml) `v1-e01-t11-task-workflow-cli` | Succeeded | 1 | 8.0 |
+| [Re-run the promotion guards when main moves](plan_specs/v1/e01-repo-foundation/t12-promotion-guard-rerun.yaml) `v1-e01-t12-promotion-guard-rerun` | Pending | 1 | 3.5 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -151,6 +152,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Publish sources and manifests to S3](plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml) `v1-e30-t05-caselist-publish` | Succeeded | 2 | 9.0 |
 | [Initial caselist and camp-file backfill](plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml) `v1-e30-t06-initial-backfill` | Pending | 3 | 5.0 |
 | [Source removal and suppression list](plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml) `v1-e30-t07-source-removal` | Pending | 2 | 12.5 |
+| [Importer metadata defects found by the backfill](plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml) `v1-e30-t08-import-metadata-defects` | Pending | 2 | 7.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 

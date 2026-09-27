@@ -6,7 +6,7 @@ everything a command actually *does* lives in `debate_core` (architecture propos
 
 ```console
 $ uv run debate-research --version
-debate-research 0.1.0
+debate-research 0.1.0 (local channel, dev environment, 8bfde67d2a41)
 $ uv run debate-research doctor
 $ uv run debate-research --json doctor | jq .data.cli_version
 ```
@@ -59,8 +59,33 @@ service for itself (that is `container.py`).
 |---|---|
 | `--verbose`, `-v` | Progress and diagnostics on stderr, including the traceback when a command hits a bug. |
 | `--json` | stdout carries exactly one JSON object — see below — and nothing else. |
-| `--version` | Print the installed version and exit 0. Works with `--json`. |
+| `--version` | Print the version, release channel, environment and commit, and exit 0. Works with `--json`. |
 | `--help`, `-h` | Usage for the app or for a command. |
+
+## Installed builds and release channels
+
+A merge to `dev` publishes a GitHub pre-release `vX.Y.Z-dev.N` of this package
+(`.github/workflows/dev-prerelease.yml`). Install one, outside any checkout, with:
+
+```console
+$ scripts/install_channel.sh v0.1.0-dev.3
+$ debate-research --version --json | jq .data
+{"package": "debate-cli", "version": "0.1.0.dev3", "channel": "dev", "commit": "…",
+ "tag": "v0.1.0-dev.3", "built_at": "…", "run_id": "…",
+ "environment": "dev", "environment_source": "build-channel:dev"}
+```
+
+| Where it came from | `channel` | `DEBATE_ENV` unset means | Configuration read from |
+|---|---|---|---|
+| A source checkout (`uv run`) | `local` | `dev` | the checkout's `config/` |
+| A dev pre-release | `dev` | `dev` | the `config/` bundled in the wheel |
+| A stable release (v1-e09-t06) | `stable` | `prod` | the `config/` bundled in the wheel |
+
+An explicit `DEBATE_ENV` always wins, and `DEBATE_PROFILE_DIR` overrides the bundled profiles.
+`debate_cli/build_info.py` reads the stamp that `scripts/stamp_build.py` writes into a published
+build (`_build_info.py` and `_bundled_config/`, both gitignored), and passes the channel and the
+bundled directory to `load_settings`. The channel rules themselves are in
+[`docs/process/branching-and-environments.md`](../../docs/process/branching-and-environments.md#the-v1-cli-channels-dev-pre-releases-and-stable-releases).
 
 ## Exit codes
 
@@ -114,7 +139,6 @@ metadata, which is the same rule the rest of the platform follows (architecture 
 
 * **Settings** are v1-e02-t05. `ServiceContainer` takes a `settings_loader` and that task passes
   one in; `doctor` reports whether settings are configured.
-* **Release channel and commit** in `--version` are v1-e01-t09.
 * **Smoke checks** for the CLI surface land with the `validate-dev` gate, v1-e01-t10.
 
 ## Tests

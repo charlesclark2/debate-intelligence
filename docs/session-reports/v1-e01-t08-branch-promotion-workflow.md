@@ -6,24 +6,30 @@
 | Spec | [`plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml`](../../plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml) |
 | Epic / release | `v1-e01-repo-foundation` / `v1.0` |
 | Branch | `task/v1-e01-t08-branch-promotion-workflow` |
-| Session status | PARTIAL — the three code nodes are done; `ruleset-wiring` and `negative-proof` belong to the operator, so the Goal stays `InProgress` |
+| Session status | COMPLETE — the code nodes shipped in #95 (merged `--partial`); the operator closed `ruleset-wiring` and `negative-proof` on 2026-09-26, and the Goal is `Succeeded` in the follow-up spec PR |
 
 ## Summary
 
 This task turns the dev→main promotion rule into GitHub mechanics. `scripts/check_promotion_source.py`
 has three pure checks: `source`, `template` and `back-merge`. Two workflows run them.
 `promotion-guard.yml` posts the `promotion-source` and `back-merge` checks on pull requests into
-`main`, with `contents: read` only. `back-merge.yml` runs on push to `main` and opens the
+`main`, with `contents: read` only. `back-merge.yml` runs on push to `main` and opens a labelled
 main → dev back-merge PR after a hotfix. There are also three PR templates (task, promotion,
-hotfix), and `branching-and-environments.md` now describes all of it. The code nodes pass,
-including 113 offline tests and actionlint. **The Goal stays `InProgress`.** Changing the rulesets
-is a GitHub settings change, and the negative proof needs throwaway PRs and a sandbox repo. Both
-are written out in full under Operator follow-ups. **What the PM should look at first:**
+hotfix), and `branching-and-environments.md` now describes all of it.
 
-* Deviation 1: the spec's "strict: branch must be up to date" on protect-main would block every
-  promotion after the first. I recommend leaving strict off and need a ruling.
-* Operator follow-up 1: required checks must be added only after this task has been promoted to
-  `main`.
+The code shipped in #95, merged `--partial` after PM acceptance. The operator then closed the two
+remaining nodes on 2026-09-26. They tightened protect-main (exports merged in #98, both rulesets
+confirmed in the UI) and ran the negative proof: two throwaway PRs in the real repository (#99,
+#100) and a full hotfix cycle in a sandbox repository. Every Goal criterion now passes with real
+runs, so the Goal is `Succeeded`, in a spec PR of its own as `task-workflow.md` asks.
+
+**For the PM:**
+
+* **Your one open question is answered.** The auto-opened back-merge PR had a green `ci` from the
+  push to `main`, and it merged.
+* **The sandbox found one gap.** A promotion PR that is already open keeps a stale green
+  `back-merge` after a hotfix lands (Follow-up work). It needs a ruling before the first real
+  hotfix, but it doesn't block this Goal.
 
 ## Plan nodes
 
@@ -32,17 +38,17 @@ are written out in full under Operator follow-ups. **What the PM should look at 
 | `guard-script` — Promotion guard script | Done | `source`, `template` and `back-merge` subcommands. Exit 0 = pass, 1 = check failed, 2 = could not run. The last one covers a git error and a shallow clone, which the script refuses. 113 hand-written tests. |
 | `pr-templates` — Task, promotion and hotfix PR templates | Done | The guidance sits in HTML comments, so an untouched `Dev build:` line reads as blank to the guard. The tests run the real template files through the parser. |
 | `guard-workflows` — promotion-guard and back-merge workflows | Done | actionlint is clean, with shellcheck on the run blocks. Neither workflow has had a real run yet (see Operator follow-ups). |
-| `ruleset-wiring` — Tighten protect-main and protect-dev | NOT RUN (operator) | A GitHub UI change. The steps, and the current state I read, are under Operator follow-ups. |
-| `negative-proof` — Prove the guards with throwaway PRs | NOT RUN (operator) | Needs throwaway PRs and a sandbox repository. The full script is under Operator follow-ups. |
+| `ruleset-wiring` — Tighten protect-main and protect-dev | Done (operator, 2026-09-26) | protect-main gained `promotion-source` and `back-merge` as required checks, with strict off, as the PM amended. protect-dev needed no change. Exports merged in #98, and Charlie confirmed both rulesets in the UI. |
+| `negative-proof` — Prove the guards with throwaway PRs | Done (operator, 2026-09-26) | Real repository: #99 (task branch into main) and #100 (blank validate-dev). Sandbox `charlesclark2/promotion-guard-sandbox`: hotfix #1, auto-opened back-merge #3, promotion #2. Evidence below. |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1 — task/* → main shows a red `promotion-source` and merging is blocked; dev and hotfix/* pass | NOT RUN | Needs a real PR into `main` and the check made required (operator follow-ups 2 and 4). Offline evidence: `source --base main --head task/v1-e01-t08-branch-promotion-workflow` → `FAILED: ... is not allowed ...`, exit 1. `--head dev` → `OK`, exit 0. The tests cover 21 rejected heads and 4 accepted ones. |
-| ac2 — promotion/hotfix templates have the sections, and `promotion-source` fails while Dev build or validate-dev is blank | NOT RUN | The template half passes: `promotion.md` has Included (release, tasks), Validation in dev (`Dev build:`, `validate-dev run:`), Evaluations, Manual checks and Rollback, and `hotfix.md` needs the same two lines. The "check fails on GitHub" half needs a real PR (operator follow-up 4). Offline: both untouched templates fail with both lines blank, and each half-filled template fails on the empty line. |
-| ac3 — an un-back-merged hotfix turns `back-merge` red on the next promotion, and merging a hotfix opens a main → dev PR | NOT RUN | Needs the sandbox run (operator follow-up 4). Offline: real-git tests on throwaway repos show that a hotfix on `main` is found, a merge-commit back-merge clears it, a squashed back-merge does not, and a shallow clone exits 2. A local dry run of `back-merge.yml`'s compare step printed `status=1` and the hotfix SHA, then `status=0` after a back-merge, then `status=2` on a `--depth 1` clone. |
-| ac4 — protect-main is merge-only and requires `ci`, `promotion-source`, `back-merge`; protect-dev requires `ci` and allows squash + merge | NOT RUN | A GitHub settings change (operator follow-up 2). I read the current state with `gh api repos/{owner}/{repo}/rulesets/<id>`. protect-main: `allowed_merge_methods: ["merge"]`, required `ci` only, `strict_required_status_checks_policy: false`. protect-dev: `["merge","squash"]`, required `ci`. protect-dev already meets ac4; protect-main needs the two new checks. |
+| ac1 — task/* → main shows a red `promotion-source` and merging is blocked; dev and hotfix/* pass | PASS | **#99** (`task/throwaway-promotion-guard` → `main`): `promotion-source` failed with ``FAILED: `task/throwaway-promotion-guard` → `main` is not allowed. Only `dev` … or `hotfix/<slug>` …``. `ci` and `back-merge` were green, and the API reported `mergeStateStatus: BLOCKED`, with `promotion-source` the only failing required check. The check runs come from GitHub Actions (app 15368), the source the ruleset requires. **Passing heads:** the real promotion #96 (`dev`) had its source step report `` `dev` → `main`: a promotion``, and sandbox #1 (`hotfix/sandbox-fix`) passed `promotion-source`. |
+| ac2 — promotion/hotfix templates have the sections, and `promotion-source` fails while Dev build or validate-dev is blank | PASS | The templates have the sections listed under the `pr-templates` node. **#100** (dev → main, with `Dev build:` filled and `validate-dev run:` blank): `promotion-source` went red, then green after the line was filled in and the description saved, which re-ran it on `edited`. Charlie confirmed this as "fully successful". **#96** was first opened with the default task template, and its template step failed with both lines `missing`. **#99** used an untouched `promotion.md`, and its template step failed with both lines `blank`. The hotfix template's two lines were exercised by sandbox #1 (filled, green). |
+| ac3 — an un-back-merged hotfix turns `back-merge` red on the next promotion, and merging a hotfix opens a main → dev PR | PASS | **Sandbox run.** Merging hotfix #1 pushed to `main`, and back-merge.yml run 36287123219 then ran its "Open the back-merge pull request" step. It opened **#3 "Back-merge main → dev"**: author `app/github-actions`, head `main`, base `dev`, label `back-merge`, and the token created that label itself. On promotion #2, the re-run `back-merge` (run 36286890861) failed with ``FAILED: `main` has 1 non-merge commit(s) that `dev` lacks`` and named `378e124c… Sandbox hotfix`. **The PM's question:** #3's required `ci` was satisfied by the push run on `main`'s head commit (app 15368, merge state `UNSTABLE`, not `BLOCKED`), and #3 merged. **After the merge:** `dev` head `0f40bd3` is a two-parent merge commit containing `378e124`, and `main` still exists at `c2184af`. #2's `back-merge` re-ran by itself on `0f40bd3` and passed at 02:01:59Z, 15 s after #3 merged at 02:01:44Z. No second back-merge PR was opened. |
+| ac4 — protect-main is merge-only and requires `ci`, `promotion-source`, `back-merge`; protect-dev requires `ci` and allows squash + merge | PASS | Exports in `docs/process/rulesets/` (#98). **protect-main:** `allowed_merge_methods: ["merge"]`; required `ci`, `promotion-source`, `back-merge`; `strict_required_status_checks_policy: false` (strict off, as the PM amended); `bypass_actors: []`. **protect-dev:** `["merge","squash"]`, required `ci`, strict off, `bypass_actors: []`. Charlie confirmed both in the UI. |
 | ac5 — the guard script has offline unit tests for every head/base combination and the empty-field cases | PASS | `uv run pytest tests/scripts/test_check_promotion_source.py` → `113 passed in 2.00s`. The tests cover heads into `main` (4 accepted, 21 rejected), 5 heads × 4 bases other than main, empty base and empty head, forks, and half-known repositories. For the template they cover missing, blank, comment-only, CRLF, bold/list forms, first-occurrence and honest "none yet" values. |
 | guard-script: Guard script tests pass offline | PASS | `uv run pytest tests/scripts/test_check_promotion_source.py` → `113 passed in 2.00s` (default options: xdist, coverage, `--disable-socket`) |
 | guard-script: A dev head into main is accepted | PASS | `uv run scripts/check_promotion_source.py source --base main --head dev` → `OK: \`dev\` → \`main\`: a promotion.`, exit 0 |
@@ -50,9 +56,9 @@ are written out in full under Operator follow-ups. **What the PM should look at 
 | pr-templates: Task template asks for the spec path | PASS | `grep -n "^Spec:" .github/pull_request_template.md` → line 12 |
 | guard-workflows: Guard workflow defines the promotion-source job | PASS | `grep -n promotion-source .github/workflows/promotion-guard.yml` → line 38 `  promotion-source:` (job `name: promotion-source`) |
 | guard-workflows: Workflows pass actionlint | PASS | `uvx --from actionlint-py actionlint .github/workflows/promotion-guard.yml .github/workflows/back-merge.yml` (actionlint 1.7.12, shellcheck 0.11.0 on PATH) → no output, exit 0. actionlint is not installed on this Mac, so uvx fetched the release binary. |
-| ruleset-wiring: Rulesets are readable via the API | NOT RUN | `gh api 'repos/{owner}/{repo}/rulesets'` works now: it returns 2 rulesets, exit 0. But the criterion means after the tightening, which has not happened. |
-| ruleset-wiring: Ruleset settings confirmed in the UI | NOT RUN | Charlie's confirmation (operator follow-up 2). |
-| negative-proof: Blocked merges observed | NOT RUN | Charlie's confirmation (operator follow-up 4). |
+| ruleset-wiring: Rulesets are readable via the API | PASS | `gh api repos/{owner}/{repo}/rulesets/<id>` after the tightening: that is how the exports in #98 were made, and both files hold the settings listed under ac4. |
+| ruleset-wiring: Ruleset settings confirmed in the UI | PASS | Charlie confirmed protect-main (merge commit only, the three required checks) and protect-dev (`ci` required, squash and merge allowed) in the UI, 2026-09-26. |
+| negative-proof: Blocked merges observed | PASS | #99: red `promotion-source`, `BLOCKED`. #100: red `promotion-source` on a blank validate-dev line. Sandbox #2: red `back-merge` naming the un-back-merged hotfix. Sandbox #3: opened automatically by back-merge.yml. All throwaway PRs were closed (#99 and #100 closed, sandbox #1–#3 merged). |
 
 Also run: `uv run scripts/validate_specs.py` → `OK: 284 files, 38 epics, 226 tasks, 20 releases`.
 `uv run pytest tests/docs tests/specs tests/scripts` → `391 passed`. pre-commit on the changed
@@ -152,6 +158,17 @@ this worktree → `OK`, exit 0. A promotion from the current `dev` passes `back-
   `GIT_CONFIG_GLOBAL=/dev/null`, so neither the surrounding worktree nor user config leaks in.
 
 ## Operator follow-ups
+
+**All done on 2026-09-26.** Everything below was run by the operator: the promotion (#96), the
+Actions setting, the ruleset change, the exports (#98) and the negative proof (#99, #100, sandbox
+#1–#3). It is kept as the record of what was run. One step is still open: deleting the sandbox
+repository needs a `gh` token with the `delete_repo` scope (see Follow-up work).
+
+Two corrections to the commands, learned during the run. **`gh pr checks --watch` straight after
+`gh pr create`** returns at once with "no checks reported", because GitHub hasn't registered the
+checks yet, so a `gh pr merge` that follows it is refused. Wait about 15 seconds, or re-run the
+watch. The same applies to `gh run list --limit 1` straight after a push; filter it with
+`--commit <sha>`.
 
 Run these in order. Steps 2–4 depend on this task being on `main`, not only on `dev`.
 
@@ -273,8 +290,6 @@ Once Charlie confirms steps 2 and 4, set the Goal to `Succeeded`:
 
 ## Follow-up work
 
-* **PM: the ruleset JSON exports** (`docs/process/rulesets/*.json`) are outputs of this task that
-  can only exist after step 2. They need a follow-up PR if this task merges `--partial`.
 * **v1-e01-t09 / v1-e01-t10:** once pre-releases and `validate-dev` exist, `template` could
   require `validate-dev run:` to be a link to a run of that workflow. That also needs the
   "none yet" paragraphs removed from both templates and from branching-and-environments.md.
@@ -282,6 +297,28 @@ Once Charlie confirms steps 2 and 4, set the Goal to `Succeeded`:
   itself (see Decisions, "Known limit"). If that ever matters beyond an admin-only merge, the
   options are a GitHub App token check run from the base branch, or the ruleset "require
   workflows" feature where the plan allows it.
+* **PM ruling needed before the first real hotfix: a stale green `back-merge` on an open
+  promotion PR.** The sandbox reproduced it. Promotion #2 was open before hotfix #1 merged, and
+  it kept `back-merge pass` after the hotfix landed. Merging into `main` doesn't re-run the checks
+  on PRs already open against it, GitHub has no "base branch moved" event, and strict mode is
+  (rightly) off. Until something re-runs the check, that promotion can merge with prod running a
+  combination dev never validated. No content is lost, and the next promotion's `back-merge`
+  catches it, but it is exactly what the check is meant to stop. Two options:
+  * **Process only:** after a hotfix merges, re-run the checks on every open promotion PR (re-run
+    the job, or edit the description). Say so in the hotfix template and
+    branching-and-environments.md.
+  * **Mechanical:** give `back-merge.yml` `actions: write` on its push-to-main job, and have it
+    re-run `promotion-guard.yml` for open PRs into `main`. The job never runs PR code, so the
+    permission is as safe as the existing `pull-requests: write`. It is a spec change to
+    `guard-workflows`, so an E01 hardening task.
+
+  I'd take the mechanical option. It is about ten lines, and the process-only option depends on
+  remembering it during an incident.
+* **Operator: delete the sandbox repository** `charlesclark2/promotion-guard-sandbox`. It is
+  public and holds a copy of the repository as of 2026-09-26.
+  `gh auth refresh -h github.com -s delete_repo`, then
+  `gh repo delete charlesclark2/promotion-guard-sandbox --yes`, or delete it from Settings →
+  Danger Zone in the browser.
 
 ## PM review
 

@@ -67,7 +67,7 @@ spec:
         import-boundaries is already a job in ci.yml and already in `ci`'s needs; this task fills it
         with contracts that bite rather than wiring it up.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

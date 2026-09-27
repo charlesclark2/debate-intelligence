@@ -187,9 +187,59 @@ None. Every command in this report ran in under a minute.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**
 
 **Notes:**
+
+Accepted, phase stays `Succeeded`. All three questions go the session's way. Verified after the
+rebase onto `origin/dev`: 2809 passed, 1 skipped; `lint-imports` reports 10 contracts kept, 0
+broken; `check_thin_handlers.py` reports 16 handlers within 25 statements.
+
+**The exception lists are ratchets, and that is what makes them legitimate.** Recording a
+violation and weakening a contract look similar in a diff and are opposites in effect. What
+separates them here is that a new violation fails, an existing one cannot grow, and a fixed one
+forces its own entry out — so the lists can only shrink. I checked the mechanism rather than the
+claim: `check_thin_handlers.py` reports a stale entry as its own failure and refuses growth, and
+import-linter errors on an `ignore_imports` matching nothing. Four *exact* imports with no
+wildcards is not what the forbidden list means by broad.
+
+One hardening I added rather than sending back: that last property was relying on
+`unmatched_ignore_imports_alerting` defaulting to `error`. It is now stated explicitly in
+pyproject.toml with a comment saying why. A default is not a guarantee, and the whole design rests
+on this one.
+
+**ac1's "on main" was corrected, not satisfied.** You flagged it and offered to flip to NOT RUN with
+the phase back to InProgress. Declining that is deliberate. The wording predates the branching
+model: `dev` is the integration branch, `main` is a release pointer nothing reaches except through
+a green `ci`, and `main` today is still at the September site launch. Measuring after a promotion
+would test older code and hold this task open for weeks to learn nothing. The criterion now says
+what it means — passes against the real package tree, not only fixtures, enforced on every pull
+request by the `import-boundaries` job inside the required check.
+
+**ac2 is what makes this task worth having.** Twenty-six cases, each constructing a real violation
+in a copy of the real packages and asserting both that `lint-imports` fails and that the right
+contract is named. A suite that fails when a contract is added without a case is the part I would
+not have specified and should have. Weakening two contracts to confirm the tests go red is the same
+instinct: a test that has never been seen to fail is a claim, not evidence.
+
+**The five violations now have an owner.** `v1-e01-t13-composition-root-cleanup` is filed: move the
+four adapter imports into `debate_cli.container`, bring `caselist pull` under budget by pushing
+run-mode sequencing into `CaselistSyncService`, and empty both lists. A ratchet with nobody turning
+it stays where it is, and these are not style preferences — they are the composition root being
+bypassed, which is the one thing a composition root exists to prevent.
+
+**Unrelated finding this task surfaced, fixed on dev as #106.** The suite failed once here on
+`tests/scripts/test_parser_corpus_health.py` and passed on the next run. The cause was not this
+branch: `build_docx` called `writestr` with a bare name, so Python stamped `time.localtime()` into
+every zip entry and the same logical document built twice differed whenever the two calls straddled
+a second. In a project that content-addresses everything, a non-deterministic fixture builder means
+any dedupe assertion can miscount under load — it failed on a 119-second run and passed on a
+79-second one. Pinned to a fixed timestamp on dev rather than patched in the test, because fixing
+the test would have hidden it.
+
+**One process note against myself.** I wrote these notes into a commit message first and only then
+into the report, which is backwards: `scripts/task pr` reads the report, and the report is what
+survives. That cost an extra round trip.

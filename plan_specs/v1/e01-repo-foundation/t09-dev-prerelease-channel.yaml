@@ -50,6 +50,8 @@ spec:
       - Dev and prod profiles sharing a data dir, model-routing file or budget
       - Real student names, emails or scouting data in pre-release assets, test fixtures or build logs
       - Secrets, .env files or local data dirs inside built wheels
+      - Resolving `debate-core` or `debate-cli` from any public index during an install
+      - A shared concurrency group that lets one dev merge cancel another's queued pre-release
   context:
     - kind: TaskRef
       name: v1-e01-t08-branch-promotion-workflow
@@ -69,6 +71,19 @@ spec:
       description: >-
         Two consecutive dev merges produce dev.N and dev.N+1 (never a reused number, even when runs
         overlap), and the wheel version is the PEP 440 X.Y.Z.devN that sorts before X.Y.Z.
+    - id: ac2b
+      description: >-
+        An installed build cannot resolve a first-party package from a public index. The wheels are
+        named `debate-core` and `debate-cli`, neither is registered on PyPI, and
+        `uv tool install --find-links <dir> debate-cli==<version>` leaves the default index in the
+        resolution set - so anyone who registers `debate-core` there can satisfy `debate-cli`'s
+        dependency on it with a higher version and take over the install. That install becomes the
+        binary a weekly launchd agent executes unattended (v1-e34-t05), which turns a name squat into
+        scheduled code execution on the operator's machine. Third-party dependencies still come from
+        PyPI as normal; only `debate-core` and `debate-cli` must be unable to. A test proves it: with
+        a find-links directory holding the real wheels and a decoy higher-versioned `debate-core`
+        reachable from a second index, the install either takes the local wheel or fails, and never
+        takes the decoy.
     - id: ac3
       description: >-
         On a clean machine, scripts/install_channel.sh <tag> installs `debate-research`, and

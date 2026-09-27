@@ -8,7 +8,7 @@ It is `v1-e30-t06-initial-backfill`. The results go in
 | | |
 |---|---|
 | Runs on | Charlie's Mac, by hand, one sitting per day |
-| Elapsed time | **Six days** of weekly archives, with one spare download on the last day. The complete archive is not in this plan yet: see [The complete archive](#the-complete-archive-blocked-waiting-on-the-pm) |
+| Elapsed time | **Six days** of weekly archives, with one spare download on the last day. The complete archive is not part of this backfill: see [The complete archive](#the-complete-archive-not-part-of-this-backfill) |
 | Hands-on time | About 15 minutes a day; day 1 about 45 minutes |
 | Priority | **HS LD first**, finished on day 1. Policy and PF share the days after that |
 | Local store | `~/.debate-research/dev`, **one store for both environments** |
@@ -61,16 +61,16 @@ summary.
 
 All three caselists list one complete archive (`<slug>-all-<date>.zip`) beside their weeklies:
 12 or 13 archives each, one of them FULL, in the 2026-09-25 dry run. That confirms the assumption
-in ADR-0017's last consequence, but see the next section.
+in ADR-0017's last consequence; the next section says why none is fetched here.
 
-## The complete archive: blocked, waiting on the PM
+## The complete archive: not part of this backfill
 
-[ADR-0017](../adr/0017-caselist-corpus-is-retrievable.md) decision 1 says the backfill starts with
-`<caselist>-all-<date>.zip` and imports it as the baseline. **With the code that exists today it
-cannot be imported correctly, so this runbook does not fetch it.** The PM decides how it gets in
-(session report, Deviations).
+[ADR-0017's revision of 2026-09-26](../adr/0017-caselist-corpus-is-retrievable.md) takes the
+complete archive out of this task: **the backfill is the dated weekly series alone, oldest
+first.** No `<slug>-all-<date>.zip` is downloaded or imported, in any environment, until
+`v1-e34-t04-full-archive-refresh` gives it a snapshot namespace of its own.
 
-What goes wrong if it is imported with `caselist import` anyway:
+Why it cannot simply be imported with `caselist import`:
 
 * **It collides with a weekly.** A snapshot is a caselist plus a date, and the complete archive
   carries the same date as that week's weekly. Both would claim
@@ -82,15 +82,9 @@ What goes wrong if it is imported with `caselist import` anyway:
   so importing a complete archive dated 09-22 before the weeklies would leave all of them
   unfetched.
 
-`pull` never fetches it (`full_archive_not_pulled_weekly`). Importing it as a snapshot of its own
-kind is `v1-e34-t04-full-archive-refresh` ac4, and that task depends on this one.
-
-**Until the PM rules:** do not download a `-all-` archive, and never pass one to `caselist
-import`. Downloading one now would spend a slot on a file nothing can ingest, and the site
-regenerates it every week anyway. The weekly plan below does not depend on the ruling: under
-every option on the table, the weeklies go in oldest first. If the ruling adds the three complete
-archives to this backfill, they need three more downloads, which is the spare slot on day 6 plus
-most of a seventh day.
+`pull` never fetches one (`full_archive_not_pulled_weekly`), so the daily runs below cannot do so
+by accident. **Never download a `-all-` archive by hand, and never pass one to `caselist
+import`.** The withdrawal count, which needs one, is `v1-e34-t04`'s.
 
 ## Before day 1
 
@@ -357,7 +351,7 @@ For the camp files, the counts are in `$LOG/openev-2026-policy.json` (`members`,
 Seconds each. The member count includes skipped junk, so NEW + UNCHANGED + CHANGED + DUPLICATE +
 SUPPRESSED + skipped = members. The REMOVED column is **paths no longer present**, not files taken
 down. See the note at the top of the summary. The withdrawal count needs the complete archive and
-waits on the PM.
+is deferred to `v1-e34-t04`.
 
 ## Spot check in dev
 

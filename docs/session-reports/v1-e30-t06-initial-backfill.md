@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml`](../../plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml) |
 | Epic / release | `v1-e30-caselist-ingestion` / `v1.1` |
 | Branch | `task/v1-e30-t06-initial-backfill` |
-| Session status | PARTIAL: runbook and template done; backfill day 1 of 6 run by the operator on 2026-09-26; the complete-archive step is blocked on a PM decision |
+| Session status | PARTIAL: runbook and template done; backfill day 1 of 6 run by the operator on 2026-09-26; days 2–6, the spot check and the prod publish remain |
 
 
 ## Summary
@@ -30,10 +30,9 @@ finish on 1 October.
 
 **Three things for the PM, in order:**
 
-1. **Deviation 1 needs a ruling.** The complete archive, which ADR-0017 says the backfill starts
-   from, cannot be imported correctly by any code that exists today. At Charlie's direction the
-   runbook stops there, and the withdrawal half of ac2 waits on the ruling. The weekly backfill
-   does not depend on the ruling and is going ahead.
+1. **Deviation 1 is resolved** by PM ruling #93: the backfill is the weekly series alone, and the
+   withdrawal figure is deferred to `v1-e34-t04`. The runbook and summary now say so. Nothing in
+   the daily plan changed.
 2. **The camp files all imported as camp `UNKNOWN`** (Follow-up work). The bytes and manifest are
    correct; the importer reads the camp from the wrong end of the filename.
 3. **A weekly import's NEW is not "new evidence"** (Follow-up work). It is measured against the
@@ -41,7 +40,7 @@ finish on 1 October.
    files first seen instead.
 
 **The Goal stays `InProgress`.** Days 2–6, the final dev check, the coach's spot check and the prod
-publish are still to run, and ac2's withdrawal figure needs the ruling on Deviation 1.
+publish are still to run.
 
 ## Plan nodes
 
@@ -61,7 +60,7 @@ day 1 run the same afternoon (21:34–21:40 UTC), pasted into the session.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | **ac1** — the runbook gives the exact operator commands (import order 0901 → 0908 → 0915, OpenEv import, dev publish, status, prod publish with `--confirm-prod`) and expected durations | PASS, with Deviation 2 | Every item is in `docs/runbooks/caselist-backfill.md`. The 0901 → 0908 → 0915 imports are day 1 step 3; `pull` fetches 08-11 to 08-25 before them, because the importer enforces order (Deviation 2). The durations are estimates scaled from the measured 34 s, five-weekly run of 2026-09-24 and marked as estimates. |
-| **ac2** — per-snapshot member and classification counts, dedupe rate, PDF/.doc and unparsed counts, bytes stored; path-level REMOVED labelled as such; withdrawals against the full archive reported separately; the measured 11% stated | NOT RUN (partly recorded) | Recorded from real runs so far: 13 per-snapshot rows (hsld26 07-07 to 09-22, hspolicy26 07-07) with every required column, the OpenEv row, the hsld26 dedupe rate (3,629 → 3,036, 16.3%), and bytes on disk after day 1 (460,988 KiB). The path-level column is headed **Paths no longer present** and never called removals (685 for 09-15, matching `v1-e30-t03`; 1,462 for 09-22). The 11% measurement is stated. Still to come: Policy/PF rows (days 2–6), final bytes, and the withdrawal figure, which is blocked on Deviation 1. |
+| **ac2** — per-snapshot member and classification counts, dedupe rate, PDF/.doc and unparsed counts, bytes stored; path-level REMOVED labelled as such; withdrawals against the full archive reported separately; the measured 11% stated | NOT RUN (partly recorded) | Recorded from real runs so far: 13 per-snapshot rows (hsld26 07-07 to 09-22, hspolicy26 07-07) with every required column, the OpenEv row, the hsld26 dedupe rate (3,629 → 3,036, 16.3%), and bytes on disk after day 1 (460,988 KiB). The path-level column is headed **Paths no longer present** and never called removals (685 for 09-15, matching `v1-e30-t03`; 1,462 for 09-22). The 11% measurement is stated. Still to come: Policy/PF rows (days 2–6) and final bytes. The withdrawal figure is out of scope under the amended ac2 (ruling #93) and is named in the summary as deferred to `v1-e34-t04`. |
 | **ac3** — hsld26 09-01/09-08/09-15 and OpenEv manifests in the dev bucket; dev `caselist status` shows no drift | NOT RUN (evidence in hand, final check after day 6) | Day 1, 2026-09-26, operator: `caselist status` → exit 0, **Every snapshot agrees**, 14 snapshots including hsld26 09-01 (59/59), 09-08 (678/678), 09-15 (1,487/1,487) and openev 2026-policy (102/102), 0 missing, 0 mismatches. Left NOT RUN until the whole backfill is published and checked again, which is when the summary records its status line. |
 | **ac4** — coach spot-checked at least 20 disclosures in dev | NOT RUN | Coach. |
 | **ac5** — the same manifests in prod; prod `caselist status` shows no drift, with the date | NOT RUN | Operator, after ac3 and ac4. |
@@ -104,8 +103,8 @@ operator's machine, each finishing in seconds (working agreements §2):
 
 ## Deviations from the spec
 
-1. **The complete archive cannot be imported, so the "complete archive first" step is blocked.
-   PM decision needed.** The spec says "the run downloads `<caselist>-all-<date>.zip` first and
+1. **The complete archive cannot be imported. Resolved by PM ruling #93 (2026-09-26), option (b):
+   the backfill is the weekly series alone.** The spec says "the run downloads `<caselist>-all-<date>.zip` first and
    imports it as the corpus" (ADR-0017 decision 1), and ac2 asks for withdrawals measured "against
    the complete archive". With the code on `dev`:
    * a snapshot is a (caselist, date) pair, and the complete archive has the same date as that
@@ -128,8 +127,14 @@ operator's machine, each finishing in seconds (working agreements §2):
    (full archive as its own snapshot kind, plus the withdrawal count) ahead of this task, and add
    a complete-archive stage here; (b) take the complete archive and the withdrawal half of ac2 out
    of this task and let `v1-e34-t04` own both; (c) amend ADR-0017 decision 1, which has the order
-   the wrong way round for the importer as it stands. ac2 is FAIL as written until one of these
-   is chosen.
+   the wrong way round for the importer as it stands.
+
+   **Ruling (#93, 2026-09-26):** option (b), together with (c). ADR-0017 gained a revision saying
+   the backfill is built from the weekly series alone, the spec's description and ac2 now name the
+   withdrawal figure as deferred to `v1-e34-t04`, and `v1-e34-t04` gained ac0 (a snapshot
+   namespace of its own). The runbook's complete-archive section and the summary's withdrawal
+   section were updated to match. The daily plan is unchanged, because it already covered only the
+   weeklies. Deviation 1 no longer blocks anything.
 
 2. **ac1 and the `local-import` node describe a manual sequence; the runbook uses `pull`.** The
    spec was written before `v1-e34-t02` shipped. The runbook uses `pull` for every download,
@@ -195,8 +200,7 @@ operator's machine, each finishing in seconds (working agreements §2):
 4. **Coach spot check:** 20 disclosures, tallies only.
 5. **Prod publish:** runbook section, with `DEBATE_STORAGE__DATA_DIR` naming the dev store and
    `--confirm-prod`. Record `prod status: in sync` and the date.
-6. **Set the Goal to `Succeeded`** only once every criterion has passed and the PM has ruled on
-   Deviation 1: `uv run scripts/task_helper.py set-phase v1-e30-t06-initial-backfill Succeeded`.
+6. **Set the Goal to `Succeeded`** only once every criterion has passed: `uv run scripts/task_helper.py set-phase v1-e30-t06-initial-backfill Succeeded`.
 
 ## Follow-up work
 

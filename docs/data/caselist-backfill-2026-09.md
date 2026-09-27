@@ -23,8 +23,8 @@ Two different numbers answer "what was removed", and they must not be confused.
   reports 36 of them, which is every path in the week before.
 * **Withdrawals.** A sha256 present in an earlier snapshot and absent from the complete archive
   (`<slug>-all-<date>.zip`). This one does mean withdrawn from the caselist. It needs the complete
-  archive, which this backfill cannot import yet (runbook, *The complete archive*), so it is
-  **not yet measured**.
+  archive, which this backfill does not import (ADR-0017, revision of 2026-09-26), so it is
+  **deferred to `v1-e34-t04-full-archive-refresh`**. It is not zero; it is not measured here.
 
 This document never reports the first number as removals or takedowns.
 
@@ -85,8 +85,7 @@ hspolicy26 rows are day 1, step 5 (run `20260926T213709Z`): 943 imported (941 + 
 683 new blobs.
 
 The 09-15 row's 685 paths no longer present is the same figure `v1-e30-t03` measured, and 09-22's
-1,462 is larger still. Neither is a takedown count: with the complete archive not yet imported,
-this document has no withdrawal figure (below).
+1,462 is larger still. Neither is a takedown count. The withdrawal figure is deferred to `v1-e34-t04` (below).
 
 Rows for the remaining snapshots are appended in date order, per caselist, as the operator
 records them.
@@ -160,9 +159,12 @@ finished backfill. It was 48,428 KiB for the five held weeks before the backfill
 
 ## Withdrawals against the complete archive
 
-_Not yet measured._ Needs the complete archive imported as its own kind of snapshot, which the
-PM has to decide how to schedule (session report, Deviations). Reported per caselist as a count
-only, beside the path-level figure above, never merged with it.
+**Deferred to `v1-e34-t04-full-archive-refresh`; not measured by this backfill.** A withdrawal is
+a sha256 present in an earlier snapshot and absent from the complete archive. This task imports no
+complete archive (ADR-0017, revision of 2026-09-26; spec ac2 as amended the same day), because one
+would share a snapshot key with that week's weekly. `v1-e34-t04` designs the separate snapshot
+namespace that makes one importable, and reports this count there, per caselist and apart from the
+path-level figure above. The blank here is not a zero.
 
 ## Pull runs
 

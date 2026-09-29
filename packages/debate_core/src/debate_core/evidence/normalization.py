@@ -321,15 +321,13 @@ class OffsetMap:
         return self._normalized_position_starting_at(start), self._normalized_position_ending_at(end)
 
     def _raw_position_starting_at(self, normalized: int) -> int:
-        if not self._visible:
-            return 0
         segment = self.segments[self._visible[bisect.bisect_right(self._visible_starts, normalized) - 1]]
         if segment.exact:
             return segment.raw_start + (normalized - segment.normalized_start)
         return segment.raw_start
 
     def _raw_position_ending_at(self, normalized: int) -> int:
-        if normalized == 0 or not self._visible:
+        if normalized == 0:
             return 0
         segment = self.segments[self._visible[bisect.bisect_left(self._visible_starts, normalized) - 1]]
         if segment.exact:

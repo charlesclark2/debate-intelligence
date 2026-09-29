@@ -19,6 +19,8 @@ from debate_core.evidence.normalization import (
     NORMALIZER_VERSION,
     SUPPORTED_NORMALIZER_VERSIONS,
     InvalidTextError,
+    OffsetMap,
+    OffsetSegment,
     UnicodeDatabaseMismatchError,
     UnknownNormalizerVersionError,
     UnknownParagraphError,
@@ -442,3 +444,19 @@ def test_offset_map_rejects_ranges_outside_the_text(start: int, end: int) -> Non
         result.to_raw_range(start, end)
     with pytest.raises(ValueError, match="outside"):
         result.to_normalized_range(start, end)
+
+
+@pytest.mark.parametrize(
+    ("segments", "raw_length", "normalized_length"),
+    [
+        ((OffsetSegment(0, 2, 0, 2, exact=True), OffsetSegment(3, 4, 2, 3, exact=True)), 4, 3),
+        ((OffsetSegment(0, 2, 0, 1, exact=True),), 2, 1),  # exact but lengths differ
+        ((OffsetSegment(0, 0, 0, 1, exact=False),), 0, 1),  # an insertion from no raw text
+        ((OffsetSegment(0, 2, 0, 2, exact=True),), 3, 2),  # raw text left uncovered
+    ],
+)
+def test_offset_map_refuses_segments_that_are_not_an_alignment(
+    segments: tuple[OffsetSegment, ...], raw_length: int, normalized_length: int
+) -> None:
+    with pytest.raises(ValueError, match="offset segments"):
+        OffsetMap(segments, raw_length=raw_length, normalized_length=normalized_length)

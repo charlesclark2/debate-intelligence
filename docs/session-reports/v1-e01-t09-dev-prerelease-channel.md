@@ -70,6 +70,15 @@ replaces the spec's single serial group (Deviations §1).
 
 Whole-repo checks, run at the end:
 
+* **Full suite after the ac2b change, run by the operator** (2026-09-28, 23:51 CDT, on the branch
+  re-synced onto current `dev`): `uv run pytest -q` → `4 failed, 2908 passed, 1 skipped in 44.01s`.
+  The four failures are the known ledger day-boundary defect (v1-e34-t06), in exactly the documented
+  places. Two are in `commands/test_caselist_runs.py` (`test_a_cap_blocked_pull_is_not_captioned_nothing_new`,
+  `test_a_truncated_pull_states_wanted_and_deferred_and_the_next_run_carries_the_backlog`). The other
+  two are the `test_help_rendering.py` narrow/wide wrappers, which fail only because they re-run the
+  second of those in a subprocess. The runs are stamped `20260929T0451Z`, after 19:00 CDT. None of them
+  touches this task's code. 2913 collected = 2908 + 4 + 1, so every test ran; the count is above my
+  earlier ~2848 estimate because the re-sync brought in other tasks' tests.
 * After the ac2b change: `uv run pytest tests/scripts packages/debate_cli/tests packages/debate_core/tests/application/test_settings_environments.py packages/debate_core/tests/application/test_settings.py tests/docs -q` → `692 passed in 111.26s`. The full suite was not re-run: it now exceeds the 2-minute hand-off line, so it is an operator command below.
 * Before the ac2b change: `uv run pytest -q` → `2843 passed, 1 skipped in 121.71s`, no failures. It took **2m21s wall-clock**
   on this machine, not the ~42 s the kickoff notes gave, so it crossed the 2-minute hand-off line
@@ -209,7 +218,7 @@ was re-based onto mid-session; this task did not edit any spec.)
 
 ## Operator follow-ups
 
-**0. Full suite after the ac2b change** (about 2.5 min, so handed over per working-agreements §2).
+**0. Full suite after the ac2b change** — DONE by the operator: `4 failed, 2908 passed, 1 skipped in 44.01s`, and the 4 are the known ledger day-boundary failures (see Acceptance criteria).
 Where: this worktree.
 ```bash
 uv run pytest -q
@@ -279,7 +288,7 @@ the pyproject version) whose tag SHA equals the hotfix head. Delete the branch a
 * **No `actionlint` in CI** (v1-e01-t04 owns `ci.yml`). A change to `dev-prerelease.yml` gets no
   lint on its PR, and the workflow's first real run is after merge. A small `actionlint` job in the
   `ci` aggregate would catch syntax errors earlier.
-* **Full-suite runtime** (kept here per the PM; not to be fixed in this task). `uv run pytest -q` took 2m21s wall-clock here (`--numprocesses=auto`,
+* **Full-suite runtime** (kept here per the PM; not to be fixed in this task). The operator's run on 2026-09-28 took **44 s**, in line with the kickoff notes, so the session's 2m21s (and the 1m52s partial run) look like load on the session's machine rather than a regression. Recorded rather than closed: `uv run pytest -q` took 2m21s wall-clock here (`--numprocesses=auto`,
   coverage on), against the ~42 s quoted in the kickoff notes. Worth checking whether that is this
   machine's load or a real regression on dev.
 * **validate-dev (v1-e01-t10)** can reuse `scripts/install_channel.sh --dir <assets> <tag>` after

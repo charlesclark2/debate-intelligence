@@ -133,6 +133,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -1240,33 +1241,44 @@ class CaselistSyncService:
         return max(found) if found else None
 
     async def _select_openev(self, *, inbox_names: frozenset[str]) -> list[OpenEvSelection]:
-        """Decide about every OpenEv camp file the API lists for the configured year."""
+        """Decide about every OpenEv camp file the API lists for the configured year.
+
+        "Already imported" is decided against what the release manifest records, not against the
+        name the sync would give the file (`v1-e34-t06` ac3): a camp file imported by hand through
+        `caselist import-openev` is recorded under its own path. See :func:`_held_openev_ids`.
+        """
         files = await self._source.list_openev(year=self._openev_year)
-        recorded: dict[tuple[int, Event], _RecordedOpenEv] = {}
-        selections: list[OpenEvSelection] = []
+        placed: list[tuple[OpenEvFile, int, Event | None]] = []
+        by_release: dict[tuple[int, Event], list[OpenEvFile]] = {}
         for file in files:
-            inbox_name = openev_inbox_name(file)
             event = _openev_event_of(file, self._openev_event)
             year = file.year or self._openev_year or self._clock().year
+            placed.append((file, year, event))
+            if event is not None:
+                by_release.setdefault((year, event), []).append(file)
+        recorded = {release: self._recorded_openev(*release) for release in by_release}
+        held = {
+            release: _held_openev_ids(listed, recorded[release].paths)
+            for release, listed in by_release.items()
+        }
+        selections: list[OpenEvSelection] = []
+        for file, year, event in placed:
+            inbox_name = openev_inbox_name(file)
             if event is None:
                 decision = SelectionDecision.NO_EVENT_CONFIGURED
+            elif file.openev_id in held[(year, event)]:
+                decision = SelectionDecision.ALREADY_IMPORTED
+            elif inbox_name in inbox_names:
+                # In the inbox. Imported already if a manifest row came from these very bytes (a
+                # camp release that is a zip records its members, not its own name); otherwise its
+                # import failed or never ran, and this run imports it (ac1).
+                decision = (
+                    SelectionDecision.ALREADY_IMPORTED
+                    if _digest_of(self._inbox / inbox_name) in recorded[(year, event)].download_digests
+                    else SelectionDecision.ALREADY_IN_INBOX
+                )
             else:
-                if (year, event) not in recorded:
-                    recorded[(year, event)] = self._recorded_openev(year, event)
-                release = recorded[(year, event)]
-                if inbox_name in release.paths:
-                    decision = SelectionDecision.ALREADY_IMPORTED
-                elif inbox_name in inbox_names:
-                    # In the inbox. Imported already if a manifest row came from these very bytes
-                    # (a camp release that is a zip records its members, not its own name);
-                    # otherwise its import failed or never ran, and this run imports it (ac1).
-                    decision = (
-                        SelectionDecision.ALREADY_IMPORTED
-                        if _digest_of(self._inbox / inbox_name) in release.download_digests
-                        else SelectionDecision.ALREADY_IN_INBOX
-                    )
-                else:
-                    decision = SelectionDecision.DOWNLOAD
+                decision = SelectionDecision.DOWNLOAD
             selections.append(
                 OpenEvSelection(
                     openev_id=file.openev_id,
@@ -1280,7 +1292,12 @@ class CaselistSyncService:
         return selections
 
     def _recorded_openev(self, year: int, event: Event) -> _RecordedOpenEv:
-        """What the release's manifest already records, for the "already imported" checks."""
+        """What the release's manifest already records, for the "already imported" checks.
+
+        A member's path counts only if the importer classified it — stored, or suppressed by the
+        removal process. A skipped member (macOS junk such as `__MACOSX/…/._<name>.docx`) is not a
+        camp file, and its name can read like one.
+        """
         paths: set[str] = set()
         digests: set[str] = set()
         for line in read_manifest_lines(self._manifest_path(openev_manifest_key(year, event))):
@@ -1292,7 +1309,7 @@ class CaselistSyncService:
                 continue
             fields = cast("dict[str, object]", row)
             path = fields.get("path")
-            if isinstance(path, str):
+            if isinstance(path, str) and fields.get("classification") is not None:
                 paths.add(path)
             download = fields.get("archive_sha256")
             if isinstance(download, str):
@@ -2029,6 +2046,80 @@ class _RecordedOpenEv:
 
     paths: frozenset[str]
     download_digests: frozenset[str]
+
+
+_OPENEV_INBOX_PREFIX: Final = re.compile(r"^openev-(\d+)-")
+"""What the sync puts in front of a camp file's name (`openev_inbox_name`), and which file it was."""
+
+_PATH_SEPARATORS: Final = re.compile(r"[\\/]+")
+_NOT_A_NAME_CHARACTER: Final = re.compile(r"[\W_]+")
+
+
+def _comparable_components(path: str) -> tuple[str, ...]:
+    """A path's components as names rather than spellings: case, spacing and punctuation aside.
+
+    `Tamarack/TSF-Estuary Solvency Advocate.docx`, as imported by hand, and
+    `openev-512-TSF-Estuary_Solvency_Advocate.docx`, as the sync names it once its prefix is off,
+    end in the same component.
+    """
+    return tuple(
+        comparable
+        for part in _PATH_SEPARATORS.split(path)
+        if (comparable := _NOT_A_NAME_CHARACTER.sub("_", part.casefold()).strip("_"))
+    )
+
+
+def _held_openev_ids(listed: Sequence[OpenEvFile], recorded_paths: Iterable[str]) -> frozenset[int]:
+    """The listed camp files a release manifest already records, however they were imported.
+
+    A recorded path names a listed file in one of two ways:
+
+    * **By id.** A file name starting `openev-<id>-` is one the sync downloaded, or a copy of one,
+      and `<id>` says which.
+    * **By path.** Compared component by component from the file name up with each listed file's
+      own path, the listed file sharing the longest tail is the one recorded — provided no other
+      listed file shares a tail as long. A tie decides nothing: two camps' `Topicality.docx`
+      imported without its folder could be either, and a wrong guess would leave a camp file the
+      store does not hold undownloaded for good. Both are fetched instead, and the one already held
+      costs a download and a `DUPLICATE` row.
+    """
+    ids = {file.openev_id for file in listed}
+    by_name: dict[str, list[tuple[int, tuple[str, ...]]]] = {}
+    for file in listed:
+        components = _comparable_components(file.path)
+        if components:
+            by_name.setdefault(components[-1], []).append((file.openev_id, components))
+    held: set[int] = set()
+    for path in recorded_paths:
+        *folders, name = _PATH_SEPARATORS.split(path)
+        prefixed = _OPENEV_INBOX_PREFIX.match(name)
+        if prefixed is not None:
+            if int(prefixed.group(1)) in ids:
+                held.add(int(prefixed.group(1)))
+                continue
+            name = name[prefixed.end() :]
+        components = _comparable_components("/".join([*folders, name]))
+        if not components:
+            continue
+        shared = [
+            (_shared_tail(components, candidate), openev_id)
+            for openev_id, candidate in by_name.get(components[-1], [])
+        ]
+        longest = max((length for length, _ in shared), default=0)
+        winners = [openev_id for length, openev_id in shared if length == longest]
+        if len(winners) == 1:
+            held.add(winners[0])
+    return frozenset(held)
+
+
+def _shared_tail(one: tuple[str, ...], other: tuple[str, ...]) -> int:
+    """How many trailing components two paths have in common."""
+    shared = 0
+    for left, right in zip(reversed(one), reversed(other), strict=False):
+        if left != right:
+            break
+        shared += 1
+    return shared
 
 
 _DIGEST_CHUNK_BYTES: Final = 1024 * 1024

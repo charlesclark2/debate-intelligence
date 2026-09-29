@@ -56,8 +56,14 @@ from tests.fixtures.openev.build_synthetic_openev import expected as expected_op
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
-from debate_core.application.caselist.manifest import manifest_key, write_manifest
+from debate_core.application.caselist.manifest import (
+    manifest_key,
+    read_manifest_lines,
+    write_manifest,
+    write_manifest_lines,
+)
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
+from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist_sync import (
@@ -80,6 +86,7 @@ from debate_core.application.caselist_sync import (
     StageOutcome,
     SyncRunInProgress,
     SyncStage,
+    _held_openev_ids,  # pyright: ignore[reportPrivateUsage]
     within_daily_budget,
 )
 from debate_core.application.errors import (
@@ -108,7 +115,7 @@ from debate_core.application.sync_runs import (
 )
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore, SqliteDatabase
-from debate_core.integrations.local.archive_reader import read_archive
+from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.local.macos_notifier import MacOsNotifier
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.s3 import S3EvidenceObjectStore
@@ -722,6 +729,256 @@ async def test_retry_a_camp_file_whose_import_failed_is_imported_from_the_inbox(
 
     assert [one.decision for one in third.openev] == [SelectionDecision.ALREADY_IMPORTED]
     assert third.nothing_new, "an imported camp file left in the inbox was imported again"
+
+
+# ------------------------------------------------------------------------------------------------
+# OpenEv selection sees camp files imported by hand (v1-e34-t06 ac3)
+# ------------------------------------------------------------------------------------------------
+#
+# The sync names a camp file it downloads `openev-<id>-<file name>`, and used to decide "already
+# imported" by looking for that name in the release manifest. A camp file imported by hand through
+# `caselist import-openev` is recorded under its own path — `Tamarack/TSF-Estuary Solvency
+# Advocate.docx` — which that check could never see. The listing's own path is what the two share.
+
+OPENEV_MANIFEST = openev_manifest_key(OPENEV_YEAR, Event.POLICY)
+
+
+async def import_openev_by_hand(data_dir: Path, download: Path) -> None:
+    """What `caselist import-openev <download> --year 2026 --event policy` does to the store."""
+    database = SqliteDatabase.open(data_dir)
+    service = OpenEvImportService(
+        caselists=SqliteCaselistRepository(database), blobs=FsSnapshotStore(data_dir)
+    )
+    manifest = FsEvidenceObjectStore(data_dir).path_for(OPENEV_MANIFEST)
+    report = await service.import_release(
+        read_archive(download, **_LIMITS),
+        year=OPENEV_YEAR,
+        event=Event.POLICY,
+        imported_on=date(2026, 9, 10),
+        archive_sha256=archive_digest(download),
+        recorded_manifest=read_manifest_lines(manifest),
+    )
+    write_manifest_lines(report.manifest_lines, manifest)
+
+
+def manifest_paths(data_dir: Path) -> list[str]:
+    rows = [
+        json.loads(line)
+        for line in read_manifest_lines(FsEvidenceObjectStore(data_dir).path_for(OPENEV_MANIFEST))
+    ]
+    return [row["path"] for row in rows if row.get("kind") == "member"]
+
+
+def camp_file(openev_id: int, path: str) -> OpenEvFile:
+    return OpenEvFile(
+        openev_id=openev_id, path=path, filename=path.rsplit("/", 1)[-1], year=OPENEV_YEAR, tags=("policy",)
+    )
+
+
+async def test_openev_a_camp_file_imported_by_hand_is_already_imported_and_costs_no_download(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path], tmp_path: Path
+) -> None:
+    """The addendum download holds `Tamarack/TSF-Estuary Solvency Advocate.docx`: OpenEv file 512.
+
+    Before v1-e34-t06 the sync fetched it again and recorded it a second time, as a DUPLICATE row
+    under `openev-512-TSF-Estuary_Solvency_Advocate.docx`, beside the row it already had.
+    """
+    await import_first_week(data_dir, archives)
+    await import_openev_by_hand(
+        data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy-addendum"]
+    )
+    held = manifest_paths(data_dir)
+    assert "Tamarack/TSF-Estuary Solvency Advocate.docx" in held
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.openev_fetches == [], "a camp file already held was downloaded again"
+    assert [one.decision for one in summary.openev] == [SelectionDecision.ALREADY_IMPORTED]
+    assert manifest_paths(data_dir) == held, "the release manifest gained a second row for the same file"
+
+
+@pytest.mark.parametrize(
+    "listed_path",
+    [
+        f"openev/{OPENEV_YEAR}/Tamarack/TSF-Estuary Solvency Advocate.docx",
+        f"openev/{OPENEV_YEAR}/tamarack/TSF-Estuary_Solvency_Advocate.docx",
+        f"{OPENEV_YEAR}/Tamarack/TSF  Estuary Solvency Advocate.DOCX",
+    ],
+    ids=["as-listed", "case-and-underscores", "spacing-and-extension-case"],
+)
+async def test_openev_a_hand_imported_file_is_matched_through_spelling_differences(
+    listed_path: str, source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    await import_openev_by_hand(
+        data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy-addendum"]
+    )
+    source.archives = {}
+    source.openev_files = [(camp_file(OPENEV_FILE_ID, listed_path), DOCUMENT_BODIES["estuary-solvency"])]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert [one.decision for one in plan.openev] == [SelectionDecision.ALREADY_IMPORTED]
+
+
+async def test_openev_the_folder_decides_between_two_listed_files_of_one_name(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """`Tamarack/TSF-Borrowed Grove Aff.docx` is held; another camp's file of that name is not."""
+    await import_openev_by_hand(data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy"])
+    source.archives = {}
+    source.openev_files = [
+        (camp_file(601, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Borrowed Grove Aff.docx"), b"held"),
+        (camp_file(602, f"openev/{OPENEV_YEAR}/Brightwater/TSF-Borrowed Grove Aff.docx"), b"not held"),
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert {one.openev_id: one.decision for one in plan.openev} == {
+        601: SelectionDecision.ALREADY_IMPORTED,
+        602: SelectionDecision.DOWNLOAD,
+    }
+
+
+async def test_openev_a_bare_name_that_two_listed_files_share_holds_neither(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """`Brightwater Workshop - Orchard Kritik.docx` was imported with no folder to tell them apart.
+
+    Calling either one held would be a guess, and a wrong guess never downloads a camp file the
+    store does not have. Both are fetched; the one already held costs a download and a DUPLICATE row.
+    """
+    await import_openev_by_hand(data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy"])
+    source.archives = {}
+    source.openev_files = [
+        (
+            camp_file(701, f"openev/{OPENEV_YEAR}/Brightwater/Brightwater Workshop - Orchard Kritik.docx"),
+            b"a",
+        ),
+        (
+            camp_file(702, f"openev/{OPENEV_YEAR}/Quillfeather/Brightwater Workshop - Orchard Kritik.docx"),
+            b"b",
+        ),
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert [one.decision for one in plan.openev] == [SelectionDecision.DOWNLOAD, SelectionDecision.DOWNLOAD]
+
+
+async def test_openev_a_file_the_sync_named_is_matched_by_its_id(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """The first download holds `openev-417-TSF-Spillway Advantage.docx`, a name the sync writes."""
+    await import_openev_by_hand(data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy"])
+    source.archives = {}
+    source.openev_files = [
+        (camp_file(417, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Spillway Advantage (final).docx"), b"renamed"),
+        (camp_file(418, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Spillway Advantage.docx"), b"another id"),
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert {one.openev_id: one.decision for one in plan.openev} == {
+        417: SelectionDecision.ALREADY_IMPORTED,
+        418: SelectionDecision.DOWNLOAD,
+    }
+
+
+async def test_openev_macos_junk_that_reads_like_a_camp_file_does_not_hold_it(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """`__MACOSX/Tamarack/._TSF-Canal Subsidies Counterplan.docx` is skipped, and is no camp file."""
+    download = tmp_path / "junk-and-one-file"
+    (download / "__MACOSX" / "Tamarack").mkdir(parents=True)
+    (download / "__MACOSX" / "Tamarack" / "._TSF-Canal Subsidies Counterplan.docx").write_bytes(
+        b"\x00\x05\x16\x07"
+    )
+    (download / "Tamarack").mkdir()
+    (download / "Tamarack" / "TSF-Estuary Solvency Advocate.docx").write_bytes(
+        DOCUMENT_BODIES["estuary-solvency"]
+    )
+    await import_openev_by_hand(data_dir, download)
+    assert "__MACOSX/Tamarack/._TSF-Canal Subsidies Counterplan.docx" in manifest_paths(data_dir)
+    source.archives = {}
+    source.openev_files = [
+        (camp_file(801, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Canal Subsidies Counterplan.docx"), b"canal"),
+        (camp_file(802, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Estuary Solvency Advocate.docx"), b"estuary"),
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert {one.openev_id: one.decision for one in plan.openev} == {
+        801: SelectionDecision.DOWNLOAD,
+        802: SelectionDecision.ALREADY_IMPORTED,
+    }
+
+
+async def test_openev_a_sync_named_file_whose_id_is_no_longer_listed_is_matched_by_its_path(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """`openev-417-TSF-Spillway Advantage.docx` with 417 gone from the listing is still that file."""
+    await import_openev_by_hand(data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy"])
+    source.archives = {}
+    source.openev_files = [
+        (camp_file(999, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Spillway Advantage.docx"), b"x")
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert [one.decision for one in plan.openev] == [SelectionDecision.ALREADY_IMPORTED]
+
+
+_SMALL_NAMES = st.sampled_from(
+    ["Tamarack", "tamarack", "Brightwater", "Juniors Lab", "Aff.docx", "aff_docx", "Neg.pdf"]
+)
+
+
+@st.composite
+def listings_and_imports(draw: st.DrawFn) -> tuple[list[OpenEvFile], set[int], list[str]]:
+    """Listed camp files over a small alphabet, so names collide, and what was imported of them.
+
+    Each imported file is recorded the way a hand import would record it: some tail of its listed
+    path, from the file name up, as the download it came in happened to be laid out.
+    """
+    count = draw(st.integers(min_value=1, max_value=8))
+    listed = [
+        camp_file(
+            100 + index,
+            "/".join(["openev", str(OPENEV_YEAR), *draw(st.lists(_SMALL_NAMES, min_size=1, max_size=3))]),
+        )
+        for index in range(count)
+    ]
+    imported = draw(st.sets(st.sampled_from([file.openev_id for file in listed])))
+    recorded: list[str] = []
+    for file in listed:
+        if file.openev_id in imported:
+            parts = file.path.split("/")
+            recorded.append("/".join(parts[-draw(st.integers(min_value=1, max_value=len(parts) - 2)) :]))
+    return listed, imported, recorded
+
+
+@settings(max_examples=300, deadline=None)
+@given(listings_and_imports())
+def test_openev_matching_never_holds_a_listed_file_nobody_imported(
+    case: tuple[list[OpenEvFile], set[int], list[str]],
+) -> None:
+    """A held camp file is never downloaded again, so holding one nobody imported loses it for good.
+
+    Every recorded path is a tail of an imported file's listed path, so the imported file shares
+    that whole tail. Another listed file can at most tie with it, and a tie holds neither.
+    """
+    listed, imported, recorded = case
+
+    held = _held_openev_ids(listed, recorded)
+
+    assert held <= imported, f"held {sorted(held - imported)} that nobody imported"
 
 
 # ------------------------------------------------------------------------------------------------

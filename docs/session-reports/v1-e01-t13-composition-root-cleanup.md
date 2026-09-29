@@ -173,9 +173,62 @@ capture above already covers every mode.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-29
 
 **Notes:**
+
+Accepted, merging in full, phase `Succeeded`. Both exception lists are empty rather than shorter,
+which is the difference between finishing this task and deferring it, and the only entry left on
+the container contract is the container's own, which was never an exception.
+
+**The `unmatched_ignore_imports_alerting` finding is correct, it is mine, and the conclusion goes
+further than the report suggests.** I added that line during the v1-e02-t06 review and wrote a
+comment claiming the ratchet was "stated rather than inherited". It is neither: the key is not a
+top-level option at all. It is a contract field, declared on every contract class in
+`importlinter/contracts/*.py` as `fields.EnumField(AlertLevel, default=AlertLevel.ERROR)`. So the
+property was already guaranteed by import-linter on every contract before I touched anything, and my
+line bought nothing while actively misleading a future reader into thinking the protection lives
+there. The differential in this report is what establishes it - top-level at `error`, `warn` and
+`none` all exit 1, `none` on the contract exits 0 - and that is a sharper measurement than reading
+the source, because it rules out the line having any effect rather than showing it has no obvious
+one.
+
+The fix is to **delete** the line and its comment, not to spread it across the ten contracts. Ten
+copies of a default restate what import-linter already promises and go stale the moment the default
+changes; and the rewritten architecture test in this task now proves the property directly, which is
+a better guard than a config line ever was. I will do that in a follow-up of my own once this
+merges, so the comment can point at the test in its new form. It stays E02's territory on paper and
+mine in practice.
+
+**Deviation 1 accepted, and the new test is stronger than the one it replaces.** Editing
+`tests/architecture/test_import_contracts.py` from outside the task's packages was unavoidable: the
+old test proved a stale exception fails by using the real `caselist_auth` import this task deletes,
+so it was a test that this task's success would have quietly disarmed. Planting the stale entry in a
+copy of the config decouples it from any particular import, so it survives the code it guards -
+which is what an architecture test is for. Checking that it still fails with the protection switched
+off is the part that makes it a test rather than a claim.
+
+**Deviation 2 accepted.** `run_pull` as a function beside `CaselistSyncService` rather than a method
+on it is right for the stated reason: the service must be constructed inside the monitor so that an
+API-disabled refusal is recorded like any other failure. A method on an already-built service would
+move construction - and therefore that refusal - outside the monitor's reach, trading a tidier shape
+for a silent failure mode. Choosing the shape that keeps the failure visible is the correct call.
+
+**The 45-run capture is the evidence I would have asked for and did not have to.** Help, every mode,
+every refusal, text and JSON, quiet and verbose, captured before the change and after each of the
+three commits, identical once timestamps are normalised, including the run log the monitor writes.
+For a pure move of sequencing out of a handler, byte-identical output across every mode is a
+stronger claim than any test count, because the risk in this task was never that a test would fail -
+it was that an ordering difference would show up only in a mode nobody exercised. The one ordering
+difference is named rather than buried: a dry run now builds the service inside the event loop, as
+every other mode already did.
+
+**The merge hold is lifted, and I should have lifted it earlier.** I asked for it so a change to
+`caselist pull` could not disturb a backfill mid-flight. That reasoning was wrong: the backfill runs
+from the installed build at `~/.local/bin/debate-research`, pinned to `v0.1.0-dev.5`, so nothing
+merged to `dev` can reach it without a deliberate reinstall. Merge on the normal schedule. The
+real-environment spot check in Operator follow-ups is worth doing anyway, but after a reinstall and
+on its own terms, not as a merge gate.

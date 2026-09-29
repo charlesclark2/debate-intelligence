@@ -16,8 +16,11 @@ which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`);
 and :meth:`ServiceContainer.caselist_sync`, which `debate-research caselist pull` and the weekly
 launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
 :meth:`ServiceContainer.caselist_sync_monitor` and read back by
-:meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`). The rest of V1's
-services and their adapters arrive in E02–E08 and slot in the same way.
+:meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`). The import
+commands also read archives and place manifests through it (:meth:`ServiceContainer.read_archive`,
+:meth:`ServiceContainer.archive_digest`, :meth:`ServiceContainer.evidence_object_path`), so no
+command imports an adapter (`v1-e01-t13-composition-root-cleanup`). The rest of V1's services and
+their adapters arrive in E02–E08 and slot in the same way.
 
 ## Adding a service
 
@@ -61,7 +64,8 @@ runs `store`, and it arrives as the `uv sync --extra aws` message that package r
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
@@ -76,7 +80,8 @@ from debate_core.application.evidence_sync import (
     SyncJournal,
     SyncKeyspace,
 )
-from debate_core.application.ports.evidence_store import EvidenceObjectStore
+from debate_core.application.ports.archive import ArchiveEntry
+from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.settings import ConfigurationError, Environment, Settings, SyncNotifierKind
 from debate_core.application.sync_runs import (
@@ -91,6 +96,7 @@ from debate_core.integrations.local import (
     FsEvidenceObjectStore,
     FsSnapshotStore,
     SqliteDatabase,
+    archive_reader,
 )
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 
@@ -211,6 +217,28 @@ class ServiceContainer:
         the transaction boundary singular (see `debate_core.integrations.local.sqlite_db`).
         """
         return self.singleton("database", lambda: SqliteDatabase.open(self.settings.storage.data_dir))
+
+    def read_archive(self, source: Path) -> Iterator[ArchiveEntry]:
+        """Read a caselist archive (a `.zip` or a directory) within this installation's size ceilings.
+
+        The local archive reader, bound to `caselist.max_archive_bytes` and
+        `caselist.max_unpacked_bytes`: what `caselist import`, `caselist import-openev` and the
+        weekly pull all read an archive with.
+        """
+        caselist = self.settings.caselist
+        return archive_reader.read_archive(
+            source,
+            max_archive_bytes=caselist.max_archive_bytes,
+            max_unpacked_bytes=caselist.max_unpacked_bytes,
+        )
+
+    def archive_digest(self, source: Path) -> str:
+        """The SHA-256 an import records for the archive itself, by the same reader's rules."""
+        return archive_reader.archive_digest(source)
+
+    def evidence_object_path(self, key: ObjectKey) -> Path:
+        """The file this machine's evidence store keeps the named object `key` at: a manifest."""
+        return FsEvidenceObjectStore(self.settings.storage.data_dir).path_for(key)
 
     def caselist_card_stats(self) -> CaselistCardStatsService:
         """Build the card statistics over this machine's recorded disclosures (`v1-e31-t04`).
@@ -385,8 +413,6 @@ class ServiceContainer:
         return self.singleton("caselist_sync", lambda: self._build_caselist_sync(event_for_caselist))
 
     def _build_caselist_sync(self, event_for_caselist: Callable[[str], Event | None]) -> CaselistSyncService:
-        from debate_core.integrations.local.archive_reader import read_archive
-
         settings = self.settings
         caselist = settings.caselist
         repository = SqliteCaselistRepository(self.database)
@@ -401,11 +427,7 @@ class ServiceContainer:
             archive_importer=CaselistImportService(caselists=repository, blobs=blobs),
             openev_importer=OpenEvImportService(caselists=repository, blobs=blobs),
             local=self._local_evidence(),
-            read_archive=lambda path: read_archive(
-                path,
-                max_archive_bytes=caselist.max_archive_bytes,
-                max_unpacked_bytes=caselist.max_unpacked_bytes,
-            ),
+            read_archive=self.read_archive,
             event_for_caselist=event_for_caselist,
             inbox=caselist.inbox_dir or settings.storage.data_dir / DEFAULT_INBOX_DIRECTORY,
             state_dir=settings.storage.data_dir,

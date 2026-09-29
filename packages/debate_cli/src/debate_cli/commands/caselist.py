@@ -25,7 +25,8 @@ person and for a program.
 
 Both are read the same way and both produce the same relative paths, so it makes no difference to
 what gets stored which one the operator happens to have
-(:func:`debate_core.integrations.local.archive_reader.read_archive`).
+(:func:`debate_core.integrations.local.archive_reader.read_archive`, which the composition root
+binds to this installation's size ceilings as :meth:`debate_cli.container.ServiceContainer.read_archive`).
 
 ## Which event
 
@@ -125,8 +126,6 @@ from debate_core.application.caselist.publish_service import PublishReport, Sour
 from debate_core.application.caselist.status_service import CaselistStatusReport, SnapshotStatus
 from debate_core.application.settings import ConfigurationError, Environment, Settings
 from debate_core.domain.caselist import Event
-from debate_core.integrations.local.archive_reader import archive_digest, read_archive
-from debate_core.integrations.local.fs_object_store import FsEvidenceObjectStore
 
 __all__ = [
     "EVENTS_BY_SLUG_PREFIX",
@@ -204,7 +203,7 @@ def import_archive(
 ) -> None:
     """Import one weekly caselist archive, deduplicated against the ones already imported."""
     cli = cli_context(ctx)
-    settings = cli.services.settings
+    cli.services.settings  # noqa: B018 - loaded first, so a broken profile is reported before a bad flag
     published = _snapshot_date(snapshot)
     resolved_event = event or event_for_caselist(caselist)
     if resolved_event is None:
@@ -214,15 +213,11 @@ def import_archive(
     cli.output.detail(f"reading {source.name}")
     report = _run(
         service.import_archive(
-            read_archive(
-                source,
-                max_archive_bytes=settings.caselist.max_archive_bytes,
-                max_unpacked_bytes=settings.caselist.max_unpacked_bytes,
-            ),
+            cli.services.read_archive(source),
             caselist=caselist,
             snapshot=published,
             event=resolved_event,
-            archive_sha256=archive_digest(source),
+            archive_sha256=cli.services.archive_digest(source),
             allow_out_of_order=allow_out_of_order,
             dry_run=dry_run,
         )
@@ -230,8 +225,9 @@ def import_archive(
 
     manifest = None
     if not dry_run:
-        objects = FsEvidenceObjectStore(settings.storage.data_dir)
-        manifest = write_manifest(report, objects.path_for(manifest_key(caselist, published)))
+        manifest = write_manifest(
+            report, cli.services.evidence_object_path(manifest_key(caselist, published))
+        )
         cli.output.detail(f"wrote {manifest.name}")
 
     cli.output.success(
@@ -275,27 +271,21 @@ def import_openev(
 ) -> None:
     """Import OpenEv camp files, deduplicated against everything already imported."""
     cli = cli_context(ctx)
-    settings = cli.services.settings
+    cli.services.settings  # noqa: B018 - loaded first, so a broken profile is reported before a bad flag
     # UTC, because that is the calendar the domain's no-future-dates rule reads.
     imported_on = _snapshot_date(snapshot) if snapshot is not None else datetime.now(UTC).date()
     aliases = load_camp_aliases(camp_aliases)
-    manifest_path = FsEvidenceObjectStore(settings.storage.data_dir).path_for(
-        openev_manifest_key(year, event)
-    )
+    manifest_path = cli.services.evidence_object_path(openev_manifest_key(year, event))
 
     service = cli.services.openev_import()
     cli.output.detail(f"reading {source.name}")
     report = _run(
         service.import_release(
-            read_archive(
-                source,
-                max_archive_bytes=settings.caselist.max_archive_bytes,
-                max_unpacked_bytes=settings.caselist.max_unpacked_bytes,
-            ),
+            cli.services.read_archive(source),
             year=year,
             event=event,
             imported_on=imported_on,
-            archive_sha256=archive_digest(source),
+            archive_sha256=cli.services.archive_digest(source),
             recorded_manifest=read_manifest_lines(manifest_path),
             aliases=aliases,
             dry_run=dry_run,

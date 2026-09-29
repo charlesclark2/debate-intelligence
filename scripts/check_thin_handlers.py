@@ -58,13 +58,9 @@ KNOWN_THICK_HANDLERS: Mapping[str, int] = {
 }
 # (handler module, imported adapter module) pairs, matching the ignore_imports entries of the
 # "Delivery packages reach debate_core.integrations only through their composition root" contract
-# in pyproject.toml. The fix for each is to have debate_cli.container build the adapter.
-KNOWN_INTEGRATIONS_IMPORTS: Set[tuple[str, str]] = {
-    ("debate_cli.commands.caselist", "debate_core.integrations.local.archive_reader"),
-    ("debate_cli.commands.caselist", "debate_core.integrations.local.fs_object_store"),
-    ("debate_cli.commands.caselist_auth", "debate_core.integrations.opencaselist"),
-    ("debate_cli.commands.caselist_auth", "debate_core.integrations.opencaselist.auth"),
-}
+# in pyproject.toml. Empty since v1-e01-t13-composition-root-cleanup moved the last four into
+# debate_cli.container; the fix for a new one is the same, not an entry here.
+KNOWN_INTEGRATIONS_IMPORTS: Set[tuple[str, str]] = frozenset()
 
 
 @dataclass(frozen=True)

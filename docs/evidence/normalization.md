@@ -196,10 +196,21 @@ regular-expression `\s`, whose membership follows the running Python's Unicode v
 it iterates a set or dict in a way that can reach the output.
 
 The one external dependency is the Unicode character database behind `unicodedata.normalize`.
-**v1 is pinned to Unicode 15.0.0**, the database of every Python 3.12 release (the repository's
-`requires-python` and `.python-version`). `normalize` checks `unicodedata.unidata_version` on
-every call and raises `UnicodeDatabaseMismatchError` rather than run v1 under a different
-database. Unicode's normalization stability policy means NFC of characters assigned in 15.0 can
+**v1 is pinned to Unicode 15.0.0**, the database of every Python 3.12 release. The pin is
+enforced in two places, which are one decision:
+
+* `debate_core` declares `requires-python = ">=3.12,<3.13"`, so the package says in its metadata
+  that it does not work on a Python with a different database. `pip` refuses to install it on
+  3.13, and uv locks the workspace to 3.12 only. uv does **not** refuse a 3.13 install of the
+  wheel: it deliberately ignores upper bounds on a dependency's `Requires-Python`, so installs
+  must still name the interpreter (`scripts/install_channel.sh` passes `--python 3.12`).
+* `normalize` checks `unicodedata.unidata_version` on every call and raises
+  `UnicodeDatabaseMismatchError` rather than run v1 under a different database. This check
+  catches any install the metadata did not stop.
+
+`test_chars_python_bound_and_unicode_pin_are_one_decision` fails if `requires-python` admits a
+Python whose Unicode database is not the current version's pin, or if this page and the code
+disagree on the pin. Unicode's normalization stability policy means NFC of characters assigned in 15.0 can
 never change. Characters assigned later can, though: under 15.0 they are unassigned and pass
 through NFC unchanged, while a newer database may decompose them. Moving the project to a Python
 with a newer Unicode database is therefore a deliberate step, not a side effect of an upgrade.

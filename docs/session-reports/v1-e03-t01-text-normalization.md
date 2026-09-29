@@ -51,7 +51,10 @@ The fingerprint normalizer in `fingerprints.py` was not touched, imported or sha
 | Epic node: `uv run scripts/validate_specs.py --require-succeeded v1-e03-t01-text-normalization` | PASS | `v1-e03-t01-text-normalization: Succeeded`; `uv run scripts/validate_specs.py` → `OK: 288 files, 38 epics, 230 tasks, 20 releases` |
 
 Other checks run: `uv run pytest -q` → `3039 passed, 1 skipped in 44.22s` (run at 02:28 CDT, before
-the 19:00 ledger failures of v1-e34-t06 can appear); `uv run lint-imports` → `Contracts: 10 kept,
+the 19:00 ledger failures of v1-e34-t06 can appear), and after the PM-required packaging commit
+`3041 passed, 1 skipped in 39.69s` (02:54 CDT). Criteria reruns after that commit: `-k chars` → `88 passed`,
+`-k "paragraph or offset"` → `33 passed`, `tests/evidence` → `366 passed`, pyright `0 errors`,
+`uv lock --check` and `uv sync --locked --all-packages` clean; `uv run lint-imports` → `Contracts: 10 kept,
 0 broken`; `uv run ruff check` and `ruff format --check` on `packages/debate_core` are clean.
 
 **How the tests were checked for teeth.** I made six deliberate mutations to the normalizer, and
@@ -88,6 +91,8 @@ policy now documents the empty-range behaviour. After that, all 20 passed at 5,0
 * `docs/README.md` and `docs/process/working-agreements.md`: one index line each for the new
   `docs/evidence/` folder (see Deviations).
 * `plan_specs/v1/e03-evidence-integrity/t01-text-normalization.yaml`: Goal phase set to `Succeeded`.
+* `packages/debate_core/pyproject.toml` and `uv.lock` (PM-required, after review): `debate_core`
+  now declares `requires-python = ">=3.12,<3.13"`; see Deviations.
 
 ## Deviations from the spec
 
@@ -95,7 +100,36 @@ policy now documents the empty-range behaviour. After that, all 20 passed at 5,0
   top-level docs folder must be added to its directory table and to `docs/README.md`. The spec
   requires `docs/evidence/`, but its package list does not cover those two files. I added one row
   to each and made no other change. If the PM prefers to land those rows separately, they can be
-  reverted without affecting anything else in the task.
+  reverted without affecting anything else in the task. The PM has since ruled that they stay in
+  this PR: a package list that forces that choice is a defect in the list.
+* **`packages/debate_core/pyproject.toml` and `uv.lock` (required by the PM's review).**
+  `debate_core`'s `requires-python` is narrowed from `>=3.12` to `>=3.12,<3.13`. `debate_cli`
+  (still `>=3.12`) inherits the bound through its dependency. uv accepted a workspace member
+  narrower than the root: `uv lock` resolved without objection, `uv lock --check` and
+  `uv sync --locked --all-packages` pass, and the root `pyproject.toml` was **not** changed. The
+  lock's own `requires-python` became `==3.12.*`, because uv takes the intersection of the
+  members' bounds. That drops every cp313, cp314 and cp315 wheel entry, which accounts for the
+  ~520-line shrink of `uv.lock`, with no version changes. A new test,
+  `test_chars_python_bound_and_unicode_pin_are_one_decision`, ties the bound to the pin: every
+  Python the bound admits must ship the current normalizer's pinned Unicode database, according
+  to a hand-written CPython→Unicode table, and the policy page must state the same pin as the
+  code. Mutation checks: raising the bound to `<3.14`, leaving it open (`>=3.12`), and changing
+  the policy's pin to 15.1.0 each fail it. The policy's Determinism section now describes both
+  enforcement points.
+* **Finding: uv does not enforce this bound on install, so the failure is not at resolution for
+  uv users.** I verified this in sandboxed environments under the scratchpad
+  (`UV_TOOL_DIR`/`UV_TOOL_BIN_DIR` redirected; nothing was installed under `~/.local`). The built
+  wheel's metadata is correct (`Requires-Python: >=3.12, <3.13`), and this machine does have a
+  3.13 (`/opt/homebrew/bin/python3.13`, which `python3` also resolves to). With uv 0.11.7,
+  `uv tool install --python 3.13 "debate-cli @ file://…whl" --with "debate-core @ file://…whl"`
+  **succeeds**. So do `uv pip install` of the path and of the wheel, and a `--find-links`
+  resolution of `debate-core==0.1.0` (PyPI has no `debate-core`, returning 404, so it was our
+  wheel). uv deliberately ignores upper bounds on a dependency's `Requires-Python`. `pip` does
+  enforce it: `ERROR: Package 'debate-core' requires a different Python: 3.13.3 not in
+  '<3.13,>=3.12'`. The bound therefore stops pip installs and pins uv's lock to 3.12, but a uv
+  tool install on 3.13 still gets through, and the runtime `UnicodeDatabaseMismatchError` remains
+  the backstop there. The supported path, `scripts/install_channel.sh`, already passes
+  `--python 3.12`. I made no change beyond what was asked; options are under Follow-up work.
 
 ## Decisions and assumptions
 
@@ -150,6 +184,16 @@ None.
 
 ## Follow-up work
 
+* **Making a uv install on the wrong Python fail at install time (PM decision; owner is whoever
+  owns `scripts/install_channel.sh` and the install docs).** Because uv ignores the upper bound,
+  the options are:
+  1. Keep the `--python 3.12` in `install_channel.sh` and make it derive the version from
+     `debate_core`'s `requires-python`, so the two cannot drift apart.
+  2. Have `install_channel.sh` run the installed `debate-research` once and check that the
+     normalizer loads, so the install fails rather than the first research run.
+  3. Document that hand-run installs must pass `--python 3.12`.
+
+  All three are outside this task's scope.
 * **Python upgrade past 3.12 (whoever bumps `.python-version`).** Python 3.13 ships Unicode 15.1,
   and `normalize` will raise under it. Before upgrading, check that no code point assigned in 15.1
   or later has a canonical decomposition or composes. Then either add that database to v1's
@@ -169,9 +213,59 @@ None.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-29
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with one packaging commit required before the PR opens (below). Every
+criterion passed and the work is not in doubt; the required change is a consequence this report
+itself identified, in a file the report did not think to reach.
+
+**Writing docs/evidence/normalization.md before the code is why this task is trustworthy.** A
+normalizer is a definition before it is an implementation: everything downstream - fingerprints,
+dedupe, card identity, every sha256 in the store - is a function of these rules, so a rule that
+exists only as code is a rule nobody can review or reproduce. Listing all 1,120 characters NFC
+always replaces and the 111 it can merge into the preceding character, and keeping that list in step
+with both the code and the Unicode database by test, is what turns the policy from a description
+into a specification. The restraint matters as much: quotes, dashes, case, ligatures and hyphenated
+words explicitly left alone, each of which someone will eventually propose "fixing".
+
+**The fail-closed version guard is the right call and I want to be explicit that I am endorsing the
+breakage.** `normalize` raising on an unknown version or an unexpected `unicodedata.unidata_version`
+means a Python upgrade stops the evidence pipeline rather than silently changing what a card
+normalizes to. Silent change is the catastrophic option here: identical source text would produce a
+different fingerprint, dedupe would stop matching across the boundary, and the store would carry two
+identities for one card with nothing recording why. An outage that names itself is cheap; a
+content-addressed store that quietly disagrees with its own past is not repairable by rerunning
+anything.
+
+**Required before the PR: narrow `debate_core`'s `requires-python`.** The guard fires at call time,
+but every package declares `requires-python = ">=3.12"`, so `uv tool install` may select a 3.13
+interpreter, resolve cleanly, install the binary, and leave a build whose evidence pipeline raises
+on first use. This is not hypothetical for the next install: the operator's machine carries pyenv,
+conda and anaconda3, so a 3.13 is plausibly available for uv to choose. The package genuinely does
+not work on 3.13 today, and packaging metadata is the mechanism for saying so - the failure belongs
+at resolution, where it costs a clear error, not at runtime inside a pipeline. Set it on
+`debate_core` alone and let it propagate through `debate_cli`'s dependency on it. I am not certain
+uv accepts a member narrower than the workspace root without complaint; if `uv lock` and
+`uv sync --locked --all-packages` object, narrow the root to match and say so rather than working
+around it.
+
+**Deviation accepted, and the spec was wrong rather than the session.** The index lines in
+`docs/README.md` and `docs/process/working-agreements.md` are required by the working agreements for
+any new `docs/` folder, and this task creates `docs/evidence/`. A package list that makes a task
+choose between its own constraints and the working agreements is a defect in the list; an index
+entry for a folder is part of creating the folder, not separate work. Keep them in this PR. I added
+`docs/evidence` to the packages during review and should have added these two at the same time.
+
+**The verification deserves naming, particularly the parts that found nothing wrong with the
+normalizer.** Eleven property tests over real Unicode, a golden test on six hand-written passages,
+and a hash-seed check are the baseline. What raises confidence above that is the six deliberate
+breaks each caught by a property test - evidence the properties constrain the implementation rather
+than describe it - and the 5,000-example run that surfaced two errors in the test definitions
+themselves. Reporting that the deep run found bugs in your own tests rather than quietly fixing them
+is the difference between a test suite and a claim about one. A suite that has never been seen to
+fail for the right reason is not yet evidence.

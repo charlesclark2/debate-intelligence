@@ -3,7 +3,7 @@ name = "debate-core"
 version = "0.1.0"
 description = "Domain core of the Debate Intelligence Platform: entities, use cases, evidence and retrieval."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 # The domain layer is deliberately thin: validation (pydantic) and ULID generation only.
 # No I/O, AWS SDK, HTTP or web-framework dependency belongs here — see docs/process/working-agreements.md.
 dependencies = [

@@ -10,6 +10,8 @@ and `offset` for segmentation and the offset map. The property-based and golden 
 from __future__ import annotations
 
 import re
+import sys
+import tomllib
 import unicodedata
 from pathlib import Path
 
@@ -33,6 +35,7 @@ from debate_core.evidence.normalization import (
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 POLICY = REPO_ROOT / "docs" / "evidence" / "normalization.md"
+DEBATE_CORE_PYPROJECT = REPO_ROOT / "packages" / "debate_core" / "pyproject.toml"
 V1 = "evidence-normalizer-v1"
 
 
@@ -73,6 +76,56 @@ def test_chars_refuses_to_run_under_another_unicode_database(
 def test_chars_v1_is_pinned_to_the_unicode_database_of_python_312() -> None:
     assert character_rules(V1).unicode_version == "15.0.0"
     assert unicodedata.unidata_version == "15.0.0"
+
+
+# The Unicode database each CPython minor version ships in `unicodedata`. Written by hand from the
+# CPython release notes; extend it only together with a decision about the normalizer's pin.
+UNICODE_VERSION_OF_PYTHON = {"3.12": "15.0.0", "3.13": "15.1.0", "3.14": "16.0.0"}
+
+
+def _python_minors_admitted_by_debate_core() -> list[str]:
+    requires_python = tomllib.loads(DEBATE_CORE_PYPROJECT.read_text(encoding="utf-8"))["project"][
+        "requires-python"
+    ]
+    bound = re.fullmatch(r">=3\.(\d+),\s*<3\.(\d+)", requires_python)
+    assert bound, (
+        f"debate_core requires-python {requires_python!r} must be a closed range '>=3.X,<3.Y': an "
+        "open upper bound admits Pythons whose Unicode database the normalizer is not pinned to"
+    )
+    return [f"3.{minor}" for minor in range(int(bound.group(1)), int(bound.group(2)))]
+
+
+def _pinned_unicode_version_in_policy(version: str) -> str:
+    row = re.search(
+        rf"^\| `{re.escape(version)}` \| Current \| (\d+\.\d+\.\d+) \|",
+        POLICY.read_text(encoding="utf-8"),
+        re.M,
+    )
+    assert row, f"the policy's Versions table has no Current row for {version}"
+    return row.group(1)
+
+
+def test_chars_python_bound_and_unicode_pin_are_one_decision() -> None:
+    # debate_core's requires-python and the current normalizer's pinned Unicode database must move
+    # together: every admitted Python must ship exactly the pinned database, or normalize() raises
+    # UnicodeDatabaseMismatchError on first use. Raising the bound means revisiting the rules.
+    pinned = character_rules(NORMALIZER_VERSION).unicode_version
+    assert _pinned_unicode_version_in_policy(NORMALIZER_VERSION) == pinned
+    for minor in _python_minors_admitted_by_debate_core():
+        assert minor in UNICODE_VERSION_OF_PYTHON, (
+            f"requires-python admits Python {minor}; record its Unicode database here and decide "
+            "whether the normalizer's rules still hold under it"
+        )
+        assert UNICODE_VERSION_OF_PYTHON[minor] == pinned, (
+            f"requires-python admits Python {minor}, whose Unicode {UNICODE_VERSION_OF_PYTHON[minor]} "
+            f"is not {NORMALIZER_VERSION}'s pinned {pinned}"
+        )
+
+
+def test_chars_running_python_is_one_debate_core_admits() -> None:
+    running = f"{sys.version_info.major}.{sys.version_info.minor}"
+    assert running in _python_minors_admitted_by_debate_core()
+    assert UNICODE_VERSION_OF_PYTHON[running] == unicodedata.unidata_version
 
 
 # ---------------------------------------------------------------------------------------------

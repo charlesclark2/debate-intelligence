@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -78,7 +78,9 @@ from debate_core.application.caselist_sync import (
 from debate_core.application.errors import (
     ProviderRateLimited,
     StoreCredentialsExpired,
+    UnreadableArchive,
 )
+from debate_core.application.ports.archive import ArchiveEntry
 from debate_core.application.ports.caselist_source import (
     ArchiveKind,
     ArchiveListing,
@@ -365,6 +367,8 @@ def build_service(
     landscape: object | None = None,
     bulk_downloads_per_day: int = DEFAULT_BULK_DOWNLOADS_PER_DAY,
     clock: Callable[[], datetime] = lambda: RUN_CLOCK,
+    reader: Callable[[Path], Iterable[ArchiveEntry]] | None = None,
+    openev_importer: Callable[[SqliteCaselistRepository, FsSnapshotStore], OpenEvImportService] | None = None,
 ) -> CaselistSyncService:
     database = SqliteDatabase.open(data_dir)
     repository = SqliteCaselistRepository(database)
@@ -372,9 +376,9 @@ def build_service(
     return CaselistSyncService(
         source=source,
         archive_importer=CaselistImportService(caselists=repository, blobs=blobs),
-        openev_importer=OpenEvImportService(caselists=repository, blobs=blobs),
+        openev_importer=(openev_importer or _openev_importer)(repository, blobs),
         local=local_evidence(data_dir),
-        read_archive=lambda path: read_archive(path, **_LIMITS),
+        read_archive=reader or (lambda path: read_archive(path, **_LIMITS)),
         event_for_caselist=lambda slug: Event.LD if slug.startswith("testcl") else None,
         inbox=inbox,
         state_dir=data_dir,
@@ -385,6 +389,10 @@ def build_service(
         bulk_downloads_per_day=bulk_downloads_per_day,
         clock=clock,
     )
+
+
+def _openev_importer(repository: SqliteCaselistRepository, blobs: FsSnapshotStore) -> OpenEvImportService:
+    return OpenEvImportService(caselists=repository, blobs=blobs)
 
 
 @pytest.fixture
@@ -549,6 +557,164 @@ async def test_an_openev_file_already_in_the_release_manifest_is_not_fetched_aga
 
     assert source.openev_fetches == [OPENEV_FILE_ID]
     assert [one.decision for one in again.openev] == [SelectionDecision.ALREADY_IMPORTED]
+
+
+# ------------------------------------------------------------------------------------------------
+# A failed import is retried by the next run (v1-e34-t06 ac1)
+# ------------------------------------------------------------------------------------------------
+
+
+class ReaderThatFailsOnce:
+    """The archive reader, except that the first read of each named archive is refused.
+
+    What a failed import looks like from the run's side: the archive reached the inbox, and the
+    importer could not read it. `UnreadableArchive` is what a truncated zip raises. The second read
+    of the same file succeeds, as it would once the operator had fixed whatever was wrong.
+    """
+
+    def __init__(self, *names: str) -> None:
+        self.failing = set(names)
+
+    def __call__(self, path: Path) -> Iterable[ArchiveEntry]:
+        if path.name in self.failing:
+            self.failing.discard(path.name)
+            raise UnreadableArchive(path.name, "not a readable zip file")
+        return read_archive(path, **_LIMITS)
+
+
+def manifest_held(data_dir: Path, snapshot: date) -> bool:
+    return FsEvidenceObjectStore(data_dir).path_for(manifest_key(SYNTHETIC_CASELIST, snapshot)).is_file()
+
+
+async def test_retry_an_archive_whose_import_failed_is_imported_by_the_next_run_without_a_download(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The defect as the spec states it: the newest weekly downloads and its import fails.
+
+    Before v1-e34-t06 the next run decided `already_in_inbox` for it, and its import stage imported
+    only what that run had downloaded, which was nothing. The archive sat in the inbox unimported
+    for good, and re-running the command changed nothing.
+    """
+    await import_first_week(data_dir, archives)
+    reader = ReaderThatFailsOnce(weekly_name(date(2026, 9, 15)))
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, reader=reader)
+    failed = await service.run([SYNTHETIC_CASELIST])
+    assert failed.stage(SyncStage.IMPORT).outcome is StageOutcome.FAILED  # type: ignore[union-attr]
+    assert not failed.succeeded
+    assert not manifest_held(data_dir, date(2026, 9, 15))
+    fetched = [weekly_name(date(2026, 9, 8)), weekly_name(date(2026, 9, 15))]
+    assert source.archive_fetches == fetched
+
+    retried = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == fetched, "the retry spent a download on an archive it already had"
+    assert decisions(retried.archives)[weekly_name(date(2026, 9, 15))] == str(
+        SelectionDecision.ALREADY_IN_INBOX
+    )
+    assert retried.snapshots_imported == (f"{SYNTHETIC_CASELIST} 2026-09-15",)
+    assert retried.stage(SyncStage.IMPORT).outcome is StageOutcome.COMPLETED  # type: ignore[union-attr]
+    assert retried.succeeded
+    assert manifest_held(data_dir, date(2026, 9, 15))
+    # 09-15's own row of the first test's arithmetic: 2 + 12 + 0 + 0 = 14 stored members, and
+    # 14 - 12 = 2 blobs the store did not already hold.
+    assert (retried.files_imported, retried.blobs_stored) == (14, 2)
+
+
+async def test_retry_a_failed_import_holds_back_the_newer_weeks_of_that_caselist(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The same gap by a second road: the older week fails and the newer one imports past it.
+
+    A caselist's weeklies are imported oldest first because each is classified against the one
+    before it. Before v1-e34-t06 a failed 09-08 did not stop 09-15, whose manifest then made 09-08
+    `already_imported` on every later run: never fetched and never imported again. A failure now
+    holds that caselist's newer weeks in the inbox, and the next run imports them in order.
+    """
+    await import_first_week(data_dir, archives)
+    reader = ReaderThatFailsOnce(weekly_name(date(2026, 9, 8)))
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, reader=reader)
+
+    failed = await service.run([SYNTHETIC_CASELIST])
+
+    assert not manifest_held(data_dir, date(2026, 9, 8))
+    assert not manifest_held(data_dir, date(2026, 9, 15)), "a newer week was imported past a failed one"
+    assert failed.snapshots_imported == ("openev 2026-policy",)
+    reason = failed.stage(SyncStage.IMPORT).reason or ""  # type: ignore[union-attr]
+    assert "1 archive(s) in the inbox held back for a later run" in reason
+
+    retried = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8)), weekly_name(date(2026, 9, 15))]
+    assert retried.snapshots_imported == (
+        f"{SYNTHETIC_CASELIST} 2026-09-08",
+        f"{SYNTHETIC_CASELIST} 2026-09-15",
+    )
+    assert retried.succeeded
+
+
+async def test_retry_an_inbox_archive_waits_behind_an_older_week_the_cap_deferred(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """An archive already in the inbox is imported only once every older wanted week is in.
+
+    09-15 is in the inbox; 09-08 is not, and the cap leaves no download for it today. Importing
+    09-15 now would make 09-08 `already_imported` for good, so 09-15 waits in the inbox too.
+    """
+    await import_first_week(data_dir, archives)
+    inbox.mkdir(parents=True, exist_ok=True)
+    (inbox / weekly_name(date(2026, 9, 15))).write_bytes(archives[date(2026, 9, 15)].read_bytes())
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, bulk_downloads_per_day=0)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == []
+    assert decisions(summary.archives)[weekly_name(date(2026, 9, 8))] == str(
+        SelectionDecision.OVER_DAILY_BUDGET
+    )
+    assert not manifest_held(data_dir, date(2026, 9, 15))
+    assert f"{SYNTHETIC_CASELIST} 2026-09-15" not in summary.snapshots_imported
+
+
+class OpenEvImporterThatFailsOnce(OpenEvImportService):
+    """The OpenEv importer, refusing its first release import the way an unreadable file would."""
+
+    failed = False
+
+    async def import_release(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def, override]
+        if not OpenEvImporterThatFailsOnce.failed:
+            OpenEvImporterThatFailsOnce.failed = True
+            raise UnreadableArchive("openev-512", "not a readable document")
+        return await super().import_release(*args, **kwargs)  # type: ignore[arg-type]
+
+
+async def test_retry_a_camp_file_whose_import_failed_is_imported_from_the_inbox(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The OpenEv half of the same defect: the camp file sat in the inbox, `already_in_inbox`."""
+    await import_first_week(data_dir, archives)
+    OpenEvImporterThatFailsOnce.failed = False
+    service = build_service(
+        source=source,
+        data_dir=data_dir,
+        inbox=inbox,
+        openev_importer=lambda repository, blobs: OpenEvImporterThatFailsOnce(
+            caselists=repository, blobs=blobs
+        ),
+    )
+    failed = await service.run([SYNTHETIC_CASELIST])
+    assert "openev 2026-policy" not in failed.snapshots_imported
+
+    retried = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.openev_fetches == [OPENEV_FILE_ID], "the retry fetched the camp file again"
+    assert [one.decision for one in retried.openev] == [SelectionDecision.ALREADY_IN_INBOX]
+    assert retried.snapshots_imported == ("openev 2026-policy",)
+    assert FsEvidenceObjectStore(data_dir).path_for("manifests/openev/2026-policy.jsonl").is_file()
+
+    third = await service.run([SYNTHETIC_CASELIST])
+
+    assert [one.decision for one in third.openev] == [SelectionDecision.ALREADY_IMPORTED]
+    assert third.nothing_new, "an imported camp file left in the inbox was imported again"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1000,6 +1166,13 @@ async def test_an_openev_release_that_is_a_zip_is_read_as_one(
     assert release_counts["skipped_total"] == 2
     assert summary.files_imported == 38
     assert summary.files_skipped == 10
+
+    again = await service.run([SYNTHETIC_CASELIST])
+
+    # Its manifest names the release's members, never the zip's own inbox name, so it is the
+    # download digest the rows carry that says these bytes were imported (v1-e34-t06 ac1).
+    assert [one.decision for one in again.openev] == [SelectionDecision.ALREADY_IMPORTED]
+    assert again.nothing_new, "a camp release left in the inbox was imported again"
 
 
 async def test_a_camp_file_whose_event_nobody_states_is_listed_and_left_alone(

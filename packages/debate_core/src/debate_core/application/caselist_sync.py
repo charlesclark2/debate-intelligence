@@ -74,6 +74,20 @@ Downloads land in one directory, which is what the importer reads. Two rules com
   identical file as `already_present`, but it streams the whole thing first, and every archive
   fetched spends one of the day's five.
 
+## What is imported
+
+The import stage works from the inbox against the manifests, not from what this run happened to
+download (`v1-e34-t06`). Every weekly newer than a caselist's latest manifest that is in the inbox
+is imported, whether this run fetched it or an earlier one did, so an archive whose import failed
+is imported by the next run without spending a download on it. The same holds for an OpenEv file
+in the inbox that its release manifest does not yet record.
+
+A caselist's weeklies are imported oldest first, because the importer classifies each against the
+one before it, and **a caselist stops at its first gap**: an import that fails, or an older week
+this run did not obtain (the cap deferred it, or its download failed). Everything newer waits in the
+inbox for a later run. Importing past a gap would give the newer week a manifest, the older week
+would then no longer be newer than the latest manifest, and no run would ever fetch or import it.
+
 ## Credentials, and stages that come back later
 
 The local stages need no AWS session. If the operator's SSO session has expired, the S3 adapter
@@ -107,6 +121,7 @@ written for an operator and for `v1-e34-t03`'s run log, and it carries no person
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -143,6 +158,7 @@ from debate_core.application.errors import (
     ProviderRateLimited,
     StoreAccessDenied,
     StoreCredentialsExpired,
+    UnreadableArchive,
 )
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember
 from debate_core.application.ports.caselist_source import (
@@ -284,7 +300,7 @@ class SelectionDecision(StrEnum):
     """Its date is not newer than the latest snapshot the local manifests hold."""
 
     ALREADY_IN_INBOX = "already_in_inbox"
-    """A file of that name is in the inbox; fetching it again would spend the day's allowance."""
+    """In the inbox and not yet in a manifest: imported from there, without fetching it again."""
 
     FULL_ARCHIVE_NOT_PULLED_WEEKLY = "full_archive_not_pulled_weekly"
     """`<slug>-all-<date>.zip`. A weekly run pulls weeklies; see this module's docstring."""
@@ -823,6 +839,15 @@ class _RunTally:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
 
 
+@dataclass(frozen=True, slots=True)
+class _ImportQueue:
+    """One caselist's weeklies for the import stage: those to import in order, and those behind a gap."""
+
+    ready: tuple[tuple[ArchiveSelection, Path], ...]
+    waiting: int
+    """In the inbox, and newer than a week this run could not import or did not obtain."""
+
+
 class CaselistSyncService:
     """Runs one weekly pull: select, download, import, publish, then the optional stages.
 
@@ -1056,7 +1081,7 @@ class CaselistSyncService:
     async def _select_openev(self, *, inbox_names: frozenset[str]) -> list[OpenEvSelection]:
         """Decide about every OpenEv camp file the API lists for the configured year."""
         files = await self._source.list_openev(year=self._openev_year)
-        recorded: dict[tuple[int, Event], frozenset[str]] = {}
+        recorded: dict[tuple[int, Event], _RecordedOpenEv] = {}
         selections: list[OpenEvSelection] = []
         for file in files:
             inbox_name = openev_inbox_name(file)
@@ -1064,16 +1089,23 @@ class CaselistSyncService:
             year = file.year or self._openev_year or self._clock().year
             if event is None:
                 decision = SelectionDecision.NO_EVENT_CONFIGURED
-            elif inbox_name in inbox_names:
-                decision = SelectionDecision.ALREADY_IN_INBOX
             else:
                 if (year, event) not in recorded:
-                    recorded[(year, event)] = self._openev_manifest_paths(year, event)
-                decision = (
-                    SelectionDecision.ALREADY_IMPORTED
-                    if inbox_name in recorded[(year, event)]
-                    else SelectionDecision.DOWNLOAD
-                )
+                    recorded[(year, event)] = self._recorded_openev(year, event)
+                release = recorded[(year, event)]
+                if inbox_name in release.paths:
+                    decision = SelectionDecision.ALREADY_IMPORTED
+                elif inbox_name in inbox_names:
+                    # In the inbox. Imported already if a manifest row came from these very bytes
+                    # (a camp release that is a zip records its members, not its own name);
+                    # otherwise its import failed or never ran, and this run imports it (ac1).
+                    decision = (
+                        SelectionDecision.ALREADY_IMPORTED
+                        if _digest_of(self._inbox / inbox_name) in release.download_digests
+                        else SelectionDecision.ALREADY_IN_INBOX
+                    )
+                else:
+                    decision = SelectionDecision.DOWNLOAD
             selections.append(
                 OpenEvSelection(
                     openev_id=file.openev_id,
@@ -1086,9 +1118,10 @@ class CaselistSyncService:
             )
         return selections
 
-    def _openev_manifest_paths(self, year: int, event: Event) -> frozenset[str]:
-        """Every member path the release's manifest already records, for the "already imported" check."""
+    def _recorded_openev(self, year: int, event: Event) -> _RecordedOpenEv:
+        """What the release's manifest already records, for the "already imported" checks."""
         paths: set[str] = set()
+        digests: set[str] = set()
         for line in read_manifest_lines(self._manifest_path(openev_manifest_key(year, event))):
             try:
                 row: object = json.loads(line)
@@ -1096,10 +1129,14 @@ class CaselistSyncService:
                 continue
             if not isinstance(row, dict):
                 continue
-            path = cast("dict[str, object]", row).get("path")
+            fields = cast("dict[str, object]", row)
+            path = fields.get("path")
             if isinstance(path, str):
                 paths.add(path)
-        return frozenset(paths)
+            download = fields.get("archive_sha256")
+            if isinstance(download, str):
+                digests.add(download)
+        return _RecordedOpenEv(paths=frozenset(paths), download_digests=frozenset(digests))
 
     def _inbox_names(self) -> frozenset[str]:
         """The files already in the inbox, by name.
@@ -1122,6 +1159,9 @@ class CaselistSyncService:
     def _plan_remaining_stages(self, plan: SyncPlan, tally: _RunTally) -> None:
         """Say what each remaining stage would do, and do none of it (ac2)."""
         fetch = len(plan.archives_to_download) + len(plan.openev_to_download)
+        in_inbox = sum(
+            1 for one in (*plan.archives, *plan.openev) if one.decision is SelectionDecision.ALREADY_IN_INBOX
+        )
         tally.record(
             SyncStage.DOWNLOAD,
             StageOutcome.PLANNED,
@@ -1130,7 +1170,8 @@ class CaselistSyncService:
         tally.record(
             SyncStage.IMPORT,
             StageOutcome.PLANNED,
-            f"would import {fetch} downloaded file(s) and write their manifests",
+            f"would import {fetch} downloaded file(s) and {in_inbox} already in the inbox, oldest first, "
+            "and write their manifests",
         )
         tally.record(
             SyncStage.PUBLISH,
@@ -1240,33 +1281,114 @@ class CaselistSyncService:
         )
 
     async def _import_stage(self, tally: _RunTally) -> None:
-        """Import every file that reached the inbox, archives before camp files, and write manifests."""
-        if not tally.downloaded_archives and not tally.downloaded_openev:
-            tally.record(SyncStage.IMPORT, StageOutcome.SKIPPED, "nothing was downloaded")
+        """Import what is in the inbox and not yet in a manifest, archives before camp files.
+
+        See "What is imported" in this module's docstring: the inbox rather than this run's
+        downloads, oldest first per caselist, and a caselist stops at its first gap.
+        """
+        archive_queues = self._archive_import_queues(tally)
+        openev_queue = self._openev_import_queue(tally)
+        if not any(queue.ready for queue in archive_queues) and not openev_queue:
+            waiting = sum(queue.waiting for queue in archive_queues)
+            tally.record(
+                SyncStage.IMPORT,
+                StageOutcome.SKIPPED,
+                f"nothing to import; {waiting} archive(s) in the inbox wait for an older week"
+                if waiting
+                else "nothing to import",
+            )
             return
         failures: list[str] = []
-        for selection, downloaded in tally.downloaded_archives:
+        held_back = 0
+        for queue in archive_queues:
+            for position, (selection, path) in enumerate(queue.ready):
+                try:
+                    await self._import_archive(
+                        selection, self._downloaded(tally, selection.name, path), tally
+                    )
+                except DomainError as refused:
+                    failures.append(f"{selection.name}: {refused}")
+                    held_back += len(queue.ready) - position - 1 + queue.waiting
+                    break
+            else:
+                held_back += queue.waiting
+        for openev_selection, path in openev_queue:
             try:
-                await self._import_archive(selection, downloaded, tally)
-            except DomainError as refused:
-                failures.append(f"{selection.name}: {refused}")
-        for openev_selection, downloaded in tally.downloaded_openev:
-            try:
-                await self._import_openev(openev_selection, downloaded, tally)
+                await self._import_openev(
+                    openev_selection, self._downloaded(tally, openev_selection.inbox_name, path), tally
+                )
             except DomainError as refused:
                 failures.append(f"openev-{openev_selection.openev_id}: {refused}")
+        waiting = (
+            f"; {held_back} archive(s) in the inbox held back for a later run, behind an older week"
+            if held_back
+            else ""
+        )
         if failures:
             tally.record(
                 SyncStage.IMPORT,
                 StageOutcome.FAILED,
-                f"{len(tally.snapshots_imported)} imported; {len(failures)} refused: " + "; ".join(failures),
+                f"{len(tally.snapshots_imported)} imported; {len(failures)} refused: "
+                + "; ".join(failures)
+                + waiting,
             )
             return
         tally.record(
             SyncStage.IMPORT,
             StageOutcome.COMPLETED,
-            f"{len(tally.snapshots_imported)} snapshot(s) imported, {tally.blobs_stored} new file(s) stored",
+            f"{len(tally.snapshots_imported)} snapshot(s) imported, {tally.blobs_stored} new file(s) stored"
+            + waiting,
         )
+
+    def _archive_import_queues(self, tally: _RunTally) -> list[_ImportQueue]:
+        """Per caselist, the weeklies to import in order, up to its first gap, and what waits behind it.
+
+        The candidates are every weekly newer than the caselist's latest manifest, which is exactly
+        the selections decided `DOWNLOAD`, `ALREADY_IN_INBOX` or deferred by the cap. One is ready
+        when it is in the inbox: fetched by this run, or decided `ALREADY_IN_INBOX`. The first that
+        is not — deferred, or its download failed — is a gap, and nothing newer is imported.
+        """
+        fetched = {selection.name for selection, _ in tally.downloaded_archives}
+        by_caselist: dict[str, list[ArchiveSelection]] = {}
+        for selection in tally.archives:
+            if selection.decision in _NEWER_THAN_HELD and selection.archive_date is not None:
+                by_caselist.setdefault(selection.caselist, []).append(selection)
+        queues: list[_ImportQueue] = []
+        for candidates in by_caselist.values():
+            candidates.sort(key=lambda one: (one.archive_date or date.min, one.name))
+            ready: list[tuple[ArchiveSelection, Path]] = []
+            waiting = 0
+            gap = False
+            for selection in candidates:
+                in_inbox = (
+                    selection.name in fetched or selection.decision is SelectionDecision.ALREADY_IN_INBOX
+                )
+                if in_inbox and not gap:
+                    ready.append((selection, self._inbox / selection.name))
+                    continue
+                gap = True
+                waiting += 1 if in_inbox else 0
+            queues.append(_ImportQueue(ready=tuple(ready), waiting=waiting))
+        return queues
+
+    def _openev_import_queue(self, tally: _RunTally) -> list[tuple[OpenEvSelection, Path]]:
+        """The camp files to import: fetched by this run, or already in the inbox and not recorded."""
+        fetched = {selection.openev_id for selection, _ in tally.downloaded_openev}
+        return [
+            (selection, self._inbox / selection.inbox_name)
+            for selection in sorted(tally.openev, key=lambda one: one.openev_id)
+            if selection.openev_id in fetched or selection.decision is SelectionDecision.ALREADY_IN_INBOX
+        ]
+
+    def _downloaded(self, tally: _RunTally, name: str, path: Path) -> DownloadedFile:
+        """What this run's download of `name` returned, or the same facts read off the inbox file."""
+        for selection, downloaded in tally.downloaded_archives:
+            if selection.name == name:
+                return downloaded
+        for openev_selection, downloaded in tally.downloaded_openev:
+            if openev_selection.inbox_name == name:
+                return downloaded
+        return _inbox_file(path)
 
     async def _import_archive(
         self, selection: ArchiveSelection, downloaded: DownloadedFile, tally: _RunTally
@@ -1308,10 +1430,10 @@ class CaselistSyncService:
         )
         write_manifest_lines(report.manifest_lines, path)
         self._count_openev(report, tally)
-        release = report.release
-        if release not in tally.snapshots_imported:
-            tally.snapshots_imported.append(f"{OPENEV_PUBLISH_TARGET} {release}")
-        target = PendingSnapshot(caselist=OPENEV_PUBLISH_TARGET, snapshot=release)
+        label = f"{OPENEV_PUBLISH_TARGET} {report.release}"
+        if label not in tally.snapshots_imported:
+            tally.snapshots_imported.append(label)
+        target = PendingSnapshot(caselist=OPENEV_PUBLISH_TARGET, snapshot=report.release)
         if target not in tally.publish_targets:
             tally.publish_targets.append(target)
 
@@ -1640,6 +1762,16 @@ _DEFERRED_BY_CAP: Final = frozenset(
     {SelectionDecision.OVER_DAILY_BUDGET, SelectionDecision.DEFERRED_BY_RATE_LIMIT}
 )
 
+_NEWER_THAN_HELD: Final = frozenset(
+    {
+        SelectionDecision.DOWNLOAD,
+        SelectionDecision.ALREADY_IN_INBOX,
+        SelectionDecision.OVER_DAILY_BUDGET,
+        SelectionDecision.DEFERRED_BY_RATE_LIMIT,
+    }
+)
+"""The decisions a weekly newer than the caselist's latest manifest can get: the import candidates."""
+
 _NO_BUCKET: Final = "this environment names no evidence bucket, so nothing is published from here"
 _NO_PARSE_PIPELINE: Final = "no parse pipeline is installed (v1-e31-t06 has not shipped)"
 _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not shipped)"
@@ -1725,6 +1857,43 @@ def _openev_event_of(file: OpenEvFile, configured: Event | None) -> Event | None
             if tag.strip().upper() == str(event).upper():
                 return event
     return configured
+
+
+@dataclass(frozen=True, slots=True)
+class _RecordedOpenEv:
+    """What one OpenEv release manifest records: member paths, and the downloads they came from."""
+
+    paths: frozenset[str]
+    download_digests: frozenset[str]
+
+
+_DIGEST_CHUNK_BYTES: Final = 1024 * 1024
+
+
+def _digest_of(path: Path) -> str | None:
+    """The SHA-256 of a file's bytes, or `None` when it cannot be read."""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(_DIGEST_CHUNK_BYTES), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
+def _inbox_file(path: Path) -> DownloadedFile:
+    """A file an earlier run left in the inbox, described the way its download was."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    digest = _digest_of(path) if size else None
+    if digest is None:
+        raise UnreadableArchive(path.name, "the file in the inbox is empty or could not be read")
+    return DownloadedFile(
+        path=path, sha256=digest, byte_size=size, source_name=path.name, already_present=True
+    )
 
 
 def _parsed_date(value: str) -> date | None:

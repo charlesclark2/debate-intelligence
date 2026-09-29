@@ -82,6 +82,14 @@ stages are then recorded as **pending** in a small local file, and the next run 
 `caselist pull --publish-pending` — completes them. Nothing that was captured is lost by a login
 that timed out overnight.
 
+## Which run a `caselist pull` is
+
+:func:`run_pull` chooses between the three things the command can be asked for — a dry run, a
+whole run, or completing the publishes an earlier run deferred — and runs the two that write
+anything inside :class:`~debate_core.application.sync_runs.SyncRunMonitor`. It takes a factory for
+this service rather than the service itself, because building it is where an API this installation
+has not turned on is refused, and that refusal has to be recorded like any other.
+
 ## One run at a time
 
 A run holds an exclusive lock on `<state_dir>/caselist-sync.lock` for its whole duration. A second
@@ -108,7 +116,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 from pathlib import Path
 from types import TracebackType
-from typing import Final, Protocol, Self, cast
+from typing import TYPE_CHECKING, Final, Protocol, Self, cast
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence, read_local_snapshots
 from debate_core.application.caselist.import_service import CaselistImportService, ImportReport
@@ -147,6 +155,9 @@ from debate_core.application.ports.caselist_source import (
 )
 from debate_core.domain.caselist import Acquisition, Event
 
+if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its types are named only
+    from debate_core.application.sync_runs import SyncRunMonitor, SyncRunRecord
+
 __all__ = [
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "INBOX_PARTIAL_DIRECTORY",
@@ -164,6 +175,7 @@ __all__ = [
     "OpenEvSelection",
     "ParseStageResult",
     "PendingWork",
+    "PulledRun",
     "RunSummary",
     "SelectionDecision",
     "StageOutcome",
@@ -173,6 +185,7 @@ __all__ = [
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "run_pull",
     "within_daily_budget",
 ]
 
@@ -1548,6 +1561,75 @@ class CaselistSyncService:
     def summary_path(self, summary: RunSummary) -> Path:
         """Where :meth:`run` wrote (or, for a dry run, would have written) this run's summary."""
         return self._state_dir / RUN_SUMMARY_DIRECTORY / f"{summary.run_id}.json"
+
+
+# ------------------------------------------------------------------------------------------------
+# Run modes
+# ------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class PulledRun:
+    """What one `caselist pull` produced, in whichever mode it ran."""
+
+    summary: RunSummary
+    record: SyncRunRecord | None
+    """The run log's record of this run (`v1-e34-t03`), or `None` for a dry run, which records nothing."""
+    summary_path: Path | None
+    """Where the run's JSON summary was written, or `None` for a dry run, which writes nothing."""
+
+
+async def run_pull(
+    sync_service: Callable[[], CaselistSyncService],
+    caselists: Sequence[str],
+    *,
+    dry_run: bool,
+    publish_pending: bool,
+    monitor: Callable[[], SyncRunMonitor],
+    progress: Callable[[str], None],
+) -> PulledRun:
+    """Run one `caselist pull`: a dry run, a whole run, or `--publish-pending`.
+
+    Args:
+        sync_service: Builds (or returns the already built) :class:`CaselistSyncService`. Called
+            only once the run has started, so that a refusal to build it is part of the run.
+        caselists: The slugs to pull; empty for `--publish-pending`.
+        dry_run: List what would be fetched, write nothing and record nothing.
+        publish_pending: Only complete the publishes an earlier run deferred. Never together with
+            `dry_run`; the command refuses that combination before calling this.
+        monitor: Builds the run monitor. Not called for a dry run.
+        progress: Where a one-line account of what is starting goes (the CLI's `--verbose`).
+
+    Raises :class:`NoCaselistsConfigured` when asked to pull no caselist, and whatever the service
+    or the monitor raise; the monitor has recorded and announced it first.
+    """
+    record: SyncRunRecord | None = None
+    if dry_run:
+        # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
+        if not caselists:
+            raise NoCaselistsConfigured
+        progress(f"pulling {', '.join(caselists)} (dry run)")
+        summary = await sync_service().run(caselists, dry_run=True)
+    else:
+
+        async def one_run() -> RunSummary:
+            # Inside the monitor, so that a refusal — no caselist, the API not turned on, an
+            # expired token, another run holding the lock — is recorded and announced too.
+            if publish_pending:
+                progress("completing the publishes an earlier run deferred")
+                return await sync_service().publish_pending()
+            if not caselists:
+                raise NoCaselistsConfigured
+            progress(f"pulling {', '.join(caselists)}")
+            return await sync_service().run(caselists)
+
+        monitored = await monitor().watch(
+            one_run, caselists=caselists, mode="publish_pending" if publish_pending else "run"
+        )
+        summary, record = monitored.summary, monitored.record
+
+    written_to = sync_service().summary_path(summary) if not summary.dry_run else None
+    return PulledRun(summary=summary, record=record, summary_path=written_to)
 
 
 # ------------------------------------------------------------------------------------------------

@@ -10,7 +10,7 @@ script reads the handlers' source with `ast`, imports nothing, and reports two t
 
   * a handler whose body holds more than the statement budget (default 25). Every statement at any
     depth counts, including those inside a nested function, a loop or an `if`; the docstring does
-    not. The thickest handler that is not an exception below holds 20.
+    not. The thickest handler holds 20.
   * a module defining a handler that imports `debate_core.integrations` itself, anywhere in the
     module. Adapters are built by the front end's composition root (`debate_cli.container`); a
     handler that constructs one has taken over a decision that is not its to make.
@@ -23,10 +23,10 @@ What counts as a handler:
     `.delete`, `.head`, `.options`, `.api_route` or `.websocket`, or passed as the endpoint of
     `<router>.add_api_route(...)`, anywhere in debate_api
 
-Handlers that were already over the line when this check was written are listed in
+Handlers that were already over the line when this check was written were listed in
 KNOWN_THICK_HANDLERS and KNOWN_INTEGRATIONS_IMPORTS, each by name, the thick ones with the count
-they had. They may shrink but not grow, and an entry that no longer matches anything is itself
-reported, so the lists only get shorter.
+they had. They could shrink but not grow, and an entry that no longer matched anything was itself
+reported, so the lists only got shorter; v1-e01-t13-composition-root-cleanup emptied both.
 
 Usage:
   uv run scripts/check_thin_handlers.py              # check the repository
@@ -51,20 +51,14 @@ CLI_REGISTRATIONS = {"command", "callback"}
 API_ROUTE_DECORATORS = {"get", "post", "put", "patch", "delete", "head", "options", "api_route", "websocket"}
 
 # Handler -> the statement count it had when the check was written. It may go down, never up.
-KNOWN_THICK_HANDLERS: Mapping[str, int] = {
-    # Sequences --dry-run, --publish-pending and the run monitor itself; that choice of run mode
-    # belongs in CaselistSyncService.
-    "debate_cli.commands.caselist_pull.pull": 33,
-}
+# Empty since v1-e01-t13-composition-root-cleanup moved `caselist pull`'s run-mode sequencing into
+# debate_core.application.caselist_sync; a handler over the budget is fixed, not listed.
+KNOWN_THICK_HANDLERS: Mapping[str, int] = {}
 # (handler module, imported adapter module) pairs, matching the ignore_imports entries of the
 # "Delivery packages reach debate_core.integrations only through their composition root" contract
-# in pyproject.toml. The fix for each is to have debate_cli.container build the adapter.
-KNOWN_INTEGRATIONS_IMPORTS: Set[tuple[str, str]] = {
-    ("debate_cli.commands.caselist", "debate_core.integrations.local.archive_reader"),
-    ("debate_cli.commands.caselist", "debate_core.integrations.local.fs_object_store"),
-    ("debate_cli.commands.caselist_auth", "debate_core.integrations.opencaselist"),
-    ("debate_cli.commands.caselist_auth", "debate_core.integrations.opencaselist.auth"),
-}
+# in pyproject.toml. Empty since v1-e01-t13-composition-root-cleanup moved the last four into
+# debate_cli.container; the fix for a new one is the same, not an entry here.
+KNOWN_INTEGRATIONS_IMPORTS: Set[tuple[str, str]] = frozenset()
 
 
 @dataclass(frozen=True)

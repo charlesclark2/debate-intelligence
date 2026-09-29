@@ -267,20 +267,14 @@ type = "forbidden"
 # CLI; debate_api and debate_workers add theirs to ignore_imports when they get one). Indirect
 # chains through that root are the design, so only direct imports are checked.
 #
-# The four other entries are the imports that existed when this contract was written, named edge
-# by edge so that nothing else in the same modules is exempt. Each is a command constructing or
-# typing an adapter itself; moving that into debate_cli.container is the fix, and each line goes
-# in the PR that makes it. They cannot be quietly left behind: an entry that no longer matches an
-# import fails lint-imports (unmatched_ignore_imports_alerting defaults to error).
+# The composition roots are the only entries. The four command imports that were grandfathered here
+# when this contract was written (v1-e02-t06) were moved into debate_cli.container by
+# v1-e01-t13-composition-root-cleanup; a command that needs an adapter asks the container for it.
 allow_indirect_imports = true
 source_modules = ["debate_cli", "debate_api", "debate_workers"]
 forbidden_modules = ["debate_core.integrations"]
 ignore_imports = [
     "debate_cli.container -> debate_core.integrations.**",
-    "debate_cli.commands.caselist -> debate_core.integrations.local.archive_reader",
-    "debate_cli.commands.caselist -> debate_core.integrations.local.fs_object_store",
-    "debate_cli.commands.caselist_auth -> debate_core.integrations.opencaselist",
-    "debate_cli.commands.caselist_auth -> debate_core.integrations.opencaselist.auth",
 ]
 
 # ---------------------------------------------------------------------------------------------

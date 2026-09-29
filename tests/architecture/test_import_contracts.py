@@ -141,8 +141,8 @@ class LintResult:
         return {match["name"] for match in BROKEN_VERDICT.finditer(self.output)}
 
 
-def lint_imports(root: Path) -> LintResult:
-    """Run the repository's import contracts over the packages under `root`."""
+def lint_imports(root: Path, config: Path = PYPROJECT) -> LintResult:
+    """Run the repository's import contracts (or those in `config`) over the packages under `root`."""
     env = {
         **os.environ,
         # Ahead of site-packages, and so of the .pth entries that point at the real packages.
@@ -152,7 +152,7 @@ def lint_imports(root: Path) -> LintResult:
         "NO_COLOR": "1",
     }
     completed = subprocess.run(
-        [str(LINT_IMPORTS), "--config", str(PYPROJECT), "--no-cache", "--no-logo"],
+        [str(LINT_IMPORTS), "--config", str(config), "--no-cache", "--no-logo"],
         cwd=root.parent,
         env=env,
         capture_output=True,
@@ -185,18 +185,24 @@ def test_a_violating_import_breaks_its_contract_by_name(package_copy: Path, viol
     assert violation.broken_contract in result.broken, result.output
 
 
-def test_an_exception_that_no_longer_matches_an_import_fails(package_copy: Path) -> None:
-    """Fixing a grandfathered command without deleting its ignore_imports line is itself a failure."""
-    command = package_copy / "debate_cli" / "commands" / "caselist_auth.py"
-    grandfathered = "from debate_core.integrations.opencaselist.auth import IssuedToken\n"
-    source = command.read_text()
-    assert grandfathered in source
-    command.write_text(source.replace(grandfathered, "from typing import Any as IssuedToken\n"))
+def test_an_exception_that_no_longer_matches_an_import_fails(package_copy: Path, tmp_path: Path) -> None:
+    """Fixing a grandfathered command without deleting its ignore_imports line is itself a failure.
 
-    result = lint_imports(package_copy)
+    The repository has no grandfathered command left (v1-e01-t13-composition-root-cleanup), so the
+    stale entry is added to a copy of the configuration: the edge the last one named, which the
+    command no longer has.
+    """
+    stale = "debate_cli.commands.caselist_auth -> debate_core.integrations.opencaselist.auth"
+    root_only = '    "debate_cli.container -> debate_core.integrations.**",\n'
+    configuration = PYPROJECT.read_text()
+    assert root_only in configuration
+    config = tmp_path / "pyproject.toml"
+    config.write_text(configuration.replace(root_only, f'{root_only}    "{stale}",\n'))
+
+    result = lint_imports(package_copy, config)
 
     assert result.returncode != 0, result.output
-    assert "debate_cli.commands.caselist_auth -> debate_core.integrations.opencaselist.auth" in result.output
+    assert stale in result.output
 
 
 def test_every_configured_contract_is_proven_to_fail() -> None:

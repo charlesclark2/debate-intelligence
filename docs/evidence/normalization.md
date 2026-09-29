@@ -167,8 +167,9 @@ bytes and not UTF-16 units). The map is a sequence of aligned segments covering 
 `to_raw_range(start, end)` returns the smallest raw range whose characters produced normalized
 `[start, end)`. A range edge inside a replaced segment widens to take in the whole segment, and a
 deleted raw character just outside the range is left out. `to_normalized_range(start, end)` is the
-reverse, and it widens the same way. Mapping a raw range to normalized text and back again never
-loses a character.
+reverse, and it widens the same way. Mapping a range to the other text and back again never
+loses a character. An empty range inside a replaced segment has no finer position to map to and
+lands at the segment's start.
 
 ## What is deliberately not changed
 

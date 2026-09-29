@@ -67,7 +67,7 @@ spec:
         docs/process/branching-and-environments.md are updated to describe what now happens
         automatically, with the manual step kept as the fallback if the re-run itself fails.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

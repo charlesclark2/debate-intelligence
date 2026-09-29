@@ -63,6 +63,7 @@ session may run it and say so in Deviations. When in doubt, hand it over.
 | `docs/guides/` | Student- and coach-facing guides for using the tools |
 | `docs/data/` | Data models and DynamoDB access patterns; recorded results of operator-run data jobs (counts, eval summaries; aggregates only, no debater names) |
 | `docs/policies/` | Data-use policies (caselist and OpenEv data use, removal process), approved by Charlie |
+| `docs/evidence/` | Evidence-integrity rules that stored data depends on: the versioned text normalization policy |
 | `plan_specs/` | PlanSpecs only: releases, epics, tasks |
 | `packages/<pkg>/README.md` | Package-level developer notes |
 

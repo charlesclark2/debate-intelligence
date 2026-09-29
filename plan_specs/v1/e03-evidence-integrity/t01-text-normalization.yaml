@@ -63,7 +63,7 @@ spec:
         The written policy (docs/evidence/normalization.md) lists every transformed code point, and a
         golden test pins the output of v1 on a corpus of news, PDF-extracted and think-tank paragraphs.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

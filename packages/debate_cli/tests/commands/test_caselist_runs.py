@@ -28,6 +28,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
+from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist_sync import DOWNLOAD_LEDGER_FILENAME, DownloadLedger
 from debate_core.application.sync_runs import (
@@ -36,6 +37,7 @@ from debate_core.application.sync_runs import (
     SyncRunOutcome,
     SyncRunRecord,
 )
+from debate_core.testing.fakes import FixedClock
 
 API = "https://api.opencaselist.example.invalid/v1"
 FILE_HOST = "https://files.opencaselist.example.invalid"
@@ -99,10 +101,28 @@ def as_json(*arguments: str) -> dict[str, Any]:
     return envelope
 
 
-def spend_todays_allowance(data_dir: Path, downloads: int) -> None:
-    DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME).record(
-        datetime.now(UTC).astimezone().date(), downloads
-    )
+OPERATOR_EVENING = datetime(2026, 9, 29, 4, 45, 11, tzinfo=UTC)
+"""23:45:11 CDT on 2026-09-28, when the operator's evening runs spent their five."""
+
+
+@pytest.fixture
+def forty_minutes_later(monkeypatch: pytest.MonkeyPatch) -> FixedClock:
+    """The command's clock, pinned forty minutes after `OPERATOR_EVENING`: past local midnight.
+
+    Pinned through the container's one clock, so the run and the window it counts against are
+    read from the same place, and nothing depends on when or where the suite runs (v1-e34-t06
+    ac2b). Each read advances a second, so two runs get two run ids.
+    """
+    clock = FixedClock(OPERATOR_EVENING + timedelta(minutes=40), step=timedelta(seconds=1))
+    monkeypatch.setattr(ServiceContainer, "clock", lambda self: clock.now)
+    return clock
+
+
+def spend_allowance(data_dir: Path, downloads: int, *, at: datetime) -> None:
+    """Record `downloads` bulk downloads started at `at`, as an earlier run would have."""
+    ledger = DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME)
+    for _ in range(downloads):
+        ledger.record(at)
 
 
 def a_record(started: datetime, *, downloaded: int = 2, deferred: int = 0) -> SyncRunRecord:
@@ -195,9 +215,15 @@ def test_a_dry_run_leaves_no_record(installation: Path, site: respx.MockRouter) 
     assert not (installation / SYNC_RUN_LOG_FILENAME).exists()
 
 
-def test_a_cap_blocked_pull_is_not_captioned_nothing_new(installation: Path, site: respx.MockRouter) -> None:
-    """The second dev run of 2026-09-24, through the command: 3 wanted, 0 allowed, 3 deferred."""
-    spend_todays_allowance(installation, 5)
+def test_a_cap_blocked_pull_is_not_captioned_nothing_new(
+    installation: Path, site: respx.MockRouter, forty_minutes_later: FixedClock
+) -> None:
+    """The second dev run of 2026-09-24, through the command: 3 wanted, 0 allowed, 3 deferred.
+
+    The five were spent forty minutes earlier, on the other side of midnight: a new date, and the
+    same 24 hours.
+    """
+    spend_allowance(installation, 5, at=OPERATOR_EVENING)
 
     result = invoke("caselist", "pull", "--caselist", SYNTHETIC_CASELIST)
 
@@ -214,10 +240,10 @@ def test_a_cap_blocked_pull_is_not_captioned_nothing_new(installation: Path, sit
 
 
 def test_a_truncated_pull_states_wanted_and_deferred_and_the_next_run_carries_the_backlog(
-    installation: Path, site: respx.MockRouter
+    installation: Path, site: respx.MockRouter, forty_minutes_later: FixedClock
 ) -> None:
     """The first dev run in miniature: 2 of 3 fetched and 1 deferred; the next run carries the 1."""
-    spend_todays_allowance(installation, 3)
+    spend_allowance(installation, 3, at=OPERATOR_EVENING)
 
     first = " ".join(invoke("caselist", "pull", "--caselist", SYNTHETIC_CASELIST).stdout.split())
 
@@ -228,7 +254,11 @@ def test_a_truncated_pull_states_wanted_and_deferred_and_the_next_run_carries_th
     second = as_json("caselist", "pull", "--caselist", SYNTHETIC_CASELIST)
 
     assert second["data"]["run_record"]["backlog_carried"] == 1
-    assert second["data"]["run_record"]["archives_deferred"] == 1, "today's allowance is still spent"
+    assert second["data"]["run_record"]["archives_deferred"] == 1, "the 24 hours' allowance is still spent"
+    assert second["data"]["bulk_downloads_spent_in_window"] == 5
+    window_start = datetime.fromisoformat(second["data"]["bulk_download_window_start"])
+    pinned = OPERATOR_EVENING + timedelta(minutes=40) - timedelta(hours=24)
+    assert pinned <= window_start < pinned + timedelta(minutes=1), "counted on the pinned clock"
 
 
 def test_redact_an_expired_token_run_record_carries_neither_the_token_nor_a_path(

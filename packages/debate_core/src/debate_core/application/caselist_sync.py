@@ -34,9 +34,17 @@ difference.
 OpenCaselist limits each user to **5 bulk downloads per day** (`weeklyLimiter` upstream, found by
 `v1-e34-t01`), separately from the 10-file-per-minute limit the transport paces itself against.
 That ceiling is budgeted in :meth:`CaselistSyncService.plan` across the configured caselists —
-decided before anything is fetched rather than discovered when the server says no — and what a run
-spends is recorded in a per-day ledger, so a second run on the same day starts from what is left
-rather than from five.
+decided before anything is fetched rather than discovered when the server says no — and every
+bulk download this machine starts is recorded in a ledger, so a second run starts from what is
+left rather than from five.
+
+The budget is a **rolling 24 hours**, not a calendar day (`v1-e34-t06`): a download may start only
+if fewer than five started in the 24 hours before it. `v1-e34-t01` established the ceiling but not
+which day the server counts, and neither does the data-use policy, so any calendar would be a guess
+— and a calendar key hands out a fresh five at its midnight, which is twice the limit across a
+boundary. It is :class:`~debate_core.integrations.opencaselist.pacing.RequestPacer`'s rule for the
+per-minute limit one scale up, and it is conservative against a limiter counting any calendar in
+any timezone. See :class:`DownloadLedger`.
 
 If the server refuses anyway, a :class:`~debate_core.application.errors.ProviderRateLimited`
 carrying a wait longer than :data:`SKIP_TODAY_SECONDS` means *skip today*: the remaining archives
@@ -127,7 +135,7 @@ import logging
 import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from types import TracebackType
@@ -175,10 +183,13 @@ if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its ty
     from debate_core.application.sync_runs import SyncRunMonitor, SyncRunRecord
 
 __all__ = [
+    "BULK_DOWNLOAD_WINDOW",
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "INBOX_PARTIAL_DIRECTORY",
+    "LEGACY_DOWNLOAD_LEDGER_FILENAME",
     "LOCK_FILENAME",
     "PENDING_WORK_FILENAME",
+    "RUN_SUMMARY_SCHEMA_VERSION",
     "SKIP_TODAY_SECONDS",
     "ArchiveReader",
     "ArchiveSelection",
@@ -223,7 +234,28 @@ INBOX_PARTIAL_DIRECTORY: Final = ".partial"
 
 LOCK_FILENAME: Final = "caselist-sync.lock"
 PENDING_WORK_FILENAME: Final = "caselist-sync-pending.json"
-DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-downloads.json"
+DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-download-starts.json"
+"""When each bulk download started, for the rolling window. See :class:`DownloadLedger`."""
+
+LEGACY_DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-downloads.json"
+"""The calendar-day ledger builds before `v1-e34-t06` kept: `{"date": ..., "bulk_downloads": N}`.
+
+Read, never written. See :class:`DownloadLedger` for why it is still read, and how.
+"""
+
+BULK_DOWNLOAD_WINDOW: Final = timedelta(hours=24)
+"""How far back the daily bulk-download ceiling counts: a rolling day, not a calendar one."""
+
+DOWNLOAD_LEDGER_SCHEMA_VERSION: Final = 1
+
+RUN_SUMMARY_SCHEMA_VERSION: Final = 2
+"""The shape of :meth:`RunSummary.as_json`.
+
+Version 2 (`v1-e34-t06`) reports the download window as `bulk_download_window_start` and
+`bulk_downloads_spent_in_window`. The summaries written before it carry no version and report
+`bulk_downloads_spent_today` instead; nothing reads them back, and `caselist runs` reads the run
+log (:mod:`debate_core.application.sync_runs`), whose records have neither field.
+"""
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
 OPENEV_PUBLISH_TARGET: Final = "openev"
@@ -401,9 +433,13 @@ class SyncPlan:
     archives: tuple[ArchiveSelection, ...]
     openev: tuple[OpenEvSelection, ...]
     bulk_downloads_allowed: int
-    """What was left of the day's 5 when this plan was made."""
+    """What was left of the five when this plan was made."""
 
-    bulk_downloads_spent_today: int
+    bulk_downloads_spent_in_window: int
+    """Bulk downloads started in the 24 hours before this plan was made."""
+
+    bulk_download_window_start: datetime
+    """Where those 24 hours began: the plan's own time less :data:`BULK_DOWNLOAD_WINDOW`."""
 
     @property
     def archives_to_download(self) -> tuple[ArchiveSelection, ...]:
@@ -615,33 +651,136 @@ class PendingWork:
 
 
 class DownloadLedger:
-    """How many bulk archive downloads this machine has spent today, against OpenCaselist's five.
+    """When this machine started each bulk archive download, counted over a rolling 24 hours.
 
-    Keyed by the calendar date the run starts on, in local time, because the server's limiter is a
-    per-day counter and the operator's day is the one they will compare against. A ledger for any
-    other date is replaced rather than accumulated: yesterday's count is not a debt.
+    A download may start at `now` only if fewer than `limit` started in `(now - 24h, now]`: the
+    rule :class:`~debate_core.integrations.opencaselist.pacing.RequestPacer` applies to the
+    per-minute limit, one scale up (see this module's docstring). Five at `T` are still counted at
+    `T + 23h59m` and released at `T + 24h`. A start later than `now` counts too, so a clock set
+    back cannot hand out an allowance.
+
+    The file is `{"schema_version": 1, "bulk_download_starts": [<ISO 8601 UTC>, ...]}`, pruned to
+    the window on every write.
+
+    ## Reading what it cannot trust
+
+    An unreadable ledger does not say "nothing spent", because nothing spent means five available.
+    A file here that is not a ledger this class wrote is read as `limit` downloads started when
+    the file was last written (its mtime): fully spent for 24 hours, then released.
+
+    The calendar-day ledger of the builds before `v1-e34-t06`
+    (:data:`LEGACY_DOWNLOAD_LEDGER_FILENAME`) is still read, and never written. Its
+    `{"date": ..., "bulk_downloads": N}` becomes `N` downloads started at its mtime: every write
+    replaced the file, so each of the `N` started at or before that moment, and counting them there
+    keeps them in the window for as long as any of them could be. It is read on every run rather than
+    migrated once, because an installed build still on the old format writes it — `v1-e30-t06`'s
+    backfill runs from one — and what that build spends must still count against this one. An old
+    build does not read this file, so it may spend what this one already has; the server's own
+    limiter absorbs that as a deferral (:data:`SKIP_TODAY_SECONDS`), which is a wasted run and not
+    a breach.
     """
 
-    def __init__(self, path: Path, *, limit: int = DEFAULT_BULK_DOWNLOADS_PER_DAY) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        limit: int = DEFAULT_BULK_DOWNLOADS_PER_DAY,
+        legacy_path: Path | None = None,
+    ) -> None:
         self.path = Path(path)
         self.limit = limit
+        self.legacy_path = Path(legacy_path) if legacy_path is not None else None
 
-    def spent_on(self, day: date) -> int:
-        body = _read_json_object(self.path)
-        if body is None or body.get("date") != day.isoformat():
-            return 0
-        spent = body.get("bulk_downloads")
-        return spent if isinstance(spent, int) and spent >= 0 else 0
+    @staticmethod
+    def window_start(now: datetime) -> datetime:
+        """The start of the 24 hours a download at `now` is counted against. Not itself inside it."""
+        return now - BULK_DOWNLOAD_WINDOW
 
-    def remaining_on(self, day: date) -> int:
-        return max(self.limit - self.spent_on(day), 0)
+    def starts(self) -> tuple[datetime, ...]:
+        """Every download start this ledger and the legacy one account for, oldest first."""
+        recorded = list(self._own_starts())
+        if self.legacy_path is not None:
+            recorded.extend(self._legacy_starts(self.legacy_path))
+        return tuple(sorted(recorded))
 
-    def record(self, day: date, downloads: int) -> None:
-        """Add `downloads` to the count for `day`. A dry run never calls this."""
-        if downloads <= 0:
-            return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(self.path, {"date": day.isoformat(), "bulk_downloads": self.spent_on(day) + downloads})
+    def spent_in_window(self, now: datetime) -> int:
+        """Downloads started in the 24 hours before `now`, or after it."""
+        since = self.window_start(now)
+        return sum(1 for started in self.starts() if started > since)
+
+    def remaining_at(self, now: datetime) -> int:
+        return max(self.limit - self.spent_in_window(now), 0)
+
+    def record(self, started_at: datetime) -> None:
+        """Add one download that started at `started_at`. A dry run never calls this."""
+        _require_aware(started_at)
+        since = self.window_start(started_at)
+        kept = [started for started in self._own_starts() if started > since]
+        kept.append(started_at)
+        _write_json(
+            self.path,
+            {
+                "schema_version": DOWNLOAD_LEDGER_SCHEMA_VERSION,
+                "bulk_download_starts": [started.astimezone(UTC).isoformat() for started in sorted(kept)],
+            },
+        )
+
+    def _own_starts(self) -> tuple[datetime, ...]:
+        if not self.path.is_file():
+            return ()
+        starts = _parsed_starts(_read_json_object(self.path))
+        if starts is None:
+            logger.warning(
+                "caselist sync: the download ledger is not one this build wrote; counting it as spent"
+            )
+            return self._spent_when_written(self.path, self.limit)
+        return starts
+
+    def _legacy_starts(self, path: Path) -> tuple[datetime, ...]:
+        if not path.is_file():
+            return ()
+        body = _read_json_object(path)
+        spent = body.get("bulk_downloads") if body is not None else None
+        if body is None or not isinstance(body.get("date"), str) or not isinstance(spent, int) or spent < 0:
+            logger.warning("caselist sync: the old download ledger is unreadable; counting it as spent")
+            return self._spent_when_written(path, self.limit)
+        return self._spent_when_written(path, spent)
+
+    @staticmethod
+    def _spent_when_written(path: Path, downloads: int) -> tuple[datetime, ...]:
+        """`downloads` starts at the moment `path` was last written, the latest any of them can be."""
+        try:
+            written = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+        except OSError:  # gone since it was found: there is nothing left to count
+            return ()
+        return (written,) * downloads
+
+
+def _parsed_starts(body: dict[str, object] | None) -> tuple[datetime, ...] | None:
+    """The starts a ledger this class wrote records, or `None` if `body` is not one."""
+    if body is None or body.get("schema_version") != DOWNLOAD_LEDGER_SCHEMA_VERSION:
+        return None
+    raw = body.get("bulk_download_starts")
+    if not isinstance(raw, list):
+        return None
+    starts: list[datetime] = []
+    for value in cast("list[object]", raw):
+        if not isinstance(value, str):
+            return None
+        try:
+            started = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        if started.tzinfo is None:
+            return None
+        starts.append(started)
+    return tuple(starts)
+
+
+def _require_aware(moment: datetime) -> datetime:
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise ValueError("a download start must be timezone-aware")
+    return moment
 
 
 def _read_json_object(path: Path) -> dict[str, object] | None:
@@ -710,7 +849,13 @@ class RunSummary:
     snapshots_imported: tuple[str, ...] = ()
     pending_publish: tuple[str, ...] = ()
     bulk_downloads_allowed: int = 0
-    bulk_downloads_spent_today: int = 0
+    """What was left of the five when the run planned."""
+
+    bulk_downloads_spent_in_window: int = 0
+    """Bulk downloads started in the 24 hours before the run planned, by this run's ledger."""
+
+    bulk_download_window_start: datetime | None = None
+    """Where those 24 hours began, or `None` when the run never planned (`--publish-pending`)."""
 
     @property
     def archives_seen(self) -> int:
@@ -770,6 +915,7 @@ class RunSummary:
     def as_json(self) -> dict[str, object]:
         """The summary as it is written to disk and returned by `caselist pull --json`."""
         return {
+            "schema_version": RUN_SUMMARY_SCHEMA_VERSION,
             "run_id": self.run_id,
             "started_at": self.started_at.isoformat(),
             "finished_at": self.finished_at.isoformat(),
@@ -796,7 +942,10 @@ class RunSummary:
             "snapshots_imported": list(self.snapshots_imported),
             "pending_publish": list(self.pending_publish),
             "bulk_downloads_allowed": self.bulk_downloads_allowed,
-            "bulk_downloads_spent_today": self.bulk_downloads_spent_today,
+            "bulk_downloads_spent_in_window": self.bulk_downloads_spent_in_window,
+            "bulk_download_window_start": (
+                self.bulk_download_window_start.isoformat() if self.bulk_download_window_start else None
+            ),
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -833,7 +982,8 @@ class _RunTally:
     published: list[PendingSnapshot] = field(default_factory=lambda: list[PendingSnapshot]())
     pending_publish: list[PendingSnapshot] = field(default_factory=lambda: list[PendingSnapshot]())
     bulk_downloads_allowed: int = 0
-    bulk_downloads_spent_today: int = 0
+    bulk_downloads_spent_in_window: int = 0
+    bulk_download_window_start: datetime | None = None
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
@@ -886,7 +1036,7 @@ class CaselistSyncService:
         openev_year: The OpenEv release year to list, or `None` for the API's current year.
         bulk_downloads_per_day: The upstream ceiling; never raised above
             :data:`DEFAULT_BULK_DOWNLOADS_PER_DAY`.
-        clock: Returns an aware `datetime`; the run's timestamps and the ledger's day come from it.
+        clock: Returns an aware `datetime`; the run's timestamps and the download window come from it.
     """
 
     def __init__(
@@ -927,6 +1077,7 @@ class CaselistSyncService:
         self._ledger = DownloadLedger(
             self._state_dir / DOWNLOAD_LEDGER_FILENAME,
             limit=min(bulk_downloads_per_day, DEFAULT_BULK_DOWNLOADS_PER_DAY),
+            legacy_path=self._state_dir / LEGACY_DOWNLOAD_LEDGER_FILENAME,
         )
         self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME)
 
@@ -947,8 +1098,8 @@ class CaselistSyncService:
         """
         if not caselists:
             raise NoCaselistsConfigured
-        today = self._clock().date()
-        allowed = self._ledger.remaining_on(today)
+        now = self._clock()
+        allowed = self._ledger.remaining_at(now)
         inbox_names = self._inbox_names()
         selections: list[ArchiveSelection] = []
         for caselist in caselists:
@@ -960,7 +1111,8 @@ class CaselistSyncService:
             archives=tuple(selections),
             openev=tuple(openev),
             bulk_downloads_allowed=allowed,
-            bulk_downloads_spent_today=self._ledger.spent_on(today),
+            bulk_downloads_spent_in_window=self._ledger.spent_in_window(now),
+            bulk_download_window_start=self._ledger.window_start(now),
         )
 
     async def run(self, caselists: Sequence[str], *, dry_run: bool = False) -> RunSummary:
@@ -1022,30 +1174,39 @@ class CaselistSyncService:
         try:
             plan = await self.plan(caselists)
         except ProviderRateLimited as limited:
+            now = self._clock()
             plan = SyncPlan(
                 caselists=tuple(caselists),
                 archives=(),
                 openev=(),
                 bulk_downloads_allowed=0,
-                bulk_downloads_spent_today=self._ledger.spent_on(self._clock().date()),
+                bulk_downloads_spent_in_window=self._ledger.spent_in_window(now),
+                bulk_download_window_start=self._ledger.window_start(now),
             )
             tally.record(SyncStage.SELECT, StageOutcome.SKIPPED, f"OpenCaselist is rate limiting: {limited}")
             tally.archives, tally.openev = plan.archives, plan.openev
             return plan
         tally.archives, tally.openev = plan.archives, plan.openev
         tally.bulk_downloads_allowed = plan.bulk_downloads_allowed
-        tally.bulk_downloads_spent_today = plan.bulk_downloads_spent_today
+        tally.bulk_downloads_spent_in_window = plan.bulk_downloads_spent_in_window
+        tally.bulk_download_window_start = plan.bulk_download_window_start
         fetch = len(plan.archives_to_download) + len(plan.openev_to_download)
         deferred = sum(1 for one in plan.archives if one.deferred_by_cap)
         listed = f"{len(plan.archives)} archive(s) and {len(plan.openev)} OpenEv file(s) listed; "
+        # What the run counted against, so nobody has to open the ledger to see it (ac2b).
+        window = (
+            f"{plan.bulk_downloads_spent_in_window} of {self._ledger.limit} bulk download(s) spent in "
+            f"the 24 hours from {plan.bulk_download_window_start.astimezone(UTC):%Y-%m-%d %H:%M} UTC, "
+            f"{plan.bulk_downloads_allowed} left"
+        )
         if deferred:
             wanted = fetch + deferred
             detail = (
                 f"{listed}{fetch} to fetch of {wanted} wanted, {deferred} deferred by the daily "
-                f"download cap ({plan.bulk_downloads_allowed} of today's allowance left)"
+                f"download cap; {window}"
             )
         else:
-            detail = f"{listed}{fetch} to fetch"
+            detail = f"{listed}{fetch} to fetch; {window}"
         tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, detail)
         return plan
 
@@ -1239,6 +1400,7 @@ class CaselistSyncService:
             listing = selection.listing
             if listing is None:  # pragma: no cover - a selection to download always carries one
                 continue
+            started = self._clock()
             try:
                 downloaded = await self._source.download_archive(listing, self._inbox)
             except ProviderRateLimited as limited:
@@ -1252,8 +1414,9 @@ class CaselistSyncService:
                 failure = f"{selection.name}: {refused}"
                 break
             tally.downloaded_archives.append((selection, downloaded))
-            if not downloaded.already_present:
-                self._ledger.record(self._clock().date(), 1)
+            # Recorded even when the bytes were `already_present`: the client streamed the whole
+            # archive before it could tell, and the server counted the download.
+            self._ledger.record(started)
 
         if deferred_from is not None:
             tally.archives = _mark_deferred(tally.archives, wanted[deferred_from:])
@@ -1671,7 +1834,8 @@ class CaselistSyncService:
             snapshots_imported=tuple(tally.snapshots_imported),
             pending_publish=tuple(f"{one.caselist} {one.snapshot}" for one in tally.pending_publish),
             bulk_downloads_allowed=tally.bulk_downloads_allowed,
-            bulk_downloads_spent_today=tally.bulk_downloads_spent_today,
+            bulk_downloads_spent_in_window=tally.bulk_downloads_spent_in_window,
+            bulk_download_window_start=tally.bulk_download_window_start,
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:

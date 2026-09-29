@@ -35,12 +35,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 from collections.abc import Callable, Iterable, Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from tests.fixtures.caselist.build_synthetic_archives import (
     SNAPSHOTS,
     SYNTHETIC_CASELIST,
@@ -58,9 +63,11 @@ from debate_core.application.caselist.status_service import CaselistStatusServic
 from debate_core.application.caselist_sync import (
     DEFAULT_BULK_DOWNLOADS_PER_DAY,
     DOWNLOAD_LEDGER_FILENAME,
+    LEGACY_DOWNLOAD_LEDGER_FILENAME,
     LOCK_FILENAME,
     PENDING_WORK_FILENAME,
     RUN_SUMMARY_DIRECTORY,
+    RUN_SUMMARY_SCHEMA_VERSION,
     ArchiveSelection,
     CaselistSyncService,
     DownloadLedger,
@@ -768,19 +775,350 @@ async def test_a_run_never_plans_more_downloads_than_the_day_has_left(
     )
 
 
-async def test_what_a_run_spent_is_carried_into_the_next_run_on_the_same_day(
+async def test_window_what_a_run_spent_is_carried_into_the_next_run_for_24_hours(
     source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
 ) -> None:
-    """The five are a day's allowance, not a run's. A second run today starts from what is left."""
+    """The five are a rolling day's allowance, not a run's. A second run starts from what is left."""
     await import_first_week(data_dir, archives)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox, bulk_downloads_per_day=2)
 
     await service.run([SYNTHETIC_CASELIST])
     ledger = DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME, limit=2)
 
-    assert ledger.spent_on(RUN_CLOCK.date()) == 2
-    assert ledger.remaining_on(RUN_CLOCK.date()) == 0
-    assert ledger.remaining_on(date(2026, 9, 17)) == 2, "yesterday's count is not a debt"
+    assert ledger.starts() == (RUN_CLOCK, RUN_CLOCK)
+    assert ledger.remaining_at(RUN_CLOCK) == 0
+    assert ledger.remaining_at(RUN_CLOCK + timedelta(hours=23, minutes=59)) == 0, (
+        "a new date is not a new five"
+    )
+    assert ledger.remaining_at(RUN_CLOCK + timedelta(hours=24, minutes=1)) == 2
+
+
+# ------------------------------------------------------------------------------------------------
+# The download budget is a rolling 24 hours (v1-e34-t06 ac2, ac2b)
+# ------------------------------------------------------------------------------------------------
+#
+# Every time here is pinned. None comes from the machine's clock or its timezone: a test of a
+# window that read either would pass at 14:00 and fail at 21:43, which is what the calendar-day
+# ledger's tests did.
+
+OPERATOR_EVENING = datetime(2026, 9, 29, 4, 45, 11, tzinfo=UTC)
+"""23:45:11 CDT on 2026-09-28: when the operator's calendar ledger was last written."""
+
+A_ROLLING_DAY = timedelta(hours=24)
+"""Written here rather than imported: a test that took the window from the module under test
+would agree with whatever window the module had."""
+
+OPERATOR_LEGACY_LEDGER = b'{\n  "bulk_downloads": 5,\n  "date": "2026-09-29"\n}\n'
+"""The operator's old-format ledger, byte for byte as the calendar-day build wrote it."""
+
+
+def spend_allowance(data_dir: Path, downloads: int, *, at: datetime) -> None:
+    """Record `downloads` bulk downloads started at `at`, as an earlier run would have."""
+    ledger = DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME)
+    for _ in range(downloads):
+        ledger.record(at)
+
+
+def written_at(path: Path, moment: datetime) -> None:
+    """Give `path` the modification time `moment`, which is what an old-format ledger is read by."""
+    os.utime(path, (moment.timestamp(), moment.timestamp()))
+
+
+def test_window_five_downloads_at_t_are_still_counted_at_23h59m_and_released_at_24h01m(
+    tmp_path: Path,
+) -> None:
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME)
+    for _ in range(5):
+        ledger.record(OPERATOR_EVENING)
+
+    assert ledger.spent_in_window(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 5
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 0
+    # Released at exactly 24 hours, as RequestPacer releases a download at exactly 60 seconds.
+    assert ledger.remaining_at(OPERATOR_EVENING + A_ROLLING_DAY) == 5
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 5
+    assert ledger.spent_in_window(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 0
+
+
+def test_window_a_start_after_now_still_counts_so_a_clock_set_back_frees_nothing(tmp_path: Path) -> None:
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME)
+    for _ in range(5):
+        ledger.record(OPERATOR_EVENING)
+
+    assert ledger.remaining_at(OPERATOR_EVENING - timedelta(hours=2)) == 0
+
+
+def test_window_the_ledger_keeps_only_what_is_inside_the_window(tmp_path: Path) -> None:
+    path = tmp_path / DOWNLOAD_LEDGER_FILENAME
+    ledger = DownloadLedger(path)
+    ledger.record(OPERATOR_EVENING)
+    ledger.record(OPERATOR_EVENING + timedelta(hours=25))
+
+    body = json.loads(path.read_text(encoding="utf-8"))
+
+    assert body == {
+        "schema_version": 1,
+        "bulk_download_starts": ["2026-09-30T05:45:11+00:00"],
+    }
+
+
+@pytest.mark.parametrize(
+    "zone", ["UTC", "America/Chicago", "Pacific/Kiritimati", "Etc/GMT+12", "Asia/Kolkata", "Europe/London"]
+)
+async def test_window_five_at_t_then_five_forty_minutes_later_are_refused_across_a_midnight(
+    zone: str, source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The doubling the calendar ledger allowed, wherever the midnight is.
+
+    The calendar-day build keyed the ledger on the date of a UTC clock, so five at 23:40 and five
+    at 00:20 were two days' allowances. The window has no midnight to cross.
+    """
+    midnight = datetime(2026, 9, 16, tzinfo=ZoneInfo(zone))
+    first = midnight - timedelta(minutes=20)
+    second = first + timedelta(minutes=40)
+    assert first.date() != second.astimezone(ZoneInfo(zone)).date(), "the two runs must straddle a midnight"
+    await import_first_week(data_dir, archives)
+    spend_allowance(data_dir, 5, at=first)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, clock=lambda: second)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == []
+    assert {
+        decisions(summary.archives)[weekly_name(day)] for day in (date(2026, 9, 8), date(2026, 9, 15))
+    } == {str(SelectionDecision.OVER_DAILY_BUDGET)}
+    assert summary.bulk_downloads_allowed == 0
+    assert summary.bulk_downloads_spent_in_window == 5
+    assert summary.bulk_download_window_start == second - timedelta(hours=24)
+
+
+async def test_window_a_run_records_each_download_at_the_moment_it_started(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The service writes the window in its own clock's instants, not in dates."""
+    await import_first_week(data_dir, archives)
+    moments = iter(OPERATOR_EVENING + timedelta(seconds=10 * tick) for tick in range(1000))
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, clock=lambda: next(moments))
+
+    await service.run([SYNTHETIC_CASELIST])
+
+    starts = DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME).starts()
+    assert len(starts) == 2
+    assert all(OPERATOR_EVENING < one < OPERATOR_EVENING + timedelta(minutes=10) for one in starts)
+    assert starts[0] < starts[1]
+
+
+class SourceWhoseBytesAreAlreadyThere(FakeCaselistSource):
+    """Every archive comes back `already_present`, as if the inbox had gained it mid-run."""
+
+    async def download_archive(self, archive: ArchiveListing, inbox: Path) -> DownloadedFile:
+        downloaded = await super().download_archive(archive, inbox)
+        return downloaded.model_copy(update={"already_present": True})
+
+
+async def test_window_a_download_whose_bytes_were_already_present_is_still_counted(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The client streams the whole archive before it can tell; the server has counted it."""
+    await import_first_week(data_dir, archives)
+    already = SourceWhoseBytesAreAlreadyThere()
+    already.archives, already.openev_files = source.archives, source.openev_files
+    service = build_service(source=already, data_dir=data_dir, inbox=inbox)
+
+    await service.run([SYNTHETIC_CASELIST])
+
+    assert DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME).spent_in_window(RUN_CLOCK) == 2
+
+
+async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    await import_first_week(data_dir, archives)
+    spend_allowance(data_dir, 2, at=RUN_CLOCK - timedelta(hours=23))
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+    written = json.loads(service.summary_path(summary).read_text(encoding="utf-8"))
+
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 2
+    assert written["bulk_download_window_start"] == "2026-09-15T06:00:00+00:00"
+    assert written["bulk_downloads_spent_in_window"] == 2
+    assert written["bulk_downloads_allowed"] == 3
+    assert "bulk_downloads_spent_today" not in written
+    reason = summary.stage(SyncStage.SELECT).reason or ""  # type: ignore[union-attr]
+    assert reason.endswith(
+        "3 to fetch; 2 of 5 bulk download(s) spent in the 24 hours from 2026-09-15 06:00 UTC, 3 left"
+    )
+
+
+async def test_window_the_first_run_after_the_upgrade_counts_the_old_calendar_ledger(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The operator's own ledger, forty minutes after it was written, is five spent — not none.
+
+    A new ledger that read the old file as saying nothing would hand out a free five on the first
+    run after the upgrade, on top of the five already spent.
+    """
+    await import_first_week(data_dir, archives)
+    legacy = data_dir / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    legacy.write_bytes(OPERATOR_LEGACY_LEDGER)
+    written_at(legacy, OPERATOR_EVENING)
+    forty_minutes_later = OPERATOR_EVENING + timedelta(minutes=40)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, clock=lambda: forty_minutes_later)
+
+    refused = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == []
+    assert refused.bulk_downloads_spent_in_window == 5
+    assert legacy.read_bytes() == OPERATOR_LEGACY_LEDGER, "the old ledger is read, never rewritten"
+
+    next_evening = OPERATOR_EVENING + timedelta(hours=24, minutes=1)
+    later = build_service(source=source, data_dir=data_dir, inbox=inbox, clock=lambda: next_evening)
+    allowed = await later.run([SYNTHETIC_CASELIST])
+
+    assert allowed.bulk_downloads_allowed == 5
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8)), weekly_name(date(2026, 9, 15))]
+
+
+def test_window_an_old_ledger_counts_from_when_it_was_written_not_from_its_date(tmp_path: Path) -> None:
+    """Its `date` is a UTC calendar day; its mtime is the latest any of its downloads can be.
+
+    The operator's five were spent at 04:45 UTC on 2026-09-29. Counted from that date's midnight
+    they would be released at 00:00 UTC on 09-30, almost five hours early.
+    """
+    legacy = tmp_path / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    legacy.write_bytes(OPERATOR_LEGACY_LEDGER)
+    written_at(legacy, OPERATOR_EVENING)
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+
+    assert ledger.starts() == (OPERATOR_EVENING,) * 5
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 0
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 5
+
+
+def test_window_an_old_ledger_with_room_left_leaves_that_room(tmp_path: Path) -> None:
+    legacy = tmp_path / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    legacy.write_bytes(b'{\n  "bulk_downloads": 2,\n  "date": "2026-09-29"\n}\n')
+    written_at(legacy, OPERATOR_EVENING)
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(minutes=40)) == 3
+
+
+def test_window_an_old_build_spending_after_this_one_still_counts(tmp_path: Path) -> None:
+    """The backfill runs from an installed build on the old format; what it spends is counted."""
+    legacy = tmp_path / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+    ledger.record(OPERATOR_EVENING)
+    ledger.record(OPERATOR_EVENING)
+    legacy.write_bytes(b'{\n  "bulk_downloads": 3,\n  "date": "2026-09-29"\n}\n')
+    written_at(legacy, OPERATOR_EVENING + timedelta(minutes=5))
+
+    assert ledger.spent_in_window(OPERATOR_EVENING + timedelta(minutes=40)) == 5
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(minutes=40)) == 0
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"",
+        b"not json",
+        b"[]",
+        b'{"date": "2026-09-29"}',
+        b'{"date": "2026-09-29", "bulk_downloads": -1}',
+        b'{"date": "2026-09-29", "bulk_downloads": "five"}',
+    ],
+    ids=["empty", "not-json", "not-an-object", "no-count", "negative-count", "count-not-a-number"],
+)
+def test_window_an_unreadable_old_ledger_is_counted_as_fully_spent(tmp_path: Path, body: bytes) -> None:
+    legacy = tmp_path / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    legacy.write_bytes(body)
+    written_at(legacy, OPERATOR_EVENING)
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 0
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 5
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"not json",
+        OPERATOR_LEGACY_LEDGER,
+        b'{"schema_version": 2, "bulk_download_starts": []}',
+        b'{"schema_version": 1, "bulk_download_starts": "2026-09-29T04:45:11+00:00"}',
+        b'{"schema_version": 1, "bulk_download_starts": ["yesterday"]}',
+        b'{"schema_version": 1, "bulk_download_starts": ["2026-09-29T04:45:11"]}',
+    ],
+    ids=[
+        "not-json",
+        "old-format-under-the-new-name",
+        "unknown-version",
+        "not-a-list",
+        "not-a-time",
+        "naive-time",
+    ],
+)
+def test_window_an_unrecognised_ledger_is_counted_as_fully_spent(tmp_path: Path, body: bytes) -> None:
+    path = tmp_path / DOWNLOAD_LEDGER_FILENAME
+    path.write_bytes(body)
+    written_at(path, OPERATOR_EVENING)
+    ledger = DownloadLedger(path)
+
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 0
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 5
+
+
+def test_window_a_naive_start_is_refused_rather_than_guessed(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME).record(datetime(2026, 9, 29, 4, 45))  # noqa: DTZ001
+
+
+@settings(max_examples=150, deadline=None)
+@given(
+    gaps=st.lists(st.integers(min_value=0, max_value=30 * 3600), min_size=1, max_size=40),
+    wanted=st.lists(st.integers(min_value=0, max_value=7), min_size=40, max_size=40),
+    legacy_spent=st.one_of(st.none(), st.integers(min_value=0, max_value=5)),
+    legacy_age_seconds=st.integers(min_value=0, max_value=30 * 3600),
+)
+def test_window_no_24_hours_ever_holds_more_than_five_starts(
+    gaps: list[int], wanted: list[int], legacy_spent: int | None, legacy_age_seconds: int
+) -> None:
+    """Runs at arbitrary gaps, each fetching as much as it wants of what the window allows.
+
+    Every run reads the ledger afresh, as separate processes do. Whatever the gaps, the starts in
+    any 24 hours ending at a start — the old calendar ledger's included — never exceed five, and
+    24 hours with nothing started always leaves the whole five.
+
+    The starts are counted from this test's own account of what it recorded and planted, never
+    read back through the ledger: an oracle that asked the code under test what had been spent
+    was blind to a ledger that forgot something (found by a deep run, v1-e34-t06).
+    """
+    with tempfile.TemporaryDirectory() as directory:
+        state = Path(directory)
+        legacy = state / LEGACY_DOWNLOAD_LEDGER_FILENAME
+        now = OPERATOR_EVENING
+        spent: list[datetime] = []
+        if legacy_spent is not None:
+            legacy.write_text(
+                json.dumps({"date": "2026-09-29", "bulk_downloads": legacy_spent}), encoding="utf-8"
+            )
+            planted = now - timedelta(seconds=legacy_age_seconds)
+            written_at(legacy, planted)
+            # Truncated to the second, as the file system keeps it and the ledger reads it.
+            spent.extend([datetime.fromtimestamp(int(planted.timestamp()), UTC)] * legacy_spent)
+        for gap, want in zip(gaps, wanted, strict=False):
+            now += timedelta(seconds=gap)
+            ledger = DownloadLedger(state / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+            allowed = ledger.remaining_at(now)
+            if all(started <= now - A_ROLLING_DAY for started in spent):
+                assert allowed == DEFAULT_BULK_DOWNLOADS_PER_DAY, "24 idle hours must leave the whole five"
+            for second in range(min(want, allowed)):
+                ledger.record(now + timedelta(seconds=second))
+                spent.append(now + timedelta(seconds=second))
+            now += timedelta(seconds=min(want, allowed))
+        for end in spent:
+            inside = [one for one in spent if end - A_ROLLING_DAY < one <= end]
+            assert len(inside) <= DEFAULT_BULK_DOWNLOADS_PER_DAY, (end, inside)
 
 
 async def test_a_day_long_retry_after_defers_the_rest_and_the_run_still_imports(
@@ -1232,9 +1570,9 @@ def test_an_unreadable_pending_work_file_reads_as_nothing_owed(tmp_path: Path) -
 # are wanted — 2026-09-08 and 2026-09-15. Every count below is those two, split by hand.
 
 
-def spend_todays_allowance(data_dir: Path, downloads: int = DEFAULT_BULK_DOWNLOADS_PER_DAY) -> None:
-    """Record `downloads` bulk downloads as already spent today, as an earlier run would have."""
-    DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME).record(RUN_CLOCK.date(), downloads)
+def spend_allowance_before_the_run(data_dir: Path, downloads: int = DEFAULT_BULK_DOWNLOADS_PER_DAY) -> None:
+    """Record `downloads` bulk downloads an hour before `RUN_CLOCK`, as an earlier run would have."""
+    spend_allowance(data_dir, downloads, at=RUN_CLOCK - timedelta(hours=1))
 
 
 async def test_a_run_the_cap_blocked_entirely_is_not_nothing_new(
@@ -1243,7 +1581,7 @@ async def test_a_run_the_cap_blocked_entirely_is_not_nothing_new(
     """The second and third dev runs of 2026-09-24: nothing fetched because nothing was allowed."""
     source.openev_files = []  # none were listed on the dev day either
     await import_first_week(data_dir, archives)
-    spend_todays_allowance(data_dir)
+    spend_allowance_before_the_run(data_dir)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
 
     summary = await service.run([SYNTHETIC_CASELIST])
@@ -1273,7 +1611,7 @@ async def test_a_run_the_cap_truncated_states_wanted_and_deferred(
     """The first dev run of 2026-09-24, in miniature: one of two fetched, one left for later."""
     source.openev_files = []  # none were listed on the dev day either
     await import_first_week(data_dir, archives)
-    spend_todays_allowance(data_dir, DEFAULT_BULK_DOWNLOADS_PER_DAY - 1)
+    spend_allowance_before_the_run(data_dir, DEFAULT_BULK_DOWNLOADS_PER_DAY - 1)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
 
     summary = await service.run([SYNTHETIC_CASELIST])
@@ -1467,7 +1805,7 @@ async def test_a_cap_blocked_run_record_is_cap_deferred_and_does_not_notify(
     """ac5: a backlog that has not grown for two runs is recorded, not announced."""
     source.openev_files = []
     await import_first_week(data_dir, archives)
-    spend_todays_allowance(data_dir)
+    spend_allowance_before_the_run(data_dir)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
     notifier = RecordingNotifier()
 

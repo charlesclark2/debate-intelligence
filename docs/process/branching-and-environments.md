@@ -87,23 +87,34 @@ into `dev` the same day with **Create a merge commit**, never squash: a squash l
 
 Guard workflows run on `pull_request` with `contents: read` and no secrets, because this repository
 is public and a fork's pull request runs its own code. Only `back-merge.yml`, which runs on push to
-`main`, holds a write permission (`pull-requests: write`, on its one job).
+`main`, holds write permissions, each on the one job that needs it: `pull-requests: write` to open
+the back-merge pull request, and `actions: write` to re-run the guards (below). The job holding
+`actions: write` checks out nothing and never runs pull-request code.
 
-### A hotfix makes every open promotion's `back-merge` stale
+### When `main` moves, the guards re-run on every open pull request into it
 
-Merging a hotfix into `main` does not re-run checks on pull requests already open against it.
+Merging into `main` does not, by itself, re-run checks on pull requests already open against it.
 GitHub has no "base branch moved" event, and "require branches to be up to date" is deliberately
 off, because a promotion leaves a merge commit on `main` that `dev` never receives and the setting
-would block every subsequent promotion.
+would block every subsequent promotion. Left alone, a promotion opened before a hotfix would keep
+the green `back-merge` it had before the hotfix landed, and could merge a combination onto prod
+that `dev` never validated, which is the one thing the check exists to prevent.
 
-So an open promotion pull request keeps whatever `back-merge` verdict it had before the hotfix
-landed. It can then merge, putting a combination on prod that `dev` never validated — which is the
-one thing the check exists to prevent. No content is lost, and the *next* promotion catches it, but
-by then it is on prod.
+So on every push to `main`, the `rerun-promotion-guards` job in
+[`back-merge.yml`](../../.github/workflows/back-merge.yml) lists the pull requests open against
+`main` and re-runs the newest `promotion-guard.yml` run for each one's head commit. If a run is
+still in progress it waits up to 5 minutes for it to finish first, because GitHub refuses to re-run
+a run in progress. The re-run's `back-merge` job fetches `main` and `dev` as they are now, so an
+open promotion goes red on its own within minutes of a hotfix merging, and protect-main blocks it
+until the back-merge pull request is merged into `dev`. Pull requests into any other branch are
+never touched. Added by `v1-e01-t12-promotion-guard-rerun`.
 
-**After any hotfix merges into `main`, re-run the checks on every promotion pull request still open
-against it** — re-run the job, or edit the description to retrigger. The hotfix template carries
-this as a checklist item. `v1-e01-t12-promotion-guard-rerun` replaces the habit with a mechanism.
+**The fallback, if the re-run fails.** A failed `rerun-promotion-guards` job (red on the push to
+`main`, with an error naming the pull request) means some promotion was not re-checked. Causes
+include a run older than GitHub's 30-day re-run limit, or a run that stayed in progress too long.
+Re-run the checks on that pull request by hand: re-run its promotion-guard run in the Actions tab,
+or edit its description, which retriggers the workflow. The hotfix template keeps this as a
+checklist item.
 
 ## GitHub settings
 

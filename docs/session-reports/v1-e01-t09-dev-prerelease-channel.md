@@ -298,9 +298,67 @@ the pyproject version) whose tag SHA equals the hotfix head. Delete the branch a
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**
 
 **Notes:**
+
+Accepted, merging `--partial`. ac1, ac3 and ac5 stay NOT RUN and are the operator's; the phase stays
+`InProgress`. Everything a session can run has been run.
+
+**ac2b: the session corrected my premise, and the correction is the substance.** I wrote the
+criterion believing an exact version pin was the hole. It was not. `debate-core` was already pinned
+to the built wheel's version, and the pin protected nothing: dev versions are guessable from the
+public tags, and uv prefers a `cp312-none-any` wheel over ours at the same version, so a squat at
+the *same* version simply wins. The second half is sharper still — a squat at a higher stable
+version makes the install fail outright, and the natural fix a tired operator reaches for,
+`--prerelease=allow`, is precisely what hands the install over. A vulnerability whose failure mode
+invites the user to complete the attack is worse than one that fails silently, and I did not see it.
+
+Installing by file URL is the right fix rather than a mitigation: a package requested by URL is
+never looked up on any index at all, and uv reuses that URL for `debate-cli`'s own dependency on
+`debate-core`, so the transitive edge is closed by the same mechanism. Third-party dependencies
+still resolve normally, which is the constraint that ruled out `--no-index`.
+
+**The test is the reason I believe the fix.** Real script, real uv, fully offline, with the decoy
+set as uv's *default* index and holding the only copy of a genuine third-party dependency — so the
+test fails if the fix over-corrects into `--no-index` as much as if it under-corrects. Both squat
+versions covered, a control showing the old command does install the decoy, and a mutation check
+putting the old command back to confirm both tests go red. A test that has never been seen to fail
+is a claim; this one has been seen to fail for the right reason.
+
+**Deviation 7 accepted, and amended in three places, not one.** The install-script node still
+described `--find-links`, and so did the task description and my own ac2b text — all three would
+have told a future reader to build the vulnerable thing. Each now describes the URL install and says
+why the pin is not the fix.
+
+**Register the PyPI placeholders: yes, with two conditions.** The install path no longer depends on
+it, so this is defence for every *other* way the names resolve — a hand-typed `pip install
+debate-core`, a future script that installs by name, a `uv add` somewhere else. The repository is
+public, so the names are discoverable, which is the precondition for a targeted squat rather than an
+opportunistic one. The cost is one account with 2FA and a `0.0.0` placeholder per name.
+
+The conditions: the placeholders carry no code, ever; and owning the names must never become a
+reason to relax the URL install. PyPI can reclaim unused names, so this deters and does not
+guarantee — the forbidden-list entry banning index resolution for first-party packages is what
+actually holds, and it stays whatever happens on PyPI. It is also worth knowing that reserving names
+one does not publish sits awkwardly with PyPI's own policy; if these are ever published for real, a
+namespaced distribution name is the cleaner answer.
+
+**The other deviations are accepted without change.** Two explicit `uv build --package` calls rather
+than `--all-packages` is correct — publishing unstamped `debate_api` and `debate_workers` wheels
+would put artefacts in a release that nothing validated. Bundling the committed `config/` was
+already accepted in review and is what makes the caselist gate travel with the build. The runbook
+edit was at my invitation.
+
+**Two consequences worth remembering, both documented by the session.** N follows claim order, not
+merge order, so two overlapping merges are numbered by which `ci` run finished first. And a failed
+build leaves a numbered tag with no release, whose number is skipped and never reused — which is the
+right trade against the alternative of ever reusing a number.
+
+**The four failing tests are the known ledger day-boundary set (`v1-e34-t06`)**, not this task's.
+The operator's run was after 19:00 CDT; two are in `test_caselist_runs.py` and the other two fail
+only because they re-run one of those in a subprocess. The session's own 2m21s suite time was load,
+not growth — the operator measured 44s.

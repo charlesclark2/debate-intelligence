@@ -26,7 +26,7 @@ spec:
     wheel carries the PEP 440 form X.Y.Z.devN), stamps a build-info module (version, channel=dev, commit
     SHA, build time, workflow run id), builds debate_core and debate_cli wheels with `uv build`, tags the
     exact commit and publishes a GitHub pre-release with the wheels, SHA256SUMS and build-info.json.
-    scripts/install_channel.sh installs a given tag with `uv tool install --find-links`. The DEBATE_ENV
+    scripts/install_channel.sh installs a given tag by file URL, never by name (ac2b). The DEBATE_ENV
     profile mechanism (dev/prod/test, per-profile data dirs, local checkout defaults to dev) is
     v1-e02-t05; this task supplies the channel values on top of it: the dev and prod model-routing files
     (dev routes to cheaper models), the low dev daily model budget in config/profiles/dev.toml consumed
@@ -80,10 +80,14 @@ spec:
         dependency on it with a higher version and take over the install. That install becomes the
         binary a weekly launchd agent executes unattended (v1-e34-t05), which turns a name squat into
         scheduled code execution on the operator's machine. Third-party dependencies still come from
-        PyPI as normal; only `debate-core` and `debate-cli` must be unable to. A test proves it: with
-        a find-links directory holding the real wheels and a decoy higher-versioned `debate-core`
-        reachable from a second index, the install either takes the local wheel or fails, and never
-        takes the decoy.
+        PyPI as normal; only `debate-core` and `debate-cli` must be unable to. Pinning the exact version
+        is not the fix: dev versions are guessable from the public tags, and uv prefers a
+        `cp312-none-any` wheel over ours at the same version, so a squat at the same version wins -
+        while a squat at a higher stable version breaks the install instead, and anyone who "fixes"
+        that with `--prerelease=allow` hands it over. A test proves it against a decoy index set as
+        uv's default, holding squatted first-party wheels at both the same version and a higher one,
+        plus the only copy of a real third-party dependency: the install takes our wheels and the
+        third-party package, or fails, and never the decoy.
     - id: ac3
       description: >-
         On a clean machine, scripts/install_channel.sh <tag> installs `debate-research`, and
@@ -192,9 +196,15 @@ spec:
         kind: Task
         name: Channel install script and docs
         description: >-
-          scripts/install_channel.sh <tag> downloads the release assets with gh, verifies SHA256SUMS and
-          runs `uv tool install --force --find-links <dir> debate-cli==<pep440>`; document dev vs stable
-          channels and DEBATE_ENV in docs/process/branching-and-environments.md and the CLI README.
+          scripts/install_channel.sh <tag> downloads the release assets with gh, verifies SHA256SUMS
+          and installs both first-party wheels BY FILE URL - `uv tool install "debate-cli @ file://...whl"
+          --with "debate-core @ file://...whl"` - because a package requested by URL is never looked up
+          on any index and uv reuses that URL for debate-cli's own dependency on debate-core. The
+          earlier `--find-links <dir> debate-cli==<pep440>` form is what ac2b forbids: pinning the
+          version does not protect it, since dev versions are guessable from the public tags and uv
+          prefers a `cp312-none-any` wheel over ours at the same version. Third-party dependencies
+          still resolve from PyPI. Document dev vs stable channels and DEBATE_ENV in
+          docs/process/branching-and-environments.md and the CLI README.
         dependsOn: [prerelease-workflow, env-profiles]
         outputs: [scripts/install_channel.sh, packages/debate_cli/README.md]
         estimatedEffort: 1h

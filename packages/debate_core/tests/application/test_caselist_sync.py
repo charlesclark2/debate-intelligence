@@ -1148,6 +1148,37 @@ async def test_window_five_at_t_then_five_forty_minutes_later_are_refused_across
     assert summary.bulk_download_window_start == second - timedelta(hours=24)
 
 
+async def test_window_a_second_run_forty_minutes_later_across_utc_midnight_gets_no_fresh_allowance(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The doubling itself, through two runs and nothing else.
+
+    With an allowance of one, the 23:50 UTC run fetches 09-08 and defers 09-15. The calendar-day
+    ledger keyed on the UTC date, so the 00:30 run found a new date, a fresh allowance, and fetched
+    09-15: two downloads in forty minutes against a limit of one.
+    """
+    await import_first_week(data_dir, archives)
+    before_midnight = datetime(2026, 9, 16, 23, 50, tzinfo=UTC)
+    after_midnight = before_midnight + timedelta(minutes=40)
+    first = build_service(
+        source=source, data_dir=data_dir, inbox=inbox, bulk_downloads_per_day=1, clock=lambda: before_midnight
+    )
+    await first.run([SYNTHETIC_CASELIST])
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8))]
+    second = build_service(
+        source=source, data_dir=data_dir, inbox=inbox, bulk_downloads_per_day=1, clock=lambda: after_midnight
+    )
+
+    summary = await second.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8))], (
+        "a new date handed out a fresh allowance"
+    )
+    assert decisions(summary.archives)[weekly_name(date(2026, 9, 15))] == str(
+        SelectionDecision.OVER_DAILY_BUDGET
+    )
+
+
 async def test_window_a_run_records_each_download_at_the_moment_it_started(
     source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
 ) -> None:

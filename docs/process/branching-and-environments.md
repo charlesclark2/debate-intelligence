@@ -140,3 +140,53 @@ Added as the tasks land:
 Release tags (`v1.1.0` …) are cut **from `main`** after the promotion that completes a release's
 epics. Each `dev` merge produces the next pre-release (`v1.1.0-dev.7`). The release review Gate
 in `plan_specs/releases/<version>.yaml` is approved on the promotion PR.
+
+### The V1 CLI channels: dev pre-releases and stable releases
+
+| | dev channel | stable channel |
+|---|---|---|
+| Tag | `vX.Y.Z-dev.N`, where `X.Y.Z` is the **next** stable release | `vX.Y.Z` (v1-e09-t06) |
+| Wheel version | PEP 440 `X.Y.Z.devN`, which sorts **before** `X.Y.Z` | `X.Y.Z` |
+| Published by | [`dev-prerelease.yml`](../../.github/workflows/dev-prerelease.yml), after `ci` is green on a push to `dev`; or a manual dispatch on a `hotfix/*` branch | the release workflow (v1-e09-t06) |
+| GitHub release | always a **pre-release**; never PyPI | a full release |
+| Default `DEBATE_ENV` | `dev` | `prod` |
+
+**Where `X.Y.Z` comes from.** For a merge to `dev`, the `version` in
+`packages/debate_cli/pyproject.toml`, the single version source. Once `vX.Y.Z` is released, that
+version must be bumped before the next dev build: the workflow refuses to build dev pre-releases of
+a version that already has a stable tag, because they would sort before it. For a hotfix
+dispatch, the patch after the newest stable tag the hotfix head contains (`v1.1.1-dev.1` for a fix
+to `v1.1.0`).
+
+**How N is numbered.** `scripts/release_version.py` pushes the tag at the head commit before
+anything is built, and the push is the claim: if an overlapping run pushed that number first, the
+push is rejected and the next number is tried. N is therefore never reused, and increases in the
+order runs claim it, which is the order their `ci` runs finished. Tags are immutable once
+published. Pruning deletes the GitHub releases of dev builds older than the newest 30 and keeps
+their tags.
+
+**What a pre-release contains.** The `debate_core` and `debate_cli` wheels (debate_cli pins
+debate_core to the same version), `SHA256SUMS`, and `build-info.json`: version, tag, channel,
+commit SHA, build time and workflow run id. The same values are stamped into the wheel, and
+`debate-research --version --json` reports them with the environment the build will run as.
+
+**Installing one.** `scripts/install_channel.sh <tag>` downloads the assets with `gh`, refuses
+anything not matching `SHA256SUMS`, and installs `debate-cli` and `debate-core` **by the file URLs of
+those verified wheels**, so no index can supply either name. Neither is registered on PyPI, and a
+`--find-links` install would let anyone who registers `debate-core` there take the install over,
+even at the exact pinned version. Third-party dependencies still come from PyPI. The result lives in
+uv's tool directory (`uv tool dir --bin`), outside every checkout and project `.venv`, and stays that
+build until another tag is installed. Anything that
+runs on a schedule (the caselist launchd agent, v1-e34-t05) should run an installed tag, never a
+checkout's `.venv/bin/debate-research`, which `uv sync` rebuilds from whatever `dev` holds.
+
+**Environments of an installed build.** `DEBATE_ENV` unset: a dev pre-release runs as `dev`, a
+stable build as `prod`, a source checkout as `dev`. An explicit `DEBATE_ENV` (or one in `.env`)
+always wins. An installed build reads the `config/profiles/` and model-routing files bundled in its
+wheel, the ones it was built and validated with, from any working directory; `DEBATE_PROFILE_DIR`
+overrides them. That includes the E34 `[caselist] api_enabled` gate: it is fixed per build, so
+turning the API off for an installed build means installing a build whose profile says so, or
+setting `DEBATE_CASELIST__API_ENABLED=false` in its environment. Editing `config/` in a checkout
+does not reach it. Dev and prod never share a data directory (`~/.debate-research/dev` and `…/prod`),
+a model-routing file (`config/model_routing.dev.yaml` routes to cheaper models) or a daily model
+budget. The dev budget is capped at **$2/day** (`DEV_DAILY_BUDGET_CAP_USD`), prod's is $20.

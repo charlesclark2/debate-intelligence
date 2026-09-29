@@ -69,3 +69,9 @@ docs/data/debate-file-style-survey.full.json
 # patterns keep it out of the repository even when a data directory is pointed inside one.
 secrets/
 caselist_token
+
+# Written by scripts/stamp_build.py into a throwaway CI checkout when the dev-prerelease workflow
+# builds a published wheel (v1-e01-t09): the build's identity and the bundled copy of config/.
+# Never committed; a source checkout reports channel "local" because these are absent.
+packages/debate_cli/src/debate_cli/_build_info.py
+packages/debate_cli/src/debate_cli/_bundled_config/

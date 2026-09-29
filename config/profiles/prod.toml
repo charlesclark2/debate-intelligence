@@ -12,7 +12,9 @@
 # the polite-pool contact address come from the environment or from an uncommitted .env; see
 # .env.example.
 #
-# The routing file and daily budget are owned by v1-e01-t09-dev-prerelease-channel.
+# The routing file and daily budget are owned by v1-e01-t09-dev-prerelease-channel. An installed
+# stable build carries this file inside its wheel and defaults to DEBATE_ENV=prod when DEBATE_ENV
+# is unset.
 
 allow_network = true
 
@@ -39,6 +41,7 @@ request_timeout_seconds = 30.0
 
 [models]
 routing_file = "config/model_routing.prod.yaml"
+# Production spend ceiling per day, enforced by the E05 BudgetGuard. Never the same as dev's.
 budget_usd_daily = 20.0
 
 [caselist]

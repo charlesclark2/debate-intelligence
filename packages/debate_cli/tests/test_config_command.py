@@ -288,3 +288,27 @@ def test_version_does_not_load_settings(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("DEBATE_PROFILE_DIR", "/definitely/not/a/directory")
 
     assert runner.invoke(create_app(), ["--version"]).exit_code == ExitCode.OK
+
+
+@pytest.mark.parametrize(
+    ("environment", "budget"),
+    [("dev", 2.0), ("prod", 20.0)],
+)
+def test_the_committed_dev_and_prod_profiles_differ_in_config_show(
+    environment: str, budget: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v1-e01-t09 ac4, from a source checkout: data_dir, routing file and budget all differ."""
+    from debate_core.application.settings import find_repository_root
+
+    root = find_repository_root(Path(__file__).parent)
+    assert root is not None
+    monkeypatch.delenv("DEBATE_PROFILE_DIR")
+    monkeypatch.chdir(root)
+    monkeypatch.setenv("DEBATE_ENV", environment)
+
+    settings = envelope_of(runner.invoke(create_app(), ["--json", "config", "show"]))["data"]["settings"]
+
+    assert settings["storage.data_dir"] == str(Path(f"~/.debate-research/{environment}").expanduser())
+    assert settings["models.routing_file"] == str(root / "config" / f"model_routing.{environment}.yaml")
+    assert settings["models.budget_usd_daily"] == budget
+    assert budget <= 2.0 or environment == "prod"

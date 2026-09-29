@@ -42,6 +42,15 @@ spec:
     - kind: TaskRef
       name: v1-e34-t02-scheduled-sync
       relation: dependsOn
+    # Added by the PM, 2026-09-29. v1-e34-t06's description already said the unattended schedule
+    # must not be enabled until at least its retry defect (ac1) is fixed - an agent that cannot
+    # recover from one failed import fails silently every week thereafter - but it said so in t06's
+    # prose, which `scripts/task ready` cannot read. Without this edge t05 is offered as startable
+    # and the constraint holds only if whoever picks it up has read another task's description. A
+    # dependency that matters is an edge, not a paragraph.
+    - kind: TaskRef
+      name: v1-e34-t06-sync-defects
+      relation: dependsOn
     - kind: TaskRef
       name: v1-e01-t09-dev-prerelease-channel
       relation: dependsOn

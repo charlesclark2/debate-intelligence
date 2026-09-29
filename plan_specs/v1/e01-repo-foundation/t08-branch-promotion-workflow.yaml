@@ -73,7 +73,7 @@ spec:
         scripts/check_promotion_source.py is covered by offline unit tests for every allowed and rejected
         head/base combination and the empty-template-field cases.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

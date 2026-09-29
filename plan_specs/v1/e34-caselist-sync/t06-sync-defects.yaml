@@ -54,7 +54,20 @@ spec:
         evening each get a fresh allowance of five and can spend ten against a cap of five. Whichever
         day boundary is chosen, the docstring, the CLI and the runbooks say the same thing, and the
         summary reports the ledger's day explicitly so an operator can see which day a run counted
-        against.
+        against. This is a correctness defect, not a documentation one, and it is already visible:
+        the CLI tests of v1-e34-t03 ac5/ac6 write the budget with
+        `datetime.now(UTC).astimezone().date()` while the service reads `self._clock().date()` over a
+        UTC clock, so after 19:00 CDT the two disagree, the service finds nothing spent, and the cap
+        does not apply at all. Four tests fail on a developer's machine in the evening and pass every
+        time in CI, where the runner's local time is UTC. A test that passes at 14:00 and fails at
+        21:43 is worse than no test: it teaches people to re-run until green.
+    - id: ac2b
+      description: >-
+        The ledger's day is the same day on every side - the service, the CLI container, the test
+        helpers and the runbooks - and a test pins a clock on both sides of the day boundary to prove
+        the budget is found and enforced there. No test may derive the ledger's day from the machine's
+        real clock or timezone, which is what makes today's four failures time-of-day flaky rather
+        than reproducible.
     - id: ac3
       description: >-
         OpenEv selection recognises a camp file already imported by hand. It matches on the inbox name

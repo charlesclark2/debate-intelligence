@@ -14,8 +14,9 @@
 # .env.example.
 #
 # The channel values below — which models dev routes to and the daily budget — are owned by
-# v1-e01-t09-dev-prerelease-channel, which replaces the placeholders with the real dev routing
-# file.
+# v1-e01-t09-dev-prerelease-channel. An installed dev pre-release carries this file inside its
+# wheel, so a build reads the profile it was built with, and it defaults to DEBATE_ENV=dev when
+# DEBATE_ENV is unset.
 
 allow_network = true
 
@@ -48,8 +49,11 @@ per_host_interval_seconds = 2.0
 request_timeout_seconds = 30.0
 
 [models]
+# Cheaper models than prod for every text class; see the file's own header.
 routing_file = "config/model_routing.dev.yaml"
-# Low cap; v1-e01-t09 owns the documented dev value and the E05 BudgetGuard enforces it.
+# The documented dev cap: at most $2 of model spend per day, enforced by the E05 BudgetGuard.
+# Raising it above 2.0 fails test_settings_environments.py; change the documented cap first
+# (docs/process/branching-and-environments.md).
 budget_usd_daily = 2.0
 
 [caselist]

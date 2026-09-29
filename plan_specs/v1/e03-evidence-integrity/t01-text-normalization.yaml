@@ -26,11 +26,18 @@ spec:
     old versions stay available for re-verification. Hashing/snapshots are t02 and span extraction t03.
   priority: 1
   constraints:
-    packages: [debate_core.evidence]
+    packages: [debate_core.evidence, docs/evidence]
+    # `docs/evidence` added by the PM: the policy-doc node outputs docs/evidence/normalization.md and
+    # ac4 requires it, which the original package list did not cover.
     forbidden:
       - Any I/O, randomness, locale- or platform-dependent behavior in the normalizer
       - Changing a released normalization rule without bumping NORMALIZER_VERSION
       - Rules that alter words or letters (normalization may change only whitespace and listed code points)
+      - Reusing, extending or unifying this normalizer with the fingerprint normalization of
+        v1-e31-t04, which casefolds and folds quotes and dashes for lossy matching and is forbidden
+        from touching stored or displayed text - the two have opposite jobs and must stay separate
+      - Committing real article text as golden-test input; the corpus is invented text exhibiting the
+        same character phenomena
   context:
     - kind: TaskRef
       name: v1-e02-t01-domain-entities

@@ -1,0 +1,34 @@
+# Model routing for the prod environment (DEBATE_ENV=prod): the stable build the team installs.
+#
+# Owned by v1-e01-t09-dev-prerelease-channel. The schema is
+# debate_core.application.routing_config.RoutingConfig; config/model_routing.example.yaml explains
+# each task class.
+#
+# Each class gets the model whose quality it needs, under the prod daily budget
+# (models.budget_usd_daily in config/profiles/prod.toml). config/model_routing.dev.yaml routes the
+# same classes one tier cheaper. Dev and prod must never share this file (the task spec forbids
+# it). Model ids are Amazon Bedrock ids and stay examples until E05 lands the router.
+
+version: 1
+
+routes:
+  complex_reasoning:
+    model_id: anthropic.claude-sonnet-5
+    max_tokens: 8192
+    temperature: 0.2
+
+  high_volume:
+    model_id: anthropic.claude-haiku-4-5
+    max_tokens: 2048
+    temperature: 0.0
+
+  deep_audit:
+    model_id: anthropic.claude-opus-5
+    max_tokens: 16384
+    temperature: 0.1
+
+  embeddings:
+    model_id: amazon.titan-embed-text-v2:0
+
+  rerank:
+    model_id: cohere.rerank-v3-5:0

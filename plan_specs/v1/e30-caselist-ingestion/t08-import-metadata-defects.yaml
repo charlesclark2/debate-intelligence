@@ -1,0 +1,144 @@
+# TASK v1-e30-t08-import-metadata-defects — Importer metadata defects found by the backfill
+# Epic: E30 Caselist Ingestion | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §8 hashes/provenance, §13 file parsing
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t08-import-metadata-defects
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: Importer metadata defects found by the backfill
+spec:
+  description: >-
+    Two defects the v1-e30-t06 backfill exposed by importing real archives at scale. Neither touches
+    the bytes or the manifests, which are correct in both cases - what is wrong is what the store says
+    about what it holds, which is the part every downstream report reads. Both were invisible to the
+    test suite because the synthetic fixtures were built to the importers' own assumptions: a camp file
+    named the way the code expects, and a diff over two weeks rather than twelve.
+    The first is camp attribution. All 105 OpenEv camp files imported in the backfill carry
+    `camp: UNKNOWN`. The OpenEv importer reads the camp from the containing folder or from the start of
+    the file name; the real files name the camp near the END of the file name, and the alias table
+    already lists every camp involved. Bytes and manifest entries are right; `camp` and `title` are
+    wrong on all 105. Re-importing costs no downloads - the files are already local - but it must
+    happen before anything filters or groups by camp.
+    The second is what NEW means. A weekly import's NEW count is measured against the immediately
+    preceding snapshot only, so it means "not in last week's archive", not "not in the corpus". Day 1
+    of the backfill reported 25 NEW across three August weeks while storing 16 genuinely new files - a
+    56% overstatement. The summary already works around it by reporting a first-seen count instead.
+    The behaviour is arguably right for a week-over-week diff; what is wrong is that it is documented
+    and read as new-to-the-corpus, which is how a landscape report would overcount new evidence.
+    Out of scope: the complete archive and withdrawal counts (v1-e34-t04), the `caselist pull` defects
+    (v1-e34-t06), and re-running the backfill itself, which is v1-e30-t06's.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, docs/data]
+    forbidden:
+      - Re-downloading anything; both fixes work on files already in the local store
+      - Changing stored bytes, sha256 values or manifest keys - only the metadata derived from them
+      - Widening camp detection until it matches a string that is not in the alias table
+      - School names, team codes or student names in any fixture added here
+  context:
+    - kind: TaskRef
+      name: v1-e30-t04-openev-importer
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t03-archive-importer
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t06-initial-backfill
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Camp detection finds the camp wherever it appears in the file name, matched against the
+        existing alias table rather than by position, and falls back to UNKNOWN only when no alias
+        matches. A fixture set built from the real naming shapes - camp at the start, at the end, in
+        the folder, and genuinely absent - covers all four, and the absent case still yields UNKNOWN
+        rather than a guess.
+    - id: ac2
+      description: >-
+        Re-importing the 105 camp files already in the dev store corrects `camp` and `title` in place,
+        changes no sha256 and no manifest key, and downloads nothing. The operator runs it; this task
+        supplies the exact command and the before/after counts, and v1-e30-t06 records them in
+        docs/data/caselist-backfill-2026-09.md. That file belongs to t06 and the two tasks must not
+        edit it at once.
+    - id: ac3
+      description: >-
+        NEW is documented and reported as what it is. The archive importer's docstring and every
+        consumer of the count say "not present in the preceding snapshot", not "new to the corpus",
+        and a distinct first-seen count - a sha256 appearing for the first time in any snapshot of
+        that caselist - is available beside it. A test over three consecutive synthetic snapshots
+        asserts the two numbers differ where they should: the 25-versus-16 shape the backfill measured.
+    - id: ac4
+      description: >-
+        Both defects have a regression test that fails against the current code and passes after, and
+        neither fix alters a stored byte, a sha256 or a manifest key - proved by re-running
+        `caselist status` against the dev bucket and finding no drift.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t08-import-metadata-defects-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Fix camp detection and re-import, then separate NEW from first-seen, each reproduced first.
+  goalRef:
+    name: v1-e30-t08-import-metadata-defects
+  graph:
+    nodes:
+      - id: camp-detection
+        kind: Task
+        name: Camp detection by alias, not by position
+        description: >-
+          Match the alias table anywhere in the file name; fixtures for camp at the start, at the end,
+          in the folder and absent. Reproduce the UNKNOWN case first.
+        outputs: [packages/debate_core/src/debate_core/integrations/opencaselist/openev.py]
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Camp detection tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/opencaselist/, -k, camp]
+      - id: reimport-command
+        kind: Task
+        name: Metadata re-import for files already held
+        description: >-
+          An operator-run path that re-derives camp and title for camp files already in the store,
+          touching no bytes and no manifest keys, with the command and expected counts written up for
+          the backfill summary.
+        dependsOn: [camp-detection]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Re-import leaves bytes and keys untouched
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/, -k, reimport]
+      - id: new-versus-first-seen
+        kind: Task
+        name: NEW means week-over-week; first-seen is its own count
+        description: >-
+          Correct the docstring and every consumer, add the first-seen count, and test over three
+          consecutive synthetic snapshots that the two numbers diverge as the backfill measured.
+        dependsOn: [reimport-command]
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: NEW and first-seen tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/, -k, "first_seen or new_count"]
+status:
+  phase: Pending

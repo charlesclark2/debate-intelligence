@@ -62,7 +62,12 @@ junk: macOS metadata, `.DS_Store`, Word lock files, unsafe paths.
 | hsld26 | 2026-09-08 | 2026-09-01 | 745 | 666 | 5 | 0 | 74 | 59 | 0 | 0 | 678 | 722 | 0 | 6 | 17 | 29 |
 | hsld26 | 2026-09-15 | 2026-09-08 | 1597 | 1387 | 58 | 2 | 148 | 685 | 0 | 2 | 1487 | 1565 | 0 | 18 | 12 | 74 |
 | hsld26 | 2026-09-22 | 2026-09-15 | 941 | 698 | 129 | 4 | 110 | 1462 | 0 | 0 | 883 | 925 | 0 | 12 | 4 | 14 |
+| hsld26 | 2026-09-29 | 2026-09-22 | 827 | 676 | 75 | 6 | 70 | 860 | 0 | 0 | 776 | 818 | 0 | 8 | 1 | 8 |
 | hspolicy26 | 2026-07-07 | none | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 2 | 0 | 0 | 0 | 0 |
+| hspolicy26 | 2026-07-14 | 2026-07-07 | 1 | 0 | 0 | 0 | 1 | 2 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 0 |
+| hspolicy26 | 2026-07-28 | 2026-07-14 | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 1 |
+| hspf26 | 2026-07-07 | none | 9 | 8 | 0 | 0 | 1 | 0 | 0 | 0 | 8 | 7 | 0 | 1 | 1 | 0 |
+| hspf26 | 2026-07-14 | 2026-07-07 | 42 | 34 | 0 | 0 | 8 | 9 | 0 | 0 | 34 | 18 | 0 | 23 | 1 | 0 |
 
 The five rows above are the weeklies the `v1-e34-t02` validation run pulled on 2026-09-24 (run
 `20260924T042300Z`, dev). A re-import would be a no-op that writes nothing new, so the counts were
@@ -85,7 +90,14 @@ hspolicy26 rows are day 1, step 5 (run `20260926T213709Z`): 943 imported (941 + 
 683 new blobs.
 
 The 09-15 row's 685 paths no longer present is the same figure `v1-e30-t03` measured, and 09-22's
-1,462 is larger still. Neither is a takedown count. The withdrawal figure is deferred to `v1-e34-t04` (below).
+1,462 is larger still. Neither is a takedown count.
+
+Day 2 of the backfill ran late, at 04:44 UTC on 2026-09-29 (run `20260929T044458Z`, 11:44 pm
+Central on the 28th). It imported hsld26 09-29, the week the site published that Tuesday, which
+makes HS LD complete through the newest listing. It also imported hspolicy26 07-14 and 07-28, and
+hspf26 07-07 and 07-14: 880 members (827 + 1 + 1 + 9 + 42), 80 duplicate, 619 new blobs. hspolicy26
+has no 07-21 row because the site lists no 07-21 weekly for it. `pull` took the oldest week it did
+not hold, 07-28. The withdrawal figure is deferred to `v1-e34-t04` (below).
 
 Rows for the remaining snapshots are appended in date order, per caselist, as the operator
 records them.
@@ -114,7 +126,12 @@ import's own `newly_stored_blobs` (58, 659, 1,380).
 | hsld26 | 2026-09-08 | 678 | 659 |
 | hsld26 | 2026-09-15 | 1487 | 1380 |
 | hsld26 | 2026-09-22 | 883 | 681 |
+| hsld26 | 2026-09-29 | 776 | 576 |
 | hspolicy26 | 2026-07-07 | 2 | 2 |
+| hspolicy26 | 2026-07-14 | 1 | 0 |
+| hspolicy26 | 2026-07-28 | 1 | 1 |
+| hspf26 | 2026-07-07 | 8 | 8 |
+| hspf26 | 2026-07-14 | 34 | 34 |
 
 ## OpenEv camp files
 
@@ -149,13 +166,15 @@ when `v1-e30-t03` measured them (its session report): an **11% saving**. The fiv
 | Caselist | Weeklies | Stored members | Distinct files | Saving | Bytes of distinct files |
 |---|---|---|---|---|---|
 | hsld26 (the five held weeks only, 07-07 to 08-04) | 5 | 255 | 242 | 5.1% | 49,107,328 |
-| hsld26 (all, 07-07 to 09-22, complete as of the 09-22 listing) | 12 | 3,629 | 3,036 | 16.3% | 408,918,566 |
+| hsld26 (07-07 to 09-22, after day 1) | 12 | 3,629 | 3,036 | 16.3% | 408,918,566 |
+| hsld26 (all, 07-07 to 09-29, complete as of the 09-29 listing) | 13 | 4,456 | 3,612 | 18.9% | 486,608,876 |
 | hspolicy26 | _not yet run_ | | | | |
 | hspf26 | _not yet run_ | | | | |
 
 **Bytes stored**, all sources on disk (`du -sk` of the store's `blobs/`): _not yet run_ for the
 finished backfill. It was 48,428 KiB for the five held weeks before the backfill began, and
-460,988 KiB after day 1 (HS LD complete, one Policy week, the camp files).
+460,988 KiB after day 1 (HS LD complete, one Policy week, the camp files), and 554,628 KiB after
+day 2.
 
 ## Withdrawals against the complete archive
 
@@ -175,6 +194,7 @@ The 2026-09-24 validation runs are in `docs/data/caselist-sync-runs.md` and not 
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | `20260926T213447Z` | hsld26 | 3 (lowered for this run) | 3 (08-11, 08-18, 08-25) | 4 | 29 | 16 | 16 | 9.1 s |
 | 1 | `20260926T213709Z` | all three | 2 left | 2 (hsld26 09-22, hspolicy26 07-07) | 21 | 943 | 683 | 683 | 65.0 s |
+| 2 (run Mon 28 Sep, 11:44 pm Central) | `20260929T044458Z` | all three | 5 | 5 (hsld26 09-29; hspolicy26 07-14, 07-28; hspf26 07-07, 07-14) | 19 | 880 | 619 | 619 | 51.4 s |
 
 ## Dev publish
 

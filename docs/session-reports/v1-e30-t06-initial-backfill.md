@@ -21,12 +21,14 @@ or publish. Every download, import and publish below was the operator's, and the
 results back with read-only commands.
 
 **Where the backfill stands (day 1 of 6, run 2026-09-26).** HS LD goes first, at the operator's
-request, because the first tournament is 3 October, and it is **complete through 09-22**: 12
-weeklies, 3,629 stored members, 3,036 distinct files (a 16.3% saving), 409 MB. The first Policy
+request, because the first tournament is 3 October. It was complete through 09-22 after day 1, and
+after day 2 it is **complete through 09-29**, the newest listing: 13 weeklies, 4,456 stored members,
+3,612 distinct files (an 18.9% saving), 487 MB. Day 2 ran on Monday 28 September at 11:44 pm
+Central (04:44 UTC on the 29th) instead of Sunday. It fetched 5 weeklies and published all 619
+new files, with none pending. The first Policy
 weekly and the 105 Policy camp files are in. Dev `caselist status` agreed on all 14 snapshots,
-and the dev bucket holds the 09-15 manifest the node criterion names. Policy (10 weeklies left)
-and PF (11 left), plus one new weekly per caselist on 29 September, go in over days 2–6. PF should
-finish on 1 October.
+and the dev bucket holds the 09-15 manifest the node criterion names. The Policy
+and PF weeklies continue: **19 downloads left** (Policy 9, PF 10) after day 2, four more runs.
 
 **Three things for the PM, in order:**
 

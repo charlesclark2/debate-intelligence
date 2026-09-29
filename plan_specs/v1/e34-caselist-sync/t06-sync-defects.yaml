@@ -104,7 +104,7 @@ spec:
         docs/runbooks/caselist-scheduled-sync.md no longer tells the operator to recover a failed
         import by re-running the same command.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

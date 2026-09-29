@@ -340,5 +340,35 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t12-promotion-guard-rerun
+    - id: ext-v1-e02-t06-import-boundary-guard
+      kind: External
+      name: 'Prerequisite from E02: import-boundary enforcement'
+      description: >-
+        Cross-epic prerequisite owned by v1-e02-domain-core (release v1.0). It writes the contracts
+        and the exception lists this task empties.
+      inputs:
+        goalRef: v1-e02-t06-import-boundary-guard
+        specRef: plan_specs/v1/e02-domain-core/t06-import-boundary-guard.yaml
+    - id: t13
+      kind: Task
+      name: Empty the import-boundary exception lists
+      description: >-
+        v1-e02-t06 found five pre-existing violations of the architecture it enforces and recorded
+        them as shrink-only exceptions. This turns the ratchet: four adapter imports move into the
+        composition root and `caselist pull` comes under its statement budget.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t13-composition-root-cleanup.yaml
+        goalRef: v1-e01-t13-composition-root-cleanup
+      dependsOn:
+      - ext-v1-e02-t06-import-boundary-guard
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t13-composition-root-cleanup reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t13-composition-root-cleanup
 status:
   phase: Pending

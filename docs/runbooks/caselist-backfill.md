@@ -229,10 +229,12 @@ what the summary records as `dev status: in sync`.
 
 ## Days 2 to 6: Policy and PF
 
-One command a day, at roughly the same time each day or later, and on a new **UTC** date from the
-previous run. The site's limiter may count a rolling 24 hours rather than a calendar day. If it
-does, a run earlier than the previous day's gets refused part way, and `pull` records the rest as
-`deferred_by_rate_limit` and still exits `0`.
+One command a day, **after 7:00 pm Central** (midnight UTC), so that each run falls on a new UTC
+date. A UTC date runs from 7:00 pm Central one evening to 6:59 pm the next, so two runs on either
+side of 7 pm in the same evening-to-evening span share one day's five. The site's own cap is per
+date, not a rolling 24 hours: measured 2026-09-29, a run 20 h 34 min after the previous day's five
+downloads was granted all five. If the site ever refuses part way anyway, `pull` records the rest
+as `deferred_by_rate_limit` and still exits `0`.
 
 ```bash
 export DEBATE_ENV=dev

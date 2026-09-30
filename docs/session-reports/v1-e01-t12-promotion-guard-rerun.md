@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e01-repo-foundation/t12-promotion-guard-rerun.yaml`](../../plan_specs/v1/e01-repo-foundation/t12-promotion-guard-rerun.yaml) |
 | Epic / release | `v1-e01-repo-foundation` / `v1.0` |
 | Branch | `task/v1-e01-t12-promotion-guard-rerun` |
-| Session status | PARTIAL: code and docs are done; the sandbox proof is an operator step |
+| Session status | COMPLETE |
 
 ## Summary
 
@@ -23,6 +23,7 @@ With t08's workflows, an open promotion kept a stale green `back-merge` after a 
 on `main`, the next hotfix's push re-ran that promotion's guard within 10 seconds, turned
 `back-merge` red, and GitHub reported the promotion `BLOCKED`, with nobody touching it. Along the
 way GitHub dropped one push event entirely (Follow-up work), which is worth the PM's attention.
+Every acceptance criterion passes, and the Goal is `Succeeded`.
 
 **For the PM:** read Deviations 1 and 2 first. They are two places where ac2's wording doesn't
 match the repository, and they need a spec amendment or a ruling. The implementation follows the
@@ -45,7 +46,7 @@ rule in the spec's forbidden list.
 | ac3 — in a sandbox, a promotion PR open before a hotfix shows `back-merge` green before and red after with no manual touch, merging blocked; the gap reproduced first | PASS | **Gap first, with t08's workflows:** after hotfix #2 merged, promotion #1 kept `back-merge` ✓ from its only run (36653456553, before the hotfix) and was `UNSTABLE`/`MERGEABLE`, while `main` held `370c548`, which `dev` lacked. **Before:** after back-merge #3, #1 was green again for real (run 36654404905 on `1454c5d`). Just before hotfix #5 merged, it was `back-merge` ✓ and `UNSTABLE`, with `main` holding `ab7a2f3` and `6f619d0` (the fix itself, which `dev` lacked). **After:** run 36654404905 attempt 2, started 02:58:31Z by `github-actions[bot]`, 10 s after #5 merged: `back-merge` failed with ``FAILED: `main` has 3 non-merge commit(s) that `dev` lacks`` naming `220cb26`, `6f619d0`, `ab7a2f3`. `gh pr view 1 --json mergeStateStatus,mergeable` → `{"mergeStateStatus":"BLOCKED","mergeable":"MERGEABLE"}`. Only `promotion-source` and `back-merge` were required at that point (Deviation 5), so `back-merge` is what blocked it. |
 | ac4 — hotfix template checklist item and the process doc describe the automatic re-run, with the manual step as the fallback | PASS | The hotfix template item now asks whether `rerun-promotion-guards` passed, and says to re-run by hand when it didn't. `branching-and-environments.md`: the section "When `main` moves, the guards re-run on every open pull request into it" replaces "A hotfix makes every open promotion's `back-merge` stale", adds "The fallback, if the re-run fails", and lists `actions: write` in the permissions paragraph. The old heading had no inbound links. |
 | rerun-job: Workflows pass actionlint | PASS | `uvx --from actionlint-py actionlint .github/workflows/promotion-guard.yml .github/workflows/back-merge.yml` → no output, exit 0 |
-| sandbox-proof: Stale green is reproduced, then fixed | PASS | Charlie ran the sandbox procedure on 2026-09-30 and pasted each step's output back into the session. Stale green: [B]. Red without a manual re-run: attempt 2 of 36654404905, by `github-actions[bot]`. Blocked: `BLOCKED` (details under ac3). |
+| sandbox-proof: Stale green is reproduced, then fixed | PASS | Charlie ran the sandbox procedure on 2026-09-30, pasted each step's output back into the session, and then confirmed the end state from promotion #1's page: `Promotion guard / back-merge (pull_request) Failing after 6s`, marked **Required**, while `CI / ci` was failing but not required. Stale green: [B]. Red without a manual re-run: attempt 2 of 36654404905, by `github-actions[bot]`. Blocked: `BLOCKED` (details under ac3). |
 | docs-update: Repository links still resolve | PASS | `uv run scripts/check_links.py` → `OK: 1059 relative links and anchors in 140 Markdown files` (0.24 s) |
 
 Also run: `uv run pytest tests/scripts/test_check_promotion_source.py -q` → `113 passed in 2.99s`
@@ -61,8 +62,8 @@ file → all applicable hooks passed. `uv run scripts/validate_specs.py` → `OK
   load-bearing. No logic or permission changed.
 * `.github/PULL_REQUEST_TEMPLATE/hotfix.md`, `docs/process/branching-and-environments.md`: the
   automatic re-run, with the manual step kept as the fallback.
-* `plan_specs/v1/e01-repo-foundation/t12-promotion-guard-rerun.yaml`: Goal phase only (stays
-  `InProgress`, set at session start).
+* `plan_specs/v1/e01-repo-foundation/t12-promotion-guard-rerun.yaml`: Goal phase only (`InProgress` at
+  session start, `Succeeded` after the sandbox proof).
 
 ## Deviations from the spec
 

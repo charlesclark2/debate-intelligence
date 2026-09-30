@@ -40,10 +40,10 @@ block another hotfix.
 - [ ] Charlie has approved this hotfix
 - [ ] Merge with **Create a merge commit**, never squash or rebase
 - [ ] The back-merge pull request is merged into `dev` with a merge commit the same day
-- [ ] **Every promotion pull request already open against `main` has had its checks re-run.** A
-      promotion PR opened before this hotfix keeps a stale green `back-merge`: merging into `main`
-      does not re-run checks on PRs already open against it, GitHub has no "base branch moved"
-      event, and strict mode is deliberately off. Until something re-runs it, that promotion can
-      merge and put a combination on prod that dev never validated. Re-run the job, or edit the
-      PR description to retrigger. Reproduced in the sandbox during `v1-e01-t08`; the mechanical
-      fix is `v1-e01-t12`.
+- [ ] **The `rerun-promotion-guards` job in the back-merge workflow passed** on the push this
+      merge makes to `main`. It re-runs the promotion guards on every pull request still open
+      against `main`, so a promotion opened before this hotfix turns its `back-merge` check red
+      on its own, instead of keeping a stale green. If that job failed, re-run the checks by hand
+      on each promotion pull request it names: re-run the job, or edit the PR description to
+      retrigger. Until that happens, the promotion can merge a combination onto prod that dev
+      never validated.

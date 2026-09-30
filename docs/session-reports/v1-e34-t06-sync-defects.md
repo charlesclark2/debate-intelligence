@@ -252,9 +252,95 @@ is: the new build reads it and stops counting it 24 hours after its last write.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-30
 
 **Notes:**
+
+Accepted in full, phase `Succeeded`. All three defects fixed, each shown failing first for the
+reason the spec names, and the two places the session went beyond the spec are both places the
+spec was incomplete rather than the session over-reaching.
+
+**My brief was wrong about the run summaries, and the correction is worth more than the shim it
+replaced.** I told the session the `caselist-sync-runs/*.json` files carry `schema_version` and are
+read back by `caselist runs`, and asked for a compatibility shim. Neither half holds: those files
+are `RunSummary.as_json` with no version field, and `caselist runs` reads
+`caselist-sync-runs.jsonl` through `SyncRunLog`. I conflated two artifacts - and the
+`KeyError: 'outcome'` the operator hit on 09-29 running my one-liner over those files was that same
+confusion showing itself, which I did not follow through. Verified: `SyncRunRecord` carries
+`model_config = ConfigDict(frozen=True, extra="forbid")` and `schema_version: Literal[1]`.
+
+The session's conclusion is sharper than my premise. Because `extra="forbid"` and the version is a
+`Literal[1]`, adding a field to `SyncRunRecord` - or bumping its version - would make the installed
+`v0.1.0-dev.5` build reject records a newer build writes into the log they share. **The JSONL run
+log is a cross-version interface between an installed build and whatever writes beside it**, and
+nothing in the codebase says so. Leaving the record untouched and versioning only the summary was
+therefore not the conservative option, it was the correct one. That property should be written
+down; see the follow-ups below.
+
+**Two files rather than one is the right call for the same reason.** The backfill runs from the
+installed old-format build against the same state directory, so one shared ledger would have each
+build reading the other's format as "nothing spent" - the old build silently, every run. Two files
+means the new build counts everything; the residual (an old build overspending what the new one
+spent) is real, is named, and is absorbed by the server's own limiter. This only became visible by
+taking seriously that the deployed artefact and the working tree are different things, which is the
+same fact that let me lift t13's merge hold.
+
+**The old ledger migrated to N starts at its mtime is the detail I would have got wrong.** Every
+write replaced the file, so each counted download started at or before that moment; the mtime is
+the latest any of them can be, which keeps them inside the window longest and is therefore the
+conservative reading. It is also independent of which timezone the old `date` was keyed in, which
+is the whole defect. And bounding the unreadable case at `limit` starts from the mtime - fully
+spent for 24 hours, then released - is better than the "treat it as fully spent" I asked for, which
+would have blocked forever on a corrupt file. Checking it against a `cp -p` of the operator's real
+ledger rather than a fixture is what makes it evidence.
+
+**Deviations accepted, all four.** `debate_cli/container.py` is outside the package list because I
+wrote a criterion naming the CLI container and a package list excluding it; I have amended the spec
+in this branch rather than asking for a change. Extending ac1 to camp files follows from ac1's own
+rule. The `_import_openev` double-listing fix sits inside the code ac1 rewrote.
+
+**The first-gap rule is the most valuable thing here and it was not asked for.** The spec's ac1
+describes one road to the silent gap. The session found a second - an older week fails, a newer
+week imports past it, and the older week is `already_imported` for good - and showed it failing on
+the original code. Without that, ac1's guarantee is not actually delivered: the retry works only
+when nothing newer has landed since. A criterion that can be satisfied while the defect it names
+survives is a criterion I wrote badly, and finding that is worth more than fixing what I did write.
+
+**The property-test findings are the standard.** Two textbook ways a property test becomes
+decorative - an oracle that reads back through the code under test, and importing the constant
+under test as the expected value - each of which made a real break pass 2,000 examples. Both found
+by deep runs, both reported rather than quietly fixed, and both shown to catch specific breaks
+afterwards. The note that the matcher property does *not* catch "folders ignored", with the reason
+that the break makes the matcher hold less rather than wrongly, is the kind of negative result that
+tells me the properties are understood and not just passing.
+
+**On the inert shims used to prove ac2 fails on the original code.** Appending four unreached
+definitions to `2b248e3`'s module so the new test could import is the right technique: the
+alternative, backporting the test, would have demonstrated something other than the test that
+ships. Stating it, naming the four, asserting none is reached and confirming the tree clean
+afterwards is what keeps it evidence rather than a footnote.
+
+**Two follow-ups I am adding, neither blocking.**
+
+1. *The legacy-ledger read is a migration shim with no removal date.* `caselist-sync-downloads.json`
+   will be read on every run forever, contributing nothing 24 hours after the backfill last touches
+   it. Shims without a trigger become permanent. I have added the removal to `v1-e34-t05` as a
+   cleanup criterion, because enabling the schedule on a build carrying this change is exactly the
+   moment it stops being needed.
+2. *Write down that the run log is a cross-version interface.* A future task adding a field to
+   `SyncRunRecord` will break installed builds reading the same log, and nothing warns it. This
+   belongs in `sync_runs.py`'s module docstring. Filed against E34 rather than reopening this task.
+
+**The remaining known gap is correctly filed and correctly left.** A download that raises
+mid-stream is not recorded although the server may have counted it - the one place the accounting
+is still optimistic. Recording the start before the request is stricter and is the right change,
+but it is a different decision from this task's and belongs with the one that makes the schedule
+unattended.
+
+**Sync before opening the PR.** This branch reports `288 files, 230 tasks`; `origin/dev` is at
+`289 / 231` after `v1-e01-t14` and the `t05` dependency edge merged on 09-29. Nothing conflicts
+with this work, but run `scripts/task sync v1-e34-t06-sync-defects` so the PR is built on current
+`dev`.

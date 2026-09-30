@@ -26,7 +26,11 @@ spec:
     and anything about the cadence or the cap, which are the maintainer's and are fixed by the policy.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_cli.commands, docs/runbooks]
+    # `debate_cli.container` added by the PM, 2026-09-29, after the fact: ac2b requires the CLI
+    # container to agree on the window and a test to pin a clock proving it, and the container had
+    # no clock to pin. The criterion named the container; the package list did not. The spec was
+    # wrong, not the session.
+    packages: [debate_core.application, debate_cli.commands, debate_cli.container, docs/runbooks]
     forbidden:
       - Raising the daily bulk-download ceiling, the per-minute rate or the weekly cadence
       - Live network or AWS calls in CI tests (respx, moto and fakes only)

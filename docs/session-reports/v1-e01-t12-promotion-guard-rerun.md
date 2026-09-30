@@ -130,7 +130,11 @@ exists.
 
 *Set up the sandbox with the workflows as t08 left them* (`5c5772b` is this branch before the fix):
 
+Run everything below from the task worktree, never the main checkout. The PM works in the main
+checkout, and a branch switch there once put the sandbox commit under a spec PR (#121).
+
 ```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t12-promotion-guard-rerun
 SANDBOX=charlesclark2/promotion-guard-rerun-sandbox
 SB="https://github.com/$SANDBOX.git"
 PRE_FIX=5c5772b

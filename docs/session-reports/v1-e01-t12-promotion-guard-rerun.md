@@ -18,8 +18,11 @@ tips, so an open promotion goes red on its own after a hotfix. If a re-run fails
 that failure is the signal to fall back to the manual re-run, which the hotfix template and
 `branching-and-environments.md` now describe as the fallback. actionlint is clean, and seven
 scenarios passed against the job's shell logic, run offline with a fake `gh`.
-**The Goal stays `InProgress`:** ac3, the sandbox proof, needs GitHub and a sandbox repository, so
-only the operator can run it (Operator follow-ups). That run is also the live evidence for ac1.
+**The sandbox proof passed on 2026-09-30** (Charlie ran it; `charlesclark2/promotion-guard-rerun-sandbox`).
+With t08's workflows, an open promotion kept a stale green `back-merge` after a hotfix. With the fix
+on `main`, the next hotfix's push re-ran that promotion's guard within 10 seconds, turned
+`back-merge` red, and GitHub reported the promotion `BLOCKED`, with nobody touching it. Along the
+way GitHub dropped one push event entirely (Follow-up work), which is worth the PM's attention.
 
 **For the PM:** read Deviations 1 and 2 first. They are two places where ac2's wording doesn't
 match the repository, and they need a spec amendment or a ruling. The implementation follows the
@@ -30,19 +33,19 @@ rule in the spec's forbidden list.
 | Node | Status | Notes |
 |---|---|---|
 | `rerun-job` — Re-run promotion-guard for open PRs into main | Done | New job `rerun-promotion-guards` in `.github/workflows/back-merge.yml` (commit b23c7c5). It is a separate job, not steps in the existing one (Deviation 3). The comments in `promotion-guard.yml` now say why the `back-merge` job must keep fetching the live branch tips. |
-| `sandbox-proof` — Operator proves it in the sandbox | NOT RUN | Operator-run by spec: it needs GitHub credentials and a sandbox repository. The paste-ready procedure is under Operator follow-ups. |
+| `sandbox-proof` — Operator proves it in the sandbox | Done (operator, 2026-09-30) | Sandbox `charlesclark2/promotion-guard-rerun-sandbox`: promotion #1, hotfix #2 (before the fix), back-merge #3, fix hotfix #4, second hotfix #5. Evidence under ac3 and in "Sandbox run record". Deviations 5 and 6 cover what differed from the planned procedure. |
 | `docs-update` — Update the template and the process doc | Done, before the sandbox proof (Deviation 4) | `.github/PULL_REQUEST_TEMPLATE/hotfix.md` and `docs/process/branching-and-environments.md` (commit bb376a2). |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1 — every open PR whose base is `main` has promotion-guard re-run within one workflow run; PRs based on other branches are untouched | NOT RUN (live); logic PASS offline | **Live:** confirmed by the sandbox run in Operator follow-ups: the `rerun-promotion-guards` log names only the promotion PR. **Offline:** the job's `run:` block was extracted from `back-merge.yml` and run under bash with a fake `gh` and `sleep` on PATH (scratchpad only, not committed). There were 7 scenarios. (1) No open PRs → `No pull requests are open against main.`, exit 0. (2) Promotion #10 and hotfix #11 into `main`, #12 into `dev` returned by the API anyway, and fork #13 sharing #10's head sha → re-ran runs 101 (the newer of #10's two), 200 and 900 (the fork's own run, not #10's). #12 was not touched. Exit 0. (3) Run in progress on two polls, then completed → waited twice, then re-ran it, exit 0. (4) Run never finishes → 20 polls (5 min), then `::error::… did not finish within 5 minutes`, exit 1. (5) Re-run refused (HTTP 403) for #10 → `::error::`, #11 still re-run, exit 1. (6) No run for the head, and a deleted fork → two `::warning::`s, exit 0. (7) PR listing fails → exit 1. |
+| ac1 — every open PR whose base is `main` has promotion-guard re-run within one workflow run; PRs based on other branches are untouched | PASS | **Live (sandbox):** merging hotfix #5 started back-merge.yml run 36662276906 (02:58:23Z). Its `rerun-promotion-guards` job succeeded and logged exactly one line, `#1: re-running promotion-guard run 36654404905 for head 1454c5d…`. The only other open PR, back-merge #6 (`main` → `dev`), opened by the same run's other job, was not touched. **Offline:** the job's `run:` block was extracted from `back-merge.yml` and run under bash with a fake `gh` and `sleep` on PATH (scratchpad only, not committed). There were 7 scenarios. (1) No open PRs → `No pull requests are open against main.`, exit 0. (2) Promotion #10 and hotfix #11 into `main`, #12 into `dev` returned by the API anyway, and fork #13 sharing #10's head sha → re-ran runs 101 (the newer of #10's two), 200 and 900 (the fork's own run, not #10's). #12 was not touched. Exit 0. (3) Run in progress on two polls, then completed → waited twice, then re-ran it, exit 0. (4) Run never finishes → 20 polls (5 min), then `::error::… did not finish within 5 minutes`, exit 1. (5) Re-run refused (HTTP 403) for #10 → `::error::`, #11 still re-run, exit 1. (6) No run for the head, and a deleted fork → two `::warning::`s, exit 0. (7) PR listing fails → exit 1. |
 | ac2 — `actions: write` scoped to the one push-to-main job that re-runs; top-level `contents: read`; no job checks out PR code; actionlint clean | PASS against the forbidden-list rule; two wording conflicts (Deviations 1 and 2) | `actions: write` appears once, on `rerun-promotion-guards`, which has no `actions/checkout` step and runs no repository or PR code. The workflow's top level is `permissions: {}` (unchanged from t08, and stricter than `contents: read`). `uvx --from actionlint-py actionlint .github/workflows/promotion-guard.yml .github/workflows/back-merge.yml` (actionlint 1.7.12, shellcheck on PATH from `.venv`) → no output, exit 0. |
-| ac3 — in a sandbox, a promotion PR open before a hotfix shows `back-merge` green before and red after with no manual touch, merging blocked; the gap reproduced first | NOT RUN | Needs a GitHub sandbox repository and the operator's credentials. Procedure: Operator follow-ups. |
+| ac3 — in a sandbox, a promotion PR open before a hotfix shows `back-merge` green before and red after with no manual touch, merging blocked; the gap reproduced first | PASS | **Gap first, with t08's workflows:** after hotfix #2 merged, promotion #1 kept `back-merge` ✓ from its only run (36653456553, before the hotfix) and was `UNSTABLE`/`MERGEABLE`, while `main` held `370c548`, which `dev` lacked. **Before:** after back-merge #3, #1 was green again for real (run 36654404905 on `1454c5d`). Just before hotfix #5 merged, it was `back-merge` ✓ and `UNSTABLE`, with `main` holding `ab7a2f3` and `6f619d0` (the fix itself, which `dev` lacked). **After:** run 36654404905 attempt 2, started 02:58:31Z by `github-actions[bot]`, 10 s after #5 merged: `back-merge` failed with ``FAILED: `main` has 3 non-merge commit(s) that `dev` lacks`` naming `220cb26`, `6f619d0`, `ab7a2f3`. `gh pr view 1 --json mergeStateStatus,mergeable` → `{"mergeStateStatus":"BLOCKED","mergeable":"MERGEABLE"}`. Only `promotion-source` and `back-merge` were required at that point (Deviation 5), so `back-merge` is what blocked it. |
 | ac4 — hotfix template checklist item and the process doc describe the automatic re-run, with the manual step as the fallback | PASS | The hotfix template item now asks whether `rerun-promotion-guards` passed, and says to re-run by hand when it didn't. `branching-and-environments.md`: the section "When `main` moves, the guards re-run on every open pull request into it" replaces "A hotfix makes every open promotion's `back-merge` stale", adds "The fallback, if the re-run fails", and lists `actions: write` in the permissions paragraph. The old heading had no inbound links. |
 | rerun-job: Workflows pass actionlint | PASS | `uvx --from actionlint-py actionlint .github/workflows/promotion-guard.yml .github/workflows/back-merge.yml` → no output, exit 0 |
-| sandbox-proof: Stale green is reproduced, then fixed | NOT RUN | Charlie's confirmation after the Operator follow-up below |
+| sandbox-proof: Stale green is reproduced, then fixed | PASS | Charlie ran the sandbox procedure on 2026-09-30 and pasted each step's output back into the session. Stale green: [B]. Red without a manual re-run: attempt 2 of 36654404905, by `github-actions[bot]`. Blocked: `BLOCKED` (details under ac3). |
 | docs-update: Repository links still resolve | PASS | `uv run scripts/check_links.py` → `OK: 1059 relative links and anchors in 140 Markdown files` (0.24 s) |
 
 Also run: `uv run pytest tests/scripts/test_check_promotion_source.py -q` → `113 passed in 2.99s`
@@ -85,8 +88,23 @@ file → all applicable hooks passed. `uv run scripts/validate_specs.py` → `OK
    single push-to-main job that performs the re-run") fits this.
 4. **`docs-update` was done before `sandbox-proof`, against the `dependsOn` order.** The sandbox
    proof is operator-run, and this session can't wait for it. The docs describe the mechanism as
-   built, so they can ship in the same PR as the workflow. If the sandbox run disproves the
-   mechanism, both the workflow and these two documents need revising before merge.
+   built, so they can ship in the same PR as the workflow. The sandbox run then confirmed the
+   mechanism as documented, so neither needed revising.
+5. **The sandbox's protect-main did not require `ci`.** On pull requests into `main`, `spec-validate`
+   also runs `spec_index.py --check`. A copy of `dev` taken mid-cycle has a stale ROADMAP.md by
+   design (the PM refreshes it before a real promotion), so the sandbox's `ci` was red on every PR
+   into `main` (`ROADMAP.md is stale; run uv run scripts/spec_index.py`). Leaving `ci` required
+   would have stopped the hotfixes from merging, and made `BLOCKED` ambiguous. With `ci` dropped
+   from the sandbox copy of the ruleset, only `promotion-source` and `back-merge` could block, so
+   `BLOCKED` at the end is attributable to `back-merge` alone. `ci` is out of scope for this task,
+   and the real ruleset is untouched.
+6. **The "after" observation comes from a second hotfix, not the one that installed the fix.**
+   GitHub never delivered the push when fix hotfix #4 merged (02:36:16Z, `a9f08a1`). No workflow of
+   any kind ran, no check suite was created, the events feed shows the merge but no `PushEvent`,
+   and GitHub Status reported no incident. It stayed that way for over 17 minutes. So a trivial
+   second hotfix (#5) was merged onto the fixed `main`. Its push was delivered in 2 s, and the fix
+   worked on it. The before-state still held: during the lost push, promotion #1 showed the stale
+   green again, this time over the fix's own commits.
 
 ## Decisions and assumptions
 
@@ -120,9 +138,24 @@ file → all applicable hooks passed. `uv run scripts/validate_specs.py` → `OK
 
 ## Operator follow-ups
 
-**1. Sandbox proof (ac3, and live evidence for ac1).** Expected runtime ~30–40 min, mostly waiting
-for `ci` on four pull requests. It changes things outside the worktree: it creates a public sandbox
-repository and pushes to it.
+**Delete the sandbox and its local branches.** These are the only open steps; the sandbox proof
+itself is done. Run from the task worktree:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t12-promotion-guard-rerun
+git branch -D sandbox-dev-change hotfix/sandbox-gap hotfix/sandbox-install-rerun hotfix/sandbox-second
+gh auth refresh -h github.com -s delete_repo
+gh repo delete charlesclark2/promotion-guard-rerun-sandbox --yes
+gh repo delete charlesclark2/promotion-guard-sandbox --yes   # t08's, if it still exists
+```
+
+### Sandbox proof procedure (run 2026-09-30)
+
+Kept as the record of what was run. Expected runtime ~30–40 min, mostly waiting for `ci`. It
+creates a public sandbox repository and pushes to it. Two things differed in the run: `ci` was
+dropped from the sandbox's required checks (Deviation 5, now in the procedure), and GitHub lost the
+push from the fix hotfix, so a second trivial hotfix was merged, and [E]–[H] were read from its run
+(Deviation 6).
 
 Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e01-t12-promotion-guard-rerun`.
 It uses a new sandbox name, so it can't collide with t08's `promotion-guard-sandbox`, if that still
@@ -234,24 +267,27 @@ Paste [B], [D], [F], [G] and [H] back, or screenshots showing "Merging is blocke
 `rerun-promotion-guards` red with a 403 on the re-run, the token lacks `actions: write` in that
 repository's settings. Paste the log.
 
-Clean up afterwards:
-
-```bash
-git switch task/v1-e01-t12-promotion-guard-rerun
-git branch -D sandbox-dev-change hotfix/sandbox-gap hotfix/sandbox-install-rerun
-gh auth refresh -h github.com -s delete_repo && gh repo delete "$SANDBOX" --yes
-```
-
-Once Charlie confirms [B], [G] and [H], the Goal can be set to `Succeeded`
-(`uv run scripts/task_helper.py set-phase v1-e01-t12-promotion-guard-rerun Succeeded`), either in
-this worktree before the PR or in a spec PR afterwards, as t08 did.
+If the back-merge.yml run for the fix hotfix never appears (Deviation 6), merge another trivial
+`hotfix/*` PR onto the fixed `main` and read [E]–[H] from that push.
 
 ## Follow-up work
 
 * **ac2's wording** (Deviations 1 and 2) should be amended in the spec, so that the criterion
   states the rule the forbidden list already enforces.
-* t08's sandbox `charlesclark2/promotion-guard-sandbox` may still exist. Its deletion is an open
-  item in t08's report.
+* **A lost push event leaves a promotion stale, and nothing turns red** (seen in the sandbox,
+  Deviation 6). If GitHub never delivers the push, `rerun-promotion-guards` never runs, so there is
+  no failed job to prompt the manual fallback. The hotfix template's checklist item covers this for
+  hotfixes, because it asks for the job to have *passed* on the merge's push, and a job that never
+  ran can't be ticked. A cheap hardening, for an E01 task if the PM wants it: add
+  `workflow_dispatch` to `back-merge.yml`, so the re-run can be started by hand without editing
+  every promotion's description.
+* **PR #121 (`specs/t05-retire-legacy-ledger` → `dev`) was built on a sandbox commit.** During the
+  sandbox run, one step was run in the main checkout by mistake (the procedure now starts with a
+  `cd`). The PM session there then branched from `hotfix/sandbox-gap`, so #121 carried
+  `370c548` (`SANDBOX_HOTFIX_GAP.txt`) and this task's start commit `5c5772b`. A rebase onto
+  `origin/dev` that keeps only `8c47e68`, plus a ROADMAP regeneration, was handed to the operator.
+  **Resolved:** #121 merged as one commit (`1ef7eda`) touching only ROADMAP.md and the t05 spec.
+  `dev` has no sandbox file, and t12 is still `Pending` there.
 
 ## PM review
 

@@ -151,6 +151,27 @@ PROMO=$(gh pr create --repo "$SANDBOX" --base main --head dev --title "Sandbox p
 sleep 15; gh pr checks --repo "$SANDBOX" "$PROMO" --watch        # [A] back-merge pass
 ```
 
+*Drop `ci` from the sandbox's required checks.* On a pull request into `main`, `spec-validate` also
+runs `spec_index.py --check`, and a copy of `dev` taken mid-cycle has a stale ROADMAP.md by design,
+since the PM refreshes it before a real promotion. The sandbox's `ci` is therefore red on every PR
+into `main`, which would stop the hotfixes from merging and would make "BLOCKED" at [H]
+ambiguous. With `ci` dropped, only `promotion-source` and `back-merge` can block. This changes the
+sandbox only.
+
+```bash
+MAIN_RULESET=$(gh api "repos/$SANDBOX/rulesets" --jq '.[] | select(.name=="protect-main") | .id')
+gh api "repos/$SANDBOX/rulesets/$MAIN_RULESET" \
+  | jq '{rules: [.rules[] | if .type == "required_status_checks"
+                             then .parameters.required_status_checks |= map(select(.context != "ci"))
+                             else . end]}' \
+  | gh api -X PUT "repos/$SANDBOX/rulesets/$MAIN_RULESET" --input - \
+      --jq '[.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context]'
+gh pr view --repo "$SANDBOX" "$PROMO" --json mergeStateStatus    # [A2] "UNSTABLE", not "BLOCKED"
+```
+
+From here on, `CI/ci` and `CI/spec-validate` stay red on every PR into `main`. Ignore them, and
+merge the hotfixes once their `promotion-source` and `back-merge` pass.
+
 *Reproduce the gap with t08's workflows:*
 
 ```bash

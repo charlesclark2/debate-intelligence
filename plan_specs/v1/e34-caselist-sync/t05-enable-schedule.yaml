@@ -89,6 +89,18 @@ spec:
         docs/runbooks/caselist-scheduled-sync.md names the installed-build prerequisite in its
         "Before you install anything" list, with the install_channel.sh command, so the next person to
         install the agent does not point it at a checkout.
+    - id: ac6
+      description: >-
+        The legacy download-ledger read is removed. v1-e34-t06 replaced the calendar ledger with a
+        rolling window in a new file, `caselist-sync-download-starts.json`, and kept reading the old
+        `caselist-sync-downloads.json` because the backfill was still running from an installed
+        old-format build against the same state directory - two files so neither build reads the
+        other's format as "nothing spent". Enabling the schedule on a build that carries the rolling
+        window is the moment that stops being true, and it is the only moment anyone will notice: a
+        migration shim with no removal trigger is a permanent one. Delete the legacy read and its
+        tests, and delete `<data_dir>/caselist-sync-downloads.json` from the environments the agent
+        runs in, only once no old-format build remains that writes to those directories - state which
+        build the agent runs and how that was checked.
 status:
   phase: Pending
 ---

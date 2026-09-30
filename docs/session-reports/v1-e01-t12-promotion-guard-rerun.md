@@ -136,7 +136,7 @@ SB="https://github.com/$SANDBOX.git"
 PRE_FIX=5c5772b
 BODY=$'Dev build: sandbox\nvalidate-dev run: sandbox'
 gh repo create "$SANDBOX" --public --description "Throwaway for v1-e01-t12 sandbox proof; delete afterwards"
-git push "$SB" $PRE_FIX:refs/heads/main $PRE_FIX:refs/heads/dev
+git push "$SB" "${PRE_FIX}:refs/heads/main" "${PRE_FIX}:refs/heads/dev"   # braces: zsh reads $VAR:r as a modifier
 git switch -c sandbox-dev-change $PRE_FIX       # something on dev for the promotion to carry
 echo dev > SANDBOX_DEV_CHANGE.txt && git add SANDBOX_DEV_CHANGE.txt && git commit -m "Sandbox dev change"
 git push "$SB" HEAD:refs/heads/dev

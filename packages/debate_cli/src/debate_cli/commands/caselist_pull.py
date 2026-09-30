@@ -174,7 +174,7 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
     if summary.dry_run:
         wanted = sum(1 for one in summary.archives if one.wanted)
         camp = sum(1 for one in summary.openev if one.wanted)
-        over_cap = f" ({deferred} more wanted, over today's download cap)" if deferred else ""
+        over_cap = f" ({deferred} more wanted, over the 24-hour download cap)" if deferred else ""
         return (
             f"{summary.archives_seen} archive(s) listed; would download {wanted} archive(s){over_cap} "
             f"and {camp} OpenEv file(s). Nothing was written. Re-run without --dry-run to do it."

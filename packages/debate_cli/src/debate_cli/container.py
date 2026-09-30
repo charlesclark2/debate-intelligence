@@ -65,6 +65,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
@@ -163,6 +164,10 @@ class SettingsNotConfigured(RuntimeError):
         )
 
 
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
 class ServiceContainer:
     """Builds and caches the application services the CLI's commands use.
 
@@ -207,6 +212,14 @@ class ServiceContainer:
     def override(self, name: str, instance: object) -> None:
         """Register `instance` under `name`, so a test can supply a fake before a command runs."""
         self._instances[name] = instance
+
+    def clock(self) -> Callable[[], datetime]:
+        """Now, in UTC: the one clock `caselist pull` and its run log read.
+
+        The run's timestamps and its rolling 24-hour download window (`v1-e34-t06`) come from it,
+        so they cannot disagree, and a CLI test pins them both by overriding `"clock"`.
+        """
+        return self.singleton("clock", lambda: _utc_now)
 
     @property
     def database(self) -> SqliteDatabase:
@@ -436,6 +449,7 @@ class ServiceContainer:
             openev_event=caselist.openev_event,
             openev_year=caselist.openev_year,
             bulk_downloads_per_day=caselist.bulk_downloads_per_day,
+            clock=self.clock(),
         )
 
     def caselist_sync_monitor(self) -> SyncRunMonitor:
@@ -457,6 +471,7 @@ class ServiceContainer:
             remote=self._evidence_bucket() if settings.storage.s3.bucket else None,
             aws_login_command=self._aws_login_command(),
             secrets=lambda: [token.get_secret_value()] if token is not None else [],
+            clock=self.clock(),
         )
 
     def caselist_sync_history(self) -> SyncRunHistory:

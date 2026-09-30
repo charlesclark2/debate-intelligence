@@ -298,9 +298,69 @@ If the back-merge.yml run for the fix hotfix never appears (Deviation 6), merge 
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-30
 
 **Notes:**
+
+Accepted in full, phase `Succeeded`. The mechanism works, it was proved against a real repository
+rather than argued for, and the two places the spec and the repository disagreed were both the
+spec's fault.
+
+**ac2 was wrong twice, and following it literally would have made the repository less safe.** I
+wrote that the top-level permissions "stay `contents: read`" when `back-merge.yml`'s top level is
+`permissions: {}`, which grants strictly less; obeying my wording would have widened the default.
+And I wrote that no job in either workflow may check out pull-request code, when promotion-guard's
+own two jobs must do exactly that to run `check_promotion_source.py` against the merge ref. The
+session kept the forbidden list's rule, which is the one that carries the safety property, and
+proposed wording for both. I have taken both suggestions into ac2 verbatim in this branch. A
+criterion that forbids the design it is meant to protect is worse than no criterion, because the
+next session may obey it.
+
+**Deviation 3 is right and the reasoning generalises.** A second push-to-main job rather than steps
+inside the existing one keeps `actions: write` away from the job that checks out the repository and
+runs a script, and it means a failure to open the back-merge pull request cannot also swallow the
+re-run. Two capabilities that fail independently should not share a job just because they share a
+trigger.
+
+**Deviation 5 is good method, not a shortcut.** Dropping `ci` from the sandbox's required checks
+looks like weakening the test until you see why: with `ci` red on every pull request into `main`
+(the sandbox's `dev` copy has a deliberately stale ROADMAP), `BLOCKED` at the end would have been
+ambiguous between `ci` and `back-merge`. Removing the confound is what makes the final observation
+attributable to the thing under test. The real ruleset was untouched.
+
+**The lost push is the finding that outlives this task.** GitHub never delivered the push when the
+fix hotfix merged: no workflow ran, no check suite was created, the events feed showed the merge
+with no `PushEvent`, and no incident was reported. It stayed that way for over seventeen minutes,
+and during it the promotion showed the stale green again - over the fix's own commits. That is this
+task's failure mode arriving through a door the task does not cover, and the session found it by
+accident and reported it rather than re-running until it looked clean.
+
+It matters more than the follow-up note suggests. Everything here is push-triggered, so a lost push
+produces no job, and a job that never ran cannot fail: there is no red anywhere to prompt the manual
+fallback. The proposed `workflow_dispatch` is worth having, because it turns the fallback from
+"edit every open promotion's description" into "press a button", but it does not close this gap - it
+still requires a person to notice, which is the same weakness the whole task exists to remove. What
+closes it is a low-frequency scheduled sweep that re-runs the guards for open pull requests into
+`main` whether or not any event arrived. I am filing both as `v1-e01-t15`, with the schedule as the
+substance and the dispatch as the convenience.
+
+The one real mitigation today is the hotfix template's checklist item, which asks whether
+`rerun-promotion-guards` *passed* on the merge's push. A job that never ran cannot be ticked, so the
+human backstop does catch it for hotfixes. That is worth knowing, and it is not a reason to leave
+promotions depending on it.
+
+**PR #121 carrying a sandbox commit was mine.** I branched in the main checkout while the sandbox
+procedure was using it, without checking what `HEAD` was. That is the second time this session I
+have cut a branch from whatever happened to be checked out rather than from a freshly pulled `dev`,
+and the procedure's new opening `cd` guards the session's side of it while my own habit is what
+needs to change: verify `HEAD` before branching, every time. Resolved cleanly - #121 merged as a
+single commit touching only ROADMAP.md and the t05 spec, `dev` carries no sandbox file, and t12 was
+still `Pending` there.
+
+**Not acting on my own addendum was correct.** I suggested running `scripts/task sync` for another
+task's name; the session read what that command does, saw it would rebase and force-push a
+concurrent session's branch, and declined. Right call, and the right way to handle an instruction
+from me that turns out to be dangerous: check what it does, refuse it, and say why.

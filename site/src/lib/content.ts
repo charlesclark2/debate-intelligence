@@ -1249,9 +1249,180 @@ export function eventsContentAsPage(
   )
 }
 
+/*
+ * ---------------------------------------------------------------------------------------------
+ * The parent email-updates section: content/email-updates.json (v1-e37-t05).
+ *
+ * The one place a visitor hands data to another company (docs/policies/website-publishing.md,
+ * Analytics and third parties). The site's whole part in it is a plain link to the mailing
+ * service's hosted signup page: no form, no input, no provider script. The address a parent types
+ * goes from their browser to the provider and never passes through this site, this repository or
+ * AWS, because there is nothing here that could receive it.
+ *
+ * Which provider that is was still provisional when this was written: the district's own parent
+ * messaging tool was preferred if the activities director allows team use. So the provider lives
+ * in two fields, `providerName` and `signupUrl`, and every sentence that names it says
+ * `{provider}` instead. Changing provider is an edit to those two fields and a deploy.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+export const EMAIL_UPDATES_FILE = 'email-updates.json'
+
+/** The anchor the section carries on every page it appears on, e.g. /#email-updates. */
+export const EMAIL_UPDATES_ID = 'email-updates'
+
+/** The only token a sentence in content/email-updates.json may use. */
+const PROVIDER_TOKEN = '{provider}'
+
+/**
+ * Where the signup link goes: the provider's hosted signup page, over https, or the
+ * `[[TBD: ...]]` marker until the operator has created the list and supplied its address. The
+ * marker shows as a gap badge in a dev preview and fails a prod build, like every other one.
+ *
+ * No credentials in the URL, because the only thing the site is ever given is the public page.
+ */
+const signupUrlSchema = z.union([
+  z.string().regex(PLACEHOLDER_ONLY_PATTERN),
+  z
+    .string()
+    .refine((value) => {
+      try {
+        const url = new URL(value)
+        return url.protocol === 'https:' && url.username === '' && url.password === ''
+      } catch {
+        return false
+      }
+    }, 'signupUrl must be the provider\'s https signup page (no credentials), or a [[TBD: ...]] marker'),
+])
+
+export const emailUpdatesContentSchema = z
+  .object({
+    providerName: z.string().min(1),
+    signupUrl: signupUrlSchema,
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    points: z.array(z.string().min(1)).min(1).max(4),
+    action: z
+      .object({ label: z.string().min(1), externalLinkNote: z.string().min(1) })
+      .strict(),
+  })
+  .strict()
+
+type EmailUpdatesSource = z.infer<typeof emailUpdatesContentSchema>
+
+/** The section as a page renders it, with `{provider}` already filled in. */
+export interface EmailUpdatesContent {
+  providerName: string
+  /** The provider's signup page, or null while it is still a [[TBD]] marker. */
+  signupUrl: string | null
+  eyebrow: string
+  title: string
+  intro: string
+  points: string[]
+  action: { label: string; externalLinkNote: string }
+  /** The notes on any placeholder left in the file, for the publishing-policy guard. */
+  placeholders: string[]
+}
+
+function emailUpdatesStrings(content: Omit<EmailUpdatesContent, 'placeholders'>): string[] {
+  return [
+    content.eyebrow,
+    content.title,
+    content.intro,
+    ...content.points,
+    content.action.label,
+    content.action.externalLinkNote,
+  ]
+}
+
+export function loadEmailUpdatesContent(
+  contentDirectory: string = defaultContentDirectory(),
+): EmailUpdatesContent {
+  const filePath = `content/${EMAIL_UPDATES_FILE}`
+  const absolutePath = join(contentDirectory, EMAIL_UPDATES_FILE)
+  if (!existsSync(absolutePath)) {
+    throw new ContentValidationError(filePath, 'file is missing')
+  }
+  let data: unknown
+  try {
+    data = JSON.parse(readFileSync(absolutePath, 'utf8'))
+  } catch (error) {
+    throw new ContentValidationError(filePath, `is not valid JSON (${(error as Error).message})`)
+  }
+  const result = emailUpdatesContentSchema.safeParse(data)
+  if (!result.success) {
+    throw new ContentValidationError(
+      filePath,
+      `invalid email-updates content (${formatIssues(result.error)})`,
+    )
+  }
+
+  const source: EmailUpdatesSource = result.data
+  for (const text of emailUpdatesStrings(source)) {
+    const unknownToken = text.replaceAll(PROVIDER_TOKEN, '').match(/\{[^}]*\}/)
+    if (unknownToken) {
+      throw new ContentValidationError(
+        filePath,
+        `uses ${unknownToken[0]}; the only token a sentence may use is ${PROVIDER_TOKEN}`,
+      )
+    }
+  }
+  const fill = (text: string) => text.replaceAll(PROVIDER_TOKEN, source.providerName)
+  const signupIsPlaceholder = PLACEHOLDER_ONLY_PATTERN.test(source.signupUrl)
+  const content = {
+    providerName: source.providerName,
+    signupUrl: signupIsPlaceholder ? null : source.signupUrl,
+    eyebrow: fill(source.eyebrow),
+    title: fill(source.title),
+    intro: fill(source.intro),
+    points: source.points.map(fill),
+    action: {
+      label: fill(source.action.label),
+      externalLinkNote: fill(source.action.externalLinkNote),
+    },
+  }
+  assertYamlHouseStyle(filePath, emailUpdatesStrings(content))
+
+  const placeholders = findPlaceholders(
+    [source.providerName, ...emailUpdatesStrings(content)].join('\n'),
+  )
+  if (signupIsPlaceholder) {
+    const note = findPlaceholders(source.signupUrl)[0]
+    placeholders.push(`${note || 'TBD'} (signupUrl)`)
+  }
+  return { ...content, placeholders }
+}
+
+/**
+ * content/email-updates.json as the publishing-policy guard sees it, for the same reason
+ * homeContentAsPage exists. Its placeholders include an unset signupUrl, so a prod build cannot
+ * ship a signup section with nowhere to sign up.
+ */
+export function emailUpdatesContentAsPage(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const content = loadEmailUpdatesContent(contentDirectory)
+  const text = emailUpdatesStrings(content).join('\n\n')
+  return {
+    slug: 'email-updates-content',
+    route: `/#${EMAIL_UPDATES_ID}`,
+    filePath: `content/${EMAIL_UPDATES_FILE}`,
+    title: content.title,
+    description: content.title,
+    navLabel: content.title,
+    navOrder: Number.MAX_SAFE_INTEGER,
+    excludeFromNavigation: true,
+    draft: false,
+    html: text,
+    guardedHtml: text,
+    placeholders: content.placeholders,
+  }
+}
+
 /**
  * Every content file that carries copy, as the publishing-policy guard sees it: the Markdown
- * pages plus the three YAML files that hold the rest of the words. src/app/layout.tsx passes
+ * pages plus the YAML and JSON files that hold the rest of the words. src/app/layout.tsx passes
  * exactly this at build time, and tests/content-policy.test.ts checks exactly this.
  */
 export function loadGuardedContent(
@@ -1263,6 +1434,7 @@ export function loadGuardedContent(
     homeContentAsPage(contentDirectory),
     faqContentAsPage(contentDirectory),
     eventsContentAsPage(contentDirectory),
+    emailUpdatesContentAsPage(contentDirectory),
   ]
 }
 

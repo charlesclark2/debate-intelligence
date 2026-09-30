@@ -263,7 +263,15 @@ settings that matter:
 | Reply-to | charles.clark@wfbschools.com | Replies stay in district email |
 | Imports | None | Every subscriber signed up and confirmed themselves |
 
-**Confirmed on the account:** pending the operator's setup (2026-09-29).
+**Confirmed on the account by Charlie, 2026-09-29:** double opt-in on, open and click tracking
+off, archive Disabled, no imports. The signup page is **`https://buttondown.com/wfbdebate`** and
+lists no past emails.
+
+**The archive redirects rather than returning 404.** Buttondown's docs say a Disabled archive
+returns 404; on this account `https://buttondown.com/wfbdebate/archive` answers `302` to the
+signup page (checked 2026-09-29, before any email was sent). Either way nothing is readable, but
+because the behaviour differs from the docs, the first real email's own web address was also
+checked after sending: see the live check in the session report.
 
 ## The site side
 

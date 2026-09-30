@@ -139,8 +139,10 @@ file → all applicable hooks passed. `uv run scripts/validate_specs.py` → `OK
 
 ## Operator follow-ups
 
-**Delete the sandbox and its local branches.** These are the only open steps; the sandbox proof
-itself is done. Run from the task worktree:
+**Done 2026-09-30.** Charlie deleted the four local sandbox branches and
+`charlesclark2/promotion-guard-rerun-sandbox`. t08's `charlesclark2/promotion-guard-sandbox`
+returned `HTTP 404`, so it had already been deleted, which closes that open item in t08's report.
+Nothing remains for the operator. The commands that were run:
 
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t12-promotion-guard-rerun

@@ -32,9 +32,9 @@ rule in the spec's forbidden list.
 
 | Node | Status | Notes |
 |---|---|---|
-| `rerun-job` — Re-run promotion-guard for open PRs into main | Done | New job `rerun-promotion-guards` in `.github/workflows/back-merge.yml` (commit b23c7c5). It is a separate job, not steps in the existing one (Deviation 3). The comments in `promotion-guard.yml` now say why the `back-merge` job must keep fetching the live branch tips. |
+| `rerun-job` — Re-run promotion-guard for open PRs into main | Done | New job `rerun-promotion-guards` in `.github/workflows/back-merge.yml` (commit f3d9055). It is a separate job, not steps in the existing one (Deviation 3). The comments in `promotion-guard.yml` now say why the `back-merge` job must keep fetching the live branch tips. |
 | `sandbox-proof` — Operator proves it in the sandbox | Done (operator, 2026-09-30) | Sandbox `charlesclark2/promotion-guard-rerun-sandbox`: promotion #1, hotfix #2 (before the fix), back-merge #3, fix hotfix #4, second hotfix #5. Evidence under ac3 and in "Sandbox run record". Deviations 5 and 6 cover what differed from the planned procedure. |
-| `docs-update` — Update the template and the process doc | Done, before the sandbox proof (Deviation 4) | `.github/PULL_REQUEST_TEMPLATE/hotfix.md` and `docs/process/branching-and-environments.md` (commit bb376a2). |
+| `docs-update` — Update the template and the process doc | Done, before the sandbox proof (Deviation 4) | `.github/PULL_REQUEST_TEMPLATE/hotfix.md` and `docs/process/branching-and-environments.md` (commit fca3457). |
 
 ## Acceptance criteria
 
@@ -155,7 +155,9 @@ Kept as the record of what was run. Expected runtime ~30–40 min, mostly waitin
 creates a public sandbox repository and pushes to it. Two things differed in the run: `ci` was
 dropped from the sandbox's required checks (Deviation 5, now in the procedure), and GitHub lost the
 push from the fix hotfix, so a second trivial hotfix was merged, and [E]–[H] were read from its run
-(Deviation 6).
+(Deviation 6). The SHAs below are the ones the run used, from before this branch was rebased onto
+`dev`: `5c5772b` is now `976573f`, `b23c7c5` is now `f3d9055`, and `bb376a2` is now `fca3457`. Each
+pair has the same `git patch-id`, so the sandbox tested exactly what this branch carries.
 
 Where: your Mac, in the task worktree `debate-intelligence-worktrees/v1-e01-t12-promotion-guard-rerun`.
 It uses a new sandbox name, so it can't collide with t08's `promotion-guard-sandbox`, if that still

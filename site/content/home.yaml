@@ -40,13 +40,13 @@ parentSession:
     what it costs, and what the team asks of a family.
   facts:
     - label: Date
-      value: Wednesday, October 1, 2026
+      value: Thursday, October 1, 2026
     - label: Time
       value: 6:00 PM
     - label: Place
       value: Whitefish Bay High School
     - label: Room
-      value: To be announced
+      value: Room 264
   whatToExpect:
     - The three events the team competes in, explained in plain language.
     - What a tournament weekend actually looks like, from Friday to Sunday.

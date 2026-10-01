@@ -396,7 +396,9 @@ class TestTheRecordsItLeaves:
         bodies = sorted(
             (
                 removal_world.client.get_object(
-                    Bucket=removal_world.bucket_name, Key=SUPPRESSION_LIST_KEY, VersionId=str(v.get("VersionId"))
+                    Bucket=removal_world.bucket_name,
+                    Key=SUPPRESSION_LIST_KEY,
+                    VersionId=str(v.get("VersionId")),
                 )["Body"].read()
                 for v in listed.get("Versions", [])
             ),
@@ -515,3 +517,92 @@ class TestRerunning:
         assert {entry.sha256 for entry in state} == EXCLUSIVE | {SHARED}
         await removal_world.suppression().reconcile()
         assert len(local.read_text().splitlines()) == 5
+
+
+class TestSupersededManifestVersions:
+    async def test_an_older_version_of_an_untouched_manifest_that_names_the_file_is_purged(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """The current 09-01 manifest never named Bayview; a version re-published before it did.
+
+        A restorable version of a removed row is the row not removed, so the sweep reads every
+        noncurrent version of the caselist's manifests and purges the ones that name it.
+        """
+        week1 = manifest_key(SYNTHETIC_CASELIST, date(2026, 9, 1))
+        current = removal_world.client.get_object(Bucket=removal_world.bucket_name, Key=week1)["Body"].read()
+        bayview = digest("bayview-semis-neg")
+        stale_row = (
+            '{"classification":"NEW","kind":"member","path":"Maple Grove/QX/Bayview.docx",'
+            f'"schema_version":1,"sha256":"{bayview}"}}\n'
+        )
+        removal_world.client.put_object(
+            Bucket=removal_world.bucket_name, Key=week1, Body=stale_row.encode() + current
+        )
+        removal_world.client.put_object(Bucket=removal_world.bucket_name, Key=week1, Body=current)
+        assert len(all_versions_under(removal_world, week1)) == 3
+
+        remover = removal_world.service()
+        plan = await remover.plan(
+            SourceSelector(bayview), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
+        )
+        assert week1 not in {rewrite.key for rewrite in plan.manifests}, "its current version is clean"
+        await remover.execute(plan)
+
+        remaining = removal_world.client.list_object_versions(Bucket=removal_world.bucket_name, Prefix=week1)
+        bodies = [
+            removal_world.client.get_object(
+                Bucket=removal_world.bucket_name, Key=week1, VersionId=str(v.get("VersionId"))
+            )["Body"].read()
+            for v in remaining.get("Versions", [])
+        ]
+        assert len(bodies) == 2, "the original and the current version stay; the one naming Bayview goes"
+        assert not any(bayview.encode() in body for body in bodies)
+
+    async def test_a_rerun_after_a_stop_during_the_sweep_still_sweeps(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """The first run cleans the current manifests then stops; the second rewrites nothing and sweeps."""
+        week1 = manifest_key(SYNTHETIC_CASELIST, date(2026, 9, 1))
+        current = removal_world.client.get_object(Bucket=removal_world.bucket_name, Key=week1)["Body"].read()
+        bayview = digest("bayview-semis-neg")
+        stale = f'{{"classification":"NEW","kind":"member","path":"x.docx","schema_version":1,"sha256":"{bayview}"}}\n'
+        removal_world.client.put_object(
+            Bucket=removal_world.bucket_name, Key=week1, Body=stale.encode() + current
+        )
+        removal_world.client.put_object(Bucket=removal_world.bucket_name, Key=week1, Body=current)
+
+        class StopsBeforeReadingVersions(S3EvidenceVersionStore):
+            async def get_version_file(self, version: ObjectVersion, destination: Path) -> None:
+                raise StoreUnavailable("GetObject", version.key, "the connection dropped")
+
+        def stopping() -> Any:
+            access = removal_world.takedown()
+            return type(access)(
+                versions=StopsBeforeReadingVersions(
+                    bucket=removal_world.bucket_name, client=removal_world.client
+                ),
+                objects=access.objects,
+                profile=access.profile,
+                bucket=access.bucket,
+            )
+
+        first = removal_world.service(takedown=stopping)
+        with pytest.raises(RemovalIncomplete):
+            await first.execute(
+                await first.plan(
+                    SourceSelector(bayview), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
+                )
+            )
+        second = removal_world.service()
+        plan = await second.plan(
+            SourceSelector(bayview), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
+        )
+        assert not plan.manifests_on(Side.BUCKET), "the current manifests were cleaned the first time"
+        await second.execute(plan)
+
+        remaining = removal_world.client.list_object_versions(Bucket=removal_world.bucket_name, Prefix=week1)
+        for version in remaining.get("Versions", []):
+            body = removal_world.client.get_object(
+                Bucket=removal_world.bucket_name, Key=week1, VersionId=str(version.get("VersionId"))
+            )["Body"].read()
+            assert bayview.encode() not in body

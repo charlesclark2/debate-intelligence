@@ -524,7 +524,7 @@ class RemovalPlanner:
             objects=tuple(objects),
             versions_counted=counted
             and all(rewrite.versions is not None for rewrite in rewrites if rewrite.side is Side.BUCKET),
-            affected_caselists=tuple(sorted({copy.caselist for copy in copies if copy.key in rewritten})),
+            affected_caselists=_affected_caselists(selector, sources, copies, rewritten),
             suppression_after=after,
         )
 
@@ -1026,6 +1026,30 @@ def _counts(raw: object) -> dict[str, int]:
 # ------------------------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------------------------
+
+
+def _affected_caselists(
+    selector: RemovalSelector,
+    sources: Sequence[PlannedSource],
+    copies: Sequence[_ManifestCopy],
+    rewritten: set[str],
+) -> tuple[str, ...]:
+    """Caselists whose superseded manifest versions the executor sweeps.
+
+    Not only those this plan rewrites: a re-run after a run that stopped during the sweep rewrites
+    nothing — the current versions are already clean — and must still sweep where the files were.
+    """
+    affected = {copy.caselist for copy in copies if copy.key in rewritten}
+    for source in sources:
+        if source.disposition is Disposition.SKIP_SHARED:
+            continue
+        affected |= {ref.caselist for ref in source.disclosures}
+        affected |= {caselist for caselist, _ in source.requester_paths}
+        if source.camp_files or source.camp_file_holders and source.disposition is Disposition.REMOVE:
+            affected.add(OPENEV)
+    if isinstance(selector, TeamSelector):
+        affected.add(selector.caselist)
+    return tuple(sorted(affected))
 
 
 def _names_digest(key: str, digest: str) -> bool:

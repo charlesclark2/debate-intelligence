@@ -124,6 +124,7 @@ QX_LOCK_FILE = "Maple Grove/QX/~$ple Grove-QX-Aff-Grove City Invitational-Round 
 ZALU_ROUND_3 = "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-Aff-Grove City Invitational-Round 3.docx"
 
 #: Directory entries in the 09-22 archive (see :func:`next_mondays_archive`).
+WRAPPER_DIRECTORY_ENTRY = "testcl26-0922/"
 QX_DIRECTORY_ENTRY = "testcl26-0922/Maple Grove/QX/"
 ZALU_DIRECTORY_ENTRY = "testcl26-0922/Cedar Hollow/ZaLu/"
 
@@ -171,8 +172,9 @@ def next_mondays_archive(*, with_a_new_file_of_the_team: bool = False) -> bytes:
 
     Written the way `build_snapshot_zips` writes a week: under a `testcl26-0922/` wrapper, the
     zip-slip entry at the top level, fixed timestamps. It also carries directory entries for the
-    team's directory and ZaLu's, as zips made by some tools do: the reader ignores them, and a
-    rewrite has to drop the team's, which names it, and keep ZaLu's.
+    wrapper, the team's directory and ZaLu's, as zips made by some tools do: the reader ignores
+    them, and a rewrite has to drop the team's, which names it and holds nothing else, and keep the
+    wrapper, which holds the team's files and everyone else's, and ZaLu's.
     """
     members = [
         *SNAPSHOTS[-1].members_for(zip_form=True),
@@ -183,7 +185,7 @@ def next_mondays_archive(*, with_a_new_file_of_the_team: bool = False) -> bytes:
     bodies = {ZALU_LAKESHORE: ZALU_LAKESHORE_BODY, QX_LAKESHORE: QX_LAKESHORE_BODY}
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for directory in (QX_DIRECTORY_ENTRY, ZALU_DIRECTORY_ENTRY):
+        for directory in (WRAPPER_DIRECTORY_ENTRY, QX_DIRECTORY_ENTRY, ZALU_DIRECTORY_ENTRY):
             archive.writestr(zipfile.ZipInfo(directory, date_time=_ZIP_TIMESTAMP), b"")
         for member in sorted(members, key=lambda one: one.path):
             name = member.path if member.path.startswith("../") else f"testcl26-0922/{member.path}"
@@ -672,7 +674,7 @@ class TestNothingPendingIsLost:
             )
         }
         taken_out.add(QX_DIRECTORY_ENTRY)
-        assert taken_out <= set(original) and ZALU_DIRECTORY_ENTRY in original
+        assert taken_out <= set(original) and {WRAPPER_DIRECTORY_ENTRY, ZALU_DIRECTORY_ENTRY} <= set(original)
         assert entries(waiting) == {name: data for name, data in original.items() if name not in taken_out}
         assert (inbox / camp_release_inbox_name()).read_bytes() == release_before
         assert sorted(path.name for path in inbox.iterdir()) == [

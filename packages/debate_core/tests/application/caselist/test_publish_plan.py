@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,13 @@ from debate_core.application.caselist.publish_plan import (
     source_key,
     sources_in_manifest,
     validate_publish_target,
+)
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    SuppressionState,
+    disclosure_digest,
 )
 
 pytestmark = pytest.mark.anyio
@@ -202,6 +210,21 @@ class TestManifestSources:
 # ------------------------------------------------------------------------------------------------
 
 
+def _suppression_entry(sha256: str, *, disclosure: str | None = None) -> SuppressionEntry:
+    return SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=sha256,
+        disclosure=disclosure,
+        recorded_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-01",
+    )
+
+
+def _suppressing(*digests: str) -> SuppressionState:
+    return SuppressionState.from_entries([_suppression_entry(digest) for digest in digests])
+
+
 def _snapshot(snapshot: str, *sources: ManifestSource) -> LocalSnapshot:
     return LocalSnapshot(caselist="hsld26", snapshot=snapshot, sources=sources, manifest_size=99)
 
@@ -213,6 +236,7 @@ class TestPublishPlan:
             [_snapshot("2026-09-01", ManifestSource(DIGEST_A, 10))],
             local_blobs={DIGEST_A},
             remote={},
+            suppression=SuppressionState(),
         )
 
         (snapshot,) = plan.snapshots
@@ -230,6 +254,7 @@ class TestPublishPlan:
             [_snapshot("2026-09-01", ManifestSource(DIGEST_A, 10))],
             local_blobs={DIGEST_A},
             remote={key_a: 10, "manifests/hsld26/2026-09-01.jsonl": 99},
+            suppression=SuppressionState(),
         )
 
         (snapshot,) = plan.snapshots
@@ -245,6 +270,7 @@ class TestPublishPlan:
             [_snapshot("2026-09-01", ManifestSource(DIGEST_A, 10), ManifestSource(DIGEST_B, 5))],
             local_blobs={DIGEST_A, DIGEST_B},
             remote={key_a: 11},
+            suppression=SuppressionState(),
         )
 
         (snapshot,) = plan.snapshots
@@ -264,23 +290,67 @@ class TestPublishPlan:
             [_snapshot("2026-09-01", ManifestSource(DIGEST_A, 10))],
             local_blobs=set(),
             remote={},
+            suppression=SuppressionState(),
         )
 
         assert [source.action for source in plan.snapshots[0].blocked] == [SourceAction.MISSING_LOCALLY]
 
-    def test_a_suppressed_source_is_never_uploaded_and_does_not_block(self) -> None:
+    def test_a_suppressed_source_is_never_uploaded(self) -> None:
         plan = build_publish_plan(
             "hsld26",
             [_snapshot("2026-09-01", ManifestSource(DIGEST_A, 10))],
             local_blobs={DIGEST_A},
             remote={},
-            suppressed={DIGEST_A},
+            suppression=_suppressing(DIGEST_A),
         )
 
         (snapshot,) = plan.snapshots
         assert snapshot.sources[0].action is SourceAction.SUPPRESSED
         assert snapshot.blocked == ()
         assert plan.uploads == ()
+
+    def test_a_manifest_that_still_names_a_suppressed_source_is_withheld(self) -> None:
+        """Uploading it would publish the removed path, school and team code all over again."""
+        local = LocalSnapshot(
+            caselist="hsld26",
+            snapshot="2026-09-01",
+            sources=(ManifestSource(DIGEST_A, 10), ManifestSource(DIGEST_B, 5)),
+            manifest_size=99,
+            stored_rows=((DIGEST_A, "Maple Grove/QX/a.docx"), (DIGEST_B, "Cedar Hollow/ZaLu/b.docx")),
+        )
+
+        plan = build_publish_plan(
+            "hsld26", [local], local_blobs={DIGEST_A, DIGEST_B}, remote={}, suppression=_suppressing(DIGEST_A)
+        )
+
+        assert plan.snapshots[0].suppressed_rows == (DIGEST_A,)
+
+    def test_a_withdrawn_disclosure_withholds_only_a_manifest_that_still_has_that_row(self) -> None:
+        mine, theirs = "Maple Grove/QX/a.docx", "Cedar Hollow/ZaLu/a.docx"
+        withdrawn = SuppressionState.from_entries(
+            [_suppression_entry(DIGEST_A, disclosure=disclosure_digest("hsld26", mine))]
+        )
+        still_has_it = LocalSnapshot(
+            caselist="hsld26",
+            snapshot="2026-09-01",
+            sources=(ManifestSource(DIGEST_A, 10),),
+            manifest_size=99,
+            stored_rows=((DIGEST_A, mine), (DIGEST_A, theirs)),
+        )
+        rewritten = LocalSnapshot(
+            caselist="hsld26",
+            snapshot="2026-09-08",
+            sources=(ManifestSource(DIGEST_A, 10),),
+            manifest_size=99,
+            stored_rows=((DIGEST_A, theirs),),
+        )
+
+        plan = build_publish_plan(
+            "hsld26", [still_has_it, rewritten], local_blobs={DIGEST_A}, remote={}, suppression=withdrawn
+        )
+
+        assert [snapshot.suppressed_rows for snapshot in plan.snapshots] == [(DIGEST_A,), ()]
+        assert plan.snapshots[1].sources[0].action is SourceAction.UPLOADED_EARLIER, "the other team's copy"
 
     def test_a_source_shared_by_two_snapshots_is_uploaded_once_by_the_earlier(self) -> None:
         plan = build_publish_plan(
@@ -292,6 +362,7 @@ class TestPublishPlan:
             ],
             local_blobs={DIGEST_A, DIGEST_B},
             remote={},
+            suppression=SuppressionState(),
         )
 
         assert [snapshot.snapshot for snapshot in plan.snapshots] == ["2026-09-01", "2026-09-08"]
@@ -308,6 +379,7 @@ class TestPublishPlan:
                 [_snapshot("2026-09-01", ManifestSource(DIGEST_A, 10))],
                 local_blobs={DIGEST_A},
                 remote={},
+                suppression=SuppressionState(),
             )
 
     async def test_the_synthetic_weeks_plan_against_an_empty_bucket(self, imported_data_dir: Path) -> None:
@@ -332,6 +404,7 @@ class TestPublishPlan:
             snapshots,
             local_blobs={digest_of_body(name) for name in every_body},
             remote={},
+            suppression=SuppressionState(),
         )
 
         for planned, week in zip(plan.snapshots, expected["snapshots"], strict=True):

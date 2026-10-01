@@ -30,6 +30,7 @@ from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStor
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.s3 import S3EvidenceObjectStore
+from debate_core.testing.fakes import empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -43,6 +44,7 @@ async def import_synthetic_weeks(data_dir: Path, zips_dir: Path) -> None:
     service = CaselistImportService(
         caselists=SqliteCaselistRepository(database),
         blobs=FsSnapshotStore(data_dir),
+        suppression=empty_suppression_list(),
     )
     objects = FsEvidenceObjectStore(data_dir)
     zips = build_snapshot_zips(zips_dir)

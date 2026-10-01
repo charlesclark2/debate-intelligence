@@ -13,10 +13,11 @@ is how the fixture's borrowed file comes to be a disclosed source before the cam
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from collections.abc import Coroutine
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -55,11 +56,20 @@ from debate_core.application.caselist.publish_plan import (
     build_publish_plan,
     sources_in_manifest,
 )
+from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    SuppressionState,
+    disclosure_digest,
+)
 from debate_core.domain.caselist import CampFile, Event, SourceDocument, SourceOrigin
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY, FsSnapshotStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.sqlite_db import SqliteDatabase
+from debate_core.testing.fakes import InMemoryAppendOnlyRecord, empty_suppression_list
 
 EXPECTED = expected()
 YEAR = EXPECTED["year"]
@@ -83,8 +93,13 @@ class Harness:
         self.data_dir = root / "data"
         self.caselists = SqliteCaselistRepository(SqliteDatabase.open(self.data_dir))
         self.blobs = FsSnapshotStore(self.data_dir)
-        self.openev = OpenEvImportService(caselists=self.caselists, blobs=self.blobs)
-        self.archives = CaselistImportService(caselists=self.caselists, blobs=self.blobs)
+        self.suppression = RecordedSuppressionList(InMemoryAppendOnlyRecord("suppression list"))
+        self.openev = OpenEvImportService(
+            caselists=self.caselists, blobs=self.blobs, suppression=self.suppression
+        )
+        self.archives = CaselistImportService(
+            caselists=self.caselists, blobs=self.blobs, suppression=self.suppression
+        )
         self.zips = build_download_zips(root / "openev")
         self.directories = build_download_directories(root / "openev-unpacked")
         self.caselist_zips = build_snapshot_zips(root / "caselist")
@@ -336,6 +351,7 @@ def test_every_row_has_the_caselist_row_layout_plus_the_camp_fields(tmp_path: Pa
     caselist = CaselistImportService(
         caselists=SqliteCaselistRepository(SqliteDatabase.open(tmp_path / "caselist")),
         blobs=FsSnapshotStore(tmp_path / "caselist"),
+        suppression=empty_suppression_list(),
     )
     zips = build_snapshot_zips(tmp_path / "zips")
     week = SNAPSHOTS[0].snapshot
@@ -503,14 +519,76 @@ def test_a_dry_run_writes_nothing_and_plans_the_manifest_a_real_run_writes(tmp_p
     assert planned.manifest_lines == Harness(tmp_path / "real").import_openev(FIRST).manifest_lines
 
 
-def test_a_suppressed_file_is_counted_and_never_stored(harness: Harness) -> None:
-    suppressed = __import__("hashlib").sha256(DOCUMENT_BODIES["orchard-kritik"]).hexdigest()
+def suppress(harness: Harness, sha256: str, *, disclosure: str | None = None) -> None:
+    entry = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=sha256,
+        disclosure=disclosure,
+        recorded_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_CAMP,
+        request_id="RM-2026-02",
+    )
+    run(harness.suppression.append([entry]))
 
-    report = harness.import_openev(FIRST, suppressed_hashes=frozenset({suppressed}))
+
+def test_a_suppressed_file_is_counted_never_stored_and_has_no_manifest_row(harness: Harness) -> None:
+    suppressed = hashlib.sha256(DOCUMENT_BODIES["orchard-kritik"]).hexdigest()
+    suppress(harness, suppressed)
+
+    report = harness.import_openev(FIRST)
 
     assert report.count(Classification.SUPPRESSED) == 1
     assert not run(harness.caselists.list_camp_files(source_sha256=suppressed, limit=10)).items
     assert run(harness.caselists.find_source(suppressed)) is None
+    rows = [json.loads(line) for line in report.manifest_lines]
+    assert not [row for row in rows if row.get("sha256") == suppressed]
+    assert not [row for row in rows if "Orchard Kritik" in str(row.get("path"))]
+    assert rows[-1]["classifications"]["SUPPRESSED"] == 1
+    assert rows[-1]["members"] == report.member_count
+
+
+def test_a_disclosed_file_suppressed_on_the_caselist_is_suppressed_from_openev_too(harness: Harness) -> None:
+    """The same bytes arriving by the other import are the same file, and stay out."""
+    suppressed = hashlib.sha256(CASELIST_BODIES["grove-round-1-aff"]).hexdigest()
+    suppress(harness, suppressed)
+
+    report = harness.import_openev(FIRST)
+
+    assert report.count(Classification.SUPPRESSED) == 1
+    assert run(harness.caselists.find_source(suppressed)) is None
+    assert not [line for line in report.manifest_lines if suppressed in line]
+
+
+def test_a_team_withdrawing_its_copy_of_a_camp_file_leaves_the_camp_file_unsuppressed(
+    harness: Harness,
+) -> None:
+    """A disclosure-scoped entry stops one team's caselist copy; the camp's own release is not theirs."""
+    shared = hashlib.sha256(CASELIST_BODIES["grove-round-1-aff"]).hexdigest()
+    suppress(
+        harness,
+        shared,
+        disclosure=disclosure_digest(
+            SYNTHETIC_CASELIST, "Maple Grove/QX/Maple Grove-QX-Aff-Grove City Invitational-Round 1.docx"
+        ),
+    )
+
+    report = harness.import_openev(FIRST)
+
+    assert report.count(Classification.SUPPRESSED) == 0
+    assert run(harness.caselists.list_camp_files(source_sha256=shared, limit=10)).items
+
+
+def test_a_recorded_row_for_a_file_suppressed_since_is_dropped_on_the_next_merge(harness: Harness) -> None:
+    """A release manifest written before the removal must not carry the removed row forward."""
+    suppressed = hashlib.sha256(DOCUMENT_BODIES["orchard-kritik"]).hexdigest()
+    harness.import_openev(FIRST)
+    assert [line for line in harness.manifest if suppressed in line]
+    suppress(harness, suppressed)
+
+    report = harness.import_openev(ADDENDUM)
+
+    assert not [line for line in report.manifest_lines if suppressed in line]
+    assert json.loads(report.manifest_lines[-1])["classifications"]["SUPPRESSED"] == 1
 
 
 def test_the_publisher_reads_the_manifest_and_files_its_sources_under_raw_openev_year(
@@ -524,6 +602,7 @@ def test_the_publisher_reads_the_manifest_and_files_its_sources_under_raw_openev
         [LocalSnapshot("openev", report.release, sources, manifest_size=1)],
         local_blobs={source.sha256 for source in sources},
         remote={},
+        suppression=SuppressionState(),
     )
 
     assert len(sources) == EXPECTED["first_download"]["manifest_summary"]["distinct_sha256"]

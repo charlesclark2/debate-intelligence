@@ -24,9 +24,10 @@ is one of six things:
     an operator can see it; the bytes are not deleted, because the file was disclosed and a card
     may already be cut from it. Deleting is :mod:`v1-e30-t07`'s deliberate act.
 `SUPPRESSED`
-    The file's SHA-256 is on the removal suppression list, so it is not stored and not disclosed,
-    however many more times the cumulative archives republish it. The list itself is t07's; this
-    task takes it as an argument, defaults it to empty, and counts what it excludes.
+    The file's SHA-256 is on the removal suppression list — or this one disclosure of it is — so it
+    is not stored, not disclosed and given no manifest row, however many more times the cumulative
+    archives republish it. Only the count survives. The list is a required constructor argument,
+    not a per-call option: an import cannot be run without it (`v1-e30-t07`).
 
 ## What the previous archive is
 
@@ -92,6 +93,7 @@ from debate_core.application.errors import DomainError
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.persistence import SnapshotStore
+from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain.caselist import (
     Acquisition,
     ArchiveSnapshot,
@@ -168,6 +170,9 @@ class ImportReport:
     previous_snapshot: SnapshotDate | None = None
     """The archive this one was classified against, or `None` for the first import."""
 
+    suppression: SuppressionState = field(default_factory=SuppressionState)
+    """The suppression list this import read, which the manifest writer checks every row against."""
+
     @property
     def member_count(self) -> int:
         """Members this archive actually contained, skipped ones included."""
@@ -190,6 +195,7 @@ class CaselistImportService:
         service = CaselistImportService(
             caselists=SqliteCaselistRepository(database),
             blobs=FsSnapshotStore(settings.storage.data_dir),
+            suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
         )
 
     It never opens an archive. The members are read by an adapter
@@ -197,9 +203,11 @@ class CaselistImportService:
     what lets the same service run over a zip on a laptop and, in V2, over an object in a bucket.
     """
 
-    def __init__(self, *, caselists: CaselistRepository, blobs: SnapshotStore) -> None:
+    def __init__(
+        self, *, caselists: CaselistRepository, blobs: SnapshotStore, suppression: SuppressionList
+    ) -> None:
         self._caselists = caselists
-        self._pipeline = SourceImportPipeline(blobs=blobs)
+        self._pipeline = SourceImportPipeline(blobs=blobs, suppression=suppression)
 
     async def import_archive(
         self,
@@ -210,15 +218,14 @@ class CaselistImportService:
         event: Event,
         archive_sha256: str,
         acquisition: Acquisition = Acquisition.MANUAL_DOWNLOAD,
-        suppressed_hashes: frozenset[str] = frozenset(),
         allow_out_of_order: bool = False,
         dry_run: bool = False,
     ) -> ImportReport:
         """Classify every member of one archive, store what is new, and report what changed.
 
         `entries` is consumed once, in the order it yields, which the reader guarantees is path
-        order. `suppressed_hashes` is the removal suppression list (v1-e30-t07); it defaults to
-        empty and its members are counted as `SUPPRESSED` and never stored.
+        order. Members the suppression list stops — the whole file, or this team's disclosure of
+        it — are counted as `SUPPRESSED` and never stored.
 
         Raises :class:`SnapshotOutOfOrder` unless `allow_out_of_order` is set and a newer archive
         is already imported. Writes nothing when `dry_run` is set.
@@ -239,7 +246,7 @@ class CaselistImportService:
             extract=lambda path: parse_disclosure_path(path, event=event),
             write=write,
             baseline=baseline,
-            suppressed=suppressed_hashes,
+            disclosure_scope=caselist,
             dry_run=dry_run,
         )
 
@@ -266,6 +273,7 @@ class CaselistImportService:
             distinct_digests=run.distinct_digests,
             newly_stored_blobs=run.newly_stored_blobs,
             previous_snapshot=previous,
+            suppression=run.suppression,
         )
         _log_counts(report)
         return report

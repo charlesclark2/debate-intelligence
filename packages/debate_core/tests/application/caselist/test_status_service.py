@@ -8,6 +8,7 @@ deliberate edit to the moto bucket or the local store. Expected counts come from
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,8 +30,15 @@ from debate_core.application.caselist.status_service import (
     NoCaselistEvidence,
     SnapshotStatus,
 )
+from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+)
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
+from debate_core.testing.fakes import InMemoryAppendOnlyRecord, empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -44,7 +52,7 @@ WEEKS = {week["snapshot"]: week for week in EXPECTED["snapshots"]}
 async def publish(
     local: LocalEvidence, remote: EvidenceObjectStore, snapshot: str | None = None
 ) -> PublishReport:
-    service = CaselistPublishService(local=local, remote=remote)
+    service = CaselistPublishService(local=local, remote=remote, suppression=empty_suppression_list())
     return await service.execute(await service.plan(SYNTHETIC_CASELIST, snapshot))
 
 
@@ -54,7 +62,26 @@ async def status(
     caselist: str | None = SYNTHETIC_CASELIST,
     snapshot: str | None = None,
 ) -> CaselistStatusReport:
-    return await CaselistStatusService(local=local, remote=remote).status(caselist, snapshot)
+    return await CaselistStatusService(
+        local=local, remote=remote, suppression=empty_suppression_list()
+    ).status(caselist, snapshot)
+
+
+def suppressing(sha256: str) -> RecordedSuppressionList:
+    return RecordedSuppressionList(
+        InMemoryAppendOnlyRecord(
+            "suppression list",
+            [
+                SuppressionEntry(
+                    action=SuppressionAction.SUPPRESS,
+                    sha256=sha256,
+                    recorded_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
+                    reason=ReasonCode.REQUESTED_BY_TEAM,
+                    request_id="RM-2026-01",
+                ).to_line()
+            ],
+        )
+    )
 
 
 def by_snapshot(report: CaselistStatusReport) -> dict[str, SnapshotStatus]:
@@ -248,21 +275,35 @@ class TestDrift:
         assert remote_only.manifest_present
         assert not remote_only.in_sync
 
-    async def test_a_suppressed_source_is_counted_not_missed(
+    async def test_a_manifest_still_naming_a_suppressed_source_is_drift(
         self, local: LocalEvidence, bucket: S3EvidenceObjectStore
     ) -> None:
-        suppressed = {digest_of_body("harbor-octas-neg")}
-        service = CaselistPublishService(local=local, remote=bucket, suppressed=suppressed)
-        await service.execute(await service.plan(SYNTHETIC_CASELIST, "2026-09-01"))
+        """A removal that never reached this machine's manifest is not "in sync", whatever else agrees."""
+        suppressed = digest_of_body("harbor-octas-neg")
+        await publish(local, bucket, "2026-09-01")
 
-        report = await CaselistStatusService(local=local, remote=bucket, suppressed=suppressed).status(
-            SYNTHETIC_CASELIST, "2026-09-01"
-        )
+        report = await CaselistStatusService(
+            local=local, remote=bucket, suppression=suppressing(suppressed)
+        ).status(SYNTHETIC_CASELIST, "2026-09-01")
 
         (entry,) = report.snapshots
         assert entry.suppressed == 1
         assert entry.sources == len(WEEKS["2026-09-01"]["sources"]) - 1
-        assert entry.in_sync
+        assert entry.suppressed_rows == (suppressed,)
+        assert not entry.in_sync
+
+    async def test_a_suppressed_source_left_in_the_bucket_is_drift(
+        self, local: LocalEvidence, bucket: S3EvidenceObjectStore
+    ) -> None:
+        suppressed = digest_of_body("harbor-octas-neg")
+        await publish(local, bucket, "2026-09-01")
+
+        report = await CaselistStatusService(
+            local=local, remote=bucket, suppression=suppressing(suppressed)
+        ).status(SYNTHETIC_CASELIST, "2026-09-01")
+
+        assert report.suppressed_objects == (expected_source_key("harbor-octas-neg"),)
+        assert not report.in_sync
 
     async def test_a_drift_report_names_digests_and_keys_and_nothing_identifying(
         self, local: LocalEvidence, bucket: S3EvidenceObjectStore, s3_client: S3Client, evidence_bucket: str

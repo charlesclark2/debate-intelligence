@@ -12,8 +12,10 @@ paper over.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Coroutine, Iterable
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -34,12 +36,22 @@ from debate_core.application.caselist.import_service import (
     ImportReport,
     SnapshotOutOfOrder,
 )
+from debate_core.application.caselist.manifest import manifest_lines
+from debate_core.application.caselist.pipeline import SuppressedWriteRefused
+from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    disclosure_digest,
+)
 from debate_core.domain.caselist import Disclosure, Event, Side, SourceFormat
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY, FsSnapshotStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.sqlite_db import SqliteDatabase
+from debate_core.testing.fakes import InMemoryAppendOnlyRecord
 
 EVENT = Event(SYNTHETIC_EVENT)
 GENEROUS_LIMITS = {"max_archive_bytes": 64 * 1024 * 1024, "max_unpacked_bytes": 64 * 1024 * 1024}
@@ -66,7 +78,11 @@ class ImportHarness:
         self.database = SqliteDatabase.open(self.data_dir)
         self.caselists = SqliteCaselistRepository(self.database)
         self.blobs = FsSnapshotStore(self.data_dir)
-        self.service = CaselistImportService(caselists=self.caselists, blobs=self.blobs)
+        self.suppression_record = InMemoryAppendOnlyRecord("suppression list")
+        self.suppression = RecordedSuppressionList(self.suppression_record)
+        self.service = CaselistImportService(
+            caselists=self.caselists, blobs=self.blobs, suppression=self.suppression
+        )
         self.zips = build_snapshot_zips(root / "zips")
         self.directories = build_snapshot_directories(root / "directories")
 
@@ -87,6 +103,23 @@ class ImportHarness:
                 event=EVENT,
                 archive_sha256=self.digest(snapshot, as_directory=as_directory),
                 **options,
+            )
+        )
+
+    def suppress(self, sha256: str, *, disclosure: str | None = None) -> None:
+        """Put `sha256` — or one disclosure of it — on the suppression list, as a removal would."""
+        run(
+            self.suppression.append(
+                [
+                    SuppressionEntry(
+                        action=SuppressionAction.SUPPRESS,
+                        sha256=sha256,
+                        disclosure=disclosure,
+                        recorded_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
+                        reason=ReasonCode.REQUESTED_BY_TEAM,
+                        request_id="RM-2026-01",
+                    )
+                ]
             )
         )
 
@@ -402,42 +435,97 @@ def test_a_dry_run_after_a_real_import_still_writes_nothing(harness: ImportHarne
 
 
 # ------------------------------------------------------------------------------------------------
-# The suppression list (v1-e30-t07 owns the list; this task honours it)
+# The suppression list (v1-e30-t07)
 # ------------------------------------------------------------------------------------------------
 
 
-def test_a_suppressed_file_is_counted_and_never_stored(harness: ImportHarness) -> None:
-    import hashlib
-
+def test_a_suppressed_file_is_counted_and_never_stored_and_has_no_manifest_row(
+    harness: ImportHarness,
+) -> None:
     suppressed = hashlib.sha256(DOCUMENT_BODIES["grove-round-1-aff"]).hexdigest()
+    harness.suppress(suppressed)
 
-    report = harness.import_one(SNAPSHOTS[0].snapshot, suppressed_hashes=frozenset({suppressed}))
+    report = harness.import_one(SNAPSHOTS[0].snapshot)
 
     assert report.count(Classification.SUPPRESSED) == 1
     assert not run(harness.blobs.exists(suppressed))
     assert run(harness.caselists.find_source(suppressed)) is None
+    assert not run(harness.caselists.list_disclosures(source_sha256=suppressed, limit=10)).items
+    rows = [json.loads(line) for line in manifest_lines(report)]
+    assert not [row for row in rows if row.get("sha256") == suppressed]
+    assert not [row for row in rows if "Grove City Invitational-Round 1.docx" in str(row.get("path"))]
+    summary = rows[-1]
+    assert summary["classifications"]["SUPPRESSED"] == 1
+    assert summary["members"] == report.member_count, "the suppressed member is still a member of the archive"
 
 
 def test_a_suppressed_file_stays_out_however_often_the_archives_republish_it(
     harness: ImportHarness,
 ) -> None:
-    """Cumulative archives bring it back every week; the list is what keeps it out every week."""
-    import hashlib
+    """Cumulative archives bring it back every week; the list is what keeps it out every week.
 
-    suppressed = frozenset({hashlib.sha256(DOCUMENT_BODIES["grove-round-1-aff"]).hexdigest()})
+    The fixture's three weeks hold the suppressed bytes at three paths across two teams, the
+    re-upload included: every one of them is refused, in every week.
+    """
+    suppressed = hashlib.sha256(DOCUMENT_BODIES["grove-round-1-aff"]).hexdigest()
+    harness.suppress(suppressed)
 
-    for snapshot in SNAPSHOTS:
-        harness.import_one(snapshot.snapshot, suppressed_hashes=suppressed)
+    reports = [harness.import_one(snapshot.snapshot) for snapshot in SNAPSHOTS]
 
-    assert run(harness.caselists.find_source(next(iter(suppressed)))) is None
+    assert [report.count(Classification.SUPPRESSED) for report in reports] == [1, 3, 3]
+    assert run(harness.caselists.find_source(suppressed)) is None
+    assert not run(harness.caselists.list_disclosures(source_sha256=suppressed, limit=10)).items
     assert harness.stored_blob_count == len(DOCUMENT_BODIES) - 1
 
 
-def test_no_file_is_suppressed_by_default(harness: ImportHarness) -> None:
-    """The list is t07's; an import that is not given one suppresses nothing."""
-    report = harness.import_one(SNAPSHOTS[0].snapshot)
+def test_a_suppressed_disclosure_keeps_the_other_teams_copy_of_shared_bytes(harness: ImportHarness) -> None:
+    """One team's withdrawn copy of a file another team also disclosed: theirs stays, the bytes stay."""
+    shared = hashlib.sha256(DOCUMENT_BODIES["grove-round-1-aff"]).hexdigest()
+    withdrawn_paths = (
+        "Maple Grove/QX/Maple Grove-QX-Aff-Grove City Invitational-Round 1.docx",
+        "Maple Grove/QX/Maple Grove-QX-Aff-Grove City Invitational-Round 1 (1).docx",
+    )
+    for path in withdrawn_paths:
+        harness.suppress(shared, disclosure=disclosure_digest(SYNTHETIC_CASELIST, path))
 
-    assert report.count(Classification.SUPPRESSED) == 0
+    report = harness.import_one(SNAPSHOTS[1].snapshot)
+
+    assert report.count(Classification.SUPPRESSED) == 2
+    assert run(harness.blobs.exists(shared)), "the other team's copy needs the bytes"
+    kept = run(harness.caselists.list_disclosures(source_sha256=shared, limit=10)).items
+    assert [(disclosure.school, disclosure.team_code) for disclosure in kept] == [("Cedar Hollow", "ZaLu")]
+    rows = [json.loads(line) for line in manifest_lines(report)]
+    assert [row["path"] for row in rows if row.get("sha256") == shared] == [
+        "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-Aff-Grove City Invitational-Round 3.docx"
+    ]
+
+
+def test_an_importer_without_the_suppression_list_cannot_be_built(harness: ImportHarness) -> None:
+    """There is no default to fall back on: leaving the list off is an error, not an empty list."""
+    with pytest.raises(TypeError, match="suppression"):
+        CaselistImportService(caselists=harness.caselists, blobs=harness.blobs)  # pyright: ignore[reportCallIssue]
+
+
+def test_a_suppressed_member_reaching_the_write_is_refused_there(harness: ImportHarness) -> None:
+    """The write re-checks the list rather than trusting classification (`SuppressedWriteRefused`).
+
+    Simulated by suppressing the file *after* the pipeline has read the list for its run: the list
+    the write consults is the one the run read, so this only holds if the write checks it at all.
+    """
+    from debate_core.application.caselist import pipeline as pipeline_module
+
+    suppressed = hashlib.sha256(DOCUMENT_BODIES["grove-round-1-aff"]).hexdigest()
+    real_classify = pipeline_module._classify  # pyright: ignore[reportPrivateUsage]
+
+    def classify_ignoring_suppression(*args: Any, **kwargs: Any) -> Classification:
+        return real_classify(*args, **{**kwargs, "suppressed": False})
+
+    harness.suppress(suppressed)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(pipeline_module, "_classify", classify_ignoring_suppression)
+        with pytest.raises(SuppressedWriteRefused):
+            harness.import_one(SNAPSHOTS[0].snapshot)
+    assert not run(harness.blobs.exists(suppressed))
 
 
 # ------------------------------------------------------------------------------------------------

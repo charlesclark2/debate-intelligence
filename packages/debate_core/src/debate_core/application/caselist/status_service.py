@@ -13,8 +13,19 @@ For each snapshot, all of:
 * the bucket holds every source the manifest names, each with its own digest recorded under it.
 
 A snapshot the bucket holds a manifest for and this machine does not is drift too: it is a snapshot
-this machine cannot vouch for. Suppressed sources (`v1-e30-t07`) are expected to be absent from both
-sides and are counted, not missed.
+this machine cannot vouch for.
+
+## Suppressed sources
+
+The suppression list (`v1-e30-t07`) is a required argument. A suppressed source is expected to be
+absent from both sides and is counted, not missed. What *is* drift is anything a removal should
+have taken and did not: a local manifest with a stored row the list stops
+(:attr:`SnapshotStatus.suppressed_rows`), or a current object in the bucket under this caselist's
+source prefix whose digest is suppressed (:attr:`CaselistStatusReport.suppressed_objects`). That
+makes `caselist status` the check an operator runs after a removal (`caselist-removal.md`, step 6):
+clean means every manifest and every current source object agrees, and nothing suppressed is left.
+Noncurrent versions are not visible to the everyday credential's listing; `caselist remove` lists
+and deletes those itself.
 
 Checksums are the bucket's *recorded* digests, read with one `HeadObject` per listed source — the
 listing states none (`debate_core.application.ports.evidence_store`). Nothing is downloaded: a
@@ -29,7 +40,7 @@ filename in a manifest row never leave the manifest (`docs/policies/caselist-dat
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Collection
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Final
 
@@ -43,13 +54,18 @@ from debate_core.application.caselist.evidence_listing import (
 )
 from debate_core.application.caselist.publish_plan import (
     LocalSnapshot,
+    digest_of_local_blob_key,
+    remote_source_prefix,
     snapshot_manifest_key,
     snapshot_of_manifest_key,
     source_key,
+    suppressed_rows,
     validate_publish_target,
 )
+from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
+from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
 
 __all__ = [
@@ -98,6 +114,8 @@ class SnapshotStatus:
     checksum_mismatches: tuple[ObjectKey, ...] = ()
     """Keys the bucket holds with other bytes, or no recorded digest: sources, or the manifest."""
     suppressed: int = 0
+    suppressed_rows: tuple[Sha256Hex, ...] = ()
+    """Digests of stored rows in the local manifest the suppression list stops. A removal leftover."""
 
     @property
     def in_sync(self) -> bool:
@@ -107,6 +125,7 @@ class SnapshotStatus:
             and not self.missing_sources
             and not self.missing_local
             and not self.checksum_mismatches
+            and not self.suppressed_rows
         )
 
 
@@ -115,11 +134,13 @@ class CaselistStatusReport:
     """Every snapshot compared, in caselist and snapshot order."""
 
     snapshots: tuple[SnapshotStatus, ...]
+    suppressed_objects: tuple[ObjectKey, ...] = ()
+    """Current source objects in the bucket whose digest is suppressed. A removal leftover."""
 
     @property
     def in_sync(self) -> bool:
-        """True only when every snapshot agrees; what `caselist status` exits 0 on."""
-        return all(snapshot.in_sync for snapshot in self.snapshots)
+        """True only when every snapshot agrees and nothing suppressed is left; what exits 0."""
+        return all(snapshot.in_sync for snapshot in self.snapshots) and not self.suppressed_objects
 
     @property
     def drifted(self) -> tuple[SnapshotStatus, ...]:
@@ -132,7 +153,7 @@ class CaselistStatusService:
     Args:
         local: This machine's manifests and blobs.
         remote: The environment's evidence bucket.
-        suppressed: Digests on the removal suppression list, expected to be absent everywhere.
+        suppression: The removal suppression list. Required.
         concurrency: `HeadObject` calls in flight at once.
     """
 
@@ -141,14 +162,14 @@ class CaselistStatusService:
         *,
         local: LocalEvidence,
         remote: EvidenceObjectStore,
-        suppressed: Collection[Sha256Hex] = frozenset(),
+        suppression: SuppressionList,
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
             raise ValueError("concurrency must be at least 1")
         self._local = local
         self._remote = remote
-        self._suppressed = frozenset(suppressed)
+        self._suppression = suppression
         self._semaphore_size = concurrency
 
     async def status(self, caselist: str | None = None, snapshot: str | None = None) -> CaselistStatusReport:
@@ -166,14 +187,22 @@ class CaselistStatusService:
             validate_publish_target(caselist, snapshot)
             caselists = [caselist]
 
+        suppression = await load_suppression_state(self._suppression)
         local_blobs = await local_blob_sizes(self._local)
         semaphore = asyncio.Semaphore(self._semaphore_size)
         compared: list[SnapshotStatus] = []
+        leftovers: list[ObjectKey] = []
         for name in caselists:
-            compared.extend(await self._caselist_status(name, snapshot, local_blobs, semaphore))
+            statuses, residue = await self._caselist_status(
+                name, snapshot, local_blobs, semaphore, suppression
+            )
+            compared.extend(statuses)
+            leftovers.extend(residue)
         if not compared:
             raise NoCaselistEvidence(caselist, snapshot)
-        return CaselistStatusReport(snapshots=tuple(compared))
+        return CaselistStatusReport(
+            snapshots=tuple(compared), suppressed_objects=tuple(sorted(set(leftovers)))
+        )
 
     async def _caselist_status(
         self,
@@ -181,9 +210,11 @@ class CaselistStatusService:
         snapshot: str | None,
         local_blobs: dict[Sha256Hex, int],
         semaphore: asyncio.Semaphore,
-    ) -> list[SnapshotStatus]:
+        suppression: SuppressionState,
+    ) -> tuple[list[SnapshotStatus], list[ObjectKey]]:
         local_snapshots = await read_local_snapshots(self._local, caselist, snapshot)
         remote = await list_remote_evidence(self._remote, caselist)
+        residue = [key for key in remote if _suppressed_source_key(caselist, key, suppression)]
         heads: dict[ObjectKey, asyncio.Task[ObjectInfo | None]] = {}
 
         def head(key: ObjectKey) -> asyncio.Task[ObjectInfo | None]:
@@ -194,7 +225,10 @@ class CaselistStatusService:
 
         statuses = list(
             await asyncio.gather(
-                *(self._snapshot_status(local, local_blobs, remote, head) for local in local_snapshots)
+                *(
+                    self._snapshot_status(local, local_blobs, remote, head, suppression)
+                    for local in local_snapshots
+                )
             )
         )
 
@@ -215,7 +249,7 @@ class CaselistStatusService:
                     published_sources=0,
                 )
             )
-        return sorted(statuses, key=lambda status: status.snapshot)
+        return sorted(statuses, key=lambda status: status.snapshot), residue
 
     async def _snapshot_status(
         self,
@@ -223,8 +257,9 @@ class CaselistStatusService:
         local_blobs: dict[Sha256Hex, int],
         remote: dict[ObjectKey, int],
         head: Callable[[ObjectKey], Awaitable[ObjectInfo | None]],
+        suppression: SuppressionState,
     ) -> SnapshotStatus:
-        sources = [source for source in local.sources if source.sha256 not in self._suppressed]
+        sources = [source for source in local.sources if not suppression.suppresses_source(source.sha256)]
         missing_local = tuple(
             source.sha256 for source in sources if local_blobs.get(source.sha256) != source.size
         )
@@ -273,6 +308,7 @@ class CaselistStatusService:
             missing_local=tuple(sorted(missing_local)),
             checksum_mismatches=tuple(sorted(mismatched)),
             suppressed=len(local.sources) - len(sources),
+            suppressed_rows=suppressed_rows(local, suppression),
         )
 
     async def _head(self, key: ObjectKey, semaphore: asyncio.Semaphore) -> ObjectInfo | None:
@@ -282,3 +318,16 @@ class CaselistStatusService:
             except NotFound:
                 # Listed a moment ago and gone now.
                 return None
+
+
+def _suppressed_source_key(caselist: str, key: ObjectKey, suppression: SuppressionState) -> bool:
+    """Whether `key` is a source object of `caselist` whose whole source is suppressed."""
+    prefix = remote_source_prefix(caselist)
+    if not key.startswith(prefix):
+        return False
+    tail = key[len(prefix) :]
+    # `raw/openev/` holds every year below it: `2026/sha256/ab/cd/<digest>`.
+    if "/" in tail and not tail.startswith("sha256/"):
+        tail = tail.split("/", 1)[1]
+    digest = digest_of_local_blob_key(tail)
+    return digest is not None and suppression.suppresses_source(digest)

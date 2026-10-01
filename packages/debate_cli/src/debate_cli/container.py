@@ -51,6 +51,15 @@ because there are none.
 a container around settings it made up, and it is why loading is lazy: the callable is not run
 until a command actually asks for `settings`, so `--help` and `--version` read no files.
 
+## Which copy of the suppression list a service reads
+
+Every service that can store or publish a caselist source is built with the removal suppression
+list (`v1-e30-t07`), and none of them has a default to fall back on. Which *copies* it reads follows
+one rule: everything the command can reach without being given anything new to reach. The importers
+run offline and read this environment's local copy (:meth:`ServiceContainer.local_suppression_list`);
+publish, status, sync and the weekly pull already hold the bucket and read the union of the local
+copy and `manifests/_suppression/suppression-list.jsonl` (:meth:`ServiceContainer.suppression_list`).
+
 ## Why the AWS adapters are imported inside the factory
 
 `debate_core.integrations.s3` is imported where it is used rather than at the top of this module,
@@ -74,6 +83,11 @@ from debate_core.application.caselist.import_service import CaselistImportServic
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.status_service import CaselistStatusService
+from debate_core.application.caselist.suppression import (
+    SUPPRESSION_LIST_KEY,
+    ObjectStoreAppendOnlyRecord,
+    RecordedSuppressionList,
+)
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_sync import CaselistSyncService
 from debate_core.application.evidence_sync import (
@@ -100,6 +114,7 @@ from debate_core.integrations.local import (
     archive_reader,
 )
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+from debate_core.integrations.local.suppression_list import local_suppression_list_file
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
@@ -278,6 +293,37 @@ class ServiceContainer:
         return CaselistImportService(
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
+            suppression=self.local_suppression_list(),
+        )
+
+    def local_suppression_list(self) -> RecordedSuppressionList:
+        """This environment's local copy of the suppression list, and nothing else.
+
+        What the offline importers read. Reading it creates nothing: an environment that has never
+        had a removal has no `suppression/` directory, and an import does not give it one.
+        """
+        return self.singleton(
+            "local_suppression_list",
+            lambda: RecordedSuppressionList(local_suppression_list_file(self.settings.storage.data_dir)),
+        )
+
+    def suppression_list(self) -> RecordedSuppressionList:
+        """The local copy and the bucket's, read as one: what every bucket-holding command consults.
+
+        Read through the everyday evidence profile, which may read `manifests/_suppression/`.
+        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket.
+        """
+        return self.singleton("suppression_list", self._build_suppression_list)
+
+    def _build_suppression_list(self) -> RecordedSuppressionList:
+        bucket = self._evidence_bucket()
+        return RecordedSuppressionList(
+            local_suppression_list_file(self.settings.storage.data_dir),
+            ObjectStoreAppendOnlyRecord(
+                bucket,
+                SUPPRESSION_LIST_KEY,
+                location=f"s3://{self.settings.storage.s3.bucket}/{SUPPRESSION_LIST_KEY}",
+            ),
         )
 
     def openev_import(self) -> OpenEvImportService:
@@ -292,6 +338,7 @@ class ServiceContainer:
         return OpenEvImportService(
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
+            suppression=self.local_suppression_list(),
         )
 
     def evidence_sync(self, *, blob_prefix: str | None = None) -> EvidenceSyncService:
@@ -334,7 +381,16 @@ class ServiceContainer:
 
         named_objects = FsEvidenceObjectStore(storage.data_dir)
         blobs = FsEvidenceObjectStore(storage.data_dir, subdirectory=BLOB_DIRECTORY.parent)
+        suppression = RecordedSuppressionList(
+            local_suppression_list_file(storage.data_dir),
+            ObjectStoreAppendOnlyRecord(
+                bucket_store(),
+                SUPPRESSION_LIST_KEY,
+                location=f"s3://{storage.s3.bucket}/{SUPPRESSION_LIST_KEY}",
+            ),
+        )
         return EvidenceSyncService(
+            suppression=suppression,
             keyspaces=(
                 SyncKeyspace(
                     name="objects",
@@ -362,19 +418,27 @@ class ServiceContainer:
     def caselist_publish(self) -> CaselistPublishService:
         """Build the publisher from this machine's evidence store to this environment's bucket.
 
-        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket. The
-        suppression list is `v1-e30-t07`'s; until it ships nothing is suppressed here.
+        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket. Built
+        with :meth:`suppression_list`, the local and bucket copies read as one.
         """
         return self.singleton(
             "caselist_publish",
-            lambda: CaselistPublishService(local=self._local_evidence(), remote=self._evidence_bucket()),
+            lambda: CaselistPublishService(
+                local=self._local_evidence(),
+                remote=self._evidence_bucket(),
+                suppression=self.suppression_list(),
+            ),
         )
 
     def caselist_status(self) -> CaselistStatusService:
         """Build the comparison between this machine's caselist snapshots and the bucket's."""
         return self.singleton(
             "caselist_status",
-            lambda: CaselistStatusService(local=self._local_evidence(), remote=self._evidence_bucket()),
+            lambda: CaselistStatusService(
+                local=self._local_evidence(),
+                remote=self._evidence_bucket(),
+                suppression=self.suppression_list(),
+            ),
         )
 
     def _local_evidence(self) -> LocalEvidence:
@@ -432,13 +496,20 @@ class ServiceContainer:
         blobs = FsSnapshotStore(settings.storage.data_dir)
         publisher: CaselistPublishService | None = None
         status: CaselistStatusService | None = None
+        # The pull's importers read the bucket's copy of the list too when there is a bucket: the
+        # run is about to publish to it anyway, and an unattended weekly import is exactly the one
+        # that must not bring back a file a removal made from another machine took out.
+        suppression = self.local_suppression_list()
         if settings.storage.s3.bucket:
             publisher = self.caselist_publish()
             status = self.caselist_status()
+            suppression = self.suppression_list()
         return CaselistSyncService(
             source=self.opencaselist_client(),
-            archive_importer=CaselistImportService(caselists=repository, blobs=blobs),
-            openev_importer=OpenEvImportService(caselists=repository, blobs=blobs),
+            archive_importer=CaselistImportService(
+                caselists=repository, blobs=blobs, suppression=suppression
+            ),
+            openev_importer=OpenEvImportService(caselists=repository, blobs=blobs, suppression=suppression),
             local=self._local_evidence(),
             read_archive=self.read_archive,
             event_for_caselist=event_for_caselist,

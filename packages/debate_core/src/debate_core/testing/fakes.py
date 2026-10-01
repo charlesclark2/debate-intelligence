@@ -24,6 +24,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from pydantic import BaseModel, ValidationError
 
+from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.errors import (
     AlreadyExists,
     BlobIntegrityError,
@@ -101,6 +102,7 @@ __all__ = [
     "build_fake_caselist_repository",
     "build_fake_debate_file_parser",
     "build_fake_ports",
+    "empty_suppression_list",
 ]
 
 #: The instant a `FixedClock` starts at unless told otherwise. Obviously synthetic, and in the
@@ -581,6 +583,16 @@ class InMemoryAppendOnlyRecord:
             raise failure
         self.appends.append(tuple(lines))
         self.lines.extend(lines)
+
+
+def empty_suppression_list() -> RecordedSuppressionList:
+    """A suppression list with nothing on it, for a test that is not about removals.
+
+    Every service that stores or publishes a source takes the list as a required argument with no
+    default (`v1-e30-t07`), so a test that does not care about removals says so at the call site by
+    passing this, rather than the service quietly assuming it.
+    """
+    return RecordedSuppressionList(InMemoryAppendOnlyRecord("empty suppression list"))
 
 
 def _disclosure_key(disclosure: Disclosure) -> tuple[str, date, str]:

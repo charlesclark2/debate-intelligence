@@ -47,10 +47,21 @@ its *distinct* digests. Publishing the three synthetic weeks writes 14 objects f
 | present, different size | `mismatched` | nothing: the key names other bytes; the snapshot fails |
 | (an earlier snapshot in this plan uploads it) | `uploaded_earlier` | waits on that upload's outcome |
 | (not in the local blob store) | `missing_locally` | nothing; the snapshot fails |
-| (on the suppression list) | `suppressed` | nothing, and it does not hold the manifest back |
+| (on the suppression list) | `suppressed` | nothing |
 
 The manifest is always last, and its action is `upload` or `verify` on the same rule. Whether it is
 written is not the plan's decision but the publisher's, made after every source has an outcome.
+
+## A manifest that still names a suppressed file is withheld
+
+The suppression list (`v1-e30-t07`) is a required argument of :func:`build_publish_plan`, not an
+option. A suppressed source is never uploaded. And a manifest with a *stored* row that the list
+stops — the whole file, or that one team's disclosure of it — is withheld from the bucket
+(:attr:`SnapshotPlan.suppressed_rows`), because uploading it would publish the removed path, school
+and team code all over again. A manifest written after the removal has no such row (the importers
+give a suppressed member none, and `caselist remove` rewrites the manifests it touches), so this
+only fires for a manifest the removal never reached, and the fix is to run the removal on this
+machine.
 """
 
 from __future__ import annotations
@@ -67,6 +78,7 @@ from debate_core.application.caselist.import_service import STORED_CLASSIFICATIO
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.evidence_store import ObjectKey, validate_object_key
+from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
 from debate_core.domain import SHA256_HEX_PATTERN, Sha256Hex
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN
 
@@ -94,6 +106,8 @@ __all__ = [
     "source_key",
     "source_prefix",
     "sources_in_manifest",
+    "stored_rows_in_manifest",
+    "suppressed_rows",
     "validate_publish_target",
 ]
 
@@ -299,6 +313,33 @@ def sources_in_manifest(key: ObjectKey, lines: Iterable[str]) -> tuple[ManifestS
     return tuple(sorted(ManifestSource(sha256=digest, size=size) for digest, size in sizes.items()))
 
 
+def stored_rows_in_manifest(lines: Iterable[str]) -> tuple[tuple[Sha256Hex, str], ...]:
+    """`(sha256, path)` of every member row with a stored classification, in file order.
+
+    What the suppression check reads: a disclosure-scoped entry stops one path's row, not the
+    digest. Assumes `lines` already passed :func:`sources_in_manifest`, which refuses a malformed
+    manifest; a row this cannot read is simply not a stored row.
+    """
+    rows: list[tuple[Sha256Hex, str]] = []
+    for line in lines:
+        try:
+            row = json.loads(line) if line.strip() else None
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        fields: dict[str, object] = row  # pyright: ignore[reportUnknownVariableType]
+        digest, path = fields.get("sha256"), fields.get("path")
+        if (
+            fields.get("kind") == "member"
+            and fields.get("classification") in _STORED
+            and isinstance(digest, str)
+            and isinstance(path, str)
+        ):
+            rows.append((digest, path))
+    return tuple(rows)
+
+
 @dataclass(frozen=True, slots=True)
 class LocalSnapshot:
     """One snapshot as this machine holds it: its manifest and the sources that manifest names."""
@@ -307,10 +348,30 @@ class LocalSnapshot:
     snapshot: str
     sources: tuple[ManifestSource, ...]
     manifest_size: int
+    stored_rows: tuple[tuple[Sha256Hex, str], ...] = ()
+    """`(sha256, path)` of every stored member row, for the suppression check. Never logged."""
 
     @property
     def manifest_key(self) -> ObjectKey:
         return snapshot_manifest_key(self.caselist, self.snapshot)
+
+
+def suppressed_rows(local: LocalSnapshot, suppression: SuppressionState) -> tuple[Sha256Hex, ...]:
+    """The digests of the local manifest's stored rows that `suppression` stops, sorted, once each.
+
+    A camp-file manifest is checked by digest alone; a caselist manifest by digest and by each
+    row's own disclosure, so one team's withdrawn copy of a shared file is caught and the other
+    team's row is not.
+    """
+    scope = None if local.caselist == OPENEV else local.caselist
+    stopped = {
+        digest
+        for digest, path in local.stored_rows
+        if suppression.suppresses(
+            digest, disclosure=disclosure_digest(scope, path) if scope is not None else None
+        )
+    }
+    return tuple(sorted(stopped))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -366,6 +427,8 @@ class SnapshotPlan:
     manifest_key: ObjectKey
     manifest_size: int
     manifest_action: ManifestAction
+    suppressed_rows: tuple[Sha256Hex, ...] = ()
+    """Digests of stored rows in the local manifest the suppression list stops; any withholds it."""
 
     def of(self, *actions: SourceAction) -> tuple[PlannedSource, ...]:
         wanted = set(actions)
@@ -409,7 +472,7 @@ def build_publish_plan(
     *,
     local_blobs: Collection[Sha256Hex],
     remote: Mapping[ObjectKey, int],
-    suppressed: Collection[Sha256Hex] = frozenset(),
+    suppression: SuppressionState,
 ) -> PublishPlan:
     """Work out what publishing `snapshots` would do, from a listing of each side.
 
@@ -421,8 +484,8 @@ def build_publish_plan(
         remote: The bucket's listing under this caselist's source and manifest prefixes, key to
             size. A listing states no digests (`debate_core.application.ports.evidence_store`), so
             a present object is `verify`, never skipped outright.
-        suppressed: Digests on the removal suppression list. The list and the check that fills it
-            are `v1-e30-t07`'s; this only honours what it is given.
+        suppression: The removal suppression list as the publisher read it. Required: a publish
+            cannot be planned without it.
     """
     validate_publish_target(caselist)
     planned_uploads: set[ObjectKey] = set()
@@ -433,7 +496,7 @@ def build_publish_plan(
         sources: list[PlannedSource] = []
         for source in local.sources:
             key = source_key(caselist, local.snapshot, source.sha256)
-            action = _source_action(source, key, local_blobs, remote, suppressed, planned_uploads)
+            action = _source_action(source, key, local_blobs, remote, suppression, planned_uploads)
             if action is SourceAction.UPLOAD:
                 planned_uploads.add(key)
             sources.append(
@@ -454,6 +517,7 @@ def build_publish_plan(
                 manifest_key=manifest_key,
                 manifest_size=local.manifest_size,
                 manifest_action=ManifestAction.VERIFY if manifest_key in remote else ManifestAction.UPLOAD,
+                suppressed_rows=suppressed_rows(local, suppression),
             )
         )
     return PublishPlan(caselist=caselist, snapshots=tuple(plans))
@@ -464,10 +528,10 @@ def _source_action(
     key: ObjectKey,
     local_blobs: Collection[Sha256Hex],
     remote: Mapping[ObjectKey, int],
-    suppressed: Collection[Sha256Hex],
+    suppression: SuppressionState,
     planned_uploads: Collection[ObjectKey],
 ) -> SourceAction:
-    if source.sha256 in suppressed:
+    if suppression.suppresses_source(source.sha256):
         return SourceAction.SUPPRESSED
     if key in remote:
         # The key is the digest, so a listed object of another size under it holds other bytes.

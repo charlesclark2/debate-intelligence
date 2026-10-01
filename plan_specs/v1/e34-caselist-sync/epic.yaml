@@ -293,5 +293,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t07-suppressed-downloads
+    - id: t08
+      kind: Task
+      name: A camp file uploaded again upstream is fetched
+      description: >-
+        A revision upstream is a new id at the same path, and t06's path matching holds it as already
+        imported, so revised camp files are never fetched. Fetch revisions; keep t07's removed-path hold.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t08-revised-camp-files.yaml
+        goalRef: v1-e34-t08-revised-camp-files
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t08-revised-camp-files reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t08-revised-camp-files
 status:
   phase: Pending

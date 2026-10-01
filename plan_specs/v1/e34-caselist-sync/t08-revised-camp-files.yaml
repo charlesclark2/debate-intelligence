@@ -1,0 +1,108 @@
+# TASK v1-e34-t08-revised-camp-files - A camp file uploaded again upstream is fetched
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+# Architecture refs: ADR-0017
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t08-revised-camp-files
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: A camp file uploaded again upstream is fetched
+spec:
+  # Filed by the PM, 2026-10-01, from v1-e34-t07's Follow-up work item 3.
+  description: >-
+    OpenCaselist changes an OpenEv camp file only one way. The upstream source (read by v1-e34-t07 at
+    ashtarcommunications/caselist fb2903e) has no update route, a UNIQUE path and an AUTO_INCREMENT
+    id, so a revision is an admin deletion followed by a new upload: a new id, normally at the same
+    path. v1-e34-t06 made "already imported" match by path, so a hand-imported camp file would not be
+    fetched twice. That same rule means the old row, which names an id no longer listed, holds the new
+    id as `already_imported`, and a revised camp file is never downloaded, whether or not anything was
+    removed. v1-e34-t07 pinned that behaviour in
+    `test_a_file_uploaded_again_where_nothing_was_removed_is_held_by_its_old_row_as_before`. Fetch a
+    revision: a new id at the path of a file that is no longer listed upstream is a revision, not a
+    duplicate of a hand import. How the release manifest then represents the old and new versions is
+    this task's to decide and justify. The removed-path hold must survive: a new id at the path of a
+    removed file stays `same_path_as_a_removed_file` (PM decision recorded in v1-e34-t07's review:
+    a removal covers a later upload at the same path, reversible by unsuppress). Out of scope:
+    removal, the suppression list, and weekly archives.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, docs]
+    forbidden:
+      - Fetching a new id at the path of a removed file
+      - Re-downloading a camp file that was imported by hand and is still listed under its original id
+      - Leaving v1-e34-t07's pinned test asserting the old behaviour
+  context:
+    - kind: TaskRef
+      name: v1-e34-t07-suppressed-downloads
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A new id at the path of a camp file whose old id is no longer listed is downloaded and
+        imported, and the run summary records it as a revision.
+    - id: ac2
+      description: >-
+        The cases v1-e34-t06 protected still hold: a hand-imported camp file still listed under its id
+        is not fetched again, and an id already imported by the sync is not fetched again.
+    - id: ac3
+      description: >-
+        A new id at the path of a removed file is still held back as same_path_as_a_removed_file, and
+        after unsuppress it is fetched.
+    - id: ac4
+      description: >-
+        v1-e34-t07's pinned test is inverted rather than deleted, the change is shown failing first,
+        and each guard is mutated and shown caught.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t08-revised-camp-files-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Invert the pinned test, tell a revision from a duplicate, keep both earlier protections.
+  goalRef:
+    name: v1-e34-t08-revised-camp-files
+  graph:
+    nodes:
+      - id: invert
+        kind: Task
+        name: Invert the pinned behaviour
+        description: >-
+          Turn v1-e34-t07's pinned test into one requiring the revision to be fetched, and show it red.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: The revision test is shown failing before the change
+            description: >-
+              The inverted test fails against the current selection code, and the output is captured
+              in the report.
+      - id: revision
+        kind: Task
+        name: Fetch revisions, keep the earlier holds
+        description: >-
+          A new id at an unlisted file's path is a revision; a removed path is still held.
+        dependsOn: [invert]
+        outputs: [packages/debate_core/src/debate_core/application/caselist_sync.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Revisions are fetched and the removed-path hold survives
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist, -k, "revision or removed"]
+status:
+  phase: Pending

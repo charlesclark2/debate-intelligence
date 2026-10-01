@@ -288,5 +288,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t08-import-metadata-defects
+    - id: t09
+      kind: Task
+      name: A removal leaves no removed bytes in the inbox
+      description: >-
+        `caselist remove` leaves the removed camp file and every cumulative archive containing it in the
+        sync's inbox. Purge them, without losing material other teams' disclosures still need imported.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml
+        goalRef: v1-e30-t09-removal-purges-inbox
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t09-removal-purges-inbox reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t09-removal-purges-inbox
 status:
   phase: Pending

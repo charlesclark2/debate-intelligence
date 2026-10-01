@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
 
 import { EXPORT_DIRECTORY, assertFreshExport } from '../../scripts/export-fingerprint.mjs'
 
@@ -33,4 +33,16 @@ export function builtPageFiles(): Array<{ location: string; path: string }> {
     .map((entry) => ({ location: `/${entry.name}/`, path: join(exportDirectory, entry.name, 'index.html') }))
     .filter((entry) => existsSync(entry.path))
     .concat([{ location: '/', path: join(exportDirectory, 'index.html') }])
+}
+
+/**
+ * Every file in the export, by its path relative to site/out/: HTML, the React payloads, the
+ * bundles, stylesheets, the sitemap, icons. Not filtered by extension, so a file type nobody
+ * thought of cannot drop out of a check that claims the whole export.
+ */
+export function exportedFiles(directory: string = exportDirectory): string[] {
+  return readdirSync(directory).flatMap((entry) => {
+    const path = join(directory, entry)
+    return statSync(path).isDirectory() ? exportedFiles(path) : [relative(exportDirectory, path)]
+  })
 }

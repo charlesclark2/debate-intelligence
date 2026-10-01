@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { readExported } from './built-export'
+import { exportedFiles, readExported } from './built-export'
 
 /**
  * The contact page as exported: its mailto survives the build and nothing on it collects data
@@ -17,10 +17,21 @@ describe('the built contact page', () => {
     }
   })
 
+  /**
+   * Every file, not just this page: docs/policies/website-publishing.md (Analytics and third
+   * parties 7) forbids cookies, localStorage and sessionStorage for any purpose, anywhere on the
+   * site, and a call on another page or in a bundle every page loads would break that as surely as
+   * one here. This test read only contact/index.html until the v1-e36-t10 review, while its name
+   * claimed the whole export.
+   */
   it('sets no cookie and uses no browser storage anywhere in the export', () => {
-    const html = readExported('contact/index.html')
-    for (const pattern of [/document\.cookie/, /localStorage/, /sessionStorage/]) {
-      expect(html, `the built contact page uses ${pattern}`).not.toMatch(pattern)
+    const files = exportedFiles()
+    expect(files.length, 'the export has too few files to be a whole site').toBeGreaterThanOrEqual(50)
+    for (const path of files) {
+      const content = readExported(path)
+      for (const pattern of [/document\.cookie/, /localStorage/, /sessionStorage/]) {
+        expect(content, `${path} uses ${pattern}`).not.toMatch(pattern)
+      }
     }
   })
 })

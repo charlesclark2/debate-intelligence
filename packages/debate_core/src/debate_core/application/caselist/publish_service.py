@@ -23,6 +23,12 @@ is in the set of keys this run has confirmed: uploaded and verified, or found pr
 A failed upload, a checksum that disagrees, a source missing from this machine or a run killed
 part-way all leave a key outside that set, and the manifest is withheld.
 
+## The suppression list
+
+A required constructor argument, read at the start of every plan (`v1-e30-t07`). A suppressed
+source is never uploaded, and a manifest that still has a stored row the list stops is withheld
+rather than published (`publish_plan`, "A manifest that still names a suppressed file").
+
 ## Idempotent and resumable
 
 Nothing is uploaded that the bucket already holds with the right checksum. A listing says which
@@ -54,7 +60,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Collection, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
@@ -76,6 +82,7 @@ from debate_core.application.caselist.publish_plan import (
     manifest_prefix,
     snapshot_manifest_key,
 )
+from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import (
     BlobIntegrityError,
     DomainError,
@@ -84,6 +91,7 @@ from debate_core.application.errors import (
     StoreCredentialsExpired,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
+from debate_core.application.ports.suppression import SuppressionList
 from debate_core.domain import Sha256Hex
 
 __all__ = [
@@ -199,7 +207,9 @@ class PublishReport:
     def succeeded(self) -> bool:
         """True for a dry run whose plan blocks nothing, and for a run that completed every snapshot."""
         if not self.applied:
-            return all(not snapshot.blocked for snapshot in self.plan.snapshots)
+            return all(
+                not snapshot.blocked and not snapshot.suppressed_rows for snapshot in self.plan.snapshots
+            )
         return all(snapshot.complete for snapshot in self.snapshots)
 
     @property
@@ -208,6 +218,11 @@ class PublishReport:
         if not self.applied:
             return tuple(sorted({source.sha256 for plan in self.plan.snapshots for source in plan.blocked}))
         return tuple(sorted({outcome.sha256 for snapshot in self.snapshots for outcome in snapshot.failed}))
+
+    @property
+    def suppressed_rows(self) -> tuple[Sha256Hex, ...]:
+        """Digests of suppressed rows that withheld (or, dry, would withhold) a manifest."""
+        return tuple(sorted({digest for plan in self.plan.snapshots for digest in plan.suppressed_rows}))
 
     def count(self, result: SourceResult) -> int:
         """How many *distinct* source objects ended with `result` across the run."""
@@ -229,8 +244,7 @@ class CaselistPublishService:
     Args:
         local: This machine's manifests and blobs.
         remote: The environment's evidence bucket.
-        suppressed: Digests on the removal suppression list, never uploaded. The list and the check
-            that fills it are `v1-e30-t07`'s; until it ships the composition root passes nothing.
+        suppression: The removal suppression list. Required: nothing is published without it.
         concurrency: Sources in flight at once; see :data:`DEFAULT_CONCURRENCY`.
     """
 
@@ -239,14 +253,14 @@ class CaselistPublishService:
         *,
         local: LocalEvidence,
         remote: EvidenceObjectStore,
-        suppressed: Collection[Sha256Hex] = frozenset(),
+        suppression: SuppressionList,
         concurrency: int = DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
             raise ValueError("concurrency must be at least 1")
         self._local = local
         self._remote = remote
-        self._suppressed = frozenset(suppressed)
+        self._suppression = suppression
         self._concurrency = concurrency
 
     async def plan(self, caselist: str, snapshot: str | None = None) -> PublishPlan:
@@ -264,7 +278,7 @@ class CaselistPublishService:
             snapshots,
             local_blobs=local_blobs.keys(),
             remote=remote,
-            suppressed=self._suppressed,
+            suppression=await load_suppression_state(self._suppression),
         )
 
     async def execute(self, plan: PublishPlan) -> PublishReport:
@@ -298,6 +312,20 @@ class CaselistPublishService:
             ],
             limit=self._concurrency,
         )
+
+        if plan.suppressed_rows:
+            return SnapshotOutcome(
+                caselist=plan.caselist,
+                snapshot=plan.snapshot,
+                manifest_key=plan.manifest_key,
+                sources=tuple(sources),
+                manifest=ManifestOutcome.WITHHELD,
+                manifest_error=(
+                    f"the local manifest still has {len(plan.suppressed_rows)} row(s) for suppressed "
+                    f"source(s): {', '.join(plan.suppressed_rows)}; re-run `caselist remove` for them "
+                    "on this machine to rewrite it"
+                ),
+            )
 
         # The invariant, checked directly: every source this manifest names is confirmed in the
         # bucket by this run, or the manifest is not written.

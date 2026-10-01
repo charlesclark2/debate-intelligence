@@ -119,6 +119,7 @@ from debate_core.integrations.local.archive_reader import archive_digest, read_a
 from debate_core.integrations.local.macos_notifier import MacOsNotifier
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.s3 import S3EvidenceObjectStore
+from debate_core.testing.fakes import empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -298,7 +299,9 @@ async def import_first_week(data_dir: Path, archives: dict[date, Path]) -> None:
     """Import `2026-09-01` the way an earlier run would have, so the run under test has a baseline."""
     database = SqliteDatabase.open(data_dir)
     service = CaselistImportService(
-        caselists=SqliteCaselistRepository(database), blobs=FsSnapshotStore(data_dir)
+        suppression=empty_suppression_list(),
+        caselists=SqliteCaselistRepository(database),
+        blobs=FsSnapshotStore(data_dir),
     )
     first = SNAPSHOTS[0].snapshot
     report = await service.import_archive(
@@ -389,7 +392,9 @@ def build_service(
     blobs = FsSnapshotStore(data_dir)
     return CaselistSyncService(
         source=source,
-        archive_importer=CaselistImportService(caselists=repository, blobs=blobs),
+        archive_importer=CaselistImportService(
+            suppression=empty_suppression_list(), caselists=repository, blobs=blobs
+        ),
         openev_importer=(openev_importer or _openev_importer)(repository, blobs),
         local=local_evidence(data_dir),
         read_archive=reader or (lambda path: read_archive(path, **_LIMITS)),
@@ -406,7 +411,7 @@ def build_service(
 
 
 def _openev_importer(repository: SqliteCaselistRepository, blobs: FsSnapshotStore) -> OpenEvImportService:
-    return OpenEvImportService(caselists=repository, blobs=blobs)
+    return OpenEvImportService(suppression=empty_suppression_list(), caselists=repository, blobs=blobs)
 
 
 @pytest.fixture
@@ -712,7 +717,7 @@ async def test_retry_a_camp_file_whose_import_failed_is_imported_from_the_inbox(
         data_dir=data_dir,
         inbox=inbox,
         openev_importer=lambda repository, blobs: OpenEvImporterThatFailsOnce(
-            caselists=repository, blobs=blobs
+            suppression=empty_suppression_list(), caselists=repository, blobs=blobs
         ),
     )
     failed = await service.run([SYNTHETIC_CASELIST])
@@ -747,7 +752,9 @@ async def import_openev_by_hand(data_dir: Path, download: Path) -> None:
     """What `caselist import-openev <download> --year 2026 --event policy` does to the store."""
     database = SqliteDatabase.open(data_dir)
     service = OpenEvImportService(
-        caselists=SqliteCaselistRepository(database), blobs=FsSnapshotStore(data_dir)
+        suppression=empty_suppression_list(),
+        caselists=SqliteCaselistRepository(database),
+        blobs=FsSnapshotStore(data_dir),
     )
     manifest = FsEvidenceObjectStore(data_dir).path_for(OPENEV_MANIFEST)
     report = await service.import_release(
@@ -1474,8 +1481,8 @@ async def test_a_run_publishes_the_snapshots_it_imported(
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local, remote=bucket),
-        status=CaselistStatusService(local=local, remote=bucket),
+        publisher=CaselistPublishService(suppression=empty_suppression_list(), local=local, remote=bucket),
+        status=CaselistStatusService(suppression=empty_suppression_list(), local=local, remote=bucket),
     )
 
     summary = await service.run([SYNTHETIC_CASELIST])
@@ -1496,8 +1503,12 @@ async def test_expired_credentials_leave_the_local_stages_done_and_the_rest_pend
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local_evidence(data_dir), remote=ExpiredBucket()),
-        status=CaselistStatusService(local=local_evidence(data_dir), remote=ExpiredBucket()),
+        publisher=CaselistPublishService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
+        status=CaselistStatusService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
     )
 
     summary = await service.run([SYNTHETIC_CASELIST])
@@ -1528,7 +1539,9 @@ async def test_publish_pending_completes_what_the_expired_run_left(
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local_evidence(data_dir), remote=ExpiredBucket()),
+        publisher=CaselistPublishService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
     )
     await expired.run([SYNTHETIC_CASELIST])
 
@@ -1537,8 +1550,8 @@ async def test_publish_pending_completes_what_the_expired_run_left(
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local, remote=bucket),
-        status=CaselistStatusService(local=local, remote=bucket),
+        publisher=CaselistPublishService(suppression=empty_suppression_list(), local=local, remote=bucket),
+        status=CaselistStatusService(suppression=empty_suppression_list(), local=local, remote=bucket),
     )
     drained = await logged_in.publish_pending()
 
@@ -1568,8 +1581,8 @@ async def test_a_dry_run_lists_what_it_would_do_and_changes_nothing(
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local, remote=bucket),
-        status=CaselistStatusService(local=local, remote=bucket),
+        publisher=CaselistPublishService(suppression=empty_suppression_list(), local=local, remote=bucket),
+        status=CaselistStatusService(suppression=empty_suppression_list(), local=local, remote=bucket),
     )
     before = _fingerprint(data_dir)
 
@@ -2069,8 +2082,12 @@ async def test_an_expired_sso_session_leaves_a_run_record_and_one_notify_naming_
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local_evidence(data_dir), remote=ExpiredBucket()),
-        status=CaselistStatusService(local=local_evidence(data_dir), remote=ExpiredBucket()),
+        publisher=CaselistPublishService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
+        status=CaselistStatusService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
     )
     notifier = RecordingNotifier()
 

@@ -42,6 +42,15 @@ because the thing that reads it is usually `jq` or a dataframe, and a flat row i
 Fields that do not apply to a row are `null` rather than absent, so every row has the same keys
 and a table built from the file has no ragged columns.
 
+## What is not in it: suppressed members
+
+A member the removal suppression list stops (`v1-e30-t07`) has no row. Its path names the school
+and team that asked for it to be removed, so a row would put back the very thing the removal took
+out. It is counted, as `SUPPRESSED` in the summary row's `classifications`, and nothing more.
+:func:`render_rows` is the backstop: every manifest's rows go through it, it takes the suppression
+list as a required argument, and it refuses to render a row the list stops
+(:class:`SuppressedRowRefused`), whichever writer built the row.
+
 ## What is in it that is not in a log
 
 School, team code, tournament, round and the archive path. That is deliberate and it is the
@@ -62,12 +71,15 @@ from pathlib import Path
 from typing import Any, Final
 
 from debate_core.application.caselist.import_service import Classification, ImportedEntry, ImportReport
+from debate_core.application.errors import DomainError
 from debate_core.application.ports.evidence_store import ObjectKey, validate_object_key
+from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
 
 __all__ = [
     "DISCLOSURE_FIELDS",
     "MANIFEST_DIRECTORY",
     "MANIFEST_SCHEMA_VERSION",
+    "SuppressedRowRefused",
     "common_member_fields",
     "counted",
     "manifest_key",
@@ -99,6 +111,20 @@ _COMPACT_SEPARATORS: Final = (",", ":")
 _TEMPORARY_FILE_PREFIX: Final = ".incoming-manifest-"
 
 
+class SuppressedRowRefused(DomainError):
+    """A manifest row names something the removal suppression list stops.
+
+    Raised by :func:`render_rows`, before anything is written. Names the digest, never the row:
+    the row carries the school, team code and path the removal was for.
+    """
+
+    def __init__(self, sha256: str) -> None:
+        self.sha256 = sha256
+        super().__init__(
+            f"refusing to write a manifest row for {sha256}: it is on the removal suppression list"
+        )
+
+
 def manifest_key(caselist: str, snapshot: date) -> ObjectKey:
     """The object key one snapshot's manifest is filed under.
 
@@ -110,21 +136,51 @@ def manifest_key(caselist: str, snapshot: date) -> ObjectKey:
 
 
 def manifest_lines(report: ImportReport) -> list[str]:
-    """Every line of the manifest for one import, in order, without their newlines."""
-    rows = [_member_row(report, index) for index in range(len(report.entries))]
+    """Every line of the manifest for one import, in order, without their newlines.
+
+    A `SUPPRESSED` member has no row, and nor does a skipped member withheld with it; the summary
+    row counts both.
+    """
+    rows = [
+        _member_row(report, index)
+        for index, entry in enumerate(report.entries)
+        if entry.classification is not Classification.SUPPRESSED and not entry.withheld
+    ]
     rows.append(_summary_row(report))
-    return render_rows(rows)
+    return render_rows(rows, suppression=report.suppression, disclosure_scope=report.caselist)
 
 
-def render_rows(rows: Iterable[Mapping[str, object]]) -> list[str]:
+def render_rows(
+    rows: Iterable[Mapping[str, object]],
+    *,
+    suppression: SuppressionState,
+    disclosure_scope: str | None,
+) -> list[str]:
     """Manifest rows as lines: sorted keys, fixed separators, so one row always renders one way.
 
     Shared by every manifest, which is what makes an OpenEv manifest's rows the same layout as a
     caselist manifest's, and a row read back and rendered again the same bytes it was read from.
+
+    Every member row that names a digest is checked against `suppression` first — the whole
+    source, and for a caselist manifest (`disclosure_scope` its slug) this one disclosure of it —
+    and :class:`SuppressedRowRefused` is raised before any line is returned if the list stops one.
+    Both arguments are required, so no manifest can be rendered without the list.
     """
-    return [
-        json.dumps(row, sort_keys=True, separators=_COMPACT_SEPARATORS, ensure_ascii=False) for row in rows
-    ]
+    rendered: list[str] = []
+    for row in rows:
+        _refuse_suppressed(row, suppression, disclosure_scope)
+        rendered.append(json.dumps(row, sort_keys=True, separators=_COMPACT_SEPARATORS, ensure_ascii=False))
+    return rendered
+
+
+def _refuse_suppressed(row: Mapping[str, object], suppression: SuppressionState, scope: str | None) -> None:
+    digest = row.get("sha256")
+    if row.get("kind") != "member" or not isinstance(digest, str):
+        return
+    path = row.get("path")
+    disclosure = disclosure_digest(scope, path) if scope is not None and isinstance(path, str) else None
+    if suppression.suppresses(digest, disclosure=disclosure):
+        raise SuppressedRowRefused(digest)
 
 
 def render_manifest(report: ImportReport) -> str:

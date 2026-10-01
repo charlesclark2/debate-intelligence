@@ -42,6 +42,16 @@ cannot delete, and removing evidence is an operator procedure with its own crede
 still worth doing: it is how an operator notices that the bucket holds a corpus their laptop does
 not.
 
+## Two things a sync never moves, either way
+
+* **`manifests/_suppression/`** — the suppression list and the removal log. They are append-only
+  and merged as a set union by `caselist remove` and `unsuppress`
+  (`debate_core.application.caselist.suppression`); a sync that copied one side over the other
+  would truncate whichever had more lines. Planned as `skipped`, whatever is on either side.
+* **A blob whose digest is on the removal suppression list.** A takedown deleted it everywhere;
+  a sync from a store that still held a copy must not put it back. Planned as `skipped`. The list
+  is a required constructor argument, like every other path that can store a source (`v1-e30-t07`).
+
 ## How few HeadObject calls this makes
 
 `list_objects` states no digest, by design, in either implementation — S3's `ListObjectsV2` does not
@@ -91,6 +101,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
+from debate_core.application.caselist.suppression import is_suppression_key, load_suppression_state
 from debate_core.application.errors import (
     BlobIntegrityError,
     DomainError,
@@ -105,6 +116,7 @@ from debate_core.application.ports.evidence_store import (
     validate_object_key,
 )
 from debate_core.application.ports.providers import Clock
+from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
 
 __all__ = [
@@ -554,6 +566,7 @@ class EvidenceSyncService:
 
         service = EvidenceSyncService(
             keyspaces=(named_objects, blobs),
+            suppression=suppression_list,
             journal=SyncJournal.open(data_dir, environment="dev", remote=bucket),
         )
         plan = await service.plan(prefix="manifests/", direction=SyncDirection.PUSH)
@@ -561,6 +574,7 @@ class EvidenceSyncService:
 
     Args:
         keyspaces: The local/remote pairs this run covers, in the order a summary lists them.
+        suppression: The removal suppression list. Required: a sync cannot be planned without it.
         journal: Where verified transfers are recorded and read back from. A dry run is given
             :meth:`SyncJournal.unwritten`, which remembers nothing.
         remote_name: The bucket, for the journal's entries. Never a credential.
@@ -574,6 +588,7 @@ class EvidenceSyncService:
         self,
         *,
         keyspaces: Sequence[SyncKeyspace],
+        suppression: SuppressionList,
         journal: SyncJournal | None = None,
         remote_name: str = "",
         clock: Clock | None = None,
@@ -581,6 +596,7 @@ class EvidenceSyncService:
         if not keyspaces:
             raise ValueError("a sync needs at least one keyspace")
         self._keyspaces = tuple(keyspaces)
+        self._suppression = suppression
         self._journal = journal if journal is not None else SyncJournal.unwritten(remote=remote_name)
         self._remote_name = remote_name
         self._clock = clock
@@ -610,8 +626,9 @@ class EvidenceSyncService:
         """
         planned: list[PlannedObject] = []
         heads = 0
+        suppression = await load_suppression_state(self._suppression)
         for keyspace in self._keyspaces:
-            objects, keyspace_heads = await self._plan_keyspace(keyspace, prefix, direction)
+            objects, keyspace_heads = await self._plan_keyspace(keyspace, prefix, direction, suppression)
             planned.extend(objects)
             heads += keyspace_heads
         planned.sort(key=lambda entry: (entry.keyspace, entry.remote_key))
@@ -623,7 +640,7 @@ class EvidenceSyncService:
         )
 
     async def _plan_keyspace(
-        self, keyspace: SyncKeyspace, prefix: str, direction: SyncDirection
+        self, keyspace: SyncKeyspace, prefix: str, direction: SyncDirection, suppression: SuppressionState
     ) -> tuple[list[PlannedObject], int]:
         local_filter = _local_filter_for(keyspace, prefix)
         if local_filter is None:
@@ -644,7 +661,9 @@ class EvidenceSyncService:
         planned: list[PlannedObject] = []
         heads = 0
         for key in sorted(source):
-            entry, cost = await self._classify(keyspace, side, key, source[key], destination.get(key))
+            entry, cost = await self._classify(
+                keyspace, side, key, source[key], destination.get(key), suppression
+            )
             planned.append(entry)
             heads += cost
         planned.extend(
@@ -660,9 +679,35 @@ class EvidenceSyncService:
         key: ObjectKey,
         source: ObjectInfo,
         destination: ObjectInfo | None,
+        suppression: SuppressionState,
     ) -> tuple[PlannedObject, int]:
         """Decide one object's action, spending as few `HeadObject` calls as the answer allows."""
         remote_key = keyspace.remote_key(key)
+        if is_suppression_key(remote_key):
+            return (
+                _planned(
+                    keyspace,
+                    key,
+                    SyncAction.SKIPPED,
+                    source.size,
+                    "the suppression list and removal log are appended to by caselist remove only",
+                ),
+                0,
+            )
+        if keyspace.content_addressed:
+            digest = keyspace.digest_of_key(key)
+            if digest is not None and suppression.suppresses_source(digest):
+                return (
+                    _planned(
+                        keyspace,
+                        key,
+                        SyncAction.SKIPPED,
+                        source.size,
+                        "on the removal suppression list",
+                        digest,
+                    ),
+                    0,
+                )
         owner = self._owner_of(remote_key)
         if owner is not None and owner is not keyspace:
             # Two keyspaces can spell one bucket key — a blob filed under `objects/raw/…` on disk

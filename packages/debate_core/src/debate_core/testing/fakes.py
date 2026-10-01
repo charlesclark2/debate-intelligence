@@ -24,6 +24,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from pydantic import BaseModel, ValidationError
 
+from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.errors import (
     AlreadyExists,
     BlobIntegrityError,
@@ -90,6 +91,7 @@ __all__ = [
     "FakePorts",
     "FakeSearchProvider",
     "FixedClock",
+    "InMemoryAppendOnlyRecord",
     "InMemoryArticleRepository",
     "InMemoryCardRepository",
     "InMemoryCaselistRepository",
@@ -100,6 +102,7 @@ __all__ = [
     "build_fake_caselist_repository",
     "build_fake_debate_file_parser",
     "build_fake_ports",
+    "empty_suppression_list",
 ]
 
 #: The instant a `FixedClock` starts at unless told otherwise. Obviously synthetic, and in the
@@ -538,6 +541,58 @@ class InMemoryCaselistRepository:
         )
         rows = [("|".join(str(part) for part in _camp_file_key(stored)), stored) for stored in matching]
         return _paginate(rows, kind="camp-file", limit=limit, cursor=cursor)
+
+    # -- removal ---------------------------------------------------------------------------
+
+    async def delete_source(self, sha256: str) -> bool:
+        return self._sources.pop(sha256, None) is not None
+
+    async def delete_disclosure(self, caselist: str, snapshot: date, source_path: str) -> bool:
+        return self._disclosures.pop((caselist, snapshot, source_path), None) is not None
+
+    async def delete_camp_file(self, source_sha256: str, year: int, event: Event) -> bool:
+        return self._camp_files.pop((source_sha256, year, str(event)), None) is not None
+
+
+class InMemoryAppendOnlyRecord:
+    """One copy of the suppression list or removal log, as a list of lines.
+
+    Append-only exactly as the real copies are: lines can be read and added, never changed. Every
+    append is also kept in :attr:`appends`, so a test can assert on what was written and when, and
+    :attr:`fail_next_append` makes the next append raise, as a bucket refusing the write would.
+    """
+
+    def __init__(self, location: str = "in-memory record", lines: Iterable[str] = ()) -> None:
+        self._location = location
+        self.lines: list[str] = list(lines)
+        self.appends: list[tuple[str, ...]] = []
+        self.fail_next_append: Exception | None = None
+
+    @property
+    def location(self) -> str:
+        return self._location
+
+    async def read_lines(self) -> tuple[str, ...]:
+        return tuple(self.lines)
+
+    async def append_lines(self, lines: Sequence[str]) -> None:
+        if not lines:
+            return
+        if self.fail_next_append is not None:
+            failure, self.fail_next_append = self.fail_next_append, None
+            raise failure
+        self.appends.append(tuple(lines))
+        self.lines.extend(lines)
+
+
+def empty_suppression_list() -> RecordedSuppressionList:
+    """A suppression list with nothing on it, for a test that is not about removals.
+
+    Every service that stores or publishes a source takes the list as a required argument with no
+    default (`v1-e30-t07`), so a test that does not care about removals says so at the call site by
+    passing this, rather than the service quietly assuming it.
+    """
+    return RecordedSuppressionList(InMemoryAppendOnlyRecord("empty suppression list"))
 
 
 def _disclosure_key(disclosure: Disclosure) -> tuple[str, date, str]:

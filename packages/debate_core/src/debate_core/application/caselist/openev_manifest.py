@@ -38,8 +38,8 @@ download is not: it is whichever files the operator fetched, and the scheduled s
 existing manifest rather than replacing it, and the existing manifest's `{path: sha256}` is the
 baseline the import classifies against:
 
-* A path this import classifies exactly as before — `UNCHANGED`, or skipped or suppressed for the
-  same reason — keeps its existing row, byte for byte. The manifest records what each file was
+* A path this import classifies exactly as before — `UNCHANGED`, or skipped for the same reason —
+  keeps its existing row, byte for byte. The manifest records what each file was
   when it entered the store; a re-import saw nothing new and writes nothing new.
 * A path that is new, or `CHANGED`, gets this import's row.
 * A path this import did not contain keeps its row. A camp file absent from one download has not
@@ -47,6 +47,15 @@ baseline the import classifies against:
 
 That is what makes re-importing a release a no-op (ac3) — identical manifest bytes, whatever date
 it runs on — and what keeps a one-file weekly import from erasing the other hundred.
+
+## Suppressed files
+
+A member the removal suppression list stops has no row (`v1-e30-t07`), and a recorded row whose
+file has since been suppressed is dropped rather than carried forward. The summary's
+`classifications` counts `SUPPRESSED` as the number of members of the import that last wrote the
+manifest which the list stopped, plus recorded rows it dropped: a release manifest accumulates
+across downloads, but a suppressed file leaves no row to accumulate from, so the count describes
+the latest import and is the same on every re-import of it.
 """
 
 from __future__ import annotations
@@ -76,6 +85,7 @@ from debate_core.application.caselist.publish_plan import (
     snapshot_manifest_key,
 )
 from debate_core.application.ports.evidence_store import ObjectKey
+from debate_core.application.ports.suppression import SuppressionState
 from debate_core.domain.caselist import Event
 
 __all__ = [
@@ -85,6 +95,7 @@ __all__ = [
     "openev_manifest_key",
     "openev_release_name",
     "read_recorded_release",
+    "summary_row",
 ]
 
 CAMP_FIELDS: Final = (
@@ -166,11 +177,28 @@ def merged_manifest_lines(
     event: Event,
     imported_on: date,
     archive_sha256: str,
+    suppression: SuppressionState,
 ) -> tuple[str, ...]:
-    """The release's manifest once this import is merged in: member rows by path, then the summary."""
-    rows = dict(recorded.rows)
+    """The release's manifest once this import is merged in: member rows by path, then the summary.
+
+    `suppression` is the list the import read: suppressed members get no row, and recorded rows
+    naming a now-suppressed file are dropped (see the module docstring).
+    """
+    rows = {
+        path: row
+        for path, row in recorded.rows.items()
+        if not (isinstance(row.get("sha256"), str) and suppression.suppresses_source(str(row["sha256"])))
+    }
+    suppressed = len(recorded.rows) - len(rows)
     for entry in entries:
         if entry.classification is Classification.REMOVED:
+            continue
+        if entry.classification is Classification.SUPPRESSED:
+            suppressed += 1
+            rows.pop(entry.path, None)
+            continue
+        if entry.withheld:
+            rows.pop(entry.path, None)
             continue
         existing = rows.get(entry.path)
         if existing is not None and _same_outcome(entry, existing):
@@ -179,7 +207,8 @@ def merged_manifest_lines(
             entry, year=year, imported_on=imported_on, archive_sha256=archive_sha256
         )
     members = [rows[path] for path in sorted(rows)]
-    return tuple(render_rows([*members, _summary_row(members, year=year, event=event)]))
+    summary = summary_row(members, year=year, event=event, suppressed=suppressed)
+    return tuple(render_rows([*members, summary], suppression=suppression, disclosure_scope=None))
 
 
 def _same_outcome(entry: ImportedEntry[ParsedCampPath], row: Mapping[str, object]) -> bool:
@@ -188,10 +217,6 @@ def _same_outcome(entry: ImportedEntry[ParsedCampPath], row: Mapping[str, object
         return True
     if entry.skip_reason is not None:
         return row.get("skip_reason") == str(entry.skip_reason)
-    if entry.classification is Classification.SUPPRESSED:
-        return (
-            row.get("classification") == str(Classification.SUPPRESSED) and row.get("sha256") == entry.sha256
-        )
     return False
 
 
@@ -214,9 +239,13 @@ def _member_row(
     }
 
 
-def _summary_row(members: Sequence[Mapping[str, object]], *, year: int, event: Event) -> dict[str, object]:
-    """The trailing row, counted from the merged member rows rather than from this one import."""
+def summary_row(
+    members: Sequence[Mapping[str, object]], *, year: int, event: Event, suppressed: int
+) -> dict[str, object]:
+    """The trailing row, counted from the merged member rows, plus `suppressed` (see above)."""
     classifications: dict[str, int] = {}
+    if suppressed:
+        classifications[str(Classification.SUPPRESSED)] = suppressed
     skipped: dict[str, int] = {}
     digests: set[object] = set()
     archives: set[str] = set()
@@ -245,7 +274,7 @@ def _summary_row(members: Sequence[Mapping[str, object]], *, year: int, event: E
         "archive_sha256": None,
         "archives": sorted(archives),
         "previous_snapshot": None,
-        "members": len(members),
+        "members": len(members) + suppressed,
         "distinct_sha256": len(digests),
         "warnings": warnings,
         "classifications": dict(sorted(classifications.items())),

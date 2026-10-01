@@ -20,6 +20,29 @@ file title for the other — but what happens to each member is the same five st
 5. **Report.** A :class:`PipelineRun` with every entry in path order and every count, which is
    what both the manifest writers and the command summaries read.
 
+## The suppression list is not optional
+
+A removal (`v1-e30-t07`) is undone by the next cumulative archive unless every import consults the
+suppression list, so the pipeline is not built without one: :class:`SourceImportPipeline` takes a
+:class:`~debate_core.application.ports.suppression.SuppressionList` as a required constructor
+argument, reads it once at the start of every run, and checks it again at the one place a member's
+bytes and records are written (:meth:`SourceImportPipeline._store`). An importer cannot opt out by
+leaving an argument off — there is no default to fall back on — and an importer that bypassed the
+pipeline to write records itself is what
+`packages/debate_core/tests/application/caselist/test_import_paths_consult_suppression.py` fails on.
+
+A suppressed member is counted as `SUPPRESSED` and nothing else happens to it: no blob, no record,
+and — in the manifest writers — no row, because a row would put the requester's path, school and
+team code back into the store they asked to be removed from. Only the count survives, in the
+summary row.
+
+The junk around a suppressed file goes with it. A skipped member has no digest, so the list cannot
+name it, but its path can still name the removed file and the team that disclosed it: macOS's
+`__MACOSX/<dir>/._<name>` and Word's `<dir>/~$<name minus two characters>` *shadow* a real file.
+:func:`withheld_skipped_paths` marks a skipped member :attr:`ImportedEntry.withheld` when it shadows
+a suppressed file, or when every real file in its directory is suppressed (a whole team removed);
+it is still counted as skipped and given no row.
+
 What stays with each service is what genuinely differs: where the baseline comes from (the
 previous weekly snapshot, or the camp release's existing manifest), which records are written,
 and whether a path that has gone is a removal (a weekly archive is cumulative, so yes; an OpenEv
@@ -44,9 +67,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
 
+from debate_core.application.caselist.suppression import load_suppression_state
+from debate_core.application.errors import DomainError
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.persistence import SnapshotStore
+from debate_core.application.ports.suppression import SuppressionList, SuppressionState, disclosure_digest
 from debate_core.domain.caselist import Sha256Hex, SourceDocument, SourceFormat
 
 __all__ = [
@@ -59,7 +85,9 @@ __all__ = [
     "RecordWriter",
     "SourceImportPipeline",
     "SourceMetadata",
+    "SuppressedWriteRefused",
     "file_source",
+    "withheld_skipped_paths",
 ]
 
 
@@ -122,6 +150,20 @@ type ExistingSourceLookup = Callable[[Sha256Hex], Awaitable[SourceDocument | Non
 """Finds a source document already filed under a digest, from any earlier import of any origin."""
 
 
+class SuppressedWriteRefused(DomainError):
+    """A suppressed member reached the point where its bytes and records are written.
+
+    Never raised by a correct run — classification has already counted the member as `SUPPRESSED`
+    — and kept because the write is where the guarantee has to hold: if a change to classification
+    ever let a suppressed member through, this stops the run before the bytes are stored rather
+    than after. Names the digest only.
+    """
+
+    def __init__(self, sha256: str) -> None:
+        self.sha256 = sha256
+        super().__init__(f"refusing to store {sha256}: it is on the removal suppression list")
+
+
 @dataclass(frozen=True, slots=True)
 class ImportedEntry[MetadataT]:
     """One row of what an import saw: a member, or a path that has gone.
@@ -154,6 +196,9 @@ class ImportedEntry[MetadataT]:
     anything filed earlier.
     """
 
+    withheld: bool = False
+    """A skipped member that shadows suppressed files: counted as skipped, given no manifest row."""
+
     @property
     def is_skipped(self) -> bool:
         return self.skip_reason is not None
@@ -177,17 +222,22 @@ class PipelineRun[MetadataT]:
     newly_stored_blobs: int = 0
     """Of those digests, how many the blob store did not already have (what a dry run would write)."""
 
+    suppression: SuppressionState = field(default_factory=SuppressionState)
+    """The suppression list as this run read it, which the manifest writers check every row against."""
+
 
 class SourceImportPipeline:
     """Classifies and stores one archive's members for whichever importer hands them in.
 
-    Holds only the blob store. The records are the caller's, written through the
-    :data:`RecordWriter` it passes to :meth:`run`, so the same pipeline files disclosures for a
-    caselist archive and camp-file records for an OpenEv release.
+    Holds the blob store and the suppression list, both required. The records are the caller's,
+    written through the :data:`RecordWriter` it passes to :meth:`run`, so the same pipeline files
+    disclosures for a caselist archive and camp-file records for an OpenEv release — and refuses to
+    file either for a suppressed member.
     """
 
-    def __init__(self, *, blobs: SnapshotStore) -> None:
+    def __init__(self, *, blobs: SnapshotStore, suppression: SuppressionList) -> None:
         self._blobs = blobs
+        self._suppression = suppression
 
     async def run[MetadataT: SourceMetadata](
         self,
@@ -196,7 +246,7 @@ class SourceImportPipeline:
         extract: MetadataExtractor[MetadataT],
         write: RecordWriter[MetadataT],
         baseline: Mapping[str, str],
-        suppressed: frozenset[str] = frozenset(),
+        disclosure_scope: str | None,
         dry_run: bool = False,
         report_removed: bool = True,
         find_existing: ExistingSourceLookup | None = None,
@@ -210,8 +260,15 @@ class SourceImportPipeline:
         already filed by any import: a `NEW` one found there is a `DUPLICATE` of it, and each entry
         carries the record it matched.
 
+        `disclosure_scope` is the caselist slug a disclosure-recording import files its members
+        under, so a disclosure-scoped suppression (one team's copy of a shared file) can be matched
+        by :func:`~debate_core.application.ports.suppression.disclosure_digest`; `None` for an
+        import that records no disclosures, which only a whole-source suppression stops. Required,
+        with no default, so that an importer has to say which it is.
+
         Writes nothing — no blob and no record — when `dry_run` is set.
         """
+        suppression = await load_suppression_state(self._suppression)
         baseline_digests = frozenset(baseline.values())
         imported: list[ImportedEntry[MetadataT]] = []
         skipped: dict[SkipReason, int] = {}
@@ -238,7 +295,7 @@ class SourceImportPipeline:
                 baseline=baseline,
                 baseline_digests=baseline_digests,
                 known=stored_digests,
-                suppressed=suppressed,
+                suppressed=_is_suppressed(suppression, entry, disclosure_scope),
             )
             existing: SourceDocument | None = None
             # Only bytes this run has not already stored: a second copy within one download
@@ -269,8 +326,33 @@ class SourceImportPipeline:
                 )
             )
             if not dry_run and classification in STORED_CLASSIFICATIONS:
-                await self._blobs.put(entry.data)
-                await write(entry, parsed, classification, existing)
+                await self._store(
+                    entry,
+                    parsed,
+                    classification,
+                    existing,
+                    write=write,
+                    suppression=suppression,
+                    disclosure_scope=disclosure_scope,
+                )
+
+        withheld = withheld_skipped_paths(
+            {
+                entry.path: entry.classification is Classification.SUPPRESSED
+                for entry in imported
+                if entry.classification is not None
+            },
+            [entry.path for entry in imported if entry.is_skipped],
+        )
+        if withheld:
+            imported = [
+                ImportedEntry(
+                    path=entry.path, classification=None, skip_reason=entry.skip_reason, withheld=True
+                )
+                if entry.path in withheld
+                else entry
+                for entry in imported
+            ]
 
         if report_removed:
             for gone in sorted(baseline.keys() - seen_paths):
@@ -284,7 +366,91 @@ class SourceImportPipeline:
             member_count=member_count,
             distinct_digests=len(stored_digests),
             newly_stored_blobs=len(newly_stored),
+            suppression=suppression,
         )
+
+    async def _store[MetadataT](
+        self,
+        member: ArchiveMember,
+        parsed: MetadataT,
+        classification: Classification,
+        existing: SourceDocument | None,
+        *,
+        write: RecordWriter[MetadataT],
+        suppression: SuppressionState,
+        disclosure_scope: str | None,
+    ) -> None:
+        """Write one member's bytes and records: the only place an import writes either.
+
+        The suppression check is repeated here, at the write, rather than trusted from
+        classification: see :class:`SuppressedWriteRefused`.
+        """
+        if _is_suppressed(suppression, member, disclosure_scope):
+            raise SuppressedWriteRefused(member.sha256)
+        await self._blobs.put(member.data)
+        await write(member, parsed, classification, existing)
+
+
+_MACOS_METADATA_DIRECTORY = "__MACOSX"
+_APPLE_DOUBLE_PREFIX = "._"
+_WORD_LOCK_PREFIX = "~$"
+
+
+def withheld_skipped_paths(real: Mapping[str, bool], skipped: Iterable[str]) -> frozenset[str]:
+    """The skipped paths whose manifest rows would name suppressed files, so get none.
+
+    `real` maps every real (read and classified) member's path to whether it is suppressed;
+    `skipped` is every skipped member's path. A skipped path is withheld when it shadows a
+    suppressed real file — `__MACOSX/<dir>/._<name>` shadows `<dir>/<name>`, and a Word lock file
+    `<dir>/~$<rest>` shadows any `<dir>/<name>` with `name[2:] == rest` — or when its directory
+    holds at least one real file and every one of them is suppressed.
+
+    Shared with the removal's manifest rewrite, so a manifest a removal rewrote and one an import
+    wrote afterwards drop the same rows.
+    """
+    by_directory: dict[str, list[bool]] = {}
+    for path, suppressed in real.items():
+        by_directory.setdefault(_directory_of(path), []).append(suppressed)
+    withheld: set[str] = set()
+    for path in skipped:
+        directory = _directory_of(path)
+        everything_suppressed = bool(by_directory.get(directory)) and all(by_directory[directory])
+        if everything_suppressed or any(real.get(shadowed, False) for shadowed in _shadowed(path, real)):
+            withheld.add(path)
+    return frozenset(withheld)
+
+
+def _directory_of(path: str) -> str:
+    """The directory a member belongs to, with macOS's metadata mirror folded onto the real one."""
+    parts = path.split("/")
+    if parts[0] == _MACOS_METADATA_DIRECTORY:
+        parts = parts[1:]
+    return "/".join(parts[:-1])
+
+
+def _shadowed(path: str, real: Mapping[str, bool]) -> list[str]:
+    """The real paths a junk member is metadata for, if it is one."""
+    directory = _directory_of(path)
+    name = path.rsplit("/", 1)[-1]
+    prefix = f"{directory}/" if directory else ""
+    if path.split("/")[0] == _MACOS_METADATA_DIRECTORY and name.startswith(_APPLE_DOUBLE_PREFIX):
+        return [prefix + name[len(_APPLE_DOUBLE_PREFIX) :]]
+    if name.startswith(_WORD_LOCK_PREFIX):
+        rest = name[len(_WORD_LOCK_PREFIX) :]
+        return [
+            candidate
+            for candidate in real
+            if _directory_of(candidate) == directory and candidate.rsplit("/", 1)[-1][2:] == rest
+        ]
+    return []
+
+
+def _is_suppressed(
+    suppression: SuppressionState, member: ArchiveMember, disclosure_scope: str | None
+) -> bool:
+    """Whether the list stops this member: its bytes as a whole, or this one disclosure of them."""
+    disclosure = disclosure_digest(disclosure_scope, member.path) if disclosure_scope is not None else None
+    return suppression.suppresses(member.sha256, disclosure=disclosure)
 
 
 def _classify(
@@ -293,14 +459,14 @@ def _classify(
     baseline: Mapping[str, str],
     baseline_digests: frozenset[str],
     known: set[str],
-    suppressed: frozenset[str],
+    suppressed: bool,
 ) -> Classification:
     """Decide what one member is, against the previous import and what this run has stored.
 
     `known` is the set of digests this run has already stored, which is what makes the second
     of two identical members in one archive a `DUPLICATE` rather than a second `NEW`.
     """
-    if member.sha256 in suppressed:
+    if suppressed:
         return Classification.SUPPRESSED
     previously = baseline.get(member.path)
     if previously == member.sha256:

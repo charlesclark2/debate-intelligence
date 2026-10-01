@@ -19,11 +19,13 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from debate_core.application.caselist.suppression import SUPPRESSION_LIST_KEY, RecordedSuppressionList
 from debate_core.application.errors import (
     BlobIntegrityError,
     NotFound,
@@ -40,9 +42,10 @@ from debate_core.application.evidence_sync import (
     UnsyncableKeyspace,
 )
 from debate_core.application.ports.evidence_store import ObjectInfo
+from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore, FsSnapshotStore
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
-from debate_core.testing.fakes import FixedClock
+from debate_core.testing.fakes import FixedClock, InMemoryAppendOnlyRecord, empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -121,6 +124,7 @@ def service(
     evidence_bucket: str,
 ) -> EvidenceSyncService:
     return EvidenceSyncService(
+        suppression=empty_suppression_list(),
         keyspaces=(objects_keyspace, blobs_keyspace),
         journal=journal,
         remote_name=evidence_bucket,
@@ -362,7 +366,9 @@ class TestBlobs:
             remote=S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client),
             content_addressed=True,
         )
-        service = EvidenceSyncService(keyspaces=(objects_keyspace, unmapped))
+        service = EvidenceSyncService(
+            suppression=empty_suppression_list(), keyspaces=(objects_keyspace, unmapped)
+        )
 
         with pytest.raises(UnsyncableKeyspace, match="raw/caselist/hsld26"):
             await service.plan()
@@ -516,6 +522,7 @@ class TestVerification:
             S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client), digest="0" * 64
         )
         service = EvidenceSyncService(
+            suppression=empty_suppression_list(),
             keyspaces=(
                 SyncKeyspace(name="objects", local=local, remote=lying, local_path_for=local.path_for),
             ),
@@ -540,6 +547,7 @@ class TestVerification:
             S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client), digest=None
         )
         service = EvidenceSyncService(
+            suppression=empty_suppression_list(),
             keyspaces=(
                 SyncKeyspace(name="objects", local=local, remote=silent, local_path_for=local.path_for),
             ),
@@ -628,6 +636,7 @@ class TestResume:
     ) -> EvidenceSyncService:
         local = FsEvidenceObjectStore(data_dir)
         return EvidenceSyncService(
+            suppression=empty_suppression_list(),
             keyspaces=(
                 SyncKeyspace(name="objects", local=local, remote=remote, local_path_for=local.path_for),
             ),
@@ -823,6 +832,88 @@ class TestTheJournalFile:
 # ------------------------------------------------------------------------------------------------
 
 
+class TestTheSuppressionListIsNeverSynced:
+    """`store sync` is a path that can put a source back in the bucket; it consults the list too."""
+
+    @staticmethod
+    def suppressing(digest: str) -> RecordedSuppressionList:
+        entry = SuppressionEntry(
+            action=SuppressionAction.SUPPRESS,
+            sha256=digest,
+            recorded_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
+            reason=ReasonCode.REQUESTED_BY_TEAM,
+            request_id="RM-2026-01",
+        )
+        return RecordedSuppressionList(InMemoryAppendOnlyRecord("suppression list", [entry.to_line()]))
+
+    async def test_a_suppressed_blob_is_never_pushed(
+        self,
+        objects_keyspace: SyncKeyspace,
+        blobs_keyspace: SyncKeyspace,
+        data_dir: Path,
+        s3_client: S3Client,
+        evidence_bucket: str,
+    ) -> None:
+        kept = await write_local_blob(data_dir, b"another team's file")
+        removed = await write_local_blob(data_dir, b"a file a team asked us to remove")
+        service = EvidenceSyncService(
+            suppression=self.suppressing(removed.rsplit("/", 1)[-1]),
+            keyspaces=(objects_keyspace, blobs_keyspace),
+        )
+
+        plan = await service.plan(prefix="raw/")
+        await service.execute(plan)
+
+        assert actions(plan, SyncAction.NEW) == [f"{BLOB_PREFIX}/{kept}"]
+        assert f"{BLOB_PREFIX}/{removed}" in actions(plan, SyncAction.SKIPPED)
+        assert remote_keys(s3_client, evidence_bucket) == [f"{BLOB_PREFIX}/{kept}"]
+
+    async def test_a_suppressed_blob_is_never_pulled_back(
+        self,
+        objects_keyspace: SyncKeyspace,
+        blobs_keyspace: SyncKeyspace,
+        data_dir: Path,
+        s3_client: S3Client,
+        evidence_bucket: str,
+    ) -> None:
+        body = b"a file a team asked us to remove"
+        digest = hashlib.sha256(body).hexdigest()
+        key = f"{BLOB_PREFIX}/sha256/{digest[0:2]}/{digest[2:4]}/{digest}"
+        put_remote_object(s3_client, evidence_bucket, key, body)
+        service = EvidenceSyncService(
+            suppression=self.suppressing(digest), keyspaces=(objects_keyspace, blobs_keyspace)
+        )
+
+        plan = await service.plan(prefix="raw/", direction=SyncDirection.PULL)
+        await service.execute(plan)
+
+        assert actions(plan, SyncAction.SKIPPED) == [key]
+        assert not (data_dir / "blobs" / "sha256" / digest[0:2] / digest[2:4] / digest).exists()
+
+    @pytest.mark.parametrize("direction", [SyncDirection.PUSH, SyncDirection.PULL])
+    async def test_neither_copy_of_the_list_is_copied_over_the_other(
+        self,
+        service: EvidenceSyncService,
+        data_dir: Path,
+        s3_client: S3Client,
+        evidence_bucket: str,
+        direction: SyncDirection,
+    ) -> None:
+        """A sync that copied the shorter copy over the longer would truncate an append-only record."""
+        longer, shorter = b"line one\nline two\n", b"line one\n"
+        # The source side is always the shorter copy: that is the sync that would truncate.
+        local, remote = (shorter, longer) if direction is SyncDirection.PUSH else (longer, shorter)
+        write_local_object(data_dir, SUPPRESSION_LIST_KEY, local)
+        put_remote_object(s3_client, evidence_bucket, SUPPRESSION_LIST_KEY, remote)
+
+        plan = await service.plan(prefix="manifests/", direction=direction)
+        await service.execute(plan)
+
+        assert actions(plan, SyncAction.SKIPPED) == [SUPPRESSION_LIST_KEY]
+        assert s3_client.get_object(Bucket=evidence_bucket, Key=SUPPRESSION_LIST_KEY)["Body"].read() == remote
+        assert (data_dir / "objects" / SUPPRESSION_LIST_KEY).read_bytes() == local
+
+
 class TestPulling:
     async def test_a_pull_writes_the_bucket_into_the_local_store(
         self, service: EvidenceSyncService, data_dir: Path, s3_client: S3Client, evidence_bucket: str
@@ -851,13 +942,14 @@ class TestPulling:
         """The port-only path, for a local store that cannot hand over a filename."""
         put_remote_object(s3_client, evidence_bucket, MANIFEST_KEY, b'{"sha256":"abc"}\n')
         service = EvidenceSyncService(
+            suppression=empty_suppression_list(),
             keyspaces=(
                 SyncKeyspace(
                     name="objects",
                     local=FsEvidenceObjectStore(data_dir),
                     remote=S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client),
                 ),
-            )
+            ),
         )
 
         report = await service.execute(await service.plan(direction=SyncDirection.PULL))
@@ -870,13 +962,14 @@ class TestPulling:
     ) -> None:
         write_local_object(data_dir, MANIFEST_KEY, b'{"sha256":"abc"}\n')
         service = EvidenceSyncService(
+            suppression=empty_suppression_list(),
             keyspaces=(
                 SyncKeyspace(
                     name="objects",
                     local=FsEvidenceObjectStore(data_dir),
                     remote=S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client),
                 ),
-            )
+            ),
         )
 
         report = await service.execute(await service.plan())
@@ -943,6 +1036,7 @@ class TestListingAndFetching:
         self, service: EvidenceSyncService, tmp_path: Path
     ) -> None:
         service = EvidenceSyncService(
+            suppression=empty_suppression_list(),
             keyspaces=(
                 SyncKeyspace(
                     name="blobs",
@@ -951,7 +1045,7 @@ class TestListingAndFetching:
                     remote_prefix=BLOB_PREFIX,
                     content_addressed=True,
                 ),
-            )
+            ),
         )
 
         with pytest.raises(NotFound):
@@ -996,9 +1090,10 @@ class TestFailures:
             S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client), digest="0" * 64
         )
         service = EvidenceSyncService(
+            suppression=empty_suppression_list(),
             keyspaces=(
                 SyncKeyspace(name="objects", local=local, remote=lying, local_path_for=local.path_for),
-            )
+            ),
         )
 
         report = await service.execute(await service.plan())
@@ -1017,9 +1112,10 @@ class TestFailures:
             S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client), profile="debate-dev-evidence"
         )
         service = EvidenceSyncService(
+            suppression=empty_suppression_list(),
             keyspaces=(
                 SyncKeyspace(name="objects", local=local, remote=expired, local_path_for=local.path_for),
-            )
+            ),
         )
 
         with pytest.raises(StoreCredentialsExpired) as raised:
@@ -1030,7 +1126,7 @@ class TestFailures:
 
     async def test_a_service_with_no_keyspaces_is_a_programming_error(self) -> None:
         with pytest.raises(ValueError, match="at least one keyspace"):
-            EvidenceSyncService(keyspaces=())
+            EvidenceSyncService(suppression=empty_suppression_list(), keyspaces=())
 
 
 # ------------------------------------------------------------------------------------------------

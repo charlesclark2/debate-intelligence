@@ -13,7 +13,9 @@ or a directory, and each file becomes:
 
 It runs on the same :class:`~debate_core.application.caselist.pipeline.SourceImportPipeline` as
 the weekly archive importer, so hashing, the content-addressed blob store, the six
-classifications and the suppression list behave exactly as they do there. What differs:
+classifications and the suppression list behave exactly as they do there. Camp files record no
+disclosures, so only a whole-source suppression stops one; a team's withdrawn disclosure of a
+camp file's bytes leaves the camp file alone. What differs:
 
 **The baseline is the release's own manifest**, not a previous weekly snapshot: an OpenEv release
 has no weeks, and a later download of it is compared against what the earlier ones recorded.
@@ -74,6 +76,7 @@ from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, S
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.evidence_store import ObjectKey
 from debate_core.application.ports.persistence import SnapshotStore
+from debate_core.application.ports.suppression import SuppressionList
 from debate_core.domain.caselist import (
     CampFile,
     Event,
@@ -162,12 +165,15 @@ class OpenEvImportService:
         service = OpenEvImportService(
             caselists=SqliteCaselistRepository(database),
             blobs=FsSnapshotStore(settings.storage.data_dir),
+            suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
         )
     """
 
-    def __init__(self, *, caselists: CaselistRepository, blobs: SnapshotStore) -> None:
+    def __init__(
+        self, *, caselists: CaselistRepository, blobs: SnapshotStore, suppression: SuppressionList
+    ) -> None:
         self._caselists = caselists
-        self._pipeline = SourceImportPipeline(blobs=blobs)
+        self._pipeline = SourceImportPipeline(blobs=blobs, suppression=suppression)
 
     async def import_release(
         self,
@@ -179,7 +185,6 @@ class OpenEvImportService:
         archive_sha256: str,
         recorded_manifest: Iterable[str] = (),
         aliases: CampAliases | None = None,
-        suppressed_hashes: frozenset[str] = frozenset(),
         dry_run: bool = False,
     ) -> OpenEvImportReport:
         """Classify and store every member of one download, and merge it into the release manifest.
@@ -187,7 +192,8 @@ class OpenEvImportService:
         `recorded_manifest` is the lines of the release's existing manifest (none for a first
         import); the caller reads it from where it keeps manifests and writes
         :attr:`OpenEvImportReport.manifest_lines` back there. `aliases` defaults to the packaged
-        `camp_aliases.yaml`. `suppressed_hashes` is the removal suppression list (v1-e30-t07).
+        `camp_aliases.yaml`. A file on the removal suppression list is counted as `SUPPRESSED`,
+        stored nowhere and given no manifest row.
 
         Writes nothing — no blob, no record — when `dry_run` is set; the report still carries the
         manifest a real run would write. Raises :class:`UnrecordableImportDate`, before reading or
@@ -216,7 +222,7 @@ class OpenEvImportService:
             extract=lambda path: parse_camp_path(path, aliases=table),
             write=write,
             baseline=recorded.baseline,
-            suppressed=suppressed_hashes,
+            disclosure_scope=None,
             dry_run=dry_run,
             report_removed=False,
             find_existing=self._caselists.find_source,
@@ -237,6 +243,7 @@ class OpenEvImportService:
                 event=event,
                 imported_on=imported_on,
                 archive_sha256=archive_sha256,
+                suppression=run.suppression,
             ),
             counts=run.counts,
             skipped=run.skipped,

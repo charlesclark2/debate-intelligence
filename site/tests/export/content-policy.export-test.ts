@@ -28,7 +28,10 @@ describe('the built export', () => {
     expect(errors).toEqual([])
   })
 
-  it('publishes no address outside the allowlist and no phone number', () => {
+  // Phone numbers in the export are checked by the test above, which runs the whole publishing
+  // policy (addresses, phone numbers, images, names) over every built page. This one reads the
+  // addresses again on its own so that a failure names the page and the address directly.
+  it('publishes no address outside the allowlist on any built page', () => {
     const allowed = new Set(settings.contactEmails.map((contact) => contact.address.toLowerCase()))
     for (const page of builtPages) {
       const text = withoutScripts(page.html)

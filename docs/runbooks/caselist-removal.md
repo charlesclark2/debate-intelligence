@@ -23,7 +23,9 @@ it back.
       `debate-prod-evidence` profiles. The dry run needs only the everyday one. `--execute` needs
       both: the takedown profile deletes and appends the suppression list, and the everyday one
       writes the rewritten manifests, because the takedown profile may write nowhere but
-      `manifests/_suppression/`.
+      `manifests/_suppression/`. The everyday one also reads the bucket's suppression list and
+      removal log, because the takedown profile cannot list, so S3 refuses its read of one that
+      does not exist yet instead of saying it is absent.
 - [ ] You know which environment each command targets. `DEBATE_ENV` selects it; prod additionally
       requires `--confirm-prod`. `DEBATE_REMOVAL_PROFILE` names the takedown profile and is set
       only in the shell you run `--execute` from; no profile file sets it.

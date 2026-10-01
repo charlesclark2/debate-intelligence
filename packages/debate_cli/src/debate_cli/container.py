@@ -631,6 +631,9 @@ class ServiceContainer:
             event_for_caselist=event_for_caselist,
             inbox=caselist.inbox_dir or settings.storage.data_dir / DEFAULT_INBOX_DIRECTORY,
             state_dir=settings.storage.data_dir,
+            # The importers' own list, so the run's skip of a removed camp file (v1-e34-t07) and the
+            # importers' refusal of one can never read different copies.
+            suppression=suppression,
             publisher=publisher,
             status=status,
             openev_event=caselist.openev_event,

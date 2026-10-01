@@ -401,6 +401,7 @@ def build_service(
         event_for_caselist=lambda slug: Event.LD if slug.startswith("testcl") else None,
         inbox=inbox,
         state_dir=data_dir,
+        suppression=empty_suppression_list(),
         publisher=publisher,
         status=status,
         parse=parse,  # type: ignore[arg-type]

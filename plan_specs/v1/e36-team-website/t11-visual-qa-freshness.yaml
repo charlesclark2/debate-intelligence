@@ -1,0 +1,106 @@
+# TASK v1-e36-t11-visual-qa-freshness - Visual QA refuses a stale export
+# Epic: E36 Public Team Website | Release: v1.6 | Major: V1
+# Architecture refs: ADR-0012 (static export), §17 (guardrails)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t11-visual-qa-freshness
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: Visual QA refuses a stale export
+spec:
+  # Filed by the PM, 2026-10-01, from v1-e36-t10's Follow-up 4.
+  description: >-
+    v1-e36-t10 made the export checks refuse to run against an export that was not built from the
+    tree under test, using the fingerprint in site/scripts/export-fingerprint.mjs, and wired that
+    into pre-commit-checks.sh and CI. `pnpm --dir site qa` runs site/scripts/visual-qa.mjs, which
+    serves site/out, screenshots every page and scores accessibility, and it has its own path to the
+    export and never consults the fingerprint. So it will produce a full, clean pre-launch report
+    about whatever site/out happens to hold, including a build from a different commit. Visual QA is
+    the step that certifies the site looks right before it ships, which makes a stale pass there the
+    most expensive kind: it is the one people act on. Make visual-qa.mjs use the same freshness
+    guard and refuse a missing or stale export, rather than a second, slightly different check of its
+    own. Out of scope: what visual QA measures, the operator-installed browser and scorer, and the
+    deploy script.
+  priority: 3
+  constraints:
+    packages: [site/scripts]
+    forbidden:
+      - A second freshness check that can disagree with export-fingerprint.mjs
+      - Building the site from inside visual-qa.mjs, which would hide which build was assessed
+      - A flag that skips the freshness check by default or quietly
+  context:
+    - kind: TaskRef
+      name: v1-e36-t10-export-checks-in-ci
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t08-prelaunch-visual-qa
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `pnpm --dir site qa` refuses to start, with the same message the export checks give, when
+        site/out is missing or was built from different sources or settings than the tree, and runs
+        as before when the export is fresh.
+    - id: ac2
+      description: >-
+        Shown both ways: a source edit after a build makes qa refuse, a rebuild makes it run, and the
+        stale case is also shown passing before the change, which is the point of the task.
+    - id: ac3
+      description: >-
+        visual-qa.mjs imports the guard from export-fingerprint.mjs; a search of site/scripts finds
+        no other implementation of export freshness.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t11-visual-qa-freshness-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Show qa passing on a stale export, wire in t10's guard, show it refusing.
+  goalRef:
+    name: v1-e36-t11-visual-qa-freshness
+  graph:
+    nodes:
+      - id: show-stale-pass
+        kind: Task
+        name: Show visual QA reporting on a stale export
+        description: >-
+          Build, edit a source, run qa, capture the clean report about the old build.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: A stale export is shown passing visual QA before the change
+            description: >-
+              After a build and a later source edit, `pnpm --dir site qa` runs to completion against
+              the old export. The output is captured in the report before anything is changed.
+      - id: guard
+        kind: Task
+        name: Use the export fingerprint guard
+        description: >-
+          Import t10's guard and refuse a missing or stale export.
+        dependsOn: [show-stale-pass]
+        outputs: [site/scripts/visual-qa.mjs]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: qa refuses a stale export and runs on a fresh one
+            description: >-
+              With a source edited after the build, qa exits non-zero naming the stale export; after
+              a rebuild it runs. Both outputs are captured.
+status:
+  phase: Pending

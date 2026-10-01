@@ -304,5 +304,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e36-t10-export-checks-in-ci
+    - id: t11
+      kind: Task
+      name: Visual QA refuses a stale export
+      description: >-
+        `pnpm --dir site qa` serves site/out without consulting t10's export fingerprint, so it will
+        certify a build from another commit. Use the same guard and refuse a missing or stale export.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t11-visual-qa-freshness.yaml
+        goalRef: v1-e36-t11-visual-qa-freshness
+      dependsOn:
+      - t10
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t11-visual-qa-freshness reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t11-visual-qa-freshness
 status:
   phase: Pending

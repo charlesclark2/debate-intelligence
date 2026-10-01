@@ -16,6 +16,14 @@ metadata:
     debate/title: Evidence edit policy
     debate/architecture-refs: §7, §8, ADR-006, §20 step 2
 spec:
+  # PM note, 2026-10-01. ADR-0018 settles the representation this task's clause (a) needs: a Card
+  # names one envelope in the snapshot and lists what it removed from inside it, evidence_text is
+  # the envelope minus the omissions with no joiner, and CardSpan offsets stay relative to
+  # evidence_text. Two consequences bind this task directly. Reordering quoted text is not merely
+  # forbidden, it is inexpressible, so do not add a validator that re-states the ban and do not
+  # introduce a segment list that would make it expressible again. And an ellipsis is never written
+  # into evidence_text; a deletion produces an omitted range, and the rendering of it belongs to
+  # the exporter.
   description: >-
     Encode §8 step 7 as domain rules in CardEditService: student edits to quoted evidence may only
     (a) delete ranges (shrink or split selections, adding omitted ranges), (b) change markup
@@ -35,6 +43,13 @@ spec:
   context:
     - kind: TaskRef
       name: v1-e03-t04-verifier
+      relation: dependsOn
+    # Added by the PM, 2026-10-01. Clause (a) of this task's description is "delete ranges
+    # (shrink or split selections, adding omitted ranges)", which the domain could not
+    # represent at all. ADR-0018 settles how, and t07 lands it. A dependency that matters is
+    # an edge, not a paragraph.
+    - kind: TaskRef
+      name: v1-e03-t07-card-omissions
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

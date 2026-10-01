@@ -142,8 +142,10 @@ spec:
       kind: Task
       name: Span-addressed evidence extraction
       description: >-
-        Given paragraph IDs and/or character offsets, extract evidence text from a snapshot; CardSpan
-        creation (underline/highlight, claim/warrant/internal_link/impact); ellipsis/omitted-range representation.
+        Given paragraph IDs and/or character offsets, extract evidence text from a snapshot; markup
+        spans (underline/highlight, claim/warrant/internal_link/impact). The ellipsis and omitted-range
+        representation named here was never written into the t03 task spec and is settled by ADR-0018
+        and landed by t07; t03 delivered the evidence-layer half of it.
       inputs:
         specRef: plan_specs/v1/e03-evidence-integrity/t03-span-extraction.yaml
         goalRef: v1-e03-t03-span-extraction
@@ -190,6 +192,7 @@ spec:
         goalRef: v1-e03-t05-edit-constraints
       dependsOn:
       - t04
+      - t07
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e03-t05-edit-constraints reports phase Succeeded
@@ -220,5 +223,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e03-t06-verify-command
+    - id: t07
+      kind: Task
+      name: Card omissions and the selection-to-card mapping
+      description: >-
+        ADR-0018's envelope-and-omissions model in the domain: Card.omitted_ranges in canonical form, the
+        length invariant, and one named function mapping a t03 selection and its markup onto an envelope,
+        omissions, evidence_text and evidence_text-relative CardSpans.
+      inputs:
+        specRef: plan_specs/v1/e03-evidence-integrity/t07-card-omissions.yaml
+        goalRef: v1-e03-t07-card-omissions
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e03-t07-card-omissions reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e03-t07-card-omissions
 status:
   phase: Pending

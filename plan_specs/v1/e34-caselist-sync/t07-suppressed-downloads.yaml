@@ -1,0 +1,132 @@
+# TASK v1-e34-t07-suppressed-downloads - The sync does not re-download a file it has been told to remove
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+# Architecture refs: docs/policies/caselist-data-use.md, ADR-0017
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t07-suppressed-downloads
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: The sync does not re-download a file it has been told to remove
+spec:
+  # Filed by the PM, 2026-10-01, from v1-e30-t07's Follow-up work item 1.
+  description: >-
+    `_recorded_openev` in caselist_sync.py decides which OpenEv camp files are already handled by
+    reading the release manifest, and counts a member as handled if the importer classified it,
+    stored or suppressed. v1-e30-t07 removes suppressed members from the manifest entirely (its ac2),
+    so after a takedown there is no row to find. The weekly pull then downloads the removed file
+    again, the importer refuses it against the suppression list, and nothing is stored. The removal
+    holds. What is lost is a download from a budget that is not ours: OpenCaselist enforces a small
+    per-day download limit server-side, the data-use policy agreed with a volunteer maintainer caps
+    the rate on top of that, and a refusal is absorbed quietly, so this would repeat every week, for
+    every removed file, for as long as the schedule runs, without anyone noticing. Make the sync
+    skip a download it already knows will be refused. There must be one authority for what has been
+    removed, and it is the suppression list v1-e30-t07 built: if the sync needs to remember OpenEv
+    ids because the list is keyed by digest and the digest is only known after download, that memory
+    is derived from or reconciled against the list, never an independent record that can disagree
+    with it. `_recorded_openev`'s docstring describes rows that no longer exist and is corrected.
+    Out of scope: the suppression list's format (v1-e30-t07), archive imports, which are cumulative
+    and already filtered by the importer, and the schedule itself (v1-e34-t05).
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_workers, docs]
+    forbidden:
+      - A second record of removals that can disagree with the suppression list
+      - Re-adding SUPPRESSED rows to the manifest to make the old check work
+      - Weakening the importer's refusal of suppressed material on the grounds that the sync now skips it
+  context:
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t06-sync-defects
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        After a camp file is removed under the removal procedure, a pull over the same release
+        downloads nothing for it: no request for that file reaches OpenCaselist, and the run summary
+        records it as skipped-as-removed rather than as downloaded and refused.
+    - id: ac2
+      description: >-
+        The test is shown failing first. Against the code as it stands once v1-e30-t07 has landed,
+        the same scenario issues the download and the importer refuses it; that output is captured
+        before the fix.
+    - id: ac3
+      description: >-
+        The importer still refuses suppressed material on its own. With the sync's skip disabled, the
+        file is downloaded and refused exactly as before, so the two defences are independent and
+        neither relies on the other.
+    - id: ac4
+      description: >-
+        If the sync keeps its own memory of removed OpenEv ids, a removal recorded in the suppression
+        list but absent from that memory still results in no download, and a memory entry with no
+        corresponding suppression entry is reported, not trusted.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t07-suppressed-downloads-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Reproduce the wasted download, skip it against the suppression list, prove both defences stand alone.
+  goalRef:
+    name: v1-e34-t07-suppressed-downloads
+  graph:
+    nodes:
+      - id: reproduce
+        kind: Task
+        name: Show the removed file being downloaded and refused
+        description: >-
+          A pull after a removal, with the request to OpenCaselist and the importer's refusal both
+          visible.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: custom
+            name: The wasted download is shown before the fix
+            description: >-
+              A test pulls a release after one of its camp files has been removed and shows the
+              download request being made and the importer refusing the file. The failing output is
+              captured in the report.
+      - id: skip
+        kind: Task
+        name: Skip downloads the suppression list already covers
+        description: >-
+          Consult the suppression list before downloading, with any id-keyed memory derived from it.
+        dependsOn: [reproduce]
+        outputs: [packages/debate_core/src/debate_core/application/caselist_sync.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: A removed camp file is not downloaded again
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, "suppress and sync"]
+      - id: independence
+        kind: Task
+        name: Prove the importer's refusal still stands alone
+        description: >-
+          Disable the skip and show the importer still refuses the file.
+        dependsOn: [skip]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: The importer refuses suppressed material with the sync's skip disabled
+            description: >-
+              With the new skip removed, the scenario downloads the file and the importer refuses
+              it, showing the two defences do not depend on each other. The skip is restored.
+status:
+  phase: Pending

@@ -1,0 +1,130 @@
+# TASK v1-e29-t06-removal-grant-scope-test - The takedown grant's scope is tested, not just written
+# Epic: E29 Cloud Evidence Store | Release: v1.1 | Major: V1
+# Architecture refs: §14 private buckets, §17 guardrails
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t06-removal-grant-scope-test
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: The takedown grant's scope is tested, not just written
+spec:
+  # Filed by the PM, 2026-10-01, from the v1-e30-t07 review. I had this down as "add the
+  # s3:ListBucketVersions grant to v1-e29-t03". The grant is already there and already correct, so
+  # that item was mine in error. Looking at why I believed it was missing turned up something worth
+  # a task: nothing would notice if it stopped being correct.
+  description: >-
+    The EvidenceRemoval permission set grants s3:ListBucketVersions on the bucket ARN with a
+    StringLike condition on s3:prefix, which is right: ListBucketVersions is a bucket-level action,
+    so granting it on object ARNs silently matches nothing. The module's terraform test asserts the
+    exact set of actions in the policy, and asserts resources for the statements carrying an
+    s3:Delete action and for the statement carrying s3:PutObject. No assertion covers the
+    ListBucketVersions statement's Resource or its prefix condition. Rewriting that Resource to an
+    object ARN, which is the tidy-looking change someone will eventually make for consistency with
+    the statements around it, leaves every existing assertion green and produces an AccessDenied at
+    the one moment the credential is used: a takedown, under a removal request, on a clock. Widen
+    the resource coverage so it cannot be true of some statements and not others, and prove it by
+    mutation. Out of scope: changing any grant, the removal procedure itself (v1-e30-t07), and the
+    operator's apply (v1-e29-t03 ac5, already done).
+  priority: 2
+  constraints:
+    packages: [infrastructure/modules/evidence_bucket, docs]
+    forbidden:
+      - Changing which actions or resources either permission set is granted
+      - A resource assertion that covers some statements and leaves others uncovered
+      - Asserting coverage by listing statements by hand, so that a new statement is uncovered by default
+  context:
+    - kind: TaskRef
+      name: v1-e29-t03-evidence-buckets
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every statement in the EvidenceRemoval inline policy has its Resource asserted by the
+        terraform test, bucket-level and object-level actions each against the shape they require.
+        The assertion counts the statements it covered and fails if that is not every statement, so
+        a statement added later is uncovered loudly rather than quietly.
+    - id: ac2
+      description: >-
+        The s3:prefix condition on the ListBucketVersions statement is asserted. Removing the
+        condition widens the grant from the removable prefixes to the whole bucket while leaving the
+        action set unchanged, and that must fail.
+    - id: ac3
+      description: >-
+        Mutation proves both. Changing the ListBucketVersions Resource from the bucket ARN to an
+        object ARN under raw/ turns `terraform test` red; removing the prefix condition turns it
+        red; each is shown passing against the test as it stands today, which is the point of the
+        task. Both are restored and the tree confirmed clean.
+    - id: ac4
+      description: >-
+        The same statement-coverage assertion is applied to the EvidenceOperator inline policy,
+        which has the same shape and the same gap, and a mutation of its ListBucket resource is
+        shown red.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t06-removal-grant-scope-test-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Show the gap, close it with a coverage assertion that cannot miss a statement, prove by mutation.
+  goalRef:
+    name: v1-e29-t06-removal-grant-scope-test
+  graph:
+    nodes:
+      - id: show-the-gap
+        kind: Task
+        name: Show the mutation passing today
+        description: >-
+          Point the ListBucketVersions Resource at an object ARN and capture `terraform test`
+          green. That output is the baseline.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: The wrong resource is shown passing before the fix
+            description: >-
+              With ListBucketVersions scoped to an object ARN, `terraform test` reports green, and
+              the output is captured in the report before anything is changed.
+      - id: coverage
+        kind: Task
+        name: Assert every statement's resource and the prefix condition
+        description: >-
+          A single assertion over all statements that also checks it saw them all.
+        dependsOn: [show-the-gap]
+        outputs: [infrastructure/modules/evidence_bucket/tests/evidence_bucket.tftest.hcl]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: terraform test passes on the unmodified module
+            command: terraform
+            args: [-chdir=infrastructure/modules/evidence_bucket, test]
+      - id: mutation
+        kind: Task
+        name: Prove it
+        description: >-
+          Wrong resource, missing condition, and the same pair on EvidenceOperator.
+        dependsOn: [coverage]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: custom
+            name: Each mutation turns terraform test red and is restored
+            description: >-
+              The object-ARN resource, the removed prefix condition and the EvidenceOperator
+              ListBucket resource each turn `terraform test` red after the change and are shown
+              green before it. All are restored and the tree confirmed clean.
+status:
+  phase: Pending

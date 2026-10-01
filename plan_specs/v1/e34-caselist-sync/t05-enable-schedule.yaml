@@ -51,6 +51,12 @@ spec:
     - kind: TaskRef
       name: v1-e34-t06-sync-defects
       relation: dependsOn
+    # Added by the PM, 2026-10-01. Without v1-e34-t07, every removed camp file is downloaded again
+    # each week and refused, and an unattended agent is exactly what makes that invisible. The
+    # removal holds either way; the maintainer's download budget does not.
+    - kind: TaskRef
+      name: v1-e34-t07-suppressed-downloads
+      relation: dependsOn
     - kind: TaskRef
       name: v1-e01-t09-dev-prerelease-channel
       relation: dependsOn

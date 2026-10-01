@@ -105,7 +105,7 @@ spec:
         single-envelope cards by hand because this task's mapping did not exist yet, are switched to the
         mapping function, so ac3's scan finds no second copy of the arithmetic in tests either.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

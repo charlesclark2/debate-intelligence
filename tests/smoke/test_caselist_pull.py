@@ -20,6 +20,7 @@ The archives are the invented ones from `tests/fixtures/caselist/` and the camp 
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Iterator
@@ -50,6 +51,7 @@ runner = CliRunner()
 
 BUCKET = "debate-dev-evidence-pull-moto"
 AWS_PROFILE_NAME = "debate-dev-evidence"
+REMOVAL_PROFILE = "debate-dev-evidence-removal"
 API = "https://api.opencaselist.example.invalid/v1"
 FILE_HOST = "https://files.opencaselist.example.invalid"
 OPENEV_FILE_ID = 512
@@ -68,10 +70,17 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         if name.startswith("DEBATE_"):
             monkeypatch.delenv(name, raising=False)
     config = tmp_path / "aws-config"
-    config.write_text(f"[profile {AWS_PROFILE_NAME}]\nregion = us-east-1\n", encoding="utf-8")
+    # The takedown profile too, for the check that removes the camp file (v1-e34-t07).
+    config.write_text(
+        "".join(f"[profile {name}]\nregion = us-east-1\n" for name in (AWS_PROFILE_NAME, REMOVAL_PROFILE)),
+        encoding="utf-8",
+    )
     credentials = tmp_path / "aws-credentials"
     credentials.write_text(
-        f"[{AWS_PROFILE_NAME}]\naws_access_key_id = testing\naws_secret_access_key = testing\n",
+        "".join(
+            f"[{name}]\naws_access_key_id = testing\naws_secret_access_key = testing\n"
+            for name in (AWS_PROFILE_NAME, REMOVAL_PROFILE)
+        ),
         encoding="utf-8",
     )
     for name, value in {
@@ -220,6 +229,47 @@ def test_the_full_archive_is_listed_and_never_fetched_by_a_weekly_run(
     full = f"{SYNTHETIC_CASELIST}-all-{SNAPSHOTS[-1].snapshot.isoformat()}.zip"
     assert decisions[full] == "full_archive_not_pulled_weekly"
     assert not any(call.request.url.path.endswith(full) for call in site.calls)
+
+
+def test_a_camp_file_removed_from_another_machine_is_not_requested_again(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v1-e34-t07 ac1, through the installed commands and the real composition root.
+
+    The camp file is pulled, then removed with `caselist remove --execute`. The next pull runs as a
+    machine that did not make the removal would: its own copy of the suppression list has no entry,
+    and its inbox no longer holds the file. Only the bucket's copy of the list can keep the request
+    away from OpenCaselist, so this fails if the pull's skip reads anything less than the union.
+    """
+    data = installation / "data"
+    assert run("caselist", "pull")["exit_code"] == ExitCode.OK
+    camp_file = hashlib.sha256(DOCUMENT_BODIES["estuary-solvency"]).hexdigest()
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    removed = run(
+        "caselist",
+        "remove",
+        "--source",
+        camp_file,
+        "--request",
+        "RM-2026-01",
+        "--reason",
+        "REQUESTED_BY_CAMP",
+        "--execute",
+    )
+    assert removed["exit_code"] == ExitCode.OK, removed
+    monkeypatch.delenv("DEBATE_REMOVAL_PROFILE")
+    (data / "suppression" / "suppression-list.jsonl").unlink()
+    for copy in (data / "inbox").glob(f"openev-{OPENEV_FILE_ID}-*"):
+        copy.unlink()
+    requested = sum(1 for call in site.calls if call.request.url.path.endswith("/download"))
+    assert requested == 1
+
+    again = run("caselist", "pull")
+
+    assert again["exit_code"] == ExitCode.OK, again
+    assert [one["decision"] for one in again["data"]["openev_selections"]] == ["skipped_as_removed"]
+    assert again["data"]["openev_skipped_as_removed"] == 1
+    assert sum(1 for call in site.calls if call.request.url.path.endswith("/download")) == requested
 
 
 @pytest.mark.live

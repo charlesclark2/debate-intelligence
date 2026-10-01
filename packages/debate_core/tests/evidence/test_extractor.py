@@ -29,6 +29,7 @@ from debate_core.evidence.extractor import (
     SnapshotTextCheck,
     SnapshotTextMismatch,
 )
+from debate_core.evidence.markup import CardMarkup, EvidenceMarkupSpan
 from debate_core.evidence.normalization import (
     NORMALIZER_VERSION,
     Paragraph,
@@ -599,11 +600,13 @@ def test_evidence_built_directly_must_belong_to_its_record(text: SnapshotText) -
 EXTRACTION_MODULES = (
     "debate_core.evidence.selection",
     "debate_core.evidence.extractor",
+    "debate_core.evidence.markup",
 )
 
 #: The types extraction produces. Anything anywhere in debate_core that returns one is in scope too.
 _PRODUCES_EVIDENCE = re.compile(
-    r"\b(ExtractedEvidence|EvidenceSegment|EvidenceSelection|OffsetRange|ParagraphRun|OmittedRange)\b"
+    r"\b(ExtractedEvidence|EvidenceSegment|EvidenceSelection|OffsetRange|ParagraphRun|OmittedRange"
+    r"|CardMarkup|EvidenceMarkupSpan)\b"
 )
 
 #: String-typed parameters that are allowed because they are identifiers, not text.
@@ -677,7 +680,15 @@ def _module_entry_points(module_name: str) -> Iterator[tuple[str, Callable[..., 
 
 
 #: The extraction result types. A subclass of one anywhere in debate_core is in scope.
-_EXTRACTION_TYPES = (ExtractedEvidence, EvidenceSegment, EvidenceSelection, OffsetRange, ParagraphRun)
+_EXTRACTION_TYPES = (
+    ExtractedEvidence,
+    EvidenceSegment,
+    EvidenceSelection,
+    OffsetRange,
+    ParagraphRun,
+    CardMarkup,
+    EvidenceMarkupSpan,
+)
 
 
 def _debate_core_producers() -> Iterator[tuple[str, Callable[..., object]]]:
@@ -715,7 +726,7 @@ def free_text_parameters(
 
 
 def test_no_public_extraction_api_has_a_parameter_that_accepts_free_text() -> None:
-    """Every public callable in the extraction modules takes ids, offsets, enums and typed values only.
+    """Every public callable in selection, extraction and markup takes ids, offsets, enums and typed values.
 
     Exceptions are skipped: an error message never reaches a card. ``SnapshotText`` and
     ``SourceSnapshot`` are structured inputs whose own constructors take text; their provenance is
@@ -734,6 +745,9 @@ def test_no_public_extraction_api_has_a_parameter_that_accepts_free_text() -> No
         "debate_core.evidence.selection.EvidenceSegment.__init__",
         "debate_core.evidence.selection.EvidenceSelection.__init__",
         "debate_core.evidence.selection.ParagraphRun.__init__",
+        "debate_core.evidence.markup.CardMarkup.__init__",
+        "debate_core.evidence.markup.EvidenceMarkupSpan.__init__",
+        "debate_core.evidence.markup.EvidenceMarkupSpan.underline",
     } <= seen, "the scan did not see the entry points it exists to check"
     assert offending == []
 

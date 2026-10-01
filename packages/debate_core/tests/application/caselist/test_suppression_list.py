@@ -240,7 +240,11 @@ class TestTheLocalCopyIsOnlyEverAppendedTo:
         with record.path.open("a", encoding="utf-8") as other:
             other.write(suppress(FILE_B).to_line() + "\n")
         await record.append_lines([unsuppress(FILE_A, at=NOON + timedelta(days=1)).to_line()])
-        assert len(await record.read_lines()) == 3
+        assert await record.read_lines() == (
+            suppress(FILE_A).to_line(),
+            suppress(FILE_B).to_line(),
+            unsuppress(FILE_A, at=NOON + timedelta(days=1)).to_line(),
+        )
 
     async def test_an_unfinished_last_line_is_refused_and_nothing_is_written_after_it(
         self, tmp_path: Path

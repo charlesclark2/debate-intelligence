@@ -37,8 +37,10 @@ this branch is merged into `dev`, `dev` is promoted to `main`, and the operator 
 `scripts/site_deploy.sh prod` from a clean `main`. For the Thursday, October 1, 6:00 PM session
 all three have to happen first. See [Operator follow-ups](#operator-follow-ups).
 
-**Look at first:** the address mismatch in [Follow-up work](#follow-up-work). The site publishes
-`charles.clark@wfbschools.org`; Charlie's real address is `charles.clark@wfbschools.com`.
+**Look at first:** the coach address was wrong across the site. It published
+`charles.clark@wfbschools.org`, but Charlie's address is `charles.clark@wfbschools.com`. At
+Charlie's request it is corrected everywhere it is published, and the publishing policy is now
+version 1.1 (Deviation 7).
 
 ## Plan nodes
 
@@ -111,6 +113,9 @@ than asserted.
 - `site/tests/email-updates.test.tsx`, `site/tests/no-third-party-scripts.test.ts` (new): the
   node's two named test files.
 - `site/README.md`: the new content file, its fields, and how to change provider.
+- Address correction (Deviation 7): `site/content/{site.yaml,faq.yaml}`,
+  `site/content/pages/{contact,coaches,join}.md`, three test files, and
+  `docs/policies/website-publishing.md` (version 1.1).
 - `docs/guides/parent-email-updates.md` (new): the guide. `docs/README.md`: its index line.
 
 ## Deviations from the spec
@@ -146,6 +151,23 @@ than asserted.
    or input.
 6. **Config file format.** It is JSON, as the spec names it, although the site's other content
    files are YAML. JSON has no comments, so its fields are documented in `site/README.md`.
+
+7. **The coach address correction, outside this task's scope, at Charlie's request.** On
+   2026-09-29 Charlie confirmed that his address is `charles.clark@wfbschools.com`, not the
+   `charles.clark@wfbschools.org` the site published. On 2026-09-30 he asked for every instance to
+   be fixed. Changed:
+   - `site/content/site.yaml` (the email allowlist);
+   - `site/content/pages/{contact,coaches,join}.md` and `site/content/faq.yaml`;
+   - the tests that pin the address or use a plausible district address
+     (`contact.test.ts`, `content-policy.test.ts`, one comment in `faq.test.tsx`);
+   - the guide;
+   - `docs/policies/website-publishing.md`, bumped to **version 1.1** as a correction with no rule
+     changed. The policy's change control requires a re-recorded approval, and Charlie's instruction
+     in this session is recorded as that approval, scoped to the address.
+
+   Historical session reports (`v1-e36-t01`, `t04`, `t08`) keep the address as it was at the time.
+   The content belongs to `v1-e36-t04` and the policy to `v1-e36-t01`. A prod build is clean, and
+   the export has no `.org` address and the `.com` mailto on contact, FAQ, join and coaches.
 
 ## Decisions and assumptions
 
@@ -206,25 +228,18 @@ Already done by the operator during this session: the Buttondown account and lis
 
 ## Follow-up work
 
-1. **Urgent, before Thursday: the site publishes the wrong coach address.** `site/content/site.yaml`
-   (`contactEmails`), `site/content/pages/contact.md` and `docs/policies/website-publishing.md`
-   (the removal-request address) all say `charles.clark@wfbschools.org`. Charlie confirmed on
-   2026-09-29 that his address is `charles.clark@wfbschools.com`, and the district's website is
-   `wfbschools.com`. Parents sent to the site on Thursday will write to the published address.
-   This belongs to the contact page's owner (`v1-e36-t04`) and to the policy (a version bump), so it
-   was not changed here. It is a content edit plus the allowlist, which the build guard checks.
-2. **A second owner for the list.** Move the Buttondown login to a district role mailbox a second
+1. **A second owner for the list.** Move the Buttondown login to a district role mailbox a second
    coach can read, pay for Teams, or move to the district's tool (guide, "Who owns the list").
    Needs Charlie and possibly district IT.
-3. **The district tool question stays open.** Whether a club can have its own opt-in group in
+2. **The district tool question stays open.** Whether a club can have its own opt-in group in
    Skyward, or a team Smore account, is a question for the activities office. If the answer is yes,
    switching is two fields in `site/content/email-updates.json`.
-4. **Link the guide from `docs/guides/coach-website-editing.md`** when `v1-e37-t01` writes it.
-5. **Smoke check for the section.** `scripts/site_smoke.py` checks the parent session panel but not
+3. **Link the guide from `docs/guides/coach-website-editing.md`** when `v1-e37-t01` writes it.
+4. **Smoke check for the section.** `scripts/site_smoke.py` checks the parent session panel but not
    the email-updates section. A check that `/` and `/contact/` carry `id="email-updates"` and the
    configured link would catch a deploy that lost it. That is outside this task's packages; it
    fits the smoke-check rule in `plan_specs/README.md`.
-6. **Subscriber count.** Buttondown is free up to 100 subscribers. Check the count before each
+5. **Subscriber count.** Buttondown is free up to 100 subscribers. Check the count before each
    season's first email.
 
 ## PM review

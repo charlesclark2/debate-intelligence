@@ -73,13 +73,13 @@ describe('email addresses', () => {
   })
 
   it('rejects any other address, however plausible', () => {
-    expect(messages('Write to <debate@wfbschools.org>.')).toMatch(
-      /publishes the email address "debate@wfbschools\.org", which is not in the allowlist/,
+    expect(messages('Write to <debate@wfbschools.com>.')).toMatch(
+      /publishes the email address "debate@wfbschools\.com", which is not in the allowlist/,
     )
   })
 
   it('rejects a student address, which no consent can ever permit', () => {
-    expect(messages('Ask <jordan.rivera@students.wfbschools.org>.')).toMatch(
+    expect(messages('Ask <jordan.rivera@students.wfbschools.com>.')).toMatch(
       /not in the allowlist/,
     )
   })

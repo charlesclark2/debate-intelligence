@@ -109,7 +109,7 @@ checked, not assumed:
 2. **In front of the list owners.** Both owners can see every subscriber address in the provider's
    dashboard. That is the only place a coach looks at the list.
 3. **In a coach's school mailbox, if a parent replies.** Updates are sent with a coach's
-   `@wfbschools.org` address as the reply-to, so a reply lands in the district's email system like
+   `@wfbschools.com` address as the reply-to, so a reply lands in the district's email system like
    any other parent email.
 4. **Nowhere else, by rule.** The list is never exported into a spreadsheet, a shared drive, this
    repository, AWS or another service, and addresses are never copied into the site's content.

@@ -508,7 +508,7 @@ describe.runIf(hasExport)('the exported FAQ page', () => {
   /**
    * Whitespace is dropped from both sides of the comparison rather than merely collapsed.
    * Stripping a tag leaves a space where the tag was, so the mailto link in the cost answer turns
-   * "wfbschools.org." into "wfbschools.org ." in the extracted text. That is a difference in the
+   * "wfbschools.com." into "wfbschools.com ." in the extracted text. That is a difference in the
    * markup, not a missing sentence, and matching on the characters rather than the spacing is
    * what keeps this assertion about whether the answer shipped.
    */

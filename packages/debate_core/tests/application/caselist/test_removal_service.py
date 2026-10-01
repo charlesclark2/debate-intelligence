@@ -460,9 +460,11 @@ class TestRerunning:
                 bucket=access.bucket,
             )
 
-        with pytest.raises(RemovalIncomplete):
+        with pytest.raises(RemovalIncomplete) as stopped:
             await remove_team(removal_world, service=removal_world.service(takedown=flaky))
 
+        assert "Every suppression entry was appended first" in str(stopped.value)
+        assert "nothing was deleted" not in str(stopped.value), "two versions were"
         (first,) = log_entries(removal_world)
         assert first.outcome is RemovalOutcome.INCOMPLETE and first.error_code == "STORE_UNAVAILABLE"
         assert local_suppression_list_file(removal_world.data_dir).path.exists(), (

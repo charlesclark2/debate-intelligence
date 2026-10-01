@@ -96,7 +96,7 @@ checked, not assumed:
 
 | What | How it is checked |
 |---|---|
-| No page has anywhere to type an address | `site/tests/no-third-party-scripts.test.ts` parses every exported page and fails on any `form`, `input`, `textarea` or `select` |
+| No page has anywhere to type an address | `site/tests/export/no-third-party-scripts.export-test.ts` parses every exported page and fails on any `form`, `input`, `textarea` or `select` |
 | No provider script, pixel, iframe or form target on any page | The same suite fails on any element that fetches from another origin, and on any mention of a mailing provider's domain outside the one signup link, in HTML, inline scripts, page payloads and bundles |
 | The link carries nothing about the visitor | `rel="noreferrer"`, and the site's `Referrer-Policy` is `strict-origin-when-cross-origin`: the provider is not even told which page the parent came from |
 | No server-side record of the visit | CloudFront access logging is off for the site (ADR-0012 decision 8), and the two CloudFront functions log nothing |

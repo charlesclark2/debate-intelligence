@@ -228,7 +228,9 @@ jobs:
         run: scripts/terraform_checks.sh
 
   # Handed over by v1-e36-t03-site-scaffold: lint, typecheck, test and a dev build of the public team
-  # site, all offline, through the same script as the site-checks pre-commit hook.
+  # site, all offline, through the same script as the site-checks pre-commit hook. Since v1-e36-t10
+  # the script ends by running the export checks against that build (site/scripts/export-checks.sh),
+  # and they fail rather than skip if there is no export of this tree to read.
   site:
     needs: changes
     if: needs.changes.outputs.site == 'true'

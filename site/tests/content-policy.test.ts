@@ -1,6 +1,3 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
-
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { AnnouncementField, ContentPage, SiteSettings } from '@/lib/content'
@@ -20,7 +17,6 @@ import {
   referencedImages,
   resetPolicyReporting,
   unreviewedNames,
-  withoutScripts,
 } from '@/lib/publishing-policy'
 
 /**
@@ -434,37 +430,6 @@ describe('the content this site actually ships', () => {
       expect(unreviewedNames(page.guardedHtml, consent.permittedNamePhrases), page.filePath).toEqual(
         [],
       )
-    }
-  })
-})
-
-describe('the built export', () => {
-  const outDirectory = join(process.cwd(), 'out')
-  const hasExport = existsSync(join(outDirectory, 'index.html'))
-  const builtPages = hasExport
-    ? readdirSync(outDirectory, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory() && entry.name !== '_next')
-        .map((entry) => ({
-          location: `/${entry.name}/`,
-          path: join(outDirectory, entry.name, 'index.html'),
-        }))
-        .filter((entry) => existsSync(entry.path))
-        .concat([{ location: '/', path: join(outDirectory, 'index.html') }])
-        .map((entry) => ({ location: entry.location, html: readFileSync(entry.path, 'utf8') }))
-    : []
-
-  it.runIf(hasExport)('loads nothing from another origin and embeds no iframe', () => {
-    const { errors } = checkPublishingPolicy({ pages: [], settings, consent, builtPages })
-    expect(errors).toEqual([])
-  })
-
-  it.runIf(hasExport)('publishes no address outside the allowlist and no phone number', () => {
-    const allowed = new Set(settings.contactEmails.map((contact) => contact.address.toLowerCase()))
-    for (const page of builtPages) {
-      const text = withoutScripts(page.html)
-      for (const address of text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? []) {
-        expect(allowed.has(address.toLowerCase()), `${page.location} publishes ${address}`).toBe(true)
-      }
     }
   })
 })

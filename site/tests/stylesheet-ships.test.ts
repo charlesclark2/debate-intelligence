@@ -15,28 +15,14 @@
  *
  * Two levels, on purpose:
  *   1. the source imports the stylesheet, which runs on every `pnpm test`;
- *   2. the exported HTML links one and that file is in the export, which runs whenever a build
- *      has produced site/out/ (the same `describe.runIf` pattern pages-a11y.test.tsx uses).
+ *   2. the exported HTML links one and that file is in the export, which is
+ *      tests/export/stylesheet-ships.export-test.ts and runs after every build.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
-
-const outDirectory = join(process.cwd(), 'out')
-const hasExport = existsSync(join(outDirectory, 'index.html'))
-
-const EXPORTED_PAGES = [
-  'index.html',
-  'about/index.html',
-  'events/index.html',
-  'join/index.html',
-  'coaches/index.html',
-  'faq/index.html',
-  'contact/index.html',
-  'accessibility/index.html',
-]
 
 describe('the root layout imports the global stylesheet', () => {
   it('keeps the side-effect import that makes Next emit CSS', () => {
@@ -49,30 +35,5 @@ describe('the root layout imports the global stylesheet', () => {
     for (const stylesheet of ['tokens.css', 'layout.css', 'sections.css', 'components.css']) {
       expect(globals).toContain(`@import "./${stylesheet}"`)
     }
-  })
-})
-
-describe.runIf(hasExport)('the exported site carries its stylesheet', () => {
-  const stylesheetHref = (html: string) => /<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/.exec(html)?.[1]
-
-  it.each(EXPORTED_PAGES)('%s links a stylesheet', (page) => {
-    const html = readFileSync(join(outDirectory, page), 'utf8')
-    expect(stylesheetHref(html), `${page} has no <link rel="stylesheet">`).toBeDefined()
-  })
-
-  it('links a stylesheet that is actually in the export', () => {
-    const html = readFileSync(join(outDirectory, 'index.html'), 'utf8')
-    const href = stylesheetHref(html)
-    expect(href).toBeDefined()
-    expect(existsSync(join(outDirectory, href!.replace(/^\//, '')))).toBe(true)
-  })
-
-  it('ships a stylesheet with the design tokens in it, not an empty file', () => {
-    const html = readFileSync(join(outDirectory, 'index.html'), 'utf8')
-    const css = readFileSync(join(outDirectory, stylesheetHref(html)!.replace(/^\//, '')), 'utf8')
-    expect(css.length).toBeGreaterThan(1000)
-    // A custom property from tokens.css: proof the whole @import chain was bundled, not just
-    // whichever file the layout happened to name.
-    expect(css).toMatch(/--[a-z-]+:/)
   })
 })

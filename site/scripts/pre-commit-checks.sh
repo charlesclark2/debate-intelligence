@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Lint, type-check, test and build the public team site.
+# Lint, type-check, test and build the public team site, then run the export checks against the
+# build.
 #
 # Run by the `site-checks` pre-commit hook whenever anything under site/ changes, and safe to run
 # by hand from anywhere in the repository:
@@ -35,7 +36,13 @@ fi
 # disallow-everything robots.txt, and a developer's machine is never producing production files.
 export SITE_ENV="${SITE_ENV:-dev}"
 
-for task in lint typecheck test build; do
+for task in lint typecheck test; do
   echo "site checks: pnpm --dir site ${task}"
   pnpm --dir "${site_directory}" "${task}"
 done
+
+# The build, then the checks that read what it built. They come last and together because the
+# export checks cannot run without an export of this tree, and refuse to: a missing or stale
+# site/out/ fails the run (site/scripts/export-checks.sh says how). site/tests/export-checks-run.test.ts
+# fails the source tests if this line goes missing.
+"${site_directory}/scripts/export-checks.sh"

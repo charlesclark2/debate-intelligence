@@ -167,8 +167,12 @@ spec:
             args: [--dir, site, build]
           - type: test_passes
             name: Built output has no third-party scripts
-            command: pnpm
-            args: [--dir, site, test, tests/no-third-party-scripts.test.ts]
+            # Path updated by the PM, 2026-10-01. v1-e36-t10 moved every export-reading test into
+            # site/tests/export/, where they run after the build instead of skipping when there is
+            # no build. The old command fails loudly rather than passing vacuously ("No test files
+            # found", exit 1), so nothing was silently lost; this is the equivalent today.
+            args: [site/scripts/export-checks.sh]
+            command: bash
       - id: verify-and-guide
         kind: Task
         name: Opt-in loop check and coach guide

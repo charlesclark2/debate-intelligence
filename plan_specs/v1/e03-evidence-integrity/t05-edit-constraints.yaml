@@ -16,16 +16,6 @@ metadata:
     debate/title: Evidence edit policy
     debate/architecture-refs: §7, §8, ADR-006, §20 step 2
 spec:
-  # PM note, 2026-10-01, raised by v1-e03-t03's report and owned by me, not by this session.
-  # This task's (a) is "delete ranges (shrink or split selections, adding omitted ranges)", which
-  # is precisely the case the domain cannot currently represent: a Card holds one evidence_text
-  # with CardSpan offsets relative to it, and there is no place for the omitted ranges or for a
-  # second segment. t03 hit the same wall from the other side and returned an evidence-layer
-  # EvidenceMarkupSpan rather than a domain CardSpan, because ac3 needed snapshot-relative offsets.
-  # Before this task starts, I must settle whether a Card stores segments plus omitted ranges and
-  # whether CardSpan moves to snapshot offsets. Do not decide it inside this task; a representation
-  # chosen to make edit policy convenient will be the representation verification and export are
-  # then stuck with.
   description: >-
     Encode §8 step 7 as domain rules in CardEditService: student edits to quoted evidence may only
     (a) delete ranges (shrink or split selections, adding omitted ranges), (b) change markup

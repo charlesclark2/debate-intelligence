@@ -143,3 +143,11 @@ the example the first had found instead of finding it again.
 * A property is checked for what it actually generates (`--hypothesis-show-statistics`) before it
   is offered as evidence. One that rarely produces the input it was written for passes without
   testing it.
+* An attempt that errors before it runs is not a catch. A mutation that fails at collection proves
+  nothing about the check it was aimed at, and is redone or discarded rather than counted.
+* Deleting a check is a legitimate result. If mutation cannot tell a check apart from its absence,
+  the honest outcome is usually to remove it, not to write a test that justifies keeping it.
+* Catch times reported before 2026-10-01, in `v1-e03-t01` and `v1-e03-t02`, were measured without
+  database isolation. Their conclusions about which checks are load-bearing stand; their timings
+  are upper bounds on speed, not evidence of how readily a property finds a break from cold.
+  (Added by the PM.)

@@ -8,7 +8,7 @@ atAGlance:
   title: Ways to reach the team
   items:
     - label: Email a coach
-      value: Charlie Clark, Head Coach, at <charles.clark@wfbschools.org>.
+      value: Charlie Clark, Head Coach, at <charles.clark@wfbschools.com>.
     - label: Write about
       value: >-
         Joining, practice, tournaments, travel, costs, financial support, parent judging, or

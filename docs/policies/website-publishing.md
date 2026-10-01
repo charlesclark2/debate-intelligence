@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Policy version | 1.0 |
-| Status | **Approved**, version 1.0, 2026-09-20. See [Approval](#approval). |
+| Policy version | 1.1 |
+| Status | **Approved**, version 1.1, 2026-09-30. See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e36-t01-publishing-policy implementation session, 2026-09-20 |
 | Applies to | Everything published on the public Whitefish Bay debate team website at `wfbdebate.org`, in the dev preview and in prod, and every source the site is built from |
@@ -526,7 +526,7 @@ without argument.** This is the rule a parent is most likely to need.
 - Any donor listed under E38, about their own entry.
 - A coach, about anything published in error or outside this policy.
 
-**How to ask.** By email to **charles.clark@wfbschools.org**, or through the contact channel
+**How to ask.** By email to **charles.clark@wfbschools.com**, or through the contact channel
 published on the site's Contact page (`v1-e36-t04`). The request names the page, the photograph or
 the person; **no reason is required and none is weighed.** Charlie confirms the requester's
 standing only where the request concerns someone other than the requester.
@@ -695,7 +695,7 @@ policy without the answer; **open** means the answer is still needed before the 
 
 ## Approval
 
-**Version 1.0 of this policy is approved.** The core pages (`v1-e36-t04`), the first prod deploy
+**Version 1.1 of this policy is approved.** The core pages (`v1-e36-t04`), the first prod deploy
 (`v1-e36-t05`), announcements and the calendar (E37) and the donation page (E38) may proceed, each
 still subject to the [Pre-publication checklist](#pre-publication-checklist). **`v1-e36-t04` may
 include student photographs**, now that the district has confirmed its form covers website
@@ -707,11 +707,12 @@ nothing this policy governs may be published under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.0 |
+| Policy version | 1.1 |
 | Approved by | **Charlie Clark** |
 | Role | Product owner and head coach |
-| Approval date | **2026-09-20** |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.0, including the district approval recorded from Randee Drew on 2026-09-18 and the [Pre-publication checklist](#pre-publication-checklist) |
+| Approval date | **2026-09-30** for version 1.1; **2026-09-20** for version 1.0 |
+| Changes in version 1.1 | **A correction, no rule changed.** The address for removal requests (and every coach address on the site) is `charles.clark@wfbschools.com`, Charlie's district address; version 1.0 printed `charles.clark@wfbschools.org`, which is not his address. Approved by Charlie in the `v1-e37-t05-parent-email-signup` session on 2026-09-30 |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.0, carried into 1.1 unchanged apart from the address, including the district approval recorded from Randee Drew on 2026-09-18 and the [Pre-publication checklist](#pre-publication-checklist) |
 | Open questions resolved at approval | **3** — the district's media-consent form covers website publication and renews annually at the start of each season (Randee Drew, 2026-09-20), which is why consent expires and the start-of-season check exists. **4** — no district pre-launch review is wanted, so `v1-e36-t05` is not gated on one |
 | Open questions accepted as known gaps | **2** — no second holder of the registrar and AWS access; the activities office holds a route to Charlie instead |
 | Open questions left open | **1** — official district brand colors. **5** — whether the district would prefer a district-owned domain. **6** — a brand asset set that survives icon sizes. **None of the three gates publication** |

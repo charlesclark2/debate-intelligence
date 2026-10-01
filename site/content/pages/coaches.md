@@ -14,7 +14,7 @@ atAGlance:
     - label: Head coach
       value: Charlie Clark
     - label: Email
-      value: <charles.clark@wfbschools.org>
+      value: <charles.clark@wfbschools.com>
     - label: Coaching since
       value: 2007, at seven schools in Missouri, Kansas and Wisconsin.
 ---

@@ -69,7 +69,7 @@ beforeEach(() => {
 
 describe('email addresses', () => {
   it('accepts an address that is in the allowlist in content/site.yaml', () => {
-    expect(check('Write to <charles.clark@wfbschools.org>.').errors).toEqual([])
+    expect(check('Write to <charles.clark@wfbschools.com>.').errors).toEqual([])
   })
 
   it('rejects any other address, however plausible', () => {

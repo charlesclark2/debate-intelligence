@@ -76,7 +76,10 @@ spec:
       description: >-
         The suppression list is an append-only JSONL of sha256, removed_at, reason code and request id, merged
         (set union) between local and S3 on every run, and readable through the SuppressionList port so
-        v2-e35-t05 can use it.
+        v2-e35-t05 can use it. Amended 2026-09-30 with the operator's approval (session report, Deviations):
+        a --team removal of a file another team or a camp file also holds, without --include-shared, appends
+        one disclosure-scoped entry per withdrawn path, carrying the sha256 of that disclosure's caselist and
+        path (never the path itself), so the next cumulative archive cannot record the requester's copy again.
     - id: ac5
       description: >-
         Each execution appends one entry to the removal log (local and manifests/_suppression/removal-log.jsonl)
@@ -88,7 +91,7 @@ spec:
         appends an un-suppress entry and a removal-log entry, after which re-importing the synthetic
         snapshot stores the file again, and the suppression list file is never rewritten.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

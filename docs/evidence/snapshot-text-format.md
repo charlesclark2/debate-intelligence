@@ -145,6 +145,87 @@ hot path, which is the path that matters. Measured against the filesystem store 
 **A caller checking many cards against one source loads the snapshot once and reuses the
 `LoadedSnapshot`.** It does not skip the check, and it does not load once per card.
 
+## Verifying a card against its snapshot
+
+Owner task: `v1-e03-t04-verifier`. `EvidenceVerifier`
+([`debate_core.application.evidence_verifier`](../../packages/debate_core/src/debate_core/application/evidence_verifier.py))
+decides whether a card is finished evidence; the checks that need no I/O are in
+[`debate_core.evidence.verifier`](../../packages/debate_core/src/debate_core/evidence/verifier.py).
+For one card it:
+
+1. checks the card: evidence text and offsets, `normalized_text_hash`, `normalizer_version` and at
+   least one span are present, the normalizer version is one this code has, and every required
+   citation field is marked verified;
+2. finds the snapshot record by the card's `snapshot_id` and loads it with `SnapshotService.load`,
+   so every integrity check in the previous section runs;
+3. checks the card cites the article the snapshot was taken of (`article_id`), and records the
+   snapshot's `normalized_text_hash` and `normalizer_version`;
+4. cuts the evidence again from the stored normalized text at the card's offsets, with the same
+   extractor that cut it (`reconstruct_card_evidence`, the one place this happens), and compares it
+   with the card's `evidence_text` exactly: no case folding, no Unicode or whitespace normalization,
+   no similarity measure;
+5. checks every span lies inside the reconstructed evidence.
+
+The result is a `VerificationResult`: `VERIFIED` or `UNVERIFIED`, every reason found, and
+`checks_run`, the checks that were attempted. A result cannot be constructed `VERIFIED` with a
+reason or with any check missing from `checks_run`. `EvidenceVerifier` is the only code that sets
+`VERIFIED`, on a result or on a card; a source scan fails if anything else does.
+
+How failures become reason codes:
+
+| Failure | Reason code |
+|---|---|
+| The card names no snapshot; the record or a blob is `NotFound` | `SNAPSHOT_MISSING` |
+| `load`'s `unknown_normalizer_version` check; the card's own version unknown | `UNKNOWN_NORMALIZER_VERSION` |
+| Any other `load` check; the card's hash or version is not the record's; the extractor's `SnapshotTextMismatch` | `HASH_MISMATCH` |
+| Evidence text, offsets, text hash, normalizer version or spans missing from the card | `CARD_INCOMPLETE` |
+| The reconstruction is not the card's `evidence_text` | `TEXT_MISMATCH`, with the first differing offset |
+| The offsets do not select evidence from the text (`InvalidSelection`); a span outside the evidence | `SPAN_OUT_OF_RANGE` |
+| A required citation field not marked verified | `CITATION_UNVERIFIED` |
+| The card's `article_id` is not its snapshot's | `ARTICLE_MISMATCH` |
+
+The first differing offset is in **evidence-text coordinates**: an index into the card's
+`evidence_text`. While a card quotes one contiguous range, the snapshot offset is
+`evidence_start_offset` plus it. When one text is a prefix of the other, it is the shorter one's
+length, and an edit inside a run of equal characters is reported where the two texts diverge.
+
+A store that cannot be reached (`StoreError`) is not a verdict about the card and propagates, as
+does any other unexpected exception: an `UNVERIFIED` card is the wrong way to report a bug.
+
+**The finished-evidence guard re-verifies.** `EvidenceVerifier.ensure_finished(card)` raises
+`UnverifiedEvidenceError` unless verifying the card now gives `VERIFIED`. It does not read the card's
+`verification_status`, which anyone can construct as `VERIFIED`; every exporter and presenter calls
+it before showing a card as finished. It costs one `load` per card (see the timings above).
+
+### What VERIFIED guarantees
+
+* The card's `evidence_text` is, character for character, the snapshot's stored normalized text at
+  the card's offsets.
+* That text, and the raw bytes, hash to what the snapshot record says, under the normalizer version
+  the record and the card both name, which this code has.
+* The card cites the article its snapshot was taken of.
+* Every span marks text inside that evidence.
+* Every required citation field carries the citation service's verified flag.
+
+### What it does not guarantee yet
+
+* **The raw bytes are hashed, not re-extracted.** Nothing re-runs the content extractor on the raw
+  bytes and compares its output with the stored text: that extractor arrives with E04, and is
+  reproducible only if it is deterministic for its `extractor_version`. Until then the chain from a
+  card ends at the stored normalized text. `checks_run` never lists a raw-bytes reproduction.
+* **The normalizer is not re-run over the stored text.** Only `SnapshotService.create` writes
+  snapshot text, and it writes normalizer output. A record and blobs written together outside
+  `create` pass `load` whether or not their text is normalized; a fixed-point check would catch the
+  un-normalized case and miss invented normalized text, so it is no defence against forgery, and it
+  would make verification depend on the pinned Unicode database.
+* **The record is trusted to be the one that was written.** Verification proves a card matches the
+  record it names and the bytes match the record. A record and blobs replaced together, consistently,
+  are not detectable here; the card's own `normalized_text_hash` catches a replaced record only if
+  the card was not replaced with it.
+* **Citation flags are read, not re-checked.** The verifier does not look metadata up again.
+* **Cards quote one contiguous range.** Omitted ranges (ADR-0018) arrive with `v1-e03-t07`, which
+  extends `reconstruct_card_evidence`.
+
 ## Changing the format
 
 A released format is never edited. A change to the keys, the encoding or what is stored gets a new
@@ -165,3 +246,10 @@ their keys and must stay readable, because cards were cut from them.
 | Any change to either blob, including a valid re-written paragraph map, fails `load` | hypothesis, `test_integrity_any_change_to_either_blob_is_refused` |
 | Span extraction re-derives the paragraph map from the text under its normalizer version and refuses a mismatch before resolving any paragraph ID, including for a `SnapshotText` that never went through `load` (`debate_core.evidence.extractor`) | `test_extract_refuses_a_paragraph_boundary_moved_to_another_valid_offset`, `test_extract_refuses_any_paragraph_map_the_text_does_not_have`; hypothesis, `test_extract_refuses_any_moved_paragraph_boundary_before_resolving_a_paragraph` |
 | Storing the same source twice stores one copy of each blob, on disk | `tests/integration/test_snapshot_local.py` |
+| `EvidenceVerifier` gives `VERIFIED`, with every check run, for a card cut by the extractor from an intact snapshot | `test_a_card_cut_from_an_intact_snapshot_is_verified_with_no_reasons` (`test_verifier.py`) |
+| A single substituted, inserted or deleted character in a card's evidence is `TEXT_MISMATCH` at the offset where the texts first differ | `test_every_single_character_edit_is_a_text_mismatch_at_its_own_offset` |
+| A missing snapshot, a tampered blob and an unknown normalizer version are reason codes, never exceptions | `test_a_card_whose_snapshot_record_does_not_exist_is_snapshot_missing`, `test_a_tampered_raw_blob_is_a_hash_mismatch`, `test_a_snapshot_under_an_unknown_normalizer_version_is_unverified_with_that_code` and neighbours |
+| No fabricated, paraphrased or single-character-mutated card verifies | `test_no_fabrication_passes`, `test_no_single_character_mutation_of_any_honest_card_passes` (`test_verifier_adversarial.py`, fixtures in `tests/fixtures/verification/`) |
+| The finished-evidence guard re-verifies and ignores a card's own claim to be `VERIFIED` | `test_ensure_finished_rejects_a_hand_built_card_claiming_verified_with_altered_text` |
+| A card citing another article than its snapshot's is `ARTICLE_MISMATCH`, and its quotation is still checked | `test_a_card_citing_another_article_than_its_snapshots_is_an_article_mismatch`, `test_a_misattributed_card_with_altered_text_reports_both` |
+| Nothing but `EvidenceVerifier` writes `VERIFIED` | `test_verified_is_set_only_by_the_evidence_verifier` |

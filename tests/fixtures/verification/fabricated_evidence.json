@@ -1,0 +1,211 @@
+{
+  "about": "Fabricated and paraphrased evidence that must never verify (v1-e03-t04 ac5). Invented text only: every place, body and figure is made up. Each source's normalized text, every honest card's evidence and every expected offset was written by hand from the source, never produced by running the verifier or the normalizer. Offsets are code points. A fabrication claims its card's snapshot and offsets unless it says otherwise in `claims`. `first_differing_offset` is an index into the fabricated evidence text (evidence-text coordinates). Non-ASCII and invisible characters are written as \\u escapes so they can be reviewed.",
+  "sources": [
+    {
+      "name": "levee",
+      "extracted": "The Corvàne levee board said the wall “will not hold” past 2031.\r\n\r\nIts engineers put the risk of a breach at 1 in 40 — higher than the 1 in 100 standard.\n",
+      "normalized": "The Corvàne levee board said the wall “will not hold” past 2031.\n\nIts engineers put the risk of a breach at 1 in 40 — higher than the 1 in 100 standard.",
+      "note": "Paragraph one is 0-64 (64 code points; the à at 8, the curly quotes at 38 and 52, \"not\" at 44-47, \"2031\" at 59-63). The break is 64-66. Paragraph two is 66-152 (86 code points; within it \"1 in 40\" is 42-49, the em dash 50, \"standard.\" 77-86). The no-break space in the extracted text normalizes to a space.",
+      "cards": [
+        {
+          "name": "levee board warning",
+          "start": 0,
+          "end": 64,
+          "evidence_text": "The Corvàne levee board said the wall “will not hold” past 2031.",
+          "fabrications": [
+            {
+              "kind": "negation dropped",
+              "evidence_text": "The Corvàne levee board said the wall “will hold” past 2031.",
+              "first_differing_offset": 44
+            },
+            {
+              "kind": "curly quotes straightened",
+              "evidence_text": "The Corvàne levee board said the wall \"will not hold\" past 2031.",
+              "first_differing_offset": 38
+            },
+            {
+              "kind": "year changed",
+              "evidence_text": "The Corvàne levee board said the wall “will not hold” past 2081.",
+              "first_differing_offset": 61
+            },
+            {
+              "kind": "homoglyph: Cyrillic o in the name",
+              "evidence_text": "The Cоrvàne levee board said the wall “will not hold” past 2031.",
+              "first_differing_offset": 5
+            },
+            {
+              "kind": "accent decomposed (NFD a + combining grave)",
+              "evidence_text": "The Corvàne levee board said the wall “will not hold” past 2031.",
+              "first_differing_offset": 8
+            },
+            {
+              "kind": "paraphrase",
+              "evidence_text": "The Corvàne levee board warned the wall “cannot hold” beyond 2031.",
+              "first_differing_offset": 24
+            },
+            {
+              "kind": "ellipsis stored in place of a cut",
+              "evidence_text": "The Corvàne levee board said the wall “will … hold” past 2031.",
+              "first_differing_offset": 44
+            },
+            {
+              "kind": "case changed",
+              "evidence_text": "the Corvàne levee board said the wall “will not hold” past 2031.",
+              "first_differing_offset": 0
+            },
+            {
+              "kind": "trailing space appended",
+              "evidence_text": "The Corvàne levee board said the wall “will not hold” past 2031. ",
+              "first_differing_offset": 64
+            },
+            {
+              "kind": "honest text, offsets shifted one character right",
+              "evidence_text": "The Corvàne levee board said the wall “will not hold” past 2031.",
+              "claims": {"start": 1, "end": 65},
+              "first_differing_offset": 0
+            }
+          ]
+        },
+        {
+          "name": "breach risk",
+          "start": 66,
+          "end": 152,
+          "evidence_text": "Its engineers put the risk of a breach at 1 in 40 — higher than the 1 in 100 standard.",
+          "fabrications": [
+            {
+              "kind": "odds changed by an inserted digit",
+              "evidence_text": "Its engineers put the risk of a breach at 1 in 400 — higher than the 1 in 100 standard.",
+              "first_differing_offset": 49
+            },
+            {
+              "kind": "em dash folded to a hyphen",
+              "evidence_text": "Its engineers put the risk of a breach at 1 in 40 - higher than the 1 in 100 standard.",
+              "first_differing_offset": 50
+            },
+            {
+              "kind": "em dash written as two hyphens",
+              "evidence_text": "Its engineers put the risk of a breach at 1 in 40 -- higher than the 1 in 100 standard.",
+              "first_differing_offset": 50
+            },
+            {
+              "kind": "truncated before the comparison",
+              "evidence_text": "Its engineers put the risk of a breach at 1 in 40",
+              "first_differing_offset": 49
+            },
+            {
+              "kind": "no-break space kept from the raw text",
+              "evidence_text": "Its engineers put the risk of a breach at 1 in 40 — higher than the 1 in 100 standard.",
+              "first_differing_offset": 43
+            },
+            {
+              "kind": "doubled space kept from the raw text",
+              "evidence_text": "Its engineers put the risk of a breach at 1 in  40 — higher than the 1 in 100 standard.",
+              "first_differing_offset": 47
+            }
+          ]
+        },
+        {
+          "name": "whole levee article",
+          "start": 0,
+          "end": 152,
+          "evidence_text": "The Corvàne levee board said the wall “will not hold” past 2031.\n\nIts engineers put the risk of a breach at 1 in 40 — higher than the 1 in 100 standard.",
+          "fabrications": [
+            {
+              "kind": "paragraph break flattened to a space",
+              "evidence_text": "The Corvàne levee board said the wall “will not hold” past 2031. Its engineers put the risk of a breach at 1 in 40 — higher than the 1 in 100 standard.",
+              "first_differing_offset": 64
+            },
+            {
+              "kind": "paragraphs reordered",
+              "evidence_text": "Its engineers put the risk of a breach at 1 in 40 — higher than the 1 in 100 standard.\n\nThe Corvàne levee board said the wall “will not hold” past 2031.",
+              "first_differing_offset": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "aquifer",
+      "extracted": "Groundwater in the Tessaly basin fell 4 metres in a decade.\r\n\r\nFarmers there now pump twice what the aquifer recharges.\n\nWithout new limits, the wells will run dry by 2040.\n",
+      "normalized": "Groundwater in the Tessaly basin fell 4 metres in a decade.\n\nFarmers there now pump twice what the aquifer recharges.\n\nWithout new limits, the wells will run dry by 2040.",
+      "note": "Paragraph one is 0-59, two is 61-117 (\"pump\" at 18-22 within it), three is 119-170 (\"new\" at 8-11, \"run\" at 35-38, \"2040\" at 46-50 within it).",
+      "cards": [
+        {
+          "name": "farmers pump",
+          "start": 61,
+          "end": 117,
+          "evidence_text": "Farmers there now pump twice what the aquifer recharges.",
+          "fabrications": [
+            {
+              "kind": "paraphrase of the same length",
+              "evidence_text": "Farmers there now draw twice what the aquifer recharges.",
+              "first_differing_offset": 18
+            },
+            {
+              "kind": "invented claim behind a true opening",
+              "evidence_text": "Farmers there have cut pumping by half since the drought.",
+              "first_differing_offset": 14
+            },
+            {
+              "kind": "true text attributed to another source",
+              "evidence_text": "Farmers there now pump twice what the aquifer recharges.",
+              "claims": {"source": "levee", "start": 0, "end": 56},
+              "first_differing_offset": 0
+            }
+          ]
+        },
+        {
+          "name": "whole aquifer article",
+          "start": 0,
+          "end": 170,
+          "evidence_text": "Groundwater in the Tessaly basin fell 4 metres in a decade.\n\nFarmers there now pump twice what the aquifer recharges.\n\nWithout new limits, the wells will run dry by 2040.",
+          "fabrications": [
+            {
+              "kind": "spliced: first and last paragraphs joined over the middle one",
+              "evidence_text": "Groundwater in the Tessaly basin fell 4 metres in a decade.\n\nWithout new limits, the wells will run dry by 2040.",
+              "first_differing_offset": 61
+            },
+            {
+              "kind": "paragraphs reordered, same length",
+              "evidence_text": "Farmers there now pump twice what the aquifer recharges.\n\nGroundwater in the Tessaly basin fell 4 metres in a decade.\n\nWithout new limits, the wells will run dry by 2040.",
+              "first_differing_offset": 0
+            }
+          ]
+        },
+        {
+          "name": "wells run dry",
+          "start": 119,
+          "end": 170,
+          "evidence_text": "Without new limits, the wells will run dry by 2040.",
+          "fabrications": [
+            {
+              "kind": "negation inserted",
+              "evidence_text": "Without new limits, the wells will not run dry by 2040.",
+              "first_differing_offset": 35
+            },
+            {
+              "kind": "homoglyph: Cyrillic e",
+              "evidence_text": "Without nеw limits, the wells will run dry by 2040.",
+              "first_differing_offset": 9
+            },
+            {
+              "kind": "zero-width space inserted",
+              "evidence_text": "Without​ new limits, the wells will run dry by 2040.",
+              "first_differing_offset": 7
+            },
+            {
+              "kind": "full-width digits",
+              "evidence_text": "Without new limits, the wells will run dry by ２０４０.",
+              "first_differing_offset": 46
+            },
+            {
+              "kind": "truncated before the date",
+              "evidence_text": "Without new limits, the wells will run dry",
+              "first_differing_offset": 42
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

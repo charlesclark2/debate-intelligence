@@ -43,6 +43,7 @@ DELIVERY_FRAMEWORKS = "The domain and application layers never import a delivery
 CORE_NEVER_IMPORTS_DELIVERY = "debate_core never imports a delivery package"
 DELIVERY_INDEPENDENCE = "The delivery packages are independent of one another"
 COMPOSITION_ROOT = "Delivery packages reach debate_core.integrations only through their composition root"
+DELIVERY_NEVER_IMPORTS_TESTING = "Delivery packages never import debate_core.testing"
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,18 @@ VIOLATIONS = [
         COMPOSITION_ROOT,
     ),
     Violation("debate_api.boundary_probe", "import debate_core.integrations.s3", COMPOSITION_ROOT),
+    # Test support in a front end, where build_card could hand out VERIFIED cards (v1-e03-t04).
+    Violation(
+        "debate_cli.commands.boundary_probe",
+        "from debate_core.testing.builders import build_card",
+        DELIVERY_NEVER_IMPORTS_TESTING,
+    ),
+    Violation("debate_api.boundary_probe", "import debate_core.testing", DELIVERY_NEVER_IMPORTS_TESTING),
+    Violation(
+        "debate_workers.boundary_probe",
+        "from debate_core.testing import fakes",
+        DELIVERY_NEVER_IMPORTS_TESTING,
+    ),
 ]
 
 

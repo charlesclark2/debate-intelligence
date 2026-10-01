@@ -315,9 +315,50 @@ the task worktree.
 * **Rendering a cut that holds only a paragraph break (`v1-e06` renderer).** Paragraphs selected as
   separate parts leave an `OmittedRange` over just `"\n\n"`. Whether that renders as an ellipsis or
   a plain paragraph break is a renderer decision. `ParagraphRun` avoids it at the source.
-* **`docs/evidence/snapshot-text-format.md`:** its guarantees table could add that span extraction
-  now re-checks the paragraph map against the text at the point of use. `docs/` was outside this
-  task's package list, so I did not edit it.
+* **`docs/evidence/snapshot-text-format.md`:** done after review, once `docs/evidence` was added
+  to this task's package list (Changes after PM review).
+
+## Changes after PM review
+
+The PM accepted the work and amended three specs in this worktree. I committed those edits and the
+review unchanged as `edce03f`, then made the three changes the PM asked for.
+
+1. **Specs and ROADMAP.** `uv run python scripts/validate_specs.py` → `OK: 292 files, 38 epics, 234
+   tasks, 20 releases`. `uv run python scripts/spec_index.py` → `ROADMAP.md updated`, committed as
+   `c0a060b`. The diff is status only: t02 and t03 now show `Succeeded`, and v1.0 shows 21 done
+   instead of 19. The t04 edit produced no ROADMAP change. `spec_index.py` renders release
+   descriptions but never task descriptions, so the old note was never in ROADMAP.md. It was in
+   t04's parsed description, which is what t02's report pointed out. The PM's fix is still right.
+2. **`docs/evidence/snapshot-text-format.md`.** One new row in the guarantees table: span extraction
+   re-derives the paragraph map from the text and refuses a mismatch before resolving any paragraph
+   ID, including for a `SnapshotText` that never went through `load`. It names the two example tests
+   and the property that hold it; I checked all three names exist. "Only the blob's own hash
+   notices" now reads "Of the checks on the stored document, only the blob's own hash notices", with
+   a pointer to that row. Nothing else in the page changed.
+3. **No change to `debate_core.domain` or to `EvidenceMarkupSpan`.**
+
+**The fresh-database rule** is now §8 of `docs/process/working-agreements.md`, beside §6's rule on
+what counts as evidence from a test. It says every mutation run sets `HYPOTHESIS_STORAGE_DIRECTORY`
+to a new empty directory, and that a report giving catch times says so. I added one bullet the PM's
+review asked for in prose: check a property's generator statistics before offering it as evidence.
+
+**Two statements in the new t04 comment do not match this report.** I left them as written, as
+instructed, and raise them here so t04 does not build on them:
+
+* *"the extractor IS deterministic for its extractor_version… re-running extraction over the raw
+  bytes is a real reproduction."* `extractor_version` belongs to the E04 content extractor, which
+  turns raw bytes into text. This task's `EvidenceExtractor` only slices normalized text and never
+  reads raw bytes, so this task settles nothing about whether the content extractor is
+  deterministic. t02's open question, idempotence check versus re-extraction, is still open.
+* *"t03 also suggests two reason codes of its own, PARAGRAPH_MAP_MISMATCH and
+  SELECTION_OUT_OF_RANGE."* This report suggested mapping `SnapshotTextCheck.PARAGRAPH_MAP` to
+  `HASH_MISMATCH` and `InvalidSelection` to t04's existing `SPAN_OUT_OF_RANGE`. A separate selection
+  code is defensible on the comment's own reasoning. A separate paragraph-map code is less so: a map
+  that disagrees with its text can only reach the extractor from a `SnapshotText` that did not come
+  intact through `load`, which is a hash problem.
+
+After these changes: `uv run pytest packages/debate_core/tests/evidence -k "extract or markup"` →
+`130 passed`, and `uv run scripts/check_links.py` → `OK`.
 
 ## PM review
 

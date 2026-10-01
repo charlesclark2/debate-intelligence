@@ -260,18 +260,142 @@ None. Every command in this task finished in under 20 seconds and was run in the
   hand-built `LoadedSnapshot`.
 - **E06 exporters:** call `await verifier.ensure_finished(card)` before rendering a finished card.
   Tests can use `VerificationWorld` for one card that verifies and one that does not.
-- **For the PM: the card's `article_id` is not compared with its snapshot's.** A card citing one
-  article while quoting another's snapshot verifies today. That is a provenance check, outside this
-  spec's list, and no reason code fits it cleanly. Listed under "What it does not guarantee yet" in
-  the format doc.
+- ~~For the PM: the card's `article_id` is not compared with its snapshot's.~~ Done after PM review
+  (`ARTICLE_MISMATCH`, see Changes after PM review).
+
+## Changes after PM review
+
+The PM accepted the work and asked for two changes before the PR. Both are committed.
+
+**1. A card citing another article than its snapshot's is `ARTICLE_MISMATCH`** (`63d8c48`).
+
+- `VerificationCheck.ARTICLE_MATCHES_SNAPSHOT` is in `REQUIRED_CHECKS`. `ReasonCode.ARTICLE_MISMATCH`
+  is new. The comparison is `card.article_id != snapshot.article_id` in `check_against_snapshot`,
+  against the record `_load` already holds.
+- **Reconstruction still runs when the articles differ.** Decision 8 skips reconstruction only when
+  it would compare nothing: when the card's text hash or normalizer version contradicts the
+  snapshot's, the offsets point into other text. A wrong `article_id` says nothing about the offsets.
+  They still point into this snapshot's text, so whether the quotation is verbatim is a separate
+  fact worth reporting. A misattributed verbatim card gets `ARTICLE_MISMATCH` alone. A misattributed,
+  altered card gets `ARTICLE_MISMATCH` and `TEXT_MISMATCH`.
+- Tests:
+  - `test_a_card_citing_another_article_than_its_snapshots_is_an_article_mismatch`: the reason code,
+    the detail, and that every check ran.
+  - `test_a_misattributed_card_with_altered_text_reports_both`.
+  - `test_a_card_citing_its_snapshots_article_passes_the_article_check`: a matching card is
+    unaffected.
+  - An `article` case added to `test_ensure_finished_raises_for_every_unverified_card`.
+- Mutants, same runner, fresh `HYPOTHESIS_STORAGE_DIRECTORY` per run, all caught:
+
+  | Mutant | Failed / run | Caught by |
+  |---|---|---|
+  | Article comparison dropped (`if False:`) | 3 / 115 | the article tests and the guard's `article` case |
+  | Article check removed entirely (no comparison, not recorded as run) | 13 / 115 | ac1's `checks_run` assertions and the result's every-check rule |
+  | Article mismatch skips reconstruction | 2 / 115 | both article tests (the second reason and `checks_run`) |
+
+- In the format doc: a step, a row in the reason-code table, a VERIFIED guarantee and a row in the
+  guarantees table. The item is gone from "What it does not guarantee yet".
+- `VERIFIER_VERSION` stays `evidence-verifier-v1`. The check set changed before any result left this
+  unmerged branch, so no stored result was reached under the old rules.
+
+**2. Delivery packages may not import `debate_core.testing`** (`12520f1`).
+
+- New contract in `pyproject.toml`: "Delivery packages never import debate_core.testing", type
+  `forbidden`. Sources are `debate_cli`, `debate_api` and `debate_workers`, and indirect chains are
+  forbidden too. Together with the layers contract, which already keeps `application` and
+  `integrations` out, no production code can reach `build_card`. The VERIFIED scan's allow-list
+  entry for `debate_core/testing/builders.py` now rests on structure.
+- Shown failing: a probe `packages/debate_cli/src/debate_cli/testing_import_probe.py` importing
+  `debate_core.testing.builders` → `Delivery packages never import debate_core.testing BROKEN`,
+  `Contracts: 10 kept, 1 broken`, naming `debate_cli.testing_import_probe -> debate_core.testing.builders`.
+  After the probe was removed, `Contracts: 11 kept, 0 broken`.
+- `tests/architecture/test_import_contracts.py` requires every contract to have a case shown to break
+  it (`test_every_configured_contract_is_proven_to_fail`). It gains three, one per delivery package:
+  `32 passed`.
+
+**Deviation 6 (PM-authorised): edits outside `constraints.packages`.** `pyproject.toml`, for the
+contract. `tests/architecture/test_import_contracts.py`, for its breaking cases: without them, that
+file's every-contract test fails.
+
+**Reruns after both changes:**
+
+- `uv run pytest packages/debate_core/tests/evidence/test_verifier.py packages/debate_core/tests/evidence/test_verifier_adversarial.py`
+  → `115 passed`.
+- `uv run pytest packages/debate_core/tests/evidence/test_verifier.py -k finished` → `10 passed`.
+- The wider suite (`packages/debate_core/tests/{evidence,application,domain,testing}`,
+  `tests/architecture`, `tests/docs`, `--no-cov`) → `2016 passed in 15.09s`.
+- `uv run lint-imports` → `Contracts: 11 kept, 0 broken.`
+- `uv run pyright packages/debate_core` → `0 errors`.
+- `uv run scripts/validate_specs.py` → `OK: 296 files, 38 epics, 238 tasks, 20 releases`.
+- `uv run ruff check .` and `uv run ruff format --check .` pass, and `scripts/check_links.py` → OK.
 
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-01
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with two small changes to make before the pull request opens (the
+last two items below). I read `application/evidence_verifier.py` on the branch rather than relying
+on this report for the parts that carry the guarantee: `ensure_finished` does call `verify` and
+never reads `card.verification_status`, and `_load` converts exactly `NotFound` and
+`SnapshotIntegrityError`, with everything else propagating.
+
+**Decision 1 is the right answer, and better argued than I asked for.** I offered "re-verify, or
+require a result bound to the card's content". You showed why the second is weaker than it sounds:
+results are not stored, so a saved card has nothing to bind to, and a frozen dataclass can be
+constructed or `replace`d by anyone, so a binding proves only that somebody computed it. Re-verifying
+trusts nothing the card says, at a measured cost. The test that a card stored UNVERIFIED but
+verifying now passes the guard makes the semantics explicit: the guard judges the evidence, not
+the stored claim.
+
+**The idempotence probe is the method I want to see more of.** Asked to show what the check catches
+that the hashes do not, you built both cases and found the honest answer: one thing (a consistent
+record around un-normalized text), which no code path writes, which a forger defeats by normalizing
+first, and which would tie every verification to the pinned Unicode database. Leaving it out, and
+recording why in the module and the format doc, is the right call.
+
+**Removing the duplicated every-check-ran rule is mutation used properly.** Combined mutants showed
+each rule was the other's backstop, so you kept the one on the result type, which also guards future
+constructors, and showed the ac1 `checks_run` assertions still catch a forgotten check with both
+gone. This is the second session in a row to delete a check on that evidence rather than write a test
+to justify it.
+
+**ac2 and ac5 by enumeration rather than sampling.** All 169 single-character edits of one card and
+1,743 mutations of six honest cards, with the honest cards required to verify so a verifier that
+refused everything would fail the file. Enumerating where the space is small enough is stronger
+than a property, and you said why there are no Hypothesis statistics instead of leaving the gap.
+
+**Deviations 1 to 5 are accepted.** The layer split is forced by the layers contract and puts the
+I/O-free checks at the spec's path. `CARD_INCOMPLETE` is justified: without it a card with nothing cut
+compares `""` with `""`, and every existing code would send the reader after the wrong problem. Not
+building t03's `CardMarkup` is correct, because highlight-within-underline is formatting, not fidelity
+to the source. `verify_and_record` anticipates exactly the trap t05 would otherwise walk into.
+Decision 3, requiring the card's text hash where the domain does not, errs on the safe side and
+closes a record-replacement hole.
+
+**The `docs/evidence` package entry I added before you started worked.** The format doc now says
+what verification guarantees and what it does not yet, which is where the next reader will look.
+
+**Change 1, PM decision on your `article_id` follow-up: check it now.** A card citing one article
+while quoting another article's snapshot is a misattributed quotation, the precise failure ADR-0006
+exists to prevent, and today it verifies. The verifier already holds the snapshot record, and
+`SourceSnapshot` carries `article_id`, so this is one comparison. Add it as its own check with a new
+reason code, `ARTICLE_MISMATCH`. None of the existing codes fits, as you said, and a provenance
+failure should not be reported as tampering. It goes in `REQUIRED_CHECKS`, gets a test, a mutant shown
+caught, a row in the format doc's guarantees table, and moves out of "What it does not guarantee yet".
+
+**Change 2: make the builders allow-list structural.** The VERIFIED scan allow-lists
+`debate_core/testing/builders.py` because `build_card` passes its caller's status through. That is
+safe only while no production package imports `debate_core.testing`, and nothing enforces that: the
+layers contract stops `application` importing it, but no contract covers `debate_cli`, `debate_api`
+or `debate_workers`. None does today; I checked. Add an import-linter contract forbidding those three
+from importing `debate_core.testing`, and show it fail on a deliberate import. `pyproject.toml` is
+outside your package list; I am authorising the edit, so list it as a deviation. An allow-list entry
+that depends on an unenforced convention is the pattern this project keeps finding, and here it costs
+a few lines to close.

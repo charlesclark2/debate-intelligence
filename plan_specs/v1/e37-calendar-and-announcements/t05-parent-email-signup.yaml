@@ -20,7 +20,8 @@ spec:
     Give parents and guardians a way to get team updates by email without the platform ever holding their
     addresses. Compare the district's existing parent messaging tool (preferred if the activities director
     allows team use, since the district already owns consent and lists) with a mailing service free tier
-    (double opt-in, one-click unsubscribe, list owned by a team/district account with two owners, open/click
+    (double opt-in, one-click unsubscribe, list controlled by a team/district identity that at least two
+    people can independently recover - see ac6 - open/click
     tracking disabled where possible), record the choice and Charlie's reasoning in
     docs/guides/parent-email-updates.md, and have the operator set it up. The site gets a "Get email updates"
     section on the home and contact pages that links out to the provider's hosted signup page (or a plain HTML
@@ -63,9 +64,26 @@ spec:
       description: >-
         Charlie subscribes a test address through the dev preview, receives the confirmation (double opt-in)
         email, confirms, receives a test update and unsubscribes with one click.
+    - id: ac6
+      description: >-
+        At least two people can independently regain control of the list and its subscriber data,
+        and the recovery path has been tested rather than described. Amended by the PM on
+        2026-09-30, replacing "two owners": a second Buttondown seat costs $79 a month, which is
+        disproportionate for a high-school team, and it is also not the control that matters. The
+        risk is not that one person's seat is revoked; it is that nobody can get into the account at
+        all, and password recovery runs through the mailbox the account is registered to. So the
+        requirement is: the list is registered to the team identity ADR-0015 names, that identity's
+        mailbox has at least two people who can reach it, the credentials are held somewhere a
+        second person can retrieve them, the recovery path has been walked through at least once by
+        someone who is not Charlie, and a subscriber export is taken periodically and kept where the
+        team controls it, so the list survives the loss of the account entirely. Registering it to
+        one person's address with no second route in is acceptable only as an interim state with a
+        dated commitment to transfer, recorded in the guide; it is not acceptable as the end state,
+        because the data in that list belongs to parents who were promised they could leave it.
     - id: ac5
       description: >-
-        The guide explains how a coach sends an update, the no-student-contact-info and first-names-only rules
+        The guide explains how a coach sends an update, the student rules as docs/policies/website-publishing.md
+        states them (cited, never restated, so email and site cannot diverge), the rules
         from the publishing policy, and who owns the list.
 status:
   phase: Pending
@@ -121,7 +139,7 @@ spec:
           - type: custom
             name: List configured and team-owned
             description: >-
-              Charlie confirms double opt-in is on, the list has two owners on a team/district identity, and
+              Charlie confirms double opt-in is on, the list meets ac6's recovery requirement, and
               only the public signup URL was shared for the site.
       - id: signup-section
         kind: Task

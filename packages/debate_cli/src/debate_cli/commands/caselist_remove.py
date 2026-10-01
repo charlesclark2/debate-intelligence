@@ -325,6 +325,16 @@ def _source_lines(number: int, source: PlannedSource, plan: RemovalPlan) -> list
         held.append(f"{source.camp_file_holders} camp file(s)")
     also = f"; also held by {' and '.join(held)}" if held else ""
     lines = [f"  {number}. {source.sha256}  ({size}{also})"]
+    held_here = (
+        source.disclosures
+        or source.camp_files
+        or source.local_blob
+        or any(planned.sha256 == source.sha256 for planned in plan.objects)
+    )
+    if source.disposition is Disposition.REMOVE and not held_here:
+        lines.append(
+            "     held nowhere in this environment: it is only suppressed, so no import can bring it in"
+        )
     if source.already_suppressed:
         lines.append("     already suppressed by this request: finishing what a previous run left")
     for ref in source.disclosures:

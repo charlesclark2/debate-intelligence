@@ -273,3 +273,18 @@ def test_a_mistaken_removal_is_reversed_and_the_file_is_imported_again(
     )  # fmt: skip
     assert reimported["data"]["counts"]["SUPPRESSED"] == 0
     assert (installation / "dev" / "blobs" / "sha256" / BAYVIEW[0:2] / BAYVIEW[2:4] / BAYVIEW).exists()
+
+
+def test_a_sha256_held_nowhere_is_planned_as_a_suppression_only(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """The runbook's manual-procedure backfill: hashes recorded before this command existed."""
+    unknown = "0" * 64
+    result = runner.invoke(
+        create_app(),
+        ["caselist", "remove", "--source", unknown, "--request", "RM-2026-04", "--reason", "POLICY"],
+    )
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    assert "held nowhere in this environment: it is only suppressed" in result.stdout
+    assert "SUPPRESSION ENTRIES appended to the list, here and in the bucket: 1" in result.stdout

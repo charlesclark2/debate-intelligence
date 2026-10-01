@@ -283,9 +283,9 @@ I checked read-only with `sts get-caller-identity`.)
    log**. Record `RM-2026-90` in the register as the exercise. A scratch local store keeps it off
    your real dev data directory.
 
-   ```bash
+   ```zsh
    cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e30-t07-source-removal
-   git branch --show-current            # task/v1-e30-t07-source-removal
+   git branch --show-current
    aws sso login --sso-session debate
    export DEBATE_ENV=dev
    export DEBATE_STORAGE__DATA_DIR="$(mktemp -d)/evidence"
@@ -304,6 +304,7 @@ I checked read-only with `sts get-caller-identity`.)
    uv run debate-research caselist status --caselist testcl26
    aws s3api list-object-versions --profile debate-dev-evidence-removal --bucket debate-dev-evidence-a7508de8 \
        --prefix raw/caselist/testcl26/ --query 'length(Versions)'
+   unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR X
    ```
 
    Success looks like:

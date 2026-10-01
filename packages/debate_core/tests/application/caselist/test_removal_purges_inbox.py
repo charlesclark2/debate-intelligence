@@ -123,6 +123,10 @@ QX_APPLEDOUBLE = "__MACOSX/Maple Grove/QX/._Maple Grove-QX-Aff-Grove City Invita
 QX_LOCK_FILE = "Maple Grove/QX/~$ple Grove-QX-Aff-Grove City Invitational-Round 1.docx"
 ZALU_ROUND_3 = "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-Aff-Grove City Invitational-Round 3.docx"
 
+#: Directory entries in the 09-22 archive (see :func:`next_mondays_archive`).
+QX_DIRECTORY_ENTRY = "testcl26-0922/Maple Grove/QX/"
+ZALU_DIRECTORY_ENTRY = "testcl26-0922/Cedar Hollow/ZaLu/"
+
 #: A file another team discloses for the first time in the week that has not been imported yet.
 ZALU_LAKESHORE = "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-Neg-Lakeshore Open-Round 4.docx"
 ZALU_LAKESHORE_BODY = _docx(("Lakeshore Open, round four, negative.", "Filed in the week not yet imported."))
@@ -166,7 +170,9 @@ def next_mondays_archive(*, with_a_new_file_of_the_team: bool = False) -> bytes:
     """The 09-22 weekly as the site serves it: the 09-15 archive, plus ZaLu's new Lakeshore negative.
 
     Written the way `build_snapshot_zips` writes a week: under a `testcl26-0922/` wrapper, the
-    zip-slip entry at the top level, fixed timestamps.
+    zip-slip entry at the top level, fixed timestamps. It also carries directory entries for the
+    team's directory and ZaLu's, as zips made by some tools do: the reader ignores them, and a
+    rewrite has to drop the team's, which names it, and keep ZaLu's.
     """
     members = [
         *SNAPSHOTS[-1].members_for(zip_form=True),
@@ -177,6 +183,8 @@ def next_mondays_archive(*, with_a_new_file_of_the_team: bool = False) -> bytes:
     bodies = {ZALU_LAKESHORE: ZALU_LAKESHORE_BODY, QX_LAKESHORE: QX_LAKESHORE_BODY}
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for directory in (QX_DIRECTORY_ENTRY, ZALU_DIRECTORY_ENTRY):
+            archive.writestr(zipfile.ZipInfo(directory, date_time=_ZIP_TIMESTAMP), b"")
         for member in sorted(members, key=lambda one: one.path):
             name = member.path if member.path.startswith("../") else f"testcl26-0922/{member.path}"
             info = zipfile.ZipInfo(name, date_time=_ZIP_TIMESTAMP)
@@ -663,7 +671,8 @@ class TestNothingPendingIsLost:
                 QX_LOCK_FILE,
             )
         }
-        assert taken_out <= set(original)
+        taken_out.add(QX_DIRECTORY_ENTRY)
+        assert taken_out <= set(original) and ZALU_DIRECTORY_ENTRY in original
         assert entries(waiting) == {name: data for name, data in original.items() if name not in taken_out}
         assert (inbox / camp_release_inbox_name()).read_bytes() == release_before
         assert sorted(path.name for path in inbox.iterdir()) == [

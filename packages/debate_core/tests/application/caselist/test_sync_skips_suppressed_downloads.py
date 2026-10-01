@@ -36,6 +36,12 @@ from debate_core.application.caselist.openev_import_service import OpenEvImportS
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import SourceSelector
+from debate_core.application.caselist.suppression import (
+    SUPPRESSION_LIST_KEY,
+    LocalFallbackSuppressionList,
+    ObjectStoreAppendOnlyRecord,
+    RecordedSuppressionList,
+)
 from debate_core.application.caselist_sync import (
     OPENEV_DELIVERIES_FILENAME,
     CaselistSyncService,
@@ -45,7 +51,7 @@ from debate_core.application.caselist_sync import (
     SelectionDecision,
     SyncStage,
 )
-from debate_core.application.errors import StoreCredentialsExpired
+from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired
 from debate_core.application.ports.caselist_source import (
     ArchiveListing,
     CaselistInfo,
@@ -53,13 +59,20 @@ from debate_core.application.ports.caselist_source import (
     OpenEvFile,
     openev_inbox_name,
 )
-from debate_core.application.ports.suppression import ReasonCode, SuppressionEntry, SuppressionList
+from debate_core.application.ports.evidence_store import ObjectInfo, ObjectKey
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    SuppressionList,
+    UnreadableAppendOnlyRecord,
+)
 from debate_core.application.sync_runs import record_for_summary
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsSnapshotStore
 from debate_core.integrations.local.archive_reader import read_archive
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes import InMemoryAppendOnlyRecord, empty_suppression_list
 
 from .conftest import REQUEST, RemovalWorld
 
@@ -172,29 +185,32 @@ def world(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> RemovalW
 
 
 def build_sync(
-    world: RemovalWorld, source: FakeOpenEvSource, *, skip_reads: SuppressionList | None = None
+    world: RemovalWorld,
+    source: FakeOpenEvSource,
+    *,
+    skip_reads: SuppressionList | None = None,
+    pull_list: SuppressionList | None = None,
 ) -> CaselistSyncService:
     """The pull as the composition root builds it when the environment names a bucket.
 
-    `skip_reads` replaces the list the run's own skip reads, and only that one: the importers
-    always read the real union, so a test can blind the skip and watch the importer stand alone.
+    One list object, shared by the importers and the run's skip: both copies, falling back to this
+    machine's when the bucket's needs a login. `pull_list` replaces that shared object.
+    `skip_reads` replaces only the list the skip reads, so a test can blind the skip and watch the
+    importer stand alone.
     """
+    shared = pull_list or LocalFallbackSuppressionList(world.suppression(), local=local_only(world))
     repository = world.repository
     blobs = FsSnapshotStore(world.data_dir)
     return CaselistSyncService(
         source=source,
-        archive_importer=CaselistImportService(
-            caselists=repository, blobs=blobs, suppression=world.suppression()
-        ),
-        openev_importer=OpenEvImportService(
-            caselists=repository, blobs=blobs, suppression=world.suppression()
-        ),
+        archive_importer=CaselistImportService(caselists=repository, blobs=blobs, suppression=shared),
+        openev_importer=OpenEvImportService(caselists=repository, blobs=blobs, suppression=shared),
         local=world.local,
         read_archive=lambda path: read_archive(path, **LIMITS),
         event_for_caselist=lambda slug: Event.LD,
         inbox=world.data_dir / "inbox",
         state_dir=world.data_dir,
-        suppression=skip_reads if skip_reads is not None else world.suppression(),
+        suppression=skip_reads if skip_reads is not None else shared,
         publisher=CaselistPublishService(
             local=world.local, remote=world.bucket, suppression=world.suppression()
         ),
@@ -202,7 +218,14 @@ def build_sync(
     )
 
 
-async def pull(world: RemovalWorld, source: FakeOpenEvSource, **options: SuppressionList) -> RunSummary:
+def local_only(world: RemovalWorld) -> RecordedSuppressionList:
+    """This machine's copy of the list, and nothing else."""
+    return RecordedSuppressionList(local_suppression_list_file(world.data_dir))
+
+
+async def pull(
+    world: RemovalWorld, source: FakeOpenEvSource, **options: SuppressionList | None
+) -> RunSummary:
     summary = await build_sync(world, source, **options).run([CASELIST])
     assert summary.succeeded, summary.stages
     return summary
@@ -574,3 +597,152 @@ async def test_the_delivery_record_holds_digests_and_ids_and_nothing_a_name_coul
     }
     text = json.dumps(written)
     assert "Quillfeather" not in text and "Harbor" not in text and "QDI" not in text
+
+
+# ------------------------------------------------------------------------------------------------
+# An expired AWS session (after PM review): the pull's list falls back to this machine's copy
+# ------------------------------------------------------------------------------------------------
+
+
+class RefusingStore:
+    """The bucket as the everyday profile reaches it, refusing every read the same way."""
+
+    def __init__(self, error: Exception | None = None, *, body: bytes = b"") -> None:
+        self.error = error
+        self.body = body
+
+    async def get_file(self, key: ObjectKey, destination: Path) -> ObjectInfo:
+        if self.error is not None:
+            raise self.error
+        destination.write_bytes(self.body)
+        return ObjectInfo(key=key, size=len(self.body))
+
+    async def put_file(self, key: ObjectKey, source: Path) -> ObjectInfo:
+        raise self.error or AssertionError("nothing may be appended")
+
+    async def head(self, key: ObjectKey) -> ObjectInfo:
+        raise AssertionError("not used")
+
+    async def list_objects(self, prefix: str) -> tuple[ObjectInfo, ...]:
+        raise AssertionError("not used")
+
+
+EXPIRED = StoreCredentialsExpired(hint="aws sso login --profile debate-dev-evidence")
+
+
+def suppression_entry(sha: str) -> SuppressionEntry:
+    return SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=sha,
+        recorded_at=PULLED_AT,
+        reason=ReasonCode.REQUESTED_BY_CAMP,
+        request_id=REQUEST,
+    )
+
+
+def pull_list_over(local: InMemoryAppendOnlyRecord, bucket: RefusingStore) -> LocalFallbackSuppressionList:
+    """The container's pull list, with the bucket's copy behind `bucket`."""
+    return LocalFallbackSuppressionList(
+        RecordedSuppressionList(local, ObjectStoreAppendOnlyRecord(bucket, SUPPRESSION_LIST_KEY)),  # type: ignore[arg-type]
+        local=RecordedSuppressionList(local),
+    )
+
+
+async def test_missing_or_expired_credentials_read_this_machines_copy_and_say_why() -> None:
+    local = InMemoryAppendOnlyRecord(lines=[suppression_entry(ESTUARY_SHA256).to_line()])
+    pull_list = pull_list_over(local, RefusingStore(EXPIRED))
+
+    entries = await pull_list.entries()
+
+    assert [entry.sha256 for entry in entries] == [ESTUARY_SHA256]
+    assert pull_list.fallbacks == 1
+    assert pull_list.local_only_reason is not None and "aws sso login" in pull_list.local_only_reason
+
+
+@pytest.mark.parametrize(
+    "bucket",
+    [
+        pytest.param(RefusingStore(StoreAccessDenied("GetObject", SUPPRESSION_LIST_KEY)), id="access-denied"),
+        pytest.param(RefusingStore(body=b'{"schema_version":1,"act'), id="torn-line"),
+    ],
+)
+async def test_any_other_failure_to_read_the_buckets_copy_still_fails_closed(bucket: RefusingStore) -> None:
+    pull_list = pull_list_over(InMemoryAppendOnlyRecord(), bucket)
+
+    with pytest.raises((StoreAccessDenied, UnreadableAppendOnlyRecord)):
+        await pull_list.entries()
+
+    assert pull_list.fallbacks == 0 and pull_list.local_only_reason is None
+
+
+async def test_an_append_never_falls_back_to_one_copy() -> None:
+    local = InMemoryAppendOnlyRecord()
+    pull_list = pull_list_over(local, RefusingStore(EXPIRED))
+
+    with pytest.raises(StoreCredentialsExpired):
+        await pull_list.append([suppression_entry(ESTUARY_SHA256)])
+
+    assert await local.read_lines() == ()
+
+
+async def test_an_expired_session_imports_skips_and_records_that_the_local_copy_alone_was_read(
+    world: RemovalWorld,
+) -> None:
+    """512 removed on this machine; the session then expires and 514 is listed.
+
+    The import completes, 512 is still skipped as removed, and the summary and both stages that
+    read the list say this machine's copy alone was read, and why.
+    """
+    source = FakeOpenEvSource([(ESTUARY, DOCUMENT_BODIES["estuary-solvency"])])
+    await pull(world, source)
+    await remove_source(world, ESTUARY_SHA256)
+    orchard = OpenEvFile(
+        openev_id=514, path=f"openev/{YEAR}/Brightwater/Orchard Kritik.docx", year=YEAR, tags=("policy",)
+    )
+    source.files.append((orchard, DOCUMENT_BODIES["orchard-kritik"]))
+    expired = LocalFallbackSuppressionList(
+        RecordedSuppressionList(
+            local_suppression_list_file(world.data_dir),
+            ObjectStoreAppendOnlyRecord(RefusingStore(EXPIRED), SUPPRESSION_LIST_KEY),  # type: ignore[arg-type]
+        ),
+        local=local_only(world),
+    )
+
+    summary = await build_sync(world, source, pull_list=expired).run([CASELIST])
+
+    assert summary.succeeded, summary.stages
+    assert decisions(summary) == {
+        ESTUARY.openev_id: SelectionDecision.SKIPPED_AS_REMOVED,
+        514: SelectionDecision.DOWNLOAD,
+    }
+    assert summary.blobs_stored == 1
+    reason = summary.suppression_list_local_copy_only
+    assert reason is not None and "aws sso login" in reason
+    assert summary.as_json()["suppression_list_local_copy_only"] == reason
+    for stage in (SyncStage.SELECT, SyncStage.IMPORT):
+        record = summary.stage(stage)
+        assert record is not None and "this machine's copy of the suppression list alone was read" in (
+            record.reason or ""
+        ), stage
+
+
+async def test_a_run_that_never_needed_the_list_does_not_report_an_earlier_runs_fallback(
+    world: RemovalWorld,
+) -> None:
+    """The record is per run: the second run reads no list (512 is held by its row) and says nothing."""
+    source = FakeOpenEvSource([(ESTUARY, DOCUMENT_BODIES["estuary-solvency"])])
+    expired = LocalFallbackSuppressionList(
+        RecordedSuppressionList(
+            local_suppression_list_file(world.data_dir),
+            ObjectStoreAppendOnlyRecord(RefusingStore(EXPIRED), SUPPRESSION_LIST_KEY),  # type: ignore[arg-type]
+        ),
+        local=local_only(world),
+    )
+    service = build_sync(world, source, pull_list=expired)
+
+    first = await service.run([CASELIST])
+    second = await service.run([CASELIST])
+
+    assert first.suppression_list_local_copy_only is not None
+    assert second.suppression_list_local_copy_only is None
+    assert decisions(second) == {ESTUARY.openev_id: SelectionDecision.ALREADY_IMPORTED}

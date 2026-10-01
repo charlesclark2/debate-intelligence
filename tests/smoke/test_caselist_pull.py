@@ -399,9 +399,12 @@ def test_an_expired_session_still_imports_and_what_was_removed_here_stays_out(
     decisions = {one["openev_id"]: one["decision"] for one in data["openev_selections"]}
     assert decisions == {OPENEV_FILE_ID: "skipped_as_removed", 513: "download", 514: "download"}
     assert data["blobs_stored"] == 1, "only 514's bytes are new and not removed"
-    summary = next(row for row in release_manifest(installation) if row["kind"] == "summary")
-    assert summary["classifications"]["SUPPRESSED"] == 1, "513, the removed bytes under another path"
-    assert not any(row.get("sha256") == removed for row in release_manifest(installation))
+    # 513 is the removed bytes under another camp's path: refused, so no row and nothing imported.
+    # (The release summary's SUPPRESSED count describes only the latest import, which was 514's.)
+    assert data["files_imported"] == 1
+    rows = [row for row in release_manifest(installation) if row["kind"] == "member"]
+    assert not any(row["sha256"] == removed or "openev-513-" in row["path"] for row in rows)
+    assert any("openev-514-" in row["path"] for row in rows)
     assert stages["publish"]["outcome"] == "pending"
     assert "aws sso login" in data["suppression_list_local_copy_only"]
     assert "this machine's copy of the suppression list alone" in stages["import"]["reason"]

@@ -135,6 +135,15 @@ stages are then recorded as **pending** in a small local file, and the next run 
 `caselist pull --publish-pending` — completes them. Nothing that was captured is lost by a login
 that timed out overnight.
 
+The one thing the local stages read from the bucket is the removal suppression list: the importers
+and the skip of a removed camp file read both copies when there is a bucket. When the bucket's copy
+cannot be read for want of a login — credentials missing or expired, and nothing else — they read
+this machine's copy alone, and the run says so: `suppression_list_local_copy_only` in the summary
+carries the reason, and the select or import stage that fell back adds a sentence to its own. An
+access denial or an unreadable list is not a login that timed out, and still fails the import. See
+:class:`~debate_core.application.caselist.suppression.LocalFallbackSuppressionList` for why this is
+safe while one machine imports, and the condition for revisiting it.
+
 ## Which run a `caselist pull` is
 
 :func:`run_pull` chooses between the three things the command can be asked for — a dry run, a
@@ -193,7 +202,7 @@ from debate_core.application.caselist.publish_service import (
     SourceResult,
 )
 from debate_core.application.caselist.status_service import CaselistStatusService, NoCaselistEvidence
-from debate_core.application.caselist.suppression import load_suppression_state
+from debate_core.application.caselist.suppression import LocalFallbackSuppressionList, load_suppression_state
 from debate_core.application.errors import (
     DomainError,
     ProviderRateLimited,
@@ -1033,6 +1042,13 @@ class RunSummary:
     bulk_download_window_start: datetime | None = None
     """Where those 24 hours began, or `None` when the run never planned (`--publish-pending`)."""
 
+    suppression_list_local_copy_only: str | None = None
+    """Why the suppression list was read from this machine's copy alone, or `None` if it was not.
+
+    Set when the bucket's copy needed a login the run did not have; see "Credentials, and stages
+    that come back later" in the module docstring.
+    """
+
     @property
     def archives_seen(self) -> int:
         return len(self.archives)
@@ -1128,6 +1144,7 @@ class RunSummary:
             "bulk_download_window_start": (
                 self.bulk_download_window_start.isoformat() if self.bulk_download_window_start else None
             ),
+            "suppression_list_local_copy_only": self.suppression_list_local_copy_only,
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -1166,9 +1183,19 @@ class _RunTally:
     bulk_downloads_allowed: int = 0
     bulk_downloads_spent_in_window: int = 0
     bulk_download_window_start: datetime | None = None
+    suppression_list_local_copy_only: str | None = None
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
+
+    def add_to_reason(self, stage: SyncStage, sentence: str) -> None:
+        """Append `sentence` to the reason the latest record of `stage` gives."""
+        for index in range(len(self.stages) - 1, -1, -1):
+            record = self.stages[index]
+            if record.stage is stage:
+                reason = f"{record.reason}; {sentence}" if record.reason else sentence
+                self.stages[index] = StageRecord(stage=stage, outcome=record.outcome, reason=reason)
+                return
 
 
 @dataclass(frozen=True, slots=True)
@@ -1320,7 +1347,9 @@ class CaselistSyncService:
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
             tally = _RunTally()
+            fallbacks = self._suppression_fallbacks()
             plan = await self._selection_stage(caselists, tally)
+            self._note_local_copy_only(tally, SyncStage.SELECT, since=fallbacks)
             if dry_run:
                 self._plan_remaining_stages(plan, tally)
             else:
@@ -1690,7 +1719,9 @@ class CaselistSyncService:
 
     async def _execute(self, plan: SyncPlan, tally: _RunTally) -> None:
         await self._download_stage(plan, tally)
+        fallbacks = self._suppression_fallbacks()
         await self._import_stage(tally)
+        self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
         await self._publish_stage(tally, drain_pending=True)
         await self._parse_stage(plan, tally)
         await self._landscape_stage(plan, tally)
@@ -2141,6 +2172,22 @@ class CaselistSyncService:
         tally.files_skipped += sum(report.skipped.values())
         tally.blobs_stored += report.newly_stored_blobs
 
+    def _suppression_fallbacks(self) -> int:
+        """How many reads of the list have fallen back to this machine's copy so far."""
+        if isinstance(self._suppression, LocalFallbackSuppressionList):
+            return self._suppression.fallbacks
+        return 0
+
+    def _note_local_copy_only(self, tally: _RunTally, stage: SyncStage, *, since: int) -> None:
+        """Say on `stage`, and in the summary, that it read this machine's copy of the list alone."""
+        if not isinstance(self._suppression, LocalFallbackSuppressionList):
+            return
+        if self._suppression.fallbacks == since:
+            return
+        reason = self._suppression.local_only_reason
+        tally.suppression_list_local_copy_only = reason
+        tally.add_to_reason(stage, f"this machine's copy of the suppression list alone was read: {reason}")
+
     def _manifest_path(self, key: str) -> Path:
         path_for = self._local.object_path_for
         if path_for is None:
@@ -2175,6 +2222,7 @@ class CaselistSyncService:
             bulk_downloads_allowed=tally.bulk_downloads_allowed,
             bulk_downloads_spent_in_window=tally.bulk_downloads_spent_in_window,
             bulk_download_window_start=tally.bulk_download_window_start,
+            suppression_list_local_copy_only=tally.suppression_list_local_copy_only,
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:
@@ -2405,9 +2453,10 @@ class _SuppressionReadOnce:
     """The suppression list as one selection reads it: at most once, and only if a decision needs it.
 
     Most runs list no camp file the manifest has lost track of, and those never read the list. A
-    list that cannot be read — an expired SSO session, when it includes the bucket's copy, or a
-    torn line — is `None` here, logged once, and the decisions that need it say so (see
-    :meth:`CaselistSyncService._judge_unrecorded`); the selection itself does not fail.
+    list that cannot be read — the bucket's copy refused, or a torn line; an expired session falls
+    back to this machine's copy before it gets here — is `None` here, logged once, and the
+    decisions that need it say so (see :meth:`CaselistSyncService._judge_unrecorded`); the
+    selection itself does not fail.
     """
 
     def __init__(self, suppression: SuppressionList) -> None:

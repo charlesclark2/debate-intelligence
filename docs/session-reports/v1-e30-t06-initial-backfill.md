@@ -28,8 +28,8 @@ Central (04:44 UTC on the 29th) instead of Sunday. It fetched 5 weeklies and pub
 new files, with none pending. The first Policy
 weekly and the 105 Policy camp files are in. Dev `caselist status` agreed on all 14 snapshots,
 and the dev bucket holds the 09-15 manifest the node criterion names. The Policy
-and PF weeklies continue. After run 3 (Tue 29 September, 8:18 pm Central) **14 downloads are left**
-(Policy 6, PF 8), three more runs, finishing on the evening of Friday 2 October. The site's cap
+and PF weeklies continue. After run 4 (Wed 30 September, 8:07 pm Central) **9 downloads are left**
+(Policy 3, PF 6), two more runs, finishing on the evening of Friday 2 October. The site's cap
 turned out to be per date rather than a rolling 24 hours; a run 20½ hours after the previous day's
 five was granted all five.
 

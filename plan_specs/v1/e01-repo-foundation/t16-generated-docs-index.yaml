@@ -1,0 +1,135 @@
+# TASK v1-e01-t16-generated-docs-index — Generate the docs index instead of hand-editing it
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §17 (guardrails)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t16-generated-docs-index
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: Generate the docs index instead of hand-editing it
+spec:
+  description: >-
+    docs/README.md carries a hand-maintained table with one row per document, and working agreement 3
+    requires every task that adds a document to add its row. The result is that one shared file sits
+    in the path of every doc-producing task, and two concurrent ones collide there by construction.
+    It has now happened four times, and three sessions have additionally had to record a deviation
+    because the agreement required them to touch a file their package list excluded - a package list
+    the PM wrote, three times, each time forgetting the agreement. Blaming the sessions or patching
+    the package lists treats the symptom: the index is derived information kept by hand, which is the
+    same shape as ROADMAP.md before scripts/spec_index.py, and it fails the same two ways. It
+    conflicts whenever two tasks touch it, and it goes quietly stale when a document is renamed,
+    moved or deleted, because nothing checks that the table still describes the tree. Generate it the
+    way the roadmap is generated, with a --check mode in CI, and the conflicts and the deviations and
+    the staleness all stop being possible rather than being discouraged. Out of scope: the content of
+    any document, the shape of docs/ itself, and ROADMAP.md, which already works this way.
+  priority: 3
+  constraints:
+    packages: [scripts, docs, .github/workflows]
+    forbidden:
+      - A generated index whose descriptions are written in the generator rather than in the documents
+      - A check that catches an added document but not a renamed, moved or deleted one
+      - Leaving working agreement 3 telling sessions to hand-edit an index that is now generated
+      - Regenerating in a commit hook or in CI, which hides drift rather than reporting it
+  context:
+    - kind: TaskRef
+      name: v1-e01-t05-spec-tooling
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A script generates docs/README.md's document table from the files under docs/, taking each
+        row's description from the document itself rather than from a list inside the generator, so
+        adding a document never means editing the index. Where a document's description comes from
+        (front matter, a first descriptive line, or a convention the task defines) is stated in the
+        script's own docstring, and a document that does not provide one fails the generator with a
+        message naming the file.
+    - id: ac2
+      description: >-
+        A `--check` mode exits non-zero when the committed index differs from the generated one, and
+        it is wired into CI the way scripts/spec_index.py --check is. It catches a renamed, moved or
+        deleted document as well as an added one; a test proves each of those four cases
+        independently, because an index that only notices additions is the failure this task exists
+        to end.
+    - id: ac3
+      description: >-
+        Run against the tree as it stands, the generator reproduces the index that is committed
+        today, apart from ordering the task may choose to define. Any row it would change is reviewed
+        line by line and the differences are explained in the report, not accepted because the script
+        produced them.
+    - id: ac4
+      description: >-
+        Working agreement 3 no longer asks a session to add an index line by hand, and says what it
+        asks for instead. scripts/task_helper.py's kickoff prompt is corrected in the same way, so a
+        session is not told one thing by the agreement and another by its prompt. Both cite this task
+        so the reason survives the people who remember it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t16-generated-docs-index-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Decide where a description lives, write the generator and its check, reconcile it with the
+    committed index, then correct the agreement and the kickoff prompt.
+  goalRef:
+    name: v1-e01-t16-generated-docs-index
+  graph:
+    nodes:
+      - id: describe-and-generate
+        kind: Task
+        name: Generator and check
+        description: >-
+          Settle where each document's one-line description lives, generate the table from the tree,
+          and add --check. Reproduce the four drift cases as failing tests first.
+        outputs: [scripts/docs_index.py, tests/scripts/test_docs_index.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Docs index tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_docs_index.py]
+      - id: reconcile
+        kind: Task
+        name: Reconcile with the committed index
+        description: >-
+          Run the generator against the tree, review every row it would change, and explain each
+          difference rather than accepting the output.
+        dependsOn: [describe-and-generate]
+        outputs: [docs/README.md]
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: The committed index matches the generated one
+            command: uv
+            args: [run, scripts/docs_index.py, --check]
+      - id: agreement-and-prompt
+        kind: Task
+        name: Correct the agreement and the kickoff prompt
+        description: >-
+          Working agreement 3 and task_helper's PROMPT stop asking for a hand-written index line and
+          say what they ask for instead.
+        dependsOn: [reconcile]
+        outputs: [docs/process/working-agreements.md, scripts/task_helper.py]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Repository links still resolve
+            command: uv
+            args: [run, scripts/check_links.py]
+status:
+  phase: Pending

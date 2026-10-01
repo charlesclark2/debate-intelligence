@@ -26,6 +26,7 @@ New records use the template in [0000-template.md](0000-template.md).
 | [0012](0012-web-hosting.md) | Web hosting — a static export on S3 and CloudFront, under one team domain | Accepted 2026-09-20 | Private bucket + CloudFront with origin access control, security headers at the edge, no access logging; the public team site first, the V2 app later under the same domain. |
 | [0013](0013-two-environments-and-dev-main-promotion.md) | Two environments (dev, prod) and dev→main promotion | Accepted 2026-09-17 | Supersedes the `stage` environment in proposal [§4](../architecture/architecture_proposal.md#4-technology-stack) and [§5](../architecture/architecture_proposal.md#5-aws-cloud-architecture); operational detail in [docs/process/branching-and-environments.md](../process/branching-and-environments.md). |
 | [0014](0014-debate-file-editor.md) | Debate file editor and format reference (CardMirror) | Accepted 2026-09-20 | CardMirror is a compatibility target for every debate `.docx` we write, and an allowed (not mandated) team editor; not embedded or forked. Evidence in [cardmirror-evaluation.md](../architecture/cardmirror-evaluation.md). |
+| [0015](0015-website-content-editing.md) | Coaches edit the website through a team Google Calendar and a Google Sheet | Proposed 2026-09-29 | Events from a public team calendar, announcements from a sheet's published tab, page text stays in git; one team Google account with two owners owns both. Accepted after a second coach's dry-run. |
 | [0016](0016-caselist-corpus-is-accumulated.md) | The caselist corpus is accumulated from windows, not captured | Superseded 2026-09-21 | Claimed no full export exists and decided a daily sync. Both were wrong: the site publishes `<caselist>-all-<date>.zip` and retains weekly archives back to 2026-07-07, and the daily cadence contradicted the approved data-use policy. Its measurements of the three September windows stand and are carried into [0017](0017-caselist-corpus-is-retrievable.md). |
 | [0017](0017-caselist-corpus-is-retrievable.md) | The caselist corpus is retrievable, and the sync stays weekly | Accepted 2026-09-21 | Supersedes [0016](0016-caselist-corpus-is-accumulated.md): the site publishes a complete archive and retains a weekly back-catalogue, so the backfill starts from the full archive and the sync stays at the policy's weekly cadence. |
 
@@ -34,15 +35,14 @@ New records use the template in [0000-template.md](0000-template.md).
 Some numbers are already referenced by task specs but the ADR files themselves have not
 been written yet. Keep the numbers reserved for these topics; write the record when the
 decision lands. A reservation moves into the index above when its record is written —
-0012 did so in `v1-e36-t02-site-hosting`.
+0012 did so in `v1-e36-t02-site-hosting`, 0015 in `v1-e37-t01-content-editing-decision`.
 
 | ADR | Topic | Owning spec |
 |---|---|---|
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
-| 0015 | How coaches edit website content (calendar source and CMS) | [`v1-e37-t01-content-editing-decision`](../../plan_specs/v1/e37-calendar-and-announcements/t01-content-editing-decision.yaml) |
 
 New ADRs take the next free number after the highest written or reserved one: **0018** is the
-next free number (0015 is reserved by v1-e37-t01). Do not skip numbers; if a reservation is dropped, note it here rather than silently
+next free number. Do not skip numbers; if a reservation is dropped, note it here rather than silently
 reusing the number.
 
 ## Proposing a new ADR (ADR-0018+)

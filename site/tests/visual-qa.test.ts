@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
@@ -16,7 +15,6 @@ const {
   buildReport,
   filePathFor,
   findFailures,
-  pagePaths,
   parseArguments,
 } = visualQa
 
@@ -35,7 +33,6 @@ const {
  */
 
 const EXPORT_DIRECTORY = join(process.cwd(), 'out')
-const hasExport = existsSync(join(EXPORT_DIRECTORY, 'index.html'))
 
 describe('the options', () => {
   it('defaults both floors to 95, which is what the task spec sets', () => {
@@ -80,18 +77,6 @@ describe('serving the export the way the origin serves it', () => {
 
   it('refuses a path that climbs out of the export', () => {
     expect(filePathFor('/../../etc/passwd')).toBeNull()
-  })
-})
-
-describe('the pages under test', () => {
-  it.runIf(hasExport)('is every page in the built sitemap, and nothing typed by hand', async () => {
-    const paths = await pagePaths()
-    const sitemap = readFileSync(join(EXPORT_DIRECTORY, 'sitemap.xml'), 'utf8')
-    const listed = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
-      (match) => new URL(match[1] as string).pathname,
-    )
-    expect(paths).toEqual(listed)
-    expect(paths).toContain('/')
   })
 })
 

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { render, screen, within } from '@testing-library/react'
@@ -314,39 +314,5 @@ describe('a navigation that does not match the content fails the build', () => {
       '---\ntitle: A page\ndescription: A page.\nexcludeFromNavigation: true\n---\n\nCopy.\n',
     )
     expect(page.excludeFromNavigation).toBe(true)
-  })
-})
-
-/** The built files, which is what a visitor actually gets. */
-const outDirectory = join(process.cwd(), 'out')
-const hasExport = existsSync(join(outDirectory, 'index.html'))
-
-describe.runIf(hasExport)('the exported navigation', () => {
-  const read = (slug: string) =>
-    readFileSync(
-      slug === 'home' ? join(outDirectory, 'index.html') : join(outDirectory, slug, 'index.html'),
-      'utf8',
-    )
-
-  const section = (html: string, tag: 'header' | 'footer') =>
-    new RegExp(`<${tag}[\\s\\S]*?</${tag}>`).exec(html)?.[0] ?? ''
-
-  it.each(settings.primaryNavigation)('%s marks itself current in the export', (slug) => {
-    const route = pages.find((page) => page.slug === slug)!.route
-    const header = section(read(slug), 'header')
-    expect(header, `${slug} has no header in the export`).not.toBe('')
-    const current = [...header.matchAll(/<a[^>]*aria-current="page"[^>]*>/g)]
-    expect(current, `${slug} marks no navigation link as the current page`).toHaveLength(1)
-    expect(current[0]?.[0]).toContain(`href="${route}"`)
-  })
-
-  it.each(settings.primaryNavigation)('%s keeps the utility links in the footer', (slug) => {
-    const html = read(slug)
-    expect(section(html, 'footer')).toContain('href="/accessibility/"')
-    expect(section(html, 'header')).not.toContain('href="/accessibility/"')
-  })
-
-  it('marks nothing current on a page outside the navigation', () => {
-    expect(section(read('accessibility'), 'header')).not.toContain('aria-current')
   })
 })

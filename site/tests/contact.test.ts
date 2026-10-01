@@ -1,6 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-
 import { describe, expect, it } from 'vitest'
 
 import { loadPage, loadPages, loadSiteSettings } from '@/lib/content'
@@ -14,10 +11,6 @@ import { loadPage, loadPages, loadSiteSettings } from '@/lib/content'
  * link is the whole mechanism: the visitor's own mail client sends the message, so nothing about
  * them ever reaches this site, this repository or AWS.
  */
-
-const outDirectory = join(process.cwd(), 'out')
-const builtContact = join(outDirectory, 'contact', 'index.html')
-const hasExport = existsSync(builtContact)
 
 describe('the contact page', () => {
   const page = loadPage('contact')
@@ -67,24 +60,5 @@ describe('the contact page', () => {
 
   it('tells a visitor how to have something taken off the site', () => {
     expect(published.toLowerCase()).toMatch(/remov/)
-  })
-})
-
-describe('the built contact page', () => {
-  it.runIf(hasExport)('carries a mailto link and nothing that collects data', () => {
-    const html = readFileSync(builtContact, 'utf8')
-    expect(html).toContain('href="mailto:charles.clark@wfbschools.com"')
-    // The navigation's disclosure button is part of the frame, so only form controls that would
-    // collect something are forbidden here.
-    for (const pattern of [/<form\b/i, /<input\b/i, /<textarea\b/i, /<select\b/i]) {
-      expect(html, `the built contact page contains ${pattern}`).not.toMatch(pattern)
-    }
-  })
-
-  it.runIf(hasExport)('sets no cookie and uses no browser storage anywhere in the export', () => {
-    const html = readFileSync(builtContact, 'utf8')
-    for (const pattern of [/document\.cookie/, /localStorage/, /sessionStorage/]) {
-      expect(html, `the built contact page uses ${pattern}`).not.toMatch(pattern)
-    }
   })
 })

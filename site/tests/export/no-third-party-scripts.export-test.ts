@@ -1,9 +1,11 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
 import { EMAIL_UPDATES_ID, loadEmailUpdatesContent } from '@/lib/content'
+
+import { exportDirectory as outDirectory } from './built-export'
 
 /**
  * The built site loads nothing from the mailing provider, or from anyone else, and has nothing
@@ -20,17 +22,13 @@ import { EMAIL_UPDATES_ID, loadEmailUpdatesContent } from '@/lib/content'
  * follow. Its exact address is allowed in the page payload because that is where the link's href
  * travels; any other mention of the provider's host fails.
  *
- * Like the other suites that read site/out, this skips when there is no export, because CI runs
- * test before build. The acceptance run builds first:
- *
- *     pnpm --dir site build && pnpm --dir site test tests/no-third-party-scripts.test.ts
- *
- * and the first two tests below fail on an export left over from before the section existed, so
- * a stale export cannot pass this suite by default.
+ * It is one of the export checks (tests/export/vitest.config.ts): site/scripts/export-checks.sh
+ * builds the export and then runs it, and built-export.ts refuses to hand over an export that was
+ * not built from the tree under test, so it can neither skip on a clean runner nor pass against
+ * an export left over from another commit. The first test below still asserts that the export
+ * carries the email-updates section, which is now a statement about the code rather than a guard
+ * against a stale build.
  */
-
-const outDirectory = join(process.cwd(), 'out')
-const hasExport = existsSync(join(outDirectory, 'index.html'))
 
 const emailUpdates = loadEmailUpdatesContent()
 
@@ -133,8 +131,8 @@ function parse(html: string): Document {
   return new DOMParser().parseFromString(html, 'text/html')
 }
 
-describe.skipIf(!hasExport)('the built site, site/out', () => {
-  const htmlFiles = hasExport ? filesUnder(outDirectory, '.html') : []
+describe('the built site, site/out', () => {
+  const htmlFiles = filesUnder(outDirectory, '.html')
   const documents = htmlFiles.map((path) => ({
     path: exported(path),
     html: readFileSync(path, 'utf8'),

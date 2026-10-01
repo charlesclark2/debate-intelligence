@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e37-calendar-and-announcements/t05-parent-email-signup.yaml`](../../plan_specs/v1/e37-calendar-and-announcements/t05-parent-email-signup.yaml) |
 | Epic / release | `v1-e37-calendar-and-announcements` / `v1.6` |
 | Branch | `task/v1-e37-t05-parent-email-signup` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> (ac6 open in its permitted interim state; goes `--partial`) |
 
 ## Summary
 
@@ -49,9 +49,9 @@ does not publish it.**
   The list is in the interim state the amendment allows: Charlie's district address, with the
   transfer to the ADR-0015 team account committed for the start of the 2027-28 season. ac6 cannot
   fully close until `v1-e37-t01`'s team account exists, and that is blocked on a second coach.
-- **One operator result is still to come:** the first subscriber export's date and the menu
-  path used. It is marked PENDING below. The mail-app one-click unsubscribe was clicked end to end
-  and passed (ac4).
+- **Both operator steps the PM asked for are done.** The mail-app one-click unsubscribe was
+  clicked end to end and passed (ac4). The first monthly subscriber export was taken on
+  2026-09-30 (ac6).
 
 **About the spec amendment.** ac5 and ac6 come from the PM's PR `specs/t05-ownership-and-student-rules`,
 which was not merged when this was written. This branch is **not synced** past it, as the PM asked.
@@ -92,7 +92,7 @@ Reported against the spec as amended in the PM's PR.
 | **ac3**: no site code, workflow or infrastructure receives or stores subscriber addresses; the only data path is visitor browser → provider | PASS | See [How ac3 was proven](#how-ac3-was-proven). Every place an address does exist is named there, including the monthly export ac6 now requires |
 | **ac4**: Charlie subscribes a test address through the dev preview, gets the confirmation email, confirms, receives a test update and unsubscribes with one click | PASS | On 2026-09-30, Charlie:<br>• subscribed charles.clark@wfbschools.com through `https://dev.wfbdebate.com/#email-updates`;<br>• **received the confirmation email and clicked it** before the test update;<br>• received the test update, whose link pointed straight at `https://wfbdebate.com/`, so click tracking is off.<br>**Footer link:** unsubscribing through it took **two clicks**, an "Are you sure?" dialog with a reason survey (screenshot). Buttondown then showed **Unsubscribed** (screenshot).<br>**Headers:** the email carries `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058). That shows one-click is advertised, not that Buttondown's endpoint answers.<br>**One click, clicked:** Charlie resubscribed, published a second test update, and clicked the **mail app's own Unsubscribe button beside the sender's name**. It unsubscribed in **one click**, and Buttondown showed the address as **Unsubscribed almost immediately**. He then resubscribed, and Buttondown showed the address as subscribed again immediately (Charlie, 2026-09-30).<br>**Not on the web:** the test email's archive address returns 404, and `/wfbdebate/rss` has 0 items (curl, 2026-09-30) |
 | **ac5** (amended): the guide explains how a coach sends an update, the student rules as `docs/policies/website-publishing.md` states them (cited, never restated), and who owns the list | PASS | Guide, "How to send an update" (step by step, plus a before-every-send list whose first item is the policy's checklist items 1 to 7); "What may not go in an email about students", a table pointing at the policy's Students, published-names allowlist, Photos and media consent, Results and awards and Pre-publication checklist sections, plus only what is specific to email; "Who owns the list". `grep -n "FIRST NAME\|Jordan Rivera\|Students 6" docs/guides/parent-email-updates.md` → none, so no policy rule is copied |
-| **ac6** (new): at least two people can independently regain control of the list and its subscriber data, and the recovery path has been tested | **NOT MET, interim state as ac6 allows** | Guide, "Who owns the list": a status line per element.<br>• **Registered to the team identity:** no.<br>• **Mailbox reachable by two people:** no.<br>• **Credentials a second person can retrieve:** no.<br>• **Recovery walked by someone other than Charlie:** not yet.<br>• **Periodic export held by the team:** monthly, started in an interim location. First export: PENDING.<br>The interim state is recorded with the dated commitment ac6 requires: transfer to the ADR-0015 team account **by the start of the 2027-28 season** (Charlie, 2026-09-30). **It cannot fully close until `v1-e37-t01`'s team account exists, which is blocked on a second coach** |
+| **ac6** (new): at least two people can independently regain control of the list and its subscriber data, and the recovery path has been tested | **NOT MET, interim state as ac6 allows** | Guide, "Who owns the list": a status line per element.<br>• **Registered to the team identity:** no.<br>• **Mailbox reachable by two people:** no.<br>• **Credentials a second person can retrieve:** no.<br>• **Recovery walked by someone other than Charlie:** not yet.<br>• **Periodic export held by the team:** monthly. First export taken on 2026-09-30 by Charlie (Subscribers → ⋯ → Export), into a private folder in his district Drive, with the download deleted. That is an interim location only Charlie can reach.<br>The interim state is recorded with the dated commitment ac6 requires: transfer to the ADR-0015 team account **by the start of the 2027-28 season** (Charlie, 2026-09-30). **It cannot fully close until `v1-e37-t01`'s team account exists, which is blocked on a second coach** |
 | `compare-and-decide`: comparison drafted (guide contains "double opt-in") | PASS | `grep -c "double opt-in" docs/guides/parent-email-updates.md` → 1 or more |
 | `compare-and-decide`: Charlie chooses the channel and it is recorded | PASS | Buttondown, 2026-09-29; the guide's status table and "Why Buttondown" |
 | `operator-setup` (amended): double opt-in on, the list meets ac6's recovery requirement, only the public signup URL shared | Double opt-in and URL: PASS. Recovery: as ac6 | Double opt-in on, tracking off and archive Disabled were confirmed by Charlie on 2026-09-29, and only `https://buttondown.com/wfbdebate` was shared |
@@ -221,8 +221,9 @@ than asserted.
 ## Operator follow-ups
 
 1. **Done:** unsubscribe with the mail app's own button, then resubscribe (ac4).
-2. **PENDING: take the first subscriber export** to a private folder in Charlie's district Drive,
-   and delete the download. The date and the menu path go in ac6 and the guide.
+2. **Done:** the first subscriber export, 2026-09-30, to a private folder in Charlie's district
+   Drive, download deleted. Next: on the first of each month (guide, "The monthly subscriber
+   export").
 3. **Hotfix (PM):** cherry-pick `9ca0aef` onto a hotfix branch from `main` and deploy prod, so the
    corrected coach address is live before the parent handout.
 4. **After the PM's spec PR merges:** `scripts/task sync v1-e37-t05-parent-email-signup` from this

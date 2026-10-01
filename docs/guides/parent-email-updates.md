@@ -224,7 +224,7 @@ in `docs/runbooks/website-content-accounts.md`, which also tracks this list's mo
 | That mailbox reachable by two people | **No.** Only Charlie reads his district mailbox | The team account has two owners who can each sign in alone (the runbook's Owners table) |
 | Credentials a second person can retrieve | **No.** Charlie only | The Buttondown password is kept the way the runbook keeps the team account's: in each owner's own password manager, never in a shared document, an email or this repository |
 | The recovery path walked once by someone who is not Charlie | **Not yet** | The second owner signs out, resets the Buttondown password through the team inbox, signs in, and the date and their role are added below |
-| A periodic subscriber export held by the team | **Started, interim location** (see below) | Exports land in the team account's Drive instead of Charlie's |
+| A periodic subscriber export held by the team | **Started 2026-09-30, interim location** (see below) | Exports land in the team account's Drive instead of Charlie's |
 
 Recovery walked: *not yet; record the date and the role of the person who did it here.*
 
@@ -233,7 +233,9 @@ Recovery walked: *not yet; record the date and the role of the person who did it
 The export is what lets the list survive losing the Buttondown account entirely.
 
 - **When:** on the first of each month, and before any change of owner or provider.
-- **What:** Buttondown's subscriber export, as a CSV file.
+- **What:** Buttondown's subscriber export, as a CSV file. In Buttondown: **Subscribers**, then the
+  **⋯** menu at the top right, then **Export**.
+- **First taken:** 2026-09-30, by Charlie, into the interim location below.
 - **Where, interim:** a private folder in Charlie's district Google Drive, shared with nobody. It is
   district-controlled, but only Charlie can reach it, so it does not meet "held by the team" on its
   own.

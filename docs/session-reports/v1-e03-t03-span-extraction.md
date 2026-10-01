@@ -33,8 +33,8 @@ and the Goal is `Succeeded`.
 - **Mutation testing found four gaps, and all four are closed.** One check was redundant, one
   check was load-bearing yet no example test exercised it, and two were property-generator blind
   spots. Re-run with a fresh Hypothesis database per run, every one of 26 mutants is caught.
-- **The 50,000-example deep run is handed to you** (about 4 minutes, Operator follow-ups). I ran
-  10,000 examples per property myself.
+- **The 50,000-example deep run passed.** The operator ran it on 2026-10-01: `5 passed in 194.01s`.
+  I ran 10,000 examples per property myself.
 
 ## Plan nodes
 
@@ -180,8 +180,14 @@ Percentages are of all generated examples, so they do not sum to 100:
   was barely tested.
 
 The five properties at 10,000 examples each, `-n 5`: `5 passed in 45.66s`. The default run is 200
-examples (`EXTRACTION_PROPERTY_EXAMPLES`), which keeps CI fast. The 50,000 run is under Operator
-follow-ups.
+examples (`EXTRACTION_PROPERTY_EXAMPLES`), which keeps CI fast.
+
+The five properties at 50,000 examples each, run by the operator on 2026-10-01 in the task worktree
+(Python 3.12.7, hypothesis 6.168.0):
+`EXTRACTION_PROPERTY_EXAMPLES=50000 uv run pytest packages/debate_core/tests/evidence/test_extraction_properties.py --no-cov -n 5`
+→ `5 passed in 194.01s (0:03:14)`. That run used the worktree's own Hypothesis database, so it also
+replayed any examples saved during my first mutation pass. A pass is unaffected by that; it only
+adds cases.
 
 ## Files changed
 
@@ -281,22 +287,11 @@ follow-ups.
 
 ## Operator follow-ups
 
-The deep property run. It is not an acceptance criterion; it is the same bar t02 was held to. At
-10,000 examples per property it took 46 seconds, so 50,000 is about 4 minutes, which is past the
-point where I hand a run over.
+Done: the deep property run at 50,000 examples per property, `5 passed in 194.01s` (see "Property
+statistics and the deep run").
 
-**Operator command** (expected runtime ~4 min)
-Where: your Mac, in the task worktree.
-
-```bash
-cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e03-t03-span-extraction
-EXTRACTION_PROPERTY_EXAMPLES=50000 uv run pytest packages/debate_core/tests/evidence/test_extraction_properties.py --no-cov -n 5
-```
-
-Success looks like: `5 passed`. Paste back the last few lines. A failure prints a minimal
-falsifying example; paste that too.
-
-Then open the PR as usual after review (`scripts/task pr v1-e03-t03-span-extraction`).
+What remains is the usual step after review: `scripts/task pr v1-e03-t03-span-extraction`, run from
+the task worktree.
 
 ## Follow-up work
 

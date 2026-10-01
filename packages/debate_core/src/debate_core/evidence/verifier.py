@@ -47,7 +47,6 @@ from debate_core.evidence.normalization import SUPPORTED_NORMALIZER_VERSIONS
 from debate_core.evidence.selection import EvidenceSelection, InvalidSelection, SelectionProblem
 from debate_core.evidence.snapshot_text import SnapshotText
 from debate_core.evidence.verification_types import (
-    REQUIRED_CHECKS,
     ReasonCode,
     VerificationCheck,
     VerificationReason,
@@ -68,9 +67,12 @@ _EXTRACTOR = EvidenceExtractor()
 class VerificationFindings:
     """What one verification has found so far: the checks that ran, and the reasons it fails.
 
-    A check is recorded as run when it was attempted, whether it passed or not. :attr:`passed` needs
-    every check in :data:`~debate_core.evidence.verification_types.REQUIRED_CHECKS` to have run, so a
-    path that skips a check without recording a reason cannot pass.
+    A check is recorded as run when it was attempted, whether it passed or not. Nothing here decides
+    whether that was every check: a
+    :class:`~debate_core.evidence.verification_types.VerificationResult` refuses to be VERIFIED unless
+    all of :data:`~debate_core.evidence.verification_types.REQUIRED_CHECKS` ran, so a code path that
+    forgets a check without recording a reason fails loudly instead of verifying. (The same rule here
+    as well was removed: mutation showed it changed nothing the result's own rule did not.)
     """
 
     def __init__(self) -> None:
@@ -102,11 +104,6 @@ class VerificationFindings:
     def reasons(self) -> tuple[VerificationReason, ...]:
         """The failures found so far, in the order they were found."""
         return tuple(self._reasons)
-
-    @property
-    def passed(self) -> bool:
-        """True when every required check ran and none failed."""
-        return not self._reasons and self._checks_run >= REQUIRED_CHECKS
 
 
 def check_card(card: Card, findings: VerificationFindings) -> None:

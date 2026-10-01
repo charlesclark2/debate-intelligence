@@ -31,7 +31,6 @@ from debate_core.evidence.markup import EvidenceMarkupSpan
 from debate_core.evidence.normalization import NORMALIZER_VERSION, Paragraph, normalize
 from debate_core.evidence.snapshot_text import SnapshotText, encode_snapshot_text
 from debate_core.evidence.verification_types import (
-    REQUIRED_CHECKS,
     VERIFIER_VERSION,
     ReasonCode,
     UnverifiedEvidenceError,
@@ -39,7 +38,7 @@ from debate_core.evidence.verification_types import (
     VerificationReason,
     VerificationResult,
 )
-from debate_core.evidence.verifier import VerificationFindings, first_difference
+from debate_core.evidence.verifier import first_difference
 from debate_core.testing import FAKE_EPOCH, InMemorySnapshotStore, SequentialIdGenerator
 from debate_core.testing.builders import build_citation
 
@@ -662,18 +661,6 @@ def test_a_first_differing_offset_belongs_to_a_text_mismatch_only() -> None:
         VerificationReason(ReasonCode.HASH_MISMATCH, "detail", 3)
     with pytest.raises(ValueError, match="TEXT_MISMATCH and only for it"):
         VerificationReason(ReasonCode.TEXT_MISMATCH, "detail")
-
-
-def test_findings_that_skipped_a_check_have_not_passed_even_with_no_reasons() -> None:
-    """The verifier's last line of defence against a code path that forgets to run a check."""
-    findings = VerificationFindings()
-    for check in REQUIRED_CHECKS - {VerificationCheck.EVIDENCE_TEXT_EXACT}:
-        findings.ran(check)
-
-    assert findings.reasons == ()
-    assert not findings.passed
-    findings.ran(VerificationCheck.EVIDENCE_TEXT_EXACT)
-    assert findings.passed
 
 
 # =============================================================================================

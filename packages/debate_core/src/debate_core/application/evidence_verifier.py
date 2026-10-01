@@ -15,7 +15,8 @@ For one card it:
 3. reconstructs the evidence from the stored normalized text at the card's offsets, compares it with
    the card's text exactly, and checks the spans fit it (:mod:`debate_core.evidence.verifier`).
 
-The result is VERIFIED only if every check ran and none failed. Model calls play no part.
+The result is VERIFIED only if no check failed, and it cannot be constructed VERIFIED unless every
+check ran. Model calls play no part.
 
 ## Expected failures are reasons; everything else propagates
 
@@ -84,7 +85,7 @@ class EvidenceVerifier:
             check_against_snapshot(card, loaded.snapshot, loaded.normalized, findings)
         return VerificationResult(
             card_id=card.card_id,
-            status=VerificationStatus.VERIFIED if findings.passed else VerificationStatus.UNVERIFIED,
+            status=VerificationStatus.UNVERIFIED if findings.reasons else VerificationStatus.VERIFIED,
             reasons=findings.reasons,
             checks_run=findings.checks_run,
             verified_at=self._clock.now(),

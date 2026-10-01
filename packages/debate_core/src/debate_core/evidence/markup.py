@@ -13,10 +13,10 @@ A :class:`CardMarkup` is a set of :class:`EvidenceMarkupSpan` records checked ag
 Offsets are into the snapshot's normalized text, like the evidence's own, so a span means the same
 characters however the card's evidence is later cut further (`v1-e03-t05`).
 
-This is not :class:`debate_core.domain.CardSpan`. The domain record's offsets are relative to a card's
-``evidence_text``, and a :class:`~debate_core.domain.Card` has no place yet for the cuts in
-non-contiguous evidence. Mapping a ``CardMarkup`` onto a card is the card service's step
-(`v1-e06-t02`); see the `v1-e03-t03` session report.
+This is not :class:`debate_core.domain.CardSpan`, whose offsets are relative to a card's
+``evidence_text``. :func:`~debate_core.evidence.card_mapping.place_evidence_on_card` maps a
+``CardMarkup`` onto a card: its envelope, its omitted ranges (ADR-0018) and ``CardSpan``s in
+evidence-text offsets.
 """
 
 from __future__ import annotations

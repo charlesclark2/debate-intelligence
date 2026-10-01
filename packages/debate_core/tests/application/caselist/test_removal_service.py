@@ -56,7 +56,7 @@ from debate_core.application.caselist.suppression import (
     SUPPRESSION_LIST_KEY,
     RecordedSuppressionList,
 )
-from debate_core.application.errors import DomainError, StoreUnavailable
+from debate_core.application.errors import DomainError, StoreAccessDenied, StoreUnavailable
 from debate_core.application.ports.evidence_versions import ObjectVersion
 from debate_core.application.ports.suppression import ReasonCode, RemovalLogEntry, RemovalOutcome
 from debate_core.domain.caselist import Event
@@ -517,6 +517,95 @@ class TestRerunning:
         assert {entry.sha256 for entry in state} == EXCLUSIVE | {SHARED}
         await removal_world.suppression().reconcile()
         assert len(local.read_text().splitlines()) == 5
+
+
+class ObjectsWithoutListBucket:
+    """The takedown credential's object access as real S3 gives it, which moto does not model.
+
+    `EvidenceRemoval` has no `s3:ListBucket`, and without it S3 answers a read of a key that does not
+    exist with 403, not 404: it will not say whether a key it will not list exists. On 2026-10-01 the
+    first real-dev `--execute` stopped exactly there, reading a suppression list and removal log the
+    bucket did not have yet. Optionally refuses every write but the preflight probe's, for a run whose
+    appends fail after the preflight passed.
+    """
+
+    def __init__(self, inner: Any, *, bucket: str, refuse_writes: bool = False) -> None:
+        self._inner = inner
+        self._refuse_writes = refuse_writes
+        self.location = f"s3://{bucket}"
+
+    async def _exists(self, key: str) -> bool:
+        return any(info.key == key for info in await self._inner.list_objects(key))
+
+    async def list_objects(self, prefix: str) -> Any:
+        raise StoreAccessDenied("ListObjectsV2", f"{self.location}/{prefix}")
+
+    async def head(self, key: str) -> Any:
+        if not await self._exists(key):
+            raise StoreAccessDenied("HeadObject", f"{self.location}/{key}")
+        return await self._inner.head(key)
+
+    async def get_file(self, key: str, destination: Path) -> Any:
+        if not await self._exists(key):
+            raise StoreAccessDenied("HeadObject", f"{self.location}/{key}")
+        return await self._inner.get_file(key, destination)
+
+    async def put_file(self, key: str, source: Path) -> Any:
+        if self._refuse_writes and not key.startswith("manifests/_suppression/preflight/"):
+            raise StoreAccessDenied("PutObject", f"{self.location}/{key}")
+        return await self._inner.put_file(key, source)
+
+
+def without_list_bucket(world: RemovalWorld, *, refuse_writes: bool = False) -> Any:
+    def access() -> Any:
+        real = world.takedown()
+        return type(real)(
+            versions=real.versions,
+            objects=ObjectsWithoutListBucket(real.objects, bucket=real.bucket, refuse_writes=refuse_writes),  # type: ignore[arg-type]
+            profile=real.profile,
+            bucket=real.bucket,
+        )
+
+    return access
+
+
+class TestTheFirstRemovalInABucketWithoutListBucket:
+    """The first removal an environment ever makes, with the takedown credential's real reach."""
+
+    async def test_it_completes_and_appends_both_records_to_the_bucket(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        assert not await world_has(removal_world, SUPPRESSION_LIST_KEY)
+        assert not await world_has(removal_world, REMOVAL_LOG_KEY)
+
+        await remove_team(
+            removal_world, service=removal_world.service(takedown=without_list_bucket(removal_world))
+        )
+
+        listed = removal_world.client.get_object(Bucket=removal_world.bucket_name, Key=SUPPRESSION_LIST_KEY)
+        assert len(listed["Body"].read().decode().splitlines()) == 5
+        (entry,) = log_entries(removal_world)
+        assert entry.outcome is RemovalOutcome.COMPLETED
+
+    async def test_an_append_that_fails_says_nothing_was_deleted_and_names_the_first_failure(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        before = removal_world.versions()
+        refusing = without_list_bucket(removal_world, refuse_writes=True)
+
+        with pytest.raises(RemovalIncomplete) as stopped:
+            await remove_team(removal_world, service=removal_world.service(takedown=refusing))
+
+        message = str(stopped.value)
+        assert f"PutObject s3://{removal_world.bucket_name}/{SUPPRESSION_LIST_KEY}" in message
+        assert "nothing was deleted" in message
+        assert "appended first" not in message, "it was not: that append is what failed"
+        assert "removal log" in message, "the log entry could not be written either, and it says so"
+        assert removal_world.versions() == before
+
+
+async def world_has(world: RemovalWorld, key: str) -> bool:
+    return any(info.key == key for info in await world.bucket.list_objects(key))
 
 
 class TestSupersededManifestVersions:

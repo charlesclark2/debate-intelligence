@@ -11,7 +11,10 @@ Deleting evidence is the `EvidenceRemoval` permission set's alone (`DEBATE_REMOV
 `v1-e29-t03`); the everyday `EvidenceOperator` profile cannot delete at all, by design. So execution
 holds both: the takedown credential to list and delete versions and to append the suppression list
 and the removal log under `manifests/_suppression/`, and the everyday one to write rewritten
-manifests, because `EvidenceRemoval` may write nowhere but `manifests/_suppression/`.
+manifests, because `EvidenceRemoval` may write nowhere but `manifests/_suppression/`. The everyday
+one also reads the bucket's copies of the list and the log before each append: `EvidenceRemoval`
+has no `s3:ListBucket`, so S3 answers its read of a copy that does not exist yet with 403 rather
+than 404, which is how the first real-dev `--execute` stopped (2026-10-01).
 
 Before the first change, :func:`preflight` proves the takedown credential can do what the removal
 needs: it writes a probe object under `manifests/_suppression/preflight/`, lists its versions,
@@ -150,14 +153,39 @@ class TakedownPreflightFailed(DomainError):
 
 
 class RemovalIncomplete(DomainError):
-    """A removal stopped part-way. The log has an `INCOMPLETE` entry; re-running the command finishes it."""
+    """A removal stopped part-way. Re-running the same command finishes it.
 
-    def __init__(self, report: RemovalReport, failure: BaseException) -> None:
+    The message says what is true of this run: whether the suppression entries reached every copy
+    before it stopped (if appending them is what failed, nothing was deleted either), and whether
+    the `INCOMPLETE` log entry could be written. `failure` is always the first thing that went wrong.
+    """
+
+    def __init__(
+        self,
+        report: RemovalReport,
+        failure: BaseException,
+        *,
+        suppressed: bool,
+        unlogged: BaseException | None = None,
+    ) -> None:
         self.report = report
         self.error_code = error_code_of(failure)
+        if suppressed:
+            state = "Every suppression entry was appended first, so nothing removed can be re-imported."
+        else:
+            state = (
+                "It stopped appending the suppression entries, before anything was deleted: nothing "
+                "was deleted, and the entries may be on some copies of the list but not all."
+            )
+        logged = (
+            ""
+            if unlogged is None
+            else f" The removal log entry could not be written either "
+            f"({error_code_of(unlogged)}): {unlogged}."
+        )
         super().__init__(
-            f"the removal stopped part-way ({self.error_code}): {failure}. Every suppression entry was "
-            "appended first, so nothing removed can be re-imported. Re-run the same command to finish."
+            f"the removal stopped part-way ({self.error_code}): {failure}. {state}{logged} "
+            "Re-run the same command to finish."
         )
 
 
@@ -323,8 +351,10 @@ class CaselistRemovalService:
         )
         counts = _Counts()
         failure: BaseException | None = None
+        suppressed = False
         try:
             await suppression.append(plan.suppression_entries)
+            suppressed = True
             await self._delete_bucket_objects(plan, access, counts)
             await self._rewrite_bucket_manifests(plan, access, counts)
             await self._sweep_superseded_manifests(plan, access, counts)
@@ -334,9 +364,15 @@ class CaselistRemovalService:
         except (DomainError, OSError) as stopped:
             failure = stopped
         entry = self._log_entry(plan, counts, failure)
-        await RecordedRemovalLog(self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY)).append(
-            [entry]
-        )
+        unlogged: DomainError | OSError | None = None
+        try:
+            await RecordedRemovalLog(
+                self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY)
+            ).append([entry])
+        except (DomainError, OSError) as refused:
+            if failure is None:
+                raise
+            unlogged = refused  # the run's own failure is the one to report; this one is added to it
         report = RemovalReport(
             plan=plan,
             log_entry=entry,
@@ -347,7 +383,7 @@ class CaselistRemovalService:
             s3_versions_deleted=counts.s3_versions_deleted,
         )
         if failure is not None:
-            raise RemovalIncomplete(report, failure) from failure
+            raise RemovalIncomplete(report, failure, suppressed=suppressed, unlogged=unlogged) from failure
         return report
 
     async def _delete_bucket_objects(
@@ -539,9 +575,11 @@ class CaselistRemovalService:
             self._access = access
         return self._access
 
-    @staticmethod
-    def _bucket_record(access: TakedownAccess, key: ObjectKey) -> ObjectStoreAppendOnlyRecord:
-        return ObjectStoreAppendOnlyRecord(access.objects, key, location=f"s3://{access.bucket}/{key}")
+    def _bucket_record(self, access: TakedownAccess, key: ObjectKey) -> ObjectStoreAppendOnlyRecord:
+        """The bucket's copy: appended with the takedown credential, read with the everyday one."""
+        return ObjectStoreAppendOnlyRecord(
+            access.objects, key, location=f"s3://{access.bucket}/{key}", reader=self.remote
+        )
 
 
 def _names_removed(plan: RemovalPlan, caselist: str, line: str) -> bool:

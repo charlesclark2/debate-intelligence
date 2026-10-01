@@ -186,10 +186,23 @@ class ObjectStoreAppendOnlyRecord:
        something else wrote it in between, that is an
        :class:`~debate_core.application.ports.suppression.AppendOnlyViolation` naming the key, and
        the caller re-runs; nothing is retried behind its back.
+
+    `reader`, when given, does the reading and `store` only the writing. A removal writes with the
+    takedown credential, which has no `s3:ListBucket`; without it S3 answers a read of a key that does
+    not exist yet with 403, not 404, so an environment's first removal could not tell "no list yet"
+    from "not allowed". The everyday credential can list, so it reads.
     """
 
-    def __init__(self, store: EvidenceObjectStore, key: ObjectKey, *, location: str | None = None) -> None:
+    def __init__(
+        self,
+        store: EvidenceObjectStore,
+        key: ObjectKey,
+        *,
+        location: str | None = None,
+        reader: EvidenceObjectStore | None = None,
+    ) -> None:
         self._store = store
+        self._reader = reader or store
         self._key = validate_object_key(key)
         self._location = location or key
 
@@ -227,7 +240,7 @@ class ObjectStoreAppendOnlyRecord:
         with tempfile.TemporaryDirectory(prefix="debate-append-") as directory:
             staged = Path(directory) / "record.jsonl"
             try:
-                await self._store.get_file(self._key, staged)
+                await self._reader.get_file(self._key, staged)
             except NotFound:
                 return b""
             return staged.read_bytes()

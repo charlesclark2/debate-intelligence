@@ -527,6 +527,17 @@ class TestTheDryRun:
 
         assert f"testcl26-0922/{QX_LAKESHORE}" in entries(waiting)
 
+        # What the runbook says to do about it: pull, which imports the week, then the same removal.
+        site = FakeOpenCaselist(archives=[(NEXT_MONDAY, b"")])
+        await build_pull(removal_world, site).run([SYNTHETIC_CASELIST])
+        lakeshore = hashlib.sha256(QX_LAKESHORE_BODY).hexdigest()
+        assert await removal_world.repository.find_source(lakeshore) is not None
+        report = await remove_team(removal_world)
+
+        assert lakeshore in report.log_entry.removed_sha256
+        assert await removal_world.repository.find_source(lakeshore) is None
+        assert removed_bytes_in_inbox(inbox, {lakeshore}) == [] and not waiting.exists(), "imported now"
+
 
 # ------------------------------------------------------------------------------------------------
 # ac3: nothing still needed is lost

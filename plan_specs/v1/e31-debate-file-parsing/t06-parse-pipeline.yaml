@@ -58,6 +58,12 @@ spec:
     - kind: TaskRef
       name: v1-e31-t04-card-fingerprints
       relation: dependsOn
+    # Added by the PM, 2026-10-01, from v1-e30-t07's Follow-up work item 2. Every caselist write
+    # path takes the suppression list as a required argument since t07; this pipeline writes
+    # aggregates derived from caselist sources, so it is one of them. See ac6.
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
     - kind: TaskRef
       name: v1-e30-t05-caselist-publish
       relation: dependsOn
@@ -89,6 +95,15 @@ spec:
         docs/data/caselist-parse-report.md records the operator-run parse of the downloaded hsld26 snapshots
         and camp files in dev and then prod: sources, parsed, skipped, failed by reason, cards, clusters and
         wall-clock time.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-01, from v1-e30-t07's Follow-up work item 2. The pipeline takes the
+        suppression list as a required argument with no default, as every caselist write path has done
+        since v1-e30-t07. `caselist remove` deletes the per-source parsed files by digest, but the
+        aggregates this pipeline maintains (the index, the occurrence table, the failures file) can
+        still hold entries derived from a removed source. After a removal, none of them does: either
+        they are rebuilt after a removal or the list is consulted on read. A test removes a source
+        that contributed to each aggregate and shows each one clean, and is shown failing first.
 status:
   phase: Pending
 ---

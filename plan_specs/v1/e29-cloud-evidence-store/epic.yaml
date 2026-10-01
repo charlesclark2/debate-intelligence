@@ -192,11 +192,12 @@ spec:
         - v1-e29-t05-evidence-sync-cli
     - id: t06
       kind: Task
-      name: The takedown grant's scope is tested, not just written
+      name: 'Removal grants: the scope is tested, and a plan can count versions'
       description: >-
-        The EvidenceRemoval policy's ListBucketVersions statement is correctly scoped to the bucket ARN
-        with a prefix condition, and nothing asserts either. Widen the terraform test's resource coverage
-        to every statement, assert the condition, and prove both by mutation.
+        Nothing asserts the EvidenceRemoval ListBucketVersions statement's resource or prefix condition;
+        widen the terraform test's resource coverage to every statement of both policies and prove it by
+        mutation. Then grant EvidenceOperator a read-only ListBucketVersions under the same condition, so
+        a removal's dry run can count the versions it will delete. Operator applies dev, then prod.
       inputs:
         specRef: plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml
         goalRef: v1-e29-t06-removal-grant-scope-test

@@ -240,6 +240,7 @@ spec:
       dependsOn:
       - t02
       - t06
+      - t07
       - ext-v1-e01-t09-dev-prerelease-channel
       acceptanceCriteria:
       - type: command_succeeds
@@ -271,5 +272,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t06-sync-defects
+    - id: t07
+      kind: Task
+      name: The sync does not re-download a file it has been told to remove
+      description: >-
+        After v1-e30-t07 drops suppressed members from the manifest, `_recorded_openev` cannot see them
+        and the weekly pull re-downloads every removed camp file for the importer to refuse, spending the
+        maintainer's download budget each week. Skip against the suppression list, one authority.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml
+        goalRef: v1-e34-t07-suppressed-downloads
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t07-suppressed-downloads reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t07-suppressed-downloads
 status:
   phase: Pending

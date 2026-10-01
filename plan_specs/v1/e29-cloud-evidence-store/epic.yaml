@@ -190,5 +190,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e29-t05-evidence-sync-cli
+    - id: t06
+      kind: Task
+      name: The takedown grant's scope is tested, not just written
+      description: >-
+        The EvidenceRemoval policy's ListBucketVersions statement is correctly scoped to the bucket ARN
+        with a prefix condition, and nothing asserts either. Widen the terraform test's resource coverage
+        to every statement, assert the condition, and prove both by mutation.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml
+        goalRef: v1-e29-t06-removal-grant-scope-test
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t06-removal-grant-scope-test reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t06-removal-grant-scope-test
 status:
   phase: Pending

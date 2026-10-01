@@ -16,6 +16,13 @@ metadata:
     debate/title: Publish sources and manifests to S3
     debate/architecture-refs: §7, §8, §14, §15
 spec:
+  # PM note, 2026-10-01. v1-e30-t07 (source removal) changes what this task shipped, so read this
+  # spec and its tests as describing behaviour before t07, not after. Once t07 lands: a suppressed
+  # member gets no manifest row at all rather than a SUPPRESSED one; publish withholds suppressed
+  # material instead of uploading it; and `caselist status` counts suppressed residue in the bucket as
+  # drift. t07 changed this task's publish and status test expectations deliberately (its Deviation
+  # 5). Anything else that read a SUPPRESSED manifest row as a record of "already handled" now sees
+  # nothing; the one known reader is E34's sync, filed as v1-e34-t07.
   description: >-
     Add `debate-research caselist publish --caselist <slug|openev> [--snapshot <date>] [--dry-run]` and
     `debate-research caselist status` so imported sources and manifests reach the evidence bucket of the

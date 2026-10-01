@@ -24,6 +24,8 @@ from debate_core.application.errors import (
     ProviderRateLimited,
     ProviderUnavailable,
     RevisionMismatch,
+    SnapshotIntegrityCheck,
+    SnapshotIntegrityError,
 )
 
 __all__ = [
@@ -38,4 +40,6 @@ __all__ = [
     "ProviderRateLimited",
     "ProviderUnavailable",
     "RevisionMismatch",
+    "SnapshotIntegrityCheck",
+    "SnapshotIntegrityError",
 ]

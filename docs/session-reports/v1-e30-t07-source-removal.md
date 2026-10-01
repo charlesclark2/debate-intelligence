@@ -84,12 +84,12 @@ Commands and results below are from the final tree (`HEAD` after the last code c
 | Node `suppression-list`: `uv run pytest packages/debate_core/tests/application/caselist/test_suppression_list.py` | PASS | `31 passed in 5.38s` |
 | Node `importer-and-publisher-checks`: `uv run pytest packages/debate_core/tests/application/caselist -k suppress` | PASS | `72 passed in 7.70s` |
 | Node `removal-planner`: `uv run pytest packages/debate_core/tests/application/caselist/test_removal_plan.py` | PASS | `20 passed in 6.72s` |
-| Node `removal-executor`: `uv run pytest packages/debate_core/tests/application/caselist/test_removal_service.py` | PASS | `18 passed in 7.61s` (16 before the post-review fix) |
+| Node `removal-executor`: `uv run pytest packages/debate_core/tests/application/caselist/test_removal_service.py` | PASS | `20 passed` (16 at the verdict, 18 after the 403 fix, 20 after the PM addendum's change) |
 | Node `unsuppress`: `uv run pytest packages/debate_core/tests/application/caselist -k "unsuppress or removal_profile"` | PASS | `13 passed in 6.63s` |
-| Node `cli-and-smoke`: `uv run pytest tests/smoke/test_caselist_remove_smoke.py` | PASS | `6 passed in 8.42s` |
+| Node `cli-and-smoke`: `uv run pytest tests/smoke/test_caselist_remove_smoke.py` | PASS | `7 passed` (6 at the verdict; the seventh is the PM addendum's CLI check) |
 | Node `cli-and-smoke`: `uv run pyright packages/debate_core packages/debate_cli` | PASS | `0 errors, 0 warnings, 0 informations` |
 | Node `cli-and-smoke`: `uv run lint-imports` | PASS | `Contracts: 10 kept, 0 broken.` |
-| Whole Python suite, CI's selection (`pytest -m "not slow and not live" packages tests`) | PASS | `3332 passed, 1 skipped in 51.57s` after the post-review fix (3330 before). The skip is the pre-existing parser eval waiting on human corrections. Also clean: `ruff check .`, `ruff format --check .`, full `pyright`, the merge-conflict hook. |
+| Whole Python suite, CI's selection (`pytest -m "not slow and not live" packages tests`) | PASS | `3335 passed, 1 skipped in 47.43s` after the PM addendum's changes (3330 at the verdict, 3332 after the 403 fix). The skip is the pre-existing parser eval waiting on human corrections. Also clean: `ruff check .`, `ruff format --check .`, full `pyright`, the merge-conflict hook. |
 | `uv run scripts/validate_specs.py` | PASS | `OK: 292 files, 38 epics, 234 tasks, 20 releases` |
 
 ## Proving it by trying to defeat it
@@ -394,6 +394,59 @@ Two grants this run did not test:
 **For the PM.** The verdict above was given on `b4fe956`. These two commits change
 `removal_service.py` and `suppression.py` after it, so the PR should not open on that verdict
 without a look at them.
+
+## The PM addendum's changes
+
+The addendum (`bd8f610`) asked for two changes before the pull request.
+
+**1. A removal that completed but could not be logged now says it completed** (`ec2f306`).
+Before, when every step succeeded and the removal-log append then failed, `execute` re-raised the
+bare store error. Through the CLI that was `INTERNAL_ERROR`, "This is a bug in debate-research",
+exit 70, with nothing saying the removal had happened.
+
+It now raises `RemovalCompletedUnlogged`, a distinct `DomainError` and not `RemovalIncomplete`. Its
+CLI code is `REMOVAL_COMPLETED_UNLOGGED`, with exit 1. The message:
+- says the removal completed;
+- gives the report's counts: records, local files, bucket object versions, manifests rewritten and
+  rows;
+- names each copy of the log that lacks the entry.
+
+The counts are also scalar fields in the `--json` error details. Neither the message nor the hint
+says the removal failed or stopped part-way.
+
+**What a re-run would log.** I checked this. A re-run finds nothing left to remove and logs a
+`COMPLETED` entry with zero counts, as `test_running_it_again_after_it_finished_finds_nothing_left`
+asserts. So it cannot reproduce the counts, and the message always says to record them in the
+register from this output.
+
+Which copy holds the entry depends on where the write failed:
+- **If the bucket's write failed,** this machine's copy, written first, holds the entry. The message
+  names it, and adds that the next removal-log write copies it across, because every append writes
+  each copy the union's lines it lacks.
+- **If this machine's write failed,** no copy has the entry, and the message says so.
+
+**Shown failing first.** Two service tests make a log copy refuse the append after the deletes
+succeed: the bucket's copy (`StoreUnavailable` on `PutObject`), and this machine's (`OSError`). A
+CLI smoke test makes the local log file read-only. Before the fix, all three failed on the bare
+error, and the smoke test printed `INTERNAL_ERROR … exit 70`. Then I broke the fix:
+
+| Mutation | Result |
+|---|---|
+| The bare re-raise restored (`if failure is None: raise`) | caught by all three new tests |
+| Every copy reported as missing the entry | caught (bucket-copy test) |
+| Every copy reported as holding it | caught (both service tests) |
+
+**2. The register is opened.** `docs/data/caselist-removal-requests.md` follows the runbook's step 1
+fields and step 10 outcome. Its one entry, `RM-2026-90`, is the 2026-10-01 dev exercise on
+synthetic data, with the `COMPLETED` counts from the `9ede19e` re-run. It notes the earlier attempt
+that changed nothing, and that the entries are permanent. It contains no school, team code,
+filename or name; a search for every fixture name finds none. I added one convention: ids from
+`RM-<year>-90` up are for exercises, so an exercise never takes a number a requester was given.
+
+**Seen, not changed.** `unsuppress --execute` has the same class of defect, outside what the
+addendum asked for. If the un-suppress entry is appended and the log append then fails, the bare
+error is raised. A re-run then stops with `NotSuppressed`, so it cannot log the reversal either.
+Same fix, about ten lines and two tests, if you want it in this task or the next.
 
 ## Operator follow-ups
 

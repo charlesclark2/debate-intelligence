@@ -579,8 +579,55 @@ nothing.
 `__MACOSX/._<name>` and Word's `~$` lock files would have reproduced the removed team's directory in
 every week's manifest through junk alone. Your own test found it. That is the kind of thing a
 takedown implementation gets wrong quietly and nobody notices until the requester does.
+
+**Addendum, PM, 2026-10-01, after the real-dev exercise.** Verdict stands at ACCEPTED, with one
+change to make before the pull request opens (the last item below). I read `c4402b2..75e927a`
+rather than relying on this report's account of it, and specifically the diffs of `d26cb32` and
+`e7406c4` to `removal_service.py` and `suppression.py`.
+
+**The 403 is the finding of the exercise, and moto could never have shown it.** S3 answers a read
+of a missing key with 403 for a principal that lacks `s3:ListBucket`, so the takedown profile could
+not tell "no list yet" from "not allowed" in an environment that had never had a removal. Reading
+with the everyday profile and writing with the takedown one is the right fix: no IAM change,
+CloudTrail still attributes every append to the takedown credential, and the two failures stay
+distinct, because only `NotFound` becomes an empty record and an access denial from the reader still
+propagates as a failure. I checked that in the diff rather than taking it from the description.
+
+**Both truthfulness fixes are right, and `e7406c4` is the method working.** The old message claimed
+every suppression entry had been appended even when appending was the step that failed, and a
+failed log append replaced the run's own error. You fixed both, and then a mutation (`suppressed`
+never set) survived, showing nothing tested a run cut short *after* suppressing, and you added that
+test instead of moving on. That is the standard.
+
+**One path is still not truthful, and it is the same class of defect.** When every deletion
+succeeds and the removal-log append then fails, `execute` re-raises the bare log error. The operator
+sees a failure with nothing saying the removal itself completed. On a takedown that is the wrong
+signal to send: it invites telling a requester the removal failed, and a re-run, which then logs a
+`COMPLETED` entry with zero counts, so the real counts reach no record at all. Requested below.
+
+**ac6's real-IAM half is closed, and so is the condition I put on `v1-e34-t05`.** The `9ede19e`
+re-run deleted under `EvidenceRemoval` for real, every number matched the moto rehearsal, and the
+read-only checks afterwards found no version, delete marker or manifest naming the removed files.
+`v1-e34-t05` still waits on `v1-e34-t06` and on the new `v1-e34-t07` (from your Follow-up 1), but no
+longer on an unobserved delete. `RM-2026-90` is now a permanent synthetic entry in the dev list and
+log, so the register needs an entry saying what it is, before anyone has to ask.
+
+**Operator follow-up 2 / Follow-up 5: granted, and a correction.** A read-only
+`s3:ListBucketVersions` for `EvidenceOperator`, scoped to the removable prefixes, so a dry run shows
+what an irreversible delete will remove. The profile can already read a version by id; it just
+cannot list them, so the exposure is negligible and the operator's last look before deleting gets
+better. Earlier today I recorded this item as already done. That was wrong: the existing grant is on
+`EvidenceRemoval`, and I conflated the two permission sets. It is being filed into `v1-e29-t06`,
+alongside the test-coverage gap found by looking at the same policy.
+
+**Follow-ups 2 and 3 are filed as criteria, not left as prose.** `v1-e31-t06` (parse pipeline)
+gains a dependency on this task and a criterion that its aggregates hold nothing from a removed
+source, with the list as a required argument. `v1-e33-t04` (built-file quality checks) gains a
+criterion to flag a built file quoting a removed card. Follow-up 6 becomes possible once the grant
+lands and is noted there; it is code in `debate_core`, so it stays out of an infrastructure task.
+Follow-up 4, the policy sentence, is Charlie's.
+
+**And thank you for `47e73b8`.** Correcting the provenance of Deviations 1 and 2 in the report
+itself, rather than leaving my verdict's complaint about it standing, is exactly the right response.
+
 <!-- ACCEPTED / CHANGES_REQUESTED -->
-
-**Reviewed by / date:**
-
-**Notes:**

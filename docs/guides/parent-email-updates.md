@@ -11,7 +11,7 @@ Rules this follows: [`docs/policies/website-publishing.md`](../policies/website-
 | Channel | **Buttondown**, a mailing service, on its free tier |
 | Chosen by | Charlie Clark, head coach, 2026-09-29, from the comparison below |
 | Activities director | Randee Drew, Athletics and Activities Director, **has been told and is fine with it** (as reported by Charlie on 2026-09-29) |
-| List owner | The Buttondown account registered to **charles.clark@wfbschools.com**, a district account. **No second owner yet**: see [Who owns the list](#who-owns-the-list) |
+| List owner | **Interim:** the Buttondown account registered to **charles.clark@wfbschools.com**, a district account, with no second way in. **Committed:** moved to the team Google account (ADR-0015) by the start of the 2027-28 season. See [Who owns the list](#who-owns-the-list) |
 | Signup page | The address in [`site/content/email-updates.json`](../../site/content/email-updates.json) (`signupUrl`) |
 | Where it appears | "Email updates for parents and guardians" on the home page, under the parent session, and at the foot of the contact page |
 
@@ -111,57 +111,50 @@ checked, not assumed:
 3. **In a coach's school mailbox, if a parent replies.** Updates are sent with a coach's
    `@wfbschools.com` address as the reply-to, so a reply lands in the district's email system like
    any other parent email.
-4. **Nowhere else, by rule.** The list is never exported into a spreadsheet, a shared drive, this
-   repository, AWS or another service, and addresses are never copied into the site's content.
-   If the list ever has to move to another provider, the move is a direct export from one
-   provider and import into the other, and the exported file is deleted the same day.
+4. **In the monthly subscriber export**, one CSV file kept in a private Drive folder so the list
+   survives losing the account ([The monthly subscriber export](#the-monthly-subscriber-export)).
+   Until the team account exists, that folder is in Charlie's district Google Drive.
+5. **Nowhere else, by rule.** Addresses are never put in this repository, AWS or the site's
+   content, never kept in any other spreadsheet or shared drive, and never sent anywhere as an
+   attachment. A move to another provider is a direct export and import, and that file is deleted
+   the same day.
 
 ## What may not go in an email about students
 
-**Treat every email as public.** Anyone can subscribe: the provider confirms that an address
-works, not that its owner is a parent. And unlike a page on the site, an email cannot be taken
-back. The site's 24-hour removal promise has nothing to act on once a message is in every subscriber's inbox.
-So every email meets **at least** the bar of the pre-publication checklist in the publishing
-policy, and in places a higher one.
+**The publishing policy governs every email, and this guide does not restate it.** Whatever
+[`docs/policies/website-publishing.md`](../policies/website-publishing.md) allows or forbids about
+a student on a page, it allows or forbids in an email, in the policy's own words:
 
-**Names follow the site's rules exactly** (Charlie's decision, 2026-09-29). A student is named in
-an email only as the publishing policy allows on a page:
+| For | Read |
+|---|---|
+| Whether a student may be named, in what form, and checking the allowlist | [Students](../policies/website-publishing.md#students), including [The published-names allowlist](../policies/website-publishing.md#the-published-names-allowlist) |
+| Contact details, places and times, quotes, sensitive matters | [Students](../policies/website-publishing.md#students) |
+| Photographs | [Photos and media consent](../policies/website-publishing.md#photos-and-media-consent) |
+| Results, records, rankings and opponents | [Results and awards](../policies/website-publishing.md#results-and-awards) |
+| The check before anything goes out | [Pre-publication checklist](../policies/website-publishing.md#pre-publication-checklist), items 1 to 7 |
 
-- in the published form **`FIRST NAME LAST NAME (GRADUATION YEAR)`**, for example
-  "Jordan Rivera (2028)", or in the reduced form (first name only) that the family asked for;
-- only if the student is on the published-names allowlist in
-  [`site/content/media-consent.yaml`](../../site/content/media-consent.yaml) with a
-  media-consent form **for the current season** confirmed with the activities office;
-- **otherwise not at all.** Unknown is no. Write it at team level instead: "A Whitefish Bay Public
-  Forum team reached quarterfinals."
+The rule for names is the site's rule because Charlie chose it on 2026-09-29, and the spec cites
+the policy rather than copying it, so the email and the site cannot drift apart. If this guide and
+the policy ever seem to disagree, the policy wins and this guide is wrong.
 
-The website's build checks names automatically; **an email has no such guard**, so the coach
-sending it does that check by hand against the allowlist, every time. And because an email cannot
-be recalled, a family who later withdraws consent cannot have their child's name taken out of an
-email already sent. When in doubt, write at team level and link to the page on the site.
+**What is different about email is the medium, not the rules:**
 
-**Never, in any email, with or without consent:**
+- **Every email is public.** Anyone can subscribe. Buttondown confirms that an address works, not
+  that its owner is a parent.
+- **An email cannot be taken back.** The policy's [Removal on request](../policies/website-publishing.md#removal-on-request)
+  has nothing to act on once a message is in every subscriber's inbox. That includes a family who
+  later withdraws consent. When in doubt, write at team level and link to the site.
+- **Nothing checks an email automatically.** The site's build refuses an unreviewed name; an
+  email has no build. The coach sending it goes through checklist items 1 to 7 by hand, against
+  the allowlist in [`site/content/media-consent.yaml`](../../site/content/media-consent.yaml),
+  every time.
+- **No attachments and no embedded images.** An image sent in an email cannot be removed later.
+  Link to the page on the site instead.
+- **The list is for parents and guardians.** If a student subscribes, remove them. Students hear
+  from the coaches through the team's own channels.
 
-- **No student contact information.** No student email address, phone number, social media
-  handle, messaging username, home address or bus route. Consent to publish a name is not consent
-  to publish a way to reach a child (policy, Students 6). This includes a sign-up sheet or a
-  carpool list pasted into the email.
-- **No named student placed at a time and place.** Say when the bus leaves and where the team is
-  staying; do not say which student is in which room, car or flight (Students 7).
-- **Nothing sensitive about a named student.** No discipline, grades, health, disability,
-  family circumstances or team-selection decisions (Students 9).
-- **No records or rankings.** A single tournament placing is a result; a win-loss record, a
-  speaker-point average or a ranking of team members is a profile (Results and awards 3 and 4).
-- **No opponent students, ever** (Results and awards 5).
-- **No student photographs.** An image attached to an email cannot be taken down. Link to the site
-  instead, where a photograph is published under the media-consent rules and can be removed.
-- **No student email addresses on the list.** The signup is for parents and guardians. If a
-  student subscribes, remove them. Students hear from the coaches through the team's own channels.
-
-**Where there is detail about individual students, put it on the site and link to it.** Results,
-photographs and anything with a name in it belong on the site, where they pass the build guard and
-can be taken down within 24 hours on request. The email says what happened in general terms and
-links to the page.
+**Detail about individual students goes on the site, and the email links to it.** On the site, a
+page passes the build guard and comes down on request; in an inbox, it does neither.
 
 ## How to send an update
 
@@ -182,12 +175,9 @@ Log in to Buttondown with the owner account (charles.clark@wfbschools.com).
 
 **Before every send:**
 
-- [ ] **No student contact information** of any kind, anywhere in the email.
-- [ ] **Every named student is on the allowlist** with current-season consent, in their published
-      or reduced form. Anyone else is written about at team level.
-- [ ] **No named student is placed at a specific room, ride, hotel or arrival time.**
-- [ ] **Nothing sensitive** about a named student, no records or rankings, no opponent students.
-- [ ] **No student photograph** attached or embedded. Link to the site instead.
+- [ ] **The policy's [pre-publication checklist](../policies/website-publishing.md#pre-publication-checklist), items 1 to 7**,
+      gone through by hand for this email. Any "no" stops the send.
+- [ ] **No attachment and no embedded image.** Link to the site instead.
 - [ ] **Tracking is still off** (Settings: open and click tracking both off).
 - [ ] **The archive is still Disabled** (Settings: Archives), so this email will not appear on the
       web.
@@ -214,26 +204,58 @@ build guard and can be corrected or taken down after publishing; the email canno
 
 ## Who owns the list
 
-| | |
-|---|---|
-| Account | Buttondown, registered to **charles.clark@wfbschools.com** |
-| Why that address | It is a district account, not a personal one, so the district can recover access through its own email system if the head coach leaves |
-| Second owner | **None yet.** Buttondown's Teams feature, which gives a second person their own login, is only on the Professional plan (+$79 a month). This is a known gap, recorded rather than hidden |
-| Credentials | Held by the account owner only. Never in this repository, never in the site's content, never in a shared document. There is no API key |
-| What the site holds | Only the public signup page address, in `site/content/email-updates.json` |
+**The rule** (the spec's ac6, from 2026-09-30): at least two people can each, on their own, get
+back into the list and its subscriber data, and that has been tried, not just written down. The
+danger is not one person losing a seat. It is nobody being able to get in at all, and Buttondown's
+password recovery runs through the mailbox the account is registered to. A paid second seat
+($79 a month) would not fix that, so the team does not buy one.
 
-**Closing the second-owner gap** is a follow-up, and one of these closes it:
+**Today the list is in its interim state**: registered to Charlie's district address with no
+second way in. The transfer to the team identity is **committed for the start of the 2027-28
+season** (Charlie, 2026-09-30). It is **blocked on a second coach**: the team Google account that
+ADR-0015 names as the owner of the calendar, the announcements sheet and this list needs two
+owners, and `v1-e37-t01` is waiting for that second coach. The account and its owners are recorded
+in `docs/runbooks/website-content-accounts.md`, which also tracks this list's move.
 
-1. Move the account's login to a district role mailbox (for example a debate team address from
-   district IT) that a second coach can also read. Buttondown's docs do not describe changing an
-   account's login address, so this starts with a request to their support.
-2. Pay for Teams if the budget allows, and invite a second coach as an admin.
-3. Move the list to the district's own tool if the activities office offers one.
+| What ac6 asks for | Today (2026-09-30) | When it is met |
+|---|---|---|
+| Registered to the team identity | **No.** charles.clark@wfbschools.com, Charlie's district account | The Buttondown login is changed to the team Google account and confirmed from that inbox. Buttondown's docs do not describe changing the login address, so this starts with a request to its support |
+| That mailbox reachable by two people | **No.** Only Charlie reads his district mailbox | The team account has two owners who can each sign in alone (the runbook's Owners table) |
+| Credentials a second person can retrieve | **No.** Charlie only | The Buttondown password is kept the way the runbook keeps the team account's: in each owner's own password manager, never in a shared document, an email or this repository |
+| The recovery path walked once by someone who is not Charlie | **Not yet** | The second owner signs out, resets the Buttondown password through the team inbox, signs in, and the date and their role are added below |
+| A periodic subscriber export held by the team | **Started, interim location** (see below) | Exports land in the team account's Drive instead of Charlie's |
 
-**If the head coach stops coaching**, the list goes with the team, not with the person, in the
-same spirit as the site itself (publishing policy, Domains and continuity): the account is handed
-to the incoming head coach or the activities office by changing its login to their district
-address, or the list is exported straight into the district's tool and the account is deleted.
+Recovery walked: *not yet; record the date and the role of the person who did it here.*
+
+### The monthly subscriber export
+
+The export is what lets the list survive losing the Buttondown account entirely.
+
+- **When:** on the first of each month, and before any change of owner or provider.
+- **What:** Buttondown's subscriber export, as a CSV file.
+- **Where, interim:** a private folder in Charlie's district Google Drive, shared with nobody. It is
+  district-controlled, but only Charlie can reach it, so it does not meet "held by the team" on its
+  own.
+- **Where, target:** a private folder in the team Google account's Drive, shared only with that
+  account's owners.
+- **Only the latest file is kept.** Each month's export replaces the previous one, and the
+  downloaded copy is deleted from the computer it was downloaded to.
+- **Never** in this repository, AWS, the site, an email attachment, or anywhere else.
+
+**If the account is ever lost and the list has to be rebuilt from an export:**
+- Import only the people the export shows as subscribed.
+- Anyone who unsubscribed after the export was taken cannot be known from it. So the first email
+  after a rebuild says what happened and makes leaving the list the first thing in it.
+- Parents were promised they could leave this list, and a rebuild must not quietly undo that.
+
+### If the head coach stops coaching
+
+The list goes with the team, not with the person, in the same spirit as the site itself (the
+publishing policy, Domains and continuity). That means one of two things:
+- the account moves to the team identity, if it has not already, and the incoming head coach
+  becomes an owner of that identity; or
+- the list is imported straight into the district's tool and the Buttondown account is deleted.
+
 It is never left running unattended with parents still on it.
 
 ### When the list passes 100
@@ -246,8 +268,8 @@ subscriber count before each season's first email and decide before it gets ther
 ### Moving the list
 
 If the list moves to another provider or to the district's tool: export the subscribers from
-Buttondown and import them directly into the new service in the same sitting, **delete the export
-file the same day**, change the two fields in `site/content/email-updates.json`, deploy, and send
+Buttondown and import them directly into the new service in the same sitting, **delete that
+migration file the same day** (the monthly export above stays the only standing copy), change the two fields in `site/content/email-updates.json`, deploy, and send
 one last Buttondown email saying where updates now come from. Subscribers who confirmed with
 Buttondown have confirmed a Buttondown list, so the new service should ask them to confirm again
 unless the district's own consent already covers them.

@@ -133,6 +133,15 @@ and the same mutation now brings back real downloads.
    `openev_skipped_as_removed` were added to the summary JSON without bumping
    `RUN_SUMMARY_SCHEMA_VERSION`: both are additive and nothing reads summaries back.
 
+4. **An expired AWS session reads this machine's copy of the list (after PM review; the PM
+   authorised it).** The pull's list is now `LocalFallbackSuppressionList`: both copies, or this
+   machine's copy alone when reading the bucket's raises `StoreCredentialsExpired` (the S3 adapter's
+   error for credentials that are missing or expired). Every other failure still fails closed. It
+   changes `v1-e30-t07`'s rule that a bucket-holding command reads the union, for the pull only, and
+   lives in `debate_core.application.caselist.suppression` and `debate_cli/container.py`. The
+   condition for revisiting it, the day a second machine imports, is in the class docstring and the
+   container comment. See "Changes after PM review".
+
 ## Decisions and assumptions
 
 - **A camp file changed upstream.** Read from the upstream source (`ashtarcommunications/caselist`
@@ -200,13 +209,165 @@ with this change, the first scheduled run after any camp-file removal should sho
    reason, visible with `--json`. A column would mean a `SyncRunRecord` schema change (`debate_cli`
    and `sync_runs`), outside this task.
 
+## Changes after PM review
+
+Both requested changes are made. Commits `3cd23a5..56aa892` on top of `448f836`.
+
+### An expired AWS session no longer fails the pull's import (required)
+
+**Shown failing first** (`3cd23a5`, red against `448f836`). The scratch case is now
+`tests/smoke/test_an_expired_session_still_imports_and_what_was_removed_here_stays_out`, through
+the real commands and composition root. It pulls, runs `caselist remove --execute` on 512, lists 513
+(512's bytes under another camp's path) and 514 (new), then makes every S3 call raise
+`StoreCredentialsExpired`. Result: `import: failed — 0 imported; 2 refused: openev-513: no usable AWS
+credentials … openev-514: no usable AWS credentials`, so `assert 'failed' == 'completed'`.
+
+**The change.**
+- `LocalFallbackSuppressionList` (`application/caselist/suppression.py`): `entries()` reads the
+  union, and on `StoreCredentialsExpired` only, reads this machine's copy and records why
+  (`fallbacks`, `local_only_reason`). `append()` never falls back.
+- The container gives the pull this one object for both importers and the skip, so they fall back
+  together. Publish and status keep the strict union.
+- The run records it. The summary JSON has `suppression_list_local_copy_only` (the reason), and the
+  select or import stage that fell back adds "this machine's copy of the suppression list alone was
+  read: …". It is counted per stage, so a later run that reads no list reports nothing.
+- The sync docstring's credentials section, line 131 on, says the local stages need no AWS session
+  (true again) and now also says exactly how the list behaves when the session has expired. The
+  revisit condition is in the class docstring and the container comment.
+
+**Evidence, final tree.**
+
+| Check | Result |
+|---|---|
+| Expired session, end to end (the reproduction, now green) | exit OK; import `completed`; 512 `skipped_as_removed`; 513 `download`, then refused (no row, `files_imported 1`); 514 imported (`blobs_stored 1`); publish `pending`; `suppression_list_local_copy_only` names `aws sso login`; the import reason carries the sentence |
+| Access denied on the bucket's copy, end to end | import `failed`, exit non-zero, `blobs_stored 0`, no local-copy note |
+| A torn line in the bucket's copy (written to moto), end to end | the same |
+| Unit: missing or expired credentials | local entries, `fallbacks 1`, reason names the login |
+| Unit: access denied, torn line | raise; `fallbacks 0` |
+| Unit: append with an expired session | raises; nothing written locally |
+| Run level: expired session | 512 skipped, 514 stored, summary and select and import reasons record it |
+| Run level: a second run that reads no list | `suppression_list_local_copy_only` is `None` |
+
+**Mutations** (`mutate_fallback.py` in the scratchpad; fresh `HYPOTHESIS_STORAGE_DIRECTORY` each run;
+files restored byte for byte from a saved copy, and checked):
+
+| Mutation | Result | Failing for its reason |
+|---|---|---|
+| **The fallback also covers access denial** | CAUGHT, 2 failed | unit: `DID NOT RAISE`; smoke: the pull exits OK where it must fail |
+| **The fallback does not record itself** | CAUGHT, 4 failed | `assert 0 == 1`; `suppression_list_local_copy_only` is `None` |
+| The fallback reads nothing instead of this machine's copy | CAUGHT, 3 failed | `assert [] == ['2b91…']`; 512 no longer skipped |
+| An append falls back to one copy | CAUGHT | `DID NOT RAISE StoreCredentialsExpired` |
+| The container does not wrap the pull's list | CAUGHT | import `failed`: no usable AWS credentials |
+
+The original 13 mutations were re-run after the change: all CAUGHT.
+
+**A mistake of mine, caught by the full suite.** I first ran these mutations before committing the
+container change, and the script restored `container.py` with `git checkout`. That put the file
+back to the previous *commit*, which deleted my uncommitted wrap. The script's "restored" check
+compared the file with HEAD, so it passed. `0cac2b3` therefore went in without the container
+change. CI's selection then failed the expired-session check, which passed in its own file only
+because that run came before the mutations. The wrap is restored in `56aa892`, and the script now
+refuses to start unless the files under mutation are committed, and restores them from a saved copy.
+The mutation table above is from that corrected run.
+
+### The removal runbook says what removal leaves in the inbox
+
+`docs/runbooks/caselist-removal.md`:
+- **Step 8** gains a manual step until `v1-e30-t09`. It says where each environment's inbox is,
+  finds a removed camp file's `openev-<id>-…` copies by sha256, for single documents and for camp
+  releases, and deletes them. I ran the block in zsh against a synthetic inbox: it named the removed
+  document and a release holding one removed member, and left a kept file and an unrelated release
+  alone. Weekly archives are left in place.
+- **Step 10** records in the register entry that the weekly archives in the inbox still contain the
+  removed files, pending `v1-e30-t09` (counts and codes only).
+
+The scheduled-sync runbook explains `suppression_list_local_copy_only`, corrects what
+`suppression_list_unreadable` now means (an expired session no longer causes it), and states the
+same-path hold as your decision. The sync docstrings and the same-path test say the same. The pinned
+re-upload test's docstring now says `v1-e34-t08` must invert it rather than delete it.
+
+### Checks on the final tree (`56aa892`, report commit aside)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -m "not slow and not live" packages tests` | `3491 passed, 1 skipped in 56.93s` (the skip is the pre-existing parser eval) |
+| `uv run pytest packages/debate_core/tests -k "suppress and sync"` | `30 passed in 11.19s` |
+| `uv run pyright` | `0 errors, 0 warnings, 0 informations` |
+| `uv run ruff check .` / `uv run ruff format --check .` | `All checks passed!` / `448 files already formatted` |
+| `uv run lint-imports` | `Contracts: 10 kept, 0 broken.` |
+| `uv run scripts/validate_specs.py` | `OK: 296 files, 38 epics, 238 tasks, 20 releases` |
+
+Not pushed. Next, for the operator: `scripts/task sync v1-e34-t07-suppressed-downloads`, then
+`scripts/task pr v1-e34-t07-suppressed-downloads`.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-01
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with one required change and one runbook addition before the pull
+request opens (the last two items below). I read the container change and the sync module's
+docstring on the branch for the two claims that decide what happens next: the skip and the
+importers do share one list object, and the docstring does still promise that the local stages need
+no AWS session.
+
+**Deviation 1 is better than the criterion it replaces.** ac4 was written for a memory of removed
+ids, with a rule that the memory must never disagree with the list. You kept a memory that holds no
+removals at all, only what each id delivered, which nothing about a removal or an unsuppress
+changes. The forbidden disagreement is impossible by construction rather than guarded by a check. And
+you named and pinned the one case no memory can close, which is honest about the design's limit.
+
+**Reading the upstream source settled the changed-file question with facts.** No update route,
+`UNIQUE` path, `AUTO_INCREMENT` id: a camp file changes only as a new id at the same path. That is
+what made Follow-up 3 visible.
+
+**The reproduction found a second waste nobody had described.** With the inbox copy kept, which is
+the normal state, the removed file was re-imported and refused every run and the run reported
+`nothing_new: false`. The fix covers both.
+
+**The first-run survivor exposed a real overlap.** Removing the skip branch failed only on the
+label, because the next rule also matched an all-suppressed release and would have called a removed
+file "already imported". `027d2ee` requires a recorded member. That is mutation finding something a
+reader would not.
+
+**Deviations 2 and 3 are accepted.** One line in the container is the only way the union reaches
+the skip, and passing the importers' own list object is what makes ac3 and "they cannot disagree"
+both true. Junk rows no longer counting as an imported download, and a release with a deleted inbox
+copy no longer being re-downloaded, are each needed by a case I asked for.
+
+**On your policy question: the default stands.** A removal covers a camp's later upload at the same
+path. A removal request is about the material, and a revised camp file normally still contains it;
+holding it back costs at most a revision we never fetch, and `unsuppress` reverses it. Charlie owns
+the data-use policy and may read it differently; if so, the decision becomes a download.
+
+**Follow-ups 1 and 3 are filed as tasks.** Removed bytes left in the inbox are a gap in the policy's
+"deleted everywhere we store it" and become `v1-e30-t09`. Revised camp files never being fetched is
+a staleness defect in `v1-e34-t06`'s matching and becomes `v1-e34-t08`, which must keep your
+removed-path hold. Neither gates `v1-e34-t05`. Follow-up 4, a skipped-count column in
+`caselist runs`, is noted and not filed.
+
+**Change 1 (required): an expired AWS session must not fail the pull's import.** This is your
+Follow-up 2, and it decides whether `v1-e34-t05` is worth enabling. A weekly launchd run on the
+coach's Mac will usually find the SSO session expired. `v1-e34-t02` built the run around exactly that:
+local stages need no session, and publish pends. Since `v1-e30-t07` the importers read the union,
+the union reads the bucket, and the import fails. So every unattended run would capture bytes and
+import nothing, and the next one would fail the same way.
+
+PM decision: when the bucket's copy cannot be read **because credentials are missing or expired**,
+the pull's list falls back to this machine's local copy, and the run summary records that it did.
+That is exactly as safe as `caselist import`, which reads only the local copy by design under
+`v1-e30-t07` Deviation 7: on the one operator machine every command that writes the list writes both
+copies, so the local copy is never behind the bucket's, and `publish`, which needs a session anyway,
+still refuses suppressed sources from the union. Any other failure to read the bucket's copy (access
+denied, a torn line, an append-only violation) still fails closed, as now. Revisit the fallback under
+the same condition as Deviation 7: the day a second machine imports.
+
+**Change 2: say in the removal runbook what removal leaves in the inbox.** Until `v1-e30-t09` lands,
+add a manual step: delete the inbox copies of a removed camp file (`openev-<id>-…`), and record in the
+register entry that weekly archives in the inbox still contain the removed files, pending that task.

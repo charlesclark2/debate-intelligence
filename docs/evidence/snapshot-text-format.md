@@ -96,9 +96,10 @@ The bytes are hashed and compared to it **before anything is parsed**. A mismatc
 
 **Why the key is not optional.** A paragraph boundary moved to another valid offset leaves a document
 that is still valid, still canonical, under the same version, with the same text, so
-`normalized_text_hash` still matches. Only the blob's own hash notices. `v1-e03-t03` resolves
-paragraph IDs through this map, so an unchecked map would point a card at different words of the same
-source while every text check passed. `v1-e03-t02` found this by removing checks one at a time and
+`normalized_text_hash` still matches. Of the checks on the stored document, only the blob's own hash
+notices. `v1-e03-t03` resolves paragraph IDs through this map, so an unchecked map would point a card
+at different words of the same source while every text check passed. Span extraction also checks the
+map at the point of use (see the guarantees below). `v1-e03-t02` found this by removing checks one at a time and
 watching which tests still passed.
 
 A test fails if any callable in `debate_core` returns a `SnapshotText` from bytes or a string
@@ -162,4 +163,5 @@ their keys and must stay readable, because cards were cut from them.
 | A moved paragraph boundary is refused under the original key | `test_a_paragraph_boundary_moved_to_another_valid_offset_is_refused_under_the_original_key`, and through `load` in `test_snapshot_service.py` |
 | No unkeyed path from bytes to a `SnapshotText` exists in `debate_core` | `test_nothing_in_debate_core_turns_serialized_text_into_a_snapshot_text_without_a_key` |
 | Any change to either blob, including a valid re-written paragraph map, fails `load` | hypothesis, `test_integrity_any_change_to_either_blob_is_refused` |
+| Span extraction re-derives the paragraph map from the text under its normalizer version and refuses a mismatch before resolving any paragraph ID, including for a `SnapshotText` that never went through `load` (`debate_core.evidence.extractor`) | `test_extract_refuses_a_paragraph_boundary_moved_to_another_valid_offset`, `test_extract_refuses_any_paragraph_map_the_text_does_not_have`; hypothesis, `test_extract_refuses_any_moved_paragraph_boundary_before_resolving_a_paragraph` |
 | Storing the same source twice stores one copy of each blob, on disk | `tests/integration/test_snapshot_local.py` |

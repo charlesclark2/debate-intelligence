@@ -302,3 +302,25 @@ def test_a_removal_profile_missing_from_the_aws_config_is_refused_with_nothing_c
     assert "debate-dev-evidence-removal-typo" in refused["error"]["message"] + str(refused["error"]["hint"])
     assert "nothing was deleted" in refused["error"]["message"]
     assert (tree(installation / "dev"), versions(bucket)) == before
+
+
+def test_a_removal_that_completes_but_cannot_be_logged_says_it_completed(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """This machine's removal log refuses the append after every deletion has succeeded."""
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    local_log = installation / "dev" / "suppression" / "removal-log.jsonl"
+    local_log.parent.mkdir(parents=True, exist_ok=True)
+    local_log.touch(mode=0o400)
+
+    result = runner.invoke(create_app(), [*REMOVE, "--execute"], terminal_width=100)
+
+    text = " ".join(result.output.replace("│", " ").split())
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert "REMOVAL_COMPLETED_UNLOGGED" in text
+    assert "the removal completed: 12 record(s), 3 local file(s)" in text
+    assert "record these counts in the register" in text.lower()
+    assert "failed" not in text.lower() and "stopped part-way" not in text
+    keys = {key for key, _ in versions(bucket)}
+    for sha in EXCLUSIVE:
+        assert not any(sha in key for key in keys), "the deletes happened"

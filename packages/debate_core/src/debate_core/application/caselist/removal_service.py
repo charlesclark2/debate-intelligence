@@ -189,6 +189,52 @@ class RemovalIncomplete(DomainError):
         )
 
 
+class RemovalCompletedUnlogged(DomainError):
+    """Every step of a removal succeeded; only its removal-log entry is missing from some copy.
+
+    Not :class:`RemovalIncomplete`: nothing is left to delete, and the operator must not tell the
+    requester otherwise. What is at risk is the record. Running the command again finds nothing left
+    and logs a `COMPLETED` entry with zero counts, so the counts are in this message for the operator
+    to put in the register. A copy that did take the entry passes it to the others on the next
+    removal-log write, because every append writes each copy the union's lines it lacks.
+    """
+
+    def __init__(
+        self,
+        report: RemovalReport,
+        failure: BaseException,
+        *,
+        holding: Sequence[str],
+        missing: Sequence[str],
+    ) -> None:
+        self.report = report
+        self.error_code = error_code_of(failure)
+        self.local_records_deleted = report.local_records_deleted
+        self.local_files_deleted = report.local_files_deleted
+        self.s3_versions_deleted = report.s3_versions_deleted
+        self.manifests_rewritten = report.manifests_rewritten
+        self.manifest_rows_dropped = report.manifest_rows_dropped
+        self.log_copies_without_entry = ", ".join(missing)
+        held = (
+            f" {', '.join(holding)} holds it, and the next removal-log write copies it across."
+            if holding
+            else " No copy of the log has it."
+        )
+        self.hint = (
+            "Nothing needs removing again. Put the counts above in the register entry for this request, "
+            "then fix what refused the log write."
+        )
+        super().__init__(
+            f"the removal completed: {report.local_records_deleted} record(s), "
+            f"{report.local_files_deleted} local file(s) and {report.s3_versions_deleted} bucket object "
+            f"version(s) deleted; {report.manifests_rewritten} manifest(s) rewritten without "
+            f"{report.manifest_rows_dropped} row(s). Its removal-log entry was not written to "
+            f"{self.log_copies_without_entry} ({self.error_code}: {failure}).{held} Record these counts "
+            "in the register from this output: running the command again finds nothing left to remove "
+            "and would log zero counts."
+        )
+
+
 class NotSuppressed(DomainError):
     """`unsuppress` was asked to lift a suppression that is not in force."""
 
@@ -343,7 +389,9 @@ class CaselistRemovalService:
         """Carry out `plan`. Raises before any change if the takedown credential is missing or refused.
 
         Raises :class:`RemovalIncomplete` — after appending an `INCOMPLETE` log entry — if a step
-        fails part-way; running the same command again finishes the job.
+        fails part-way; running the same command again finishes the job. Raises
+        :class:`RemovalCompletedUnlogged` if every step succeeded and only the log entry could not be
+        written to every copy.
         """
         access = await self._authorised()
         suppression = RecordedSuppressionList(
@@ -364,15 +412,12 @@ class CaselistRemovalService:
         except (DomainError, OSError) as stopped:
             failure = stopped
         entry = self._log_entry(plan, counts, failure)
+        log = RecordedRemovalLog(self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY))
         unlogged: DomainError | OSError | None = None
         try:
-            await RecordedRemovalLog(
-                self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY)
-            ).append([entry])
+            await log.append([entry])
         except (DomainError, OSError) as refused:
-            if failure is None:
-                raise
-            unlogged = refused  # the run's own failure is the one to report; this one is added to it
+            unlogged = refused  # reported with the run's own failure, or as a completed removal unlogged
         report = RemovalReport(
             plan=plan,
             log_entry=entry,
@@ -384,6 +429,9 @@ class CaselistRemovalService:
         )
         if failure is not None:
             raise RemovalIncomplete(report, failure, suppressed=suppressed, unlogged=unlogged) from failure
+        if unlogged is not None:
+            holding, missing = await _copies_holding(log.records, entry.to_line())
+            raise RemovalCompletedUnlogged(report, unlogged, holding=holding, missing=missing) from unlogged
         return report
 
     async def _delete_bucket_objects(
@@ -580,6 +628,21 @@ class CaselistRemovalService:
         return ObjectStoreAppendOnlyRecord(
             access.objects, key, location=f"s3://{access.bucket}/{key}", reader=self.remote
         )
+
+
+async def _copies_holding(
+    records: Sequence[AppendOnlyRecord], line: str
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The locations of the copies that hold `line`, and of those that do not or cannot be read."""
+    holding: list[str] = []
+    missing: list[str] = []
+    for record in records:
+        try:
+            present = line in await record.read_lines()
+        except (DomainError, OSError):
+            present = False
+        (holding if present else missing).append(record.location)
+    return tuple(holding), tuple(missing)
 
 
 def _names_removed(plan: RemovalPlan, caselist: str, line: str) -> bool:

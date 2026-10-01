@@ -11,6 +11,7 @@ files, week by week.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import zipfile
 from collections.abc import Sequence
@@ -67,6 +68,7 @@ from debate_core.integrations.local.suppression_list import (
     local_suppression_list_file,
 )
 from debate_core.integrations.s3 import S3EvidenceVersionStore
+from debate_core.testing.fakes import InMemoryAppendOnlyRecord
 
 from .conftest import REQUEST, TEAM, RemovalWorld
 
@@ -604,6 +606,94 @@ class TestTheFirstRemovalInABucketWithoutListBucket:
         assert "appended first" not in message, "it was not: that append is what failed"
         assert "removal log" in message, "the log entry could not be written either, and it says so"
         assert removal_world.versions() == before
+
+
+class BucketLogThatRefuses:
+    """The takedown credential's object access, refusing only to write the bucket's removal log."""
+
+    def __init__(self, inner: Any, *, bucket: str) -> None:
+        self._inner = inner
+        self.location = f"s3://{bucket}"
+
+    async def list_objects(self, prefix: str) -> Any:
+        return await self._inner.list_objects(prefix)
+
+    async def head(self, key: str) -> Any:
+        return await self._inner.head(key)
+
+    async def get_file(self, key: str, destination: Path) -> Any:
+        return await self._inner.get_file(key, destination)
+
+    async def put_file(self, key: str, source: Path) -> Any:
+        if key == REMOVAL_LOG_KEY:
+            raise StoreUnavailable("PutObject", f"{self.location}/{key}", "the connection dropped")
+        return await self._inner.put_file(key, source)
+
+
+def assert_says_it_completed(message: str, report: Any) -> None:
+    """What the operator must be told when only the log entry is missing: done, and the counts."""
+    assert "the removal completed" in message
+    assert "stopped part-way" not in message and "removal failed" not in message
+    assert report.local_records_deleted == 12 and report.local_files_deleted == 3
+    assert report.manifests_rewritten == 6 and report.manifest_rows_dropped == 30
+    assert report.s3_versions_deleted > 0
+    for count in (
+        f"{report.local_records_deleted} record(s)",
+        f"{report.local_files_deleted} local file(s)",
+        f"{report.s3_versions_deleted} bucket object version(s)",
+        f"{report.manifests_rewritten} manifest(s)",
+        f"{report.manifest_rows_dropped} row(s)",
+    ):
+        assert count in message, count
+    assert "record these counts in the register" in message.lower(), "a re-run would log zero counts"
+
+
+class TestARemovalThatCompletesButCannotBeLogged:
+    """Every deletion succeeded and only the log append failed: the operator must hear it completed."""
+
+    async def test_the_bucket_copy_refusing_names_it_and_still_reports_the_counts(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        def refusing() -> Any:
+            real = removal_world.takedown()
+            return type(real)(
+                versions=real.versions,
+                objects=BucketLogThatRefuses(real.objects, bucket=real.bucket),  # type: ignore[arg-type]
+                profile=real.profile,
+                bucket=real.bucket,
+            )
+
+        with pytest.raises(DomainError) as stopped:
+            await remove_team(removal_world, service=removal_world.service(takedown=refusing))
+
+        assert type(stopped.value).__name__ == "RemovalCompletedUnlogged"
+        message = str(stopped.value)
+        assert_says_it_completed(message, getattr(stopped.value, "report", None))
+        assert f"not written to s3://{removal_world.bucket_name}/{REMOVAL_LOG_KEY}" in message
+        local = local_removal_log_file(removal_world.data_dir)
+        assert f"{local.location} holds it" in message
+        (entry,) = log_entries(removal_world)
+        assert entry.outcome is RemovalOutcome.COMPLETED and entry.local_records_deleted == 12
+        for sha in EXCLUSIVE:
+            key = f"raw/caselist/{SYNTHETIC_CASELIST}/sha256/{sha[0:2]}/{sha[2:4]}/{sha}"
+            assert all_versions_under(removal_world, key) == [], "the deletes really happened"
+
+    async def test_this_machines_copy_refusing_leaves_no_copy_with_the_entry_and_says_so(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        local_log = InMemoryAppendOnlyRecord("local removal log")
+        local_log.fail_next_append = OSError("disk full")
+        service = dataclasses.replace(removal_world.service(), local_removal_log=local_log)
+
+        with pytest.raises(DomainError) as stopped:
+            await remove_team(removal_world, service=service)
+
+        message = str(stopped.value)
+        assert_says_it_completed(message, getattr(stopped.value, "report", None))
+        assert "not written to local removal log" in message
+        assert f"s3://{removal_world.bucket_name}/{REMOVAL_LOG_KEY}" in message
+        assert "holds it" not in message
+        assert not await world_has(removal_world, REMOVAL_LOG_KEY)
 
 
 async def world_has(world: RemovalWorld, key: str) -> bool:

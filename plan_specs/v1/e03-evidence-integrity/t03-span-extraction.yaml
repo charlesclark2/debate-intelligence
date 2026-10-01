@@ -26,7 +26,10 @@ spec:
     CardSelection contract (E05/E06) will feed this; verification is t04 and the edit policy t05.
   priority: 1
   constraints:
-    packages: [debate_core.evidence]
+    # docs/evidence added by the PM, 2026-10-01. Omitted when this spec was written, which is
+    # why the session could not record the point-of-use paragraph-map recheck in the format
+    # doc that v1-e03-t01 created and v1-e03-t02 extended. Both of those specs carry it.
+    packages: [debate_core.evidence, docs/evidence]
     forbidden:
       - Accepting evidence text as input (selections are ids/offsets only)
       - Markup spans outside the extracted evidence ranges or overlapping in the same style
@@ -52,7 +55,7 @@ spec:
       description: >-
         The extractor API has no parameter that accepts free text, enforced by a signature test.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

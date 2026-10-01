@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 28 | 19 | 177 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 28 | 21 | 177 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 25 | 18 | 248 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
@@ -124,8 +124,8 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [Deterministic, versioned text normalization](plan_specs/v1/e03-evidence-integrity/t01-text-normalization.yaml) `v1-e03-t01-text-normalization` | Succeeded | 2 | 9.0 |
-| [SHA-256 provenance and snapshot creation](plan_specs/v1/e03-evidence-integrity/t02-hashing-provenance.yaml) `v1-e03-t02-hashing-provenance` | Pending | 2 | 6.0 |
-| [Span-addressed evidence extraction](plan_specs/v1/e03-evidence-integrity/t03-span-extraction.yaml) `v1-e03-t03-span-extraction` | Pending | 1 | 7.5 |
+| [SHA-256 provenance and snapshot creation](plan_specs/v1/e03-evidence-integrity/t02-hashing-provenance.yaml) `v1-e03-t02-hashing-provenance` | Succeeded | 2 | 6.0 |
+| [Span-addressed evidence extraction](plan_specs/v1/e03-evidence-integrity/t03-span-extraction.yaml) `v1-e03-t03-span-extraction` | Succeeded | 1 | 7.5 |
 | [EvidenceVerifier and verification statuses](plan_specs/v1/e03-evidence-integrity/t04-verifier.yaml) `v1-e03-t04-verifier` | Pending | 1 | 7.0 |
 | [Evidence edit policy](plan_specs/v1/e03-evidence-integrity/t05-edit-constraints.yaml) `v1-e03-t05-edit-constraints` | Pending | 1 | 5.5 |
 | [`debate-research verify` command](plan_specs/v1/e03-evidence-integrity/t06-verify-command.yaml) `v1-e03-t06-verify-command` | Pending | 2 | 5.0 |

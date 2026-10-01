@@ -68,6 +68,7 @@ __all__ = [
     "nfc_replaced_code_points",
     "normalize",
     "normalize_chars",
+    "paragraph_map",
 ]
 
 NORMALIZER_VERSION: Final = "evidence-normalizer-v1"
@@ -597,3 +598,19 @@ def normalize(text: str, version: str) -> NormalizedText:
         paragraphs=_DEFINITIONS[version].segment_paragraphs(characters.text),
         offset_map=characters.offset_map,
     )
+
+
+def paragraph_map(text: str, version: str) -> tuple[Paragraph, ...]:
+    """The paragraphs ``version`` divides already-normalized ``text`` into.
+
+    A stored paragraph map is correct exactly when it equals this, so span extraction
+    (`v1-e03-t03`) compares the two before it resolves a paragraph ID. Segmentation reads no
+    Unicode data, so unlike :func:`normalize` this does not require the version's pinned database;
+    it raises :class:`UnknownNormalizerVersionError` for a version that does not exist.
+    """
+    definition = _DEFINITIONS.get(version)
+    if definition is None:
+        raise UnknownNormalizerVersionError(
+            f"unknown normalizer version {version!r}; supported: " + ", ".join(SUPPORTED_NORMALIZER_VERSIONS)
+        )
+    return definition.segment_paragraphs(text)

@@ -11,7 +11,7 @@ Rules this follows: [`docs/policies/website-publishing.md`](../policies/website-
 | Channel | **Buttondown**, a mailing service, on its free tier |
 | Chosen by | Charlie Clark, head coach, 2026-09-29, from the comparison below |
 | Activities director | Randee Drew, Athletics and Activities Director, **has been told and is fine with it** (as reported by Charlie on 2026-09-29) |
-| List owner | **Interim:** the Buttondown account registered to **charles.clark@wfbschools.com**, a district account, with no second way in. **Committed:** moved to the team Google account (ADR-0015) by the start of the 2027-28 season. See [Who owns the list](#who-owns-the-list) |
+| List owner | **Interim:** the Buttondown account registered to **charles.clark@wfbschools.com**, a district account, with no second way in. **Moves to the team Google account (ADR-0015) as soon as that account exists**, with the start of the 2027-28 season as a backstop only. See [Who owns the list](#who-owns-the-list) |
 | Signup page | The address in [`site/content/email-updates.json`](../../site/content/email-updates.json) (`signupUrl`) |
 | Where it appears | "Email updates for parents and guardians" on the home page, under the parent session, and at the foot of the contact page |
 
@@ -212,11 +212,22 @@ password recovery runs through the mailbox the account is registered to. A paid 
 ($79 a month) would not fix that, so the team does not buy one.
 
 **Today the list is in its interim state**: registered to Charlie's district address with no
-second way in. The transfer to the team identity is **committed for the start of the 2027-28
-season** (Charlie, 2026-09-30). It is **blocked on a second coach**: the team Google account that
-ADR-0015 names as the owner of the calendar, the announcements sheet and this list needs two
-owners, and `v1-e37-t01` is waiting for that second coach. The account and its owners are recorded
-in `docs/runbooks/website-content-accounts.md`, which also tracks this list's move.
+second way in.
+
+**When it moves: as soon as the team account exists.** The trigger is an event, not a date. The
+team Google account that ADR-0015 names as the owner of the calendar, the announcements sheet and
+this list is being set up by `v1-e37-t01`, and it is waiting for a second coach. **Moving this list
+is part of setting that account up, not a later chore.** Whoever creates the account changes the
+Buttondown login to it, in the same sitting where possible. The account is not finished until
+this list is on it. Its owners and this move are recorded in
+`docs/runbooks/website-content-accounts.md`.
+
+**Backstop: the start of the 2027-28 season.** If the team account still does not exist by then,
+that is the point to stop waiting and fix ownership another way: a district role mailbox, or the
+district's own tool. The backstop is a deadline for giving up on the plan, not the plan. A parent
+who asks who can delete their address is owed a shorter answer than "within the year".
+(The PM set the trigger on 2026-09-30, replacing Charlie's date of the same day, which had made
+the start of the 2027-28 season the target.)
 
 | What ac6 asks for | Today (2026-09-30) | When it is met |
 |---|---|---|

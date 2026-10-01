@@ -47,7 +47,8 @@ does not publish it.**
 **The phase stays `InProgress`, and this goes `--partial`.**
 - **ac6 is open by design.** ac6 asks that two people can each, independently, recover the list and its data.
   The list is in the interim state the amendment allows: Charlie's district address, with the
-  transfer to the ADR-0015 team account committed for the start of the 2027-28 season. ac6 cannot
+  transfer to the ADR-0015 team account triggered by that account existing, with the start of the
+  2027-28 season as a backstop only (PM, 2026-09-30). ac6 cannot
   fully close until `v1-e37-t01`'s team account exists, and that is blocked on a second coach.
 - **Both operator steps the PM asked for are done.** The mail-app one-click unsubscribe was
   clicked end to end and passed (ac4). The first monthly subscriber export was taken on
@@ -92,7 +93,7 @@ Reported against the spec as amended in the PM's PR.
 | **ac3**: no site code, workflow or infrastructure receives or stores subscriber addresses; the only data path is visitor browser → provider | PASS | See [How ac3 was proven](#how-ac3-was-proven). Every place an address does exist is named there, including the monthly export ac6 now requires |
 | **ac4**: Charlie subscribes a test address through the dev preview, gets the confirmation email, confirms, receives a test update and unsubscribes with one click | PASS | On 2026-09-30, Charlie:<br>• subscribed charles.clark@wfbschools.com through `https://dev.wfbdebate.com/#email-updates`;<br>• **received the confirmation email and clicked it** before the test update;<br>• received the test update, whose link pointed straight at `https://wfbdebate.com/`, so click tracking is off.<br>**Footer link:** unsubscribing through it took **two clicks**, an "Are you sure?" dialog with a reason survey (screenshot). Buttondown then showed **Unsubscribed** (screenshot).<br>**Headers:** the email carries `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058). That shows one-click is advertised, not that Buttondown's endpoint answers.<br>**One click, clicked:** Charlie resubscribed, published a second test update, and clicked the **mail app's own Unsubscribe button beside the sender's name**. It unsubscribed in **one click**, and Buttondown showed the address as **Unsubscribed almost immediately**. He then resubscribed, and Buttondown showed the address as subscribed again immediately (Charlie, 2026-09-30).<br>**Not on the web:** the test email's archive address returns 404, and `/wfbdebate/rss` has 0 items (curl, 2026-09-30) |
 | **ac5** (amended): the guide explains how a coach sends an update, the student rules as `docs/policies/website-publishing.md` states them (cited, never restated), and who owns the list | PASS | Guide, "How to send an update" (step by step, plus a before-every-send list whose first item is the policy's checklist items 1 to 7); "What may not go in an email about students", a table pointing at the policy's Students, published-names allowlist, Photos and media consent, Results and awards and Pre-publication checklist sections, plus only what is specific to email; "Who owns the list". `grep -n "FIRST NAME\|Jordan Rivera\|Students 6" docs/guides/parent-email-updates.md` → none, so no policy rule is copied |
-| **ac6** (new): at least two people can independently regain control of the list and its subscriber data, and the recovery path has been tested | **NOT MET, interim state as ac6 allows** | Guide, "Who owns the list": a status line per element.<br>• **Registered to the team identity:** no.<br>• **Mailbox reachable by two people:** no.<br>• **Credentials a second person can retrieve:** no.<br>• **Recovery walked by someone other than Charlie:** not yet.<br>• **Periodic export held by the team:** monthly. First export taken on 2026-09-30 by Charlie (Subscribers → ⋯ → Export), into a private folder in his district Drive, with the download deleted. That is an interim location only Charlie can reach.<br>The interim state is recorded with the dated commitment ac6 requires: transfer to the ADR-0015 team account **by the start of the 2027-28 season** (Charlie, 2026-09-30). **It cannot fully close until `v1-e37-t01`'s team account exists, which is blocked on a second coach** |
+| **ac6** (new): at least two people can independently regain control of the list and its subscriber data, and the recovery path has been tested | **NOT MET, interim state as ac6 allows** | Guide, "Who owns the list": a status line per element.<br>• **Registered to the team identity:** no.<br>• **Mailbox reachable by two people:** no.<br>• **Credentials a second person can retrieve:** no.<br>• **Recovery walked by someone other than Charlie:** not yet.<br>• **Periodic export held by the team:** monthly. First export taken on 2026-09-30 by Charlie (Subscribers → ⋯ → Export), into a private folder in his district Drive, with the download deleted. That is an interim location only Charlie can reach.<br>The interim state is recorded with the commitment ac6 requires. The transfer to the ADR-0015 team account is **triggered by that account existing**: moving the list is part of setting the account up. **The start of the 2027-28 season is a backstop, not the target** (PM ruling, 2026-09-30, replacing a date-only commitment). **It cannot fully close until `v1-e37-t01`'s team account exists, which is blocked on a second coach** |
 | `compare-and-decide`: comparison drafted (guide contains "double opt-in") | PASS | `grep -c "double opt-in" docs/guides/parent-email-updates.md` → 1 or more |
 | `compare-and-decide`: Charlie chooses the channel and it is recorded | PASS | Buttondown, 2026-09-29; the guide's status table and "Why Buttondown" |
 | `operator-setup` (amended): double opt-in on, the list meets ac6's recovery requirement, only the public signup URL shared | Double opt-in and URL: PASS. Recovery: as ac6 | Double opt-in on, tracking off and archive Disabled were confirmed by Charlie on 2026-09-29, and only `https://buttondown.com/wfbdebate` was shared |
@@ -188,9 +189,12 @@ than asserted.
    report). The policy is bumped to **version 1.1** as a correction with no rule changed. Its change
    control requires a re-recorded approval, and Charlie's instruction is recorded as that approval,
    scoped to the address. Historical session reports keep the address as it was at the time.
-8. **Transfer date is a season, not a day.** ac6 asks for a "dated commitment". Charlie chose "the
-   start of the 2027-28 season", which matches the publishing policy's own next review but is not a
-   calendar date. The PM may want a specific day.
+8. **The transfer commitment is an event, not a date.** Charlie first chose "the start of the
+   2027-28 season". The PM ruled on 2026-09-30 that a commitment nearly a year out cannot be told
+   apart from the end state, because nothing prompts anyone to revisit it. The guide now says:
+   - the list moves **as soon as `v1-e37-t01`'s team account exists**, as part of setting that
+     account up;
+   - the 2027-28 season is a **backstop** for switching to another route, not the target.
 
 ## Decisions and assumptions
 
@@ -282,7 +286,53 @@ Already done by the operator during this session:
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
+
+**Reviewed by / date:** PM, 2026-09-30
+
+**Notes:**
+
+Accepted, merging `--partial`. ac6 stays open and the Goal stays `InProgress`, which is the honest
+state: the list is in the interim arrangement ac6 permits, and it cannot leave that arrangement
+until v1-e37-t01's team account exists, which is blocked on a second coach existing. Everything a
+session could close is closed.
+
+**The strongest thing here is a test, not a feature.** The site cannot receive a subscriber address
+because there is no form and no provider code, and that property is held by a test over the built
+output that fails when Buttondown code is planted in it. The difference between "we did not add a
+form" and "a form cannot be added without the build going red" is the difference between a decision
+and a guarantee. For the first personal data this project has ever touched, the guarantee is what I
+wanted and it is what shipped.
+
+**You changed a true-sounding claim to a true one, before I ruled on it.** The site said
+"unsubscribe with one click"; Buttondown's footer link asks for a confirmation, so the claim was
+false by that route even though it is true by the mail client's own button. Rewriting it to "every
+email has a link to unsubscribe, and you can leave the list at any time" costs nothing and is
+accurate by either path. Shrinking a promise to fit reality, unprompted, on a privacy-adjacent
+claim, is the instinct I most want in this part of the codebase.
+
+**The ac4 sequence is how this is supposed to go.** You recorded the criterion as passing on the
+strength of the RFC 8058 header, said plainly that you had read the header rather than clicked the
+button, I asked for the click, and you did it end to end and resubscribed. Reading
+`List-Unsubscribe-Post` proves the capability is advertised; clicking proves the endpoint answers.
+Neither of us would have caught the gap if you had simply written PASS.
+
+**ac6's interim state is acceptable, and its deadline is not.** The export is the thing that makes
+a single-address registration survivable: if the account is lost tomorrow, the list is not, and the
+first export was taken on 2026-09-30 rather than merely scheduled, into district Drive with the
+local download deleted. That is real mitigation. But "by the start of the 2027-28 season" is close
+to a year, and a dated commitment that far out is indistinguishable from the end state, because
+nothing will prompt anyone to revisit it. **The trigger should be the event, not the date: the list
+moves to the team identity as soon as v1-e37-t01's account exists, with the 2027-28 season as a
+backstop rather than the target.** Please amend that one line in the guide before the PR opens.
+Parents who hand over an address are owed a shorter answer than "within the year" to the question of
+who can delete it.
+
+**Splitting `9ca0aef` out on request was the right-sized response to an awkward ask.** It is the
+address correction and nothing else across eight files, which is what makes it cherry-pickable onto
+a hotfix for `main` without dragging an unfinished feature into production. The policy's version 1.1
+entry inside it is better than the silent find-and-replace I had staged, because a document that
+promises families a removal channel should record when that channel changed and who approved it.
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**

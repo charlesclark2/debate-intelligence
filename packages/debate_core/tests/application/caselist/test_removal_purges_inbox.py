@@ -50,7 +50,14 @@ from tests.fixtures.openev.build_synthetic_openev import DOWNLOADS as OPENEV_DOW
 from tests.fixtures.openev.build_synthetic_openev import build_download_zips
 
 from debate_core.application.caselist.import_service import CaselistImportService
-from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxAction, InboxReason
+from debate_core.application.caselist.inbox_purge import (
+    CaselistInbox,
+    InboxAction,
+    InboxFileChanged,
+    InboxFileKind,
+    InboxFilePlan,
+    InboxReason,
+)
 from debate_core.application.caselist.manifest import manifest_key, read_manifest_lines
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.removal_plan import RemovalPlan, SourceSelector, parse_team_selector
@@ -884,3 +891,19 @@ class TestTheChecksBeforeAFileIsChanged:
 
         assert changed.name in str(stopped.value)
         assert changed.read_bytes() == next_mondays_archive()
+
+
+def test_an_error_names_a_camp_download_by_its_id_never_its_title() -> None:
+    """The sync's rule for anything that may reach a log: an OpenEv id, not a camp file's title."""
+    one = InboxFilePlan(
+        name="openev-512-TSF-Estuary_Solvency_Advocate.docx",
+        kind=InboxFileKind.OPENEV,
+        sha256="ab" * 32,
+        action=InboxAction.DELETE,
+        reason=InboxReason.THE_FILE_IS_REMOVED,
+        openev_id=512,
+    )
+
+    message = str(InboxFileChanged(one.label))
+
+    assert "openev-512" in message and "Estuary" not in message

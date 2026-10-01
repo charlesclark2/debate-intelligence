@@ -97,8 +97,9 @@ command plans again from the list and finishes the rest.
 them; symbolic links, which are not followed. A zip that cannot be read cannot be checked: it is
 reported, and the removal does not call itself complete while it is there.
 
-Nothing here logs a member's path or a file's name beyond the inbox's own download names, which
-carry an archive's caselist and date or an OpenEv id.
+Nothing here logs. Its errors name a file by :attr:`InboxFilePlan.label` — a weekly archive's name
+(a caselist and a date) or an OpenEv id — never a member's path or a camp file's title; the plan,
+which the operator reads in their own terminal, shows the inbox names in full.
 """
 
 from __future__ import annotations
@@ -239,6 +240,16 @@ class InboxFilePlan:
     """For a camp download: the digests of every real member, which the delivery record keeps."""
     detail: str | None = None
     """For `UNREADABLE`: why, without a member's path."""
+
+    @property
+    def label(self) -> str:
+        """How an error names this file: a weekly archive's own name (a caselist and a date), an
+        OpenEv download's id, never a camp file's title or a name somebody gave a file by hand."""
+        if self.kind is InboxFileKind.WEEKLY_ARCHIVE:
+            return self.name
+        if self.openev_id is not None:
+            return f"openev-{self.openev_id}"
+        return f"the inbox file with sha256 {self.sha256[:12]}…"
 
 
 @dataclass(frozen=True, slots=True)
@@ -590,9 +601,9 @@ def purge_inbox(
 def _carry_out(inbox: CaselistInbox, one: InboxFilePlan, *, request_id: str, done: InboxPurge) -> None:
     path = inbox.directory / one.name
     if one.action is InboxAction.UNREADABLE:
-        raise InboxFileUnreadable(one.name, one.detail)
+        raise InboxFileUnreadable(one.label, one.detail)
     if _digest_of(path) != one.sha256:
-        raise InboxFileChanged(one.name)
+        raise InboxFileChanged(one.label)
     if one.action is InboxAction.REWRITE:
         done.rewrites.append(_rewrite(inbox, path, one, request_id=request_id))
         done.rewritten += 1
@@ -635,13 +646,13 @@ def _rewrite(inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, request_id
         rewritten = inbox.archives.inventory(staged)
         if [_identity(entry) for entry in rewritten] != expected:
             raise InboxRewriteFailed(
-                one.name, "it did not read back as the original without the removed entries"
+                one.label, "it did not read back as the original without the removed entries"
             )
         with staged.open("rb") as written:
             os.fsync(written.fileno())
         os.replace(staged, path)
     except (UnreadableArchive, ArchiveTooLarge) as broken:
-        raise InboxRewriteFailed(one.name, type(broken).__name__) from broken
+        raise InboxRewriteFailed(one.label, type(broken).__name__) from broken
     finally:
         staged.unlink(missing_ok=True)
         with contextlib.suppress(OSError):

@@ -29,8 +29,12 @@ stores it once:
 
 :meth:`~SnapshotService.load` re-hashes both blobs every time, and there is no switch to turn that
 off. An integrity check that callers can skip is one they will skip on the hot path, which is the
-path that matters. Measured cost and the reasoning are in
-`docs/session-reports/v1-e03-t02-hashing-provenance.md`.
+path that matters. Measured against the filesystem store on an Apple M3 Pro (task
+`v1-e03-t02-hashing-provenance`), a load costs about 0.3 ms for a 150 KB web page, 8 ms for a 5 MB
+PDF and 170 ms for a 50 MB one: roughly two and a half times the bare reads, most of it the
+service's own re-hash of the raw bytes and the strict decode of the normalized document. A caller
+that checks many cards against one source loads the snapshot once and reuses the
+:class:`LoadedSnapshot`; it does not skip the check.
 """
 
 from __future__ import annotations

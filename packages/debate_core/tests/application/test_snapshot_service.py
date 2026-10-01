@@ -34,7 +34,8 @@ from debate_core.application.errors import (
 from debate_core.application.ports import BlobKey
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.domain import AccessStatus, ProvenanceMode, SourceSnapshot
-from debate_core.evidence.normalization import InvalidTextError, NormalizedText, normalize
+from debate_core.evidence.normalization import InvalidTextError, NormalizedText, Paragraph, normalize
+from debate_core.evidence.snapshot_text import SnapshotText, decode_snapshot_text, encode_snapshot_text
 from debate_core.testing import FAKE_EPOCH, FixedClock, InMemorySnapshotStore, SequentialIdGenerator
 
 PROPERTY_SETTINGS = settings(
@@ -56,7 +57,7 @@ RAW = (
     b"<p>Ocean heat reached a record \xe2\x80\x94 again.</p></body></html>\r\n"
 )
 #: What an extractor made of RAW: a no-break space and CRLF breaks, which normalization tidies.
-EXTRACTED = "Arctic methane release is accelerating.\r\n\r\nOcean heat reached a record — again.\r\n"
+EXTRACTED = "Arctic methane release is\u00a0accelerating.\r\n\r\nOcean heat reached a record — again.\r\n"
 
 #: The normalized text as UTF-8, by hand. Paragraph one is 39 characters, the break takes 39-41, and
 #: "Ocean heat reached a record — again." is 36 characters (the em dash is one), so it ends at 77.
@@ -587,26 +588,72 @@ def test_integrity_a_missing_blob_is_not_found_rather_than_damaged() -> None:
         run(service_over_an_empty_store.load(snapshot))
 
 
+def test_integrity_a_paragraph_map_altered_into_another_valid_document_is_refused() -> None:
+    """Only the normalized blob's own hash catches this edit; the text and its hash are untouched.
+
+    The altered document is valid and canonical, names the same version and holds the same text, so
+    every other check passes. Span extraction resolves paragraph IDs through this map
+    (`v1-e03-t03`), so a nudged boundary would quietly move a card's evidence.
+    """
+    store = TrustingSnapshotStore()
+    service, _ = build_service(store)
+    snapshot = create(service)
+    altered = DOCUMENT.replace(b'"end":77', b'"end":76')
+    assert decode_snapshot_text(altered).text.encode("utf-8") == NORMALIZED_UTF8
+    store.blobs[snapshot.normalized_blob_key] = altered
+
+    with pytest.raises(SnapshotIntegrityError) as refused:
+        run(service.load(snapshot))
+
+    assert refused.value.check is SnapshotIntegrityCheck.NORMALIZED_BLOB_HASH
+
+
+def _with_last_paragraph_moved(document: bytes) -> bytes | None:
+    """The same text with its last paragraph boundary moved: a valid, canonical, different document."""
+    stored = decode_snapshot_text(document)
+    if not stored.paragraphs:
+        return None
+    last = stored.paragraphs[-1]
+    moved = (
+        Paragraph(last.paragraph_id, last.start, last.end - 1)
+        if last.end > last.start
+        else Paragraph("p9999", last.start, last.end)
+    )
+    return encode_snapshot_text(
+        SnapshotText(stored.text, stored.normalizer_version, (*stored.paragraphs[:-1], moved))
+    )
+
+
 @PROPERTY_SETTINGS
 @given(
     raw=st.binary(min_size=1, max_size=300),
     extracted=st.text(alphabet=st.characters(exclude_categories=("Cs",)), max_size=200),
     data=st.data(),
 )
-def test_integrity_any_single_byte_change_to_either_blob_is_refused(
+def test_integrity_any_change_to_either_blob_is_refused(
     raw: bytes, extracted: str, data: st.DataObject
 ) -> None:
-    """Against a store that does not check, so every refusal here is the service's own."""
+    """Against a store that does not check, so every refusal here is the service's own.
+
+    Two kinds of change: one substituted byte in either blob, and a paragraph map rewritten into
+    another valid document with the same text. Random bytes alone almost never produce the second,
+    and a deep run of the byte-only version passed with the normalized blob's re-hash removed.
+    """
     store = TrustingSnapshotStore()
     service, _ = build_service(store)
     snapshot = create(service, raw=raw, extracted=extracted)
-    key = data.draw(st.sampled_from([snapshot.raw_blob_key, snapshot.normalized_blob_key]), label="blob")
-    stored = store.blobs[key]
-    position = data.draw(st.integers(min_value=0, max_value=len(stored) - 1), label="position")
-    replacement = data.draw(
-        st.integers(min_value=0, max_value=255).filter(lambda byte: byte != stored[position])
-    )
-    store.blobs[key] = stored[:position] + bytes([replacement]) + stored[position + 1 :]
+    change = data.draw(st.sampled_from(["byte", "paragraph map"]), label="change")
+    altered_document = _with_last_paragraph_moved(store.blobs[snapshot.normalized_blob_key])
+    if change == "paragraph map" and altered_document is not None:
+        store.blobs[snapshot.normalized_blob_key] = altered_document
+    else:
+        key = data.draw(st.sampled_from([snapshot.raw_blob_key, snapshot.normalized_blob_key]), label="blob")
+        stored = store.blobs[key]
+        position = data.draw(st.integers(min_value=0, max_value=len(stored) - 1), label="position")
+        replacement = data.draw(
+            st.integers(min_value=0, max_value=255).filter(lambda byte: byte != stored[position])
+        )
+        store.blobs[key] = stored[:position] + bytes([replacement]) + stored[position + 1 :]
 
     with pytest.raises(SnapshotIntegrityError):
         run(service.load(snapshot))

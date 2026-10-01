@@ -101,7 +101,7 @@ def test_sha256_text_of_ascii_text_matches_the_published_vectors(message: bytes,
     ("text", "utf8"),
     [
         pytest.param("café", b"caf\xc3\xa9", id="two-byte"),
-        pytest.param("café", b"cafe\xcc\x81", id="combining-mark-not-composed"),
+        pytest.param("cafe\u0301", b"cafe\xcc\x81", id="combining-mark-not-composed"),
         pytest.param("“quoted” — dash", b"\xe2\x80\x9cquoted\xe2\x80\x9d \xe2\x80\x94 dash", id="three-byte"),
         pytest.param("\U0001f30a", b"\xf0\x9f\x8c\x8a", id="four-byte"),
         pytest.param("ماء", b"\xd9\x85\xd8\xa7\xd8\xa1", id="arabic"),
@@ -129,7 +129,7 @@ def test_sha256_text_is_not_the_hash_of_any_other_encoding(wrong_encoding: bytes
 
 def test_sha256_text_does_not_normalize_the_text_it_is_given() -> None:
     """Normalization is the caller's step, recorded with its version; the hash adds no rules of its own."""
-    assert sha256_text("café") != sha256_text("café")
+    assert sha256_text("café") != sha256_text("cafe\u0301")
     assert sha256_text("a  b") != sha256_text("a b")
     assert sha256_text("A") != sha256_text("a")
 
@@ -137,8 +137,8 @@ def test_sha256_text_does_not_normalize_the_text_it_is_given() -> None:
 def test_a_leading_feff_in_the_text_is_hashed_as_content_and_not_stripped() -> None:
     """The helper adds no BOM and removes none. The v1 normalizer has already deleted U+FEFF, so in a
     snapshot it never reaches the hash; here it is hashed as the three bytes it encodes to."""
-    assert sha256_text("﻿abc") == sha256_bytes(BYTE_ORDER_MARK_UTF8 + b"abc")
-    assert sha256_text("﻿abc") != sha256_text("abc")
+    assert sha256_text("\ufeffabc") == sha256_bytes(BYTE_ORDER_MARK_UTF8 + b"abc")
+    assert sha256_text("\ufeffabc") != sha256_text("abc")
 
 
 def test_sha256_text_refuses_text_with_a_lone_surrogate() -> None:

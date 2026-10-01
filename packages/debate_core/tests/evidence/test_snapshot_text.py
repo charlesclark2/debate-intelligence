@@ -10,6 +10,7 @@ run is `SNAPSHOT_PROPERTY_EXAMPLES=20000 uv run pytest ...`.
 
 from __future__ import annotations
 
+import json
 import os
 
 import pytest
@@ -190,7 +191,7 @@ def test_a_non_canonical_spelling_of_the_document_is_refused(data: bytes) -> Non
 EXTRACTED_TEXT = st.text(
     alphabet=st.one_of(
         st.characters(exclude_categories=("Cs",)),
-        st.sampled_from(list(' \t\n\r   ­​﻿é"\\')),
+        st.sampled_from(list(' \t\n\r\u00a0\u2028\u2029\u00ad\u200b\ufeffe\u0301"\\')),
     ),
     max_size=200,
 )
@@ -209,7 +210,16 @@ def test_every_normalizer_result_round_trips_through_its_document(extracted: str
 def test_no_single_byte_change_to_a_document_decodes_to_the_same_content(
     extracted: str, data: st.DataObject
 ) -> None:
-    """A changed byte is refused or reads as different content; it never passes as the original."""
+    """A changed byte is refused or reads as different content; it never passes as the original.
+
+    This guards the outcome, not any one check, and mutation testing shows what that means: it
+    fails only when two checks are gone together. A changed format identifier is refused by the
+    format check and, independently, by the canonical re-encoding, so removing either alone leaves
+    this passing. It also cannot exercise the canonical check on its own, because no one-byte
+    substitution turns a canonical document into another spelling of the same content; that is
+    `test_every_other_json_spelling_of_a_document_is_refused`. A 50,000-example run passed with the
+    canonical check removed, which is how that was found.
+    """
     stored = SnapshotText.from_normalized(normalize(extracted, V1))
     document = encode_snapshot_text(stored)
     position = data.draw(st.integers(min_value=0, max_value=len(document) - 1), label="position")
@@ -223,3 +233,39 @@ def test_no_single_byte_change_to_a_document_decodes_to_the_same_content(
     except MalformedSnapshotText:
         return
     assert decoded != stored
+
+
+@PROPERTY_SETTINGS
+@given(
+    EXTRACTED_TEXT,
+    st.sampled_from([None, 0, 1]),
+    st.sampled_from([(",", ":"), (", ", ": "), (",", ": "), (", ", ":")]),
+    st.booleans(),
+    st.booleans(),
+)
+def test_every_other_json_spelling_of_a_document_is_refused(
+    extracted: str,
+    indent: int | None,
+    separators: tuple[str, str],
+    ensure_ascii: bool,
+    reverse_keys: bool,
+) -> None:
+    """The same content written any other way JSON allows is refused; only the canonical bytes decode.
+
+    A second accepted spelling would be a second blob key for one normalized text, and the check
+    that prevents it is the canonical re-encoding at the end of `decode_snapshot_text`.
+    """
+    stored = SnapshotText.from_normalized(normalize(extracted, V1))
+    canonical = encode_snapshot_text(stored)
+    document = json.loads(canonical)
+    if reverse_keys:
+        document = dict(reversed(document.items()))
+    respelled = json.dumps(
+        document, indent=indent, separators=separators, ensure_ascii=ensure_ascii, sort_keys=False
+    ).encode("utf-8")
+
+    if respelled == canonical:
+        assert decode_snapshot_text(respelled) == stored
+    else:
+        with pytest.raises(MalformedSnapshotText):
+            decode_snapshot_text(respelled)

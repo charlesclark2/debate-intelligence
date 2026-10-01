@@ -181,7 +181,19 @@ class UnreadableSuppressionList:
 
 @pytest.fixture
 def world(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> RemovalWorld:
-    return RemovalWorld(data_dir=tmp_path / "evidence", bucket_name=evidence_bucket, client=s3_client)
+    """The removal here never reaches the pull's inbox, whose state each test sets by hand.
+
+    Since `v1-e30-t09` a removal on this machine purges this machine's inbox itself. These tests
+    are about the pull given each state the inbox can be in after a removal — a copy kept, as a
+    removal made on another machine leaves it, or gone — so the removal is given an inbox of its
+    own. What a removal here does to the pull's inbox is `test_removal_purges_inbox.py`'s.
+    """
+    return RemovalWorld(
+        data_dir=tmp_path / "evidence",
+        bucket_name=evidence_bucket,
+        client=s3_client,
+        removal_inbox=tmp_path / "an-inbox-on-another-machine",
+    )
 
 
 def build_sync(

@@ -29,6 +29,7 @@ under a 7-day clock (`docs/policies/caselist-data-use.md`, "Removal").
 Without `--execute` nothing is written anywhere — no record, file, object, list line or log line —
 and only the everyday evidence profile is used. The plan is printed in the order an operator needs
 it: what will be removed, what is shared and therefore kept, the manifests that will be rewritten,
+the files in the download inbox that hold removed files and what happens to each (`v1-e30-t09`),
 the suppression entries exactly as they will be appended, and a paragraph of facts for the
 confirmation to the requester, then the exact command that executes it.
 
@@ -61,6 +62,7 @@ from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
+from debate_core.application.caselist.inbox_purge import InboxAction, InboxFilePlan
 from debate_core.application.caselist.removal_plan import (
     Disposition,
     InvalidRemovalRequest,
@@ -252,7 +254,8 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"DONE in {plan.environment} ({plan.bucket}): {report.local_records_deleted} record(s), "
             f"{report.local_files_deleted} local file(s), {report.s3_versions_deleted} bucket object "
             f"version(s) deleted; {report.manifests_rewritten} manifest(s) rewritten without "
-            f"{report.manifest_rows_dropped} row(s)."
+            f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
+            f"{report.inbox_files_rewritten} rewritten."
         )
     lines.append(f"Request {plan.request_id}, reason {plan.reason}, selector {_describe(plan.selector)}.")
     if plan.nothing_to_do and not skipped:
@@ -287,6 +290,8 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             versions = "" if rewrite.versions is None else f", {rewrite.versions} version(s) replaced by one"
             lines.append(f"  {rewrite.side.value:6} {rewrite.key}  -{rewrite.rows_dropped} row(s){versions}")
 
+    lines += ["", *_inbox_lines(plan)]
+
     entries = plan.suppression_entries
     whole = sum(1 for entry in entries if entry.disclosure is None)
     lines += [
@@ -310,6 +315,36 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
     if report is None and not plan.nothing_to_do:
         lines += ["", "TO CARRY IT OUT", f"  {_execute_command(plan)}"]
     return "\n".join(lines)
+
+
+def _inbox_lines(plan: RemovalPlan) -> list[str]:
+    """The download inbox: each file holding a removed file, and whether it is deleted or rewritten."""
+    if not plan.inbox:
+        lines = [f"DOWNLOAD INBOX ({plan.inbox_directory}): nothing in it holds a removed file."]
+    else:
+        lines = [
+            f"DOWNLOAD INBOX ({plan.inbox_directory}): {len(plan.inbox)} file(s) hold removed files. An",
+            "archive still waiting to be imported is rewritten without them, never deleted.",
+        ]
+        lines += [_inbox_file_line(one) for one in plan.inbox]
+    for left in plan.inbox_team_files_left:
+        lines += [
+            f"  NOTE {left.name}, waiting to be imported, holds {left.files} file(s) under this team's",
+            "       directory that the store has never seen, so this removal cannot resolve them. Run",
+            "       `caselist pull` to import it, then this same command again.",
+        ]
+    return lines
+
+
+def _inbox_file_line(one: InboxFilePlan) -> str:
+    noun = "entry" if one.entries_dropped == 1 else "entries"
+    entries = f" ({one.entries_dropped} {noun} out, {one.entries_kept} kept)" if one.dropped else ""
+    if one.action is InboxAction.UNREADABLE:
+        return (
+            f"  UNREADABLE {one.name}: {one.reason} ({one.detail}). Move it out of the inbox: the removal "
+            "stops INCOMPLETE while it is there."
+        )
+    return f"  {one.action.value:8} {one.name}: {one.reason}{entries}"
 
 
 def _source_lines(number: int, source: PlannedSource, plan: RemovalPlan) -> list[str]:
@@ -385,6 +420,11 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
         lines.append(
             f"  - Kept: {len(shared)} file(s) another team disclosed too or a camp released; say so, and why."
         )
+    if plan.inbox:
+        lines.append(
+            f"  - Taken out of the download inbox on this machine: {len(plan.inbox)} downloaded file(s) "
+            "held it."
+        )
     lines += [
         "  - Suppressed, so next week's cumulative archive cannot bring any of it back.",
         f"  - Run in {plan.environment} only; the policy needs dev and prod both, dev first.",
@@ -453,6 +493,23 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
             for planned in plan.objects
         ],
         "suppression_entries": [entry.to_line() for entry in plan.suppression_entries],
+        "inbox_directory": plan.inbox_directory,
+        "inbox": [
+            {
+                "name": one.name,
+                "kind": one.kind.value,
+                "sha256": one.sha256,
+                "action": one.action.value,
+                "reason": str(one.reason),
+                "removed_sha256": list(one.removed_sha256),
+                "entries_dropped": one.entries_dropped,
+                "entries_kept": one.entries_kept,
+            }
+            for one in plan.inbox
+        ],
+        "inbox_team_files_left": [
+            {"name": left.name, "files": left.files} for left in plan.inbox_team_files_left
+        ],
         "counts": {
             "remove": len(plan.of(Disposition.REMOVE)),
             "withdraw": len(plan.of(Disposition.WITHDRAW)),

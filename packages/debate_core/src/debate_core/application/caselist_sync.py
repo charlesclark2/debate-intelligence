@@ -259,6 +259,7 @@ __all__ = [
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "openev_id_of_inbox_name",
     "run_pull",
     "within_daily_budget",
 ]
@@ -895,10 +896,13 @@ class OpenEvDeliveries:
     records is a fact about upstream — these bytes came from that id — which no removal and no
     un-suppress changes. Like the suppression list it holds no name: digests and ids only.
 
-    Written after each import of an OpenEv download completes, never by a dry run. A file that cannot
-    be read is treated as empty, with a warning: what it would have said is recovered by the next
-    download of each id, which costs that download once and nothing worse, since the importer refuses
-    a removed file on its own.
+    Written after each import of an OpenEv download completes, never by a dry run, and by a removal
+    that deletes an id's copy from the inbox when this record does not yet know what the id
+    delivered (`v1-e30-t09`, :meth:`remember_if_unknown`): the inbox copy was the only other place
+    those digests could be read from, and without them the next run would fetch the removed file
+    again. A file that cannot be read is treated as empty, with a warning: what it would have said is
+    recovered by the next download of each id, which costs that download once and nothing worse,
+    since the importer refuses a removed file on its own.
     """
 
     def __init__(self, path: Path) -> None:
@@ -916,6 +920,17 @@ class OpenEvDeliveries:
             )
             return {}
         return deliveries
+
+    def remember_if_unknown(self, openev_id: int, delivery: OpenEvDelivery) -> bool:
+        """Record `delivery` for `openev_id` unless the record already holds that id. True if it wrote.
+
+        What an import recorded is never replaced: it carries the upstream path's digest, which a
+        removal reading the bytes off the inbox cannot know.
+        """
+        if openev_id in self.read():
+            return False
+        self.record(openev_id, delivery)
+        return True
 
     def record(self, openev_id: int, delivery: OpenEvDelivery) -> None:
         """Remember what `openev_id` delivered, replacing anything remembered for it before."""
@@ -2486,6 +2501,13 @@ def _path_digest(path: str) -> str:
 
 _OPENEV_INBOX_PREFIX: Final = re.compile(r"^openev-(\d+)-")
 """What the sync puts in front of a camp file's name (`openev_inbox_name`), and which file it was."""
+
+
+def openev_id_of_inbox_name(name: str) -> int | None:
+    """The OpenEv id an inbox file was downloaded as (`openev-<id>-…`), or `None` for any other name."""
+    prefixed = _OPENEV_INBOX_PREFIX.match(name)
+    return int(prefixed.group(1)) if prefixed is not None else None
+
 
 _PATH_SEPARATORS: Final = re.compile(r"[\\/]+")
 _NOT_A_NAME_CHARACTER: Final = re.compile(r"[\W_]+")

@@ -36,6 +36,14 @@ manifest does not record which form the import happened to run from. A zip wraps
 one directory named after the archive (`hsld26-0915/…`), and :func:`read_archive` takes that
 wrapper off; see :func:`common_root_to_strip` for exactly when it will and will not.
 
+## Taking removed members out of an archive
+
+A removal (`v1-e30-t09`) rewrites a weekly archive that is still waiting in the sync's inbox,
+without the files it removed. :class:`ZipArchiveRewriter` does that here, beside the reader, so the
+two cannot disagree about what a member's path is: :func:`inventory_zip` names every entry by the
+name the zip carries and by the path :func:`read_archive` would report, using the same wrapper and
+junk rules, and :func:`rewrite_zip_without` copies every entry it is not told to drop.
+
 ## Where this lives
 
 In `integrations.local` rather than in `application`, because it is an adapter: it knows about
@@ -50,13 +58,15 @@ import hashlib
 import os
 import stat
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from debate_core.application.errors import ArchiveTooLarge, UnreadableArchive
 from debate_core.application.ports.archive import (
     ArchiveEntry,
     ArchiveMember,
+    InventoriedEntry,
     SkippedMember,
     SkipReason,
 )
@@ -68,9 +78,12 @@ __all__ = [
     "SkipReason",
     "SkippedMember",
     "UnreadableArchive",
+    "ZipArchiveRewriter",
     "archive_digest",
     "common_root_to_strip",
+    "inventory_zip",
     "read_archive",
+    "rewrite_zip_without",
 ]
 
 #: Directory macOS puts a member's resource fork in.
@@ -233,6 +246,110 @@ def _zip_entries(
 def _is_zip_symlink(info: zipfile.ZipInfo) -> bool:
     """Whether a zip entry is a symlink, from the Unix mode its external attributes carry."""
     return stat.S_ISLNK(info.external_attr >> 16)
+
+
+# ------------------------------------------------------------------------------------------------
+# Inventory and rewrite (v1-e30-t09)
+# ------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ZipArchiveRewriter:
+    """The :class:`~debate_core.application.ports.archive.ArchiveRewriter` for zips, under the reader's
+    ceilings."""
+
+    max_archive_bytes: int
+    max_unpacked_bytes: int
+
+    def inventory(self, source: Path) -> tuple[InventoriedEntry, ...]:
+        return inventory_zip(
+            source, max_archive_bytes=self.max_archive_bytes, max_unpacked_bytes=self.max_unpacked_bytes
+        )
+
+    def rewrite_without(
+        self, source: Path, destination: Path, *, drop: Collection[str], comment: bytes
+    ) -> None:
+        rewrite_zip_without(source, destination, drop=drop, comment=comment)
+
+
+def inventory_zip(
+    source: Path, *, max_archive_bytes: int, max_unpacked_bytes: int
+) -> tuple[InventoriedEntry, ...]:
+    """Every entry of a zip: its own name, the path :func:`read_archive` gives it, and its digest.
+
+    The same ceilings as :func:`read_archive`, checked before anything is read. Unlike the reader it
+    hashes skipped entries too — a zip-slip member is never imported but can hold any bytes at all —
+    and it lists directory entries, which a rewrite has to decide about. Entries come in the
+    archive's own order, the order a rewrite writes them in.
+    """
+    location = Path(source)
+    if not location.is_file():
+        raise UnreadableArchive(location.name, "no such file")
+    on_disk = location.stat().st_size
+    if on_disk > max_archive_bytes:
+        raise ArchiveTooLarge(
+            measured="archive", actual_bytes=on_disk, limit_bytes=max_archive_bytes, source=location.name
+        )
+    try:
+        with zipfile.ZipFile(location) as archive:
+            infos = archive.infolist()
+            files = [info for info in infos if not info.is_dir()]
+            declared = sum(info.file_size for info in files)
+            if declared > max_unpacked_bytes:
+                raise ArchiveTooLarge(
+                    measured="unpacked",
+                    actual_bytes=declared,
+                    limit_bytes=max_unpacked_bytes,
+                    source=location.name,
+                )
+            # The wrapper is decided exactly as `_zip_entries` decides it, from the same entries.
+            root = common_root_to_strip(
+                [_normalized(info.filename) for info in files if _is_contained(info.filename)],
+                archive_stem=location.stem,
+            )
+            return tuple(_inventoried(archive, info, root) for info in infos)
+    except zipfile.BadZipFile as broken:
+        raise UnreadableArchive(location.name, "not a readable zip file") from broken
+
+
+def _inventoried(archive: zipfile.ZipFile, info: zipfile.ZipInfo, root: str | None) -> InventoriedEntry:
+    raw = _normalized(info.filename)
+    if info.is_dir():
+        return InventoriedEntry(
+            name=info.filename, path=_strip_root(raw.rstrip("/"), root), skip_reason=None, sha256=None
+        )
+    if not _is_contained(info.filename):
+        path, reason = raw, SkipReason.PATH_OUTSIDE_ARCHIVE
+    else:
+        path = _strip_root(raw, root)
+        reason = SkipReason.SYMLINK if _is_zip_symlink(info) else _skip_reason_for(path)
+    digest = hashlib.sha256()
+    with archive.open(info) as stream:
+        while chunk := stream.read(_HASH_CHUNK_BYTES):
+            digest.update(chunk)
+    return InventoriedEntry(name=info.filename, path=path, skip_reason=reason, sha256=digest.hexdigest())
+
+
+def rewrite_zip_without(source: Path, destination: Path, *, drop: Collection[str], comment: bytes) -> None:
+    """Write `destination`: every entry of `source` but those named in `drop`, each as it was.
+
+    A kept entry keeps its name, timestamp, compression method and attributes, and its bytes are
+    copied unchanged, so the reader gives it the same path and the same digest it did before. The
+    archive's comment is replaced by `comment`. `destination` must not exist; `source` is only read.
+    """
+    dropped = frozenset(drop)
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "x") as rewritten:
+        rewritten.comment = comment
+        for info in original.infolist():
+            if info.filename in dropped:
+                continue
+            kept = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+            kept.compress_type = info.compress_type
+            kept.external_attr = info.external_attr
+            kept.internal_attr = info.internal_attr
+            kept.create_system = info.create_system
+            kept.comment = info.comment
+            rewritten.writestr(kept, original.read(info))
 
 
 # ------------------------------------------------------------------------------------------------

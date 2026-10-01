@@ -90,6 +90,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
+from debate_core.application.caselist.inbox_purge import CaselistInbox
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import RemovalPlanner
@@ -296,6 +297,27 @@ class ServiceContainer:
             max_archive_bytes=caselist.max_archive_bytes,
             max_unpacked_bytes=caselist.max_unpacked_bytes,
         )
+
+    def caselist_inbox(self) -> CaselistInbox:
+        """The directory `caselist pull` downloads into, as a removal purges it (`v1-e30-t09`).
+
+        The same directory the pull is built with, so the removal cannot purge one inbox while the
+        pull reads another; zips are listed and rewritten under the reader's own ceilings.
+        """
+        settings = self.settings
+        caselist = settings.caselist
+        return CaselistInbox(
+            directory=self._inbox_directory(),
+            state_dir=settings.storage.data_dir,
+            archives=archive_reader.ZipArchiveRewriter(
+                max_archive_bytes=caselist.max_archive_bytes,
+                max_unpacked_bytes=caselist.max_unpacked_bytes,
+            ),
+        )
+
+    def _inbox_directory(self) -> Path:
+        settings = self.settings
+        return settings.caselist.inbox_dir or settings.storage.data_dir / DEFAULT_INBOX_DIRECTORY
 
     def archive_digest(self, source: Path) -> str:
         """The SHA-256 an import records for the archive itself, by the same reader's rules."""
@@ -508,6 +530,7 @@ class ServiceContainer:
                 profile=storage.s3.aws_profile,
                 client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
             ),
+            inbox=self.caselist_inbox(),
             suppression=suppression,
             clock=clock,
             environment=settings.environment.value,
@@ -519,6 +542,7 @@ class ServiceContainer:
             local=self._local_evidence(),
             local_blobs=FsEvidenceVersionStore(data_dir / BLOB_DIRECTORY.parent),
             local_parsed=FsEvidenceVersionStore(data_dir / PARSED_DIRECTORY),
+            inbox=self.caselist_inbox(),
             remote=bucket,
             suppression=suppression,
             local_suppression=local_suppression_list_file(data_dir),
@@ -637,7 +661,7 @@ class ServiceContainer:
             local=self._local_evidence(),
             read_archive=self.read_archive,
             event_for_caselist=event_for_caselist,
-            inbox=caselist.inbox_dir or settings.storage.data_dir / DEFAULT_INBOX_DIRECTORY,
+            inbox=self._inbox_directory(),
             state_dir=settings.storage.data_dir,
             # The importers' own list, so the run's skip of a removed camp file (v1-e34-t07) and the
             # importers' refusal of one can never read different copies.

@@ -30,8 +30,13 @@ named by mistake all fail there, with nothing deleted and nothing appended (spec
    takedown credential so nothing the dry run could not see is missed; then each rewritten
    manifest, written and every superseded version of it purged; then every noncurrent version of
    any other manifest of the same caselists that still names what was removed.
-3. **This machine**: blobs and parsed files, then manifests, then — last — the records. The
-   records are what a re-run resolves a `--team` from, so they outlive every other step.
+3. **This machine**: blobs and parsed files, then manifests, then the sync's download inbox
+   (`v1-e30-t09`: removed camp files and imported archives deleted, archives still waiting to be
+   imported rewritten without the removed files; see
+   :mod:`~debate_core.application.caselist.inbox_purge`), then — last — the records. The records
+   are what a re-run resolves a `--team` from, so they outlive every other step. Every step after
+   the first relies on it: the inbox step deletes the copy of a camp file the sync would otherwise
+   use to recognise it as removed, which is safe only once the list says it is.
 4. **The removal log**, one entry, `COMPLETED` or `INCOMPLETE` with the error's code. An incomplete
    run is finished by running the same command again; nothing is retried behind the operator's back.
 
@@ -55,6 +60,7 @@ from pathlib import Path
 from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxPurge, purge_inbox
 from debate_core.application.caselist.publish_service import error_code_of
 from debate_core.application.caselist.removal_plan import (
     Disposition,
@@ -90,6 +96,7 @@ from debate_core.application.ports.suppression import (
     REINSTATEMENT_REASONS,
     REQUEST_ID_PATTERN,
     AppendOnlyRecord,
+    InboxRewriteRecord,
     ReasonCode,
     RemovalLogEntry,
     RemovalLogKind,
@@ -214,6 +221,8 @@ class RemovalCompletedUnlogged(DomainError):
         self.s3_versions_deleted = report.s3_versions_deleted
         self.manifests_rewritten = report.manifests_rewritten
         self.manifest_rows_dropped = report.manifest_rows_dropped
+        self.inbox_files_deleted = report.inbox_files_deleted
+        self.inbox_files_rewritten = report.inbox_files_rewritten
         self.log_copies_without_entry = ", ".join(missing)
         held = (
             f" {', '.join(holding)} holds it, and the next removal-log write copies it across."
@@ -228,7 +237,8 @@ class RemovalCompletedUnlogged(DomainError):
             f"the removal completed: {report.local_records_deleted} record(s), "
             f"{report.local_files_deleted} local file(s) and {report.s3_versions_deleted} bucket object "
             f"version(s) deleted; {report.manifests_rewritten} manifest(s) rewritten without "
-            f"{report.manifest_rows_dropped} row(s). Its removal-log entry was not written to "
+            f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
+            f"{report.inbox_files_rewritten} rewritten. Its removal-log entry was not written to "
             f"{self.log_copies_without_entry} ({self.error_code}: {failure}).{held} Record these counts "
             "in the register from this output: running the command again finds nothing left to remove "
             "and would log zero counts."
@@ -308,6 +318,7 @@ class _Counts:
     manifests_rewritten: int = 0
     manifest_rows_dropped: int = 0
     s3_versions_deleted: int = 0
+    inbox: InboxPurge = field(default_factory=InboxPurge)
 
 
 @dataclass(frozen=True, slots=True)
@@ -321,6 +332,8 @@ class RemovalReport:
     manifests_rewritten: int
     manifest_rows_dropped: int
     s3_versions_deleted: int
+    inbox_files_deleted: int = 0
+    inbox_files_rewritten: int = 0
 
     @property
     def completed(self) -> bool:
@@ -362,6 +375,8 @@ class CaselistRemovalService:
     local: LocalEvidence
     local_blobs: EvidenceVersionStore
     local_parsed: EvidenceVersionStore
+    inbox: CaselistInbox
+    """The sync's download inbox in this environment. Required, so no removal can forget it."""
     remote: EvidenceObjectStore
     """The bucket through the everyday profile: rewritten manifests are written with it."""
     suppression: SuppressionList
@@ -408,6 +423,7 @@ class CaselistRemovalService:
             await self._sweep_superseded_manifests(plan, access, counts)
             await self._delete_local_files(plan, counts)
             await self._rewrite_local_manifests(plan, counts)
+            await self._purge_inbox(plan, counts)
             await self._delete_records(plan, counts)
         except (DomainError, OSError) as stopped:
             failure = stopped
@@ -426,6 +442,8 @@ class CaselistRemovalService:
             manifests_rewritten=counts.manifests_rewritten,
             manifest_rows_dropped=counts.manifest_rows_dropped,
             s3_versions_deleted=counts.s3_versions_deleted,
+            inbox_files_deleted=counts.inbox.deleted,
+            inbox_files_rewritten=counts.inbox.rewritten,
         )
         if failure is not None:
             raise RemovalIncomplete(report, failure, suppressed=suppressed, unlogged=unlogged) from failure
@@ -504,6 +522,16 @@ class CaselistRemovalService:
             counts.manifests_rewritten += 1
             counts.manifest_rows_dropped += rewrite.rows_dropped
 
+    async def _purge_inbox(self, plan: RemovalPlan, counts: _Counts) -> None:
+        """The sync's inbox, as planned: after this machine's store, before the records."""
+        purge_inbox(
+            self.inbox,
+            plan.inbox,
+            suppression=plan.suppression_after,
+            request_id=plan.request_id,
+            done=counts.inbox,
+        )
+
     async def _delete_records(self, plan: RemovalPlan, counts: _Counts) -> None:
         """Last, because a re-run of a `--team` removal resolves the team from these."""
         for source in plan.sources:
@@ -544,6 +572,12 @@ class CaselistRemovalService:
             manifests_rewritten=counts.manifests_rewritten,
             manifest_rows_dropped=counts.manifest_rows_dropped,
             s3_versions_deleted=counts.s3_versions_deleted,
+            inbox_files_deleted=counts.inbox.deleted,
+            inbox_files_rewritten=counts.inbox.rewritten,
+            inbox_rewrites=tuple(
+                InboxRewriteRecord(from_sha256=one.from_sha256, to_sha256=one.to_sha256)
+                for one in counts.inbox.rewrites
+            ),
             error_code=None if failure is None else error_code_of(failure),
         )
 

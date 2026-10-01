@@ -69,6 +69,7 @@ __all__ = [
     "SUPPRESSION_SCHEMA_VERSION",
     "AppendOnlyRecord",
     "AppendOnlyViolation",
+    "InboxRewriteRecord",
     "ReasonCode",
     "RemovalLog",
     "RemovalLogEntry",
@@ -266,6 +267,17 @@ class RemovalSelectorKind(StrEnum):
     TEAM = "TEAM"
 
 
+class InboxRewriteRecord(DomainModel):
+    """One inbox archive a removal rewrote without the removed files: its digest before and after.
+
+    The next pull imports the rewritten file and its manifest names the `after` digest; this pair is
+    what ties that digest back to the archive as downloaded (`v1-e30-t09`).
+    """
+
+    from_sha256: Sha256Hex
+    to_sha256: Sha256Hex
+
+
 class RemovalLogEntry(DomainModel):
     """One line of the removal log: one execution, in sha256 values, counts and codes.
 
@@ -294,6 +306,11 @@ class RemovalLogEntry(DomainModel):
     manifests_rewritten: int = 0
     manifest_rows_dropped: int = 0
     s3_versions_deleted: int = 0
+    inbox_files_deleted: int = 0
+    """Files deleted from the sync's inbox (`v1-e30-t09`): removed camp files, and imported archives."""
+    inbox_files_rewritten: int = 0
+    """Archives in the inbox, still waiting to be imported, rewritten without the removed files."""
+    inbox_rewrites: tuple[InboxRewriteRecord, ...] = ()
     error_code: Annotated[str, StringConstraints(pattern=_ERROR_CODE_PATTERN)] | None = None
 
     def to_line(self) -> str:

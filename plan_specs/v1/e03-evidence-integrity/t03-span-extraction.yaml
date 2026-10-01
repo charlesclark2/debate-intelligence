@@ -52,7 +52,7 @@ spec:
       description: >-
         The extractor API has no parameter that accepts free text, enforced by a signature test.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

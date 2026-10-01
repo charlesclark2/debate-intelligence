@@ -599,7 +599,8 @@ def test_integrity_a_paragraph_map_altered_into_another_valid_document_is_refuse
     service, _ = build_service(store)
     snapshot = create(service)
     altered = DOCUMENT.replace(b'"end":77', b'"end":76')
-    assert decode_snapshot_text(altered).text.encode("utf-8") == NORMALIZED_UTF8
+    altered_key = hashlib.sha256(altered).hexdigest()  # a valid document under its own key
+    assert decode_snapshot_text(altered, expected_key=altered_key).text.encode("utf-8") == NORMALIZED_UTF8
     store.blobs[snapshot.normalized_blob_key] = altered
 
     with pytest.raises(SnapshotIntegrityError) as refused:
@@ -610,7 +611,7 @@ def test_integrity_a_paragraph_map_altered_into_another_valid_document_is_refuse
 
 def _with_last_paragraph_moved(document: bytes) -> bytes | None:
     """The same text with its last paragraph boundary moved: a valid, canonical, different document."""
-    stored = decode_snapshot_text(document)
+    stored = decode_snapshot_text(document, expected_key=hashlib.sha256(document).hexdigest())
     if not stored.paragraphs:
         return None
     last = stored.paragraphs[-1]

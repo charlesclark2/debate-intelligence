@@ -58,6 +58,7 @@ from debate_core.evidence.normalization import (
 from debate_core.evidence.snapshot_text import (
     MalformedSnapshotText,
     SnapshotText,
+    SnapshotTextKeyMismatch,
     decode_snapshot_text,
     encode_snapshot_text,
 )
@@ -216,16 +217,17 @@ class SnapshotService:
         normalized_blob = await self._read(
             snapshot_id, snapshot.normalized_blob_key, SnapshotIntegrityCheck.NORMALIZED_BLOB_HASH
         )
-        normalized_blob_sha256 = sha256_bytes(normalized_blob)
-        if normalized_blob_sha256 != snapshot.normalized_blob_key:
+        try:
+            # The re-hash of this blob happens inside the decode, which cannot be called without the
+            # key. It is the only check that protects the paragraph map: see `snapshot_text`.
+            stored_text = decode_snapshot_text(normalized_blob, expected_key=snapshot.normalized_blob_key)
+        except SnapshotTextKeyMismatch as mismatch:
             raise SnapshotIntegrityError(
                 snapshot_id,
                 SnapshotIntegrityCheck.NORMALIZED_BLOB_HASH,
-                expected=snapshot.normalized_blob_key,
-                actual=normalized_blob_sha256,
-            )
-        try:
-            stored_text = decode_snapshot_text(normalized_blob)
+                expected=mismatch.expected_key,
+                actual=mismatch.actual_key,
+            ) from mismatch
         except MalformedSnapshotText as malformed:
             raise SnapshotIntegrityError(
                 snapshot_id, SnapshotIntegrityCheck.NORMALIZED_BLOB_MALFORMED

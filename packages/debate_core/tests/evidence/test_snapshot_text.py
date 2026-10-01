@@ -10,17 +10,25 @@ run is `SNAPSHOT_PROPERTY_EXAMPLES=20000 uv run pytest ...`.
 
 from __future__ import annotations
 
+import hashlib
+import importlib
+import inspect
 import json
 import os
+import pkgutil
+import re
+from collections.abc import Callable, Iterator
 
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+import debate_core
 from debate_core.evidence.normalization import NORMALIZER_VERSION, Paragraph, UnknownParagraphError, normalize
 from debate_core.evidence.snapshot_text import (
     MalformedSnapshotText,
     SnapshotText,
+    SnapshotTextKeyMismatch,
     decode_snapshot_text,
     encode_snapshot_text,
 )
@@ -45,11 +53,22 @@ DOCUMENT = (
     b'"paragraphs":[{"end":31,"id":"p0001","start":0},{"end":63,"id":"p0002","start":33}],'
     b'"text":"Arctic methane is accelerating.\\n\\nOcean heat reached a new high."}'
 )
+DOCUMENT_KEY = hashlib.sha256(DOCUMENT).hexdigest()
 STORED = SnapshotText(
     text=NORMALIZED,
     normalizer_version=V1,
     paragraphs=(Paragraph("p0001", 0, 31), Paragraph("p0002", 33, 63)),
 )
+
+
+def decode_under_its_own_key(data: bytes) -> SnapshotText:
+    """Decode with the key computed from ``data`` itself, which production code must never do.
+
+    It stands in for a blob read from a content-addressed store under its own correct key, so the
+    tests that use it exercise the structural and canonical checks rather than the key check. The
+    key check has tests of its own, below.
+    """
+    return decode_snapshot_text(data, expected_key=hashlib.sha256(data).hexdigest())
 
 
 # ---------------------------------------------------------------------------------------------
@@ -108,7 +127,7 @@ def test_paragraph_lookups_slice_the_stored_text() -> None:
 
 
 def test_the_hand_written_document_decodes_to_the_stored_text() -> None:
-    assert decode_snapshot_text(DOCUMENT) == STORED
+    assert decode_snapshot_text(DOCUMENT, expected_key=DOCUMENT_KEY) == STORED
 
 
 @pytest.mark.parametrize(
@@ -154,7 +173,7 @@ def test_the_hand_written_document_decodes_to_the_stored_text() -> None:
 )
 def test_a_document_with_the_wrong_structure_is_refused(data: bytes) -> None:
     with pytest.raises(MalformedSnapshotText):
-        decode_snapshot_text(data)
+        decode_under_its_own_key(data)
 
 
 @pytest.mark.parametrize(
@@ -180,7 +199,90 @@ def test_a_document_with_the_wrong_structure_is_refused(data: bytes) -> None:
 def test_a_non_canonical_spelling_of_the_document_is_refused(data: bytes) -> None:
     """Any second spelling would be a second blob key for the same content."""
     with pytest.raises(MalformedSnapshotText):
-        decode_snapshot_text(data)
+        decode_under_its_own_key(data)
+
+
+# ---------------------------------------------------------------------------------------------
+# The key check
+# ---------------------------------------------------------------------------------------------
+
+
+def test_decoding_requires_the_key_as_a_keyword_with_no_default() -> None:
+    """There is no call that turns bytes into a `SnapshotText` without saying which key they belong to."""
+    expected_key = inspect.signature(decode_snapshot_text).parameters["expected_key"]
+
+    assert expected_key.kind is inspect.Parameter.KEYWORD_ONLY
+    assert expected_key.default is inspect.Parameter.empty
+
+
+def test_bytes_that_do_not_hash_to_their_key_are_refused_before_they_are_parsed() -> None:
+    """`{` is not even JSON; the refusal is still the key mismatch, so nothing unchecked was read."""
+    with pytest.raises(SnapshotTextKeyMismatch) as refused:
+        decode_snapshot_text(b"{", expected_key=DOCUMENT_KEY)
+
+    assert refused.value.expected_key == DOCUMENT_KEY
+    assert refused.value.actual_key == hashlib.sha256(b"{").hexdigest()
+
+
+def test_a_paragraph_boundary_moved_to_another_valid_offset_is_refused_under_the_original_key() -> None:
+    """The edit only the key catches: valid, canonical, same version, same text."""
+    moved = DOCUMENT.replace(b'"end":63', b'"end":62')
+    assert decode_under_its_own_key(moved).text == STORED.text  # a perfectly good document
+
+    with pytest.raises(SnapshotTextKeyMismatch):
+        decode_snapshot_text(moved, expected_key=DOCUMENT_KEY)
+
+
+#: Parameter annotations that could carry a serialized document.
+_SERIALIZED = re.compile(r"\b(bytes|bytearray|memoryview|str|object|Any)\b")
+_RETURNS_SNAPSHOT_TEXT = re.compile(r"\bSnapshotText\b")
+
+
+def _debate_core_callables() -> Iterator[tuple[str, Callable[..., object]]]:
+    """Every function, and every method of every class, defined anywhere in `debate_core`."""
+    for info in pkgutil.walk_packages(debate_core.__path__, "debate_core."):
+        module = importlib.import_module(info.name)
+        for name, value in vars(module).items():
+            if getattr(value, "__module__", None) != module.__name__:
+                continue
+            if inspect.isfunction(value):
+                yield f"{module.__name__}.{name}", value
+            elif inspect.isclass(value):
+                for member_name, member in vars(value).items():
+                    function = getattr(member, "__func__", member)  # unwrap classmethod/staticmethod
+                    if inspect.isfunction(function) and not member_name.startswith("__"):
+                        yield f"{module.__name__}.{name}.{member_name}", function
+
+
+def test_nothing_in_debate_core_turns_serialized_text_into_a_snapshot_text_without_a_key() -> None:
+    """Fails if an unkeyed way from bytes (or a string) back to a `SnapshotText` appears anywhere.
+
+    The paragraph map in a `SnapshotText` is trustworthy only when the bytes it came from were
+    checked against their key, so every callable that returns one from serialized input must
+    require `expected_key`. What this cannot see is a caller that parses the JSON itself and calls
+    the `SnapshotText` constructor; that would be deliberate, and is left to review.
+    """
+    found: list[str] = []
+    unkeyed: list[str] = []
+    for qualified_name, function in _debate_core_callables():
+        signature = inspect.signature(function, eval_str=False)
+        if not _RETURNS_SNAPSHOT_TEXT.search(str(signature.return_annotation)):
+            continue
+        if not any(
+            _SERIALIZED.search(str(parameter.annotation)) for parameter in signature.parameters.values()
+        ):
+            continue
+        found.append(qualified_name)
+        key = signature.parameters.get("expected_key")
+        if (
+            key is None
+            or key.kind is not inspect.Parameter.KEYWORD_ONLY
+            or key.default is not inspect.Parameter.empty
+        ):
+            unkeyed.append(qualified_name)
+
+    assert "debate_core.evidence.snapshot_text.decode_snapshot_text" in found, "the scan saw nothing"
+    assert unkeyed == []
 
 
 # ---------------------------------------------------------------------------------------------
@@ -202,7 +304,7 @@ EXTRACTED_TEXT = st.text(
 def test_every_normalizer_result_round_trips_through_its_document(extracted: str) -> None:
     stored = SnapshotText.from_normalized(normalize(extracted, V1))
 
-    assert decode_snapshot_text(encode_snapshot_text(stored)) == stored
+    assert decode_under_its_own_key(encode_snapshot_text(stored)) == stored
 
 
 @PROPERTY_SETTINGS
@@ -229,7 +331,7 @@ def test_no_single_byte_change_to_a_document_decodes_to_the_same_content(
     altered = document[:position] + bytes([replacement]) + document[position + 1 :]
 
     try:
-        decoded = decode_snapshot_text(altered)
+        decoded = decode_under_its_own_key(altered)
     except MalformedSnapshotText:
         return
     assert decoded != stored
@@ -265,7 +367,7 @@ def test_every_other_json_spelling_of_a_document_is_refused(
     ).encode("utf-8")
 
     if respelled == canonical:
-        assert decode_snapshot_text(respelled) == stored
+        assert decode_under_its_own_key(respelled) == stored
     else:
         with pytest.raises(MalformedSnapshotText):
-            decode_snapshot_text(respelled)
+            decode_under_its_own_key(respelled)

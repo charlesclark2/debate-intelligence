@@ -1,38 +1,32 @@
 """The stored form of a snapshot's normalized text: one canonical JSON document per text.
 
 A :class:`~debate_core.domain.SourceSnapshot` keeps two blobs. The raw blob is the bytes a source
-served. The normalized blob is this document: the normalized text, the normalizer version that
-produced it, and its paragraph map, which is what span extraction (`v1-e03-t03`) resolves paragraph
-IDs against.
+served. The normalized blob is a ``debate-snapshot-text/1`` document: the normalized text, the
+normalizer version that produced it, and its paragraph map, which span extraction (`v1-e03-t03`)
+resolves paragraph IDs through.
 
-## Format ``debate-snapshot-text/1``
+The format is specified in `docs/evidence/snapshot-text-format.md`. This module implements it: the
+encoding is canonical, so equal normalized text always gives equal bytes and one blob key, and the
+offset map is deliberately not stored.
 
-UTF-8 JSON, no byte-order mark, keys sorted, no insignificant whitespace, non-ASCII characters
-written as themselves rather than ``\\u`` escapes::
+## Bytes become a `SnapshotText` only after they are checked against their key
 
-    {"format":"debate-snapshot-text/1",
-     "normalizer_version":"evidence-normalizer-v1",
-     "paragraphs":[{"end":31,"id":"p0001","start":0},{"end":63,"id":"p0002","start":33}],
-     "text":"Arctic methane is accelerating.\\n\\nOcean heat reached a new high."}
+:func:`decode_snapshot_text` requires the key the blob is recorded under (a snapshot's
+`normalized_blob_key`) and refuses bytes that do not hash to it, before parsing anything. There is
+no other way to turn bytes into a :class:`SnapshotText`.
 
-(shown wrapped; the stored bytes are one line).
+That check is what protects the paragraph map. A paragraph boundary moved to another valid offset
+leaves a document that is still valid, still canonical, under the same version and with the same
+text, so the snapshot's `normalized_text_hash` still matches. Only the blob's own hash notices, and
+a moved boundary would point a card's paragraph selection at different words of the same source
+(found by mutation testing in `v1-e03-t02`). With the key a required argument, skipping the check
+means computing the key from the very bytes being checked, which is visible in review; a test in
+`tests/evidence/test_snapshot_text.py` fails if an unkeyed way back from bytes appears anywhere in
+`debate_core`.
 
-**The encoding is canonical, so it is a function of the normalized text alone.** Equal normalized
-text under the same version always encodes to the same bytes, and therefore to the same
-content-addressed blob key. That is what makes a second snapshot of an unchanged source store no
-second copy (`v1-e03-t02` ac3), even when the raw bytes differ — a page re-served with different
-markup around the same text shares its normalized blob with the first retrieval.
-
-For the same reason the document does **not** contain the normalizer's offset map. That map relates
-normalized offsets to offsets in the extractor's output, which is not stored, so it could not be
-used; and it differs whenever the extractor's whitespace differs, so it would split one normalized
-text across many blobs.
-
-:func:`decode_snapshot_text` is strict. It accepts exactly the bytes :func:`encode_snapshot_text`
-writes: any other spelling of the same JSON — reordered keys, added whitespace, escaped characters,
-a duplicated key — is refused as :class:`MalformedSnapshotText`. A document that could be written
-two ways would have two blob keys, and a reader that accepted both would hide which one a snapshot
-actually recorded.
+Callers outside the evidence layer should not decode at all: they get a checked `SnapshotText` from
+:meth:`~debate_core.application.snapshot_service.SnapshotService.load`, which also checks the text
+and version against the snapshot record.
 """
 
 from __future__ import annotations
@@ -41,12 +35,15 @@ import json
 from dataclasses import dataclass
 from typing import Final, cast
 
+from debate_core.evidence.hashing import sha256_bytes
 from debate_core.evidence.normalization import NormalizedText, Paragraph, UnknownParagraphError
 
 __all__ = [
     "SNAPSHOT_TEXT_FORMAT",
     "MalformedSnapshotText",
     "SnapshotText",
+    "SnapshotTextError",
+    "SnapshotTextKeyMismatch",
     "decode_snapshot_text",
     "encode_snapshot_text",
 ]
@@ -58,8 +55,23 @@ _DOCUMENT_KEYS: Final = frozenset({"format", "normalizer_version", "paragraphs",
 _PARAGRAPH_KEYS: Final = frozenset({"end", "id", "start"})
 
 
-class MalformedSnapshotText(ValueError):
-    """Bytes that are not a canonical ``debate-snapshot-text/1`` document."""
+class SnapshotTextError(ValueError):
+    """Bytes that :func:`decode_snapshot_text` refused. Catch this to catch both reasons."""
+
+
+class SnapshotTextKeyMismatch(SnapshotTextError):
+    """The bytes do not hash to the key they were read under, so nothing in them is trusted."""
+
+    def __init__(self, expected_key: str, actual_key: str) -> None:
+        self.expected_key = expected_key
+        """The key the caller says the blob is recorded under."""
+        self.actual_key = actual_key
+        """The SHA-256 the bytes actually have."""
+        super().__init__(f"snapshot text bytes hash to {actual_key}, not to their key {expected_key}")
+
+
+class MalformedSnapshotText(SnapshotTextError):
+    """Bytes that match their key but are not a canonical ``debate-snapshot-text/1`` document."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,17 +132,25 @@ def encode_snapshot_text(snapshot_text: SnapshotText) -> bytes:
     ).encode("utf-8")
 
 
-def decode_snapshot_text(data: bytes) -> SnapshotText:
-    """Decode a document written by :func:`encode_snapshot_text`, or raise :class:`MalformedSnapshotText`.
+def decode_snapshot_text(data: bytes, *, expected_key: str) -> SnapshotText:
+    """Decode a stored document, after checking ``data`` hashes to ``expected_key``.
 
-    Checks the structure (keys, types, format identifier), that every paragraph lies inside the
+    ``expected_key`` is the key the blob is recorded under, a snapshot's `normalized_blob_key`. It
+    must come from that record, never from ``data``: computing it from the bytes being checked
+    checks nothing. Bytes that do not hash to it raise :class:`SnapshotTextKeyMismatch` before any
+    of them is parsed.
+
+    Then checks the structure (keys, types, format identifier), that every paragraph lies inside the
     text, in order and without overlap, with unique IDs, and finally that ``data`` is exactly the
-    canonical encoding of what it decoded to.
+    canonical encoding of what it decoded to; any failure raises :class:`MalformedSnapshotText`.
 
     It does not check that the paragraph map is the one the recorded normalizer version would
-    produce for this text. The map is inside the blob, so the blob's content hash already binds it
-    to what was written; re-deriving it would mean re-running the normalizer on every load.
+    produce for this text. The key check binds the map to what was written; re-deriving it would
+    mean re-running the normalizer on every load.
     """
+    actual_key = sha256_bytes(data)
+    if actual_key != expected_key:
+        raise SnapshotTextKeyMismatch(expected_key, actual_key)
     try:
         document: object = json.loads(data.decode("utf-8", errors="strict"))
     except (UnicodeDecodeError, json.JSONDecodeError) as unreadable:

@@ -5,10 +5,11 @@ import { Fragment } from 'react'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { CardGrid } from '@/components/CardGrid'
+import { EmailUpdates } from '@/components/EmailUpdates'
 import { Prose } from '@/components/Prose'
 import { Section } from '@/components/Section'
 import { SourceLine } from '@/components/SourceLine'
-import { HOME_SLUG, loadHomeContent, loadPage } from '@/lib/content'
+import { HOME_SLUG, loadEmailUpdatesContent, loadHomeContent, loadPage } from '@/lib/content'
 import { buildPageMetadata } from '@/lib/page-metadata'
 
 /** Names the October 1 panel for a screen reader moving by region. */
@@ -21,20 +22,22 @@ export function generateMetadata(): Metadata {
 /**
  * The home page.
  *
- * Six bands, in the order a parent needs them: the hero, the October 1 parent session, four
- * entry points into the site, what debate actually is, what a season of it builds, and what the
+ * Seven bands, in the order a parent needs them: the hero, the October 1 parent session, the
+ * signup for parent email updates (v1-e37-t05), four entry points into the site, what debate actually is, what a season of it builds, and what the
  * research says about it academically. The
  * October 1 panel is the only band on navy, which is what makes it the most prominent thing on
  * the page after the hero without giving it a bigger heading than its neighbours.
  *
  * Not one string below is written here. The title and the prose come from content/pages/home.md
- * and everything else from content/home.yaml, both read through src/lib/content.ts and validated
+ * and everything else from content/home.yaml (the email-updates band from
+ * content/email-updates.json), all read through src/lib/content.ts and validated
  * at build time; tests/home.test.tsx fails if a word of that copy appears in this file.
  */
 export default function HomePage() {
   const page = loadPage(HOME_SLUG)
   const { hero, parentSession, entryPoints, prose, whatDebateBuilds, academicCase } =
     loadHomeContent()
+  const emailUpdates = loadEmailUpdatesContent()
 
   return (
     <>
@@ -78,6 +81,8 @@ export default function HomePage() {
           {parentSession.action.label}
         </Button>
       </Section>
+
+      <EmailUpdates content={emailUpdates} />
 
       <Section
         contentWidth="wide"

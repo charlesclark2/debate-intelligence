@@ -55,6 +55,8 @@ No page component contains copy. Everything a visitor reads is a file under `sit
 ```
 content/
   site.yaml            site-wide strings, the email allowlist and the Debater login label
+  email-updates.json   the parent email-updates section: the mailing provider's name, its signup
+                       page address and the section's copy (v1-e37-t05)
   media-consent.yaml   who may be named, which images may be published, and when each was checked
   pages/<slug>.md      one page each; home.md renders at /, every other file at /<slug>/
   not-found.md         the 404 page, kept out of pages/ so it never enters the navigation or sitemap
@@ -105,6 +107,27 @@ file name, so a page missing a title fails `pnpm --dir site build` instead of sh
    approved list in [`docs/data/academic-case-sources.md`](../docs/data/academic-case-sources.md).
 6. **Home entry-point cards carry the title of the page they open.** A card whose `href` is not a
    page in `content/pages/`, or whose `title` differs from that page's title, fails the build.
+
+### The parent email-updates section
+
+`content/email-updates.json` drives the "Email updates for parents and guardians" band on the home
+page (directly under the parent session) and at the foot of the contact page. The band is one
+plain link to the mailing provider's hosted signup page. There is no form, no input and no
+provider script, so the site never receives a parent's address.
+
+| Field | Meaning |
+|---|---|
+| `providerName` | The service's name. Every sentence below writes `{provider}` and the loader fills it in |
+| `signupUrl` | The provider's public signup page, `https://` only, no credentials. While it is `[[TBD: ...]]` the band shows the gap badge and a prod build fails |
+| `eyebrow`, `title`, `intro`, `points`, `action` | The copy. `action.externalLinkNote` is shown in the button, because every link that leaves the site says so |
+
+**Changing provider** (for example to the district's parent messaging tool) is an edit to
+`providerName` and `signupUrl` and a deploy. No code changes. The coach-facing side, including who
+owns the list, is in [`docs/guides/parent-email-updates.md`](../docs/guides/parent-email-updates.md).
+
+`tests/no-third-party-scripts.test.ts` checks the built export: no script, pixel, iframe or form
+target from another origin, no mention of a mailing provider's domain outside the signup link,
+and nowhere on any page to type anything. Build first, as for the other export-reading suites.
 
 ## The content guard
 

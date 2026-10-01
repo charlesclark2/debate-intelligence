@@ -1,13 +1,20 @@
 import type { Metadata } from 'next'
 import { Fragment } from 'react'
 
+import { EmailUpdates } from '@/components/EmailUpdates'
 import { Prose } from '@/components/Prose'
 import { Section } from '@/components/Section'
-import { loadPage, loadRoutedPages } from '@/lib/content'
+import { loadEmailUpdatesContent, loadPage, loadRoutedPages } from '@/lib/content'
 import { buildPageMetadata } from '@/lib/page-metadata'
 
 /** The band holding the at-a-glance block, when a page has one. */
 const AT_A_GLANCE_ID = 'at-a-glance'
+
+/**
+ * The pages that end with the parent email-updates signup (v1-e37-t05). The home page places its
+ * own; of the Markdown pages only contact carries it, as the other way of hearing from the team.
+ */
+const EMAIL_UPDATES_SLUGS: ReadonlySet<string> = new Set(['contact'])
 
 /**
  * One route per Markdown file in site/content/pages/, apart from the pages composed by a route
@@ -75,6 +82,8 @@ export default async function ContentPageRoute({ params }: { params: Promise<{ s
       <Section>
         <Prose html={page.html} />
       </Section>
+
+      {EMAIL_UPDATES_SLUGS.has(slug) ? <EmailUpdates content={loadEmailUpdatesContent()} /> : null}
     </>
   )
 }

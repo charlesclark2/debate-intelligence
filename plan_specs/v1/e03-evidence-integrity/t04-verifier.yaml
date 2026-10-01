@@ -93,7 +93,7 @@ spec:
       description: >-
         A mutation-style test suite of fabricated and paraphrased evidence fixtures has a 0% pass rate.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

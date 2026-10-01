@@ -386,6 +386,32 @@ class SqliteCaselistRepository:
         return _page_of(CampFile, "CampFile", rows, _CAMP_FILE_CURSOR_KIND, limit)
 
     # ------------------------------------------------------------------------------------
+    # Removal (v1-e30-t07)
+    # ------------------------------------------------------------------------------------
+
+    async def delete_source(self, sha256: str) -> bool:
+        """Delete one source document. False when there was none: a re-run removal finds it gone."""
+        return self._delete("DELETE FROM caselist_sources WHERE sha256 = ?", (sha256,))
+
+    async def delete_disclosure(self, caselist: str, snapshot: date, source_path: str) -> bool:
+        """Delete one disclosure by caselist, snapshot and path."""
+        return self._delete(
+            "DELETE FROM caselist_disclosures WHERE caselist = ? AND snapshot = ? AND source_path = ?",
+            (caselist, snapshot.isoformat(), source_path),
+        )
+
+    async def delete_camp_file(self, source_sha256: str, year: int, event: Event) -> bool:
+        """Delete one camp-file record by hash, year and event."""
+        return self._delete(
+            "DELETE FROM caselist_camp_files WHERE source_sha256 = ? AND year = ? AND event = ?",
+            (source_sha256, year, str(event)),
+        )
+
+    def _delete(self, statement: str, parameters: tuple[object, ...]) -> bool:
+        with self._database.transaction() as connection:
+            return connection.execute(statement, parameters).rowcount > 0
+
+    # ------------------------------------------------------------------------------------
     # Paging
     # ------------------------------------------------------------------------------------
 

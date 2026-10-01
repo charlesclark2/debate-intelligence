@@ -90,6 +90,7 @@ __all__ = [
     "FakePorts",
     "FakeSearchProvider",
     "FixedClock",
+    "InMemoryAppendOnlyRecord",
     "InMemoryArticleRepository",
     "InMemoryCardRepository",
     "InMemoryCaselistRepository",
@@ -538,6 +539,48 @@ class InMemoryCaselistRepository:
         )
         rows = [("|".join(str(part) for part in _camp_file_key(stored)), stored) for stored in matching]
         return _paginate(rows, kind="camp-file", limit=limit, cursor=cursor)
+
+    # -- removal ---------------------------------------------------------------------------
+
+    async def delete_source(self, sha256: str) -> bool:
+        return self._sources.pop(sha256, None) is not None
+
+    async def delete_disclosure(self, caselist: str, snapshot: date, source_path: str) -> bool:
+        return self._disclosures.pop((caselist, snapshot, source_path), None) is not None
+
+    async def delete_camp_file(self, source_sha256: str, year: int, event: Event) -> bool:
+        return self._camp_files.pop((source_sha256, year, str(event)), None) is not None
+
+
+class InMemoryAppendOnlyRecord:
+    """One copy of the suppression list or removal log, as a list of lines.
+
+    Append-only exactly as the real copies are: lines can be read and added, never changed. Every
+    append is also kept in :attr:`appends`, so a test can assert on what was written and when, and
+    :attr:`fail_next_append` makes the next append raise, as a bucket refusing the write would.
+    """
+
+    def __init__(self, location: str = "in-memory record", lines: Iterable[str] = ()) -> None:
+        self._location = location
+        self.lines: list[str] = list(lines)
+        self.appends: list[tuple[str, ...]] = []
+        self.fail_next_append: Exception | None = None
+
+    @property
+    def location(self) -> str:
+        return self._location
+
+    async def read_lines(self) -> tuple[str, ...]:
+        return tuple(self.lines)
+
+    async def append_lines(self, lines: Sequence[str]) -> None:
+        if not lines:
+            return
+        if self.fail_next_append is not None:
+            failure, self.fail_next_append = self.fail_next_append, None
+            raise failure
+        self.appends.append(tuple(lines))
+        self.lines.extend(lines)
 
 
 def _disclosure_key(disclosure: Disclosure) -> tuple[str, date, str]:

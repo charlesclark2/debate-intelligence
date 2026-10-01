@@ -1,6 +1,30 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "CardOmission": {
+      "additionalProperties": false,
+      "description": "Characters of the snapshot a card left out of the passage it quotes.\n\nOffsets are character positions **into the snapshot's normalized text**, like the card's\n`evidence_start_offset` and `evidence_end_offset`, half-open (`start_offset` inclusive,\n`end_offset` exclusive). This is the opposite of :class:`CardSpan`, whose offsets index\n`evidence_text`: an omission names text that is, by definition, not in `evidence_text`.\n\nIt holds no text. Whoever audits the card reads what was removed from the snapshot at these\noffsets, and the exporter decides how to show the cut.",
+      "properties": {
+        "start_offset": {
+          "description": "Inclusive start offset of the omitted text in the snapshot.",
+          "minimum": 0,
+          "title": "Start Offset",
+          "type": "integer"
+        },
+        "end_offset": {
+          "description": "Exclusive end offset of the omitted text in the snapshot.",
+          "exclusiveMinimum": 0,
+          "title": "End Offset",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_offset",
+        "end_offset"
+      ],
+      "title": "CardOmission",
+      "type": "object"
+    },
     "CardSpan": {
       "additionalProperties": false,
       "description": "A marked region of a card's evidence.\n\nOffsets are character positions **into the card's `evidence_text`**, half-open (`start`\ninclusive, `end` exclusive) — not into the snapshot. The renderer marks up the quotation it is\ngiven, so spans stay correct no matter where in the source the quotation was taken from.",
@@ -280,7 +304,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "A piece of evidence cut from a source snapshot.\n\n`evidence_text` is verbatim: it is extracted from the stored snapshot at\n`[evidence_start_offset:evidence_end_offset]`, never written or paraphrased by a model. A model\nmay choose *which* span to cut and may write the `tag`, but the quotation itself only ever\ncomes out of the snapshot (architecture proposal §8).\n\n`provenance_mode` has no default on purpose. Defaulting it would make\n`PUBLISHER_RETRIEVED` — the strongest claim the platform can make about a piece of text — the\nthing that happens when a caller says nothing, which is exactly backwards.\n\n`verification_status` defaults to `UNVERIFIED`, and only the evidence verifier (E03) promotes\na card to `VERIFIED`.",
+  "description": "A piece of evidence cut from a source snapshot.\n\n`evidence_text` is verbatim: it is the stored snapshot's text from `evidence_start_offset` to\n`evidence_end_offset` with `omitted_ranges` taken out (see the module docstring), never written\nor paraphrased by a model. A model may choose *which* span to cut and may write the `tag`, but\nthe quotation itself only ever comes out of the snapshot (architecture proposal §8).\n\n`provenance_mode` has no default on purpose. Defaulting it would make\n`PUBLISHER_RETRIEVED` — the strongest claim the platform can make about a piece of text — the\nthing that happens when a caller says nothing, which is exactly backwards.\n\n`verification_status` defaults to `UNVERIFIED`, and only the evidence verifier (E03) promotes\na card to `VERIFIED`.",
   "properties": {
     "created_at": {
       "description": "When this record was first created, in UTC.",
@@ -384,7 +408,7 @@
         }
       ],
       "default": null,
-      "description": "Inclusive start offset of the quotation in the normalized snapshot.",
+      "description": "Inclusive start offset of the quotation's envelope in the normalized snapshot.",
       "title": "Evidence Start Offset"
     },
     "evidence_end_offset": {
@@ -398,8 +422,17 @@
         }
       ],
       "default": null,
-      "description": "Exclusive end offset of the quotation in the normalized snapshot.",
+      "description": "Exclusive end offset of the quotation's envelope in the normalized snapshot.",
       "title": "Evidence End Offset"
+    },
+    "omitted_ranges": {
+      "default": [],
+      "description": "Snapshot ranges left out from inside the envelope, in canonical form: sorted, separated by at least one kept character, and touching neither end of the envelope.",
+      "items": {
+        "$ref": "#/$defs/CardOmission"
+      },
+      "title": "Omitted Ranges",
+      "type": "array"
     },
     "normalized_text_hash": {
       "anyOf": [

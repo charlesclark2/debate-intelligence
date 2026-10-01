@@ -18,6 +18,7 @@ from debate_core.domain import (
     Article,
     ArticleIdentifiers,
     Card,
+    CardOmission,
     CardSpan,
     Citation,
     CitationField,
@@ -212,6 +213,21 @@ def cards(draw: st.DrawFn) -> Card:
         )
 
     start = draw(st.integers(min_value=0, max_value=10_000))
+    # Omissions go between kept characters (ADR-0018): at distinct interior cut points of the text,
+    # each removing one or more characters, so the envelope grows by what they remove.
+    cut_points = sorted(
+        draw(st.sets(st.integers(min_value=1, max_value=max(1, len(evidence_text) - 1)), max_size=3))
+        if len(evidence_text) > 1
+        else set[int]()
+    )
+    omitted: list[CardOmission] = []
+    removed = 0
+    for point in cut_points:
+        length = draw(st.integers(min_value=1, max_value=50))
+        omitted.append(
+            CardOmission(start_offset=start + point + removed, end_offset=start + point + removed + length)
+        )
+        removed += length
     # Spans of a single style, laid out left to right, so the no-overlap rule cannot be tripped.
     style = draw(st.sampled_from(SpanStyle))
     cuts = sorted(draw(st.lists(st.integers(min_value=0, max_value=len(evidence_text)), max_size=6)))
@@ -238,7 +254,8 @@ def cards(draw: st.DrawFn) -> Card:
         citation=draw(citations),
         evidence_text=evidence_text,
         evidence_start_offset=start,
-        evidence_end_offset=start + len(evidence_text),
+        evidence_end_offset=start + len(evidence_text) + removed,
+        omitted_ranges=tuple(omitted),
         normalized_text_hash=draw(sha256_hexes),
         normalizer_version=draw(non_empty_text),
         spans=spans,

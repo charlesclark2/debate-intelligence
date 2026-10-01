@@ -13,10 +13,10 @@ Two kinds of adversarial card are checked:
 The honest card each fabrication is derived from must itself verify, so a suite that refused
 everything would fail here rather than pass. No Hypothesis: the mutations are enumerated.
 
-A fabrication whose text is not as long as the range it claims is constructible today. Once
-`v1-e03-t07` makes the domain check that length (ADR-0018), such a card is refused at construction,
-which is also a refusal; the test counts it as one, and requires every same-length fabrication to
-reach the verifier.
+A fabrication whose text is not as long as the range it claims is refused at construction:
+`v1-e03-t07` made the domain check that the envelope minus the omissions is as long as the text
+(ADR-0018). That is also a refusal, and the tests count it as one, but they require every
+same-length fabrication to reach the verifier, so they cannot pass by the domain refusing everything.
 """
 
 from __future__ import annotations
@@ -154,7 +154,45 @@ def test_the_fixture_covers_every_fabrication_kind_the_spec_names() -> None:
     assert len(FABRICATIONS) == 28
 
 
-@pytest.mark.parametrize("fabrication", FABRICATIONS, ids=lambda fabrication: fabrication.kind)
+SAME_LENGTH = tuple(fabrication for fabrication in FABRICATIONS if fabrication.same_length)
+LENGTH_CHANGING = tuple(fabrication for fabrication in FABRICATIONS if not fabrication.same_length)
+
+
+#: The fabrications whose text is not as long as the range they claim, read off the fixture by hand:
+#: each adds, removes or replaces characters with a different number of them.
+CHANGES_LENGTH = {
+    "negation dropped",
+    "accent decomposed (NFD a + combining grave)",
+    "paraphrase",
+    "ellipsis stored in place of a cut",
+    "trailing space appended",
+    "odds changed by an inserted digit",
+    "em dash written as two hyphens",
+    "truncated before the comparison",
+    "doubled space kept from the raw text",
+    "paragraph break flattened to a space",
+    "invented claim behind a true opening",
+    "spliced: first and last paragraphs joined over the middle one",
+    "negation inserted",
+    "zero-width space inserted",
+    "truncated before the date",
+}
+
+
+def test_the_fixture_has_fabrications_of_both_lengths() -> None:
+    assert {fabrication.kind for fabrication in LENGTH_CHANGING} == CHANGES_LENGTH
+    assert len(SAME_LENGTH) == 28 - 15
+
+
+@pytest.mark.parametrize("fabrication", LENGTH_CHANGING, ids=lambda fabrication: fabrication.kind)
+def test_a_fabrication_longer_or_shorter_than_its_claimed_range_is_refused_at_construction(
+    adversarial: AdversarialWorld, fabrication: Fabrication
+) -> None:
+    with pytest.raises(ValidationError, match="omission\\(s\\) quotes"):
+        adversarial.fabricate(fabrication)
+
+
+@pytest.mark.parametrize("fabrication", SAME_LENGTH, ids=lambda fabrication: fabrication.kind)
 def test_a_fabrication_is_unverified_with_a_text_mismatch_where_it_departs(
     adversarial: AdversarialWorld, fabrication: Fabrication
 ) -> None:

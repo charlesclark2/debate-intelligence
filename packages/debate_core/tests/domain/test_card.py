@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from debate_core.domain import (
     DEFAULT_FORMAT_PROFILE,
     Card,
+    CardOmission,
     CardSpan,
     Citation,
     CitationField,
@@ -294,3 +295,156 @@ def test_pasted_provenance_survives_onto_the_card() -> None:
     card = make_cut_card(provenance_mode=ProvenanceMode.USER_SUPPLIED)
     assert card.provenance_mode is ProvenanceMode.USER_SUPPLIED
     assert card.verification_status is VerificationStatus.UNVERIFIED
+
+
+# --------------------------------------------------------------------------------------------
+# Card: omissions inside the envelope (ADR-0018)
+# --------------------------------------------------------------------------------------------
+# The source passage, by hand, at snapshot offset 1840:
+#   "Sea level rise of one metre would, by most estimates, displace roughly 230 million people
+#   worldwide."  (100 characters, so the envelope is 1840-1940)
+# Cutting ", by most estimates," (20 characters, passage 33-53, snapshot 1873-1893) leaves EVIDENCE,
+# which is 80 characters. Every non-canonical set below also removes 20 characters in all, so the
+# length invariant holds and the refusal can only come from the rule the case is about.
+
+ENVELOPE = {"evidence_start_offset": 1840, "evidence_end_offset": 1940}
+
+
+def omission(start: int, end: int) -> CardOmission:
+    return CardOmission(start_offset=start, end_offset=end)
+
+
+def make_cut_card_with_omissions(*omitted: CardOmission, **overrides: object) -> Card:
+    """EVIDENCE quoted from the 100-character passage, with ``omitted`` removed from inside it."""
+    return make_cut_card(**ENVELOPE, omitted_ranges=omitted, **overrides)
+
+
+def test_omissions_default_to_none_and_an_existing_card_quotes_its_whole_envelope() -> None:
+    card = make_cut_card()
+    assert card.omitted_ranges == ()
+    assert card.quoted_ranges == ((1840, 1920),)
+
+
+def test_a_card_with_no_evidence_has_no_omissions_and_quotes_nothing() -> None:
+    card = make_card()
+    assert card.omitted_ranges == ()
+    assert card.quoted_ranges == ()
+
+
+def test_a_cut_card_records_its_omission_and_quotes_the_envelope_around_it() -> None:
+    card = make_cut_card_with_omissions(omission(1873, 1893))
+    assert card.evidence_text == EVIDENCE
+    assert card.omitted_ranges == (omission(1873, 1893),)
+    assert card.quoted_ranges == ((1840, 1873), (1893, 1940))
+
+
+def test_a_card_may_omit_several_ranges_separated_by_kept_text() -> None:
+    """Cutting ", by" (1873-1877) and " estimates," (1882-1893) keeps " most" (1877-1882) between them."""
+    card = make_cut_card_with_omissions(
+        omission(1873, 1877), omission(1882, 1893), evidence_text=EVIDENCE[:33] + " most" + EVIDENCE[33:]
+    )
+    assert card.evidence_text.startswith("Sea level rise of one metre would most displace")
+    assert card.quoted_ranges == ((1840, 1873), (1877, 1882), (1893, 1940))
+
+
+def test_a_card_with_omissions_round_trips_through_json() -> None:
+    card = make_cut_card_with_omissions(omission(1873, 1893))
+    assert Card.model_validate_json(card.model_dump_json()) == card
+
+
+def test_a_card_with_omissions_can_be_verified() -> None:
+    card = make_cut_card_with_omissions(omission(1873, 1893), verification_status=VerificationStatus.VERIFIED)
+    assert card.is_finished_evidence
+
+
+@pytest.mark.parametrize(
+    ("omitted", "message"),
+    [
+        pytest.param((omission(1873, 1888), omission(1850, 1855)), "are out of order", id="out-of-order"),
+        pytest.param((omission(1873, 1883), omission(1878, 1888)), "overlap", id="overlapping"),
+        pytest.param((omission(1873, 1891), omission(1875, 1877)), "overlap", id="one-inside-another"),
+        pytest.param((omission(1873, 1883), omission(1873, 1883)), "overlap", id="identical"),
+        pytest.param(
+            (omission(1873, 1883), omission(1883, 1893)), "two touching omissions are one omission", id="adjacent"
+        ),
+        pytest.param((omission(1840, 1860),), "not strictly inside the envelope", id="touching-the-start"),
+        pytest.param((omission(1920, 1940),), "not strictly inside the envelope", id="touching-the-end"),
+        pytest.param((omission(1830, 1850),), "not strictly inside the envelope", id="across-the-start"),
+        pytest.param((omission(1930, 1950),), "not strictly inside the envelope", id="across-the-end"),
+        pytest.param((omission(1800, 1820),), "not strictly inside the envelope", id="before-the-envelope"),
+        pytest.param((omission(1940, 1960),), "not strictly inside the envelope", id="after-the-envelope"),
+    ],
+)
+def test_a_non_canonical_omission_set_is_refused(omitted: tuple[CardOmission, ...], message: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        make_cut_card_with_omissions(*omitted)
+    assert message in str(caught.value)
+
+
+def test_the_same_omissions_in_order_are_accepted() -> None:
+    """The out-of-order case above, sorted: the refusal was for the order, nothing else."""
+    card = make_cut_card_with_omissions(omission(1850, 1855), omission(1873, 1888))
+    assert card.quoted_ranges == ((1840, 1850), (1855, 1873), (1888, 1940))
+
+
+def test_an_omission_at_an_edge_is_a_smaller_envelope_instead() -> None:
+    """Cutting the first 20 characters is written by starting the envelope 20 later."""
+    card = make_cut_card(evidence_start_offset=1860, evidence_end_offset=1940)
+    assert card.quoted_ranges == ((1860, 1940),)
+
+
+@pytest.mark.parametrize(("start", "end"), [(1873, 1873), (1893, 1873)])
+def test_an_omission_must_remove_at_least_one_character(start: int, end: int) -> None:
+    with pytest.raises(ValidationError) as caught:
+        omission(start, end)
+    assert "an omission must remove at least one character" in str(caught.value)
+
+
+def test_an_omission_offset_is_never_negative() -> None:
+    with pytest.raises(ValidationError):
+        omission(-1, 5)
+
+
+def test_omissions_without_an_envelope_are_refused() -> None:
+    with pytest.raises(ValidationError) as caught:
+        make_card(omitted_ranges=(omission(10, 20),))
+    assert "no evidence envelope cannot omit anything" in str(caught.value)
+
+
+# The length invariant: the envelope minus the omissions is exactly as long as evidence_text.
+
+
+@pytest.mark.parametrize(
+    ("omitted", "evidence_text", "quotes"),
+    [
+        pytest.param((), EVIDENCE, 100, id="omission-forgotten"),
+        pytest.param((omission(1873, 1892),), EVIDENCE, 81, id="omission-one-short"),
+        pytest.param((omission(1873, 1894),), EVIDENCE, 79, id="omission-one-long"),
+        pytest.param((omission(1873, 1893),), EVIDENCE + " ", 80, id="text-one-long-after-an-omission"),
+        pytest.param((omission(1873, 1893),), EVIDENCE[:-1], 80, id="text-one-short-after-an-omission"),
+        pytest.param((omission(1873, 1893), omission(1900, 1901)), EVIDENCE, 79, id="omission-added"),
+    ],
+)
+def test_the_envelope_minus_the_omissions_must_be_as_long_as_the_text(
+    omitted: tuple[CardOmission, ...], evidence_text: str, quotes: int
+) -> None:
+    with pytest.raises(ValidationError) as caught:
+        make_cut_card_with_omissions(*omitted, evidence_text=evidence_text)
+    assert (
+        f"the envelope 1840-1940 minus {len(omitted)} omission(s) quotes {quotes} characters, but "
+        f"evidence_text has {len(evidence_text)}"
+    ) in str(caught.value)
+
+
+def test_the_length_invariant_holds_for_a_card_without_omissions() -> None:
+    """Cards without omissions are held to it too: the envelope is the text's length or it is refused."""
+    with pytest.raises(ValidationError) as caught:
+        make_cut_card(evidence_end_offset=1840 + len(EVIDENCE) + 1)
+    assert "quotes 81 characters, but evidence_text has 80" in str(caught.value)
+
+
+def test_a_card_altered_without_changing_its_length_is_still_constructible_despite_its_omissions() -> None:
+    """The invariant compares the card with itself, not with the snapshot: TEXT_MISMATCH stays the
+    verifier's finding."""
+    card = make_cut_card_with_omissions(omission(1873, 1893), evidence_text=EVIDENCE.replace("230", "930"))
+    assert "930 million" in card.evidence_text

@@ -158,7 +158,8 @@ For one card it:
    citation field is marked verified;
 2. finds the snapshot record by the card's `snapshot_id` and loads it with `SnapshotService.load`,
    so every integrity check in the previous section runs;
-3. checks the card records the snapshot's `normalized_text_hash` and `normalizer_version`;
+3. checks the card cites the article the snapshot was taken of (`article_id`), and records the
+   snapshot's `normalized_text_hash` and `normalizer_version`;
 4. cuts the evidence again from the stored normalized text at the card's offsets, with the same
    extractor that cut it (`reconstruct_card_evidence`, the one place this happens), and compares it
    with the card's `evidence_text` exactly: no case folding, no Unicode or whitespace normalization,
@@ -181,6 +182,7 @@ How failures become reason codes:
 | The reconstruction is not the card's `evidence_text` | `TEXT_MISMATCH`, with the first differing offset |
 | The offsets do not select evidence from the text (`InvalidSelection`); a span outside the evidence | `SPAN_OUT_OF_RANGE` |
 | A required citation field not marked verified | `CITATION_UNVERIFIED` |
+| The card's `article_id` is not its snapshot's | `ARTICLE_MISMATCH` |
 
 The first differing offset is in **evidence-text coordinates**: an index into the card's
 `evidence_text`. While a card quotes one contiguous range, the snapshot offset is
@@ -201,6 +203,7 @@ it before showing a card as finished. It costs one `load` per card (see the timi
   the card's offsets.
 * That text, and the raw bytes, hash to what the snapshot record says, under the normalizer version
   the record and the card both name, which this code has.
+* The card cites the article its snapshot was taken of.
 * Every span marks text inside that evidence.
 * Every required citation field carries the citation service's verified flag.
 
@@ -222,7 +225,6 @@ it before showing a card as finished. It costs one `load` per card (see the timi
 * **Citation flags are read, not re-checked.** The verifier does not look metadata up again.
 * **Cards quote one contiguous range.** Omitted ranges (ADR-0018) arrive with `v1-e03-t07`, which
   extends `reconstruct_card_evidence`.
-* The card's `article_id` is not compared with the snapshot's.
 
 ## Changing the format
 
@@ -249,4 +251,5 @@ their keys and must stay readable, because cards were cut from them.
 | A missing snapshot, a tampered blob and an unknown normalizer version are reason codes, never exceptions | `test_a_card_whose_snapshot_record_does_not_exist_is_snapshot_missing`, `test_a_tampered_raw_blob_is_a_hash_mismatch`, `test_a_snapshot_under_an_unknown_normalizer_version_is_unverified_with_that_code` and neighbours |
 | No fabricated, paraphrased or single-character-mutated card verifies | `test_no_fabrication_passes`, `test_no_single_character_mutation_of_any_honest_card_passes` (`test_verifier_adversarial.py`, fixtures in `tests/fixtures/verification/`) |
 | The finished-evidence guard re-verifies and ignores a card's own claim to be `VERIFIED` | `test_ensure_finished_rejects_a_hand_built_card_claiming_verified_with_altered_text` |
+| A card citing another article than its snapshot's is `ARTICLE_MISMATCH`, and its quotation is still checked | `test_a_card_citing_another_article_than_its_snapshots_is_an_article_mismatch`, `test_a_misattributed_card_with_altered_text_reports_both` |
 | Nothing but `EvidenceVerifier` writes `VERIFIED` | `test_verified_is_set_only_by_the_evidence_verifier` |

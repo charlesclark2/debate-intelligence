@@ -21,6 +21,7 @@ the first, so one run reports everything wrong with a card:
 * ``TEXT_MISMATCH``: the card's evidence text is not the snapshot's text at its offsets.
 * ``SPAN_OUT_OF_RANGE``: the offsets, or a span, do not fit the snapshot's evidence.
 * ``CITATION_UNVERIFIED``: a required citation field is not marked verified.
+* ``ARTICLE_MISMATCH``: the card cites a different article from the one its snapshot was taken of.
 
 ## What VERIFIED means, and what it does not
 
@@ -89,6 +90,11 @@ class ReasonCode(StrEnum):
     """A required citation field is not marked verified. The verifier reads the per-field flags the
     citation service sets; it does not look the metadata up again."""
 
+    ARTICLE_MISMATCH = "ARTICLE_MISMATCH"
+    """The card's ``article_id`` is not the article its snapshot was taken of: a quotation attributed
+    to a source it did not come from. A provenance failure, not damage, so it is not
+    ``HASH_MISMATCH``; the quotation may still be verbatim from the snapshot."""
+
 
 class VerificationCheck(StrEnum):
     """One check the verifier can run. A result lists those that ran, passed or not."""
@@ -106,6 +112,9 @@ class VerificationCheck(StrEnum):
     """The snapshot record was found and `SnapshotService.load` passed: raw bytes hash to the record's
     `sha256` and are `byte_size` long, the normalized blob hashes to its key and is canonical, and its
     text hashes to `normalized_text_hash` under the record's normalizer version."""
+
+    ARTICLE_MATCHES_SNAPSHOT = "article_matches_snapshot"
+    """The card's ``article_id`` is the snapshot's: the card cites the article it quotes."""
 
     CARD_MATCHES_SNAPSHOT = "card_matches_snapshot"
     """The card's recorded text hash and normalizer version are the snapshot's."""

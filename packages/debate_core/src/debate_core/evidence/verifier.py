@@ -165,6 +165,17 @@ def check_against_snapshot(
     if card.snapshot_id != snapshot.snapshot_id:
         raise ValueError(f"card {card.card_id} names snapshot {card.snapshot_id}, not {snapshot.snapshot_id}")
 
+    # A misattributed quotation. Reconstruction still runs: the offsets point into this snapshot's
+    # text, so whether the quotation is verbatim is a separate fact worth reporting.
+    findings.ran(VerificationCheck.ARTICLE_MATCHES_SNAPSHOT)
+    if card.article_id != snapshot.article_id:
+        findings.fail(
+            VerificationCheck.ARTICLE_MATCHES_SNAPSHOT,
+            ReasonCode.ARTICLE_MISMATCH,
+            f"the card cites article {card.article_id}; its snapshot was taken of article "
+            f"{snapshot.article_id}",
+        )
+
     findings.ran(VerificationCheck.CARD_MATCHES_SNAPSHOT)
     contradicts = False
     if card.normalizer_version is not None and card.normalizer_version != snapshot.normalizer_version:

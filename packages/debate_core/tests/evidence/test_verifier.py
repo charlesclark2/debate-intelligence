@@ -569,6 +569,42 @@ def test_a_card_cut_from_other_text_is_a_hash_mismatch_and_is_not_compared(
     assert VerificationCheck.EVIDENCE_RECONSTRUCTED not in result.checks_run
 
 
+OTHER_ARTICLE_ID = "0ART0000000000000000000002"
+
+
+def test_a_card_citing_another_article_than_its_snapshots_is_an_article_mismatch(
+    world: VerificationWorld, source: LoadedSnapshot, card: Card
+) -> None:
+    """A verbatim quotation attributed to the wrong article: provenance, not tampering."""
+    assert card.article_id == source.snapshot.article_id != OTHER_ARTICLE_ID
+
+    result = world.verify(card.evolve(article_id=OTHER_ARTICLE_ID))
+
+    assert result.status is VerificationStatus.UNVERIFIED
+    assert result.reason_codes == (ReasonCode.ARTICLE_MISMATCH,)
+    assert result.reasons[0].detail == (
+        f"the card cites article {OTHER_ARTICLE_ID}; its snapshot was taken of article "
+        f"{source.snapshot.article_id}"
+    )
+    # Reconstruction still ran, and found the quotation verbatim.
+    assert result.checks_run == ALL_CHECKS
+
+
+def test_a_misattributed_card_with_altered_text_reports_both(world: VerificationWorld, card: Card) -> None:
+    result = world.verify(card.evolve(article_id=OTHER_ARTICLE_ID, evidence_text=FARMERS.lower()))
+
+    assert result.reason_codes == (ReasonCode.ARTICLE_MISMATCH, ReasonCode.TEXT_MISMATCH)
+
+
+def test_a_card_citing_its_snapshots_article_passes_the_article_check(
+    world: VerificationWorld, card: Card
+) -> None:
+    result = world.verify(card)
+
+    assert VerificationCheck.ARTICLE_MATCHES_SNAPSHOT in result.checks_run
+    assert result.is_verified
+
+
 def test_offsets_past_the_end_of_the_text_are_span_out_of_range(world: VerificationWorld, card: Card) -> None:
     """The same 56 characters claimed at 150-206 of a 170-character text."""
     result = world.verify(card.evolve(evidence_start_offset=150, evidence_end_offset=206))
@@ -686,6 +722,7 @@ def test_ensure_finished_returns_the_verified_result_for_a_verified_card(
         pytest.param({"snapshot_id": ABSENT_SNAPSHOT_ID}, ReasonCode.SNAPSHOT_MISSING, id="snapshot"),
         pytest.param({"spans": ()}, ReasonCode.CARD_INCOMPLETE, id="spans"),
         pytest.param({"citation": build_citation(verified=False)}, ReasonCode.CITATION_UNVERIFIED, id="cite"),
+        pytest.param({"article_id": "0ART0000000000000000000002"}, ReasonCode.ARTICLE_MISMATCH, id="article"),
         pytest.param(
             {"evidence_start_offset": 150, "evidence_end_offset": 206},
             ReasonCode.SPAN_OUT_OF_RANGE,

@@ -12,8 +12,9 @@ For one card it:
 2. finds the card's snapshot record and loads it with
    :meth:`~debate_core.application.snapshot_service.SnapshotService.load`, which re-hashes both
    blobs against the record;
-3. reconstructs the evidence from the stored normalized text at the card's offsets, compares it with
-   the card's text exactly, and checks the spans fit it (:mod:`debate_core.evidence.verifier`).
+3. checks the card cites the article the snapshot was taken of, then reconstructs the evidence
+   from the stored normalized text at the card's offsets, compares it with the card's text exactly,
+   and checks the spans fit it (:mod:`debate_core.evidence.verifier`).
 
 The result is VERIFIED only if no check failed, and it cannot be constructed VERIFIED unless every
 check ran. Model calls play no part.

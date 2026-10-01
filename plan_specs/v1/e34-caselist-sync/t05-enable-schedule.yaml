@@ -54,6 +54,17 @@ spec:
     - kind: TaskRef
       name: v1-e01-t09-dev-prerelease-channel
       relation: dependsOn
+    # Added by the PM, 2026-10-01, for the same reason as the t06 edge above. v1-e30-t07 builds the
+    # suppression list that the archive and OpenEv importers consult, and its own description says
+    # why: "so a cumulative weekly archive can never re-import a removed file". The archives are
+    # cumulative. Until that list exists and the importers read it, a removal honoured under
+    # docs/policies/caselist-data-use.md is silently undone by the next import - and this task is
+    # what makes that import unattended and weekly. The policy promises removal within 7 calendar
+    # days, and the removal contact address started working on 2026-09-30, so a request can now
+    # actually arrive. An unattended agent that reverses takedowns is worse than no agent.
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

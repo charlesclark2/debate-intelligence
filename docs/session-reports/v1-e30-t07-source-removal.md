@@ -17,7 +17,8 @@ the bucket, merged as a set union, and its fields cannot hold a name.
 **After the PM review, the first real-dev exercise found a defect moto cannot show** (see "After the
 PM review: the real-dev exercise"). `--execute` stopped safely before deleting anything, because the
 takedown profile cannot read a list that does not exist yet. That is fixed in `d26cb32` and
-`e7406c4`, which the PM's verdict predates, and the exercise needs running again.
+`e7406c4`, which the PM's verdict predates. The re-run on `9ede19e` then completed under real IAM,
+and every number matched the moto rehearsal.
 
 Consulting the list is structural rather than conventional. Every path that can store or publish
 a source takes the list as a **required argument with no default**: the import pipeline, both
@@ -79,7 +80,7 @@ Commands and results below are from the final tree (`HEAD` after the last code c
 | **ac3** — `--team` resolves across snapshots; shared sources are listed as shared; without `--include-shared` only this team's disclosures go and the blob stays; with it the blob goes | PASS | Hand-derived from the fixture tables (`test_removal_plan.py` docstring): 3 removed, 1 withdrawn (ZaLu plus a camp file hold it), 9 records, 15 rows per side. `test_the_records_go_last_and_only_the_teams`: ZaLu's disclosure and the camp file stay. `test_with_include_shared_the_shared_file_goes_for_everyone`: blob, records, `raw/openev` copy gone. `test_the_withdrawn_teams_copy_…_is_refused_and_the_other_teams_kept`. |
 | **ac4** — Append-only JSONL of sha256, date, reason and request id, union-merged local/S3, readable through the port | PASS as amended (see note) | `test_suppression_list.py`, 31 passed: append-only (same inode, prefix kept, `O_APPEND`), every bucket version a prefix of the next, union merge, torn-line refusal, no free-text field, `isinstance(…, SuppressionList)`. As written, the timestamp field is named `recorded_at` not `removed_at` (an un-suppress entry is not a removal), and an entry may carry a `disclosure` digest. The digest is the amendment the operator approved in this session (not the PM), now in the spec's ac4. |
 | **ac5** — One removal-log entry per execution (local and `manifests/_suppression/removal-log.jsonl`) with no names; prod refused without `--confirm-prod` | PASS | `test_one_log_entry_per_execution_in_both_copies_and_no_names`: 12 records, 30 rows (15 × 2 sides), bucket log equals local, no fixture school/team/tournament string in the list or the log. `test_a_run_cut_short_…`: an `INCOMPLETE` then a `COMPLETED` entry. Smoke `test_prod_is_refused_without_confirm_prod` → `CONFIRMATION_REQUIRED`, exit 1. |
-| **ac6** — `--execute` uses `DEBATE_REMOVAL_PROFILE`, failing clearly with no partial deletes if it is unset or lacks delete rights; `unsuppress --execute` appends both entries, the next import stores the file again, and the list is never rewritten | PASS | `test_unsuppress_and_removal_profile.py`, 10 passed: unset; everyday profile; lists-but-cannot-delete; signed out. All refused with bucket evidence, data dir, records and list unchanged. Unsuppress, then re-import stores the file again. Smoke: unset → refused; profile missing from the AWS config → refused with nothing changed; unsuppress end to end. Moto does not enforce IAM, so refusals are simulated by the stores; the everyday profile's real denial of `ListObjectVersions` was confirmed read-only against dev (see Decisions). **Real IAM, 2026-10-01:** the first dev `--execute` passed the preflight under `debate-dev-evidence-removal`, then stopped before any delete on a 403 reading the not-yet-existing removal log. Nothing was deleted or appended anywhere. Fixed, with a test that reproduces the 403 (`TestTheFirstRemovalInABucketWithoutListBucket`); the re-run is pending (see "After the PM review"). |
+| **ac6** — `--execute` uses `DEBATE_REMOVAL_PROFILE`, failing clearly with no partial deletes if it is unset or lacks delete rights; `unsuppress --execute` appends both entries, the next import stores the file again, and the list is never rewritten | PASS | `test_unsuppress_and_removal_profile.py`, 10 passed: unset; everyday profile; lists-but-cannot-delete; signed out. All refused with bucket evidence, data dir, records and list unchanged. Unsuppress, then re-import stores the file again. Smoke: unset → refused; profile missing from the AWS config → refused with nothing changed; unsuppress end to end. Moto does not enforce IAM, so refusals are simulated by the stores; the everyday profile's real denial of `ListObjectVersions` was confirmed read-only against dev (see Decisions). **Real IAM, 2026-10-01:** the first dev `--execute` passed the preflight under `debate-dev-evidence-removal`, then stopped before any delete on a 403 reading the not-yet-existing removal log. Nothing was deleted or appended anywhere. Fixed, with a test that reproduces the 403 (`TestTheFirstRemovalInABucketWithoutListBucket`). **The re-run on `9ede19e` completed under real IAM:** `DONE … 16 record(s), 3 local file(s), 7 bucket object version(s) deleted; 8 manifest(s) rewritten without 42 row(s)`, status clean, the next archive `SUPPRESSED 4`. I then verified the bucket read-only (see "After the PM review"). |
 | Node `suppression-list`: `uv run pytest packages/debate_core/tests/application/caselist/test_suppression_list.py` | PASS | `31 passed in 5.38s` |
 | Node `importer-and-publisher-checks`: `uv run pytest packages/debate_core/tests/application/caselist -k suppress` | PASS | `72 passed in 7.70s` |
 | Node `removal-planner`: `uv run pytest packages/debate_core/tests/application/caselist/test_removal_plan.py` | PASS | `20 passed in 6.72s` |
@@ -313,8 +314,7 @@ are now observed for real:
 
 The 403 is the file's own design: no `s3:ListBucket` for the takedown profile. Earlier I had
 confirmed read-only that it is refused `ListObjectsV2`, and that the everyday profile is refused
-`ListObjectVersions`. Still unobserved: deleting versions under `raw/` and `GetObjectVersion`.
-Those need the re-run below.
+`ListObjectVersions`. Deleting versions under `raw/` was still unobserved at this point. The re-run below observed it.
 
 **The fix** (`d26cb32`):
 - **Reads move to the everyday profile.** The bucket's copies of the list and the log are now read
@@ -349,6 +349,48 @@ the same message the dev run printed. Then I broke each part of the fix in turn:
 First a machine in the state the first exercise left the bucket in, then a fresh scratch store.
 That gave the expected values in Operator follow-up 1.
 
+**The re-run (`9ede19e`, 2026-10-01).** Charlie ran Operator follow-up 1 again from a fresh scratch
+store. Every printed number matched the moto rehearsal:
+- the four imports reported `NEW` 4, 7, 2, 0;
+- the publish uploaded 0 sources across 4 of 4 snapshots, and `status` agreed;
+- the dry run showed 3 removed, 1 shared and kept, 8 manifest rewrites (4 weeks × 2 sides) and 5
+  suppression entries, with "Versions not counted";
+- `--execute` printed `DONE in dev (debate-dev-evidence-a7508de8): 16 record(s), 3 local file(s),
+  7 bucket object version(s) deleted; 8 manifest(s) rewritten without 42 row(s).`;
+- `status` agreed, with 2/10/10/10 files per week;
+- the 09-29 import reported `UNCHANGED 10` and `SUPPRESSED 4`, and its publish uploaded 0 sources;
+- the final `status` agreed, the raw version count was `11`, and both records were listed.
+
+Afterwards I checked the bucket read-only, removal profile for listing, everyday profile for
+reading:
+- **The three removed files:** under `raw/caselist/testcl26/`, each has 0 versions and 0 delete
+  markers.
+- **The shared file** `eea75cc2…` is still in the bucket, kept for the other team.
+- **Each of the five `manifests/testcl26/` keys has exactly one version**, and there are no delete
+  markers. I downloaded every version: none names a removed sha256 or the team ("Maple Grove").
+- **Each record has exactly one version**, so neither was ever rewritten.
+  `manifests/_suppression/suppression-list.jsonl` holds 5 lines, and `removal-log.jsonl` holds 1
+  `COMPLETED` entry. That entry records 16 records, 42 rows, 8 manifests, 7 S3 versions, 3 removed
+  and 1 withdrawn sha256.
+- **No names in either record.** A case-insensitive search of both files for every fixture
+  school, team code and tournament, and for `.docx`, finds nothing.
+
+**Do the real grants match `operator_access.tf`? Yes.** This run used each `EvidenceRemoval`
+statement for real, and nothing it was refused or allowed departed from the file:
+- `ListEvidenceObjectVersionsForTakedown` listed versions under `raw/` and `manifests/`;
+- `DeleteDisclosedMaterialOnRequest` deleted every version under `raw/` and the superseded
+  `manifests/` versions;
+- `MaintainSuppressionList` and `UseEvidenceKeyForTakedown` wrote both records.
+
+The absence of `s3:ListBucket` showed up as the file intends: a 403 for a missing key. The code
+now accounts for that, which closes ac6's real-IAM gap.
+
+Two grants this run did not test:
+- **`GetObjectVersion` under the takedown profile:** this run had no older manifest version to
+  read, because none existed before it.
+- **Whether the removal profile could delete from `reports/`:** IAM is meant to refuse that, and
+  nothing here asked it to.
+
 **For the PM.** The verdict above was given on `b4fe956`. These two commits change
 `removal_service.py` and `suppression.py` after it, so the PR should not open on that verdict
 without a look at them.
@@ -360,7 +402,10 @@ request, and before `v1-e34-t05` enables the schedule**: moto does not enforce I
 delete under `EvidenceRemoval` has not yet happened. (Both removal profiles exist and are signed in;
 I checked read-only with `sts get-caller-identity`.)
 
-1. **Exercise the takedown end to end on the real dev bucket, again** (about 5 min). The first
+1. **Done 2026-10-01 on `9ede19e`; results under "After the PM review".** `RM-2026-90` now has
+   permanent synthetic entries in the dev suppression list (5 lines) and removal log (1 entry);
+   record it in the register as the exercise. Kept for reference: **Exercise the takedown end to end
+   on the real dev bucket, again** (about 5 min). The first
    run, on 2026-10-01, stopped before any delete. See "After the PM review" above. It left
    `testcl26` with four weeks published in dev (09-01, 09-08, 09-15 and 09-22), so this run imports
    the same four into a fresh scratch store first. Then it publishes, which changes nothing in the

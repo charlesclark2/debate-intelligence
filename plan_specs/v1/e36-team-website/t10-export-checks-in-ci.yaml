@@ -1,0 +1,138 @@
+# TASK v1-e36-t10-export-checks-in-ci — The export checks run against an export
+# Epic: E36 Public Team Website | Release: v1.6 | Major: V1
+# Architecture refs: ADR-0012 (static export), §17 (guardrails)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t10-export-checks-in-ci
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: The export checks run against an export
+spec:
+  description: >-
+    Four tests check the site that actually ships rather than the sources it is built from: the
+    contact page carries its mailto and collects nothing, the exported FAQ holds the full text of
+    every answer, the export publishes no address outside the allowlist and no phone number, and the
+    export loads nothing from another origin and embeds no iframe. They are the publishing-policy
+    guarantees for the built artefact, and the last two are the ones that stop an unauthorised
+    address or a third-party tracker reaching production. They are written `it.runIf(hasExport)`,
+    site/out is gitignored, and site/scripts/pre-commit-checks.sh runs lint, typecheck, test and
+    build in that order. So on a clean runner there is no export when the tests run and all four skip
+    in silence. They have never run in CI. They fire only on a developer's machine, against whichever
+    build happens to be lying in the working tree: on 2026-09-30 that meant four failures against a
+    correct source tree, because the export predated the change, and it would equally have meant four
+    passes against a wrong one. A check that reports success while checking nothing is worse than an
+    absent one, because the absent one does not have to be unlearned. Out of scope: the content of
+    the policy itself (v1-e36-t01), the deploy script, and the tests that already run against sources.
+  priority: 2
+  constraints:
+    packages: [site/scripts, site/tests, .github/workflows]
+    forbidden:
+      - Leaving any publishing-policy check able to pass by skipping
+      - Committing site/out, or depending on an export that a previous run left behind
+      - Deleting the affected tests instead of making them run
+      - Weakening a check so it passes against sources when it is meant to check the export
+  context:
+    - kind: TaskRef
+      name: v1-e36-t05-site-deploy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t01-publishing-policy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The export checks run against an export built from the tree under test, in CI and on a
+        developer's machine, every time. Ordering the build before the tests, a second pass after the
+        build, or building a fixture export inside the tests are all acceptable; what is not
+        acceptable is any arrangement in which they can pass without an export having been built from
+        the current sources.
+    - id: ac2
+      description: >-
+        Mutation proves it, in CI's own invocation rather than a hand-run command: change a published
+        address to one outside the allowlist and confirm the suite fails naming it; add a script tag
+        from another origin to a page and confirm the suite fails naming it; restore both and confirm
+        it passes. Each mutation is shown failing before the fix as well, where the old arrangement
+        let it through.
+    - id: ac3
+      description: >-
+        Skipping is loud. If an export genuinely cannot be produced in some context, the run says so
+        in a way that fails rather than passes, so this task's own failure mode cannot return quietly
+        the next time someone reorders a script.
+    - id: ac4
+      description: >-
+        A stale export cannot produce a pass. Running the suite twice without rebuilding, or running
+        it with an export left over from a different commit, either rebuilds or fails; it does not
+        silently check the wrong bytes. This is the half that bit the operator, and it is separate
+        from ac1: ac1 makes the checks run, ac4 makes them run against the right thing.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t10-export-checks-in-ci-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    Show the checks skipping in CI first, then make them run, then prove them by mutation.
+  goalRef:
+    name: v1-e36-t10-export-checks-in-ci
+  graph:
+    nodes:
+      - id: show-the-skip
+        kind: Task
+        name: Demonstrate that the checks never run in CI
+        description: >-
+          Capture the current behaviour from a clean checkout with no site/out: the four tests report
+          as skipped and the suite is green. This is the baseline the fix is measured against.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: The four export tests are shown skipping on a clean tree
+            description: >-
+              From a checkout with no site/out, the site checks are run as CI runs them and the four
+              runIf(hasExport) tests report as skipped while the suite reports green. The output is
+              captured in the report, because this is the baseline the fix is measured against.
+      - id: make-them-run
+        kind: Task
+        name: Build before the checks, and fail on a missing or stale export
+        description: >-
+          Reorder or restructure so an export always exists and always matches the tree, and make an
+          absent export fail rather than skip.
+        dependsOn: [show-the-skip]
+        outputs: [site/scripts/pre-commit-checks.sh, site/tests]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: The site checks pass from a clean tree
+            command: site/scripts/pre-commit-checks.sh
+      - id: mutation
+        kind: Task
+        name: Prove the checks by mutation
+        description: >-
+          A disallowed address and a third-party script tag each turn the suite red through CI's own
+          invocation, and each is shown passing under the old arrangement.
+        dependsOn: [make-them-run]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: custom
+            name: Both mutations fail after the change and pass before it
+            description: >-
+              A published address outside the allowlist, and a script tag from another origin, each
+              turn the suite red through CI's own invocation after the change, and each is shown
+              passing under the arrangement this task replaces. Both are restored afterwards and the
+              tree confirmed clean.
+status:
+  phase: Pending

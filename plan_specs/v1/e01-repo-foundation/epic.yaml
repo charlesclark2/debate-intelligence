@@ -404,5 +404,47 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t14-install-interpreter-bound
+    - id: t15
+      kind: Task
+      name: Re-run the promotion guards without waiting for an event
+      description: >-
+        t12 closed the stale-green gap for every push that arrives. t12's own sandbox proved one may
+        not: a lost push produces no job, and a job that never ran cannot fail. A schedule and a
+        dispatch re-run the guards without depending on an event.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml
+        goalRef: v1-e01-t15-promotion-guard-sweep
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t15-promotion-guard-sweep reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t15-promotion-guard-sweep
+    - id: t16
+      kind: Task
+      name: Generate the docs index instead of hand-editing it
+      description: >-
+        docs/README.md is derived information kept by hand, so every doc-producing task collides
+        there and a renamed document goes unnoticed. Generate it as ROADMAP.md is generated, with a
+        --check mode, and correct the agreement that asks sessions to edit it.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml
+        goalRef: v1-e01-t16-generated-docs-index
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t16-generated-docs-index reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t16-generated-docs-index
 status:
   phase: Pending

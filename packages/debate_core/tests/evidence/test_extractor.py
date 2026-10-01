@@ -437,6 +437,23 @@ def test_extract_refuses_text_in_place_of_a_snapshot_text(snapshot: SourceSnapsh
         extractor.extract(snapshot, cast("SnapshotText", NORMALIZED), EvidenceSelection.of_offsets((0, 6)))
 
 
+def test_extract_refuses_bare_offsets_in_place_of_a_selection(
+    snapshot: SourceSnapshot, text: SnapshotText
+) -> None:
+    with pytest.raises(TypeError):
+        extractor.extract(snapshot, text, cast("EvidenceSelection", ((0, 6),)))
+
+
+def test_evidence_built_directly_needs_a_snapshot_record_and_a_tuple_of_segments(
+    snapshot: SourceSnapshot, text: SnapshotText
+) -> None:
+    segment = EvidenceSegment(text, 0, 6)
+    with pytest.raises(TypeError):
+        ExtractedEvidence(cast("SourceSnapshot", snapshot.snapshot_id), (segment,))
+    with pytest.raises(TypeError):
+        ExtractedEvidence(snapshot, cast("tuple[EvidenceSegment, ...]", [segment]))
+
+
 # =============================================================================================
 # The text must belong to the record, and the paragraph map to the text
 # =============================================================================================

@@ -119,10 +119,6 @@ class EvidenceMarkupSpan:
         """A highlight over ``[start, end)``."""
         return cls(start, end, SpanStyle.HIGHLIGHT, purpose)
 
-    def overlaps(self, other: EvidenceMarkupSpan) -> bool:
-        """True when the two spans share at least one character."""
-        return self.start < other.end and other.start < self.end
-
 
 @dataclass(frozen=True, slots=True)
 class CardMarkup:

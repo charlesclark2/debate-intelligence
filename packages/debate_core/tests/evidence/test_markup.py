@@ -156,6 +156,11 @@ def test_a_purpose_given_as_a_string_is_refused() -> None:
     assert refused.value.problem is MarkupProblem.NOT_A_PURPOSE
 
 
+def test_markup_needs_extracted_evidence_not_text() -> None:
+    with pytest.raises(TypeError):
+        CardMarkup(cast("ExtractedEvidence", NORMALIZED), (underline(0, 6),))
+
+
 def test_markup_spans_must_be_a_tuple_of_spans(evidence: ExtractedEvidence) -> None:
     with pytest.raises(InvalidMarkup) as refused:
         CardMarkup(evidence, cast("tuple[EvidenceMarkupSpan, ...]", [underline(0, 6)]))

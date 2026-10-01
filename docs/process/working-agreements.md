@@ -128,3 +128,18 @@ download cadence that an already-approved policy forbade.
   costs data that cannot be recovered - was itself the thing that was untrue.
 * Superseded records stay in place with their reasoning intact. Whoever reads them next should be
   able to see what was believed, what it caused, and what disproved it.
+
+## 8. A mutation run starts from an empty Hypothesis database
+
+Hypothesis saves every failing example it finds and replays it first on the next run. During
+mutation testing that makes a property look stronger than it is. In `v1-e03-t03` one mutant was
+caught 28 seconds into a run and then twice more in 0.3 seconds, because the later runs replayed
+the example the first had found instead of finding it again.
+
+* Every run against a mutant sets `HYPOTHESIS_STORAGE_DIRECTORY` to a new, empty directory, so the
+  property has to find the break from scratch.
+* A report that gives catch times, or says a property caught a mutant, states that each run used a
+  fresh database.
+* A property is checked for what it actually generates (`--hypothesis-show-statistics`) before it
+  is offered as evidence. One that rarely produces the input it was written for passes without
+  testing it.

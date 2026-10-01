@@ -143,6 +143,7 @@ def test_doctor_reports_the_environment_as_json() -> None:
     assert data["services"] == [
         "caselist_import",
         "caselist_publish",
+        "caselist_removal",
         "caselist_status",
         "caselist_sync",
         "caselist_sync_history",

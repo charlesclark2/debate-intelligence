@@ -748,6 +748,16 @@ class Settings(BaseSettings):
             "quietly reaching the internet."
         ),
     )
+    removal_profile: str | None = Field(
+        default=None,
+        description=(
+            "The EvidenceRemoval SSO profile `caselist remove --execute` and `caselist unsuppress "
+            "--execute` delete and append with (DEBATE_REMOVAL_PROFILE): debate-dev-evidence-removal "
+            "or debate-prod-evidence-removal. Unset in every profile on purpose, so that deleting "
+            "evidence takes a decision in the shell it runs in; the dry run never needs it "
+            "(v1-e30-t07)."
+        ),
+    )
     storage: StorageSettings
     http: HttpSettings = Field(default_factory=HttpSettings)
     providers: ProviderSettings = Field(default_factory=ProviderSettings)

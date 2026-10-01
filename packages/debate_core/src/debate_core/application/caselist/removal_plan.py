@@ -233,6 +233,9 @@ class DisclosureRef:
     source_path: str
     school: str
     team_code: str
+    tournament: str | None = None
+    round_label: str | None = None
+    """The round as disclosed (`Round 1`, `Semis`): what the confirmation to the requester names."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1038,6 +1041,8 @@ def _disclosure_ref(disclosure: Disclosure) -> DisclosureRef:
         source_path=disclosure.source_path,
         school=disclosure.school,
         team_code=disclosure.team_code,
+        tournament=disclosure.tournament,
+        round_label=disclosure.round_label.raw if disclosure.round_label is not None else None,
     )
 
 

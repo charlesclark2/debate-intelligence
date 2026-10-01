@@ -239,7 +239,11 @@ class TestTheRemovalProfile:
 
         message = str(refused.value)
         assert "debate-dev-evidence" in message and "nothing was deleted" in message
-        assert "probe object was left at manifests/_suppression/preflight/" in message
+        if profile == "everyday":
+            assert "could not list object versions" in message
+            assert "probe" not in message, "the everyday profile is stopped before anything is written"
+        else:
+            assert "probe object was left at manifests/_suppression/preflight/" in message
         assert [
             key for key in removal_world.versions() if not key[0].startswith("manifests/_suppression/")
         ] == evidence_before

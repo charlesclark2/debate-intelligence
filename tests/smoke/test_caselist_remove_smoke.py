@@ -288,3 +288,17 @@ def test_a_sha256_held_nowhere_is_planned_as_a_suppression_only(
     assert result.exit_code == ExitCode.OK, result.stdout
     assert "held nowhere in this environment: it is only suppressed" in result.stdout
     assert "SUPPRESSION ENTRIES appended to the list, here and in the bucket: 1" in result.stdout
+
+
+def test_a_removal_profile_missing_from_the_aws_config_is_refused_with_nothing_changed(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", "debate-dev-evidence-removal-typo")
+    before = (tree(installation / "dev"), versions(bucket))
+
+    refused = run(*REMOVE, "--execute")
+
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE
+    assert "debate-dev-evidence-removal-typo" in refused["error"]["message"] + str(refused["error"]["hint"])
+    assert "nothing was deleted" in refused["error"]["message"]
+    assert (tree(installation / "dev"), versions(bucket)) == before

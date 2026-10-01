@@ -142,7 +142,8 @@ class TakedownPreflightFailed(DomainError):
         )
         leftover = f"; its probe object was left at {left}" if left else ""
         super().__init__(
-            f"the takedown profile {profile or '(none)'} could not {step} ({error_code_of(failure)}), so it "
+            f"the takedown profile {profile or 'named by DEBATE_REMOVAL_PROFILE'} could not {step} "
+            f"({error_code_of(failure)}), so it "
             f"cannot carry out a removal: check DEBATE_REMOVAL_PROFILE names this environment's "
             f"EvidenceRemoval profile and that its session is signed in; nothing was deleted{leftover}"
         )
@@ -191,13 +192,17 @@ def refuse_protected_versions(versions: Sequence[ObjectVersion]) -> None:
 async def preflight(access: TakedownAccess) -> None:
     """Prove the takedown credential can write, list and delete versions, before any real change.
 
-    Writes a few bytes under :data:`PREFLIGHT_PREFIX`, lists their versions, deletes every one and
-    checks none is left. Raises :class:`TakedownPreflightFailed` naming the step that failed.
+    Lists versions first — the one grant the everyday profile lacks, so the commonest mistake, naming
+    that profile, fails before anything is written — then writes a few bytes under
+    :data:`PREFLIGHT_PREFIX`, lists their versions, deletes every one and checks none is left. Raises
+    :class:`TakedownPreflightFailed` naming the step that failed.
     """
     key = f"{PREFLIGHT_PREFIX}{uuid.uuid4().hex}.txt"
-    step = "write a probe under manifests/_suppression/"
+    step = "list object versions"
     written = False
     try:
+        await access.versions.list_versions(PREFLIGHT_PREFIX)
+        step = "write a probe under manifests/_suppression/"
         with tempfile.TemporaryDirectory(prefix="debate-preflight-") as directory:
             probe = Path(directory) / "probe.txt"
             probe.write_text("caselist remove preflight\n", encoding="utf-8")

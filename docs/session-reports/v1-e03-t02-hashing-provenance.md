@@ -213,10 +213,85 @@ characters, so `"café"` read as `café`, identical to the line above it. They 
 7. **Location.** `snapshot_service.py` sits at `debate_core/application/`, the path the spec's node
    `outputs` names, not under `application/services/`.
 
+## Changes after PM review
+
+The PM accepted the work and required two commits before the PR. Both are now on the branch, after
+the PM's own edits, which I committed unchanged as `e777f60`.
+
+**1. The paragraph map can no longer be read without its key check** (`1602cc3`).
+`decode_snapshot_text(data, *, expected_key)` now requires the key the blob is recorded under. It
+hashes the bytes and raises `SnapshotTextKeyMismatch` before parsing anything, and it is the only
+way from bytes to a `SnapshotText`. `SnapshotService.load` gets its normalized-blob check from this
+call instead of doing a separate hash.
+
+I chose the required key over a rename. A rename still leaves an unchecked call one line away, and
+nothing fails when someone makes it. With the key required, skipping the check means computing the
+key from the bytes being checked, which a reviewer can see, and the test below fails if any other
+route back appears. The cost was one hash. The service's separate re-hash of the normalized blob
+is gone, so `load` hashes that blob once (twice counting the store's own read check), as before.
+
+`test_nothing_in_debate_core_turns_serialized_text_into_a_snapshot_text_without_a_key` imports all
+98 `debate_core` modules. It fails if any function or method returns a `SnapshotText` from bytes, a
+string, `object` or `Any` without a required keyword-only `expected_key`. It also asserts it found
+`decode_snapshot_text`, so it cannot pass by seeing nothing. Its limit: code that parses the JSON
+itself and calls the `SnapshotText` constructor directly is invisible to it. Tests that exercise the
+structural checks decode under the bytes' own key through one named helper, whose docstring says
+production code must never do that.
+
+Deliberate breaks of the new guard, each applied alone:
+
+| Break | Caught by |
+|---|---|
+| An unkeyed `decode_unchecked(data: bytes)` added beside the keyed function | the scan |
+| A `SnapshotText.from_bytes` classmethod added | the scan |
+| An unkeyed `read_snapshot_text(blob: bytes)` added in the application layer | the scan |
+| `expected_key` made optional, with the check skipped when it is omitted | `test_decoding_requires_the_key_as_a_keyword_with_no_default` |
+| The key check removed | `test_bytes_that_do_not_hash_to_their_key_are_refused_before_they_are_parsed`. With only the service's tests run, `test_integrity_a_paragraph_map_altered_into_another_valid_document_is_refused` and the property `test_integrity_any_change_to_either_blob_is_refused` each catch it too. |
+| The bytes parsed before the key is checked | `test_bytes_that_do_not_hash_to_their_key_are_refused_before_they_are_parsed` |
+
+**2. `docs/evidence/snapshot-text-format.md`** (committed with this report). It is the
+specification of `debate-snapshot-text/1`. It covers the fields, the hand-written example, the
+canonical-encoding rule and why the reader enforces it, why the offset map is excluded, the
+required key and the finding behind it, the seven `load` checks, and the measured cost. It also
+carries the rule that a caller checking many cards against one source loads once and reuses the
+`LoadedSnapshot` rather than skipping the check. It ends with a guarantees table naming the test
+behind each one; I checked every cited test name exists. There is a row in `docs/README.md`, and
+`uv run scripts/check_links.py` reports `OK: 1134 relative links and anchors in 148 Markdown
+files`. The module docstrings of `snapshot_text.py` and `snapshot_service.py` now point to the page.
+
+**Re-run after both commits:**
+- `uv run pytest` → `3222 passed, 1 skipped in 39.39s` (the same pre-existing eval skip).
+- `uv run pyright` → `0 errors`.
+- `uv run lint-imports` → `10 kept, 0 broken`.
+- ruff → clean.
+- The six properties at 50,000 examples each → `6 passed in 48.48s`.
+- Node criteria: `test_hashing.py` → `34 passed`, `-k create` → `15 passed`, `-k integrity` → `23 passed`,
+  `test_snapshot_local.py` → `8 passed`. `uv run scripts/validate_specs.py` → `OK`.
+
+**One thing in the PM's t04 edit to look at.** The note added to
+`plan_specs/v1/e03-evidence-integrity/t04-verifier.yaml` uses `#` comment lines, but they sit inside
+the `description: >-` folded block. YAML treats them as text, not comments. The parsed description
+now reads "…re-normalizes under the card's recorded normalizer_version, # PM note, 2026-10-01, …"
+and only then continues the original sentence. The specs still validate, and a t04 session will
+read the note, but it splits a sentence and carries the `#` marks. The PM said to leave it, so it
+is committed as written.
+
 ## Operator follow-ups
 
-None. Every command in this session finished in under a minute. The longest was the full default
-suite at 47 s.
+Bring the branch up to date with `dev`, which has moved, then open the PR. The task rules leave
+both to the operator. If `docs/README.md` conflicts during the sync, keep both rows, per the PM.
+
+**Operator command** (expected runtime ~1 min each, plus the sync's own checks)
+Where: your Mac, in the task worktree.
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e03-t02-hashing-provenance
+scripts/task sync v1-e03-t02-hashing-provenance
+scripts/task pr v1-e03-t02-hashing-provenance
+```
+
+Success looks like: the sync finishes without conflicts (or with only the `docs/README.md` row
+conflict, resolved by keeping both rows), and `scripts/task pr` prints the PR URL.
 
 ## Follow-up work
 
@@ -230,15 +305,15 @@ suite at 47 s.
   `UNKNOWN_NORMALIZER_VERSION` gets its own code. The hash, size, malformed and version-mismatch
   checks map to `HASH_MISMATCH`, and `NotFound` maps to `SNAPSHOT_MISSING`.
 * **`v1-e03-t03-span-extraction`:** `LoadedSnapshot.normalized` (`SnapshotText`) has
-  `paragraph()` and `paragraph_text()`, matching `NormalizedText`. The paragraph map is trustworthy
-  only from a `load`ed snapshot, never from a blob read directly (see the deep-run finding above).
+  `paragraph()` and `paragraph_text()`, matching `NormalizedText`. Get it from
+  `SnapshotService.load`. Decoding a blob directly now requires its recorded key, and a test fails
+  if an unkeyed route is added (Changes after PM review).
 * **E04 article service (`v1-e04-t05`):** add `SnapshotService` to `debate_cli.container`
   (`blobs=FsSnapshotStore(settings.storage.data_dir)`, a system clock and an id generator), and save
   the returned record with `ArticleRepository.save_snapshot`.
-* **Docs (PM decision):** the `debate-snapshot-text/1` format is stored data that later code
-  depends on. Its specification is currently the module docstring of `snapshot_text.py`. Under the
-  working agreements' table it would sit in `docs/evidence/` beside `normalization.md`. I did not
-  add the page, because `docs/` is outside this task's packages.
+* **Docs:** done after review. See `docs/evidence/snapshot-text-format.md`. The working
+  agreements' directory table still describes `docs/evidence/` as "the versioned text normalization
+  policy" alone; widening that line belongs to whoever next edits `working-agreements.md`.
 
 ## PM review
 

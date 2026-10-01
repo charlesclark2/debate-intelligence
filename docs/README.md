@@ -17,6 +17,7 @@
 | [policies/caselist-data-use.md](policies/caselist-data-use.md) | Data-use policy for OpenCaselist disclosures and OpenEv camp files |
 | [policies/website-publishing.md](policies/website-publishing.md) | What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request |
 | [evidence/normalization.md](evidence/normalization.md) | Evidence text normalization policy: the frozen, versioned rules every snapshot offset, hash and verification depends on |
+| [evidence/snapshot-text-format.md](evidence/snapshot-text-format.md) | `debate-snapshot-text/1`: how a snapshot's normalized text and paragraph map are stored, the canonical encoding, the key check every read makes, and what `SnapshotService.load` verifies |
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
 | [runbooks/terraform-bootstrap.md](runbooks/terraform-bootstrap.md) | Creating the Terraform state buckets and the dev/prod environment roots |
 | [runbooks/evidence-store.md](runbooks/evidence-store.md) | Applying the dev and prod evidence buckets and checking the operator and takedown credentials |

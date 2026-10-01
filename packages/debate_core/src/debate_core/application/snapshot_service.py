@@ -21,9 +21,10 @@ stores it once:
 
 * the **raw blob** is the response bytes exactly as received, and its key is their SHA-256;
 * the **normalized blob** is the canonical ``debate-snapshot-text/1`` JSON document
-  (:mod:`debate_core.evidence.snapshot_text`): normalized text, normalizer version and paragraph
-  map. Its encoding depends on nothing but the normalized text, so two retrievals that normalize to
-  the same text share it even when their raw bytes differ.
+  (:mod:`debate_core.evidence.snapshot_text`, specified in `docs/evidence/snapshot-text-format.md`):
+  normalized text, normalizer version and paragraph map. Its encoding depends on nothing but the
+  normalized text, so two retrievals that normalize to the same text share it even when their raw
+  bytes differ.
 
 ## Integrity on load is always on
 

@@ -22,7 +22,7 @@ atAGlance:
       value: Nothing. No fees are due on the first day and there is no equipment to buy.
     - label: Sign up
       value: >-
-        Email Coach Clark at <charles.clark@wfbschools.org>, come to a practice, or join the
+        Email Coach Clark at <charles.clark@wfbschools.com>, come to a practice, or join the
         team's Remind group with the code @debatewfb.
 ---
 
@@ -49,7 +49,7 @@ That is the whole list, and a student does not have to know which event they wan
 
 ## Three ways to sign up
 
-1. **Email Coach Clark** at <charles.clark@wfbschools.org>.
+1. **Email Coach Clark** at <charles.clark@wfbschools.com>.
 2. **Come to a practice.** Any of the three above. No notice needed.
 3. **Join the team's Remind group** with the code @debatewfb, which is how practice changes,
    tournament deadlines and travel details reach students and families.

@@ -73,7 +73,7 @@ describe('the contact page', () => {
 describe('the built contact page', () => {
   it.runIf(hasExport)('carries a mailto link and nothing that collects data', () => {
     const html = readFileSync(builtContact, 'utf8')
-    expect(html).toContain('href="mailto:charles.clark@wfbschools.org"')
+    expect(html).toContain('href="mailto:charles.clark@wfbschools.com"')
     // The navigation's disclosure button is part of the frame, so only form controls that would
     // collect something are forbidden here.
     for (const pattern of [/<form\b/i, /<input\b/i, /<textarea\b/i, /<select\b/i]) {

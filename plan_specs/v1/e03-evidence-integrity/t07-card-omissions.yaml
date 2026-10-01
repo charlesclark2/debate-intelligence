@@ -47,6 +47,15 @@ spec:
     - kind: TaskRef
       name: v1-e03-t03-span-extraction
       relation: dependsOn
+    # Added by the PM, 2026-10-01, before either task started. t07 changes what a card is, and
+    # v1-e03-t04's verifier reconstructs a card's evidence from the snapshot. Run in parallel, the
+    # verifier would be written for contiguous cards only and a card with omissions would then fail
+    # TEXT_MISMATCH with nobody's spec saying whose job the fix was. Run in this order, t04 writes
+    # reconstruction once for one envelope and t07 extends that one function (ac7). It also keeps two
+    # sessions out of debate_core.evidence at the same time.
+    - kind: TaskRef
+      name: v1-e03-t04-verifier
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -87,6 +96,14 @@ spec:
         docs/evidence/snapshot-text-format.md and the card module docstring record the envelope and
         omission model, the no-joiner rule, and that the ellipsis belongs to rendering. The card
         docstring's three construction rules become four.
+    - id: ac7
+      description: >-
+        Added by the PM, 2026-10-01. The verifier honours omissions: v1-e03-t04's single reconstruction
+        function is extended, not copied, so that a card with omitted_ranges built by this task's
+        mapping function verifies VERIFIED, and the same card with any omission widened, narrowed,
+        removed or added yields UNVERIFIED with TEXT_MISMATCH. v1-e03-t04's test fixtures, which build
+        single-envelope cards by hand because this task's mapping did not exist yet, are switched to the
+        mapping function, so ac3's scan finds no second copy of the arithmetic in tests either.
 status:
   phase: Pending
 ---

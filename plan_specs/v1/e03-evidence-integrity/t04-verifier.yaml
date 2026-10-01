@@ -62,7 +62,9 @@ spec:
     CLI surfacing is t06; edit re-verification is t05; DOCX export is E06.
   priority: 1
   constraints:
-    packages: [debate_core.evidence, debate_core.application]
+    # docs/evidence added by the PM, 2026-10-01, before the task started: the verifier changes what
+    # the format doc's guarantees table can promise, and t01, t02 and t03 all needed it.
+    packages: [debate_core.evidence, debate_core.application, docs/evidence]
     forbidden:
       - Fuzzy or similarity-based matching for evidence text (exact match after normalization only)
       - Setting VERIFIED anywhere except EvidenceVerifier

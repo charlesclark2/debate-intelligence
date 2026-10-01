@@ -235,6 +235,7 @@ spec:
         goalRef: v1-e03-t07-card-omissions
       dependsOn:
       - t03
+      - t04
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e03-t07-card-omissions reports phase Succeeded

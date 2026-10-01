@@ -21,6 +21,8 @@ from debate_core.application.errors import (
     ProviderRateLimited,
     ProviderUnavailable,
     RevisionMismatch,
+    SnapshotIntegrityCheck,
+    SnapshotIntegrityError,
 )
 
 EVERY_ERROR = (
@@ -30,6 +32,7 @@ EVERY_ERROR = (
     AlreadyExists("Card", "01J"),
     RevisionMismatch("Card", "01J", 3, 4),
     BlobIntegrityError("abc123"),
+    SnapshotIntegrityError("01J", SnapshotIntegrityCheck.RAW_BYTES_HASH),
     InvalidModelOutput("select-passage", "1.0.0", "missing field"),
     ProviderError("openalex", "broke"),
     ProviderUnavailable("openalex"),
@@ -86,3 +89,16 @@ def test_a_blob_integrity_error_reports_the_digest_the_bytes_actually_have() -> 
     error = BlobIntegrityError("abc", actual_sha256="def")
     assert error.actual_sha256 == "def"
     assert "def" in str(error)
+
+
+def test_a_snapshot_integrity_error_names_the_check_and_both_values() -> None:
+    """The verifier turns `check` into a reason code, so it is an attribute, not only a message."""
+    error = SnapshotIntegrityError(
+        "01J", SnapshotIntegrityCheck.NORMALIZED_TEXT_HASH, expected="a" * 64, actual="b" * 64
+    )
+
+    assert error.snapshot_id == "01J"
+    assert error.check is SnapshotIntegrityCheck.NORMALIZED_TEXT_HASH
+    assert (error.expected, error.actual) == ("a" * 64, "b" * 64)
+    assert "normalized_text_hash" in str(error)
+    assert not isinstance(error, BlobIntegrityError), "a damaged blob and snapshot are reported apart"

@@ -249,6 +249,14 @@ class InMemorySnapshotStore:
     async def exists(self, key: BlobKey) -> bool:
         return key in self._blobs
 
+    def stored_keys(self) -> frozenset[BlobKey]:
+        """Every key a blob is held under: one entry per stored copy.
+
+        Test-only, like :meth:`corrupt`: it is how a test counts copies to show that storing the same
+        bytes twice stored them once. The port has no listing, on purpose.
+        """
+        return frozenset(self._blobs)
+
     def corrupt(self, key: BlobKey, replacement: bytes) -> None:
         """Replace a blob's bytes without changing its key, to test tamper detection.
 

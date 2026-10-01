@@ -82,7 +82,24 @@ may rewrite a stored blob, so the binding has to supply the damage:
         return lambda key, replacement: store.tamper_for_tests(key, replacement)
 ```
 
-A binding that leaves it alone skips that one test and runs the rest.
+A binding that leaves it alone skips those tests and runs the rest. The test is parametrized over
+several kinds of damage, down to a single flipped bit, so a store that compared only lengths or
+only a prefix is caught.
+
+### Counting copies: `count_stored_blobs`
+
+A second optional fixture, `count_stored_blobs`, returns how many copies the backing storage
+physically holds (files under a directory, objects in a bucket). It turns on the test that putting
+identical bytes twice occupies one copy, which equal keys alone do not show and which a snapshot's
+"one stored copy of each blob" (`v1-e03-t02-hashing-provenance` ac3) rests on. Count what is there,
+not distinct keys:
+
+```python
+    @pytest.fixture
+    def count_stored_blobs(self, make_adapter: SnapshotStoreFactory) -> BlobCopyCounter:
+        store = make_adapter()
+        return lambda: sum(1 for path in store.root.rglob("*") if path.is_file())
+```
 
 ## Running them
 

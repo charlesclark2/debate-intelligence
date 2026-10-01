@@ -14,7 +14,9 @@ each is stated once rather than re-proved per adapter:
 
 Corruption cannot be staged through the port, because no production path can rewrite a stored
 blob. A binding therefore supplies the damage itself through the optional `corrupt_blob` fixture;
-a binding that leaves it `None` skips that one test and keeps the rest.
+a binding that leaves it `None` skips those tests and keeps the rest. Likewise "one stored copy"
+cannot be observed through a port that has no listing, so a binding that can count what its
+backing storage holds supplies `count_stored_blobs`, and one that cannot skips that test.
 
 Nothing here looks at a file path, a bucket name or a directory layout — where the bytes live is
 the adapter's business and is tested in the adapter's own module.
@@ -23,6 +25,7 @@ the adapter's business and is tested in the adapter's own module.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 
 import pytest
 
@@ -30,6 +33,7 @@ from debate_core.application.errors import BlobIntegrityError, NotFound
 from debate_core.application.ports import SnapshotStore
 from debate_core.testing.contracts.harness import (
     AdapterContract,
+    BlobCopyCounter,
     BlobCorruptor,
     SnapshotStoreFactory,
 )
@@ -43,6 +47,23 @@ OCEAN_HEAT_HTML = b"<html><body><p>Ocean heat content reached a new high.</p></b
 
 #: A key of the right shape that nothing was ever stored under.
 UNWRITTEN_KEY = "f" * 64
+
+
+def _flip_one_bit(data: bytes) -> bytes:
+    middle = len(data) // 2
+    return data[:middle] + bytes([data[middle] ^ 0x01]) + data[middle + 1 :]
+
+
+#: Ways stored bytes go wrong, from wholesale replacement to the smallest change there is. A store
+#: that compared only lengths, or only a prefix, or trusted a non-empty read, passes some of these
+#: and not others; every store must refuse all of them.
+DAMAGE: dict[str, Callable[[bytes], bytes]] = {
+    "replaced-by-other-content": lambda data: OCEAN_HEAT_HTML,
+    "one-bit-flipped": _flip_one_bit,
+    "last-byte-truncated": lambda data: data[:-1],
+    "byte-appended": lambda data: data + b"\n",
+    "emptied": lambda data: b"",
+}
 
 
 class SnapshotStoreContract(AdapterContract):
@@ -70,6 +91,15 @@ class SnapshotStoreContract(AdapterContract):
 
         Overriding it turns on `test_a_blob_whose_bytes_no_longer_match_its_key_is_refused`, which
         is the one property of this port that cannot be exercised through the port itself.
+        """
+        return None
+
+    @pytest.fixture
+    def count_stored_blobs(self) -> BlobCopyCounter | None:
+        """Count the copies the backing storage holds, or `None` if this store cannot be counted.
+
+        Overriding it turns on `test_identical_bytes_put_twice_occupy_one_stored_copy`. Count what is
+        physically there — files, objects, entries — not distinct keys, or the test proves nothing.
         """
         return None
 
@@ -125,6 +155,24 @@ class SnapshotStoreContract(AdapterContract):
         assert first_key == second_key
         assert await store.get(first_key) == ARCTIC_METHANE_HTML
 
+    async def test_identical_bytes_put_twice_occupy_one_stored_copy(
+        self, store: SnapshotStore, count_stored_blobs: BlobCopyCounter | None
+    ) -> None:
+        """Equal keys alone do not show deduplication; a store could still write a second copy.
+
+        This is what a snapshot service's "one stored copy of each blob" (`v1-e03-t02` ac3) rests on.
+        """
+        if count_stored_blobs is None:
+            pytest.skip("this binding supplies no way to count stored copies")
+
+        await store.put(ARCTIC_METHANE_HTML)
+        await store.put(ARCTIC_METHANE_HTML)
+        assert count_stored_blobs() == 1
+
+        await store.put(OCEAN_HEAT_HTML)
+        await store.put(ARCTIC_METHANE_HTML)
+        assert count_stored_blobs() == 2
+
     async def test_a_repeat_put_cannot_disturb_other_blobs(self, store: SnapshotStore) -> None:
         arctic_key = await store.put(ARCTIC_METHANE_HTML)
         ocean_key = await store.put(OCEAN_HEAT_HTML)
@@ -166,15 +214,16 @@ class SnapshotStoreContract(AdapterContract):
 
         assert refused.value.key == UNWRITTEN_KEY
 
+    @pytest.mark.parametrize("damage", sorted(DAMAGE))
     async def test_a_blob_whose_bytes_no_longer_match_its_key_is_refused(
-        self, store: SnapshotStore, corrupt_blob: BlobCorruptor | None
+        self, store: SnapshotStore, corrupt_blob: BlobCorruptor | None, damage: str
     ) -> None:
         """Damaged evidence fails loudly. It is never repaired, and it is never served anyway."""
         if corrupt_blob is None:
             pytest.skip("this binding supplies no way to damage a stored blob")
         key = await store.put(ARCTIC_METHANE_HTML)
 
-        corrupt_blob(key, OCEAN_HEAT_HTML)
+        corrupt_blob(key, DAMAGE[damage](ARCTIC_METHANE_HTML))
 
         with pytest.raises(BlobIntegrityError) as refused:
             await store.get(key)

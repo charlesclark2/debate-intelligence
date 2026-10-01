@@ -18,7 +18,12 @@ import pytest
 
 from debate_core.application.ports import BlobKey
 from debate_core.integrations.local import BLOB_FILE_MODE, FsSnapshotStore
-from debate_core.testing.contracts import BlobCorruptor, SnapshotStoreContract, SnapshotStoreFactory
+from debate_core.testing.contracts import (
+    BlobCopyCounter,
+    BlobCorruptor,
+    SnapshotStoreContract,
+    SnapshotStoreFactory,
+)
 from debate_core.testing.fakes import InMemorySnapshotStore
 
 
@@ -37,6 +42,13 @@ class TestInMemorySnapshotStore(SnapshotStoreContract):
         store = make_adapter()
         assert isinstance(store, InMemorySnapshotStore)
         return store.corrupt
+
+    @pytest.fixture
+    def count_stored_blobs(self, make_adapter: SnapshotStoreFactory) -> BlobCopyCounter:
+        """One dictionary entry per copy."""
+        store = make_adapter()
+        assert isinstance(store, InMemorySnapshotStore)
+        return lambda: len(store.stored_keys())
 
 
 class TestFsSnapshotStore(SnapshotStoreContract):
@@ -65,3 +77,10 @@ class TestFsSnapshotStore(SnapshotStoreContract):
             os.chmod(path, BLOB_FILE_MODE)
 
         return rewrite
+
+    @pytest.fixture
+    def count_stored_blobs(self, make_adapter: SnapshotStoreFactory) -> BlobCopyCounter:
+        """Every regular file under the store's root, leftover temp files included."""
+        store = make_adapter()
+        assert isinstance(store, FsSnapshotStore)
+        return lambda: sum(1 for path in store.root.rglob("*") if path.is_file())

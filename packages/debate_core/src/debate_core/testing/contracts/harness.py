@@ -50,6 +50,7 @@ __all__ = [
     "MAX_PAGES_WALKED",
     "AdapterContract",
     "ArticleRepositoryFactory",
+    "BlobCopyCounter",
     "BlobCorruptor",
     "CardRepositoryFactory",
     "SearchRepositoryFactory",
@@ -77,6 +78,14 @@ type CardRepositoryFactory = Callable[[], CardRepository]
 
 type SearchRepositoryFactory = Callable[[], SearchRepository]
 """Returns another handle onto the same search storage."""
+
+type BlobCopyCounter = Callable[[], int]
+"""Returns how many blob copies the store is physically holding: files, objects, dictionary entries.
+
+Only a test's view of the backing storage, used to show that a second write of identical bytes
+stores nothing. The port has no listing, so the binding supplies it, as it supplies
+:data:`BlobCorruptor`.
+"""
 
 type BlobCorruptor = Callable[[BlobKey, bytes], None]
 """Replaces a stored blob's bytes without changing the key it is filed under.

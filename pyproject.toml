@@ -285,6 +285,18 @@ ignore_imports = [
     "debate_cli.container -> debate_core.integrations.**",
 ]
 
+[[tool.importlinter.contracts]]
+name = "Delivery packages never import debate_core.testing"
+type = "forbidden"
+# v1-e03-t04-verifier. The shared fakes and builders are test support. `build_card` passes its
+# caller's verification_status through, so the scan that keeps VERIFIED inside EvidenceVerifier
+# (packages/debate_core/tests/evidence/test_verifier.py) allow-lists debate_core/testing/builders.py.
+# That is safe only while no production code can reach it: the layers contract above keeps
+# debate_core.application and debate_core.integrations out, and this contract keeps the front ends
+# out, directly or through any chain.
+source_modules = ["debate_cli", "debate_api", "debate_workers"]
+forbidden_modules = ["debate_core.testing"]
+
 # ---------------------------------------------------------------------------------------------
 # pytest: every project marker is registered here, once. Later tasks use them, never add their own.
 # ---------------------------------------------------------------------------------------------

@@ -72,7 +72,7 @@ spec:
         silently check the wrong bytes. This is the half that bit the operator, and it is separate
         from ac1: ac1 makes the checks run, ac4 makes them run against the right thing.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

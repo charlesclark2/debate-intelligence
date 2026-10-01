@@ -26,9 +26,12 @@ follow-up work for E04, and no result claims it (see ``checks_run``).
 
 Re-running the normalizer over the stored text, to show it is a fixed point, is deliberately not
 done. The text's hash is checked against a record written by
-:meth:`~debate_core.application.snapshot_service.SnapshotService.create`, which only stores
-normalizer output. Text that is not normalized can only arrive with a record forged to match it,
-and whoever can forge the record can forge normalized text just as easily.
+:meth:`~debate_core.application.snapshot_service.SnapshotService.create`, the only code that encodes
+snapshot text, and it stores only normalizer output. The one thing such a check would add is
+refusing a record and blobs written together outside ``create`` around un-normalized text; invented
+text that is already normalized passes it (both shown in the `v1-e03-t04` session report). It would
+also make every verification depend on the normalizer's pinned Unicode database, which loading and
+reconstruction do not.
 
 ## Failures are typed, and only the expected ones become reasons
 

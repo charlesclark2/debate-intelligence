@@ -1537,7 +1537,8 @@ class CaselistSyncService:
                 return (SelectionDecision.SUPPRESSION_LIST_UNREADABLE if from_record else None), None
             if all(state.suppresses_source(one) for one in members):
                 return SelectionDecision.SKIPPED_AS_REMOVED, None
-            if all(one in release.stored_digests or state.suppresses_source(one) for one in members):
+            recorded = members & release.stored_digests
+            if recorded and all(one in recorded or state.suppresses_source(one) for one in members):
                 return SelectionDecision.ALREADY_IMPORTED, None
             if not from_record:
                 return None, None

@@ -125,10 +125,16 @@ def arbitrary_parts(draw: st.DrawFn, text: SnapshotText) -> list[SelectionPart]:
     """Parts that may overlap, run off the end, name unknown paragraphs or run backwards."""
     length = len(text.text)
     ids = [paragraph.paragraph_id for paragraph in text.paragraphs] + ["p0000", "p9999"]
+    # Paragraph edges, where a part can touch a paragraph run exactly.
+    edges = sorted({edge for paragraph in text.paragraphs for edge in (paragraph.start, paragraph.end)})
 
     def offsets() -> OffsetRange:
-        start = draw(st.integers(0, length + 3))
-        return OffsetRange(start, draw(st.integers(start + 1, length + 6)))
+        start = draw(st.integers(0, length + 3) | st.sampled_from(edges[:-1] or [0]))
+        later_edges = [edge for edge in edges if edge > start]
+        end_strategy = st.integers(start + 1, length + 6)
+        return OffsetRange(
+            start, draw(end_strategy | st.sampled_from(later_edges) if later_edges else end_strategy)
+        )
 
     def run() -> ParagraphRun:
         return ParagraphRun(ParagraphId(draw(st.sampled_from(ids))), ParagraphId(draw(st.sampled_from(ids))))
@@ -148,7 +154,13 @@ def markup_for(draw: st.DrawFn, evidence: ExtractedEvidence, length: int) -> lis
             continue
         points = _distinct_points(draw, segment.start, segment.end, 2)
         for i in range(0, len(points), 2):
-            spans.append(EvidenceMarkupSpan.underline(points[i], points[i + 1]))
+            if points[i + 1] - points[i] >= 2 and draw(st.booleans()):
+                # Two underlines that touch, which a highlight may run across.
+                middle = draw(st.integers(points[i] + 1, points[i + 1] - 1))
+                spans.append(EvidenceMarkupSpan.underline(points[i], middle))
+                spans.append(EvidenceMarkupSpan.underline(middle, points[i + 1]))
+            else:
+                spans.append(EvidenceMarkupSpan.underline(points[i], points[i + 1]))
             if points[i + 1] - points[i] >= 1 and draw(st.booleans()):
                 inner = sorted(
                     draw(st.lists(st.integers(points[i], points[i + 1]), min_size=2, max_size=2, unique=True))

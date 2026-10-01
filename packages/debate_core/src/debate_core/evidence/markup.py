@@ -155,16 +155,17 @@ class CardMarkup:
 
 
 def _check_inside(span: EvidenceMarkupSpan, evidence: ExtractedEvidence) -> None:
+    if evidence.segment_containing(span.start, span.end) is not None:
+        return
     if span.start < evidence.start or span.end > evidence.end:
         raise InvalidMarkup(
             MarkupProblem.OUTSIDE_EVIDENCE,
             f"span [{span.start}, {span.end}) is not inside the evidence [{evidence.start}, {evidence.end})",
         )
-    if evidence.segment_containing(span.start, span.end) is None:
-        raise InvalidMarkup(
-            MarkupProblem.CROSSES_OMITTED_TEXT,
-            f"span [{span.start}, {span.end}) takes in text the evidence omits; mark each segment separately",
-        )
+    raise InvalidMarkup(
+        MarkupProblem.CROSSES_OMITTED_TEXT,
+        f"span [{span.start}, {span.end}) takes in text the evidence omits; mark each segment separately",
+    )
 
 
 def _check_no_overlap(spans_in_order: tuple[EvidenceMarkupSpan, ...]) -> None:

@@ -319,6 +319,18 @@ def test_extract_refuses_a_reversed_paragraph_run(snapshot: SourceSnapshot, text
     assert refused.value.problem is SelectionProblem.REVERSED_RANGE
 
 
+def test_extract_refuses_a_reversed_run_that_touches_another_part_instead_of_shortening_it(
+    snapshot: SourceSnapshot, text: SnapshotText
+) -> None:
+    """p0002..p0001 would resolve to (33, 31). Joined to [20, 33), which ends where it starts, it
+    would quietly turn the selection into [20, 31). Found by the arbitrary-selection property with
+    the reversed-run check removed; every example test above still passed."""
+    with pytest.raises(InvalidSelection) as refused:
+        extractor.extract(snapshot, text, EvidenceSelection((OffsetRange(20, 33), ParagraphRun(P2, P1))))
+
+    assert refused.value.problem is SelectionProblem.REVERSED_RANGE
+
+
 # =============================================================================================
 # Refusals: nothing is clamped, nothing is guessed
 # =============================================================================================

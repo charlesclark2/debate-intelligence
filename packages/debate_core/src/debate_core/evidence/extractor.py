@@ -218,9 +218,9 @@ class EvidenceExtractor:
     ) -> ExtractedEvidence:
         """Slice ``selection`` out of ``snapshot_text``, which must come from loading ``snapshot``.
 
-        Parts are resolved to offset ranges and put in source order. Ranges that overlap are refused;
-        ranges that touch become one segment, since nothing lies between them to omit. A range past
-        the end of the text is refused, never shortened.
+        Parts are resolved to offset ranges and put in source order. Ranges that overlap are refused
+        (by :class:`ExtractedEvidence`); ranges that touch become one segment, since nothing lies
+        between them to omit. A range past the end of the text is refused, never shortened.
         """
         if not is_instance(snapshot_text, SnapshotText):
             raise TypeError(f"snapshot_text must be a SnapshotText, got {type(snapshot_text)!r}")
@@ -233,13 +233,11 @@ class EvidenceExtractor:
         }
         ranges = sorted(_resolve(part, snapshot_text, positions) for part in selection.parts)
 
+        # Touching ranges join; nothing lies between them to omit. Overlapping ones are left apart
+        # for ExtractedEvidence to refuse, the one place that refusal is made. A reversed range
+        # never gets here: joined to a neighbour it would silently shorten the selection.
         merged: list[tuple[int, int]] = []
         for start, end in ranges:
-            if merged and start < merged[-1][1]:
-                raise InvalidSelection(
-                    SelectionProblem.OVERLAPPING,
-                    f"[{start}, {end}) overlaps [{merged[-1][0]}, {merged[-1][1]})",
-                )
             if merged and start == merged[-1][1]:
                 merged[-1] = (merged[-1][0], end)
             else:

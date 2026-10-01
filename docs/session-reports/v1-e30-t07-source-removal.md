@@ -351,7 +351,85 @@ I checked read-only with `sts get-caller-identity`.)
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
+
+**Reviewed by / date:** PM, 2026-10-01
+
+**Notes:**
+
+Accepted, phase `Succeeded`. The operator exercise under Operator follow-ups is required before
+`v1-e34-t05` enables the schedule, and I am treating it as a condition on that task rather than on
+this one.
+
+**The structural placement is what I asked for and it found a path I did not know about.** I asked
+for the check at the point a blob or manifest row is stored, so a fourth importer would inherit it
+by construction. You put it on five write paths as a required argument with no default, re-checked
+it at the write itself, and added an AST scan for modules that write caselist records outside the
+pipeline. And `store sync` was a genuine fourth path I had not considered: it could put a removed
+blob back in the bucket *and* truncate the bucket's copy of the suppression list. The forbidden
+entry about rewriting the list is what led you there, which is the second time this fortnight a
+forbidden list has turned out to carry the real requirement while the description carried only what
+someone had noticed.
+
+**You confirmed the dependency empirically, which I had only argued.** "Before this change the
+scheduled pull called both importers with no suppression at all, so enabling `v1-e34-t05` would have
+reversed takedowns weekly." I added that edge on reasoning about cumulative archives. It is better
+to know.
+
+**Three mutations survived at first and each exposed something real.** The `O_APPEND` test counted
+lines, and an offset-zero write happens to leave three. The junk-row test only covered `--team`,
+where the team rule drops those rows anyway. And the sweep, scoped to rewritten manifests, left a
+re-run from a machine with no local copy sweeping nothing. That third one is a bug that would have
+left noncurrent manifest versions naming a removed file in the bucket after a recovery run, and no
+amount of reading would have found it. Mutation testing earns its cost in exactly these three
+findings.
+
+**The one survivor is reported honestly and I accept it as reported.** Deleting local records first
+instead of last is defence in depth, and no test you could write without disabling the other
+defences would fail. Saying so, rather than inventing a test that passes for the wrong reason or
+quietly dropping the row, is the right handling of an unfalsifiable ordering property.
+
+**On Deviations 1 and 2: I have no record of ruling on either.** The report says I chose both
+mid-session. Those decisions did not come through the PM conversation. I am accepting both on their
+merits below, so nothing needs redoing, but the provenance matters: a session that believes it has a
+PM ruling it does not have will not re-raise the question, and the PM will not know a decision was
+made. If a question is put to me and the answer arrives from anywhere else, say where it came from
+in the report.
+
+**Deviation 1, accepted on the merits.** Without disclosure scope, ac3 and a sha256-only ac4 leave a
+real hole: the withdrawn team's copy of a shared file sits in every cumulative archive at the same
+path, the blob legitimately stays for the other holder, and the next import records the disclosure
+again every week. Keying on `sha256(caselist + "/" + path)` closes it. The digest is a deterministic
+pseudonym for a team path, so anyone holding the public archive can reverse it by hashing every
+path, but that is exactly as true of the file's own sha256, which is already stored. It adds no
+exposure that the design did not already carry, and it is the difference between a withdrawal that
+holds and one that is undone weekly.
+
+**Deviation 2, accepted on the merits.** A dry run that fails because it lacks a read permission
+would stop the operator seeing the plan at all, which is worse than a plan with one column missing,
+and the mutation table shows you tested that it degrades rather than fails. Confirming the denial
+read-only against the real dev bucket rather than assuming it from the policy file is the right kind
+of check. I will decide the `s3:ListBucketVersions` grant separately as a `v1-e29-t03` amendment.
+
+**Deviation 5 is the one with the longest reach.** Three Succeeded tasks now behave differently:
+suppressed members get no manifest row, `publish` withholds a manifest that still names a suppressed
+row, and `status` counts residue as drift. All three are right, and ac2 requires the first, since a
+row would put the requester's path, school and team code back into the published manifest. But the
+behaviour of a shipped guarantee has changed and the record of it lives in this task's report. I am
+adding a line to `v1-e30-t05`'s spec rather than leaving it here, for the same reason the t05/t07
+dependency is an edge and not a paragraph.
+
+**Deviation 7 accepted, with a condition for revisiting.** Imports reading only the local copy is
+right while there is one operator machine: `caselist import` is offline by design, the scheduled
+path holds the bucket and reads the union, and `publish` refuses suppressed sources from the union
+so nothing reaches the bucket. Revisit it the day a second machine imports, which is also the day
+the one-line change in `container.py` stops costing `caselist import` its offline property for
+nothing.
+
+**Deviation 6 is a finding, not a deviation.** Junk rows that name a removed file and team through
+`__MACOSX/._<name>` and Word's `~$` lock files would have reproduced the removed team's directory in
+every week's manifest through junk alone. Your own test found it. That is the kind of thing a
+takedown implementation gets wrong quietly and nobody notices until the requester does.
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**

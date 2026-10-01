@@ -27,7 +27,9 @@ re-importing every cumulative archive, importing next Monday's archive in order,
 renamed and filed by another team, the OpenEv import, publishing, `store sync` in either direction,
 and a run cut short and re-run. The same holds for a shared file's withdrawn copy.
 
-**Two of the spec's rules met reality, and you ruled on both mid-session** (Deviations 1 and 2).
+**Two of the spec's rules met reality** (Deviations 1 and 2). Both were decided mid-session by the
+operator, Charlie, answering a question in this session's terminal, not by the PM; see the
+provenance note under Deviations.
 **Read first:** "Where the check sits", and the mutation table, where 29 of 30 deliberate breakages
 are caught and the one survivor is explained.
 
@@ -70,7 +72,7 @@ Commands and results below are from the final tree (`HEAD` after the last code c
 | **ac1** — Without `--execute` the plan prints sources, records, manifest rows, local and S3 objects with version counts and shared references, and changes nothing. With `--execute` against moto every listed object and version is gone and `caselist status` is clean | PASS | `test_removal_plan.py::test_a_dry_run_changes_nothing_anywhere` (data-dir bytes, bucket versions and DB records identical after two plans). `test_removal_service.py::test_every_listed_object_and_every_version_is_gone_and_status_is_clean`: a raw object given 2 versions and a manifest given 3; afterwards 0 versions per removed key, 1 per rewritten manifest, status `in_sync`. Smoke: dry run, then execute, then `caselist status` exit 0. Version counts are shown against moto. Under the real everyday profile they print as "not counted" (Deviation 2, your decision). |
 | **ac2** — Re-importing snapshots that still contain the file reports SUPPRESSED, stores no blob and writes no row, for `import` and `import-openev`; `publish` never uploads a suppressed sha256 | PASS | `test_the_cumulative_archives_reimported_bring_back_nothing`: `SUPPRESSED` [2, 3, 4, 4] for 09-01, 09-08, 09-15, plus 09-15 re-arriving as 09-22. No blob, no record, no "Maple Grove" in any row, junk included. `test_the_openev_import_brings_back_none_of_it`; `test_a_publish_after_the_reimport_uploads_none_of_it`; `test_the_same_bytes_renamed_and_filed_by_another_team_are_still_refused`; smoke `…next_weeks_archive_does_not_bring_it_back` (`SUPPRESSED` 4, publish uploads none, status 0). |
 | **ac3** — `--team` resolves across snapshots; shared sources are listed as shared; without `--include-shared` only this team's disclosures go and the blob stays; with it the blob goes | PASS | Hand-derived from the fixture tables (`test_removal_plan.py` docstring): 3 removed, 1 withdrawn (ZaLu plus a camp file hold it), 9 records, 15 rows per side. `test_the_records_go_last_and_only_the_teams`: ZaLu's disclosure and the camp file stay. `test_with_include_shared_the_shared_file_goes_for_everyone`: blob, records, `raw/openev` copy gone. `test_the_withdrawn_teams_copy_…_is_refused_and_the_other_teams_kept`. |
-| **ac4** — Append-only JSONL of sha256, date, reason and request id, union-merged local/S3, readable through the port | PASS as amended (see note) | `test_suppression_list.py`, 31 passed: append-only (same inode, prefix kept, `O_APPEND`), every bucket version a prefix of the next, union merge, torn-line refusal, no free-text field, `isinstance(…, SuppressionList)`. As written, the timestamp field is named `recorded_at` not `removed_at` (an un-suppress entry is not a removal), and an entry may carry a `disclosure` digest. The digest is the amendment you approved, now in the spec's ac4. |
+| **ac4** — Append-only JSONL of sha256, date, reason and request id, union-merged local/S3, readable through the port | PASS as amended (see note) | `test_suppression_list.py`, 31 passed: append-only (same inode, prefix kept, `O_APPEND`), every bucket version a prefix of the next, union merge, torn-line refusal, no free-text field, `isinstance(…, SuppressionList)`. As written, the timestamp field is named `recorded_at` not `removed_at` (an un-suppress entry is not a removal), and an entry may carry a `disclosure` digest. The digest is the amendment the operator approved in this session (not the PM), now in the spec's ac4. |
 | **ac5** — One removal-log entry per execution (local and `manifests/_suppression/removal-log.jsonl`) with no names; prod refused without `--confirm-prod` | PASS | `test_one_log_entry_per_execution_in_both_copies_and_no_names`: 12 records, 30 rows (15 × 2 sides), bucket log equals local, no fixture school/team/tournament string in the list or the log. `test_a_run_cut_short_…`: an `INCOMPLETE` then a `COMPLETED` entry. Smoke `test_prod_is_refused_without_confirm_prod` → `CONFIRMATION_REQUIRED`, exit 1. |
 | **ac6** — `--execute` uses `DEBATE_REMOVAL_PROFILE`, failing clearly with no partial deletes if it is unset or lacks delete rights; `unsuppress --execute` appends both entries, the next import stores the file again, and the list is never rewritten | PASS | `test_unsuppress_and_removal_profile.py`, 10 passed: unset; everyday profile; lists-but-cannot-delete; signed out. All refused with bucket evidence, data dir, records and list unchanged. Unsuppress, then re-import stores the file again. Smoke: unset → refused; profile missing from the AWS config → refused with nothing changed; unsuppress end to end. Moto does not enforce IAM, so refusals are simulated by the stores; the everyday profile's real denial of `ListObjectVersions` was confirmed read-only against dev (see Decisions). |
 | Node `suppression-list`: `uv run pytest packages/debate_core/tests/application/caselist/test_suppression_list.py` | PASS | `31 passed in 5.38s` |
@@ -175,13 +177,18 @@ after PRs #133 and #134; all commits listed are this task's.
 
 ## Deviations from the spec
 
-1. **Disclosure-scoped suppression entries (ac4 amended; you chose this option).** As written, ac3
+**Provenance of the two mid-session decisions.** I put Deviations 1 and 2 to the session as
+questions with options. Charlie answered both in this session's terminal; neither went through the
+PM conversation, and an earlier draft of this report wrongly said the PM had ruled. The PM has since
+accepted both on their merits in the review below.
+
+1. **Disclosure-scoped suppression entries (ac4 amended; the operator chose this option).** As written, ac3
    with sha256-only ac4 leaves a hole: without `--include-shared`, the team's copy of a shared file
    is still in every cumulative archive at the same path. The blob stays for the other holder, so
    the next import would record it as the team's disclosure again, every week. A `--team` withdrawal
    therefore appends one entry per withdrawn path, carrying `sha256(caselist + "/" + path)`, never
    the path. Reversing it needs the archive in hand, the same as reversing the file's own sha256.
-2. **Version counts in the dry run (you chose "degrade and propose IAM").** `EvidenceOperator` has no
+2. **Version counts in the dry run (the operator chose "degrade and propose IAM").** `EvidenceOperator` has no
    `s3:ListBucketVersions`, which I confirmed read-only against dev. So the dry run cannot count
    versions with only the everyday profile, and it prints "Versions not counted". `--execute` lists
    and deletes every version under the takedown profile. A one-statement grant is proposed below; the

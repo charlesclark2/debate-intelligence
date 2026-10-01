@@ -88,7 +88,7 @@ spec:
         appends an un-suppress entry and a removal-log entry, after which re-importing the synthetic
         snapshot stores the file again, and the suppression list file is never rewritten.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

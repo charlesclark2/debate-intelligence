@@ -11,6 +11,7 @@ Nothing in these archives is real caselist content (`docs/policies/caselist-data
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -35,6 +36,7 @@ from debate_core.application.caselist.manifest import manifest_key, write_manife
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import RemovalPlanner
+from debate_core.application.caselist.removal_service import CaselistRemovalService, TakedownAccess
 from debate_core.application.caselist.suppression import (
     SUPPRESSION_LIST_KEY,
     ObjectStoreAppendOnlyRecord,
@@ -46,7 +48,10 @@ from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStor
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
-from debate_core.integrations.local.suppression_list import local_suppression_list_file
+from debate_core.integrations.local.suppression_list import (
+    local_removal_log_file,
+    local_suppression_list_file,
+)
 from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore
 from debate_core.testing.fakes import FixedClock, empty_suppression_list
 
@@ -165,6 +170,32 @@ class RemovalWorld:
             clock=FixedClock(REMOVAL_TIME),
             environment="dev",
             bucket=self.bucket_name,
+        )
+
+    def takedown(self) -> TakedownAccess:
+        """The takedown credential's reach, on moto (which does not enforce IAM: the tests that need a
+        refusal build one that refuses)."""
+        return TakedownAccess(
+            versions=S3EvidenceVersionStore(bucket=self.bucket_name, client=self.client),
+            objects=self.bucket,
+            profile="debate-dev-evidence-removal",
+            bucket=self.bucket_name,
+        )
+
+    def service(self, *, takedown: Callable[[], TakedownAccess] | None = None) -> CaselistRemovalService:
+        return CaselistRemovalService(
+            planner=self.planner(),
+            caselists=self.repository,
+            local=self.local,
+            local_blobs=FsEvidenceVersionStore(self.data_dir / "blobs"),
+            local_parsed=FsEvidenceVersionStore(self.data_dir / "parsed"),
+            remote=self.bucket,
+            suppression=self.suppression(),
+            local_suppression=local_suppression_list_file(self.data_dir),
+            local_removal_log=local_removal_log_file(self.data_dir),
+            takedown=takedown or self.takedown,
+            clock=FixedClock(REMOVAL_TIME),
+            environment="dev",
         )
 
     def tree(self) -> dict[str, bytes]:

@@ -29,6 +29,7 @@ removal.
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
@@ -36,7 +37,7 @@ from typing import Final
 
 from pydantic import ValidationError
 
-from debate_core.application.errors import NotFound
+from debate_core.application.errors import NotFound, StoreCredentialsExpired
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey, validate_object_key
 from debate_core.application.ports.suppression import (
     AppendOnlyRecord,
@@ -52,12 +53,15 @@ __all__ = [
     "REMOVAL_LOG_KEY",
     "SUPPRESSION_LIST_KEY",
     "SUPPRESSION_PREFIX",
+    "LocalFallbackSuppressionList",
     "ObjectStoreAppendOnlyRecord",
     "RecordedRemovalLog",
     "RecordedSuppressionList",
     "is_suppression_key",
     "load_suppression_state",
 ]
+
+logger = logging.getLogger(__name__)
 
 SUPPRESSION_PREFIX: Final = "manifests/_suppression/"
 """Where both records live in the bucket. The one prefix the takedown credential may write."""
@@ -140,6 +144,58 @@ class RecordedSuppressionList:
     async def reconcile(self) -> None:
         """Write every copy the entries another copy has and it lacks. Appends nothing new."""
         await self._lines.append([])
+
+
+class LocalFallbackSuppressionList:
+    """The weekly pull's list: every copy, or this machine's alone when the bucket's needs a login.
+
+    ::
+
+        suppression = LocalFallbackSuppressionList(union, local=local_copy)
+
+    `caselist pull` runs unattended, and a weekly launchd run usually finds the operator's SSO
+    session expired. `v1-e34-t02` built the run so that the local stages need no session and only
+    publish waits for one; reading the bucket's copy of this list from the importers undid that
+    (`v1-e34-t07`, after PM review). So when — and only when — reading every copy fails with
+    :class:`~debate_core.application.errors.StoreCredentialsExpired` (no credentials at all, or
+    expired ones), the entries are this machine's copy alone, and :attr:`local_only_reason` says
+    why. The pull's skip and its importers hold this one object, so they fall back together.
+
+    It is as safe as `caselist import`, which reads only the local copy by design
+    (`v1-e30-t07` Deviation 7): on the one operator machine every command that writes the list
+    writes both copies, so this machine's copy is never behind the bucket's; and `caselist publish`,
+    which needs a session anyway, still refuses suppressed sources from the union. **Revisit it the
+    day a second machine imports**, the same condition as Deviation 7: a removal made there would
+    then be in the bucket's copy only, and an import here with an expired session would not see it.
+
+    Every other failure to read a copy still fails closed: an access denial is a missing grant, not a
+    login that timed out, and a torn or unreadable line is a list nobody can honour. Appending never
+    falls back; an entry written to one copy only would be the disagreement the list exists to
+    prevent.
+    """
+
+    def __init__(self, union: SuppressionList, *, local: SuppressionList) -> None:
+        self._union = union
+        self._local = local
+        self.fallbacks = 0
+        """How many reads fell back so far. A caller compares it before and after a stage."""
+        self.local_only_reason: str | None = None
+        """Why the latest read that fell back did, or `None` if none has."""
+
+    async def entries(self) -> tuple[SuppressionEntry, ...]:
+        try:
+            return await self._union.entries()
+        except StoreCredentialsExpired as expired:
+            entries = await self._local.entries()
+            self.fallbacks += 1
+            self.local_only_reason = f"the bucket's copy could not be read without a login ({expired})"
+            logger.warning(
+                "suppression list: the bucket's copy needs a login, so this machine's copy alone was read"
+            )
+            return entries
+
+    async def append(self, entries: Sequence[SuppressionEntry]) -> None:
+        await self._union.append(entries)
 
 
 class RecordedRemovalLog:

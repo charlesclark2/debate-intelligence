@@ -101,6 +101,7 @@ from debate_core.application.caselist.removal_service import (
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import (
     SUPPRESSION_LIST_KEY,
+    LocalFallbackSuppressionList,
     ObjectStoreAppendOnlyRecord,
     RecordedSuppressionList,
 )
@@ -114,6 +115,7 @@ from debate_core.application.evidence_sync import (
 from debate_core.application.ports.archive import ArchiveEntry
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.notifier import Notifier, NullNotifier
+from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.settings import ConfigurationError, Environment, Settings, SyncNotifierKind
 from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
@@ -614,12 +616,18 @@ class ServiceContainer:
         status: CaselistStatusService | None = None
         # The pull's importers read the bucket's copy of the list too when there is a bucket: the
         # run is about to publish to it anyway, and an unattended weekly import is exactly the one
-        # that must not bring back a file a removal made from another machine took out.
-        suppression = self.local_suppression_list()
+        # that must not bring back a file a removal made from another machine took out. When that
+        # copy needs a login the run does not have, they read this machine's copy alone and the run
+        # says so, so an expired SSO session pends the publish rather than failing the import
+        # (v1-e34-t07, PM decision). Safe while one machine imports, as `caselist import`'s local
+        # read is (v1-e30-t07 Deviation 7); revisit both the day a second machine imports.
+        suppression: SuppressionList = self.local_suppression_list()
         if settings.storage.s3.bucket:
             publisher = self.caselist_publish()
             status = self.caselist_status()
-            suppression = self.suppression_list()
+            suppression = LocalFallbackSuppressionList(
+                self.suppression_list(), local=self.local_suppression_list()
+            )
         return CaselistSyncService(
             source=self.opencaselist_client(),
             archive_importer=CaselistImportService(
@@ -631,6 +639,9 @@ class ServiceContainer:
             event_for_caselist=event_for_caselist,
             inbox=caselist.inbox_dir or settings.storage.data_dir / DEFAULT_INBOX_DIRECTORY,
             state_dir=settings.storage.data_dir,
+            # The importers' own list, so the run's skip of a removed camp file (v1-e34-t07) and the
+            # importers' refusal of one can never read different copies.
+            suppression=suppression,
             publisher=publisher,
             status=status,
             openev_event=caselist.openev_event,

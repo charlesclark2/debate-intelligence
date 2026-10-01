@@ -69,7 +69,7 @@ spec:
         list but absent from that memory still results in no download, and a memory entry with no
         corresponding suppression entry is reported, not trusted.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

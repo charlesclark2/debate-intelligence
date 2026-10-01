@@ -96,6 +96,38 @@ this run did not obtain (the cap deferred it, or its download failed). Everythin
 inbox for a later run. Importing past a gap would give the newer week a manifest, the older week
 would then no longer be newer than the latest manifest, and no run would ever fetch or import it.
 
+## A camp file that was removed
+
+A removal (`caselist remove`, `v1-e30-t07`) puts the file's sha256 on the suppression list and
+takes its rows out of the release manifest, so nothing the manifest says marks the camp file as
+handled any more. Left alone, every run would fetch it again — or import it again from the inbox —
+for the importer to refuse, spending a download from a budget the site's maintainer sets
+(`v1-e34-t07`). The run skips it instead, as :attr:`SelectionDecision.SKIPPED_AS_REMOVED`.
+
+**The suppression list is the only record of what was removed.** The list is keyed by sha256, and
+the listing gives an id and a path but no digest, so the run needs to know which bytes an id
+delivered. :class:`OpenEvDeliveries` remembers that, per id, when an import of it completes: the
+download's digest, the digest of its upstream path, and the digest of every member the importer
+classified. It holds no removal state at all. Whether an id is removed is decided on every run, by
+reading the list — the union of this machine's copy and the bucket's, when there is a bucket — and
+asking whether it suppresses every member that id delivered. A removal made on another machine is
+therefore honoured as soon as the bucket's copy says so; an `unsuppress` is honoured the same way,
+and the file is fetched again. A remembered id whose bytes are neither recorded in the manifest nor
+suppressed is reported in the select stage and fetched, never skipped on the memory's word.
+
+What the memory does not know, it cannot use. A camp file this machine never imported, removed
+somewhere else, is fetched once; the importer refuses it, the memory records what it delivered, and
+the next run skips it. A file still in the inbox is read there instead, so it costs nothing.
+
+**A camp file changes upstream only under a new id.** OpenCaselist has no route that replaces a
+file's bytes: `POST /openev` refuses a path that exists, `DELETE /openev/{id}` is the only other
+write, and ids are `AUTO_INCREMENT` (`server/v1/controllers/openev/`, `server/v1/db/caselist.sql`,
+upstream). A re-uploaded file therefore arrives as a new id, usually at the same path. A removal
+covers a camp's later upload of the same file (PM decision, `v1-e34-t07`): the request was about the
+material, and a revised file normally still contains it. Such an id is held back as
+:attr:`SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE` and logged. If the data-use policy is read the
+other way, that decision becomes a download.
+
 ## Credentials, and stages that come back later
 
 The local stages need no AWS session. If the operator's SSO session has expired, the S3 adapter
@@ -103,6 +135,15 @@ raises :class:`~debate_core.application.errors.StoreCredentialsExpired`; the pub
 stages are then recorded as **pending** in a small local file, and the next run — or
 `caselist pull --publish-pending` — completes them. Nothing that was captured is lost by a login
 that timed out overnight.
+
+The one thing the local stages read from the bucket is the removal suppression list: the importers
+and the skip of a removed camp file read both copies when there is a bucket. When the bucket's copy
+cannot be read for want of a login — credentials missing or expired, and nothing else — they read
+this machine's copy alone, and the run says so: `suppression_list_local_copy_only` in the summary
+carries the reason, and the select or import stage that fell back adds a sentence to its own. An
+access denial or an unreadable list is not a login that timed out, and still fails the import. See
+:class:`~debate_core.application.caselist.suppression.LocalFallbackSuppressionList` for why this is
+safe while one machine imports, and the condition for revisiting it.
 
 ## Which run a `caselist pull` is
 
@@ -155,13 +196,14 @@ from debate_core.application.caselist.openev_import_service import (
     OpenEvImportService,
 )
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
-from debate_core.application.caselist.pipeline import Classification
+from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
 from debate_core.application.caselist.publish_service import (
     CaselistPublishService,
     NothingToPublish,
     SourceResult,
 )
 from debate_core.application.caselist.status_service import CaselistStatusService, NoCaselistEvidence
+from debate_core.application.caselist.suppression import LocalFallbackSuppressionList, load_suppression_state
 from debate_core.application.errors import (
     DomainError,
     ProviderRateLimited,
@@ -178,6 +220,7 @@ from debate_core.application.ports.caselist_source import (
     OpenEvFile,
     openev_inbox_name,
 )
+from debate_core.application.ports.suppression import SuppressionAction, SuppressionList, SuppressionState
 from debate_core.domain.caselist import Acquisition, Event
 
 if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its types are named only
@@ -189,6 +232,7 @@ __all__ = [
     "INBOX_PARTIAL_DIRECTORY",
     "LEGACY_DOWNLOAD_LEDGER_FILENAME",
     "LOCK_FILENAME",
+    "OPENEV_DELIVERIES_FILENAME",
     "PENDING_WORK_FILENAME",
     "RUN_SUMMARY_SCHEMA_VERSION",
     "SKIP_TODAY_SECONDS",
@@ -200,6 +244,8 @@ __all__ = [
     "LandscapeStage",
     "LandscapeStageResult",
     "NoCaselistsConfigured",
+    "OpenEvDeliveries",
+    "OpenEvDelivery",
     "OpenEvSelection",
     "ParseStageResult",
     "PendingWork",
@@ -243,6 +289,11 @@ LEGACY_DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-downloads.json"
 
 Read, never written. See :class:`DownloadLedger` for why it is still read, and how.
 """
+
+OPENEV_DELIVERIES_FILENAME: Final = "caselist-sync-openev-deliveries.json"
+"""What each OpenEv id delivered when this machine imported it. See :class:`OpenEvDeliveries`."""
+
+OPENEV_DELIVERIES_SCHEMA_VERSION: Final = 1
 
 BULK_DOWNLOAD_WINDOW: Final = timedelta(hours=24)
 """How far back the daily bulk-download ceiling counts: a rolling day, not a calendar one."""
@@ -350,6 +401,28 @@ class SelectionDecision(StrEnum):
     NO_EVENT_CONFIGURED = "no_event_configured"
     """An OpenEv file whose event neither its tags nor the configuration state."""
 
+    SKIPPED_AS_REMOVED = "skipped_as_removed"
+    """An OpenEv file every member of which the removal suppression list stops.
+
+    Fetching it would only hand the importer bytes it must refuse. Decided from the list on every
+    run; see "A camp file that was removed" in this module's docstring.
+    """
+
+    SAME_PATH_AS_A_REMOVED_FILE = "same_path_as_a_removed_file"
+    """A new OpenEv id at the upstream path of a camp file that was removed.
+
+    How OpenEv re-publishes a file, since nothing upstream replaces bytes under an id. Held back
+    rather than fetched: a removal covers a camp's later upload of the same file (PM decision,
+    `v1-e34-t07`), and the run says which id it held back.
+    """
+
+    SUPPRESSION_LIST_UNREADABLE = "suppression_list_unreadable"
+    """Fetched by this machine before, recorded nowhere now, and the list could not be read.
+
+    It may have been removed, and nothing can say until the list can be read, so it is left for a
+    run that can read it rather than fetched on a guess.
+    """
+
 
 @dataclass(frozen=True, slots=True)
 class ArchiveSelection:
@@ -411,6 +484,8 @@ class OpenEvSelection:
     event: Event | None
     decision: SelectionDecision
     file: OpenEvFile | None = None
+    note: str | None = None
+    """Why the decision deserves an operator's eye, when it does. Ids and codes only, never a path."""
 
     @property
     def wanted(self) -> bool:
@@ -423,6 +498,7 @@ class OpenEvSelection:
             "year": self.year,
             "event": str(self.event) if self.event is not None else None,
             "decision": str(self.decision),
+            "note": self.note,
         }
 
 
@@ -784,6 +860,115 @@ def _require_aware(moment: datetime) -> datetime:
     return moment
 
 
+@dataclass(frozen=True, slots=True)
+class OpenEvDelivery:
+    """What one OpenEv id's download held when this machine last imported it. Digests only."""
+
+    download_sha256: str
+    """The download itself: the single document, or the camp release's zip."""
+
+    path_sha256: str | None
+    """The SHA-256 of the file's upstream path (`OpenEvFile.path`), never the path itself."""
+
+    member_sha256: frozenset[str]
+    """Every member the importer classified, stored or refused. Junk it skipped has no digest."""
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "download_sha256": self.download_sha256,
+            "path_sha256": self.path_sha256,
+            "member_sha256": sorted(self.member_sha256),
+        }
+
+
+class OpenEvDeliveries:
+    """Which bytes each OpenEv id delivered, so a removed one can be recognised before it is fetched.
+
+    The suppression list names digests and the OpenEv listing names ids, and a digest is only known
+    once the bytes are in hand. This file joins the two for every id this machine has imported:
+    `{"schema_version": 1, "deliveries": {"<openev id>": {"download_sha256": ..., "path_sha256":
+    ..., "member_sha256": [...]}}}`.
+
+    **It records no removal.** There is no field here that says an id was removed, suppressed or
+    refused, so it cannot disagree with the suppression list about any of those: whether an id is
+    removed is asked of the list on every run (:meth:`CaselistSyncService._select_openev`). What it
+    records is a fact about upstream — these bytes came from that id — which no removal and no
+    un-suppress changes. Like the suppression list it holds no name: digests and ids only.
+
+    Written after each import of an OpenEv download completes, never by a dry run. A file that cannot
+    be read is treated as empty, with a warning: what it would have said is recovered by the next
+    download of each id, which costs that download once and nothing worse, since the importer refuses
+    a removed file on its own.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+
+    def read(self) -> dict[int, OpenEvDelivery]:
+        """Every id this machine has imported, and what it delivered."""
+        if not self.path.is_file():
+            return {}
+        deliveries = _parsed_deliveries(_read_json_object(self.path))
+        if deliveries is None:
+            logger.warning(
+                "caselist sync: the OpenEv delivery record is not one this build wrote; ignoring it, "
+                "so a removed camp file this machine cannot recognise may be fetched once more"
+            )
+            return {}
+        return deliveries
+
+    def record(self, openev_id: int, delivery: OpenEvDelivery) -> None:
+        """Remember what `openev_id` delivered, replacing anything remembered for it before."""
+        deliveries = self.read()
+        deliveries[openev_id] = delivery
+        _write_json(
+            self.path,
+            {
+                "schema_version": OPENEV_DELIVERIES_SCHEMA_VERSION,
+                "deliveries": {str(one): deliveries[one].as_json() for one in sorted(deliveries)},
+            },
+        )
+
+
+_SHA256_HEX: Final = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _parsed_deliveries(body: dict[str, object] | None) -> dict[int, OpenEvDelivery] | None:
+    """The deliveries a record :class:`OpenEvDeliveries` wrote holds, or `None` if `body` is not one."""
+    if body is None or body.get("schema_version") != OPENEV_DELIVERIES_SCHEMA_VERSION:
+        return None
+    raw = body.get("deliveries")
+    if not isinstance(raw, dict):
+        return None
+    deliveries: dict[int, OpenEvDelivery] = {}
+    for key, value in cast("dict[str, object]", raw).items():
+        if not key.isdigit() or not isinstance(value, dict):
+            return None
+        fields = cast("dict[str, object]", value)
+        download = fields.get("download_sha256")
+        path = fields.get("path_sha256")
+        members = fields.get("member_sha256")
+        if (
+            not _is_sha256(download)
+            or not (path is None or _is_sha256(path))
+            or not isinstance(members, list)
+        ):
+            return None
+        listed = cast("list[object]", members)
+        if not all(_is_sha256(one) for one in listed):
+            return None
+        deliveries[int(key)] = OpenEvDelivery(
+            download_sha256=cast("str", download),
+            path_sha256=cast("str | None", path),
+            member_sha256=frozenset(cast("list[str]", listed)),
+        )
+    return deliveries
+
+
+def _is_sha256(value: object) -> bool:
+    return isinstance(value, str) and _SHA256_HEX.match(value) is not None
+
+
 def _read_json_object(path: Path) -> dict[str, object] | None:
     """The JSON object at `path`, or `None` when there is none, or it is not readable as one.
 
@@ -858,6 +1043,13 @@ class RunSummary:
     bulk_download_window_start: datetime | None = None
     """Where those 24 hours began, or `None` when the run never planned (`--publish-pending`)."""
 
+    suppression_list_local_copy_only: str | None = None
+    """Why the suppression list was read from this machine's copy alone, or `None` if it was not.
+
+    Set when the bucket's copy needed a login the run did not have; see "Credentials, and stages
+    that come back later" in the module docstring.
+    """
+
     @property
     def archives_seen(self) -> int:
         return len(self.archives)
@@ -876,6 +1068,11 @@ class RunSummary:
         (`v1-e34-t03` ac5).
         """
         return sum(1 for one in self.archives if one.wanted or one.deferred_by_cap)
+
+    @property
+    def openev_skipped_as_removed(self) -> int:
+        """Camp files not fetched because the suppression list stops everything they deliver."""
+        return sum(1 for one in self.openev if one.decision is SelectionDecision.SKIPPED_AS_REMOVED)
 
     @property
     def duration_seconds(self) -> float:
@@ -932,6 +1129,7 @@ class RunSummary:
             "archives_deferred": self.archives_deferred,
             "openev_seen": len(self.openev),
             "openev_downloaded": self.openev_downloaded,
+            "openev_skipped_as_removed": self.openev_skipped_as_removed,
             "files_imported": self.files_imported,
             "files_duplicate": self.files_duplicate,
             "files_skipped": self.files_skipped,
@@ -947,6 +1145,7 @@ class RunSummary:
             "bulk_download_window_start": (
                 self.bulk_download_window_start.isoformat() if self.bulk_download_window_start else None
             ),
+            "suppression_list_local_copy_only": self.suppression_list_local_copy_only,
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -985,9 +1184,19 @@ class _RunTally:
     bulk_downloads_allowed: int = 0
     bulk_downloads_spent_in_window: int = 0
     bulk_download_window_start: datetime | None = None
+    suppression_list_local_copy_only: str | None = None
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
+
+    def add_to_reason(self, stage: SyncStage, sentence: str) -> None:
+        """Append `sentence` to the reason the latest record of `stage` gives."""
+        for index in range(len(self.stages) - 1, -1, -1):
+            record = self.stages[index]
+            if record.stage is stage:
+                reason = f"{record.reason}; {sentence}" if record.reason else sentence
+                self.stages[index] = StageRecord(stage=stage, outcome=record.outcome, reason=reason)
+                return
 
 
 @dataclass(frozen=True, slots=True)
@@ -1013,6 +1222,7 @@ class CaselistSyncService:
             event_for_caselist=event_for_caselist,
             inbox=settings.caselist.inbox_dir,
             state_dir=settings.storage.data_dir,
+            suppression=container.suppression_list(),  # the importers' list: both copies
             publisher=container.caselist_publish(),   # None when no bucket is configured
         )
 
@@ -1027,8 +1237,12 @@ class CaselistSyncService:
             not know. A caselist whose event is unknown is not imported, because the event decides
             which sides are legal on a disclosure.
         inbox: Where downloads land and where the importer reads them from.
-        state_dir: Where the run lock, the pending-work file, the download ledger and the run
-            summaries live. The environment's data directory.
+        state_dir: Where the run lock, the pending-work file, the download ledger, the OpenEv
+            delivery record and the run summaries live. The environment's data directory.
+        suppression: The removal suppression list, read to skip camp files a removal has taken
+            out. Required, with no default, and it should be the very list the importers were
+            built with — the union of this machine's copy and the bucket's when there is a bucket —
+            so the skip and the importers' refusal can never read two different lists.
         publisher: The S3 publisher (`v1-e30-t05`), or `None` for an environment with no bucket.
         status: The local-against-bucket comparison used by the report stage, or `None`.
         parse: The parse pipeline (`v1-e31-t06`), or `None` — the normal case today.
@@ -1051,6 +1265,7 @@ class CaselistSyncService:
         event_for_caselist: Callable[[str], Event | None],
         inbox: Path,
         state_dir: Path,
+        suppression: SuppressionList,
         publisher: CaselistPublishService | None = None,
         status: CaselistStatusService | None = None,
         parse: CaselistParseStage | None = None,
@@ -1081,6 +1296,8 @@ class CaselistSyncService:
             legacy_path=self._state_dir / LEGACY_DOWNLOAD_LEDGER_FILENAME,
         )
         self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME)
+        self._suppression = suppression
+        self._deliveries = OpenEvDeliveries(self._state_dir / OPENEV_DELIVERIES_FILENAME)
 
     # --------------------------------------------------------------------------------------
     # Entry points
@@ -1131,7 +1348,9 @@ class CaselistSyncService:
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
             tally = _RunTally()
+            fallbacks = self._suppression_fallbacks()
             plan = await self._selection_stage(caselists, tally)
+            self._note_local_copy_only(tally, SyncStage.SELECT, since=fallbacks)
             if dry_run:
                 self._plan_remaining_stages(plan, tally)
             else:
@@ -1208,7 +1427,7 @@ class CaselistSyncService:
             )
         else:
             detail = f"{listed}{fetch} to fetch; {window}"
-        tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, detail)
+        tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, detail + _removal_sentence(plan.openev))
         return plan
 
     async def _select_archives(self, caselist: str, *, inbox_names: frozenset[str]) -> list[ArchiveSelection]:
@@ -1245,7 +1464,9 @@ class CaselistSyncService:
 
         "Already imported" is decided against what the release manifest records, not against the
         name the sync would give the file (`v1-e34-t06` ac3): a camp file imported by hand through
-        `caselist import-openev` is recorded under its own path. See :func:`_held_openev_ids`.
+        `caselist import-openev` is recorded under its own path. See :func:`_held_openev_ids`. A
+        file the manifest does not record is then judged against the suppression list before it is
+        fetched or imported from the inbox (`v1-e34-t07`): see :meth:`_judge_unrecorded`.
         """
         files = await self._source.list_openev(year=self._openev_year)
         placed: list[tuple[OpenEvFile, int, Event | None]] = []
@@ -1261,24 +1482,37 @@ class CaselistSyncService:
             release: _held_openev_ids(listed, recorded[release].paths)
             for release, listed in by_release.items()
         }
+        remembered = self._deliveries.read()
+        suppression = _SuppressionReadOnce(self._suppression)
         selections: list[OpenEvSelection] = []
         for file, year, event in placed:
             inbox_name = openev_inbox_name(file)
+            note: str | None = None
             if event is None:
                 decision = SelectionDecision.NO_EVENT_CONFIGURED
             elif file.openev_id in held[(year, event)]:
                 decision = SelectionDecision.ALREADY_IMPORTED
-            elif inbox_name in inbox_names:
-                # In the inbox. Imported already if a manifest row came from these very bytes (a
-                # camp release that is a zip records its members, not its own name); otherwise its
-                # import failed or never ran, and this run imports it (ac1).
-                decision = (
-                    SelectionDecision.ALREADY_IMPORTED
-                    if _digest_of(self._inbox / inbox_name) in recorded[(year, event)].download_digests
-                    else SelectionDecision.ALREADY_IN_INBOX
-                )
             else:
-                decision = SelectionDecision.DOWNLOAD
+                release = recorded[(year, event)]
+                in_inbox = inbox_name in inbox_names
+                inbox_digest = _digest_of(self._inbox / inbox_name) if in_inbox else None
+                if inbox_digest is not None and inbox_digest in release.download_digests:
+                    # Imported already: a manifest row came from these very bytes (a camp release
+                    # that is a zip records its members, not its own name).
+                    decision = SelectionDecision.ALREADY_IMPORTED
+                else:
+                    judged, note = await self._judge_unrecorded(
+                        file,
+                        release,
+                        remembered,
+                        suppression,
+                        in_inbox=(self._inbox / inbox_name, inbox_digest) if inbox_digest else None,
+                    )
+                    # Otherwise in the inbox, its import failed or never ran, and this run imports
+                    # it (v1-e34-t06 ac1); or it is new, and this run fetches it.
+                    decision = judged or (
+                        SelectionDecision.ALREADY_IN_INBOX if in_inbox else SelectionDecision.DOWNLOAD
+                    )
             selections.append(
                 OpenEvSelection(
                     openev_id=file.openev_id,
@@ -1287,18 +1521,115 @@ class CaselistSyncService:
                     event=event,
                     decision=decision,
                     file=file,
+                    note=note,
                 )
             )
         return selections
 
+    async def _judge_unrecorded(
+        self,
+        file: OpenEvFile,
+        release: _RecordedOpenEv,
+        remembered: Mapping[int, OpenEvDelivery],
+        suppression: _SuppressionReadOnce,
+        *,
+        in_inbox: tuple[Path, str] | None,
+    ) -> tuple[SelectionDecision | None, str | None]:
+        """Whether a camp file the manifest does not record was removed, and so must not be fetched.
+
+        Returns a decision, or `None` to fetch it (or import it from the inbox) as before, and a
+        note for the operator. The suppression list decides; the delivery record and the inbox only
+        say which digests to ask it about (see "A camp file that was removed" in the module
+        docstring):
+
+        * Every member this id delivered is suppressed: `SKIPPED_AS_REMOVED`.
+        * Every member is recorded in the release manifest or suppressed — a camp release some of
+          whose members were removed: `ALREADY_IMPORTED`.
+        * A remembered id whose bytes are neither: fetched, with a note. The usual cause is an
+          `unsuppress`, which is why it is fetched rather than skipped on the record's word.
+        * An id never seen, at the upstream path of a remembered id whose members are all
+          suppressed: `SAME_PATH_AS_A_REMOVED_FILE`, a policy default.
+
+        With a list that cannot be read, nothing here can tell removed from not: a remembered id or
+        a re-upload is left for a later run, and a file in the inbox goes on to an import that will
+        meet the same unreadable list and fail with its own reason.
+        """
+        delivery = remembered.get(file.openev_id)
+        from_record = delivery is not None
+        if delivery is None and in_inbox is not None:
+            delivery = self._delivery_in_inbox(*in_inbox)
+        if delivery is not None and delivery.member_sha256:
+            members = delivery.member_sha256
+            state = await suppression.state()
+            if state is None:
+                if members <= release.stored_digests:
+                    return SelectionDecision.ALREADY_IMPORTED, None
+                return (SelectionDecision.SUPPRESSION_LIST_UNREADABLE if from_record else None), None
+            if all(state.suppresses_source(one) for one in members):
+                return SelectionDecision.SKIPPED_AS_REMOVED, None
+            recorded = members & release.stored_digests
+            if recorded and all(one in recorded or state.suppresses_source(one) for one in members):
+                return SelectionDecision.ALREADY_IMPORTED, None
+            if not from_record:
+                return None, None
+            lifted = any(
+                (latest := state.latest.get(one)) is not None
+                and latest.action is SuppressionAction.UNSUPPRESS
+                for one in members
+            )
+            note = (
+                "fetched by this machine before; neither recorded in the release manifest nor "
+                "suppressed now" + (", its suppression having been lifted" if lifted else "")
+            )
+            logger.warning("caselist sync: OpenEv file %d was %s; fetching it again", file.openev_id, note)
+            return None, note
+        if delivery is None:
+            path = _path_digest(file.path)
+            earlier = [
+                one
+                for openev_id, one in remembered.items()
+                if openev_id != file.openev_id and one.path_sha256 == path and one.member_sha256
+            ]
+            if not earlier:
+                return None, None
+            state = await suppression.state()
+            if state is None:
+                return SelectionDecision.SUPPRESSION_LIST_UNREADABLE, None
+            if any(all(state.suppresses_source(member) for member in one.member_sha256) for one in earlier):
+                note = "a new id at the upstream path of a camp file that was removed; the removal covers it"
+                logger.warning("caselist sync: OpenEv file %d is %s", file.openev_id, note)
+                return SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE, note
+        return None, None
+
+    def _delivery_in_inbox(self, path: Path, digest: str) -> OpenEvDelivery | None:
+        """What a download still in the inbox delivered, read from its bytes: a zip's members, or itself.
+
+        `None` for a zip that cannot be read, which the import will then refuse with its reason.
+        """
+        if path.suffix.lower() != ".zip":
+            return OpenEvDelivery(download_sha256=digest, path_sha256=None, member_sha256=frozenset({digest}))
+        try:
+            members = frozenset(
+                entry.sha256 for entry in self._read_archive(path) if isinstance(entry, ArchiveMember)
+            )
+        except (DomainError, OSError):
+            return None
+        return OpenEvDelivery(download_sha256=digest, path_sha256=None, member_sha256=members)
+
     def _recorded_openev(self, year: int, event: Event) -> _RecordedOpenEv:
         """What the release's manifest already records, for the "already imported" checks.
 
-        A member's path counts only if the importer classified it — stored, or suppressed by the
-        removal process. A skipped member (macOS junk such as `__MACOSX/…/._<name>.docx`) is not a
-        camp file, and its name can read like one.
+        Every row with a classification is a stored member. A member the removal suppression list
+        stops has no row at all (`v1-e30-t07`), and a removal takes the rows of the file it removes
+        out, so a removed camp file is not recognised from here: it is judged against the list
+        (:meth:`_judge_unrecorded`). A skipped member (macOS junk such as `__MACOSX/…/._<name>.docx`)
+        has a row with no classification; it is not a camp file, and its name can read like one. Nor
+        does its row say the download it came from was imported: a camp release whose every file
+        was removed keeps its `.DS_Store` row, and that row alone must not make it "already
+        imported".
         """
         paths: set[str] = set()
+        stored: set[str] = set()
         digests: set[str] = set()
         for line in read_manifest_lines(self._manifest_path(openev_manifest_key(year, event))):
             try:
@@ -1308,13 +1639,20 @@ class CaselistSyncService:
             if not isinstance(row, dict):
                 continue
             fields = cast("dict[str, object]", row)
+            if fields.get("classification") is None:
+                continue
             path = fields.get("path")
-            if isinstance(path, str) and fields.get("classification") is not None:
+            if isinstance(path, str):
                 paths.add(path)
+            sha256 = fields.get("sha256")
+            if fields.get("classification") in _STORED_CLASSIFICATION_NAMES and isinstance(sha256, str):
+                stored.add(sha256)
             download = fields.get("archive_sha256")
             if isinstance(download, str):
                 digests.add(download)
-        return _RecordedOpenEv(paths=frozenset(paths), download_digests=frozenset(digests))
+        return _RecordedOpenEv(
+            paths=frozenset(paths), stored_digests=frozenset(stored), download_digests=frozenset(digests)
+        )
 
     def _inbox_names(self) -> frozenset[str]:
         """The files already in the inbox, by name.
@@ -1382,7 +1720,9 @@ class CaselistSyncService:
 
     async def _execute(self, plan: SyncPlan, tally: _RunTally) -> None:
         await self._download_stage(plan, tally)
+        fallbacks = self._suppression_fallbacks()
         await self._import_stage(tally)
+        self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
         await self._publish_stage(tally, drain_pending=True)
         await self._parse_stage(plan, tally)
         await self._landscape_stage(plan, tally)
@@ -1609,6 +1949,20 @@ class CaselistSyncService:
             recorded_manifest=read_manifest_lines(path),
         )
         write_manifest_lines(report.manifest_lines, path)
+        # Which bytes this id delivered, so that a later run can ask the suppression list about
+        # them before fetching it again. Refused members are included: they are what it delivered.
+        self._deliveries.record(
+            selection.openev_id,
+            OpenEvDelivery(
+                download_sha256=downloaded.sha256,
+                path_sha256=_path_digest(selection.file.path) if selection.file is not None else None,
+                member_sha256=frozenset(
+                    entry.sha256
+                    for entry in report.entries
+                    if entry.sha256 is not None and entry.classification is not None
+                ),
+            ),
+        )
         self._count_openev(report, tally)
         label = f"{OPENEV_PUBLISH_TARGET} {report.release}"
         if label not in tally.snapshots_imported:
@@ -1819,6 +2173,22 @@ class CaselistSyncService:
         tally.files_skipped += sum(report.skipped.values())
         tally.blobs_stored += report.newly_stored_blobs
 
+    def _suppression_fallbacks(self) -> int:
+        """How many reads of the list have fallen back to this machine's copy so far."""
+        if isinstance(self._suppression, LocalFallbackSuppressionList):
+            return self._suppression.fallbacks
+        return 0
+
+    def _note_local_copy_only(self, tally: _RunTally, stage: SyncStage, *, since: int) -> None:
+        """Say on `stage`, and in the summary, that it read this machine's copy of the list alone."""
+        if not isinstance(self._suppression, LocalFallbackSuppressionList):
+            return
+        if self._suppression.fallbacks == since:
+            return
+        reason = self._suppression.local_only_reason
+        tally.suppression_list_local_copy_only = reason
+        tally.add_to_reason(stage, f"this machine's copy of the suppression list alone was read: {reason}")
+
     def _manifest_path(self, key: str) -> Path:
         path_for = self._local.object_path_for
         if path_for is None:
@@ -1853,6 +2223,7 @@ class CaselistSyncService:
             bulk_downloads_allowed=tally.bulk_downloads_allowed,
             bulk_downloads_spent_in_window=tally.bulk_downloads_spent_in_window,
             bulk_download_window_start=tally.bulk_download_window_start,
+            suppression_list_local_copy_only=tally.suppression_list_local_copy_only,
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:
@@ -2020,6 +2391,33 @@ def _mark_deferred(
     return tuple(one.deferred() if (one.caselist, one.name) in names else one for one in selections)
 
 
+def _removal_sentence(openev: Sequence[OpenEvSelection]) -> str:
+    """What the removal suppression list did to this run's camp files, for the select stage's reason.
+
+    The run log keeps that reason, so `caselist runs --json` shows a removed file as skipped rather
+    than as nothing at all. Counts and ids only.
+    """
+
+    def ids(decision: SelectionDecision) -> list[int]:
+        return [one.openev_id for one in openev if one.decision is decision]
+
+    parts: list[str] = []
+    if skipped := ids(SelectionDecision.SKIPPED_AS_REMOVED):
+        parts.append(f"{len(skipped)} OpenEv file(s) skipped as removed")
+    if same_path := ids(SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE):
+        listed = ", ".join(f"openev-{one}" for one in same_path)
+        parts.append(f"{len(same_path)} held back as a new id at a removed file's path ({listed})")
+    if unreadable := ids(SelectionDecision.SUPPRESSION_LIST_UNREADABLE):
+        parts.append(f"{len(unreadable)} not fetched because the suppression list could not be read")
+    taken_again = (SelectionDecision.DOWNLOAD, SelectionDecision.ALREADY_IN_INBOX)
+    if noted := [one.openev_id for one in openev if one.decision in taken_again and one.note is not None]:
+        listed = ", ".join(f"openev-{one}" for one in noted)
+        parts.append(
+            f"{len(noted)} fetched before and neither recorded nor suppressed now, so taken again ({listed})"
+        )
+    return "; " + "; ".join(parts) if parts else ""
+
+
 def _is_daily_limiter(limited: ProviderRateLimited) -> bool:
     """Whether a rate limit means "not today" rather than "in a moment"."""
     wait = limited.retry_after_seconds
@@ -2042,10 +2440,48 @@ def _openev_event_of(file: OpenEvFile, configured: Event | None) -> Event | None
 
 @dataclass(frozen=True, slots=True)
 class _RecordedOpenEv:
-    """What one OpenEv release manifest records: member paths, and the downloads they came from."""
+    """What one OpenEv release manifest records: member paths and bytes, and the downloads they came from."""
 
     paths: frozenset[str]
+    stored_digests: frozenset[str]
     download_digests: frozenset[str]
+
+
+_STORED_CLASSIFICATION_NAMES: Final = frozenset(str(one) for one in STORED_CLASSIFICATIONS)
+
+
+class _SuppressionReadOnce:
+    """The suppression list as one selection reads it: at most once, and only if a decision needs it.
+
+    Most runs list no camp file the manifest has lost track of, and those never read the list. A
+    list that cannot be read — the bucket's copy refused, or a torn line; an expired session falls
+    back to this machine's copy before it gets here — is `None` here, logged once, and the
+    decisions that need it say so (see :meth:`CaselistSyncService._judge_unrecorded`); the
+    selection itself does not fail.
+    """
+
+    def __init__(self, suppression: SuppressionList) -> None:
+        self._suppression = suppression
+        self._read = False
+        self._state: SuppressionState | None = None
+
+    async def state(self) -> SuppressionState | None:
+        if not self._read:
+            self._read = True
+            try:
+                self._state = await load_suppression_state(self._suppression)
+            except (DomainError, OSError) as unreadable:
+                logger.warning(
+                    "caselist sync: the suppression list could not be read (%s), so no camp file "
+                    "this machine has fetched before is fetched this run",
+                    type(unreadable).__name__,
+                )
+        return self._state
+
+
+def _path_digest(path: str) -> str:
+    """The SHA-256 of an OpenEv file's upstream path: what the delivery record keeps instead of it."""
+    return hashlib.sha256(path.encode("utf-8")).hexdigest()
 
 
 _OPENEV_INBOX_PREFIX: Final = re.compile(r"^openev-(\d+)-")

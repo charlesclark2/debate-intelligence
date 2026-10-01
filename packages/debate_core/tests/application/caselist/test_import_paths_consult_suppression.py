@@ -37,6 +37,7 @@ from debate_core.application.caselist.pipeline import SourceImportPipeline
 from debate_core.application.caselist.publish_plan import build_publish_plan
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.status_service import CaselistStatusService
+from debate_core.application.caselist_sync import CaselistSyncService
 from debate_core.application.evidence_sync import EvidenceSyncService
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
@@ -62,6 +63,9 @@ GUARDED: tuple[tuple[str, Callable[..., Any]], ...] = (
     ("CaselistPublishService", CaselistPublishService),
     ("CaselistStatusService", CaselistStatusService),
     ("EvidenceSyncService", EvidenceSyncService),
+    # Stores nothing itself, but skips a removed camp file on the list's word (v1-e34-t07): a
+    # default here would let a composition root build a pull that skips nothing.
+    ("CaselistSyncService", CaselistSyncService),
     ("render_rows", render_rows),
     ("merged_manifest_lines", merged_manifest_lines),
     ("build_publish_plan", build_publish_plan),

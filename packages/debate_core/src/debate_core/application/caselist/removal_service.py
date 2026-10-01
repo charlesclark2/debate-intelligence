@@ -527,7 +527,6 @@ class CaselistRemovalService:
         purge_inbox(
             self.inbox,
             plan.inbox,
-            suppression=plan.suppression_after,
             request_id=plan.request_id,
             done=counts.inbox,
         )

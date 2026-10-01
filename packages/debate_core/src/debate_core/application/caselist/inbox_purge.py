@@ -568,7 +568,6 @@ def purge_inbox(
     inbox: CaselistInbox,
     planned: Sequence[InboxFilePlan],
     *,
-    suppression: SuppressionState,
     request_id: str,
     done: InboxPurge,
 ) -> None:
@@ -583,26 +582,19 @@ def purge_inbox(
     try:
         with RunLock(inbox.state_dir / LOCK_FILENAME):
             for one in planned:
-                _carry_out(inbox, one, suppression=suppression, request_id=request_id, done=done)
+                _carry_out(inbox, one, request_id=request_id, done=done)
     except SyncRunInProgress as busy:
         raise InboxInUse(busy.lock_path) from None
 
 
-def _carry_out(
-    inbox: CaselistInbox,
-    one: InboxFilePlan,
-    *,
-    suppression: SuppressionState,
-    request_id: str,
-    done: InboxPurge,
-) -> None:
+def _carry_out(inbox: CaselistInbox, one: InboxFilePlan, *, request_id: str, done: InboxPurge) -> None:
     path = inbox.directory / one.name
     if one.action is InboxAction.UNREADABLE:
         raise InboxFileUnreadable(one.name, one.detail)
     if _digest_of(path) != one.sha256:
         raise InboxFileChanged(one.name)
     if one.action is InboxAction.REWRITE:
-        done.rewrites.append(_rewrite(inbox, path, one, suppression=suppression, request_id=request_id))
+        done.rewrites.append(_rewrite(inbox, path, one, request_id=request_id))
         done.rewritten += 1
         return
     if one.openev_id is not None and one.delivered:
@@ -617,9 +609,7 @@ def _carry_out(
     done.deleted += 1
 
 
-def _rewrite(
-    inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, suppression: SuppressionState, request_id: str
-) -> InboxRewrite:
+def _rewrite(inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, request_id: str) -> InboxRewrite:
     """Write the file without its dropped entries beside it, check it, and rename it over the original.
 
     It is staged under the same name in a dot directory beside the original — which the sync skips —
@@ -647,9 +637,6 @@ def _rewrite(
             raise InboxRewriteFailed(
                 one.name, "it did not read back as the original without the removed entries"
             )
-        scope = one.caselist if one.kind is InboxFileKind.WEEKLY_ARCHIVE else None
-        if entries_to_drop(rewritten, suppression=suppression, disclosure_scope=scope)[1]:
-            raise InboxRewriteFailed(one.name, "it still held a removed file")
         with staged.open("rb") as written:
             os.fsync(written.fileno())
         os.replace(staged, path)

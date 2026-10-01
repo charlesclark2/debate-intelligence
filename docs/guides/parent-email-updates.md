@@ -38,7 +38,7 @@ pages did not say.
 |---|---|---|---|---|
 | Cost | $0 up to 100 subscribers, then about $9 a month | $0 up to 250 subscribers | $0 up to 250 contacts, but **500 sends a month**: four emails a month to more than 125 parents is over it | $0 up to 10,000 |
 | Double opt-in | **Required by default** for every newsletter | On by default for forms | Available, off by default outside the EU, forms only | On by default for forms |
-| One-click unsubscribe | Link in every email, plus the one-click `List-Unsubscribe` header | Yes, including the one-click header (RFC 8058) | Link in every email (two clicks); one click only through the header | Yes, header included; cannot be turned off |
+| One-click unsubscribe | Link in every email, but **it is two clicks**: it opens a page with an "Are you sure?" dialog and an optional reason survey (seen on this account, 2026-09-30). Every email also carries a `List-Unsubscribe` header, which mail apps show as their own Unsubscribe button; whether that is true one-click (RFC 8058) is not stated in Buttondown's docs | Yes, including the one-click header (RFC 8058) | Link in every email (two clicks); one click only through the header | Yes, header included; cannot be turned off |
 | A second owner | Teams are Professional-plan only (+$79 a month) | **2 admin seats on the free plan** | 1 seat on free; about $13 a month for more | 1 user on free |
 | Open and click tracking | **Both off by default**, both opt-in | On by default. Opens can be turned off; **clicks cannot** | On by default; on free, links are **always redirected** through Mailchimp | Open tracking on by default; no documented way to turn it off |
 | Signup page with no script on our site | Hosted page, `https://buttondown.com/<username>` | Hosted form "share URL" | Hosted signup form URL | Hosted landing page |
@@ -197,8 +197,10 @@ Log in to Buttondown with the owner account (charles.clark@wfbschools.com).
 **Replies** come to charles.clark@wfbschools.com, the reply-to address set up on the account. A
 parent's reply is ordinary district email and is handled like any other.
 
-**Unsubscribes need nothing from a coach.** Every email carries Buttondown's unsubscribe link and
-the one-click unsubscribe header mail apps show as an "Unsubscribe" button. A parent who asks a
+**Unsubscribes need nothing from a coach.** Every email ends with Buttondown's unsubscribe link.
+It opens a page that asks "Are you sure?" and offers an optional reason, so it takes two clicks,
+not one. Mail apps such as Gmail also show their own **Unsubscribe** button beside the sender,
+from the `List-Unsubscribe` header Buttondown adds to every email. A parent who asks a
 coach to be taken off is removed from the subscriber list in Buttondown the same day.
 
 **What not to send through this list:** anything urgent or safety-related on a tournament day. An

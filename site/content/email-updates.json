@@ -7,7 +7,7 @@
   "points": [
     "Signing up happens on {provider}, the service that sends the team's emails. Your address goes to {provider}, not to this site.",
     "{provider} emails you a link to confirm. Nothing is sent to you until you do.",
-    "Every email has a link to unsubscribe with one click."
+    "Every email has a link to unsubscribe, and you can leave the list at any time."
   ],
   "action": {
     "label": "Sign up for email updates",

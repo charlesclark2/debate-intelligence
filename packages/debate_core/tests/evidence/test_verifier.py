@@ -217,9 +217,7 @@ def _with_text(card: Card, text: str) -> Card:
         pytest.param("Farmers there no pump twice what the aquifer recharges.", 16, id="deleted-w-of-now"),
         pytest.param("XFarmers there now pump twice what the aquifer recharges.", 0, id="inserted-at-start"),
         pytest.param("armers there now pump twice what the aquifer recharges.", 0, id="deleted-at-start"),
-        pytest.param(
-            "Farmers there now pump twice what the aquifer recharge.", 54, id="deleted-final-s"
-        ),
+        pytest.param("Farmers there now pump twice what the aquifer recharge.", 54, id="deleted-final-s"),
         pytest.param("Farmers there now pump twice what the aquifer recharges..", 56, id="appended-period"),
         pytest.param(
             "Farmers there now pump twice what the aquifer recharges!", 55, id="changed-final-period"
@@ -684,7 +682,9 @@ def test_text_appended_and_marked_is_a_text_mismatch_and_a_span_out_of_range(
     claimed = FARMERS + " It is already too late."
     highlight = CardSpan(start_offset=57, end_offset=80, style=SpanStyle.HIGHLIGHT)
 
-    result = world.verify(card.model_copy(update={"evidence_text": claimed, "spans": (*card.spans, highlight)}))
+    result = world.verify(
+        card.model_copy(update={"evidence_text": claimed, "spans": (*card.spans, highlight)})
+    )
 
     assert [(reason.code, reason.first_differing_offset) for reason in result.reasons] == [
         (ReasonCode.TEXT_MISMATCH, 56),

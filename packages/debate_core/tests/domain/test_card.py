@@ -365,7 +365,9 @@ def test_a_card_with_omissions_can_be_verified() -> None:
         pytest.param((omission(1873, 1891), omission(1875, 1877)), "overlap", id="one-inside-another"),
         pytest.param((omission(1873, 1883), omission(1873, 1883)), "overlap", id="identical"),
         pytest.param(
-            (omission(1873, 1883), omission(1883, 1893)), "two touching omissions are one omission", id="adjacent"
+            (omission(1873, 1883), omission(1883, 1893)),
+            "two touching omissions are one omission",
+            id="adjacent",
         ),
         pytest.param((omission(1840, 1860),), "not strictly inside the envelope", id="touching-the-start"),
         pytest.param((omission(1920, 1940),), "not strictly inside the envelope", id="touching-the-end"),

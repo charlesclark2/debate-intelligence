@@ -198,6 +198,26 @@ does not know the event of, an unreadable zip — because a run meets the same a
 with the cause still there, fails the same way. An unreadable zip is the one case to delete by
 hand: remove it from the inbox, and the next run downloads it again.
 
+**A camp file shows `skipped_as_removed`** (and the select stage says *N OpenEv file(s) skipped as
+removed*). Nothing is wrong: it was taken out with `caselist remove`, and the run did not fetch it
+again for the importer to refuse. The decision is read from the suppression list on every run, so
+after `caselist unsuppress` the next run fetches it again, and says so in the select stage (*fetched
+before and neither recorded nor suppressed now*). Which bytes each OpenEv id delivered is kept in
+`<data_dir>/caselist-sync-openev-deliveries.json`; it holds digests only, and deleting it costs at
+most one download of each removed file, which the importer refuses.
+
+**A camp file shows `same_path_as_a_removed_file`.** OpenEv lists a new id at the path of a camp
+file that was removed; that is how a camp uploads a file again, since OpenEv cannot replace a file in
+place. The run holds it back rather than decide whether the removal covers the new upload. Check the
+removal request in the register: if the requester asked for that camp file whatever its version, do
+nothing and it stays held back. Whether the run should ever fetch such a file is a question with the
+PM (`v1-e34-t07`); until it is answered there is no command to fetch it, and fetching it by hand
+through `caselist import-openev` is a decision to record in the register.
+
+**A camp file shows `suppression_list_unreadable`.** The run could not read the bucket's copy of the
+suppression list (usually an expired SSO session), so it did not fetch any camp file it may have been
+told to remove. Log in; the next run decides it.
+
 **The run says `over_daily_budget` week after week** (a *caselist backlog growing* notification,
 or `archives_deferred` rising in `caselist runs`). There is more back-catalogue than a weekly
 run will ever catch up on. That is the one-off fetch in `v1-e30-t06`, not a reason to raise the

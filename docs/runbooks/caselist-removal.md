@@ -199,7 +199,11 @@ At the next weekly import (or immediately, if you have the next archive on hand)
 - [ ] `caselist publish` does not upload it.
 
 Once E34 is running, the scheduled download inherits this check because everything it downloads
-goes through the same importer.
+goes through the same importer. For an OpenEv camp file it does more: `caselist pull` reads the same
+list before it fetches anything, and a camp file whose every member is suppressed is reported as
+`skipped_as_removed` and never requested from OpenCaselist again (`v1-e34-t07`). Check for that
+decision in the next run's `openev_selections`. A weekly archive is still downloaded, because it
+holds every other team's disclosures too, and the importer refuses the removed files inside it.
 
 ## Step 10 — Close it out
 

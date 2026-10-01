@@ -565,7 +565,10 @@ class TestSupersededManifestVersions:
         week1 = manifest_key(SYNTHETIC_CASELIST, date(2026, 9, 1))
         current = removal_world.client.get_object(Bucket=removal_world.bucket_name, Key=week1)["Body"].read()
         bayview = digest("bayview-semis-neg")
-        stale = f'{{"classification":"NEW","kind":"member","path":"x.docx","schema_version":1,"sha256":"{bayview}"}}\n'
+        stale = (
+            '{"classification":"NEW","kind":"member","path":"x.docx","schema_version":1,'
+            + f'"sha256":"{bayview}"}}\n'
+        )
         removal_world.client.put_object(
             Bucket=removal_world.bucket_name, Key=week1, Body=stale.encode() + current
         )

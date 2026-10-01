@@ -153,3 +153,40 @@ def test_the_scan_finds_a_record_write_when_there_is_one(tmp_path: Path) -> None
         encoding="utf-8",
     )
     assert _record_write_calls(module) == [(3, "record_disclosure")]
+
+
+def test_the_row_renderer_refuses_a_row_the_list_stops_whoever_built_it() -> None:
+    """The backstop under every manifest writer: a row for a suppressed file is never rendered."""
+    from datetime import UTC, datetime
+
+    from debate_core.application.caselist.manifest import SuppressedRowRefused
+    from debate_core.application.ports.suppression import (
+        ReasonCode,
+        SuppressionAction,
+        SuppressionEntry,
+        SuppressionState,
+        disclosure_digest,
+    )
+
+    digest = "c" * 64
+    row = {"kind": "member", "sha256": digest, "path": "Maple Grove/QX/a.docx", "classification": "NEW"}
+    entry = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=digest,
+        recorded_at=datetime(2026, 9, 30, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-01",
+    )
+    whole = SuppressionState.from_entries([entry])
+    one_disclosure = SuppressionState.from_entries(
+        [entry.evolve(disclosure=disclosure_digest("hsld26", "Maple Grove/QX/a.docx"))]
+    )
+
+    assert render_rows([row], suppression=SuppressionState(), disclosure_scope="hsld26")
+    with pytest.raises(SuppressedRowRefused) as refused:
+        render_rows([row], suppression=whole, disclosure_scope=None)
+    assert "Maple Grove" not in str(refused.value)
+    with pytest.raises(SuppressedRowRefused):
+        render_rows([row], suppression=one_disclosure, disclosure_scope="hsld26")
+    other_team = {**row, "path": "Cedar Hollow/ZaLu/a.docx"}
+    assert render_rows([other_team], suppression=one_disclosure, disclosure_scope="hsld26")

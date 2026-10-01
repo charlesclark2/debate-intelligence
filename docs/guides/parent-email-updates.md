@@ -191,7 +191,8 @@ parent's reply is ordinary district email and is handled like any other.
 It opens a page that asks "Are you sure?" and asks why they are leaving, so it takes two clicks,
 not one. Mail apps such as Gmail and Apple Mail also show their own **Unsubscribe** button beside
 the sender, and that one **is** one click: every email carries the RFC 8058 one-click headers
-(`List-Unsubscribe-Post: List-Unsubscribe=One-Click`, checked on the test email, 2026-09-30). A parent who asks a
+(`List-Unsubscribe-Post: List-Unsubscribe=One-Click`), and on 2026-09-30 clicking it unsubscribed
+the test address in one click, showing as Unsubscribed in Buttondown almost immediately. A parent who asks a
 coach to be taken off is removed from the subscriber list in Buttondown the same day.
 
 **What not to send through this list:** anything urgent or safety-related on a tournament day. An

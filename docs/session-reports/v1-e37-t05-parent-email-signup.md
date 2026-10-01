@@ -49,9 +49,9 @@ does not publish it.**
   The list is in the interim state the amendment allows: Charlie's district address, with the
   transfer to the ADR-0015 team account committed for the start of the 2027-28 season. ac6 cannot
   fully close until `v1-e37-t01`'s team account exists, and that is blocked on a second coach.
-- **Two operator results are still to come:** unsubscribing with the mail app's own button (the
-  PM asked for a click, not a header read), and the first subscriber export. They are marked
-  PENDING below.
+- **One operator result is still to come:** the first subscriber export's date and the menu
+  path used. It is marked PENDING below. The mail-app one-click unsubscribe was clicked end to end
+  and passed (ac4).
 
 **About the spec amendment.** ac5 and ac6 come from the PM's PR `specs/t05-ownership-and-student-rules`,
 which was not merged when this was written. This branch is **not synced** past it, as the PM asked.
@@ -79,7 +79,7 @@ chose, and the guide was written while he did it.
 | `compare-and-decide` | Done | Buttondown, MailerLite, Mailchimp, Kit (and EmailOctopus in brief) from the vendors' own pages, plus the district's Skyward and Smore routes. Charlie chose Buttondown, 2026-09-29 |
 | `signup-section` | Done | Built before the setup with `signupUrl` as a `[[TBD]]` marker, which failed the shipped-content gate and a prod build until the real URL arrived |
 | `operator-setup` | Done; its ac6 criterion is in the interim state | Charlie created the list on 2026-09-29 under charles.clark@wfbschools.com |
-| `verify-and-guide` | Done except the mail-app unsubscribe click | Two dev deploys by the operator, smoke check 31/31 both times. The link from `coach-website-editing.md` waits for the sync (Deviation 4) |
+| `verify-and-guide` | Done | Two dev deploys by the operator, smoke check 31/31 both times. The link from `coach-website-editing.md` waits for the sync (Deviation 4) |
 
 ## Acceptance criteria
 
@@ -90,7 +90,7 @@ Reported against the spec as amended in the PM's PR.
 | **ac1**: the guide records the channel, the comparison on cost, double opt-in, unsubscribe, ownership and tracking, and Charlie's approval; the activities director told if a mailing service is chosen | PASS | Guide, "The channel, and why": a comparison table on all five dimensions plus archive, branding and signup page, every fact from the vendor's own page, fetched 2026-09-29. Chosen by Charlie on 2026-09-29. Randee Drew, Athletics and Activities Director: told and fine with it, as Charlie reported on 2026-09-29 |
 | **ac2**: home and contact pages show an email-updates section whose link comes from site content config, and the built `site/out` has no script tags from the provider's domain | PASS | `pnpm --dir site test tests/email-updates.test.tsx` → 27 passed. `SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build` → clean, then `pnpm --dir site test tests/no-third-party-scripts.test.ts tests/email-updates.test.tsx` → 38 passed, 0 skipped. Deployed dev, checked with curl: `/` and `/contact/` each have `id="email-updates"` and one `href="https://buttondown.com/wfbdebate" rel="noopener noreferrer"`, and 0 `script`/`img`/`iframe`/`link`/`form` tags naming Buttondown |
 | **ac3**: no site code, workflow or infrastructure receives or stores subscriber addresses; the only data path is visitor browser → provider | PASS | See [How ac3 was proven](#how-ac3-was-proven). Every place an address does exist is named there, including the monthly export ac6 now requires |
-| **ac4**: Charlie subscribes a test address through the dev preview, gets the confirmation email, confirms, receives a test update and unsubscribes with one click | **PENDING** (the one-click click). Everything before it: PASS | On 2026-09-30, Charlie:<br>• subscribed charles.clark@wfbschools.com through `https://dev.wfbdebate.com/#email-updates`;<br>• **received the confirmation email and clicked it** before the test update;<br>• received the test update, whose link pointed straight at `https://wfbdebate.com/`, so click tracking is off.<br>**Footer link:** unsubscribing through it took **two clicks**, an "Are you sure?" dialog with a reason survey (screenshot). Buttondown then showed **Unsubscribed** (screenshot).<br>**Headers:** the email carries `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058). That shows one-click is advertised, not that Buttondown's endpoint answers.<br>**Still to do:** the PM asked for the mail app's own Unsubscribe button to be clicked end to end, then a resubscribe. Result: PENDING.<br>**Not on the web:** the test email's archive address returns 404, and `/wfbdebate/rss` has 0 items (curl, 2026-09-30) |
+| **ac4**: Charlie subscribes a test address through the dev preview, gets the confirmation email, confirms, receives a test update and unsubscribes with one click | PASS | On 2026-09-30, Charlie:<br>• subscribed charles.clark@wfbschools.com through `https://dev.wfbdebate.com/#email-updates`;<br>• **received the confirmation email and clicked it** before the test update;<br>• received the test update, whose link pointed straight at `https://wfbdebate.com/`, so click tracking is off.<br>**Footer link:** unsubscribing through it took **two clicks**, an "Are you sure?" dialog with a reason survey (screenshot). Buttondown then showed **Unsubscribed** (screenshot).<br>**Headers:** the email carries `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058). That shows one-click is advertised, not that Buttondown's endpoint answers.<br>**One click, clicked:** Charlie resubscribed, published a second test update, and clicked the **mail app's own Unsubscribe button beside the sender's name**. It unsubscribed in **one click**, and Buttondown showed the address as **Unsubscribed almost immediately**. He then resubscribed, and Buttondown showed the address as subscribed again immediately (Charlie, 2026-09-30).<br>**Not on the web:** the test email's archive address returns 404, and `/wfbdebate/rss` has 0 items (curl, 2026-09-30) |
 | **ac5** (amended): the guide explains how a coach sends an update, the student rules as `docs/policies/website-publishing.md` states them (cited, never restated), and who owns the list | PASS | Guide, "How to send an update" (step by step, plus a before-every-send list whose first item is the policy's checklist items 1 to 7); "What may not go in an email about students", a table pointing at the policy's Students, published-names allowlist, Photos and media consent, Results and awards and Pre-publication checklist sections, plus only what is specific to email; "Who owns the list". `grep -n "FIRST NAME\|Jordan Rivera\|Students 6" docs/guides/parent-email-updates.md` → none, so no policy rule is copied |
 | **ac6** (new): at least two people can independently regain control of the list and its subscriber data, and the recovery path has been tested | **NOT MET, interim state as ac6 allows** | Guide, "Who owns the list": a status line per element.<br>• **Registered to the team identity:** no.<br>• **Mailbox reachable by two people:** no.<br>• **Credentials a second person can retrieve:** no.<br>• **Recovery walked by someone other than Charlie:** not yet.<br>• **Periodic export held by the team:** monthly, started in an interim location. First export: PENDING.<br>The interim state is recorded with the dated commitment ac6 requires: transfer to the ADR-0015 team account **by the start of the 2027-28 season** (Charlie, 2026-09-30). **It cannot fully close until `v1-e37-t01`'s team account exists, which is blocked on a second coach** |
 | `compare-and-decide`: comparison drafted (guide contains "double opt-in") | PASS | `grep -c "double opt-in" docs/guides/parent-email-updates.md` → 1 or more |
@@ -100,7 +100,7 @@ Reported against the spec as amended in the PM's PR.
 | `signup-section`: static export builds | PASS | Dev build clean; prod build (`SITE_ENV=prod`) clean, which is the one the content guard is strict on |
 | `signup-section`: built output has no third-party scripts | PASS | `pnpm --dir site test tests/no-third-party-scripts.test.ts` after a build → 11 passed, 0 skipped, on the dev and the prod export. Planting a Buttondown `<script src>`, a pixel, an inline loader and a posting form in `out/contact/index.html` made 4 of the 11 fail; restoring the file brought it back to 11 |
 | `verify-and-guide`: guide covers sending an update | PASS | `grep -n "^## How to send an update" docs/guides/parent-email-updates.md` → found |
-| `verify-and-guide`: double opt-in and unsubscribe verified from the dev preview | As ac4 | |
+| `verify-and-guide`: double opt-in and unsubscribe verified from the dev preview | PASS | As ac4 |
 | Full site suite (not a spec criterion) | PASS | After a build: `pnpm --dir site test` → 20 files, 744 passed, 0 skipped; lint and typecheck clean. The site pre-commit hook runs all four on every commit touching `site/` |
 
 ### How ac3 was proven
@@ -220,8 +220,7 @@ than asserted.
 
 ## Operator follow-ups
 
-1. **PENDING: unsubscribe with the mail app's own button, then resubscribe** (about 10 minutes;
-   the steps were given in the session). The result goes in ac4.
+1. **Done:** unsubscribe with the mail app's own button, then resubscribe (ac4).
 2. **PENDING: take the first subscriber export** to a private folder in Charlie's district Drive,
    and delete the download. The date and the menu path go in ac6 and the guide.
 3. **Hotfix (PM):** cherry-pick `9ca0aef` onto a hotfix branch from `main` and deploy prod, so the

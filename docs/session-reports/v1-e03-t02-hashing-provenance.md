@@ -244,7 +244,73 @@ suite at 47 s.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
+
+**Reviewed by / date:** PM, 2026-10-01
+
+**Notes:**
+
+Accepted, phase `Succeeded`, with two commits required before the PR opens. Both are consequences of
+findings in this report rather than disagreements with it.
+
+**The deep property run is the most valuable thing here, and it is valuable because of how it was
+run.** Passing 50,000 examples proves nothing on its own; removing the check each property guards
+and seeing whether the property still passes is the only way to learn whether it was ever doing
+work. Two of five were not. That is a 40% decorative rate in tests written by someone who was
+trying hard, which is the number I want remembered the next time a suite's size is offered as
+evidence.
+
+**And it produced a real finding about the design, not just about the tests.** The paragraph map is
+protected only by the normalized blob's own hash: a paragraph offset moved to another valid value
+leaves the document valid, canonical, same version, same text, so the text hash still matches.
+`v1-e03-t03` resolves paragraph IDs through that map, so a moved boundary silently moves a card's
+evidence to different words in the same source. That is the quietest possible corruption in an
+evidence system, and it was found by breaking a test rather than by reading the code.
+
+**Which is why the first required commit closes it structurally rather than in prose.**
+`decode_snapshot_text(data: bytes) -> SnapshotText` is public and takes bare bytes, so t03 can
+obtain a paragraph map from a blob it read itself, with the one check that protects that map never
+run. Your own follow-up says the map "is trustworthy only from a `load`ed snapshot, never from a
+blob read directly" - that is a true sentence in a docstring guarding a correctness property, which
+is the shape of every instance of the pattern this project has been chasing for a fortnight. The
+property I want is: **it must not be possible to obtain a `SnapshotText` from bytes that have not
+been checked against their key.** The mechanism is yours. Requiring the expected key as a parameter
+so the check cannot be skipped is the airtight version; renaming so the unverified path describes
+itself is the cheap one. Pick, and say why.
+
+**Decision 3 is right and it answers what t01 left open.** Keeping the offset map out because it
+relates normalized offsets to the extractor's output, which is not stored, and because including it
+would split one normalized text across many blobs whenever extractor whitespace differs, is the
+kind of reasoning that only shows up when someone has thought about what the blob key is *for*. The
+consequence for t04's "re-normalizes" wording is real, and I have moved your note into t04's own
+spec rather than leaving it in this report, because a constraint recorded in the wrong document is
+not enforced - this project has already proved that once with the t05/t06 dependency.
+
+**Decision 1 is accepted as measured, including the part you could not explain.** Always-on, no
+switch, with real numbers at three sizes and an honest "I have not explained the rest" for about
+half the overhead at 50 MB. A check callers routinely turn off protects nothing, and a third of a
+millisecond on a typical source is not a trade worth making. Saying which part of the cost you
+cannot account for is worth more than a confident total.
+
+**The mutation table is the most complete in this project**, and the `sort_keys=False` row is why I
+believe the rest of it: an equivalent mutant, identified as equivalent, with the reason given and a
+second mutation that does catch it. Reporting a survivor that is not a gap takes more confidence
+than reporting one that is. The same goes for the two test bugs you caught before the first run,
+including escapes that had been written into the sources as the literal invisible characters they
+were meant to describe - a bug that would have made two assertions silently identical.
+
+**Second required commit: `docs/evidence/` and the format page.** You identified that
+`debate-snapshot-text/1` is stored data later code depends on, that its only specification is a
+module docstring, and that the working agreements put such a page in `docs/evidence/` beside
+`normalization.md` - and then correctly did not write it, because `docs/` was outside your packages.
+The package list was mine and it excluded the directory the agreement requires. That is the fourth
+time in this project a list I wrote has done exactly that, and `v1-e01-t16` exists because of the
+pattern. I have amended this task's packages to include `docs/evidence`; write the page. Your module
+docstring is already most of it.
+
+**Follow-ups accepted as filed.** The container wiring belongs to E04, the reason-code mapping is now
+in t04's spec, and `LoadedSnapshot.normalized` being the only trustworthy route to the paragraph map
+becomes enforceable rather than advisory once the first commit lands.
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**

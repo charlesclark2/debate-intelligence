@@ -19,6 +19,16 @@ spec:
   description: >-
     Implement EvidenceVerifier, the gate that decides whether a card is finished evidence. It loads the
     card's snapshot with integrity checks, re-normalizes under the card's recorded normalizer_version,
+    # PM note, 2026-10-01, from v1-e03-t02's report rather than left in it: t02 stores the raw
+    # bytes and the normalized text, not the extractor's output, so "re-normalizes" can only
+    # mean re-running the normalizer on the normalized text (an idempotence check) or re-running
+    # the extractor on the raw bytes, which is reproducible only if the extractor is
+    # deterministic for its extractor_version. Settle which before building, and if this task
+    # needs the extracted text, that is a change to t02's blob layout and not something t04 can
+    # add alone. t02 also exposes a SnapshotIntegrityCheck enum for this task to map to reason
+    # codes; its report suggests UNKNOWN_NORMALIZER_VERSION gets its own code, the hash, size,
+    # malformed and version-mismatch checks map to HASH_MISMATCH, and NotFound maps to
+    # SNAPSHOT_MISSING.
     reconstructs evidence from the stored offsets, compares exactly to the card's evidence text,
     validates span containment and required citation fields, and returns a VerificationResult
     (status VERIFIED or UNVERIFIED plus machine-readable reason codes such as SNAPSHOT_MISSING,

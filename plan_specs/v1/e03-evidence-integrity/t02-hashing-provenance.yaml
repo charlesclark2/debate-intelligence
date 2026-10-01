@@ -55,7 +55,7 @@ spec:
       description: >-
         Hash helpers match known SHA-256 test vectors and hash normalized text as UTF-8 without BOM.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

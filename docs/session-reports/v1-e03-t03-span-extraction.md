@@ -323,9 +323,80 @@ the task worktree.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-01
 
 **Notes:**
+
+Accepted in full, phase `Succeeded`. Both deviations are right, the follow-up that matters is mine
+rather than yours, and one finding in here changes how every future task reports property strength.
+
+**The Hypothesis replay finding is the most valuable thing in this report, and it reaches
+backwards.** One mutant caught at 28 seconds and then twice at 0.3 seconds is not a property that
+got faster; it is Hypothesis replaying the saved failing example instead of rediscovering it. You
+noticed a number that was too good, worked out why, and re-ran the entire mutation pass with a
+fresh `HYPOTHESIS_STORAGE_DIRECTORY` per run rather than reporting the table you already had.
+
+It reaches backwards because neither `v1-e03-t01` nor `v1-e03-t02` isolated the database, and both
+reported mutation tables with catch times. Their conclusions about which checks are load-bearing
+probably stand, because a saved example that kills one mutant usually kills a closely related one
+for the same reason. What does not stand is reading those timings as evidence of how readily the
+properties find a break from scratch. I am not reopening either task for it. I am making the fresh
+database per mutation run a standing requirement, and I will say so in the task prompt so no one
+has to rediscover this.
+
+**Mutation earned its cost here, which is not something I say by default.** Four gaps, each of a
+different kind: a check that could not be told apart from its absence, which you deleted rather
+than wrote a test for; a check that was load-bearing with no example exercising it; a property that
+never generated the input class it was written to cover; and two overlapping containment checks
+collapsed into one decision plus a label. The second of those is the one I would have missed: a
+reversed paragraph run touching another part *silently shortened the selection*, which is the
+clamping this task's forbidden list prohibits, arriving through a door the forbidden list does not
+describe. A forbidden behaviour is only actually forbidden once something fails when it happens by
+accident, and until this mutation nothing did.
+
+**The generator statistics are a sibling of a pattern this project keeps hitting.** A markup
+property producing valid-with-spans examples 3.5 percent of the time is a green property that
+barely tests the direction it exists for. We have now seen an import-linter key that was never
+read, a promotion guard whose job never ran, seventy-six export tests passing by skipping, and now
+a property passing on inputs that skip its point. Same failure, four surfaces: the check reports
+success without having done its work. Measuring the distribution with `--hypothesis-show-statistics`
+and rebalancing is the right response, and I want it treated as normal practice rather than as
+something you did because this task happened to be about generators.
+
+**ac4's scan asserting that it saw its own entry points is the structural fix for that whole
+family.** A scan that fails when it finds nothing cannot silently stop covering the thing it was
+written for. Seven mutations, all red, including the two I would have expected to slip past: an
+untyped `**overrides` counting as text, and a `NewType` alias caught because only `ParagraphId` is
+allowed. And you declined to count the eighth because it errored at collection. An attempt that
+never ran proves nothing about the check, and most reports would have counted it.
+
+**Decision 2 is better than the criterion asked for.** I asked `v1-e03-t02` to make unverified
+construction impossible inside its own layer. You added a second, independent defence at the point
+of use: the extractor re-derives the paragraph map and refuses a mismatch even for a `SnapshotText`
+that reached you without going through `load`. That holds whatever another layer does or stops
+doing later, which is the only kind of guarantee worth having across a package boundary. Keeping it
+always on at 6.6 milliseconds against `load`'s 166 is obviously right, and measuring before
+deciding is why the answer is credible.
+
+**Deviation 1 is the resolution I was hoping for.** Taking the text alone and re-pairing it with a
+snapshot in the caller is exactly where text from one snapshot acquires the id of another. Passing
+both and verifying they agree puts the check at the boundary instead of trusting the caller to do
+it.
+
+**Deviation 2 is correct, and the decision behind it is mine.** Domain `CardSpan` offsets are
+relative to `evidence_text` while ac3 needs snapshot-relative, and the domain was outside your
+package list, so an evidence-layer type was the only honest option. The real question your report
+surfaces is how a `Card` represents evidence with cuts in it: whether it stores segments plus
+omitted ranges, and whether `CardSpan` moves to snapshot offsets. That is a representation choice
+binding on verification, edit policy and export at once, so it is not a decision any one task should
+make on the way past. I have recorded it on both `v1-e03-t04` and `v1-e03-t05` and will settle it
+before t05 starts. t04 may proceed on single-segment cards.
+
+**The `docs/evidence` omission is mine, and this is the fifth time.** `v1-e03-t01` and
+`v1-e03-t02` both carry `docs/evidence` in their package lists and this spec did not, which is a
+copying error on my part, not a scoping decision. I have amended the constraint in this branch, so
+the format doc's guarantees table is now in scope and the point-of-use recheck should be recorded
+there before the pull request. `v1-e01-t16` exists in part to stop me doing this a sixth time.

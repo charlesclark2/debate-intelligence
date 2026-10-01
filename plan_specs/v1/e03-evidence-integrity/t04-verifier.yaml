@@ -16,19 +16,35 @@ metadata:
     debate/title: EvidenceVerifier and verification statuses
     debate/architecture-refs: §8, ADR-006, §11, §16, §20 step 2
 spec:
+  # PM notes, 2026-10-01. The v1-e03-t02 note below was first written inside the description's
+  # folded block, where a leading # is text and not a comment, so it was rendering into
+  # ROADMAP.md as prose. Moved here, where these are actually comments.
+  #
+  # From v1-e03-t02's report: t02 stores the raw bytes and the normalized text, not the
+  # extractor's output, so "re-normalizes" can only mean re-running the normalizer on the
+  # normalized text (an idempotence check) or re-running the extractor on the raw bytes, which is
+  # reproducible only if the extractor is deterministic for its extractor_version. Settle which
+  # before building, and if this task needs the extracted text, that is a change to t02's blob
+  # layout and not something t04 can add alone. t02 also exposes a SnapshotIntegrityCheck enum to
+  # map to reason codes; its report suggests UNKNOWN_NORMALIZER_VERSION gets its own code, the
+  # hash, size, malformed and version-mismatch checks map to HASH_MISMATCH, and NotFound maps to
+  # SNAPSHOT_MISSING.
+  #
+  # From v1-e03-t03's report, which answers the first half of that: the extractor IS deterministic
+  # for its extractor_version, and it re-derives the paragraph map from the text and refuses a
+  # mismatch at the point of use. So t04 re-running extraction over the raw bytes is a real
+  # reproduction and not a tautology. t03 also suggests two reason codes of its own,
+  # PARAGRAPH_MAP_MISMATCH and SELECTION_OUT_OF_RANGE, distinct from HASH_MISMATCH because the
+  # snapshot can be byte-identical while the recorded offsets no longer mean what they meant.
+  #
+  # Open and mine, not t04's: a Card today holds one evidence_text with CardSpan offsets relative
+  # to it, which cannot express evidence with cuts in the middle. t03 therefore returns its own
+  # snapshot-relative EvidenceMarkupSpan rather than a domain CardSpan. Single-segment evidence
+  # maps cleanly either way, so t04 may proceed on single-segment cards, but it must not invent a
+  # multi-segment Card shape along the way. The same note is on v1-e03-t05, where it bites hardest.
   description: >-
     Implement EvidenceVerifier, the gate that decides whether a card is finished evidence. It loads the
     card's snapshot with integrity checks, re-normalizes under the card's recorded normalizer_version,
-    # PM note, 2026-10-01, from v1-e03-t02's report rather than left in it: t02 stores the raw
-    # bytes and the normalized text, not the extractor's output, so "re-normalizes" can only
-    # mean re-running the normalizer on the normalized text (an idempotence check) or re-running
-    # the extractor on the raw bytes, which is reproducible only if the extractor is
-    # deterministic for its extractor_version. Settle which before building, and if this task
-    # needs the extracted text, that is a change to t02's blob layout and not something t04 can
-    # add alone. t02 also exposes a SnapshotIntegrityCheck enum for this task to map to reason
-    # codes; its report suggests UNKNOWN_NORMALIZER_VERSION gets its own code, the hash, size,
-    # malformed and version-mismatch checks map to HASH_MISMATCH, and NotFound maps to
-    # SNAPSHOT_MISSING.
     reconstructs evidence from the stored offsets, compares exactly to the card's evidence text,
     validates span containment and required citation fields, and returns a VerificationResult
     (status VERIFIED or UNVERIFIED plus machine-readable reason codes such as SNAPSHOT_MISSING,

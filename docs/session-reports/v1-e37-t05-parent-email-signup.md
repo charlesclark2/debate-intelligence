@@ -263,20 +263,25 @@ Already done by the operator during this session:
 
 ## Follow-up work
 
-1. **Close ac6:**
+1. **Make the ac6 trigger fire.** `docs/runbooks/website-content-accounts.md` (on `dev`, from
+   `v1-e37-t01`) lists moving the Buttondown login as a to-do "after `v1-e37-t05` merges". For the
+   event trigger to work, that step belongs in the runbook's account-setup steps, so creating the
+   team account includes moving the list. This is a one-line change to t01's runbook, outside this
+   task's packages and not on this branch's base. It is for the PM, or for this branch after the sync.
+2. **Close ac6:**
    - the team Google account (`v1-e37-t01`, blocked on a second coach);
    - move the Buttondown login to it (runbook, "Reconciling the parent email list");
    - a recovery walk by the second owner;
    - move the monthly export to the team Drive.
-2. **The district tool question stays open.** Whether a club can have its own opt-in group in
+3. **The district tool question stays open.** Whether a club can have its own opt-in group in
    Skyward, or a team Smore account, is for the activities office. If yes, switching is two fields in
    `site/content/email-updates.json`.
-3. **Smoke check for the section.** `scripts/site_smoke.py` does not check for `id="email-updates"`
+4. **Smoke check for the section.** `scripts/site_smoke.py` does not check for `id="email-updates"`
    and the configured link on `/` and `/contact/`. It fits the smoke-check rule in
    `plan_specs/README.md`, outside this task's packages.
-4. **Subscriber count.** Buttondown is free up to 100 subscribers. Check it before each season's
+5. **Subscriber count.** Buttondown is free up to 100 subscribers. Check it before each season's
    first email.
-5. **Branding the Buttondown page** (optional, free tier):
+6. **Branding the Buttondown page** (optional, free tier):
    - the square team mark as the icon;
    - `#2E2578` as the accent colour.
 

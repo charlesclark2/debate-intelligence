@@ -495,14 +495,14 @@ async def test_a_delivery_record_this_build_did_not_write_is_ignored_with_a_warn
 # ------------------------------------------------------------------------------------------------
 
 
-async def test_a_removed_file_uploaded_again_under_a_new_id_is_held_back_by_default(
+async def test_a_removed_file_uploaded_again_under_a_new_id_is_held_back(
     world: RemovalWorld, caplog: pytest.LogCaptureFixture
 ) -> None:
     """OpenEv changes a file only by deleting it and uploading again: a new id at the same path.
 
-    The new bytes have a new sha256 that no entry names, so the importer would store them. Whether
-    the removal covers them is the PM's question (session report); until it is answered the run
-    holds the file back, says which id, and logs it.
+    The new bytes have a new sha256 that no entry names, so the importer would store them. A
+    removal covers a camp's later upload of the same file (PM decision), so the run holds it back,
+    says which id, and logs it. `v1-e34-t08` must keep this hold when it changes the rule below.
     """
     source = FakeOpenEvSource([(ESTUARY, DOCUMENT_BODIES["estuary-solvency"])])
     await pull(world, source)
@@ -522,11 +522,12 @@ async def test_a_removed_file_uploaded_again_under_a_new_id_is_held_back_by_defa
 async def test_a_file_uploaded_again_where_nothing_was_removed_is_held_by_its_old_row_as_before(
     world: RemovalWorld,
 ) -> None:
-    """Not this task's rule, pinned so the report's account of it stays true.
+    """Not this task's rule, pinned so the report's account of it stays true. A known defect.
 
     512's row, `openev-512-…`, names an id no longer listed, so `v1-e34-t06`'s matching reads it by
     path, and the re-upload at that path counts as already imported: its revised bytes are never
-    fetched. The skip above changes nothing here; the session report puts it to the PM.
+    fetched. `v1-e34-t08` fixes it, and must invert this test — the re-upload fetched — rather than
+    delete it.
     """
     source = FakeOpenEvSource([(ESTUARY, DOCUMENT_BODIES["estuary-solvency"])])
     await pull(world, source)

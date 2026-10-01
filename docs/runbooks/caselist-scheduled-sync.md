@@ -208,15 +208,24 @@ most one download of each removed file, which the importer refuses.
 
 **A camp file shows `same_path_as_a_removed_file`.** OpenEv lists a new id at the path of a camp
 file that was removed; that is how a camp uploads a file again, since OpenEv cannot replace a file in
-place. The run holds it back rather than decide whether the removal covers the new upload. Check the
-removal request in the register: if the requester asked for that camp file whatever its version, do
-nothing and it stays held back. Whether the run should ever fetch such a file is a question with the
-PM (`v1-e34-t07`); until it is answered there is no command to fetch it, and fetching it by hand
-through `caselist import-openev` is a decision to record in the register.
+place. The run holds it back: a removal covers a camp's later upload of the same file, because the request
+was about the material and a revised file normally still contains it (PM decision, `v1-e34-t07`).
+Nothing needs doing. If the data-use policy is ever read the other way, this becomes a download; until
+then, fetching such a file by hand through `caselist import-openev` is a decision to record in the
+register.
 
-**A camp file shows `suppression_list_unreadable`.** The run could not read the bucket's copy of the
-suppression list (usually an expired SSO session), so it did not fetch any camp file it may have been
-told to remove. Log in; the next run decides it.
+**A camp file shows `suppression_list_unreadable`.** The run could not read the suppression list:
+the bucket refused its copy (a missing grant, `access denied`) or a copy has a line nobody can read.
+It did not fetch any camp file it may have been told to remove, and the import stage fails for the
+same reason. Fix what the import stage's reason names; the next run decides it. An expired SSO
+session does not cause this (below).
+
+**The summary's `suppression_list_local_copy_only` is set** (and the select or import stage says
+*this machine's copy of the suppression list alone was read*). The SSO session had expired, so the
+run read this machine's copy of the list instead of both, imported as usual, and left the publish
+pending. That is safe while this is the only machine that imports, because every removal writes both
+copies; log in and run `caselist pull --publish-pending`. If a second machine ever imports, this is
+the day to revisit it (`v1-e34-t07`, `v1-e30-t07` Deviation 7).
 
 **The run says `over_daily_budget` week after week** (a *caselist backlog growing* notification,
 or `archives_deferred` rising in `caselist runs`). There is more back-catalogue than a weekly

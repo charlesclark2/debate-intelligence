@@ -190,6 +190,35 @@ DEBATE_ENV=prod uv run debate-research caselist status
       there is, note it in the register as an incident.
 - [ ] **V2 only:** mark the matching tub files `REMOVED` so they stop listing and presigning
       (v2-e35-t05). The tub takedown flow uses this same suppression list.
+- [ ] **The download inbox — by hand until `v1-e30-t09`.** `caselist remove` does not touch the
+      inbox `caselist pull` downloads into: `caselist.inbox_dir` in the environment's profile, or
+      `<data_dir>/inbox` when it is not set. Each environment that pulls has its own. After a
+      removal it still holds the removed bytes: every camp file the sync fetched (`openev-<id>-…`),
+      and every weekly archive (`<slug>-weekly-<date>.zip`) holding the removed disclosure.
+      **Delete the inbox copies of a removed camp file.** Find them by digest, in each environment's
+      inbox, with the request's sha256 values in place of `<sha256>`:
+
+      ```bash
+      cd <inbox>
+      printf '%s\n' <sha256> <sha256> > /tmp/removed-sha256.txt
+      shasum -a 256 openev-* | grep -F -f /tmp/removed-sha256.txt          # single documents
+      for zip in openev-*.zip(N); do                                        # camp releases
+        python3 -c 'import hashlib, sys, zipfile
+      z = zipfile.ZipFile(sys.argv[1])
+      for n in z.namelist():
+          if not n.endswith("/"): print(hashlib.sha256(z.read(n)).hexdigest(), sys.argv[1])' "$zip"
+      done | grep -F -f /tmp/removed-sha256.txt
+      ```
+
+      Delete every file either command names (`rm <inbox>/openev-<id>-…`), including a camp
+      release only some of whose files were removed, then `rm /tmp/removed-sha256.txt`. The next
+      pull does not fetch them again: it remembers which bytes each OpenEv id delivered
+      (`<data_dir>/caselist-sync-openev-deliveries.json`, digests only — leave it in place) and
+      skips a removed one (`v1-e34-t07`).
+      **Leave the weekly archives.** One holds every team's disclosures for that week, and the
+      importer refuses the removed files inside it. Removing the removed files from them is
+      `v1-e30-t09`; until it lands, record in the register entry (step 10) that the weekly archives
+      in the inbox still contain the removed files, pending `v1-e30-t09`.
 
 ## Step 9 — Check nothing re-imports it
 
@@ -208,7 +237,10 @@ holds every other team's disclosures too, and the importer refuses the removed f
 ## Step 10 — Close it out
 
 - [ ] Fill in the Outcome column of the register entry: sources removed, snapshots affected,
-      whether anything was left in place as shared, and the date completed.
+      whether anything was left in place as shared, and the date completed. Until `v1-e30-t09`
+      lands, add: *camp-file inbox copies deleted; weekly archives in the inbox still contain the
+      removed files, pending v1-e30-t09*. Counts and codes only, as for the rest of the entry — no
+      filename.
 - [ ] Reply to the requester confirming completion, naming what was removed in their terms (their
       team, their rounds) and anything that was not, with the reason.
 - [ ] Commit the register update. No personal data in the diff or the commit message.

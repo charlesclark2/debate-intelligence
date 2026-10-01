@@ -122,10 +122,11 @@ the next run skips it. A file still in the inbox is read there instead, so it co
 **A camp file changes upstream only under a new id.** OpenCaselist has no route that replaces a
 file's bytes: `POST /openev` refuses a path that exists, `DELETE /openev/{id}` is the only other
 write, and ids are `AUTO_INCREMENT` (`server/v1/controllers/openev/`, `server/v1/db/caselist.sql`,
-upstream). A re-uploaded file therefore arrives as a new id, usually at the same path. Whether a
-removal covers a camp's later upload of the same file is a policy question this module does not
-settle: by default such an id is held back as :attr:`SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE`
-and logged, and fetching it is a decision for the operator.
+upstream). A re-uploaded file therefore arrives as a new id, usually at the same path. A removal
+covers a camp's later upload of the same file (PM decision, `v1-e34-t07`): the request was about the
+material, and a revised file normally still contains it. Such an id is held back as
+:attr:`SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE` and logged. If the data-use policy is read the
+other way, that decision becomes a download.
 
 ## Credentials, and stages that come back later
 
@@ -410,9 +411,9 @@ class SelectionDecision(StrEnum):
     SAME_PATH_AS_A_REMOVED_FILE = "same_path_as_a_removed_file"
     """A new OpenEv id at the upstream path of a camp file that was removed.
 
-    How OpenEv re-publishes a file, since nothing upstream replaces bytes under an id. Held back by
-    default rather than fetched: whether a removal covers a camp's later upload is a policy question
-    (`v1-e34-t07` session report), and the run says so instead of deciding it.
+    How OpenEv re-publishes a file, since nothing upstream replaces bytes under an id. Held back
+    rather than fetched: a removal covers a camp's later upload of the same file (PM decision,
+    `v1-e34-t07`), and the run says which id it held back.
     """
 
     SUPPRESSION_LIST_UNREADABLE = "suppression_list_unreadable"
@@ -1595,7 +1596,7 @@ class CaselistSyncService:
             if state is None:
                 return SelectionDecision.SUPPRESSION_LIST_UNREADABLE, None
             if any(all(state.suppresses_source(member) for member in one.member_sha256) for one in earlier):
-                note = "a new id at the upstream path of a camp file that was removed; not fetched by default"
+                note = "a new id at the upstream path of a camp file that was removed; the removal covers it"
                 logger.warning("caselist sync: OpenEv file %d is %s", file.openev_id, note)
                 return SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE, note
         return None, None

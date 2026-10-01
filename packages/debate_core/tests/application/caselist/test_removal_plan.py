@@ -225,6 +225,33 @@ class TestSharedFiles:
         assert skipped.other_teams == 2 and skipped.camp_file_holders == 1
         assert plan.nothing_to_do
 
+    async def test_junk_that_shadows_a_removed_file_goes_even_when_its_team_stays(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """`--source` leaves the team's other files, but the Finder and Word junk naming this one goes.
+
+        09-01 holds the Round 1 affirmative once, with its `__MACOSX/…/._` twin and its `~$` lock file:
+        three rows. 09-08 and 09-15 add the (1) re-upload and Cedar Hollow/ZaLu's Round 3: five each.
+        """
+        plan = await removal_world.planner().plan(
+            SourceSelector(SHARED),
+            request_id=REQUEST,
+            reason=ReasonCode.REQUESTED_BY_SITE_ADMIN,
+            include_shared=True,
+        )
+
+        dropped = {
+            rewrite.key: rewrite.rows_dropped for rewrite in plan.manifests if rewrite.side is Side.LOCAL
+        }
+        assert dropped[manifest("2026-09-01")] == 3
+        assert dropped[manifest("2026-09-08")] == 5
+        for rewrite in plan.manifests:
+            assert not [line for line in rewrite.lines if "Grove City Invitational-Round 1" in line]
+            if rewrite.key == manifest("2026-09-15"):
+                assert [line for line in rewrite.lines if "Maple Grove/QX" in line], (
+                    "the team's other files stay"
+                )
+
     async def test_a_file_only_one_team_holds_is_removed_by_source(self, removal_world: RemovalWorld) -> None:
         bayview = digest("bayview-semis-neg")
 

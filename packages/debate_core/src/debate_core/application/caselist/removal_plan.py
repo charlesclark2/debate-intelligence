@@ -510,7 +510,6 @@ class RemovalPlanner:
         index = _BucketIndex(self._remote, self._remote_versions)
         rewrites = await self._manifest_rewrites(copies, selector, removed, withdrawn_paths, after, index)
         objects, counted = await self._objects(sources, caselists, copies, index)
-        rewritten = {rewrite.key for rewrite in rewrites}
         return RemovalPlan(
             selector=selector,
             request_id=request_id,
@@ -524,7 +523,7 @@ class RemovalPlanner:
             objects=tuple(objects),
             versions_counted=counted
             and all(rewrite.versions is not None for rewrite in rewrites if rewrite.side is Side.BUCKET),
-            affected_caselists=_affected_caselists(selector, sources, copies, rewritten),
+            affected_caselists=_affected_caselists(sources, caselists),
             suppression_after=after,
         )
 
@@ -1028,28 +1027,17 @@ def _counts(raw: object) -> dict[str, int]:
 # ------------------------------------------------------------------------------------------------
 
 
-def _affected_caselists(
-    selector: RemovalSelector,
-    sources: Sequence[PlannedSource],
-    copies: Sequence[_ManifestCopy],
-    rewritten: set[str],
-) -> tuple[str, ...]:
-    """Caselists whose superseded manifest versions the executor sweeps.
+def _affected_caselists(sources: Sequence[PlannedSource], caselists: Sequence[str]) -> tuple[str, ...]:
+    """Caselists whose superseded manifest versions the executor sweeps: every one, if anything goes.
 
-    Not only those this plan rewrites: a re-run after a run that stopped during the sweep rewrites
-    nothing — the current versions are already clean — and must still sweep where the files were.
+    Not only those this plan rewrites, nor only those this machine's records name: a re-run after a
+    run that stopped during the sweep rewrites nothing — the current versions are already clean —
+    and a machine with no local copy has no records to name the caselist by. The sweep only reads
+    noncurrent versions, which a caselist accumulates one per re-published week at most.
     """
-    affected = {copy.caselist for copy in copies if copy.key in rewritten}
-    for source in sources:
-        if source.disposition is Disposition.SKIP_SHARED:
-            continue
-        affected |= {ref.caselist for ref in source.disclosures}
-        affected |= {caselist for caselist, _ in source.requester_paths}
-        if source.camp_files or source.camp_file_holders and source.disposition is Disposition.REMOVE:
-            affected.add(OPENEV)
-    if isinstance(selector, TeamSelector):
-        affected.add(selector.caselist)
-    return tuple(sorted(affected))
+    if not any(source.disposition is not Disposition.SKIP_SHARED for source in sources):
+        return ()
+    return tuple(sorted(caselists))
 
 
 def _names_digest(key: str, digest: str) -> bool:

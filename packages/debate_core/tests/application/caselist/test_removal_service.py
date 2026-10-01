@@ -559,9 +559,18 @@ class TestSupersededManifestVersions:
         assert not any(bayview.encode() in body for body in bodies)
 
     async def test_a_rerun_after_a_stop_during_the_sweep_still_sweeps(
-        self, removal_world: RemovalWorld
+        self, removal_world: RemovalWorld, tmp_path: Path
     ) -> None:
-        """The first run cleans the current manifests then stops; the second rewrites nothing and sweeps."""
+        """The first run cleans the current manifests then stops; the second rewrites nothing and sweeps.
+
+        Run from a machine with no local copy at all — prod after its own store was purged, or a
+        second laptop — so nothing local can name the caselist either: only the bucket can.
+        """
+        from .conftest import RemovalWorld as World
+
+        machine = World(
+            data_dir=tmp_path / "empty", bucket_name=removal_world.bucket_name, client=removal_world.client
+        )
         week1 = manifest_key(SYNTHETIC_CASELIST, date(2026, 9, 1))
         current = removal_world.client.get_object(Bucket=removal_world.bucket_name, Key=week1)["Body"].read()
         bayview = digest("bayview-semis-neg")
@@ -579,28 +588,26 @@ class TestSupersededManifestVersions:
                 raise StoreUnavailable("GetObject", version.key, "the connection dropped")
 
         def stopping() -> Any:
-            access = removal_world.takedown()
+            access = machine.takedown()
             return type(access)(
-                versions=StopsBeforeReadingVersions(
-                    bucket=removal_world.bucket_name, client=removal_world.client
-                ),
+                versions=StopsBeforeReadingVersions(bucket=machine.bucket_name, client=machine.client),
                 objects=access.objects,
                 profile=access.profile,
                 bucket=access.bucket,
             )
 
-        first = removal_world.service(takedown=stopping)
+        first = machine.service(takedown=stopping)
         with pytest.raises(RemovalIncomplete):
             await first.execute(
                 await first.plan(
                     SourceSelector(bayview), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
                 )
             )
-        second = removal_world.service()
+        second = machine.service()
         plan = await second.plan(
             SourceSelector(bayview), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
         )
-        assert not plan.manifests_on(Side.BUCKET), "the current manifests were cleaned the first time"
+        assert not plan.manifests, "the bucket's current manifests were cleaned the first time"
         await second.execute(plan)
 
         remaining = removal_world.client.list_object_versions(Bucket=removal_world.bucket_name, Prefix=week1)

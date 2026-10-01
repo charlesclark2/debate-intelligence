@@ -111,7 +111,86 @@ None. Everything ran in seconds and offline.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
+
+**Reviewed by / date:** PM, 2026-10-01
+
+**Notes:**
+
+Accepted, phase `Succeeded`, with two small follow-on commits asked for below. This is the best
+piece of work this project has produced, and the reason is the first paragraph of the summary.
+
+**I wrote "four tests" and it was seventy-six.** I counted the failures I happened to see in one
+pasted terminal output and wrote that number into the spec, the epic node and the kickoff prompt,
+three times, as though it were a census. The session counted the gating instead. What that found is
+materially worse than what I specified: beyond the four, the third-party-script guard from
+v1-e37-t05, seventeen axe checks over the exported HTML, and the ten stylesheet-ships tests written
+*after* an unstyled export reached the site had all never run in CI either. The accessibility of the
+shipped pages and the question of whether the CSS actually ships were both being asserted by tests
+that were not running. Moving only the four I named would have satisfied my words and left the
+failure mode intact, which is the trap this task exists to close. Taking the spec's forbidden entry
+("leaving any publishing-policy check able to pass by skipping") over its description was the right
+reading of two instructions that disagreed.
+
+**The arrangement chosen is the one I would not have thought to ask for, and the measurement is why
+I believe it.** I said reordering or a second pass were both acceptable and to measure. You
+measured: the inner loop stays at 5.2 to 7.0 seconds and reads only sources, while reordering would
+add a rebuild-or-fail to every run after an edit. That is precisely the bypass I warned about, and
+you showed it with numbers rather than agreeing with me in prose. Two seconds of CI for an inner
+loop nobody is tempted to route around is the right trade.
+
+**The freshness record is the part that makes it hold.** A build that records what it was built
+from, a check enforced on import so no suite can read a stale export by accident, and the record
+kept in `node_modules/.cache` rather than in `site/out` so it can never be deployed. Over-including
+build inputs because "over-inclusion only costs a rebuild; under-inclusion is the bug" is the right
+default stated the right way round, and excluding `tests/` so editing a check does not force a
+rebuild is the detail that keeps the inner loop honest.
+
+**ac3 is self-defending, which is more than it asked for.** `export-checks-run.test.ts` fails if
+`pre-commit-checks.sh` stops calling `export-checks.sh`, if `export-checks.sh` stops building before
+checking, if `ci.yml` stops running the script, and if anyone reintroduces `runIf`, `skipIf`, `skip`,
+`todo` or `only` anywhere in the site tests. The mechanism now guards its own wiring. Every instance
+of this pattern we have found was created by someone reordering or relaxing something innocuous;
+this is the first fix that notices.
+
+**Deviation 2's runbook edit is the single best catch in the report.** Promotion precondition 3 ran
+`pnpm --dir site test` after a prod build to check the export. After this change that command no
+longer contains the export checks, so the runbook would have gone on passing while checking nothing,
+before a production promotion. The fix created a fresh instance of the bug it was fixing, one file
+away, and you found it and ran the prod-settings version to prove the replacement works. Noticing
+that your own change has moved someone else's guarantee out from under them is the hardest thing on
+this list to do reliably.
+
+**The mutation placement reasoning is test design of a high order.** Recognising that a content-file
+address mutation would fail under *both* arrangements and therefore prove nothing about the export,
+and moving it into a component so only the export shows it, is the difference between a mutation
+test and a mutation-shaped ritual. Same for passing the script URL through a variable because
+`offline.test.ts` already catches a literal one in source. You knew what each test actually covers.
+
+**Two follow-on commits before you open the PR, both small, and both kept separate from the move so
+that "76 tests moved, no assertion changed" stays verifiable as a pure move:**
+
+1. Widen `contact.export-test.ts`'s "sets no cookie and uses no browser storage anywhere in the
+   export" to read every exported file rather than `contact/index.html`. You were right that it
+   belongs to v1-e36-t04's lineage, but you now own that file, the test's own name already claims
+   the wider scope, and leaving a check whose name overstates what it reads is the pattern this task
+   is named after. Your grep of all 69 files says the claim is true today, so this is cheap.
+2. Rename `content-policy.export-test.ts`'s "publishes no address outside the allowlist and no phone
+   number" to say what it checks. You established the phone guarantee holds through the test before
+   it; a name that misleads the next reader is worth one commit to fix.
+
+**Follow-up 1 handled, follow-up 4 filed.** I have amended v1-e37-t05's criterion to
+`site/scripts/export-checks.sh` in this branch, and corrected t10's own description from four to 76
+so the next reader is not misled by my count. `pnpm --dir site qa` reading `site/out` with no
+freshness check is a real gap; the runbook now runs it straight after `export-checks.sh`, which
+makes it fresh in practice but not by guarantee. I will file it rather than widen this task again.
+
+**On the pattern count: you are right that this is the third instance, and your fourth candidate is
+a genuine one.** Import-linter's unread key, the promotion guard whose job never ran, 76 tests that
+passed by skipping. What the three share is not carelessness; each was created by a reasonable local
+decision whose effect nobody checked from the outside. The useful generalisation, which I would like
+in the next report that touches a check: a check earns trust only when someone has seen it fail for
+the reason it exists.
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:**

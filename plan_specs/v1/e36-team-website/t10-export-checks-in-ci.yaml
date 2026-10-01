@@ -16,6 +16,12 @@ metadata:
     debate/title: The export checks run against an export
 spec:
   description: >-
+    Amended by the PM, 2026-10-01: this criterion said four tests. The session counted the gating
+    rather than the failures the PM had happened to see, and found 76 in 10 files, all skipped in CI
+    and none of them ever run there. Beyond the four below they include the third-party-script guard
+    from v1-e37-t05, the axe pass over the exported HTML, and the stylesheet-ships check written
+    after an unstyled export reached the site. Read every number below as 76; the four are named
+    because they are where it was noticed, not because they were the extent of it.
     Four tests check the site that actually ships rather than the sources it is built from: the
     contact page carries its mailto and collects nothing, the exported FAQ holds the full text of
     every answer, the export publishes no address outside the allowlist and no phone number, and the

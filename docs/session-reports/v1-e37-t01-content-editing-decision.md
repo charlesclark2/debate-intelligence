@@ -171,9 +171,63 @@ In order. None needs a terminal except the last.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-09-30
 
 **Notes:**
+
+Accepted, merging `--partial`. ac1, ac3 and ac4 stay NOT RUN and the Goal stays `InProgress`:
+the ADR cannot be Accepted before the dry-run it depends on, no second coach is available yet, and
+the team account does not exist. Every one of those is a person this session cannot summon, which
+is precisely the case `--partial` is for. Everything a session could do has been done.
+
+**The domain finding is the most valuable thing in this report, and it was found while looking at
+something else.** Checking a contact address was not this task's job; the session noticed, verified
+with whois and DNS rather than asserting, kept its hands off `site/` and the publishing policy
+because they are outside its packages, named the exact file locations, and escalated. That is the
+correct shape for an out-of-scope discovery: prove it, do not fix it, hand it over with enough
+detail that someone else can act in minutes.
+
+I could not reproduce the verification. This sandbox has no DNS and the proxy refuses both hosts,
+so I confirmed only the blast radius: `wfbschools.org` appears in six site content files, in
+`docs/policies/website-publishing.md` as the removal-request address, and in three test files,
+while `wfbschools.com` appears nowhere in the repository. Charlie is confirming his own address,
+which settles it faster than any tool. **Recording it here because it should not be lost either
+way:** if the domain is wrong, the publishing policy's removal commitment points at an address that
+cannot receive mail, which is a promise the project cannot keep, and the parent handout carries the
+same address two days before the session.
+
+**One consequence the report did not connect.** t05's Buttondown list is registered to that same
+district address with no second owner. If the address is wrong, that account never received its
+confirmation mail and has no recovery path, and it is the list parents are meant to join on
+Thursday. The ownership fix and the address fix are the same fix, and t05 is where it lands.
+
+**ac3 and ac4 being blocked on people is a finding, not just a status.** No second coach is
+available, and the team account has no second owner. Both are ownership-continuity requirements,
+and both are blocked on the same underlying fact: today this program is one person. The ADR naming
+a team account with two owners is the right answer and it is currently aspirational. It should not
+be quietly downgraded to "Charlie's account" when the dry-run proves hard to schedule, because
+continuity is the criterion that matters most in five years and least this week.
+
+**The decision itself is sound and the scoring is legible.** Calendar 33, Sheets 30, Sanity 24,
+git-backed CMS 15, against Charlie's own criteria and weights. The git-backed CMS placing last on
+coach usability is the outcome I expected and the reason I asked for adoption to be weighted
+heavily: a tool a volunteer assistant will not open on a Sunday is not cheaper, it produces a stale
+website. The protected "Published" tab is a better idea than the spec asked for, because it keeps
+drafts inside Google rather than relying on anyone remembering what is shareable.
+
+**Deviations.** The two `docs/README.md` index lines are accepted, and this is now the third task
+in a row deviating for the same reason: working agreement 3 requires an index line for a new `docs/`
+folder, and I keep writing package lists that exclude the file the agreement requires. That is my
+pattern to fix, not three sessions' coincidence, and I am filing it rather than accepting it a
+fourth time. "Page text stays in git" departing from the epic's wording is accepted and the epic
+should be amended to match the ADR. Announcement photos going through the repository rather than
+the sheet is accepted and t03's image criterion will need amending; flag it there rather than
+pre-empting t03's own design.
+
+**Copy the checker out of the scratchpad.** `prototype_check.py` lives in a temporary folder that
+gets cleared, and it is the thing that verifies a guest's address does not leak into the public
+feed, which no Google documentation confirms either way. A check that answers a question the vendor
+will not answer is worth keeping in the repository, not in `/private/tmp`.

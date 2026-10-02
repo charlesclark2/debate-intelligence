@@ -207,9 +207,15 @@ class InstalledCli:
         stdin: str | None = None,
         timeout: float = 120,
     ) -> CliRun:
-        """Any program (the build's own interpreter, say) in the same environment as the CLI."""
+        """Any program (the build's own interpreter, say) in the same environment as the CLI.
+
+        In a session of its own, so it has no controlling terminal: a prompt (getpass reads
+        /dev/tty when there is one) then reads the stdin given here instead of waiting on the
+        keyboard of whoever started the run.
+        """
         completed = subprocess.run(
             list(command),
+            start_new_session=True,
             cwd=self.workdir,
             env=self.environment(env),
             input=stdin,

@@ -117,7 +117,8 @@ against the unchanged `check_promotion_source.py` → `22 failed, 90 passed`. Af
 
 ### Whole-repo checks
 
-* `uv run --frozen pytest tests/smoke tests/scripts tests/docs tests/integration packages/debate_cli/tests -q --no-cov` → `795 passed in 32.78s`. The whole suite is operator follow-up 0.
+* **Whole suite, run by the operator** (2026-10-02, this worktree after `scripts/task sync`): `uv run pytest -q` → `1 failed, 3944 passed, 1 skipped in 166.27s`. The failure was this task's: `test_a_request_the_cli_itself_makes_is_refused_and_logged` timed out (`subprocess.TimeoutExpired`), because the CLI waited on the operator's terminal for a password. Fixed; see "Fixed after the operator's full-suite run". The skip is the known parser eval at `test_parser_eval.py:279`. Re-run requested (follow-up 0).
+* `uv run --frozen pytest tests/smoke tests/scripts tests/docs tests/integration packages/debate_cli/tests -q --no-cov` → `795 passed in 32.78s` (before the fix).
 * `uv run --frozen ruff check .` → `All checks passed!`; `ruff format --check .` → `491 files already formatted`.
 * `uv run --frozen pyright` → `0 errors`. The new files pass pyright when named explicitly, too. `tests/smoke/test_site.py`'s `site_smoke` import error was already there.
 * `uv run --frozen lint-imports` → `Contracts: 11 kept, 0 broken.`
@@ -249,6 +250,7 @@ but this task is not yet on `main`, a hotfix branch (cut from `main`) has no val
 so a hotfix would be blocked until the promotion in step 3 merges.
 
 **0. The whole suite** (about 1 minute on your Mac; it crossed 2 minutes in some sessions).
+First run: `1 failed, 3944 passed, 1 skipped in 166.27s`, a defect in this task's harness, now fixed. Run it again.
 Where: this task's worktree.
 
 ```bash
@@ -380,6 +382,35 @@ Success: the run's smoke job log ends with `== live canary tier: passed`.
   the merge.
 * **The site smoke stays out of validate-dev** until a site deploy is tied to a commit (E36, or
   `v2-e12-t07` for the V2 web app).
+
+## Fixed after the operator's full-suite run
+
+**What failed.** `test_a_request_the_cli_itself_makes_is_refused_and_logged` timed out after 120 s on
+the operator's Mac (`subprocess.TimeoutExpired`), and the suite took 2:46 instead of about a minute.
+The check drives `caselist auth login`, which asks for a password with `getpass`. `getpass` reads
+from the controlling terminal (`/dev/tty`) whenever the process has one, not from stdin. The
+operator's shell has one and the smoke harness's child process inherited it, so the CLI waited on the
+keyboard. This session and GitHub's runners have no terminal, so `getpass` fell back to the stdin the
+check supplied, and the check passed in both places. The harness had a hole: a smoke run could read
+the keyboard of whoever started it.
+
+**Shown first.** A reproduction script ran the same `login` command under a pseudo-terminal
+(`script -q /dev/null …`) → `TIMED OUT waiting on the terminal`. With `start_new_session=True` →
+`exit 70`, the guard's refusal, as intended. I added
+`test_the_build_can_never_read_the_operators_terminal` (`test_smoke_harness.py`): the build's
+interpreter must fail to open `/dev/tty`. Under a pseudo-terminal, before the fix, it and the guard
+check → `2 failed … in 120.24s`.
+
+**The fix.** `InstalledCli.run_program` starts every process in a session of its own
+(`start_new_session=True`), so it has no controlling terminal and a prompt reads the stdin the check
+gives it. Under a pseudo-terminal after the fix: the two checks → `2 passed in 0.53s`;
+`tests/smoke -m "not live"` → `56 passed in 11.68s` (and `56 passed` without a terminal); the recorded
+tier against the installed `v0.1.0-dev.49` → `27 passed in 5.30s`. `ruff check`, `ruff format --check`
+and pyright are clean.
+
+The new check only tells the two cases apart when run from a terminal. In CI it passes either way,
+because there is no terminal to inherit. The operator's re-run of the whole suite is what exercises
+it for real.
 
 ## PM review
 

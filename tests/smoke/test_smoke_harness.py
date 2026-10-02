@@ -17,6 +17,7 @@ from tests.smoke.installed_build import (
     EXPECT_SHA,
     EXPECT_TAG,
     SMOKE_BIN,
+    InstalledCli,
     NetworkAttempted,
     SmokeConfigurationError,
     assert_no_network_attempts,
@@ -114,7 +115,7 @@ def test_pytests_own_process_has_no_network_in_an_offline_check() -> None:
 def test_no_inherited_debate_or_aws_variable_reaches_the_build(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from tests.smoke.installed_build import InstalledCli, SmokeBuild
+    from tests.smoke.installed_build import SmokeBuild
 
     monkeypatch.setenv("DEBATE_PROVIDERS__CASELIST_TOKEN", "from-the-operators-shell")
     monkeypatch.setenv("AWS_PROFILE", "debate-dev-evidence")
@@ -131,3 +132,25 @@ def test_no_inherited_debate_or_aws_variable_reaches_the_build(
     }
     assert environment["DEBATE_ENV"] == "dev"
     assert environment["HOME"] == str(tmp_path / "smoke-home")
+
+
+NO_TERMINAL = """
+try:
+    open("/dev/tty").close()
+except OSError:
+    print("no terminal")
+else:
+    print("terminal")
+"""
+
+
+def test_the_build_can_never_read_the_operators_terminal(installed_cli: InstalledCli) -> None:
+    """A prompt in a smoke run reads the stdin the check gives it, never the keyboard.
+
+    getpass reads /dev/tty when the process has a controlling terminal, so in an operator's shell
+    `caselist auth login` waited on the keyboard until the run timed out; in CI, which has no
+    terminal, it read stdin. Only an interactive run can tell the two apart.
+    """
+    run = installed_cli.run_program([str(installed_cli.build.interpreter), "-c", NO_TERMINAL])
+
+    assert run.stdout.strip() == "no terminal", run.output

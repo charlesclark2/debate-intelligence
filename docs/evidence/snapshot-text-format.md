@@ -160,6 +160,7 @@ A card quotes one passage of a snapshot's normalized text and records what it cu
 | `omitted_ranges` | snapshot | What was removed from inside the envelope, in canonical form |
 | `evidence_text` | - | The envelope with the omissions removed, the pieces joined with **no joiner** |
 | `spans` (`CardSpan`) | `evidence_text` | Underlines and highlights, indexing the quotation, never the snapshot |
+| `interpolations` (`Interpolation`) | `evidence_text` | Bracketed words a debater added beside the quotation, never in it (see "Editing a card") |
 
 **Canonical form.** Omissions are sorted, non-overlapping, non-adjacent (two touching omissions are
 one omission), each removes at least one character, and each lies strictly inside the envelope,
@@ -186,6 +187,133 @@ cut, so each card span lies inside the text of one kept piece and maps back onto
 snapshot characters it was made from. Two spans that touch on either side of a cut stay two spans,
 each with its own purpose. A test scans every Python file in the repository and fails if this
 arithmetic appears anywhere else.
+
+The inverse, `snapshot_ranges_of(card, start, end)` in the same module, says which snapshot ranges
+`evidence_text[start:end]` was cut from: one range per kept piece the range touches, never one
+covering omitted text. Edits use it (next section). The same scan flags a loop over a card's
+`quoted_ranges` that keeps a running count, the inverse's shape, anywhere but this module.
+
+## Editing a card: cut, mark up, interpolate, never rewrite
+
+Owner task: `v1-e03-t05-edit-constraints` (architecture proposal §8 step 7). Implementation:
+[`debate_core.evidence.edits`](../../packages/debate_core/src/debate_core/evidence/edits.py) (what an
+editor may send),
+[`debate_core.evidence.edit_policy`](../../packages/debate_core/src/debate_core/evidence/edit_policy.py)
+(what each edit does) and
+[`CardEditService`](../../packages/debate_core/src/debate_core/application/card_edit_service.py)
+(re-verify, save, log). The V2 rich-text editor calls the same service.
+
+### What a student may send
+
+Every offset is into `evidence_text`, the quotation as the student sees it: the kept pieces joined
+with nothing, no ellipsis, no brackets. A student never sends a snapshot offset.
+
+| Kind | Operation | Outcome |
+|---|---|---|
+| `delete_range` | `DeleteRange(start, end)` | At an edge of the quotation the envelope shrinks; inside it, an omission is added, or widened if it touches one, or two are joined |
+| `set_markup` | `SetMarkup(spans)` | The underlines and highlights are replaced. A span across a cut becomes one span per side |
+| `add_interpolation` | `AddInterpolation(anchor, text)` | Bracketed words are added beside the quotation |
+| `remove_interpolation` | `RemoveInterpolation(anchor)` | The interpolation at that anchor is removed |
+| `edit_tag` | `EditTag(tag)` | The tag is replaced |
+| `edit_cite` | `EditCite(citation)` | The cite is replaced. A field the student changed may not arrive marked verified (`CITATION_CLAIMS_VERIFICATION`); only the citation service verifies a cite field |
+| `insert_text` | `InsertText(at, text)` | Refused: `ForbiddenEvidenceEdit` |
+| `replace_text` | `ReplaceText(start, end, text)` | Refused: `ForbiddenEvidenceEdit`, even when the text is empty or the same |
+| `move_text` | `MoveText(start, end, to)` | Refused: `ForbiddenEvidenceEdit` |
+
+The three forbidden kinds are refused by kind, before the card or the snapshot is looked at, and
+their payload is never read or stored: not on the card, not in the edit log, not in the error, whose
+message names only the kind. Reordering needs no validator of its own: a card is one envelope read
+left to right (ADR-0018), so a reordered card cannot be written down. `MoveText` exists so that an
+editor offering drag-and-drop gets a typed answer.
+
+### Every accepted edit is a fresh cut
+
+No edit writes `evidence_text`. Each works out which snapshot ranges the card should quote and which
+snapshot characters each span marks, and the card is cut again exactly as a new one is: the extractor
+slices the snapshot, `CardMarkup` checks the markup, and `place_evidence_on_card` sets the envelope,
+the omissions, the text and the spans. The omissions therefore come out in canonical form without the
+policy arranging it. Every kind of edit does this, a tag edit included, so one path does all of them.
+
+For a deletion:
+
+1. The deleted evidence-text range is mapped to snapshot ranges (`snapshot_ranges_of`) and taken out
+   of the card's quoted ranges. Deleting everything is refused (`DELETES_ALL_EVIDENCE`): deleting the
+   card is a different operation.
+2. **Markup is carried across in snapshot offsets.** A span that lost all its text is dropped, and its
+   purpose with it. A span that lost part keeps the rest, and its purpose. A span the deletion cuts
+   through the middle becomes two spans, one per side, each with the original style and purpose.
+3. **Interpolations move with the quotation.** An anchor before the deletion stays where it is, one
+   after it moves back by the length deleted, and one at either edge lands on the seam. One strictly
+   inside the deletion, or two that would land on one place, refuse the deletion with
+   `InterpolationBlocksDeletion`: remove the interpolation first.
+4. The removed text is checked for a negation (below).
+
+**An edit does what it says and nothing else.** After the fresh cut, `evidence_text` must be the old
+text with exactly the deleted characters gone, or unchanged for any other kind of edit. The fresh cut
+makes the text verbatim; this check makes it the text the student was looking at. They differ only
+when the stored quotation does not match its snapshot: a same-length alteration passes the length
+invariant, so it can be stored, and a fresh cut would quietly put the snapshot's words back while the
+edit "succeeded". The verifier cannot see that, because anything cut from a snapshot verifies. The
+edit is refused (`QUOTATION_DOES_NOT_MATCH_SNAPSHOT`) and the card is left for the verifier to report.
+
+### Re-verify, then save once, then log
+
+`CardEditService.edit(card_id, edit, expected_revision=..., actor_id=...)`:
+
+1. refuses with `RevisionMismatch` at once if the stored revision is not `expected_revision`. The
+   edit's offsets index the text at the revision the student saw, so they mean nothing against another;
+2. loads the snapshot with every integrity check (`SnapshotService.load`);
+3. applies the edit as above, or raises a typed `EvidenceEditRefused`;
+4. re-verifies with `EvidenceVerifier.verify_and_record`. **Unless the result is VERIFIED, nothing is
+   saved**: `EditNotVerified` carries the verifier's reasons. An edit that removes every marked
+   character (`CARD_INCOMPLETE`) or changes a required cite field (`CITATION_UNVERIFIED`) ends here;
+5. saves once with `CardRepository.save(card, expected_revision=...)`, which refuses a write that raced
+   another (`RevisionMismatch`) and increments the revision by exactly one;
+6. appends one `CardEditEntry` to the `CardEditLog` port.
+
+A refused edit, an edit that does not verify and an edit that loses a race leave the stored card
+unchanged and the log untouched. The `RevisionMismatch` used is the one the repository already
+raises (`debate_core.application.errors`). Because every edit re-verifies, a card that does not verify
+today, for any reason, cannot be edited through this service, not even its tag.
+
+**What an edit-log entry holds:** the card id, the actor id, the edit kind, the revision before and
+after, the time, and the negation flag (which omission, as snapshot offsets). No evidence text, no
+deleted text, no tag, cite or interpolation, no payload, and no student data beyond the actor id. The
+port has an in-memory fake (`debate_core.testing.InMemoryCardEditLog`) and no production adapter yet:
+no V1 command edits a card. The card is saved before the entry is appended, so a failure between them
+loses an entry rather than logging an edit that never happened; the V2 adapter should write both in
+one transaction.
+
+### Interpolations: beside the quotation, in brackets, unverified
+
+`Card.interpolations` holds each interpolation as an **anchor** (an `evidence_text` offset meaning
+"before this character"; `len(evidence_text)` means after the last) and its **text, stored without
+brackets**, and nothing else. `Interpolation.rendered` adds the brackets and is the only code that
+does. Anchors lie inside the text or at its end and strictly increase, so two interpolations never
+share a place. Text holding a `[` or `]` is refused, because `x] will [y` rendered in brackets would
+read as unbracketed words the source never wrote. An interpolation is never part of `evidence_text`;
+the verifier and the length invariant do not read it, and a card verifies exactly as it would without
+one. `card.schema.json` describes the field, and a verify manifest carries it untouched, because its
+cards are domain `Card`s.
+
+### The negation flag is a heuristic
+
+ADR-0018 notes that the envelope makes it possible to flag an omission that deletes a negation. A
+deletion whose removed text holds a negation is **accepted and flagged, never refused**. The flag is
+on the edit result and in the edit-log entry, naming the omission that now holds the removed text,
+or no omission when the deletion was at an edge (the envelope shrank, and nothing on the card records
+the cut).
+
+The rule ([`debate_core.evidence.negation`](../../packages/debate_core/src/debate_core/evidence/negation.py)):
+a deletion removes a negation when a word it touches is one of `not`, `no`, `never`, `without`,
+`neither`, `nor`, `cannot`, or ends in `n't`, compared case-insensitively, with a curly apostrophe
+(U+2019, which the normalizer keeps) read as a straight one. A cut that starts or ends inside a word
+counts the whole word ("not" cut from "cannot" is "cannot"); one that starts or ends at a word's edge
+does not reach into its neighbour (cutting " really" from "not really" is not flagged).
+
+It is a word list, not a reading. It misses negation it has no word for ("hardly", "fails to", "un-")
+and flags cuts that change nothing ("No. 5"). It draws a reader's attention to a cut; it does not
+judge whether the cut is fair, and VERIFIED still says nothing about that.
 
 ## Verifying a card against its snapshot
 
@@ -282,9 +410,10 @@ it before showing a card as finished. It costs one `load` per card (see the timi
   the card was not replaced with it.
 * **Citation flags are read, not re-checked.** The verifier does not look metadata up again.
 * **What an omission removed is not judged.** VERIFIED means the quotation is the envelope minus the
-  omissions, not that the cuts are fair. Cutting "not" out of a sentence verifies. The omissions are
-  stored as offsets, so the removed text can be shown or flagged; nothing does that yet (ADR-0018,
-  Consequences).
+  omissions, not that the cuts are fair. Cutting "not" out of a sentence verifies. A student's
+  deletion through `CardEditService` is flagged when it removes a negation (a word-list heuristic,
+  see "The negation flag is a heuristic"), but the flag is advice to a reader, it is not part of
+  verification, and a card cut some other way is not checked at all.
 * **An omission's position is fixed only up to repeated text.** Where the characters either side of
   a cut repeat, two different cuts can leave the same text: cutting " there now" or "there now "
   from "Farmers there now pump" both leave "Farmers pump". Both cards' claims are true, and both
@@ -322,3 +451,13 @@ their keys and must stay readable, because cards were cut from them.
 | A card made by `place_evidence_on_card` reproduces exactly from its snapshot, and no span maps back onto an omitted range | hypothesis, `test_card_mapping_reproduces_from_the_snapshot_and_no_span_lands_on_an_omission` |
 | The selection-to-card offset arithmetic exists once in the repository, tests and fixtures included | `test_card_mapping_arithmetic_exists_once_in_the_whole_tree` |
 | A card cut with omissions verifies; any one omission widened, narrowed, removed or added is refused at construction or is `TEXT_MISMATCH` | `test_a_card_cut_with_omissions_by_the_mapping_is_verified`, `test_no_single_omission_change_verifies_unless_it_quotes_the_same_text` (`test_verifier_omissions.py`) |
+| The inverse mapping, evidence-text range to snapshot ranges, exists once too | `test_card_mapping_arithmetic_exists_once_in_the_whole_tree` (its `quoted_ranges` running-count detector), `test_snapshot_ranges_of_maps_an_evidence_range_to_the_snapshot_pieces_it_was_cut_from` |
+| Any sequence of allowed edits leaves a VERIFIED card, one revision further on per accepted edit, quoting exactly the snapshot characters, omissions, marks and anchors an independent oracle predicts; each refusal is the one the oracle predicts and changes nothing | hypothesis, `test_any_sequence_of_allowed_edits_leaves_a_verified_canonical_card_quoting_what_the_oracle_says` (`tests/application/test_card_edit_service.py`) |
+| Deletions add, widen and join omissions and shrink the envelope at an edge; spans are trimmed, split or dropped with their purposes | `test_edit_policy.py`, the "Deletions" section, hand-counted |
+| Insertions, substitutions and moves are refused by kind and leave the stored card and the log unchanged; their payload appears in no error | `test_an_insertion_substitution_or_move_is_refused_by_kind_whatever_its_payload`, `test_a_forbidden_edit_raises_and_leaves_the_stored_card_and_the_log_unchanged` |
+| Nothing is saved unless the edited card re-verifies as VERIFIED | `test_an_edit_that_leaves_no_markup_does_not_verify_and_is_not_saved`, `test_clearing_the_markup_does_not_verify_and_is_not_saved`, `test_a_cite_edit_that_unverifies_a_required_field_is_not_saved` |
+| An edit to a card that does not match its snapshot is refused, not silently repaired | `test_an_edit_to_a_card_that_does_not_match_its_snapshot_is_refused_not_repaired` |
+| A stale or raced revision is refused with `RevisionMismatch`, before the edit's offsets are read | `test_a_stale_revision_is_refused_and_nothing_changes`, `test_a_stale_revision_is_reported_before_the_edits_offsets_are_read`, `test_an_edit_that_loses_a_race_is_refused_at_the_save_and_logs_nothing` |
+| Interpolations are stored beside the quotation, rendered in brackets, carried by a verify manifest and ignored by verification; an anchor strictly inside a deletion refuses it | `test_an_interpolation_is_saved_beside_the_quotation_and_is_not_verified`, `test_the_verify_manifest_carries_interpolations_untouched`, `test_a_deletion_with_an_interpolation_strictly_inside_it_is_refused` |
+| An edit-log entry holds the actor, kind, revisions, time and negation flag, and no evidence, tag, cite or interpolation | `test_an_accepted_edit_appends_one_entry_with_the_actor_kind_revisions_and_time`, `test_no_entry_holds_evidence_a_tag_a_cite_or_an_interpolation` |
+| A dropped negation is accepted and flagged with the omission that holds it; an ordinary deletion is not flagged | `test_a_dropped_not_is_saved_and_flagged_in_the_result_and_the_entry`, `test_an_ordinary_deletion_is_saved_unflagged`, `test_removes_negation_reads_the_words_a_cut_touches` |

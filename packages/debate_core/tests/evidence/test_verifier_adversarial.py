@@ -15,8 +15,9 @@ everything would fail here rather than pass. No Hypothesis: the mutations are en
 
 A fabrication whose text is not as long as the range it claims is refused at construction:
 `v1-e03-t07` made the domain check that the envelope minus the omissions is as long as the text
-(ADR-0018). That is also a refusal, and the tests count it as one, but they require every
-same-length fabrication to reach the verifier, so they cannot pass by the domain refusing everything.
+(ADR-0018). That defends against an honest mistake, not a forger: a forger, or a model's output, fits
+the envelope to the text, and a card can arrive unvalidated. So every fabrication is also checked in
+its fitted form, which always reaches the verifier (``AdversarialWorld.fabricate(..., fitted=True)``).
 """
 
 from __future__ import annotations
@@ -115,14 +116,27 @@ class AdversarialWorld:
                 markup = (EvidenceMarkupSpan.underline(start, start + 3),)
                 self.honest[(source["name"], card["name"])] = self.world.cut_card(loaded, start, end, markup)
 
-    def fabricate(self, fabrication: Fabrication) -> Card:
-        claimed = self.sources[fabrication.claims_source].snapshot
+    def fabricate(self, fabrication: Fabrication, *, fitted: bool = False) -> Card:
+        """The fabrication on the range it claims, or ``fitted``: on an envelope as long as its text.
+
+        Fitting moves the envelope's end, as a forger would, unless that runs past the end of the
+        snapshot's text; then it moves the start back instead. A same-length fabrication is already
+        fitted, so ``fitted`` changes nothing for it.
+        """
+        claimed = self.sources[fabrication.claims_source]
+        start, end = fabrication.claims_start, fabrication.claims_end
+        if fitted:
+            length = len(fabrication.evidence_text)
+            if start + length <= len(claimed.normalized.text):
+                end = start + length
+            else:
+                start = end - length
         return self.honest[(fabrication.source, fabrication.card)].evolve(
             evidence_text=fabrication.evidence_text,
-            snapshot_id=claimed.snapshot_id,
-            normalized_text_hash=claimed.normalized_text_hash,
-            evidence_start_offset=fabrication.claims_start,
-            evidence_end_offset=fabrication.claims_end,
+            snapshot_id=claimed.snapshot.snapshot_id,
+            normalized_text_hash=claimed.snapshot.normalized_text_hash,
+            evidence_start_offset=start,
+            evidence_end_offset=end,
         )
 
 
@@ -192,6 +206,81 @@ def test_a_fabrication_longer_or_shorter_than_its_claimed_range_is_refused_at_co
         adversarial.fabricate(fabrication)
 
 
+#: The fifteen on an envelope fitted to their length, worked out by hand from the fixture's normalized
+#: text: the fitted envelope, and where the reconstruction first differs (evidence-text coordinates),
+#: or ``None`` where it does not differ at all.
+#:
+#: * Eight keep their offset. The envelope keeps its start, so the reconstruction agrees with the
+#:   honest text up to the end of the shorter of the two, and the departure lies inside that. The
+#:   trailing space keeps 64 for a new reason: the snapshot has "\n\n" after "2031.", not a space.
+#: * Five move to 0. Their cards end at the last character of the snapshot (152 and 170), so the
+#:   envelope cannot grow at the end and starts earlier instead; the reconstruction then begins with
+#:   the character before the card ("\n" before "Its" at 65, ".\n\n" before "Without" at 115-118),
+#:   which no fabrication starts with.
+#: * Two do not differ: a truncated card is a prefix of the honest text, so on a fitted envelope it
+#:   is the honest, shorter quotation of exactly those characters (66-115 and 119-161).
+FITTED: dict[str, tuple[int, int, int | None]] = {
+    "negation dropped": (0, 60, 44),
+    "accent decomposed (NFD a + combining grave)": (0, 65, 8),
+    "paraphrase": (0, 66, 24),
+    "ellipsis stored in place of a cut": (0, 62, 44),
+    "trailing space appended": (0, 65, 64),
+    "paragraph break flattened to a space": (0, 151, 64),
+    "invented claim behind a true opening": (61, 118, 14),
+    "spliced: first and last paragraphs joined over the middle one": (0, 112, 61),
+    "odds changed by an inserted digit": (65, 152, 0),
+    "em dash written as two hyphens": (65, 152, 0),
+    "doubled space kept from the raw text": (65, 152, 0),
+    "negation inserted": (115, 170, 0),
+    "zero-width space inserted": (118, 170, 0),
+    "truncated before the comparison": (66, 115, None),
+    "truncated before the date": (119, 161, None),
+}
+TRUNCATIONS = {kind for kind, (_, _, offset) in FITTED.items() if offset is None}
+
+
+def test_every_length_changing_fabrication_has_a_hand_counted_fitted_form() -> None:
+    assert set(FITTED) == CHANGES_LENGTH
+
+
+@pytest.mark.parametrize(
+    "fabrication",
+    [fabrication for fabrication in LENGTH_CHANGING if fabrication.kind not in TRUNCATIONS],
+    ids=lambda fabrication: fabrication.kind,
+)
+def test_a_length_changing_fabrication_on_a_fitted_envelope_is_a_text_mismatch(
+    adversarial: AdversarialWorld, fabrication: Fabrication
+) -> None:
+    start, end, offset = FITTED[fabrication.kind]
+    card = adversarial.fabricate(fabrication, fitted=True)
+    assert (card.evidence_start_offset, card.evidence_end_offset) == (start, end)
+
+    result = adversarial.world.verify(card)
+
+    assert result.status is VerificationStatus.UNVERIFIED
+    assert [(reason.code, reason.first_differing_offset) for reason in result.reasons] == [
+        (ReasonCode.TEXT_MISMATCH, offset)
+    ]
+
+
+@pytest.mark.parametrize(
+    "fabrication",
+    [fabrication for fabrication in LENGTH_CHANGING if fabrication.kind in TRUNCATIONS],
+    ids=lambda fabrication: fabrication.kind,
+)
+def test_a_truncation_on_a_fitted_envelope_is_the_honest_shorter_card_and_verifies(
+    adversarial: AdversarialWorld, fabrication: Fabrication
+) -> None:
+    """Truncating a quotation misleads by what it leaves out, as an unfair cut does; it does not put
+    words in a source's mouth. On the range it claims it is refused; on its own range it is true, and
+    the verifier, which judges fidelity and not fairness, verifies it."""
+    start, end, _ = FITTED[fabrication.kind]
+    card = adversarial.fabricate(fabrication, fitted=True)
+    assert (card.evidence_start_offset, card.evidence_end_offset) == (start, end)
+
+    assert adversarial.world.verify(card).status is VerificationStatus.VERIFIED
+
+
 @pytest.mark.parametrize("fabrication", SAME_LENGTH, ids=lambda fabrication: fabrication.kind)
 def test_a_fabrication_is_unverified_with_a_text_mismatch_where_it_departs(
     adversarial: AdversarialWorld, fabrication: Fabrication
@@ -214,17 +303,27 @@ def _verdict(adversarial: AdversarialWorld, build: Any) -> str:
 
 
 def test_no_fabrication_passes(adversarial: AdversarialWorld) -> None:
-    verdicts = {
+    """All 28 reach the verifier in their fitted form, and none verifies except the two truncations,
+    which fitted are honest quotations (test above). On the ranges they claim, nothing verifies either."""
+    claimed = {
         fabrication.kind: _verdict(
             adversarial, lambda fabrication=fabrication: adversarial.fabricate(fabrication)
         )
         for fabrication in FABRICATIONS
     }
+    fitted = {
+        fabrication.kind: _verdict(
+            adversarial, lambda fabrication=fabrication: adversarial.fabricate(fabrication, fitted=True)
+        )
+        for fabrication in FABRICATIONS
+    }
 
-    assert [kind for kind, verdict in verdicts.items() if verdict == VerificationStatus.VERIFIED.value] == []
-    unverified_by_the_verifier = [fabrication.kind for fabrication in FABRICATIONS if fabrication.same_length]
-    assert unverified_by_the_verifier, "no same-length fabrication, so nothing proves the verifier ran"
-    assert all(verdicts[kind] == VerificationStatus.UNVERIFIED.value for kind in unverified_by_the_verifier)
+    assert [kind for kind, verdict in claimed.items() if verdict == VerificationStatus.VERIFIED.value] == []
+    assert [kind for kind, verdict in fitted.items() if verdict == "refused"] == []
+    assert {
+        kind for kind, verdict in fitted.items() if verdict == VerificationStatus.VERIFIED.value
+    } == TRUNCATIONS
+    assert sum(verdict == VerificationStatus.UNVERIFIED.value for verdict in fitted.values()) == 28 - 2
 
 
 def _mutations(text: str) -> Iterator[tuple[str, str]]:

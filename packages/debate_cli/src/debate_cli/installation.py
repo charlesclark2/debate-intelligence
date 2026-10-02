@@ -284,7 +284,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _print_report(report: InstallationReport) -> None:
     for module in report.wired:
-        outcome = "ok" if module in report.imported else f"FAILED  {report.failed.get(module, 'not checked')}"
+        if module in report.imported:
+            outcome = "ok"
+        elif module in report.failed:
+            outcome = f"FAILED  {report.failed[module]}"
+        else:
+            outcome = "NOT CHECKED"
         print(f"  {module:<60} {outcome}")
     for distribution, extra in report.missing_distributions.items():
         print(f"  {distribution} (debate-core[{extra}])  MISSING")

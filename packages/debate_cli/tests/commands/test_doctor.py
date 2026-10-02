@@ -17,7 +17,7 @@ import unicodedata
 from typing import Any
 
 import pytest
-from hypothesis import given
+from hypothesis import event, given
 from hypothesis import strategies as st
 from typer.testing import CliRunner, Result
 
@@ -195,6 +195,9 @@ def test_doctor_fails_exactly_when_the_running_database_is_not_the_pin(
         "python_unicode_version": running,
         "unicode_database_matches": pinned == running,
     }
+
+    event("databases match" if pinned == running else "databases differ")
+    event("settings not configured" if other_facts.get("settings_configured") is False else "settings other")
 
     failure = doctor_module.unicode_database_failure(report)
 

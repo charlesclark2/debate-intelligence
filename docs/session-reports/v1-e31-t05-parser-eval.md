@@ -688,9 +688,72 @@ whoever owns `v1-e30-t02`/`v1-e31-t06`. `tests/README.md` is corrected in the sa
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-02
 
 **Notes:**
+
+Accepted for another `--partial` merge; the Goal stays `InProgress`. Three changes before the pull
+request (the last three items below). I checked `select_eval_files.py` on the branch for how the
+rejection rule is enforced.
+
+**My first review was wrong about this file, and this session showed it.** I called `02469e60…`
+"the most informative file in the set" and asked for it to stay in the PR subset. It was not debate
+material, and its zero cards were correct because there was nothing to find. A guess about a file
+nobody had opened, recorded as a decision; your hashing to confirm the identity closes it properly.
+
+**Point 3 is the finding of the session.** A fresh run of the selector no longer reproduces the
+committed thirty: the selection was made in plain-SHA-256 order and re-keyed afterwards, so the key
+changed the order and only 3 files survive a re-run. The docstring claimed reproducibility; it is
+corrected, and the manifest, not the script, is now plainly the record. Implementing the request as
+replacement in place, rather than obeying "re-run selection" literally and swapping 27 files, is
+the right reading of what was asked.
+
+**Deviation 12 is the catch I would have missed.** `task_helper` reads the first `**Verdict:**` in
+the report, so the first session's ACCEPTED would have let `scripts/task pr` open this change before
+anyone reviewed it. Renaming that label is right, and the general problem (a resumed task's report
+carrying two reviews) goes into the tooling task I owe for restarting a partly merged task.
+
+**Following the rule while surfacing the hint (Deviation 10) is right.** A hint that silently
+became a rule would be the session deciding what counts as debate material. The coach opens the two
+hinted files first.
+
+**Deviations 8, 9, 11 and 13 are accepted.** Deleting the rejected file's worksheet, proven
+byte-identical to its generated state, was within the regeneration asked for, and reporting it was
+right.
+
+**Deviation 2, PM decision: the full tier runs before a promotion, not nightly.** A second launchd
+agent on the coach's Mac to re-score a parser that changes rarely is not worth it. Run
+`-m "eval and slow"` before any promotion whose `dev` contains a parser change, and record the
+result in the promotion's description.
+
+**Change 1: make "every rejection before any import" structural.** It is written in the report and
+nothing enforces it. `--reject` must refuse while any label file is `CORRECTED` or
+`COACH_REVIEWED`, naming them, because a rejection changes the plan id and silently invalidates
+corrected work no tool can re-stamp. An explicit override is acceptable only if it says what it
+discards. Show it failing first.
+
+**Change 2: make the operator's rejection path one command block with no hand edits.** The coach
+will reject files from the main clone without a session. Today that means a `git rm` of the right
+label file, a worksheet, an `rm`, and editing two tables in `MANIFEST.md` by hand until a test
+passes. The tooling should regenerate `MANIFEST.md`'s tables from `manifest.json` and
+`rejections.json`, and `prelabel --all` should remove the `PRELABELED` label file of a rejected entry
+(never a corrected one). Then follow-up 1's block is the selector, the plan, the pre-labels and the
+replacement's worksheet, and a `git status` that shows exactly what to commit.
+
+**Change 3: a current working reference for the labeling, safe to paste.** The coach is working
+from a reference written before this change. It says to start with the rejected file, gives 1,876
+rows, 435 in the PR subset and the old PR-subset table, and omits the approval step. Put a short
+"Working reference" at the top of `labels/README.md`:
+- the order: approve the selection (open the two hinted files first), reject before any import, then
+  label the PR subset first;
+- the current PR-subset table and counts (plan `06a5e928bf1fc90f`: 1,851 rows, 410 in the subset);
+- how to open a file's `.docx` by digest prefix;
+- import, delete the worksheet, commit and open a small PR from a branch, since `dev` refuses direct
+  pushes;
+- the spot-check, `mark-reviewed`, the baseline and the health run, in order.
+
+Every code block in the guide, including the existing Workflow block, must be safe to paste into
+zsh: no `#` comments inside code blocks. The coach's shell treats them as arguments.

@@ -359,8 +359,13 @@ def run_tier(
     return result
 
 
-def without_tokens(environment: Mapping[str, str]) -> dict[str, str]:
-    return {name: value for name, value in environment.items() if name not in WITHHELD}
+def environment_for_tests(environ: Mapping[str, str]) -> dict[str, str]:
+    """pytest's environment: no token, no inherited DEBATE_* setting, no other project's venv."""
+    return {
+        name: value
+        for name, value in environ.items()
+        if name not in WITHHELD and name != "VIRTUAL_ENV" and not name.startswith("DEBATE_")
+    }
 
 
 def tree_commit(cwd: Path = REPO_ROOT) -> str:
@@ -492,7 +497,7 @@ def smoke(
     if report.problems:
         return report
 
-    environment = without_tokens({k: v for k, v in os.environ.items() if not k.startswith("DEBATE_")})
+    environment = environment_for_tests(os.environ)
     environment |= {
         "DEBATE_SMOKE_BIN": str(binary),
         "DEBATE_SMOKE_EXPECT_SHA": sha,
@@ -539,7 +544,7 @@ def slow(
             f"the slow tier would run {report.tests_commit}, not {sha}; check out the validated commit"
         )
         return report
-    environment = without_tokens({k: v for k, v in os.environ.items() if not k.startswith("DEBATE_")})
+    environment = environment_for_tests(os.environ)
     result = run_tier(tier, work / "junit-slow.xml", environment, pytest_command=pytest_command, cwd=cwd)
     report.tier = {
         "name": result.name,

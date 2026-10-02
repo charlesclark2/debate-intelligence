@@ -98,9 +98,9 @@ from tests.evals.parser.digests import create_key, key_location, keyed_digest, l
 from tests.evals.parser.labels_schema import (  # noqa: E402
     MANIFEST_PATH,
     PR_SUBSET_SIZE,
-    REJECTIONS_PATH,
     Category,
     DebateFormat,
+    LabelStatus,
     Manifest,
     ManifestEntry,
     RejectedFile,
@@ -108,6 +108,7 @@ from tests.evals.parser.labels_schema import (  # noqa: E402
     RejectionReason,
     TemplateFamily,
     coverage_shortfalls,
+    load_label_files,
     load_manifest,
     load_rejections,
     rejection_conflicts,
@@ -543,6 +544,38 @@ def _load_locations(path_map_path: Path) -> dict[str, Path]:
     return {digest: Path(p) for digest, p in json.loads(path_map_path.read_text(encoding="utf-8")).items()}
 
 
+def _corrections_allow_a_rejection(labels_dir: Path, *, discard: bool) -> bool:
+    """Whether a rejection may go ahead given the labels already corrected.
+
+    A rejection writes a new sampling plan, and the plan id changes with it. Every label file
+    corrected under the old id then stops validating, even where its blocks have not moved, and no
+    tool moves a correction to a new plan. So every rejection comes before any import: this refuses
+    while any label file is CORRECTED or COACH_REVIEWED, naming them, unless told to discard them.
+    """
+    corrected = sorted(
+        (label.digest[:16], label.header.status.value)
+        for label in (load_label_files(labels_dir) if labels_dir.is_dir() else {}).values()
+        if label.header.status is not LabelStatus.PRELABELED
+    )
+    if not corrected:
+        return True
+    named = ", ".join(f"{digest} {status}" for digest, status in corrected)
+    if not discard:
+        print(
+            f"REFUSED: {len(corrected)} label file(s) are already corrected: {named}. A rejection "
+            "writes a new sampling plan id, and labels corrected under the old one stop validating; no "
+            "tool moves them to the new plan. Reject before any import. --discard-corrected-labels "
+            "goes ahead and discards those corrections. Nothing written."
+        )
+        return False
+    print(
+        f"DISCARDING {len(corrected)} correction(s): {named}. After this rejection and the new plan "
+        "they no longer validate. Reset each with `prelabel_docx.py prelabel DIGEST_PREFIX --force` and "
+        "correct it again; a corrected file of a rejected entry is left for you to delete."
+    )
+    return True
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--input", action="append", type=_parse_input, default=[], help="CATEGORY=PATH")
@@ -564,7 +597,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--max-paragraphs", type=int, default=DEFAULT_MAX_PARAGRAPHS)
     parser.add_argument("--min-paragraphs", type=int, default=DEFAULT_MIN_PARAGRAPHS)
     parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
-    parser.add_argument("--rejections", type=Path, default=REJECTIONS_PATH)
+    parser.add_argument(
+        "--discard-corrected-labels",
+        action="store_true",
+        help="Reject even though label files are corrected; they stop matching the plan and must be redone.",
+    )
+    parser.add_argument(
+        "--rejections", type=Path, default=None, help="Defaults to rejections.json beside the manifest."
+    )
+    parser.add_argument(
+        "--labels-dir", type=Path, default=None, help="Defaults to labels/ beside the manifest."
+    )
     parser.add_argument("--path-map", type=Path, default=None, help="Defaults to the evaluation's path map.")
     args = parser.parse_args(argv)
     if not args.input and not args.rekey:
@@ -573,6 +616,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--reject and --rekey are separate steps")
     if args.reject and args.reason is None:
         parser.error("--reject needs a --reason")
+    rejections_path: Path = args.rejections or args.manifest.parent / "rejections.json"
+    labels_dir: Path = args.labels_dir or args.manifest.parent / "labels"
+    if args.reject and not _corrections_allow_a_rejection(labels_dir, discard=args.discard_corrected_labels):
+        return 1
 
     path_map_path: Path = (args.path_map or path_map_location()).expanduser().resolve()
     try:
@@ -592,7 +639,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "It is never committed; keep it with the path map."
         )
 
-    rejections = load_rejections(args.rejections)
+    rejections = load_rejections(rejections_path)
     replacements: dict[str, str] = {}
     if args.rekey:
         manifest, path_map = rekey_manifest(args.manifest, path_map_path, key)
@@ -671,8 +718,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
     if rejections.rejections:
-        args.rejections.parent.mkdir(parents=True, exist_ok=True)
-        args.rejections.write_text(rejections.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        rejections_path.parent.mkdir(parents=True, exist_ok=True)
+        rejections_path.write_text(rejections.model_dump_json(indent=2) + "\n", encoding="utf-8")
     path_map_path.parent.mkdir(parents=True, exist_ok=True)
     path_map_path.write_text(
         json.dumps({digest: str(p) for digest, p in path_map.items()}, indent=2), encoding="utf-8"

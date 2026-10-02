@@ -11,26 +11,33 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import sys
 import zipfile
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 from tests.evals.parser.digests import create_key
 from tests.evals.parser.labels_schema import (
+    EVAL_FIXTURE_DIRECTORY,
+    LABELS_DIRECTORY,
     REPOSITORY_ROOT,
     Category,
     DebateFormat,
+    LabelStatus,
     Manifest,
     RejectedFile,
     RejectionList,
     RejectionReason,
     TemplateFamily,
     coverage_shortfalls,
+    load_manifest,
     rejection_conflicts,
     stratum_of,
+    write_label_file,
 )
+from tests.evals.parser.synthetic import build_invented_corpus_file, build_synthetic_file
 
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
@@ -354,3 +361,110 @@ def test_the_selector_prints_counts_never_text_names_or_paths(
     assert "may not be debate material" in output
     for secret in ("SECRETTEXT", "SECRETNAME", "SECRETSCHOOL", "Ουδέν", str(tmp_path)):
         assert secret not in output
+
+
+# --------------------------------------------------------------------------------------------
+# An invented evaluation on disk: the selector run the way the coach runs it
+# --------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _InventedEvaluation:
+    directory: Path
+    options: list[str]
+
+    @property
+    def manifest(self) -> Path:
+        return self.directory / "manifest.json"
+
+    def pr_subset_prefix(self) -> str:
+        return next(e.digest[:16] for e in load_manifest(self.manifest).entries if e.pr_subset)
+
+
+def _invented_evaluation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, files: int = 8
+) -> _InventedEvaluation:
+    """Eight invented camp files, selected into a scratch evaluation directory, never the real one."""
+    monkeypatch.setenv("DEBATE_PARSER_EVAL_KEY_FILE", str(create_key(tmp_path / "key" / "digest.key")))
+    path_map = tmp_path / "private" / "paths.json"
+    monkeypatch.setenv("DEBATE_PARSER_EVAL_PATHS", str(path_map))
+    camp = tmp_path / "corpus" / "2026-2027" / "Policy Debate" / "Camp Files"
+    camp.mkdir(parents=True)
+    for number in range(files):
+        (camp / f"camp file {number}.docx").write_bytes(build_invented_corpus_file(number))
+    directory = tmp_path / "eval"
+    (directory / "labels").mkdir(parents=True)
+    shutil.copy(EVAL_FIXTURE_DIRECTORY / "MANIFEST.md", directory / "MANIFEST.md")
+    shutil.copy(LABELS_DIRECTORY / "README.md", directory / "labels" / "README.md")
+    options = [
+        "--input",
+        f"camp={camp}",
+        "--min-paragraphs",
+        "1",
+        "--manifest",
+        str(directory / "manifest.json"),
+        "--rejections",
+        str(directory / "rejections.json"),
+        "--path-map",
+        str(path_map),
+    ]
+    selector.main(options)
+    return _InventedEvaluation(directory=directory, options=options)
+
+
+def _reject(evaluation: _InventedEvaluation, prefix: str, *extra: str) -> int:
+    return selector.main([*evaluation.options, "--reject", prefix, "--reason", "NOT_DEBATE_CONTENT", *extra])
+
+
+def test_a_rejection_is_refused_while_any_label_file_is_corrected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A rejection writes a new plan id, and labels corrected under the old one stop validating."""
+    evaluation = _invented_evaluation(tmp_path, monkeypatch)
+    corrected = build_synthetic_file(LabelStatus.CORRECTED).labels
+    write_label_file(corrected, evaluation.directory / "labels")
+    manifest_before = evaluation.manifest.read_bytes()
+    capsys.readouterr()
+
+    code = _reject(evaluation, evaluation.pr_subset_prefix())
+
+    output = capsys.readouterr().out
+    assert code == 1
+    assert "REFUSED" in output
+    assert f"{corrected.digest[:16]} CORRECTED" in output
+    assert evaluation.manifest.read_bytes() == manifest_before
+    assert not (evaluation.directory / "rejections.json").exists()
+
+
+def test_the_override_rejects_and_names_the_corrections_it_discards(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evaluation = _invented_evaluation(tmp_path, monkeypatch)
+    corrected = build_synthetic_file(LabelStatus.CORRECTED).labels
+    write_label_file(corrected, evaluation.directory / "labels")
+    rejected = evaluation.pr_subset_prefix()
+    capsys.readouterr()
+
+    _reject(evaluation, rejected, "--discard-corrected-labels")
+
+    output = capsys.readouterr().out
+    assert "DISCARDING" in output and f"{corrected.digest[:16]} CORRECTED" in output
+    assert not any(e.digest.startswith(rejected) for e in load_manifest(evaluation.manifest).entries)
+
+
+def test_pre_labels_do_not_block_a_rejection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evaluation = _invented_evaluation(tmp_path, monkeypatch)
+    write_label_file(
+        build_synthetic_file(LabelStatus.PRELABELED).labels,
+        evaluation.directory / "labels",
+        check_cards=False,
+    )
+    rejected = evaluation.pr_subset_prefix()
+    capsys.readouterr()
+
+    _reject(evaluation, rejected)
+
+    assert "REFUSED" not in capsys.readouterr().out
+    assert not any(e.digest.startswith(rejected) for e in load_manifest(evaluation.manifest).entries)

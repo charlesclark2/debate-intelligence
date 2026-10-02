@@ -13,6 +13,7 @@ import hashlib
 import json
 import sys
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -163,6 +164,8 @@ def test_a_file_rejected_earlier_is_not_brought_back_by_a_later_rejection() -> N
     second, replacements = selector.replace_rejected(first, candidates, {rejected_first})
     rejected_second = replacements[rejected_first]
 
+    # Make the first rejected file the one the rule would pick, were it not rejected.
+    candidates = [replace(c, paragraphs=1) if c.digest == rejected_first else c for c in candidates]
     third, later = selector.replace_rejected(second, candidates, {rejected_first, rejected_second})
 
     chosen = {e.digest for e in third.entries}
@@ -191,6 +194,11 @@ def test_the_recorded_rejection_checks_out_against_the_new_manifest() -> None:
 
     assert rejection_conflicts(after, RejectionList(rejections=(recorded,))) == []
     assert rejection_conflicts(before, RejectionList(rejections=(recorded,))) != []
+    elsewhere = next(e.digest for e in after.entries if stratum_of(e) != stratum_of(recorded))
+    misrecorded = recorded.model_copy(update={"replaced_by": elsewhere})
+    assert rejection_conflicts(after, RejectionList(rejections=(misrecorded,))) == [
+        f"{rejected[:12]}…'s replacement is from a different stratum"
+    ]
 
 
 # --------------------------------------------------------------------------------------------

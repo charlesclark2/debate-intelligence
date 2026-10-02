@@ -49,6 +49,7 @@ from debate_cli.commands import (
     config,
     doctor,
     store,
+    verify,
 )
 
 __all__ = ["command_group", "register_commands"]
@@ -57,6 +58,7 @@ __all__ = ["command_group", "register_commands"]
 def register_commands(app: typer.Typer) -> None:
     """Attach every command and command group to the root application."""
     app.command("doctor")(doctor.doctor)
+    app.command("verify")(verify.verify)
 
     configuration = command_group("config", "Inspect the settings this installation runs with.")
     configuration.command("show")(config.show)

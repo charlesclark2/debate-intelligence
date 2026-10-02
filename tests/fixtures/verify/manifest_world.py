@@ -61,8 +61,7 @@ from debate_core.evidence.extractor import EvidenceExtractor
 from debate_core.evidence.manifest import CardManifest
 from debate_core.evidence.markup import CardMarkup, EvidenceMarkupSpan
 from debate_core.evidence.selection import EvidenceSelection
-from debate_core.integrations.local import FsSnapshotStore, SqliteDatabase
-from debate_core.integrations.local.sqlite_repos import SqliteArticleRepository
+from debate_core.integrations.local import FsSnapshotStore, SqliteArticleRepository, SqliteDatabase
 from debate_core.testing import (
     FixedClock,
     InMemoryArticleRepository,

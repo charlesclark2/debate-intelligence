@@ -13,8 +13,9 @@ runs (`v1-e29-t05-evidence-sync-cli`); :meth:`ServiceContainer.caselist_import`,
 (`v1-e30-t04-openev-importer`); and
 :meth:`ServiceContainer.caselist_token_store` and :meth:`ServiceContainer.opencaselist_client`,
 which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`);
-and :meth:`ServiceContainer.caselist_sync`, which `debate-research caselist pull` and the weekly
-launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
+and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` runs
+(`v1-e03-t06-verify-command`); and :meth:`ServiceContainer.caselist_sync`, which
+`debate-research caselist pull` and the weekly launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
 :meth:`ServiceContainer.caselist_sync_monitor` and read back by
 :meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`). The import
 commands also read archives and place manifests through it (:meth:`ServiceContainer.read_archive`,
@@ -123,22 +124,27 @@ from debate_core.application.evidence_sync import (
     SyncJournal,
     SyncKeyspace,
 )
+from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.application.ports.archive import ArchiveEntry
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.settings import ConfigurationError, Environment, Settings, SyncNotifierKind
+from debate_core.application.snapshot_service import SnapshotService
 from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
     SyncRunHistory,
     SyncRunLog,
     SyncRunMonitor,
 )
+from debate_core.application.verify_manifest import VerifyManifest
+from debate_core.domain import new_id
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import (
     BLOB_DIRECTORY,
     FsEvidenceObjectStore,
     FsSnapshotStore,
+    SqliteArticleRepository,
     SqliteDatabase,
     archive_reader,
 )
@@ -173,6 +179,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "evidence_sync",
     "openev_import",
     "opencaselist_client",
+    "verify_manifest",
 )
 """Names of the services this container can build, for `debate-research doctor` to report."""
 
@@ -225,6 +232,13 @@ class _PortClock:
 
     def now(self) -> datetime:
         return self._now()
+
+
+class _PortIdGenerator:
+    """Fresh ULIDs, as the :class:`~debate_core.application.ports.providers.IdGenerator` port."""
+
+    def new_id(self) -> str:
+        return new_id()
 
 
 PARSED_DIRECTORY: Final = Path("parsed")
@@ -349,6 +363,27 @@ class ServiceContainer:
                 SqliteCaselistRepository(self.database), self.settings.fingerprints.thresholds()
             ),
         )
+
+    def verify_manifest(self) -> VerifyManifest:
+        """Build `debate-research verify` over this environment's local evidence store (`v1-e03-t06`).
+
+        The verifier reads snapshot records from the SQLite file and their content from the blob
+        store under `storage.data_dir`, through ``SnapshotService.load``: the same records and
+        blobs every card on this machine was cut from. Nothing here reaches the network; a snapshot
+        that is not in this data directory is a card the verifier reports as ``SNAPSHOT_MISSING``.
+        """
+        return self.singleton("verify_manifest", self._build_verify_manifest)
+
+    def _build_verify_manifest(self) -> VerifyManifest:
+        clock = _PortClock(self.clock())
+        snapshots = SnapshotService(
+            blobs=FsSnapshotStore(self.settings.storage.data_dir),
+            clock=clock,
+            # Verification only loads snapshots; it never mints an id. The port is required all the same.
+            id_generator=_PortIdGenerator(),
+        )
+        articles = SqliteArticleRepository(self.database)
+        return VerifyManifest(verifier=EvidenceVerifier(articles=articles, snapshots=snapshots, clock=clock))
 
     def caselist_import(self) -> CaselistImportService:
         """Build the weekly-archive importer over this environment's local evidence store.

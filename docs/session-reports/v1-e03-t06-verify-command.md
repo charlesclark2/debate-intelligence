@@ -327,13 +327,58 @@ Once this merges, the next `uv run` in any checkout syncs the new `jsonschema` d
   `SnapshotService.load`, would fix it. It needs an `EvidenceVerifier` API that accepts a loaded
   snapshot, so it belongs to whoever next touches the verifier.
 
+## Changes after PM review
+
+Committed the PM's rewording of the `e2e-fixture` criterion; `uv run pytest tests/integration/test_verify_cli.py -k verified_only` selects only `test_a_verified_only_manifest_exits_zero` → `1 passed in 4.38s`, and `uv run scripts/validate_specs.py` → `OK: 302 files, 38 epics, 244 tasks, 20 releases`.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-02
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with no code changes requested. I have reworded the `e2e-fixture`
+command criterion in this branch as you suggested (Deviation 2); commit it with the rest.
+
+**The design honours the three decisions without bending them.** One manifest model whose items are
+`$ref`s to the domain card schema, so the manifest cannot drift from the `Card`; exit 3 kept for "could
+not run", widened sensibly to any `DomainError` the verifier lets through; and a schema-valid,
+domain-invalid card judged on its own while the rest of the manifest is still verified. Making
+`InvalidManifest` and `VerificationCouldNotRun` deliberately *not* `DomainError`s, so a forgotten
+handler ends as a bug rather than as a verdict, is the kind of defence that never shows up until it
+matters.
+
+**The privacy work goes beyond what was asked.** Writing schema-violation messages from the schema's
+side because jsonschema's own quote the failing value, which you measured; refusing duplicate keys
+because a viewer could be shown different evidence from what was verified; refusing an empty manifest
+because a script gating on the exit code would pass having checked nothing. Each closes a real way to
+be told "verified" falsely.
+
+**Mutant 12 surviving is the method working again.** Every table test used a manifest with no missing
+snapshot, so a table that silently dropped `SNAPSHOT_MISSING` rows passed. That is the failure a person
+reading the table would never notice. Redoing mutant 5 rather than counting a collection error is the
+standard.
+
+**Decisions 1 and 2 are accepted.** `jsonschema` was the operator's choice among three options you
+put to him, and it is recorded as his. Exit 2 means "fails the JSON Schema", so the check has to be the
+standard's, and rendering the schemas in memory rather than reading files an installed wheel does not
+ship is right. `CARD_INVALID` rather than `CARD_INCOMPLETE` follows t04's own reasoning.
+
+**Deviations 1 and 4 are accepted.** A builder plus byte-identical committed manifests, held by a
+drift test, is better than a committed SQLite file that the next migration would rewrite.
+
+**Deviation 3: the smoke check belongs to `v1-e01-t10`,** whose spec already requires the recorded
+smoke tier to include a `verify` check on fixture manifests. That task is now unblocked by this one,
+and `build_fixture_data_dir` is what it should reuse. Nothing more is needed here.
+
+**Follow-ups, PM decisions.** The amendments to `v1-e06-t05` (the field name, the schema's path, the
+reason codes that do not exist, never an empty manifest) go into my next spec batch. The filesystem
+store's untranslated `PermissionError`, and the CLI-wide mapping of every `StoreError` to exit 1, are
+filed together as one small task: a failure that may succeed on retry should never share an exit code
+with a verdict. The per-card snapshot load is noted for whoever next changes the verifier's API; it
+does not matter until a manifest holds many cards from one large PDF.

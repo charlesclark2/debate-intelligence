@@ -142,10 +142,14 @@ spec:
         outputs: [tests/fixtures/verify/]
         estimatedEffort: 1h
         acceptanceCriteria:
-          - type: command_succeeds
+          # Reworded by the PM, 2026-10-02 (session Deviation 2): run bare, the command reads the
+          # operator's dev data directory, which holds none of the fixture snapshots, and opening it
+          # would create or migrate the operator's database. The integration test builds its own data
+          # directory and runs the installed command against it.
+          - type: test_passes
             name: Verified-only manifest exits 0
             command: uv
-            args: [run, debate-research, --json, verify, tests/fixtures/verify/all_verified.json]
+            args: [run, pytest, tests/integration/test_verify_cli.py, -k, verified_only]
           - type: test_passes
             name: Mixed manifest exits 1 with reasons
             command: uv

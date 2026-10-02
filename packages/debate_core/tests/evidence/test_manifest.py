@@ -12,15 +12,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from jsonschema import Draft202012Validator
 from pydantic import ValidationError
-from referencing import Registry, Resource
 from tests.fixtures.verification.verification_world import VerificationWorld
+from tests.fixtures.verify.published_schemas import violations
 
 from debate_core.domain import Card
 from debate_core.evidence.manifest import (
     CARD_MANIFEST_SCHEMA_FILENAME,
-    CARD_SCHEMA_REFERENCE,
     CardManifest,
     render_card_manifest_schema,
 )
@@ -31,13 +29,6 @@ GENERATED_AT = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
 def committed(name: str) -> dict[str, Any]:
     return json.loads((SCHEMA_DIR / name).read_text(encoding="utf-8"))
-
-
-def committed_validator() -> Draft202012Validator:
-    """The manifest schema as a consumer reads it: the two committed files, side by side."""
-    card_schema = Resource.from_contents(committed(CARD_SCHEMA_REFERENCE))
-    registry = Registry().with_resource(CARD_SCHEMA_REFERENCE, card_schema)
-    return Draft202012Validator(committed(CARD_MANIFEST_SCHEMA_FILENAME), registry=registry)
 
 
 def manifest_document(cards: tuple[Card, ...]) -> dict[str, Any]:
@@ -85,7 +76,7 @@ def test_a_manifest_the_model_writes_passes_the_committed_schemas(cards: tuple[C
     manifest = CardManifest(manifest_version=1, generated_at=GENERATED_AT, cards=cards)
     document = json.loads(manifest.model_dump_json())
 
-    assert list(committed_validator().iter_errors(document)) == []
+    assert violations(CARD_MANIFEST_SCHEMA_FILENAME, document) == []
     assert cards[1].omitted_ranges, "the second card should carry an omission through the round trip"
     assert CardManifest.model_validate_json(manifest.model_dump_json()) == manifest
 
@@ -94,9 +85,7 @@ def test_the_committed_schemas_refuse_a_card_without_an_id(cards: tuple[Card, Ca
     document = manifest_document(cards)
     del document["cards"][1]["card_id"]
 
-    errors = list(committed_validator().iter_errors(document))
-
-    assert [(error.json_path, error.validator) for error in errors] == [("$.cards[1]", "required")]
+    assert violations(CARD_MANIFEST_SCHEMA_FILENAME, document) == [("$.cards[1]", "required")]
 
 
 def test_the_committed_schemas_enforce_a_rule_only_the_card_schema_has(cards: tuple[Card, Card]) -> None:
@@ -104,9 +93,9 @@ def test_the_committed_schemas_enforce_a_rule_only_the_card_schema_has(cards: tu
     document = manifest_document(cards)
     document["cards"][0]["evidence_start_offset"] = -1
 
-    errors = list(committed_validator().iter_errors(document))
-
-    assert [error.json_path for error in errors] == ["$.cards[0].evidence_start_offset"]
+    assert violations(CARD_MANIFEST_SCHEMA_FILENAME, document) == [
+        ("$.cards[0].evidence_start_offset", "anyOf")
+    ]
 
 
 @pytest.mark.parametrize(
@@ -116,11 +105,24 @@ def test_the_committed_schemas_enforce_a_rule_only_the_card_schema_has(cards: tu
         ("generated_at", datetime(2026, 10, 1, 12, 0)),  # naive: refused
     ],
 )
-def test_the_model_refuses_another_version_and_a_naive_timestamp(field: str, value: object) -> None:
-    arguments: dict[str, Any] = {"manifest_version": 1, "generated_at": GENERATED_AT, "cards": ()}
+def test_the_model_refuses_another_version_and_a_naive_timestamp(
+    field: str, value: object, cards: tuple[Card, Card]
+) -> None:
+    arguments: dict[str, Any] = {"manifest_version": 1, "generated_at": GENERATED_AT, "cards": cards}
     arguments[field] = value
 
     with pytest.raises(ValidationError) as refused:
         CardManifest(**arguments)
 
     assert [error["loc"] for error in refused.value.errors()] == [(field,)]
+
+
+def test_a_manifest_lists_at_least_one_card(cards: tuple[Card, Card]) -> None:
+    """An empty manifest would let a gate on `verify`'s exit code pass having checked nothing."""
+    with pytest.raises(ValidationError) as refused:
+        CardManifest(manifest_version=1, generated_at=GENERATED_AT, cards=())
+    assert [error["loc"] for error in refused.value.errors()] == [("cards",)]
+
+    document = manifest_document(cards)
+    document["cards"] = []
+    assert violations(CARD_MANIFEST_SCHEMA_FILENAME, document) == [("$.cards", "minItems")]

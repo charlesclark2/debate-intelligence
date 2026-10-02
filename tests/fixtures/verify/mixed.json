@@ -1,0 +1,398 @@
+{
+  "manifest_version": 1,
+  "generated_at": "2026-10-01T12:00:00Z",
+  "cards": [
+    {
+      "created_at": "2026-10-01T11:00:00Z",
+      "updated_at": "2026-10-01T11:00:00Z",
+      "revision": 1,
+      "card_id": "0CARD000000000000000000001",
+      "owner_id": "0WNER000000000000000000001",
+      "organization_id": null,
+      "article_id": "0ART0000000000000000000001",
+      "snapshot_id": "0SNAP000000000000000000001",
+      "tag": "Marrow basin wells ran dry in 2031",
+      "citation": {
+        "authors": {
+          "value": [
+            "Rivera, J.",
+            "Okonkwo, A."
+          ],
+          "source": "byline",
+          "verified": true,
+          "raw": null
+        },
+        "author_credentials": {
+          "value": "Professor of Atmospheric Science",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "title": {
+          "value": "Arctic methane release is accelerating",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "publication": {
+          "value": "Journal of Climate Systems",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "published_at": {
+          "value": "2023-01-01T00:00:00Z",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "canonical_url": {
+          "value": "https://example.org/arctic-methane-release",
+          "source": "meta_tag",
+          "verified": true,
+          "raw": null
+        },
+        "accessed_at": {
+          "value": "2024-01-01T00:00:00Z",
+          "source": "meta_tag",
+          "verified": false,
+          "raw": null
+        }
+      },
+      "evidence_text": "Wells across the invented Marrow basin ran dry in 2031.",
+      "evidence_start_offset": 0,
+      "evidence_end_offset": 55,
+      "omitted_ranges": [],
+      "normalized_text_hash": "e6cd51bc14a9715914dc36a036ae301a6edd11aa52364c34a78875afcb1cc744",
+      "normalizer_version": "evidence-normalizer-v1",
+      "spans": [
+        {
+          "span_id": "0SPAN000000000000000000001",
+          "start_offset": 0,
+          "end_offset": 55,
+          "style": "underline",
+          "purpose": "claim"
+        }
+      ],
+      "verification_status": "UNVERIFIED",
+      "provenance_mode": "PUBLISHER_RETRIEVED",
+      "format_profile": "team-default"
+    },
+    {
+      "created_at": "2026-10-01T11:00:00Z",
+      "updated_at": "2026-10-01T11:00:00Z",
+      "revision": 1,
+      "card_id": "0CARD000000000000000000002",
+      "owner_id": "0WNER000000000000000000001",
+      "organization_id": null,
+      "article_id": "0ART0000000000000000000001",
+      "snapshot_id": "0SNAP000000000000000000001",
+      "tag": "Wells ran dry in 2031, with where cut out",
+      "citation": {
+        "authors": {
+          "value": [
+            "Rivera, J.",
+            "Okonkwo, A."
+          ],
+          "source": "byline",
+          "verified": true,
+          "raw": null
+        },
+        "author_credentials": {
+          "value": "Professor of Atmospheric Science",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "title": {
+          "value": "Arctic methane release is accelerating",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "publication": {
+          "value": "Journal of Climate Systems",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "published_at": {
+          "value": "2023-01-01T00:00:00Z",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "canonical_url": {
+          "value": "https://example.org/arctic-methane-release",
+          "source": "meta_tag",
+          "verified": true,
+          "raw": null
+        },
+        "accessed_at": {
+          "value": "2024-01-01T00:00:00Z",
+          "source": "meta_tag",
+          "verified": false,
+          "raw": null
+        }
+      },
+      "evidence_text": "Wells basin ran dry in 2031.",
+      "evidence_start_offset": 0,
+      "evidence_end_offset": 55,
+      "omitted_ranges": [
+        {
+          "start_offset": 6,
+          "end_offset": 33
+        }
+      ],
+      "normalized_text_hash": "e6cd51bc14a9715914dc36a036ae301a6edd11aa52364c34a78875afcb1cc744",
+      "normalizer_version": "evidence-normalizer-v1",
+      "spans": [
+        {
+          "span_id": "0SPAN000000000000000000002",
+          "start_offset": 0,
+          "end_offset": 6,
+          "style": "underline",
+          "purpose": "claim"
+        },
+        {
+          "span_id": "0SPAN000000000000000000003",
+          "start_offset": 6,
+          "end_offset": 28,
+          "style": "underline",
+          "purpose": "claim"
+        }
+      ],
+      "verification_status": "UNVERIFIED",
+      "provenance_mode": "PUBLISHER_RETRIEVED",
+      "format_profile": "team-default"
+    },
+    {
+      "created_at": "2026-10-01T11:00:00Z",
+      "updated_at": "2026-10-01T11:00:00Z",
+      "revision": 1,
+      "card_id": "0CARD000000000000000000003",
+      "owner_id": "0WNER000000000000000000001",
+      "organization_id": null,
+      "article_id": "0ART0000000000000000000001",
+      "snapshot_id": "0SNAP000000000000000000001",
+      "tag": "Nobody in the basin planned for it",
+      "citation": {
+        "authors": {
+          "value": [
+            "Rivera, J.",
+            "Okonkwo, A."
+          ],
+          "source": "byline",
+          "verified": true,
+          "raw": null
+        },
+        "author_credentials": {
+          "value": "Professor of Atmospheric Science",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "title": {
+          "value": "Arctic methane release is accelerating",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "publication": {
+          "value": "Journal of Climate Systems",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "published_at": {
+          "value": "2023-01-01T00:00:00Z",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "canonical_url": {
+          "value": "https://example.org/arctic-methane-release",
+          "source": "meta_tag",
+          "verified": true,
+          "raw": null
+        },
+        "accessed_at": {
+          "value": "2024-01-01T00:00:00Z",
+          "source": "meta_tag",
+          "verified": false,
+          "raw": null
+        }
+      },
+      "evidence_text": "Nobody in the basin has planned for it.",
+      "evidence_start_offset": 57,
+      "evidence_end_offset": 96,
+      "omitted_ranges": [],
+      "normalized_text_hash": "e6cd51bc14a9715914dc36a036ae301a6edd11aa52364c34a78875afcb1cc744",
+      "normalizer_version": "evidence-normalizer-v1",
+      "spans": [
+        {
+          "span_id": "0SPAN000000000000000000004",
+          "start_offset": 0,
+          "end_offset": 39,
+          "style": "underline",
+          "purpose": "claim"
+        }
+      ],
+      "verification_status": "UNVERIFIED",
+      "provenance_mode": "PUBLISHER_RETRIEVED",
+      "format_profile": "team-default"
+    },
+    {
+      "created_at": "2026-10-01T11:00:00Z",
+      "updated_at": "2026-10-01T11:00:00Z",
+      "revision": 1,
+      "card_id": "0CARD000000000000000000004",
+      "owner_id": "0WNER000000000000000000001",
+      "organization_id": null,
+      "article_id": "0ART0000000000000000000001",
+      "snapshot_id": "0SNAP000000000000000000001",
+      "tag": "A card whose text no longer fits its envelope",
+      "citation": {
+        "authors": {
+          "value": [
+            "Rivera, J.",
+            "Okonkwo, A."
+          ],
+          "source": "byline",
+          "verified": true,
+          "raw": null
+        },
+        "author_credentials": {
+          "value": "Professor of Atmospheric Science",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "title": {
+          "value": "Arctic methane release is accelerating",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "publication": {
+          "value": "Journal of Climate Systems",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "published_at": {
+          "value": "2023-01-01T00:00:00Z",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "canonical_url": {
+          "value": "https://example.org/arctic-methane-release",
+          "source": "meta_tag",
+          "verified": true,
+          "raw": null
+        },
+        "accessed_at": {
+          "value": "2024-01-01T00:00:00Z",
+          "source": "meta_tag",
+          "verified": false,
+          "raw": null
+        }
+      },
+      "evidence_text": "Wells across the invented Marrow basin ran dry in 2031, not 2035.",
+      "evidence_start_offset": 0,
+      "evidence_end_offset": 55,
+      "omitted_ranges": [],
+      "normalized_text_hash": "e6cd51bc14a9715914dc36a036ae301a6edd11aa52364c34a78875afcb1cc744",
+      "normalizer_version": "evidence-normalizer-v1",
+      "spans": [
+        {
+          "span_id": "0SPAN000000000000000000005",
+          "start_offset": 0,
+          "end_offset": 55,
+          "style": "underline",
+          "purpose": "claim"
+        }
+      ],
+      "verification_status": "UNVERIFIED",
+      "provenance_mode": "PUBLISHER_RETRIEVED",
+      "format_profile": "team-default"
+    },
+    {
+      "created_at": "2026-10-01T11:00:00Z",
+      "updated_at": "2026-10-01T11:00:00Z",
+      "revision": 1,
+      "card_id": "0AWAYCARD00000000000000001",
+      "owner_id": "0WNER000000000000000000001",
+      "organization_id": null,
+      "article_id": "0ART0000000000000000000001",
+      "snapshot_id": "0AWAYSNAP00000000000000001",
+      "tag": "Fenn valley reservoirs held water",
+      "citation": {
+        "authors": {
+          "value": [
+            "Rivera, J.",
+            "Okonkwo, A."
+          ],
+          "source": "byline",
+          "verified": true,
+          "raw": null
+        },
+        "author_credentials": {
+          "value": "Professor of Atmospheric Science",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "title": {
+          "value": "Arctic methane release is accelerating",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "publication": {
+          "value": "Journal of Climate Systems",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "published_at": {
+          "value": "2023-01-01T00:00:00Z",
+          "source": "crossref",
+          "verified": true,
+          "raw": null
+        },
+        "canonical_url": {
+          "value": "https://example.org/arctic-methane-release",
+          "source": "meta_tag",
+          "verified": true,
+          "raw": null
+        },
+        "accessed_at": {
+          "value": "2024-01-01T00:00:00Z",
+          "source": "meta_tag",
+          "verified": false,
+          "raw": null
+        }
+      },
+      "evidence_text": "Reservoirs in the invented Fenn valley held water through 2040.",
+      "evidence_start_offset": 0,
+      "evidence_end_offset": 63,
+      "omitted_ranges": [],
+      "normalized_text_hash": "25f1312640b98c747b5f5a8867201cf5a4e9dd2b0795a1099ff2f1a7461f9ced",
+      "normalizer_version": "evidence-normalizer-v1",
+      "spans": [
+        {
+          "span_id": "0AWAYSPAN00000000000000001",
+          "start_offset": 0,
+          "end_offset": 63,
+          "style": "underline",
+          "purpose": "claim"
+        }
+      ],
+      "verification_status": "UNVERIFIED",
+      "provenance_mode": "PUBLISHER_RETRIEVED",
+      "format_profile": "team-default"
+    }
+  ]
+}

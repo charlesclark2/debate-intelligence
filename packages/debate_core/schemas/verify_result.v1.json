@@ -1,0 +1,472 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "debate-research verify --json output",
+  "description": "One JSON object on stdout per run. Exit 0: every card VERIFIED, report under data. Exit 1: some card UNVERIFIED, report under error.details. Exit 2: usage error or a manifest that fails its schema, with the failing JSON path. Exit 3: verification could not run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "command",
+    "data",
+    "error"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "error"
+      ]
+    },
+    "command": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "data": true,
+    "error": true
+  },
+  "oneOf": [
+    {
+      "title": "Every card VERIFIED (exit 0)",
+      "properties": {
+        "status": {
+          "const": "ok"
+        },
+        "data": {
+          "$ref": "#/$defs/ManifestVerificationReport"
+        },
+        "error": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "title": "Some card UNVERIFIED (exit 1)",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "exit_code",
+            "details",
+            "hint"
+          ],
+          "properties": {
+            "code": {
+              "const": "UNVERIFIED"
+            },
+            "message": {
+              "type": "string"
+            },
+            "exit_code": {
+              "const": 1
+            },
+            "details": {
+              "$ref": "#/$defs/ManifestVerificationReport"
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "Not a manifest (exit 2)",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "exit_code",
+            "details",
+            "hint"
+          ],
+          "properties": {
+            "code": {
+              "const": "INVALID_MANIFEST"
+            },
+            "message": {
+              "type": "string"
+            },
+            "exit_code": {
+              "const": 2
+            },
+            "details": {
+              "type": "object",
+              "required": [
+                "json_path",
+                "problem",
+                "violations",
+                "manifest"
+              ],
+              "properties": {
+                "json_path": {
+                  "type": "string",
+                  "pattern": "^\\$"
+                },
+                "problem": {
+                  "type": "string"
+                },
+                "violations": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "manifest": {
+                  "type": "string"
+                }
+              }
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "Usage error (exit 2)",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "exit_code",
+            "details",
+            "hint"
+          ],
+          "properties": {
+            "code": {
+              "const": "USAGE_ERROR"
+            },
+            "message": {
+              "type": "string"
+            },
+            "exit_code": {
+              "const": 2
+            },
+            "details": {
+              "type": "object"
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "Verification could not run (exit 3)",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "exit_code",
+            "details",
+            "hint"
+          ],
+          "properties": {
+            "code": {
+              "const": "VERIFICATION_COULD_NOT_RUN"
+            },
+            "message": {
+              "type": "string"
+            },
+            "exit_code": {
+              "const": 3
+            },
+            "details": {
+              "type": "object",
+              "required": [
+                "card_id",
+                "position",
+                "cause"
+              ],
+              "properties": {
+                "card_id": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "cause": {
+                  "type": "string"
+                }
+              }
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "CardVerdict": {
+      "additionalProperties": false,
+      "description": "The verdict on one card of the manifest.",
+      "properties": {
+        "position": {
+          "description": "The card's index in the manifest's cards.",
+          "minimum": 0,
+          "title": "Position",
+          "type": "integer"
+        },
+        "card_id": {
+          "title": "Card Id",
+          "type": "string"
+        },
+        "tag": {
+          "title": "Tag",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/VerificationStatus"
+        },
+        "reasons": {
+          "description": "Every reason found, in check order.",
+          "items": {
+            "$ref": "#/$defs/ReportedReason"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "snapshot_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The snapshot the card names, if it names one.",
+          "title": "Snapshot Id"
+        },
+        "checks_run": {
+          "description": "The verifier's checks that ran. Empty for a card that was never a valid Card.",
+          "items": {
+            "$ref": "#/$defs/VerificationCheck"
+          },
+          "title": "Checks Run",
+          "type": "array"
+        },
+        "verifier_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The verifier's rules version; null when the card never reached the verifier.",
+          "title": "Verifier Version"
+        },
+        "reason_codes": {
+          "description": "The codes of :attr:`reasons`, in order, without repeats.",
+          "items": {
+            "$ref": "#/$defs/ReasonCode"
+          },
+          "readOnly": true,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "position",
+        "card_id",
+        "tag",
+        "status",
+        "reasons",
+        "snapshot_id",
+        "checks_run",
+        "verifier_version",
+        "reason_codes"
+      ],
+      "title": "CardVerdict",
+      "type": "object"
+    },
+    "ReasonCode": {
+      "description": "Why a card is UNVERIFIED. Values are stable: they are written into reports and JSON output.",
+      "enum": [
+        "SNAPSHOT_MISSING",
+        "HASH_MISMATCH",
+        "UNKNOWN_NORMALIZER_VERSION",
+        "CARD_INCOMPLETE",
+        "TEXT_MISMATCH",
+        "SPAN_OUT_OF_RANGE",
+        "CITATION_UNVERIFIED",
+        "ARTICLE_MISMATCH",
+        "PROVENANCE_MISMATCH",
+        "CARD_INVALID"
+      ],
+      "title": "ReasonCode",
+      "type": "string"
+    },
+    "ReportedReason": {
+      "additionalProperties": false,
+      "description": "One reason a card is UNVERIFIED, as the report carries it.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ReasonCode"
+        },
+        "detail": {
+          "description": "For people. Gives offsets, lengths and record values; never evidence text.",
+          "title": "Detail",
+          "type": "string"
+        },
+        "first_differing_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For TEXT_MISMATCH only: the first index where the texts differ, in evidence_text.",
+          "title": "First Differing Offset"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "ReportedReason",
+      "type": "object"
+    },
+    "VerificationCheck": {
+      "description": "One check the verifier can run. A result lists those that ran, passed or not.",
+      "enum": [
+        "card_complete",
+        "normalizer_version_known",
+        "citation_verified",
+        "snapshot_integrity",
+        "article_matches_snapshot",
+        "provenance_matches_snapshot",
+        "card_matches_snapshot",
+        "evidence_reconstructed",
+        "evidence_text_exact",
+        "spans_inside_evidence"
+      ],
+      "title": "VerificationCheck",
+      "type": "string"
+    },
+    "VerificationStatus": {
+      "description": "Whether a card's quoted evidence has been reproduced from its stored snapshot.\n\n`VERIFIED` is set only by the evidence verifier (E03), only after the evidence text has been\nreconstructed byte for byte from the recorded snapshot offsets. Anything else is `UNVERIFIED`\nand must never be presented as a finished card.",
+      "enum": [
+        "UNVERIFIED",
+        "VERIFIED",
+        "FAILED"
+      ],
+      "title": "VerificationStatus",
+      "type": "string"
+    },
+    "ManifestVerificationReport": {
+      "additionalProperties": false,
+      "description": "Every card of one manifest, with its verdict, in manifest order.",
+      "properties": {
+        "manifest_version": {
+          "const": 1,
+          "title": "Manifest Version",
+          "type": "integer"
+        },
+        "generated_at": {
+          "description": "The manifest's own generated_at.",
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "cards": {
+          "items": {
+            "$ref": "#/$defs/CardVerdict"
+          },
+          "title": "Cards",
+          "type": "array"
+        },
+        "total": {
+          "description": "How many cards the manifest lists.",
+          "readOnly": true,
+          "title": "Total",
+          "type": "integer"
+        },
+        "verified": {
+          "description": "How many of them are VERIFIED.",
+          "readOnly": true,
+          "title": "Verified",
+          "type": "integer"
+        },
+        "unverified": {
+          "description": "How many of them are not.",
+          "readOnly": true,
+          "title": "Unverified",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "manifest_version",
+        "generated_at",
+        "cards",
+        "total",
+        "verified",
+        "unverified"
+      ],
+      "title": "ManifestVerificationReport",
+      "type": "object"
+    }
+  }
+}

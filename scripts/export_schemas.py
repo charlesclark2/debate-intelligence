@@ -2,7 +2,7 @@
 
 One file per domain entity (`*.schema.json`), plus the documents `debate-research verify` reads and
 writes (v1-e03-t06-verify-command): the card manifest (`card_manifest.v1.json`, whose cards refer
-to `card.schema.json`) and the command's `--json` result.
+to `card.schema.json`) and the command's `--json` result (`verify_result.v1.json`).
 
 The committed schemas are the published contract for the domain model, so they are generated
 rather than hand-written and they are checked in. `packages/debate_core/tests/domain/
@@ -24,6 +24,7 @@ import json
 import sys
 from pathlib import Path
 
+from debate_core.application.verify_manifest import VERIFY_RESULT_SCHEMA_FILENAME, render_verify_result_schema
 from debate_core.domain import render_schemas
 from debate_core.evidence.manifest import CARD_MANIFEST_SCHEMA_FILENAME, render_card_manifest_schema
 
@@ -40,6 +41,7 @@ def published_schemas() -> dict[str, dict[str, object]]:
     """Every schema this script writes, keyed by file name."""
     schemas: dict[str, dict[str, object]] = dict(render_schemas())
     schemas[CARD_MANIFEST_SCHEMA_FILENAME] = render_card_manifest_schema()
+    schemas[VERIFY_RESULT_SCHEMA_FILENAME] = render_verify_result_schema()
     return schemas
 
 

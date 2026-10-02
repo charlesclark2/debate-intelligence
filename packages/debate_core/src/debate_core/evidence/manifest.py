@@ -34,6 +34,10 @@ an id a fresh one, which is right for a card being created and wrong for one bei
 a report about a card nobody can name is no report at all. A serialized card always has its id, so
 the rule refuses nothing a writer produces.
 
+A manifest lists at least one card. A run that checked nothing should not be able to report that
+everything it checked verified, which is what an empty manifest would let `verify` say to a script
+that gates on its exit code.
+
 ## What the schema cannot say
 
 JSON Schema describes each field. It cannot express the rules that relate fields to one another,
@@ -80,7 +84,8 @@ class CardManifest(BaseModel):
     )
     generated_at: AwareDatetime = Field(description="When the manifest was written (timezone-aware).")
     cards: tuple[Card, ...] = Field(
-        description="The cards, each the domain Card exactly as it serializes (card.schema.json)."
+        min_length=1,
+        description="The cards, each the domain Card exactly as it serializes (card.schema.json).",
     )
 
 

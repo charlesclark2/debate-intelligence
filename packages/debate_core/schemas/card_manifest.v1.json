@@ -23,6 +23,7 @@
           "card_id"
         ]
       },
+      "minItems": 1,
       "title": "Cards",
       "type": "array"
     }

@@ -31,12 +31,16 @@ indexability   dev must send ``X-Robots-Tag: noindex`` and disallow everything i
 version        ``/version.json`` parses and, with ``--expect-sha``, names the commit that was
                meant to be deployed. This is what distinguishes "the deploy worked" from "the old
                build is still being served".
-panel          the home page carries the parent-session panel, and on prod no page carries a gap
-               badge. A gap badge on prod means a page went out with a fact nobody supplied, which
+panel          the home page carries the season-schedule panel (the parent-session panel until
+               v1-e37-t02), and on prod no page carries a gap badge. A gap badge on prod means a page went out with a fact nobody supplied, which
                a prod build refuses (``site/src/lib/publishing-policy.ts``); seeing one live means
                the build guard was bypassed, so this is the check that notices. On the preview a
                gap is ordinary and is reported as a count, because that is how Charlie reviews the
                copy with the holes visible.
+calendar       ``/schedule.ics``, the tournament calendar parents subscribe to (v1-e37-t02), answers
+               200 as ``text/calendar`` and is an iCalendar file. It is not in the sitemap, so
+               no page check reaches it, and a calendar app that is served the 404 page or a
+               download type quietly stops updating rather than saying so.
 faq            the parent FAQ serves native ``<details>``/``<summary>`` disclosures. The page is
                the one parents are sent to most, and its answers being reachable is a property of
                the built HTML rather than of the deploy, so it is cheap to confirm it survived
@@ -231,8 +235,12 @@ def check_robots(client: httpx.Client, site_url: str, environment: str) -> Check
 #: site/src/styles/components.css). A prod build refuses to export one.
 GAP_BADGE = 'class="placeholder"'
 
-#: The home page's October 1 parent-session panel (``PARENT_SESSION_ID`` in site/src/app/page.tsx).
-PARENT_SESSION_ANCHOR = 'id="parent-session"'
+#: The home page's pointer to the tournament schedule (``SEASON_SCHEDULE_ID`` in
+#: site/src/app/page.tsx), which replaced the October 1 parent-session panel in v1-e37-t02.
+SEASON_SCHEDULE_ANCHOR = 'id="season-schedule"'
+
+#: The tournament calendar (``CALENDAR_PATH`` in site/src/lib/tournaments.ts).
+CALENDAR_PATH = "/schedule.ics"
 
 
 def check_launch_content(
@@ -250,9 +258,9 @@ def check_launch_content(
     home = _get(client, f"{site_url}/")
     if home.status_code == 200:
         yield CheckResult(
-            "parent session panel",
-            PARENT_SESSION_ANCHOR in home.text,
-            "on the home page" if PARENT_SESSION_ANCHOR in home.text else "missing from the home page",
+            "season schedule panel",
+            SEASON_SCHEDULE_ANCHOR in home.text,
+            "on the home page" if SEASON_SCHEDULE_ANCHOR in home.text else "missing from the home page",
         )
 
     gaps = {path: _get(client, urljoin(f"{site_url}/", path.lstrip("/"))) for path in paths}
@@ -288,6 +296,24 @@ def check_launch_content(
             if disclosures
             else "the parent FAQ serves no <summary> disclosure",
         )
+
+
+def check_calendar(client: httpx.Client, site_url: str) -> CheckResult:
+    """The subscribed calendar is served, as a calendar, and is one."""
+    response = _get(client, f"{site_url}{CALENDAR_PATH}")
+    if response.status_code != 200:
+        return CheckResult("calendar file", False, f"GET {CALENDAR_PATH} returned {response.status_code}")
+    content_type = response.headers.get("content-type", "")
+    if not content_type.lower().startswith("text/calendar"):
+        return CheckResult(
+            "calendar file",
+            False,
+            f"{CALENDAR_PATH} is served as {content_type or 'no content type'!r}, not text/calendar",
+        )
+    if not response.text.startswith("BEGIN:VCALENDAR"):
+        return CheckResult("calendar file", False, f"{CALENDAR_PATH} does not start with BEGIN:VCALENDAR")
+    events = response.text.count("BEGIN:VEVENT")
+    return CheckResult("calendar file", True, f"text/calendar, {events} events")
 
 
 def check_version(client: httpx.Client, site_url: str, expected_sha: str | None) -> CheckResult:
@@ -332,6 +358,7 @@ def check_site(
         for path in paths:
             results.extend(check_page(client, site_url, path, environment))
         results.extend(check_launch_content(client, site_url, environment, paths))
+        results.append(check_calendar(client, site_url))
         results.append(check_robots(client, site_url, environment))
         results.append(check_version(client, site_url, expected_sha))
         return results

@@ -121,7 +121,7 @@ still caught, `git diff` clean. The byte-restore covered the file I mutated but 
 * `uv run scripts/check_thin_handlers.py` → `OK: 18 CLI command and API route handlers within 25 statements`.
 * `shellcheck scripts/install_channel.sh` → clean; `uvx --from actionlint-py actionlint .github/workflows/dev-prerelease.yml` → exit 0.
 * `uv run scripts/validate_specs.py` → `OK: 302 files, 38 epics, 244 tasks, 20 releases`. The task Goal stays `InProgress` because ac4 is NOT RUN.
-* The full suite was not run: an earlier session measured it at 2m21s on this machine. It is Operator follow-up 0.
+* **Full suite, run by the operator** (2026-10-01, this worktree at `99be433`): `uv run pytest -q` → `3656 passed, 1 skipped in 69.26s`. The skip is `tests/evals/parser/test_parser_eval.py:279` ("6 of 6 pr-subset files are not yet corrected by a person"), not this task's. Total coverage 96%; `installation.py` 83%, with the uncovered lines mostly the human-readable report printer and `main`'s `UnfollowableWiring` exit, both exercised by the scratch installs above rather than by unit tests.
 
 ## Files changed
 
@@ -228,7 +228,7 @@ still caught, `git diff` clean. The byte-restore covered the file I mutated but 
 
 ## Operator follow-ups
 
-**0. Full suite** (~45 s on your Mac, 2m21s in an earlier session here).
+**0. Full suite** — DONE by the operator: `3656 passed, 1 skipped in 69.26s` (see Whole-repo checks).
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t17-installed-build-extras
 git branch --show-current     # task/v1-e01-t17-installed-build-extras

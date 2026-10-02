@@ -149,6 +149,45 @@ What a scheduled consumer (v1-e34-t02's caselist sync is the first) can rely on:
 Evidence text never appears in the payload: `data` carries offsets, paragraph ids, counts and
 metadata, which is the same rule the rest of the platform follows (architecture proposal §8).
 
+## `debate-research verify`
+
+`debate-research verify <manifest.json>` (`v1-e03-t06-verify-command`) checks that every card in a
+card manifest is reproducible from its stored snapshot. Each card's evidence is cut again from the
+snapshot and compared exactly; snapshots are read from this environment's data directory
+(`storage.data_dir`, from `DEBATE_ENV` or `DEBATE_STORAGE__DATA_DIR`) and never fetched. The work is
+`VerifyManifest`'s, in `debate_core.application.verify_manifest`; the command only reads the file,
+renders the report and chooses the exit code.
+
+```console
+$ uv run debate-research verify cards.json
+$ uv run debate-research --json verify cards.json | jq '.data // .error.details | .cards[] | [.card_id, .status]'
+$ DEBATE_ENV=test DEBATE_STORAGE__DATA_DIR=/tmp/verify-data uv run debate-research verify tests/fixtures/verify/mixed.json
+```
+
+The manifest is `{"manifest_version": 1, "generated_at": ..., "cards": [<Card>, ...]}`, published as
+`packages/debate_core/schemas/card_manifest.v1.json`; each card is the domain `Card` and refers to
+`card.schema.json`. A person sees a table of card id, tag, status and reason codes (`--verbose` adds
+each reason's detail on stderr). `--json` prints one envelope, published as
+`packages/debate_core/schemas/verify_result.v1.json`: the report under `data` on exit 0, under
+`error.details` on exit 1.
+
+| Exit | Means |
+|---|---|
+| `0` | Every card is VERIFIED. |
+| `1` | The manifest was read and at least one card is UNVERIFIED. Every card is still listed. |
+| `2` | A usage error, or a file that is not a card manifest: not JSON, or not valid against `card_manifest.v1.json`. The failing JSON path is reported and nothing is verified. |
+| `3` | Verification could not run, for example because a store could not be read. No card has a verdict. |
+
+Three rules worth knowing:
+
+* A card whose snapshot is not in this data directory is UNVERIFIED with `SNAPSHOT_MISSING`. It is
+  never skipped and never assumed.
+* A card that passes the schema but is not a valid card, such as one whose `evidence_text` no
+  longer fits its envelope (ADR-0018's length invariant, which a JSON Schema cannot express), is one
+  UNVERIFIED row with `CARD_INVALID`. The other cards are still verified; the run is not a `2`.
+* Exit `3` uses the CLI-wide `RETRIEVAL_FAILURE` number: the same command may succeed once the store
+  can be read. It is never reported as `0` or `1`, because no card was judged.
+
 ## Not here yet
 
 * **Settings** are v1-e02-t05. `ServiceContainer` takes a `settings_loader` and that task passes

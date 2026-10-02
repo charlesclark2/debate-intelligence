@@ -23,6 +23,8 @@ the first, so one run reports everything wrong with a card:
 * ``CITATION_UNVERIFIED``: a required citation field is not marked verified.
 * ``ARTICLE_MISMATCH``: the card cites a different article from the one its snapshot was taken of.
 * ``PROVENANCE_MISMATCH``: the card's ``provenance_mode`` is not its snapshot's.
+* ``CARD_INVALID``: a card read from a manifest is not a valid ``Card``, so it was never verified.
+  Reported by the manifest reader, not by the verifier.
 
 ## What VERIFIED means, and what it does not
 
@@ -106,6 +108,17 @@ class ReasonCode(StrEnum):
     every card cut from it; a card saying ``PUBLISHER_RETRIEVED`` about text a user supplied makes the
     strongest claim the platform has about text the platform never retrieved. A provenance failure,
     like ``ARTICLE_MISMATCH``; the quotation may still be verbatim."""
+
+    CARD_INVALID = "CARD_INVALID"
+    """A card read from a manifest passes the manifest's JSON Schema but is not a valid ``Card``: it
+    breaks a rule the domain enforces at construction and a schema cannot express, such as ADR-0018's
+    length invariant or canonical omissions. Nothing was compared with a snapshot, because there is
+    no card to compare. Reported by
+    :class:`~debate_core.application.verify_manifest.VerifyManifest`, never by the verifier, which
+    only ever receives valid cards; the detail names the rule and where it failed, never the text.
+
+    Not ``CARD_INCOMPLETE``, which says something re-verification needs is missing: every field may be
+    present here, and a reader sent looking for an absent one would look in the wrong place."""
 
 
 class VerificationCheck(StrEnum):

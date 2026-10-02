@@ -1,9 +1,13 @@
-"""Write one JSON Schema file per domain entity into packages/debate_core/schemas/.
+"""Write the published JSON Schemas into packages/debate_core/schemas/.
+
+One file per domain entity (`*.schema.json`), plus the documents `debate-research verify` reads and
+writes (v1-e03-t06-verify-command): the card manifest (`card_manifest.v1.json`, whose cards refer
+to `card.schema.json`) and the command's `--json` result (`verify_result.v1.json`).
 
 The committed schemas are the published contract for the domain model, so they are generated
 rather than hand-written and they are checked in. `packages/debate_core/tests/domain/
-test_schemas.py` regenerates them in memory and fails if what is committed has drifted, which
-means a field change and its schema change always land together.
+test_schemas.py` and `tests/evidence/test_manifest.py` regenerate them in memory and fail if what is
+committed has drifted, which means a field change and its schema change always land together.
 
 No inline script metadata here on purpose: this script imports debate_core, so it must run in the
 workspace environment (`uv run scripts/export_schemas.py`), not in an isolated one.
@@ -20,7 +24,9 @@ import json
 import sys
 from pathlib import Path
 
+from debate_core.application.verify_manifest import VERIFY_RESULT_SCHEMA_FILENAME, render_verify_result_schema
 from debate_core.domain import render_schemas
+from debate_core.evidence.manifest import CARD_MANIFEST_SCHEMA_FILENAME, render_card_manifest_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "packages" / "debate_core" / "schemas"
@@ -31,12 +37,20 @@ def serialize(schema: dict[str, object]) -> str:
     return json.dumps(schema, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
 
 
+def published_schemas() -> dict[str, dict[str, object]]:
+    """Every schema this script writes, keyed by file name."""
+    schemas: dict[str, dict[str, object]] = dict(render_schemas())
+    schemas[CARD_MANIFEST_SCHEMA_FILENAME] = render_card_manifest_schema()
+    schemas[VERIFY_RESULT_SCHEMA_FILENAME] = render_verify_result_schema()
+    return schemas
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check", action="store_true", help="report stale files instead of rewriting them")
     args = ap.parse_args()
 
-    schemas = render_schemas()
+    schemas = published_schemas()
     SCHEMA_DIR.mkdir(parents=True, exist_ok=True)
 
     expected = {name: serialize(schema) for name, schema in schemas.items()}

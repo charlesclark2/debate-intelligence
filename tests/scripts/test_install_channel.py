@@ -86,23 +86,30 @@ def core_files(origin: str) -> dict[str, str]:
     return {"debate_core/__init__.py": f"import thirdparty_dep\n\nORIGIN = {origin!r}\n"}
 
 
-def cli_files(origin: str, version: str) -> dict[str, str]:
+def cli_files(origin: str, version: str, *, check_exit: int = 0) -> dict[str, str]:
     report = f'{{"version": "{version}", "channel": "dev", "cli": "{origin}", "core": debate_core.ORIGIN}}'
     return {
         "debate_cli/__init__.py": "",
         "debate_cli/app.py": (
             f"import json\n\nimport debate_core\n\n\ndef main():\n    print(json.dumps({report}))\n"
         ),
+        # Stands in for the real post-install check (v1-e01-t17), which these wheels have nothing to
+        # check with; its exit status is what install_channel.sh acts on.
+        "debate_cli/installation.py": (
+            f"print('stand-in installation check, exiting {check_exit}')\nraise SystemExit({check_exit})\n"
+        ),
     }
 
 
-def cli_wheel(directory: Path, origin: str, version: str, tag: str = "py3-none-any") -> Path:
+def cli_wheel(
+    directory: Path, origin: str, version: str, tag: str = "py3-none-any", *, check_exit: int = 0
+) -> Path:
     return write_wheel(
         directory,
         "debate-cli",
         version,
         requires=(f"debate-core[opencaselist]=={VERSION}",),
-        files=cli_files(origin, version),
+        files=cli_files(origin, version, check_exit=check_exit),
         console_scripts={"debate-research": "debate_cli.app:main"},
         tag=tag,
     )
@@ -119,13 +126,13 @@ class Fixture:
         return self.tools / "bin" / "debate-research"
 
 
-def write_release(directory: Path, *, with_core: bool = True) -> Path:
+def write_release(directory: Path, *, with_core: bool = True, check_exit: int = 0) -> Path:
     """The assets of a pre-release, as install_channel.sh finds them after `gh release download`."""
     if with_core:
         write_wheel(
             directory, "debate-core", VERSION, requires=("thirdparty-dep",), files=core_files("release")
         )
-    cli_wheel(directory, "release", VERSION)
+    cli_wheel(directory, "release", VERSION, check_exit=check_exit)
     (directory / "build-info.json").write_text(json.dumps({"version": VERSION, "tag": TAG}), encoding="utf-8")
     sums = [
         f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}"
@@ -241,6 +248,28 @@ def test_without_the_release_core_wheel_the_install_fails_instead_of_using_the_i
     assert result.returncode != 0
     assert f"has no debate_core wheel for version {VERSION}" in result.stderr
     assert not fixture.installed.exists()
+
+
+def test_an_installed_build_whose_integration_check_fails_fails_the_install(tmp_path: Path) -> None:
+    """`--version` passing is not enough: the build must pass `python -m debate_cli.installation`."""
+    fixture = Fixture(
+        release=write_release(tmp_path / "release", check_exit=1),
+        index_url=write_decoy_index(tmp_path / "decoy-index", squat_versions=()),
+        tools=tmp_path / "tools",
+    )
+
+    result = subprocess.run(
+        ["sh", str(SCRIPT), "--dir", str(fixture.release), TAG],
+        capture_output=True,
+        text=True,
+        env=uv_environment(fixture, tmp_path),
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "stand-in installation check, exiting 1" in result.stdout
+    assert f"the build installed from {TAG} is incomplete" in result.stderr
+    assert "Installed debate-research" not in result.stdout
 
 
 def test_control_the_old_find_links_install_is_taken_over_by_a_same_version_squat(tmp_path: Path) -> None:

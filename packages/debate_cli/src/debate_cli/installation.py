@@ -33,7 +33,7 @@ import importlib.util
 import json
 import re
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
@@ -149,16 +149,27 @@ class InstallationReport:
         }
 
 
-def check_installation() -> InstallationReport:
-    """Import every wired integration and look for every declared extra's distributions."""
-    wired = wired_integrations()
+def check_installation(
+    *,
+    source: str | None = None,
+    import_module: Callable[[str], object] = importlib.import_module,
+    installed: Callable[[str], bool] | None = None,
+) -> InstallationReport:
+    """Import every wired integration and look for every declared extra's distributions.
+
+    `source` stands in for the container's source, `import_module` for the import itself and
+    `installed` for the distribution lookup, so a test can describe an incomplete installation
+    without making one.
+    """
+    is_installed = installed or _installed
+    wired = wired_integrations(source)
     imported: list[str] = []
     failed: dict[str, str] = {}
     for module in wired:
         try:
-            importlib.import_module(module)
+            import_module(module)
         except ImportError as error:
-            failed[module] = _import_failure(error)
+            failed[module] = _import_failure(error, is_installed)
         else:
             imported.append(module)
     extras = declared_core_extras()
@@ -168,7 +179,7 @@ def check_installation() -> InstallationReport:
         if extra not in requirements:
             missing[f"{CORE_DISTRIBUTION}[{extra}] (no such extra)"] = extra
         for distribution in requirements.get(extra, ()):
-            if not _installed(distribution):
+            if not is_installed(distribution):
                 missing[distribution] = extra
     return InstallationReport(
         wired=wired,
@@ -200,7 +211,7 @@ def optional_core_dependencies() -> dict[str, str]:
 
 
 def incomplete_installation_failure(
-    error: ModuleNotFoundError, build: BuildInfo
+    error: ModuleNotFoundError, build: BuildInfo, *, installed: Callable[[str], bool] | None = None
 ) -> tuple[str, str, dict[str, str]] | None:
     """The message, hint and details for `error` if it is a missing optional dependency.
 
@@ -214,7 +225,8 @@ def incomplete_installation_failure(
         distribution = _canonical(error.name.split(".", 1)[0])
         missing = [distribution] if distribution in optional else []
     else:
-        missing = sorted(distribution for distribution in optional if not _installed(distribution))
+        is_installed = installed or _installed
+        missing = sorted(distribution for distribution in optional if not is_installed(distribution))
     if not missing:
         return None
     extras = sorted({optional[distribution] for distribution in missing})
@@ -283,7 +295,7 @@ def _print_report(report: InstallationReport) -> None:
     )
 
 
-def _import_failure(error: ImportError) -> str:
+def _import_failure(error: ImportError, installed: Callable[[str], bool]) -> str:
     """Why an integration did not import, in words that suit any installation.
 
     Not the error's own message: `debate_core.integrations.s3` tells its reader to run `uv sync`,
@@ -293,7 +305,7 @@ def _import_failure(error: ImportError) -> str:
         if error.name:
             return f"ModuleNotFoundError: no module named {error.name!r}"
         optional = optional_core_dependencies()
-        absent = sorted(name for name in optional if not _installed(name))
+        absent = sorted(name for name in optional if not installed(name))
         if absent:
             return "ModuleNotFoundError: needs " + ", ".join(
                 f"{name} (debate-core[{optional[name]}])" for name in absent

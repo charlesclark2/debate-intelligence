@@ -74,10 +74,20 @@ read with it, let alone deleted.
 
 `debate_core.integrations.s3` is imported where it is used rather than at the top of this module,
 and the reason is not style: boto3 is an *optional* dependency of `debate-core`, under the `aws`
-extra, so a V1 installation running against a local evidence directory does not have it. A
-module-level import here would make `debate-research --help` fail on a machine that has no AWS SDK
-and no use for one. Imported inside the factory, the missing dependency arrives only when someone
-runs `store`, and it arrives as the `uv sync --extra aws` message that package raises.
+extra, and `debate-research --help` should not depend on it. `debate-cli` itself requires the
+extras its wiring needs (`aws`, `docx`, `opencaselist`, v1-e01-t17), so an installed build has
+them. If one is missing anyway, the missing dependency arrives only when a command reaches the
+factory, and the root error handler reports it with the fix for that kind of installation:
+reinstall at a fixed tag for an installed build, `uv sync` for a checkout
+(:func:`debate_cli.installation.incomplete_installation_failure`).
+
+## The post-install check reads this module
+
+`python -m debate_cli.installation`, which `scripts/install_channel.sh` runs after every channel
+install, imports every `debate_core.integrations` module this file imports, and finds them by
+reading this file's import statements. Wire an adapter with an ordinary `import` or `from … import`
+statement, here or inside a factory, and it is checked from that day on. A dynamic import, or an
+integration's module name in a string, makes the check refuse rather than skip it.
 """
 
 from __future__ import annotations

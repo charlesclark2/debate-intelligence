@@ -125,13 +125,15 @@ Everything `ci` runs here, the in-process checks included:
 uv run pytest tests/smoke -m "not live"
 ```
 
-The recorded tier against a dev pre-release, installed into a scratch directory, exactly as
-validate-dev runs it. `--rehearsal` lets the tests come from this checkout even when it is not the
-tag's commit; the report records the difference, and `conclude` would refuse to post success on
-it:
+The recorded tier against the newest dev pre-release, installed into a scratch directory, exactly
+as validate-dev runs it. `--rehearsal` lets the tests come from this checkout even when it is not
+the tag's commit; the report records the difference, and `conclude` would refuse to post success on
+it. Your own installed `debate-research` is not touched:
 
 ```bash
-uv run scripts/validate_dev.py smoke --sha <commit> --tag <vX.Y.Z-dev.N> --rehearsal --work-dir "$(mktemp -d)"
+TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+SHA=$(gh api "repos/charlesclark2/debate-intelligence/git/ref/tags/${TAG}" --jq .object.sha)
+uv run scripts/validate_dev.py smoke --sha "${SHA}" --tag "${TAG}" --rehearsal --work-dir "$(mktemp -d)"
 ```
 
 The live canary, against this checkout's console script:

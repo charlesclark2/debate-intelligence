@@ -14,7 +14,7 @@ it:
 
 What it asks, beyond "is it up": that the security headers the CloudFront policy sets are all
 present, that the preview is not indexable and prod is, that the commit being served is the one
-meant to be, and, since v1-e36-t08, that the pages say what they should: the October 1 panel is
+meant to be, and, since v1-e36-t08, that the pages say what they should: the season-schedule panel is
 on the home page, the parent FAQ's answers still open individually, and no page on prod shows a
 gap badge where a fact nobody supplied would go. That last one is the interesting failure. A prod
 build refuses to export a gap badge at all, so finding one on the live site does not mean the

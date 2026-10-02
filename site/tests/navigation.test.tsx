@@ -92,6 +92,7 @@ describe('the header navigation is the list in content/site.yaml', () => {
       'home',
       'about',
       'events',
+      'schedule',
       'join',
       'coaches',
       'faq',

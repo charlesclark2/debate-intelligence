@@ -1,0 +1,70 @@
+# The words around the tournament schedule: headings, labels and the subscribe instructions.
+# Validated by scheduleContentSchema in src/lib/tournaments.ts at build time, and read by
+# src/app/schedule/page.tsx and the calendar file (src/app/schedule.ics/route.ts), which hold no
+# copy of their own.
+#
+# The tournaments themselves are in content/tournaments.yaml. The page's title, description and
+# opening paragraphs are in content/pages/schedule.md.
+#
+# House style, enforced by the loader: no em dashes, and every acronym the page uses is spelled
+# out somewhere on it.
+
+subscribe:
+  title: Add the schedule to your calendar
+  intro: >-
+    Subscribe once and every tournament appears in your own calendar app. When the schedule
+    changes, your calendar picks up the change the next time it checks, which can take a day.
+  subscribeLabel: Subscribe in your calendar app
+  linkLabel: Calendar address to copy
+  steps:
+    - >-
+      On an iPhone, iPad or Mac, press the subscribe button and confirm. It opens in Apple's
+      Calendar app.
+    - >-
+      In Google Calendar on a computer, choose "Other calendars", then the plus sign, then "From
+      URL", and paste the calendar address.
+    - >-
+      In Outlook, choose "Add calendar", then "Subscribe from web", and paste the calendar address.
+
+seasonTitle: The {season} season
+seasonIntro: >-
+  Every tournament the team plans to attend this season, in date order, including the ones that
+  have already happened. A student does not go to all of them.
+
+nationalsTitle: Nationals
+nationalsIntro: >-
+  Two national tournaments close the season: the National Catholic Forensic League (NCFL) and the
+  National Speech and Debate Association (NSDA) national tournaments. Only students who qualify go.
+
+labels:
+  dates: Dates
+  where: Where
+  held: How it is held
+  events: Events
+  overnight: Overnight
+  status: Status
+  signUpBy: Sign up by
+  notes: Notes
+  overlap: Same dates as
+  revised: Schedule last updated
+  page: Full schedule
+
+held:
+  in-person: In person
+  online-at-school: Online, debated at Whitefish Bay High School
+  online-from-home: Online, from home
+
+overnight:
+  'no': 'No'
+  'yes': 'Yes'
+  possibly: Possibly
+
+status:
+  confirmed: Confirmed
+  tentative: Tentative
+  conditional: Conditional
+
+calendar:
+  name: Whitefish Bay Debate tournaments
+  description: >-
+    The tournament schedule of the Whitefish Bay High School debate team, from the team website.

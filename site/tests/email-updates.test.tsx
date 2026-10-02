@@ -232,12 +232,13 @@ describe('the EmailUpdates section', () => {
 })
 
 describe('where the section appears', () => {
-  it('is on the home page, directly after the parent information session', async () => {
+  it('is on the home page, directly after the season-schedule panel', async () => {
     const { container } = renderInFrame(<HomePage />)
     await flushPendingEffects()
     const ids = [...container.querySelectorAll('main > section')].map((section) => section.id)
     expect(ids).toContain(EMAIL_UPDATES_ID)
-    expect(ids.indexOf(EMAIL_UPDATES_ID)).toBe(ids.indexOf('parent-session') + 1)
+    expect(ids).toContain('season-schedule')
+    expect(ids.indexOf(EMAIL_UPDATES_ID)).toBe(ids.indexOf('season-schedule') + 1)
   })
 
   it('is the last band of the contact page', async () => {

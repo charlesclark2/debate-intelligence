@@ -13,7 +13,7 @@ Rules this follows: [`docs/policies/website-publishing.md`](../policies/website-
 | Activities director | Randee Drew, Athletics and Activities Director, **has been told and is fine with it** (as reported by Charlie on 2026-09-29) |
 | List owner | **Interim:** the Buttondown account registered to **charles.clark@wfbschools.com**, a district account, with no second way in. **Moves to the team Google account (ADR-0015) as soon as that account exists**, with the start of the 2027-28 season as a backstop only. See [Who owns the list](#who-owns-the-list) |
 | Signup page | The address in [`site/content/email-updates.json`](../../site/content/email-updates.json) (`signupUrl`) |
-| Where it appears | "Email updates for parents and guardians" on the home page, under the parent session, and at the foot of the contact page |
+| Where it appears | "Email updates for parents and guardians" on the home page, under the tournament-schedule panel, and at the foot of the contact page |
 
 ## The channel, and why
 
@@ -318,7 +318,7 @@ emails at all, only the description.
 
 The site's part is one link. `site/content/email-updates.json` holds the provider's name, the
 signup page address and the section's copy; `site/README.md` describes the fields. The section
-appears on the home page, directly under the parent session, and at the foot of the contact page,
+appears on the home page, directly under the tournament-schedule panel, and at the foot of the contact page,
 with the anchor `#email-updates`, so `https://wfbdebate.com/#email-updates` goes straight to it.
 
 Content changes, including the signup address, reach parents only when the operator deploys:

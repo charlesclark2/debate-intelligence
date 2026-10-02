@@ -33,7 +33,7 @@
  * The text column, centred in its band.
  *
  * Everything on a page that is read rather than scanned goes in here: section headers, the hero,
- * the parent session panel, prose. Because it is one column rather than a cap per element, a
+ * the season-schedule panel, prose. Because it is one column rather than a cap per element, a
  * heading, the paragraph under it and the list under that all share a left edge and a right edge,
  * and the block as a whole sits on the middle of the page. Only a card grid breaks out of it, to
  * the wider .section__inner, and it is centred on the same axis.
@@ -161,69 +161,6 @@
 .hero__lead {
   margin-bottom: var(--space-6);
   font-size: var(--font-size-lead-hero);
-}
-
-/*
- * The parent session panel: the most prominent block on the home page after the hero. It is the
- * page's only inverse band, which is what makes it outrank the cards below it without needing a
- * larger heading than the sections around it.
- */
-.parent-session__facts {
-  display: grid;
-  gap: var(--space-2) var(--space-4);
-  margin: 0 0 var(--space-6);
-}
-
-.parent-session__facts dt {
-  color: var(--color-link-inverse);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--letter-spacing-eyebrow);
-  text-transform: uppercase;
-}
-
-.parent-session__facts dd {
-  margin: 0 0 var(--space-3);
-  font-size: var(--font-size-lead);
-}
-
-.parent-session__facts dd:last-of-type {
-  margin-bottom: 0;
-}
-
-.parent-session__expect {
-  margin: 0 0 var(--space-6);
-  padding: 0;
-  list-style: none;
-}
-
-.parent-session__expect li {
-  margin-bottom: var(--space-3);
-  padding-left: var(--space-5);
-  position: relative;
-}
-
-/* A tick drawn from a border rather than an icon font, so nothing is fetched. */
-.parent-session__expect li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.45em;
-  width: 0.55em;
-  height: 0.3em;
-  border-left: 2px solid var(--color-link-inverse);
-  border-bottom: 2px solid var(--color-link-inverse);
-  transform: rotate(-45deg);
-}
-
-@media (min-width: 48rem) {
-  .parent-session__facts {
-    grid-template-columns: max-content 1fr;
-  }
-
-  .parent-session__facts dd {
-    margin-bottom: var(--space-2);
-  }
 }
 
 /* The card grid: one up on a phone, two or three up from 48rem. */
@@ -584,4 +521,114 @@
 
 .source-line__link {
   color: var(--color-link);
+}
+
+/*
+ * The tournament schedule (/schedule/, v1-e37-t02).
+ *
+ * One entry per tournament, in a single column at every width: a schedule is read down, by date,
+ * and a grid would make a parent's eye zigzag across months. Each entry is a white card with the
+ * dates in bold above its facts.
+ *
+ * Two things are marked in more than colour, because a parent must not miss either:
+ *   - an entry sharing a day with another carries a written "Same dates as" line linking to it,
+ *     and a heavy warm rule down its left edge;
+ *   - a tentative or conditional entry shows its status as a bordered badge, and a conditional one
+ *     prints its condition in full beside it.
+ * The warm accent appears only as a border (it is large-text and non-text only, tokens.css), and
+ * every word is body grey or navy.
+ */
+.schedule-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schedule-entry {
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  overflow-wrap: anywhere;
+}
+
+.schedule-entry--overlap {
+  border-left: 6px solid var(--color-brand-warm);
+}
+
+.schedule-entry__name {
+  margin: 0;
+}
+
+.schedule-entry__dates {
+  margin: var(--space-1) 0 var(--space-3);
+  color: var(--color-text-heading);
+  font-weight: var(--font-weight-bold);
+}
+
+.schedule-entry__overlap {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface-panel);
+  border-radius: var(--radius-small);
+}
+
+.schedule-entry__facts {
+  display: grid;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+}
+
+.schedule-entry__facts dt {
+  color: var(--color-text-heading);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+}
+
+.schedule-entry__facts dd {
+  margin: 0 0 var(--space-2);
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  color: var(--color-text-heading);
+  font-weight: var(--font-weight-bold);
+}
+
+.status-badge--tentative,
+.status-badge--conditional {
+  border: 2px solid var(--color-brand-warm);
+}
+
+.schedule-entry__condition {
+  display: block;
+  margin-top: var(--space-1);
+}
+
+.schedule-revised {
+  font-size: var(--font-size-small);
+}
+
+.schedule-subscribe__address {
+  overflow-wrap: anywhere;
+}
+
+.schedule-subscribe__label {
+  display: block;
+  font-weight: var(--font-weight-bold);
+}
+
+@media (min-width: 48rem) {
+  .schedule-entry__facts {
+    grid-template-columns: max-content 1fr;
+  }
+
+  .schedule-entry__facts dd {
+    margin-bottom: 0;
+  }
 }

@@ -225,7 +225,7 @@ owned by one team Google account with at least two owners.** Page text stays whe
    "Make changes to events" from their own Google accounts. The site reads its **public iCal
    address** at build time (`v1-e37-t02`); parents subscribe to the same address. The **secret
    iCal address** is never copied anywhere and is reset if exposed. Event conventions are set by the
-   [coach guide](../guides/coach-website-editing.md#events-the-team-calendar): a kind prefix on
+   [coach guide as this proposal left it](https://github.com/charlesclark2/debate-intelligence/blob/2a7ba08/docs/guides/coach-website-editing.md#events-the-team-calendar): a kind prefix on
    the title (`Tournament: `, `Practice: `, `Meeting: `, `Parent event: `, `Deadline: `), all-day
    tournaments, and `Entry deadline:` (month day, year), `Events:` (`PF`, `LD`, `Policy`) and
    `Travel notes:` lines at the top of the description. No guests, no attachments, no video-call

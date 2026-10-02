@@ -11,6 +11,7 @@ import {
 import { debaterLoginNavigationItem } from '@/lib/feature-flags'
 import { loadMediaConsent } from '@/lib/media-consent'
 import { enforcePublishingPolicy } from '@/lib/publishing-policy'
+import { scheduleGuardedContent } from '@/lib/tournaments'
 import { isIndexable, readSiteUrl } from '@/lib/site-settings'
 import '@/styles/globals.css'
 
@@ -43,12 +44,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
   // content/home.yaml, content/faq.yaml and content/events.yaml carry copy too, so they are
   // guarded alongside the Markdown pages rather than being the files on the site where an address
-  // or a name is not checked. loadGuardedContent() is that whole list.
-  // announcementFields() is the October 1 panel's facts. They go through the guard as fields
-  // rather than as copy because a fact nobody has supplied leaves no trace in the copy: a panel
-  // with no room in it is a well-formed panel. A prod build fails while one is unset.
+  // or a name is not checked. loadGuardedContent() is that list, and scheduleGuardedContent() adds
+  // content/schedule.yaml and every text field in content/tournaments.yaml.
+  // announcementFields() is the facts an announcement promises (none since the October 1 panel
+  // was replaced; v1-e37-t03 adds them). They go through the guard as fields rather than as copy
+  // because a fact nobody has supplied leaves no trace in the copy. A prod build fails while one
+  // is unset.
   enforcePublishingPolicy({
-    pages: loadGuardedContent(),
+    pages: [...loadGuardedContent(), ...scheduleGuardedContent()],
     settings,
     consent: loadMediaConsent(),
     announcements: announcementFields(),

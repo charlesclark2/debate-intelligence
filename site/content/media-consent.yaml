@@ -96,6 +96,7 @@ permittedNamePhrases:
   - Public Forum
   # Page headings that are written in title case, so the guard reads them as a name.
   - Debate Events Offered
+  - Tournament Schedule
   # The schools and universities in Coach Clark's coaching history on content/pages/coaches.md,
   # each one reviewed with Charlie when he supplied the list. Every one is an institution; none is
   # a person, and a student name still never goes here.
@@ -109,6 +110,27 @@ permittedNamePhrases:
   - Indiana University
   # The country named in the Public Forum resolution in content/events.yaml.
   - United States
+  # Tournaments, host schools and towns on the 2026-27 schedule in content/tournaments.yaml,
+  # from docs/data/2026-27-tournament-schedule.md as Charlie gave it on 2026-09-30. Every one is a
+  # tournament, a school or a place; none is a person. "Ronald Reagan" is listed only as the whole
+  # school name, so the two words stay unreviewed anywhere else.
+  - Fort Atkinson
+  - Ronald Reagan High School
+  - Iowa Caucus
+  - West Bend
+  - West Bend High School
+  - Apple Valley High School
+  - Brookfield East High School
+  - Madison West
+  - Southern Wisconsin
+  - Last Chance Qualifier
+  - Wisconsin State Debate Tournament
+  # The calendar apps named in the subscribe instructions in content/schedule.yaml. Products, not
+  # people. "In" is an ordinary word that starts a sentence before a product name, like "The".
+  - Google Calendar
+  - Apple's Calendar
+  - Outlook
+  - In
   # The studies and school districts cited in the academic-case band of content/home.yaml, each one
   # from the approved list in docs/data/academic-case-sources.md. Institutions and journals only;
   # the researchers are named by surname, which the guard does not read as a run. The journal

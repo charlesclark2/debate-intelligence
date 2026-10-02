@@ -333,5 +333,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t09-retire-legacy-ledger
+    - id: t10
+      kind: Task
+      name: The weekly agent runs nothing from a git checkout
+      description: >-
+        The installed plist runs the wrapper from the operator's working checkout, and --debate-research
+        is never written into it. Copy the wrapper out at install time and pin DEBATE_RESEARCH_BIN.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml
+        goalRef: v1-e34-t10-agent-outside-checkout
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t10-agent-outside-checkout reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t10-agent-outside-checkout
 status:
   phase: Pending

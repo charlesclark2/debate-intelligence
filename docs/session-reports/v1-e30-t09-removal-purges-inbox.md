@@ -200,6 +200,10 @@ absence, and it is removed (`a7e6b11`, working agreement 8).
      from the inbox anything the suppression list does not cover" as covering them. I read it as I
      believe t07 did for manifest rows: the list covers what its own rule withholds.
    - A directory entry goes only when every file under it goes.
+6. **Outside `constraints.packages`: one docstring in `debate_core.domain`** (after PM review,
+   authorised by the PM). `ArchiveSnapshot.archive_sha256` said "the downloaded archive file
+   itself", which is false for a week imported from a rewritten inbox copy. See "Changes after PM
+   review".
 
 ## Decisions and assumptions
 
@@ -315,6 +319,67 @@ Do **not** add `--execute`: it would append a permanent entry.
 5. **`ArchiveSnapshot.archive_sha256`'s description** says "the downloaded archive file itself". For
    a week imported from a rewritten inbox archive, it is the rewritten file, as Decisions explains.
    That is a domain-model docstring, outside this task's packages.
+
+## Changes after PM review
+
+Both requested changes are made, in `4a50811`, on top of `e2124cd`.
+
+**1. A removal where there is no inbox.** Prod does not pull, so it has no inbox, and every takedown
+runs there after dev. `_inbox_files` already returned nothing for a missing directory, and
+`purge_inbox` returns before it takes the lock when nothing is planned, so no code path creates
+the directory. But no test said so, and the CLI would have printed *nothing in it holds a removed
+file*, which implies a directory was checked. Now:
+- The plan records `inbox_exists`, and the `--json` plan carries it.
+- The CLI prints, for example: `DOWNLOAD INBOX (/Users/charlesclark/.debate-research/prod/inbox):
+  does not exist, so there is nothing to check or change (an environment that has never pulled
+  has none).`
+- `test_a_removal_where_there_is_no_inbox_completes_and_creates_none` plans and executes
+  `--team … --include-shared` with no inbox directory. It checks that:
+  - the plan says `inbox_exists` False, with no inbox files;
+  - the run is `COMPLETED`, with 0 deleted and 0 rewritten;
+  - there is still no inbox directory, no sync lock file and no delivery record.
+- The smoke checks already run without an inbox. Two cheap assertions were added:
+  - the human-readable dry run shows that line;
+  - the executed removal reports `inbox_exists` false and creates no `<data_dir>/inbox`.
+
+Shown failing for their reasons (`mutate_no_inbox.py` in the scratchpad, a fresh
+`HYPOTHESIS_STORAGE_DIRECTORY` per run, files restored and checked against `HEAD`):
+
+| Mutation | Result | Failing for its reason |
+|---|---|---|
+| The purge creates the inbox before finding nothing to do | CAUGHT, 2 failed | `nothing created where the inbox would be`; smoke `none created` |
+| A missing inbox stops the run | CAUGHT, 4 failed | `RemovalIncomplete … (INBOX_FILE_UNREADABLE)`; smoke: the command fails |
+| The plan says an inbox exists whether or not it does | CAUGHT, 3 failed | `(True, (), …) == (False, (), …)` |
+| The CLI says nothing in a missing inbox holds a removed file | CAUGHT | the smoke check's expected line is missing |
+
+**2. `ArchiveSnapshot.archive_sha256`** (Deviation 6). The class docstring and the field's
+description now say it is the digest of the archive file imported. That is the archive as
+downloaded, except for a week imported from a copy a removal rewrote in the inbox. Then it is the
+rewritten file's digest, and the removal log entry's `inbox_rewrites` pairs it with the digest of
+the archive as downloaded. Nothing pins the old wording: a search of code, fixtures and docs finds
+it only in this report.
+
+**Follow-ups, as the PM decided them.**
+- 1, the policy line: lands as version 1.4 in a separate PM PR, merged after this one.
+- 2, the hand copies: go to Charlie as a decision.
+- 3, the `--team` gap: accepted as a procedural gap, not filed.
+- 4, the junk-only camp release: folded into `v1-e34-t08` as ac5.
+- 5: done above.
+- The inbox measurement and the imported-week argument are the basis of `v1-e34-t11`, inbox
+  retention.
+
+**Checks on the final tree (`4a50811`, report commit aside).**
+
+| Command | Result |
+|---|---|
+| `uv run pytest -m "not slow and not live" packages tests` | `3629 passed, 1 skipped in 37.45s` (the skip is the pre-existing parser eval) |
+| `uv run ruff check .` / `uv run ruff format --check .` | `All checks passed!` / `458 files already formatted` |
+| `uv run pyright` | `0 errors, 0 warnings, 0 informations` |
+| `uv run lint-imports` | `Contracts: 11 kept, 0 broken.` |
+| `uv run scripts/validate_specs.py` | `OK: 298 files, 38 epics, 240 tasks, 20 releases` |
+
+Not pushed. Next, for the operator: `scripts/task sync v1-e30-t09-removal-purges-inbox`, then
+`scripts/task pr v1-e30-t09-removal-purges-inbox`.
 
 ## PM review
 

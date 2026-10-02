@@ -4,6 +4,7 @@ import type { AnnouncementField, ContentPage, SiteSettings } from '@/lib/content
 import {
   announcementFields,
   loadGuardedContent,
+  loadPages,
   loadSiteSettings,
   parsePage,
 } from '@/lib/content'
@@ -216,6 +217,70 @@ describe('named students', () => {
     expect(messages('Jordan Rivera reached quarterfinals.', { students })).toMatch(
       /whose consent entry is for season 2025-26/,
     )
+  })
+})
+
+/**
+ * The front matter a page publishes outside its body (v1-e37-t02 review, change 1). A title is
+ * the page's <h1> and its <title>, a description is the meta description a search result or a
+ * shared link shows, and a navLabel is printed in the navigation. Until the review only the export
+ * checks read them, and scripts/site_deploy.sh runs no checks, so a student named in a title went
+ * through a clean prod build.
+ */
+describe("a page's title, description and navigation label", () => {
+  function pageWith(frontMatter: string): ContentPage {
+    return parsePage('example', 'content/pages/example.md', `---\n${frontMatter}\n---\n\nBody.\n`)
+  }
+
+  function errorsFor(page: ContentPage): string {
+    return checkPublishingPolicy({ pages: [page], settings, consent })
+      .errors.map((error) => `${error.location}: ${error.message}`)
+      .join('\n')
+  }
+
+  it('fails on a student named in the title', () => {
+    expect(errorsFor(pageWith('title: Results for Jordan Rivera\ndescription: An example.'))).toMatch(
+      /content\/pages\/example\.md: names "Jordan Rivera"/,
+    )
+  })
+
+  it('fails on a student named in the description', () => {
+    expect(
+      errorsFor(pageWith('title: Example page\ndescription: A team with Avery Chen reached quarterfinals.')),
+    ).toMatch(/names "Avery Chen"/)
+  })
+
+  it('fails on a student named in the navigation label', () => {
+    expect(
+      errorsFor(pageWith('title: Example page\ndescription: An example.\nnavLabel: Sam Okafor')),
+    ).toMatch(/names "Sam Okafor"/)
+  })
+
+  it('fails on an address or a phone number in the description', () => {
+    const errors = errorsFor(
+      pageWith('title: Example page\ndescription: Write to a.parent@example.com or call 414-555-0142.'),
+    )
+    expect(errors).toMatch(/publishes the email address "a\.parent@example\.com"/)
+    expect(errors).toMatch(/looks like a phone number/)
+  })
+
+  /**
+   * The titles that are written in title case pass because each one is a reviewed phrase in
+   * content/media-consent.yaml, not because the guard skips titles. Take the phrase away and the
+   * real page fails.
+   */
+  it.each([
+    ['schedule', 'Tournament Schedule'],
+    ['events', 'Debate Events Offered'],
+  ])('passes the real %s page only because "%s" is a reviewed phrase', (slug, phrase) => {
+    const page = loadPages().find((candidate) => candidate.slug === slug)!
+    expect(errorsFor(page)).toBe('')
+    const withoutPhrase = {
+      ...consent,
+      permittedNamePhrases: consent.permittedNamePhrases.filter((entry) => entry !== phrase),
+    }
+    const errors = checkPublishingPolicy({ pages: [page], settings, consent: withoutPhrase }).errors
+    expect(errors.map((error) => error.message).join('\n')).toMatch(new RegExp(`names "${phrase}"`))
   })
 })
 

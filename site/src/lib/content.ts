@@ -339,8 +339,10 @@ export interface ContentPage {
   /** Markdown body rendered to HTML at build time. */
   html: string
   /**
-   * Everything published on the page, as HTML: the body plus the lead and the at-a-glance values
-   * that live in the front matter and are rendered by the route module rather than by Prose.
+   * Everything published on the page, as HTML: the body, plus the front matter the page publishes
+   * outside it: the title (the <h1> and the <title>), the description (the meta description a
+   * search result or a shared link shows), the navigation label, the lead and the at-a-glance
+   * values.
    *
    * src/lib/publishing-policy.ts reads this rather than `html`. A value in a summary block is
    * published copy exactly as a paragraph is, and the guard cannot have a blind spot wherever a
@@ -559,6 +561,14 @@ export function parsePage(slug: string, filePath: string, source: string): Conte
     // mailto link a visitor actually gets, which is what the guard and tests/contact.test.ts are
     // really asking about.
     guardedHtml: [
+      // The title is the page's <h1> and its <title>, the description its meta description and
+      // the text a search result or a shared link shows, and a navLabel is printed in the
+      // navigation. All three are published. Until v1-e37-t02's review only the export checks
+      // read them, and scripts/site_deploy.sh runs no checks, so a name in a title reached prod
+      // through a clean prod build.
+      `<p>${frontMatter.title}</p>`,
+      `<p>${frontMatter.description}</p>`,
+      ...(frontMatter.navLabel ? [`<p>${frontMatter.navLabel}</p>`] : []),
       ...(frontMatter.lead ? [`<p>${frontMatter.lead}</p>`] : []),
       ...(atAGlance
         ? [

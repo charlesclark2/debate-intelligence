@@ -84,7 +84,7 @@ spec:
         `pnpm --dir site lint`, `typecheck`, `test` and `build` pass offline, and the export's
         accessibility checks cover /schedule.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

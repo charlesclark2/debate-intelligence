@@ -20,13 +20,22 @@ from pathlib import Path
 from typing import TypeGuard
 
 import pytest
+from pydantic import ValidationError
 from tests.fixtures.verification.verification_world import VerificationWorld, run
 
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.application.ports import BlobKey
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
-from debate_core.domain import Card, CardSpan, SourceSnapshot, SpanPurpose, SpanStyle, VerificationStatus
+from debate_core.domain import (
+    Card,
+    CardSpan,
+    ProvenanceMode,
+    SourceSnapshot,
+    SpanPurpose,
+    SpanStyle,
+    VerificationStatus,
+)
 from debate_core.evidence.markup import EvidenceMarkupSpan
 from debate_core.evidence.normalization import NORMALIZER_VERSION, Paragraph, normalize
 from debate_core.evidence.snapshot_text import SnapshotText, encode_snapshot_text
@@ -129,7 +138,7 @@ def test_a_card_cut_from_an_intact_snapshot_is_verified_with_no_reasons(
     assert result.card_id == card.card_id
     assert result.snapshot_id == source.snapshot.snapshot_id
     assert result.normalizer_version == NORMALIZER_VERSION
-    assert result.verifier_version == VERIFIER_VERSION == "evidence-verifier-v1"
+    assert result.verifier_version == VERIFIER_VERSION == "evidence-verifier-v2"
     assert result.verified_at == FAKE_EPOCH
 
 
@@ -191,6 +200,19 @@ def test_verify_and_record_demotes_a_card_that_no_longer_verifies(
 # =============================================================================================
 # Offsets are evidence-text coordinates: an index into the card's evidence_text. For these
 # single-range cards the snapshot offset is evidence_start_offset (61) plus the index.
+#
+# Since v1-e03-t07 the domain refuses a card whose envelope is not as long as its text (ADR-0018), so
+# an inserted or deleted character keeping the original offsets never reaches the verifier
+# (test_an_edit_that_changes_the_length_is_refused_at_construction_with_the_original_envelope). To
+# keep checking what the verifier makes of one, the edited text is given an envelope as long as it is,
+# ending one character later or earlier (_with_text). Where the texts first differ is unchanged.
+
+
+def _with_text(card: Card, text: str) -> Card:
+    """``card`` claiming ``text``, its envelope's end moved so the envelope is as long as the text."""
+    assert card.evidence_start_offset is not None
+    assert not card.omitted_ranges
+    return card.evolve(evidence_text=text, evidence_end_offset=card.evidence_start_offset + len(text))
 
 
 @pytest.mark.parametrize(
@@ -203,9 +225,7 @@ def test_verify_and_record_demotes_a_card_that_no_longer_verifies(
         pytest.param("Farmers there no pump twice what the aquifer recharges.", 16, id="deleted-w-of-now"),
         pytest.param("XFarmers there now pump twice what the aquifer recharges.", 0, id="inserted-at-start"),
         pytest.param("armers there now pump twice what the aquifer recharges.", 0, id="deleted-at-start"),
-        pytest.param(
-            "Farmers there now pump twice what the aquifer recharges", 55, id="deleted-final-period"
-        ),
+        pytest.param("Farmers there now pump twice what the aquifer recharge.", 54, id="deleted-final-s"),
         pytest.param("Farmers there now pump twice what the aquifer recharges..", 56, id="appended-period"),
         pytest.param(
             "Farmers there now pump twice what the aquifer recharges!", 55, id="changed-final-period"
@@ -215,7 +235,7 @@ def test_verify_and_record_demotes_a_card_that_no_longer_verifies(
 def test_one_edited_character_is_a_text_mismatch_at_the_first_differing_offset(
     world: VerificationWorld, lightly_marked_card: Card, edited: str, first_differing_offset: int
 ) -> None:
-    result = world.verify(lightly_marked_card.evolve(evidence_text=edited))
+    result = world.verify(_with_text(lightly_marked_card, edited))
 
     assert result.status is VerificationStatus.UNVERIFIED
     assert result.reasons == (
@@ -232,7 +252,7 @@ def test_a_deletion_inside_a_run_of_equal_characters_is_reported_where_the_run_e
     card = world.cut_card(source, 0, 59, (EvidenceMarkupSpan.underline(0, 11),))
     assert card.evidence_text == GROUNDWATER
 
-    result = world.verify(card.evolve(evidence_text=GROUNDWATER.replace("Tessaly", "Tesaly")))
+    result = world.verify(_with_text(card, GROUNDWATER.replace("Tessaly", "Tesaly")))
 
     assert [(reason.code, reason.first_differing_offset) for reason in result.reasons] == [
         (ReasonCode.TEXT_MISMATCH, 22)
@@ -270,18 +290,50 @@ def _single_character_edits(text: str) -> Iterator[tuple[str, str, int]]:
 def test_every_single_character_edit_is_a_text_mismatch_at_its_own_offset(
     world: VerificationWorld, lightly_marked_card: Card
 ) -> None:
+    """Except deleting the final period: given an envelope one shorter, that is the honest card for
+    61-116, and the test after this one shows it verifies."""
     edits = list(_single_character_edits(FARMERS))
     # 56 substitutions, 56 deletions (FARMERS has no doubled letter) and 57 insertions.
     assert len(edits) == 169
 
     wrong: list[str] = []
     for name, edited, offset in edits:
-        result = world.verify(lightly_marked_card.evolve(evidence_text=edited))
+        if name == "delete 55":
+            continue
+        result = world.verify(_with_text(lightly_marked_card, edited))
         got = [(reason.code, reason.first_differing_offset) for reason in result.reasons]
         if result.status is not VerificationStatus.UNVERIFIED or got != [(ReasonCode.TEXT_MISMATCH, offset)]:
             wrong.append(f"{name}: {result.status} {got}")
 
     assert wrong == []
+
+
+def test_a_shorter_text_with_an_envelope_to_match_is_an_honest_card_and_verifies(
+    world: VerificationWorld, lightly_marked_card: Card
+) -> None:
+    """FARMERS without its final period is snapshot 61-116 exactly. The card is judged by what it
+    claims, and this claim is true."""
+    result = world.verify(_with_text(lightly_marked_card, FARMERS[:-1]))
+
+    assert result.status is VerificationStatus.VERIFIED
+
+
+def test_an_edit_that_changes_the_length_is_refused_at_construction_with_the_original_envelope(
+    lightly_marked_card: Card,
+) -> None:
+    """Every insertion and deletion, kept at 61-117: the domain's length invariant refuses all 113."""
+    changing = [edited for _, edited, _ in _single_character_edits(FARMERS) if len(edited) != len(FARMERS)]
+    assert len(changing) == 56 + 57
+
+    constructed: list[str] = []
+    for edited in changing:
+        try:
+            lightly_marked_card.evolve(evidence_text=edited)
+        except ValidationError:
+            continue
+        constructed.append(edited)
+
+    assert constructed == []
 
 
 @pytest.mark.parametrize(
@@ -605,6 +657,32 @@ def test_a_card_citing_its_snapshots_article_passes_the_article_check(
     assert result.is_verified
 
 
+def test_a_card_claiming_another_provenance_than_its_snapshots_is_a_provenance_mismatch(
+    world: VerificationWorld, card: Card
+) -> None:
+    """The snapshot was retrieved from the publisher; the card says a user supplied it. Either way
+    round, the card's provenance is a claim about where its text came from, and the snapshot decides."""
+    result = world.verify(card.evolve(provenance_mode=ProvenanceMode.USER_SUPPLIED))
+
+    assert result.reason_codes == (ReasonCode.PROVENANCE_MISMATCH,)
+    assert result.reasons[0].detail == (
+        "the card claims provenance USER_SUPPLIED; its snapshot's text is PUBLISHER_RETRIEVED"
+    )
+    assert result.checks_run == ALL_CHECKS
+
+
+def test_a_card_overstating_its_provenance_is_a_provenance_mismatch(world: VerificationWorld) -> None:
+    """The case that matters: text a user supplied, on a card claiming the publisher's retrieval."""
+    supplied = world.add_source(EXTRACTED, provenance_mode=ProvenanceMode.USER_SUPPLIED)
+    honest = world.cut_card(supplied, 61, 117)
+    assert honest.provenance_mode is ProvenanceMode.USER_SUPPLIED
+    assert world.verify(honest).is_verified
+
+    result = world.verify(honest.evolve(provenance_mode=ProvenanceMode.PUBLISHER_RETRIEVED))
+
+    assert result.reason_codes == (ReasonCode.PROVENANCE_MISMATCH,)
+
+
 def test_offsets_past_the_end_of_the_text_are_span_out_of_range(world: VerificationWorld, card: Card) -> None:
     """The same 56 characters claimed at 150-206 of a 170-character text."""
     result = world.verify(card.evolve(evidence_start_offset=150, evidence_end_offset=206))
@@ -633,10 +711,14 @@ def test_a_span_past_the_end_of_the_evidence_is_span_out_of_range(
 def test_text_appended_and_marked_is_a_text_mismatch_and_a_span_out_of_range(
     world: VerificationWorld, card: Card
 ) -> None:
+    """``model_copy`` skips the domain's checks, including the length invariant that would refuse 80
+    characters on a 56-character envelope: the verifier must not rely on them."""
     claimed = FARMERS + " It is already too late."
     highlight = CardSpan(start_offset=57, end_offset=80, style=SpanStyle.HIGHLIGHT)
 
-    result = world.verify(card.evolve(evidence_text=claimed, spans=(*card.spans, highlight)))
+    result = world.verify(
+        card.model_copy(update={"evidence_text": claimed, "spans": (*card.spans, highlight)})
+    )
 
     assert [(reason.code, reason.first_differing_offset) for reason in result.reasons] == [
         (ReasonCode.TEXT_MISMATCH, 56),
@@ -717,12 +799,18 @@ def test_ensure_finished_returns_the_verified_result_for_a_verified_card(
     ("change", "code"),
     [
         pytest.param(
-            {"evidence_text": FARMERS.replace("twice", "thrice")}, ReasonCode.TEXT_MISMATCH, id="text"
+            # One character longer, so the envelope ends one later (117 -> 118) to be constructible.
+            {"evidence_text": FARMERS.replace("twice", "thrice"), "evidence_end_offset": 118},
+            ReasonCode.TEXT_MISMATCH,
+            id="text",
         ),
         pytest.param({"snapshot_id": ABSENT_SNAPSHOT_ID}, ReasonCode.SNAPSHOT_MISSING, id="snapshot"),
         pytest.param({"spans": ()}, ReasonCode.CARD_INCOMPLETE, id="spans"),
         pytest.param({"citation": build_citation(verified=False)}, ReasonCode.CITATION_UNVERIFIED, id="cite"),
         pytest.param({"article_id": "0ART0000000000000000000002"}, ReasonCode.ARTICLE_MISMATCH, id="article"),
+        pytest.param(
+            {"provenance_mode": ProvenanceMode.PASTED}, ReasonCode.PROVENANCE_MISMATCH, id="provenance"
+        ),
         pytest.param(
             {"evidence_start_offset": 150, "evidence_end_offset": 206},
             ReasonCode.SPAN_OUT_OF_RANGE,
@@ -753,8 +841,9 @@ def test_ensure_finished_rejects_a_hand_built_card_claiming_verified_with_altere
         tag=card.tag,
         citation=card.citation,
         evidence_text="Farmers there now pump half what the aquifer recharges.",
-        evidence_start_offset=card.evidence_start_offset,
-        evidence_end_offset=card.evidence_end_offset,
+        # One character shorter than FARMERS, so the envelope is 61-116 to be constructible.
+        evidence_start_offset=61,
+        evidence_end_offset=116,
         normalized_text_hash=card.normalized_text_hash,
         normalizer_version=card.normalizer_version,
         spans=(CardSpan(start_offset=0, end_offset=7, style=SpanStyle.UNDERLINE),),

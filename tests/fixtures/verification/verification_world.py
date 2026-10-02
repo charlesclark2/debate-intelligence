@@ -6,9 +6,10 @@ calls `EvidenceVerifier.ensure_finished` (the hard-failure rule).
 
 Snapshots go the way production's do: `SnapshotService.create` stores them, the record is saved to
 the article repository, and `SnapshotService.load` reads them back with every integrity check.
-Cards are built by `card_from_extraction` from `EvidenceExtractor` output. That mapping is test-only
-on purpose: `v1-e03-t07` owns the production function that turns a selection into a card (ADR-0018)
-and will switch these fixtures to it. Until then a card quotes one contiguous range.
+Cards are cut by `EvidenceExtractor`, marked up with t03's `CardMarkup`, and put on a card by
+`place_evidence_on_card`, the production mapping from a selection to a card (ADR-0018,
+`v1-e03-t07`). This module does no offset arithmetic of its own, so a card here is made exactly as
+production makes one, omissions included.
 
 Every source text is invented.
 """
@@ -21,8 +22,9 @@ from typing import Any, cast
 
 from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
-from debate_core.domain import AccessStatus, Card, CardSpan, Citation, ProvenanceMode, SpanPurpose
-from debate_core.evidence.extractor import EvidenceExtractor, ExtractedEvidence
+from debate_core.domain import AccessStatus, Card, Citation, ProvenanceMode, SpanPurpose
+from debate_core.evidence.card_mapping import place_evidence_on_card
+from debate_core.evidence.extractor import EvidenceExtractor
 from debate_core.evidence.markup import CardMarkup, EvidenceMarkupSpan
 from debate_core.evidence.selection import EvidenceSelection
 from debate_core.evidence.verification_types import VerificationResult
@@ -64,7 +66,13 @@ class VerificationWorld:
         self.verifier = EvidenceVerifier(articles=self.articles, snapshots=self.snapshots, clock=self.clock)
         self._card_ids = SequentialIdGenerator("CARD")
 
-    def add_source(self, extracted_text: str, *, raw_bytes: bytes | None = None) -> LoadedSnapshot:
+    def add_source(
+        self,
+        extracted_text: str,
+        *,
+        raw_bytes: bytes | None = None,
+        provenance_mode: ProvenanceMode = ProvenanceMode.PUBLISHER_RETRIEVED,
+    ) -> LoadedSnapshot:
         """Create, save and load a snapshot of ``extracted_text``, as an article service would."""
         snapshot = run(
             self.snapshots.create(
@@ -74,7 +82,7 @@ class VerificationWorld:
                 canonical_url=CANONICAL_URL,
                 retrieved_at=RETRIEVED_AT,
                 extractor_version=EXTRACTOR_VERSION,
-                provenance_mode=ProvenanceMode.PUBLISHER_RETRIEVED,
+                provenance_mode=provenance_mode,
                 access_status=AccessStatus.ACCESSIBLE,
             )
         )
@@ -92,11 +100,32 @@ class VerificationWorld:
     ) -> Card:
         """A card for ``[start, end)`` of ``source``, cut by the extractor, underlined end to end
         unless ``markup`` (snapshot offsets) says otherwise."""
+        return self.cut_card_from_ranges(source, ((start, end),), markup, citation=citation)
+
+    def cut_card_from_ranges(
+        self,
+        source: LoadedSnapshot,
+        ranges: tuple[tuple[int, int], ...],
+        markup: tuple[EvidenceMarkupSpan, ...] | None = None,
+        *,
+        citation: Citation = VERIFIED_CITATION,
+    ) -> Card:
+        """A card quoting the snapshot ``ranges`` of ``source`` and omitting what lies between them.
+
+        Each kept segment is underlined end to end unless ``markup`` (snapshot offsets) says otherwise.
+        """
         evidence = EvidenceExtractor().extract(
-            source.snapshot, source.normalized, EvidenceSelection.of_offsets((start, end))
+            source.snapshot, source.normalized, EvidenceSelection.of_offsets(*ranges)
         )
-        spans = (EvidenceMarkupSpan.underline(start, end, SpanPurpose.CLAIM),) if markup is None else markup
-        return card_from_extraction(
+        spans = (
+            tuple(
+                EvidenceMarkupSpan.underline(segment.start, segment.end, SpanPurpose.CLAIM)
+                for segment in evidence.segments
+            )
+            if markup is None
+            else markup
+        )
+        return card_from_markup(
             CardMarkup(evidence, spans), card_id=self._card_ids.new_id(), citation=citation
         )
 
@@ -107,35 +136,20 @@ class VerificationWorld:
         return run(self.verifier.ensure_finished(card))
 
 
-def card_from_extraction(markup: CardMarkup, *, card_id: str, citation: Citation) -> Card:
-    """The card a selection and its markup make, for single-segment evidence. Test-only (see above).
+def card_from_markup(markup: CardMarkup, *, card_id: str, citation: Citation) -> Card:
+    """The card ``markup`` makes: a fresh card for the snapshot's article, given to
+    ``place_evidence_on_card``, which sets everything about the evidence, provenance included.
 
-    The text, offsets, hash and version all come from the extractor's output; the spans are moved
-    from snapshot offsets to evidence-text offsets by subtracting where the evidence starts.
+    The blank card claims ``PASTED``, which no snapshot here has, so every card in these fixtures
+    depends on the mapping replacing it with the snapshot's provenance.
     """
-    evidence: ExtractedEvidence = markup.evidence
-    if len(evidence.segments) != 1:
-        raise ValueError("cards quote one contiguous range until v1-e03-t07 adds omitted ranges")
-    return Card(
+    snapshot = markup.evidence.snapshot
+    blank = Card(
         card_id=card_id,
         owner_id=DEFAULT_OWNER_ID,
-        article_id=evidence.snapshot.article_id,
-        snapshot_id=evidence.snapshot_id,
+        article_id=snapshot.article_id,
         tag="Invented basin evidence for the verifier's tests",
         citation=citation,
-        evidence_text=evidence.segments[0].text,
-        evidence_start_offset=evidence.start,
-        evidence_end_offset=evidence.end,
-        normalized_text_hash=evidence.normalized_text_hash,
-        normalizer_version=evidence.normalizer_version,
-        spans=tuple(
-            CardSpan(
-                start_offset=span.start - evidence.start,
-                end_offset=span.end - evidence.start,
-                style=span.style,
-                purpose=span.purpose,
-            )
-            for span in markup.spans
-        ),
-        provenance_mode=evidence.snapshot.provenance_mode,
+        provenance_mode=ProvenanceMode.PASTED,
     )
+    return place_evidence_on_card(blank, markup)

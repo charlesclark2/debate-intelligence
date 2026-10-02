@@ -70,6 +70,16 @@ spec:
       description: >-
         Each accepted edit appends an audit entry (actor id, edit kind, before/after revision,
         timestamp) without storing student-identifying data beyond the actor id.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-01, from ADR-0018 and v1-e03-t07's follow-up work: ADR-0018 says the
+        envelope makes it possible to flag an omission that deletes a negation, and nothing does yet. A
+        deletion whose omitted text contains a negation from a short, documented word list (for example
+        not, no, never, n't, without, neither, nor, cannot) is accepted but flagged: the edit result
+        carries the flag and the edit log entry records which omission carries it, so the CLI and the
+        exporter can show it. Tests show a dropped "not" flagged and an ordinary deletion not. It is a
+        heuristic, documented as one: it draws a reader's attention, it does not judge whether a cut is
+        fair, and it never refuses an edit.
 status:
   phase: Pending
 ---

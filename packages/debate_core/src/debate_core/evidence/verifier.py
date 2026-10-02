@@ -10,11 +10,18 @@ verifier turns that into a :class:`~debate_core.evidence.verification_types.Veri
 ## Reconstruction happens in one place
 
 :func:`reconstruct_card_evidence` is the only code that rebuilds a card's evidence from a snapshot.
-It cuts the card's recorded offsets out of the snapshot's stored normalized text with
+It selects the card's envelope minus its omitted ranges (ADR-0018, ``Card.quoted_ranges``) and cuts
+those ranges out of the snapshot's stored normalized text with
 :class:`~debate_core.evidence.extractor.EvidenceExtractor`, the same code that cut it in the first
-place, so a card is checked by the rules it was made by. Today a card quotes one contiguous range.
-`v1-e03-t07` gives cards omitted ranges (ADR-0018) and extends this function to select the envelope
-minus them; :func:`evidence_text_of` already joins segments with no joiner, as ADR-0018 requires.
+place, so a card is checked by the rules it was made by. :func:`evidence_text_of` joins the pieces
+with nothing between them, as ADR-0018 requires, and is also what
+:func:`~debate_core.evidence.card_mapping.place_evidence_on_card` uses to write ``evidence_text``.
+
+Each omission is therefore checked as part of the text. Widen, narrow, remove or add one and either
+the domain refuses the card (the envelope minus the omissions is no longer as long as the text) or
+the reconstruction differs from ``evidence_text`` and the card is ``TEXT_MISMATCH``. A card whose
+omissions were never validated (``model_construct``, ``model_copy``) and are not in canonical form
+is refused here rather than read some other way: see :func:`reconstruct_card_evidence`.
 
 ## What "re-normalizes" means here
 
@@ -176,6 +183,18 @@ def check_against_snapshot(
             f"{snapshot.article_id}",
         )
 
+    # Where the text came from is the snapshot's to say; a card can arrive without passing through
+    # place_evidence_on_card, which copies it. Like the article, a mismatch does not stop the
+    # quotation being checked.
+    findings.ran(VerificationCheck.PROVENANCE_MATCHES_SNAPSHOT)
+    if card.provenance_mode is not snapshot.provenance_mode:
+        findings.fail(
+            VerificationCheck.PROVENANCE_MATCHES_SNAPSHOT,
+            ReasonCode.PROVENANCE_MISMATCH,
+            f"the card claims provenance {card.provenance_mode.value}; its snapshot's text is "
+            f"{snapshot.provenance_mode.value}",
+        )
+
     findings.ran(VerificationCheck.CARD_MATCHES_SNAPSHOT)
     contradicts = False
     if card.normalizer_version is not None and card.normalizer_version != snapshot.normalizer_version:
@@ -202,11 +221,12 @@ def check_against_snapshot(
     try:
         evidence = reconstruct_card_evidence(card, snapshot, snapshot_text)
     except InvalidSelection as refused:
+        omissions = f" less {len(card.omitted_ranges)} omitted range(s)" if card.omitted_ranges else ""
         findings.fail(
             VerificationCheck.EVIDENCE_RECONSTRUCTED,
             ReasonCode.SPAN_OUT_OF_RANGE,
-            f"the card's offsets [{card.evidence_start_offset}, {card.evidence_end_offset}) do not select "
-            f"evidence from the snapshot's {len(snapshot_text.text)}-character text: {refused}",
+            f"the card's offsets [{card.evidence_start_offset}, {card.evidence_end_offset}){omissions} do "
+            f"not select evidence from the snapshot's {len(snapshot_text.text)}-character text: {refused}",
         )
         return
     except SnapshotTextMismatch as mismatch:
@@ -246,17 +266,30 @@ def check_against_snapshot(
 def reconstruct_card_evidence(
     card: Card, snapshot: SourceSnapshot, snapshot_text: SnapshotText
 ) -> ExtractedEvidence:
-    """Cut the card's evidence out of its snapshot's text again, at the card's recorded offsets.
+    """Cut the card's evidence out of its snapshot's text again: its envelope minus its omissions.
 
     The one place a card's evidence is rebuilt. Raises
     :class:`~debate_core.evidence.selection.InvalidSelection` when the offsets do not select evidence
     from this text (including a card that records none) and
     :class:`~debate_core.evidence.extractor.SnapshotTextMismatch` when the text is not the record's.
+
+    The evidence comes back cut exactly where the card says it was cut, or not at all. A card whose
+    omissions are not in canonical form can only arrive unvalidated, and most such forms leave an
+    empty or reversed range that the selection refuses. An empty omission does not: the extractor
+    joins the two ranges either side of it, which would verify a card claiming a cut that never
+    happened, so a reconstruction cut anywhere else than the card says is refused too.
     """
-    if card.evidence_start_offset is None or card.evidence_end_offset is None:
+    quoted = card.quoted_ranges
+    if not quoted:
         raise InvalidSelection(SelectionProblem.NO_PARTS, "the card records no evidence offsets")
-    selection = EvidenceSelection.of_offsets((card.evidence_start_offset, card.evidence_end_offset))
-    return _EXTRACTOR.extract(snapshot, snapshot_text, selection)
+    evidence = _EXTRACTOR.extract(snapshot, snapshot_text, EvidenceSelection.of_offsets(*quoted))
+    if tuple((segment.start, segment.end) for segment in evidence.segments) != quoted:
+        raise InvalidSelection(
+            SelectionProblem.SEGMENTS_TOUCH,
+            f"the card's {len(quoted)} quoted ranges come back as {len(evidence.segments)}; an omission "
+            "that removes nothing is not an omission",
+        )
+    return evidence
 
 
 def evidence_text_of(evidence: ExtractedEvidence) -> str:

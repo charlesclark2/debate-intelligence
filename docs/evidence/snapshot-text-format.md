@@ -145,6 +145,48 @@ hot path, which is the path that matters. Measured against the filesystem store 
 **A caller checking many cards against one source loads the snapshot once and reuses the
 `LoadedSnapshot`.** It does not skip the check, and it does not load once per card.
 
+## How a card records what it quotes: envelope and omissions
+
+Owner task: `v1-e03-t07-card-omissions`, implementing
+[ADR-0018](../adr/0018-card-evidence-omissions.md). Implementation:
+[`debate_core.domain.card`](../../packages/debate_core/src/debate_core/domain/card.py) and
+[`debate_core.evidence.card_mapping`](../../packages/debate_core/src/debate_core/evidence/card_mapping.py).
+
+A card quotes one passage of a snapshot's normalized text and records what it cut out of it.
+
+| Field | Coordinates | Meaning |
+|---|---|---|
+| `evidence_start_offset`, `evidence_end_offset` | snapshot | The **envelope**: the passage quoted from, half-open |
+| `omitted_ranges` | snapshot | What was removed from inside the envelope, in canonical form |
+| `evidence_text` | - | The envelope with the omissions removed, the pieces joined with **no joiner** |
+| `spans` (`CardSpan`) | `evidence_text` | Underlines and highlights, indexing the quotation, never the snapshot |
+
+**Canonical form.** Omissions are sorted, non-overlapping, non-adjacent (two touching omissions are
+one omission), each removes at least one character, and each lies strictly inside the envelope,
+touching neither end (an omission at an edge is a smaller envelope). One card therefore has exactly
+one representation, and the domain refuses any other at construction.
+
+**The length invariant.** The envelope's length minus the total length of the omissions equals
+`len(evidence_text)`, checked at construction. It compares the card with itself, not with the
+snapshot, so a card whose text was changed without changing its length is still constructible and
+the verifier reports it (`TEXT_MISMATCH`). A card whose text is longer or shorter than what it
+claims to quote is refused before it can be stored.
+
+**No joiner, and the ellipsis belongs to rendering.** `evidence_text` never contains an ellipsis,
+bracket, space or anything else marking a cut, because a stored "..." is text no snapshot contains.
+Whether a cut is shown as an ellipsis, a paragraph break or nothing is decided by the exporter (E06)
+from `omitted_ranges` when it renders the card. A cut that removes only a paragraph break is the
+case a renderer most needs to decide (see the `v1-e03-t03` report).
+
+**One function does the offset arithmetic.** `place_evidence_on_card(card, markup)` takes t03's
+`CardMarkup` (an `ExtractedEvidence` and snapshot-offset `EvidenceMarkupSpan`s) and sets all of the
+fields above, and the snapshot's `provenance_mode`. A snapshot offset `s` inside a kept piece becomes `s - evidence_start_offset - (total
+length of the omissions ending at or before s)` in `evidence_text`. A markup span never crosses a
+cut, so each card span lies inside the text of one kept piece and maps back onto exactly the
+snapshot characters it was made from. Two spans that touch on either side of a cut stay two spans,
+each with its own purpose. A test scans every Python file in the repository and fails if this
+arithmetic appears anywhere else.
+
 ## Verifying a card against its snapshot
 
 Owner task: `v1-e03-t04-verifier`. `EvidenceVerifier`
@@ -158,12 +200,15 @@ For one card it:
    citation field is marked verified;
 2. finds the snapshot record by the card's `snapshot_id` and loads it with `SnapshotService.load`,
    so every integrity check in the previous section runs;
-3. checks the card cites the article the snapshot was taken of (`article_id`), and records the
+3. checks the card cites the article the snapshot was taken of (`article_id`) and claims the
+   provenance the snapshot has (`provenance_mode`), and records the
    snapshot's `normalized_text_hash` and `normalizer_version`;
-4. cuts the evidence again from the stored normalized text at the card's offsets, with the same
-   extractor that cut it (`reconstruct_card_evidence`, the one place this happens), and compares it
-   with the card's `evidence_text` exactly: no case folding, no Unicode or whitespace normalization,
-   no similarity measure;
+4. cuts the evidence again from the stored normalized text, selecting the card's envelope minus its
+   omitted ranges, with the same extractor that cut it (`reconstruct_card_evidence`, the one place
+   this happens), joins the pieces with nothing between them, and compares the result with the
+   card's `evidence_text` exactly: no case folding, no Unicode or whitespace normalization, no
+   similarity measure. A reconstruction that comes back cut anywhere other than where the card says
+   is refused (`SPAN_OUT_OF_RANGE`); only a card that skipped validation can ask for one;
 5. checks every span lies inside the reconstructed evidence.
 
 The result is a `VerificationResult`: `VERIFIED` or `UNVERIFIED`, every reason found, and
@@ -183,10 +228,11 @@ How failures become reason codes:
 | The offsets do not select evidence from the text (`InvalidSelection`); a span outside the evidence | `SPAN_OUT_OF_RANGE` |
 | A required citation field not marked verified | `CITATION_UNVERIFIED` |
 | The card's `article_id` is not its snapshot's | `ARTICLE_MISMATCH` |
+| The card's `provenance_mode` is not its snapshot's | `PROVENANCE_MISMATCH` |
 
 The first differing offset is in **evidence-text coordinates**: an index into the card's
-`evidence_text`. While a card quotes one contiguous range, the snapshot offset is
-`evidence_start_offset` plus it. When one text is a prefix of the other, it is the shorter one's
+`evidence_text`. For a card with no omissions, the snapshot offset is `evidence_start_offset` plus
+it; past an omission, add the lengths of the omissions before it too. When one text is a prefix of the other, it is the shorter one's
 length, and an edit inside a run of equal characters is reported where the two texts diverge.
 
 A store that cannot be reached (`StoreError`) is not a verdict about the card and propagates, as
@@ -199,11 +245,15 @@ it before showing a card as finished. It costs one `load` per card (see the timi
 
 ### What VERIFIED guarantees
 
-* The card's `evidence_text` is, character for character, the snapshot's stored normalized text at
-  the card's offsets.
+* The card's `evidence_text` is, character for character, the snapshot's stored normalized text from
+  the envelope's start to its end with the card's omitted ranges taken out, and the omissions are
+  exactly where the card says.
 * That text, and the raw bytes, hash to what the snapshot record says, under the normalizer version
   the record and the card both name, which this code has.
 * The card cites the article its snapshot was taken of.
+* The card's `provenance_mode` is its snapshot's, so a card says `PUBLISHER_RETRIEVED` only about
+  text the platform retrieved. Since `evidence-verifier-v2` (`v1-e03-t07`); a v1 result did not
+  check it.
 * Every span marks text inside that evidence.
 * Every required citation field carries the citation service's verified flag.
 
@@ -223,8 +273,14 @@ it before showing a card as finished. It costs one `load` per card (see the timi
   are not detectable here; the card's own `normalized_text_hash` catches a replaced record only if
   the card was not replaced with it.
 * **Citation flags are read, not re-checked.** The verifier does not look metadata up again.
-* **Cards quote one contiguous range.** Omitted ranges (ADR-0018) arrive with `v1-e03-t07`, which
-  extends `reconstruct_card_evidence`.
+* **What an omission removed is not judged.** VERIFIED means the quotation is the envelope minus the
+  omissions, not that the cuts are fair. Cutting "not" out of a sentence verifies. The omissions are
+  stored as offsets, so the removed text can be shown or flagged; nothing does that yet (ADR-0018,
+  Consequences).
+* **An omission's position is fixed only up to repeated text.** Where the characters either side of
+  a cut repeat, two different cuts can leave the same text: cutting " there now" or "there now "
+  from "Farmers there now pump" both leave "Farmers pump". Both cards' claims are true, and both
+  verify.
 
 ## Changing the format
 
@@ -252,4 +308,9 @@ their keys and must stay readable, because cards were cut from them.
 | No fabricated, paraphrased or single-character-mutated card verifies | `test_no_fabrication_passes`, `test_no_single_character_mutation_of_any_honest_card_passes` (`test_verifier_adversarial.py`, fixtures in `tests/fixtures/verification/`) |
 | The finished-evidence guard re-verifies and ignores a card's own claim to be `VERIFIED` | `test_ensure_finished_rejects_a_hand_built_card_claiming_verified_with_altered_text` |
 | A card citing another article than its snapshot's is `ARTICLE_MISMATCH`, and its quotation is still checked | `test_a_card_citing_another_article_than_its_snapshots_is_an_article_mismatch`, `test_a_misattributed_card_with_altered_text_reports_both` |
+| A card's provenance is its snapshot's: `place_evidence_on_card` copies it, and the verifier reports any other as `PROVENANCE_MISMATCH` (a required check, since `evidence-verifier-v2`) | `test_card_mapping_takes_provenance_from_the_snapshot_not_the_card`, `test_a_card_overstating_its_provenance_is_a_provenance_mismatch`, `test_a_card_claiming_another_provenance_than_its_snapshots_is_a_provenance_mismatch` |
 | Nothing but `EvidenceVerifier` writes `VERIFIED` | `test_verified_is_set_only_by_the_evidence_verifier` |
+| A card's omissions are in canonical form, and the envelope minus them is as long as `evidence_text`; every other set is refused at construction | `test_a_non_canonical_omission_set_is_refused`, `test_the_envelope_minus_the_omissions_must_be_as_long_as_the_text` (`tests/domain/test_card.py`) |
+| A card made by `place_evidence_on_card` reproduces exactly from its snapshot, and no span maps back onto an omitted range | hypothesis, `test_card_mapping_reproduces_from_the_snapshot_and_no_span_lands_on_an_omission` |
+| The selection-to-card offset arithmetic exists once in the repository, tests and fixtures included | `test_card_mapping_arithmetic_exists_once_in_the_whole_tree` |
+| A card cut with omissions verifies; any one omission widened, narrowed, removed or added is refused at construction or is `TEXT_MISMATCH` | `test_a_card_cut_with_omissions_by_the_mapping_is_verified`, `test_no_single_omission_change_verifies_unless_it_quotes_the_same_text` (`test_verifier_omissions.py`) |

@@ -35,7 +35,28 @@ spec:
     which validates a build in CI rather than an install on an operator's machine.
   priority: 2
   constraints:
-    packages: [scripts, debate_cli.commands, docs/runbooks]
+    packages:
+      - scripts
+      - debate_cli.commands
+      - docs/runbooks
+      # added on the PM's instruction, 2026-10-02
+      - .github/workflows
+      - tests/scripts
+      - tests/architecture
+      - debate_cli.installation
+      - packages/debate_cli/tests
+      - packages/debate_cli/README.md
+      # added on the PM's instruction, 2026-10-02 (answers to the session's scope questions): a
+      # public accessor for the normalizer's pin, the workspace members' requires-python lines, and
+      # the documents and comments that named a version instead of pointing at the metadata
+      - debate_core.evidence.normalization
+      - pyproject.toml
+      - packages/*/pyproject.toml
+      - uv.lock
+      - README.md
+      - docs/evidence/normalization.md
+      - docs/architecture/architecture_proposal.md
+      - debate_core.application.snapshot_service
     forbidden:
       - A fourth statement of the supported interpreter anywhere, including documentation that names
         a version rather than pointing at the metadata

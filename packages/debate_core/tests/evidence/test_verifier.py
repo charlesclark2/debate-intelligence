@@ -27,7 +27,15 @@ from debate_core.application.errors import StoreUnavailable
 from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.application.ports import BlobKey
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
-from debate_core.domain import Card, CardSpan, SourceSnapshot, SpanPurpose, SpanStyle, VerificationStatus
+from debate_core.domain import (
+    Card,
+    CardSpan,
+    ProvenanceMode,
+    SourceSnapshot,
+    SpanPurpose,
+    SpanStyle,
+    VerificationStatus,
+)
 from debate_core.evidence.markup import EvidenceMarkupSpan
 from debate_core.evidence.normalization import NORMALIZER_VERSION, Paragraph, normalize
 from debate_core.evidence.snapshot_text import SnapshotText, encode_snapshot_text
@@ -130,7 +138,7 @@ def test_a_card_cut_from_an_intact_snapshot_is_verified_with_no_reasons(
     assert result.card_id == card.card_id
     assert result.snapshot_id == source.snapshot.snapshot_id
     assert result.normalizer_version == NORMALIZER_VERSION
-    assert result.verifier_version == VERIFIER_VERSION == "evidence-verifier-v1"
+    assert result.verifier_version == VERIFIER_VERSION == "evidence-verifier-v2"
     assert result.verified_at == FAKE_EPOCH
 
 
@@ -649,6 +657,32 @@ def test_a_card_citing_its_snapshots_article_passes_the_article_check(
     assert result.is_verified
 
 
+def test_a_card_claiming_another_provenance_than_its_snapshots_is_a_provenance_mismatch(
+    world: VerificationWorld, card: Card
+) -> None:
+    """The snapshot was retrieved from the publisher; the card says a user supplied it. Either way
+    round, the card's provenance is a claim about where its text came from, and the snapshot decides."""
+    result = world.verify(card.evolve(provenance_mode=ProvenanceMode.USER_SUPPLIED))
+
+    assert result.reason_codes == (ReasonCode.PROVENANCE_MISMATCH,)
+    assert result.reasons[0].detail == (
+        "the card claims provenance USER_SUPPLIED; its snapshot's text is PUBLISHER_RETRIEVED"
+    )
+    assert result.checks_run == ALL_CHECKS
+
+
+def test_a_card_overstating_its_provenance_is_a_provenance_mismatch(world: VerificationWorld) -> None:
+    """The case that matters: text a user supplied, on a card claiming the publisher's retrieval."""
+    supplied = world.add_source(EXTRACTED, provenance_mode=ProvenanceMode.USER_SUPPLIED)
+    honest = world.cut_card(supplied, 61, 117)
+    assert honest.provenance_mode is ProvenanceMode.USER_SUPPLIED
+    assert world.verify(honest).is_verified
+
+    result = world.verify(honest.evolve(provenance_mode=ProvenanceMode.PUBLISHER_RETRIEVED))
+
+    assert result.reason_codes == (ReasonCode.PROVENANCE_MISMATCH,)
+
+
 def test_offsets_past_the_end_of_the_text_are_span_out_of_range(world: VerificationWorld, card: Card) -> None:
     """The same 56 characters claimed at 150-206 of a 170-character text."""
     result = world.verify(card.evolve(evidence_start_offset=150, evidence_end_offset=206))
@@ -774,6 +808,9 @@ def test_ensure_finished_returns_the_verified_result_for_a_verified_card(
         pytest.param({"spans": ()}, ReasonCode.CARD_INCOMPLETE, id="spans"),
         pytest.param({"citation": build_citation(verified=False)}, ReasonCode.CITATION_UNVERIFIED, id="cite"),
         pytest.param({"article_id": "0ART0000000000000000000002"}, ReasonCode.ARTICLE_MISMATCH, id="article"),
+        pytest.param(
+            {"provenance_mode": ProvenanceMode.PASTED}, ReasonCode.PROVENANCE_MISMATCH, id="provenance"
+        ),
         pytest.param(
             {"evidence_start_offset": 150, "evidence_end_offset": 206},
             ReasonCode.SPAN_OUT_OF_RANGE,

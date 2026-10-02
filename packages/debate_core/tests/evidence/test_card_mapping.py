@@ -207,6 +207,18 @@ def test_card_mapping_keeps_the_card_and_replaces_its_evidence(source: LoadedSna
     assert [(span.start_offset, span.end_offset) for span in recut.spans] == [(0, 11)]
 
 
+def test_card_mapping_takes_provenance_from_the_snapshot_not_the_card(world: VerificationWorld) -> None:
+    """ProvenanceMode "travels from the snapshot onto every card cut from it". A tag-only card made
+    with the strongest claim, PUBLISHER_RETRIEVED, given text a user supplied, must say USER_SUPPLIED."""
+    supplied = world.add_source(EXTRACTED, provenance_mode=ProvenanceMode.USER_SUPPLIED)
+    claiming = blank_card(supplied)
+    assert claiming.provenance_mode is ProvenanceMode.PUBLISHER_RETRIEVED
+
+    card = place_evidence_on_card(claiming, markup_for(supplied, KEPT, *MARKUP))
+
+    assert card.provenance_mode is ProvenanceMode.USER_SUPPLIED
+
+
 def test_card_mapping_refuses_a_card_for_another_article(source: LoadedSnapshot) -> None:
     other = blank_card(source).evolve(article_id="0ART0000000000000000000002")
 

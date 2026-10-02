@@ -22,6 +22,7 @@ the first, so one run reports everything wrong with a card:
 * ``SPAN_OUT_OF_RANGE``: the offsets, or a span, do not fit the snapshot's evidence.
 * ``CITATION_UNVERIFIED``: a required citation field is not marked verified.
 * ``ARTICLE_MISMATCH``: the card cites a different article from the one its snapshot was taken of.
+* ``PROVENANCE_MISMATCH``: the card's ``provenance_mode`` is not its snapshot's.
 
 ## What VERIFIED means, and what it does not
 
@@ -52,9 +53,14 @@ __all__ = [
     "VerificationResult",
 ]
 
-VERIFIER_VERSION: Final = "evidence-verifier-v1"
+VERIFIER_VERSION: Final = "evidence-verifier-v2"
 """Recorded on every result. A change to which checks run, or to what one of them accepts, is a new
-version, so a stored result says which rules it was reached under."""
+version, so a stored result says which rules it was reached under.
+
+* ``evidence-verifier-v1`` (`v1-e03-t04`): the checks up to ``ARTICLE_MATCHES_SNAPSHOT``.
+* ``evidence-verifier-v2`` (`v1-e03-t07`): adds ``PROVENANCE_MATCHES_SNAPSHOT``. A card claiming a
+  provenance its snapshot does not have was VERIFIED under v1 and is not under v2.
+"""
 
 
 class ReasonCode(StrEnum):
@@ -95,6 +101,12 @@ class ReasonCode(StrEnum):
     to a source it did not come from. A provenance failure, not damage, so it is not
     ``HASH_MISMATCH``; the quotation may still be verbatim from the snapshot."""
 
+    PROVENANCE_MISMATCH = "PROVENANCE_MISMATCH"
+    """The card's ``provenance_mode`` is not its snapshot's. Provenance travels from the snapshot onto
+    every card cut from it; a card saying ``PUBLISHER_RETRIEVED`` about text a user supplied makes the
+    strongest claim the platform has about text the platform never retrieved. A provenance failure,
+    like ``ARTICLE_MISMATCH``; the quotation may still be verbatim."""
+
 
 class VerificationCheck(StrEnum):
     """One check the verifier can run. A result lists those that ran, passed or not."""
@@ -115,6 +127,9 @@ class VerificationCheck(StrEnum):
 
     ARTICLE_MATCHES_SNAPSHOT = "article_matches_snapshot"
     """The card's ``article_id`` is the snapshot's: the card cites the article it quotes."""
+
+    PROVENANCE_MATCHES_SNAPSHOT = "provenance_matches_snapshot"
+    """The card's ``provenance_mode`` is the snapshot's: the card says truly where its text came from."""
 
     CARD_MATCHES_SNAPSHOT = "card_matches_snapshot"
     """The card's recorded text hash and normalizer version are the snapshot's."""

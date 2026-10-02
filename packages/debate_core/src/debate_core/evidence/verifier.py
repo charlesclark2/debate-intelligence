@@ -183,6 +183,18 @@ def check_against_snapshot(
             f"{snapshot.article_id}",
         )
 
+    # Where the text came from is the snapshot's to say; a card can arrive without passing through
+    # place_evidence_on_card, which copies it. Like the article, a mismatch does not stop the
+    # quotation being checked.
+    findings.ran(VerificationCheck.PROVENANCE_MATCHES_SNAPSHOT)
+    if card.provenance_mode is not snapshot.provenance_mode:
+        findings.fail(
+            VerificationCheck.PROVENANCE_MATCHES_SNAPSHOT,
+            ReasonCode.PROVENANCE_MISMATCH,
+            f"the card claims provenance {card.provenance_mode.value}; its snapshot's text is "
+            f"{snapshot.provenance_mode.value}",
+        )
+
     findings.ran(VerificationCheck.CARD_MATCHES_SNAPSHOT)
     contradicts = False
     if card.normalizer_version is not None and card.normalizer_version != snapshot.normalizer_version:

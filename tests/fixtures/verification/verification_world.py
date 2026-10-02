@@ -66,7 +66,13 @@ class VerificationWorld:
         self.verifier = EvidenceVerifier(articles=self.articles, snapshots=self.snapshots, clock=self.clock)
         self._card_ids = SequentialIdGenerator("CARD")
 
-    def add_source(self, extracted_text: str, *, raw_bytes: bytes | None = None) -> LoadedSnapshot:
+    def add_source(
+        self,
+        extracted_text: str,
+        *,
+        raw_bytes: bytes | None = None,
+        provenance_mode: ProvenanceMode = ProvenanceMode.PUBLISHER_RETRIEVED,
+    ) -> LoadedSnapshot:
         """Create, save and load a snapshot of ``extracted_text``, as an article service would."""
         snapshot = run(
             self.snapshots.create(
@@ -76,7 +82,7 @@ class VerificationWorld:
                 canonical_url=CANONICAL_URL,
                 retrieved_at=RETRIEVED_AT,
                 extractor_version=EXTRACTOR_VERSION,
-                provenance_mode=ProvenanceMode.PUBLISHER_RETRIEVED,
+                provenance_mode=provenance_mode,
                 access_status=AccessStatus.ACCESSIBLE,
             )
         )
@@ -132,7 +138,11 @@ class VerificationWorld:
 
 def card_from_markup(markup: CardMarkup, *, card_id: str, citation: Citation) -> Card:
     """The card ``markup`` makes: a fresh card for the snapshot's article, given to
-    ``place_evidence_on_card``, which sets everything about the evidence."""
+    ``place_evidence_on_card``, which sets everything about the evidence, provenance included.
+
+    The blank card claims ``PASTED``, which no snapshot here has, so every card in these fixtures
+    depends on the mapping replacing it with the snapshot's provenance.
+    """
     snapshot = markup.evidence.snapshot
     blank = Card(
         card_id=card_id,
@@ -140,6 +150,6 @@ def card_from_markup(markup: CardMarkup, *, card_id: str, citation: Citation) ->
         article_id=snapshot.article_id,
         tag="Invented basin evidence for the verifier's tests",
         citation=citation,
-        provenance_mode=snapshot.provenance_mode,
+        provenance_mode=ProvenanceMode.PASTED,
     )
     return place_evidence_on_card(blank, markup)

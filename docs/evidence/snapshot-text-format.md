@@ -180,7 +180,7 @@ case a renderer most needs to decide (see the `v1-e03-t03` report).
 
 **One function does the offset arithmetic.** `place_evidence_on_card(card, markup)` takes t03's
 `CardMarkup` (an `ExtractedEvidence` and snapshot-offset `EvidenceMarkupSpan`s) and sets all of the
-fields above. A snapshot offset `s` inside a kept piece becomes `s - evidence_start_offset - (total
+fields above, and the snapshot's `provenance_mode`. A snapshot offset `s` inside a kept piece becomes `s - evidence_start_offset - (total
 length of the omissions ending at or before s)` in `evidence_text`. A markup span never crosses a
 cut, so each card span lies inside the text of one kept piece and maps back onto exactly the
 snapshot characters it was made from. Two spans that touch on either side of a cut stay two spans,
@@ -200,7 +200,8 @@ For one card it:
    citation field is marked verified;
 2. finds the snapshot record by the card's `snapshot_id` and loads it with `SnapshotService.load`,
    so every integrity check in the previous section runs;
-3. checks the card cites the article the snapshot was taken of (`article_id`), and records the
+3. checks the card cites the article the snapshot was taken of (`article_id`) and claims the
+   provenance the snapshot has (`provenance_mode`), and records the
    snapshot's `normalized_text_hash` and `normalizer_version`;
 4. cuts the evidence again from the stored normalized text, selecting the card's envelope minus its
    omitted ranges, with the same extractor that cut it (`reconstruct_card_evidence`, the one place
@@ -227,6 +228,7 @@ How failures become reason codes:
 | The offsets do not select evidence from the text (`InvalidSelection`); a span outside the evidence | `SPAN_OUT_OF_RANGE` |
 | A required citation field not marked verified | `CITATION_UNVERIFIED` |
 | The card's `article_id` is not its snapshot's | `ARTICLE_MISMATCH` |
+| The card's `provenance_mode` is not its snapshot's | `PROVENANCE_MISMATCH` |
 
 The first differing offset is in **evidence-text coordinates**: an index into the card's
 `evidence_text`. For a card with no omissions, the snapshot offset is `evidence_start_offset` plus
@@ -249,6 +251,9 @@ it before showing a card as finished. It costs one `load` per card (see the timi
 * That text, and the raw bytes, hash to what the snapshot record says, under the normalizer version
   the record and the card both name, which this code has.
 * The card cites the article its snapshot was taken of.
+* The card's `provenance_mode` is its snapshot's, so a card says `PUBLISHER_RETRIEVED` only about
+  text the platform retrieved. Since `evidence-verifier-v2` (`v1-e03-t07`); a v1 result did not
+  check it.
 * Every span marks text inside that evidence.
 * Every required citation field carries the citation service's verified flag.
 
@@ -303,6 +308,7 @@ their keys and must stay readable, because cards were cut from them.
 | No fabricated, paraphrased or single-character-mutated card verifies | `test_no_fabrication_passes`, `test_no_single_character_mutation_of_any_honest_card_passes` (`test_verifier_adversarial.py`, fixtures in `tests/fixtures/verification/`) |
 | The finished-evidence guard re-verifies and ignores a card's own claim to be `VERIFIED` | `test_ensure_finished_rejects_a_hand_built_card_claiming_verified_with_altered_text` |
 | A card citing another article than its snapshot's is `ARTICLE_MISMATCH`, and its quotation is still checked | `test_a_card_citing_another_article_than_its_snapshots_is_an_article_mismatch`, `test_a_misattributed_card_with_altered_text_reports_both` |
+| A card's provenance is its snapshot's: `place_evidence_on_card` copies it, and the verifier reports any other as `PROVENANCE_MISMATCH` (a required check, since `evidence-verifier-v2`) | `test_card_mapping_takes_provenance_from_the_snapshot_not_the_card`, `test_a_card_overstating_its_provenance_is_a_provenance_mismatch`, `test_a_card_claiming_another_provenance_than_its_snapshots_is_a_provenance_mismatch` |
 | Nothing but `EvidenceVerifier` writes `VERIFIED` | `test_verified_is_set_only_by_the_evidence_verifier` |
 | A card's omissions are in canonical form, and the envelope minus them is as long as `evidence_text`; every other set is refused at construction | `test_a_non_canonical_omission_set_is_refused`, `test_the_envelope_minus_the_omissions_must_be_as_long_as_the_text` (`tests/domain/test_card.py`) |
 | A card made by `place_evidence_on_card` reproduces exactly from its snapshot, and no span maps back onto an omitted range | hypothesis, `test_card_mapping_reproduces_from_the_snapshot_and_no_span_lands_on_an_omission` |

@@ -55,10 +55,12 @@ __all__ = ["place_evidence_on_card"]
 def place_evidence_on_card(card: Card, markup: CardMarkup) -> Card:
     """Return ``card`` holding the evidence and markup of ``markup``, and nothing it held before.
 
-    Sets the envelope, ``omitted_ranges``, ``evidence_text``, the spans, and the snapshot id, text hash
-    and normalizer version the offsets refer to, all from ``markup.evidence``. The card's identity,
-    tag, citation and provenance are kept. Its verification status is reset to ``UNVERIFIED``: new
-    evidence has not been verified, whatever the card held before.
+    Sets the envelope, ``omitted_ranges``, ``evidence_text``, the spans, the snapshot id, text hash
+    and normalizer version the offsets refer to, and ``provenance_mode``, all from
+    ``markup.evidence``. Provenance is the snapshot's to say: it "travels from the snapshot onto every
+    card cut from it" (:class:`~debate_core.domain.ProvenanceMode`), so whatever the card claimed
+    before is replaced. The card's identity, tag and citation are kept. Its verification status is
+    reset to ``UNVERIFIED``: new evidence has not been verified, whatever the card held before.
 
     Raises :class:`ValueError` if the card cites a different article from the one the snapshot was
     taken of, rather than producing a misattributed card.
@@ -73,6 +75,7 @@ def place_evidence_on_card(card: Card, markup: CardMarkup) -> Card:
         snapshot_id=evidence.snapshot_id,
         normalized_text_hash=evidence.normalized_text_hash,
         normalizer_version=evidence.normalizer_version,
+        provenance_mode=evidence.snapshot.provenance_mode,
         evidence_start_offset=evidence.start,
         evidence_end_offset=evidence.end,
         omitted_ranges=tuple(

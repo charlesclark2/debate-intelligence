@@ -317,6 +317,142 @@ the task worktree.
   every fabrication to reach the verifier, those 15 need claimed ranges fitted to their length.
   Their hand-counted offsets would then need re-deriving.
 
+## Changes after PM review
+
+The PM accepted the work, reworded ac7 and added ac6 to `v1-e03-t05`. I committed those spec edits
+and the review unchanged as `ffc26df`, then made the two changes asked for.
+
+### 1. Every length-changing fabrication also reaches the verifier on a fitted envelope
+
+Commit `da523d4` (`test_verifier_adversarial.py` only).
+
+- The construction-refusal test stays: all 15 are refused on the range they claim.
+- `AdversarialWorld.fabricate(fabrication, fitted=True)` gives a fabrication an envelope as long as
+  its text. It moves the envelope's end, as a forger would, unless that runs past the snapshot's
+  text; then it moves the start back.
+- `FITTED` records, by hand, each one's fitted envelope and where the reconstruction first differs.
+  A plain slice of the fixture's normalized text confirmed each value before any test ran. Two
+  tests assert them.
+- `test_no_fabrication_passes` now builds all 28 in fitted form. It asserts that none is refused,
+  that 26 are UNVERIFIED, and that the only two that verify are the truncations. It also still
+  asserts that nothing verifies on its claimed range.
+
+**Eight keep their offset.** Their envelope keeps its start, so the reconstruction agrees with the
+honest text up to the shorter of the two, and the departure lies inside that:
+
+| Fabrication | Offset |
+|---|---|
+| negation dropped (the dropped "not") | 44 |
+| accent decomposed | 8 |
+| paraphrase | 24 |
+| ellipsis stored | 44 |
+| trailing space appended | 64 |
+| paragraph break flattened | 64 |
+| invented claim | 14 |
+| spliced | 61 |
+
+The trailing space keeps 64 for a new reason. The snapshot has `"\n\n"` after "2031.", so the
+fitted reconstruction differs from the fabrication's space at that index, where before the
+fabrication was simply longer.
+
+**Five move to 0.** Each is longer than the range it claims, and its card ends at the last
+character of the snapshot (the breach card at 152, the wells card at 170). The envelope therefore
+starts earlier, and the reconstruction begins with a character before the card: "\n" at 65, or
+`s.\n\n` at 115-118. No fabrication starts with that.
+
+| Fabrication | Offset before | Offset now |
+|---|---|---|
+| odds changed by an inserted digit | 49 | 0 |
+| em dash written as two hyphens | 50 | 0 |
+| doubled space kept | 47 | 0 |
+| negation inserted | 35 | 0 |
+| zero-width space inserted | 7 | 0 |
+
+**Two cannot be `TEXT_MISMATCH`, and I did not force them.** "truncated before the comparison" and
+"truncated before the date" are prefixes of the honest text. On a fitted envelope (66-115, 119-161),
+each is the honest quotation of exactly those characters, and it verifies, correctly.
+
+A truncation misleads by what it leaves out, as an unfair cut does. It does not put words in the
+source's mouth. Fitting their envelopes some other way so they fail would test nothing real.
+`test_a_truncation_on_a_fitted_envelope_is_the_honest_shorter_card_and_verifies` says so. Catching
+them is the same problem as the negation flag the PM added to `v1-e03-t05` as ac6. It is about
+fairness, not fidelity, and it is out of the verifier's reach.
+
+`uv run pytest packages/debate_core/tests/evidence/test_verifier_adversarial.py` → `50 passed`.
+
+### 2. Provenance comes from the snapshot, and the verifier checks it
+
+**The masking, shown before the fix**, with the new tests on the old code:
+
+- `test_card_mapping_takes_provenance_from_the_snapshot_not_the_card` failed: `assert
+  <ProvenanceMode.PUBLISHER_RETRIEVED> is <ProvenanceMode.USER_SUPPLIED>`. The mapping kept the
+  tag-only card's own mode.
+- A probe on the unchanged verifier: a card cut from a `USER_SUPPLIED` snapshot, evolved to claim
+  `PUBLISHER_RETRIEVED`, gave `VERIFIED ()`.
+- The fixture had hidden both, because `card_from_markup` copied the snapshot's mode onto the blank
+  card itself.
+
+My first verifier test run errored at collection, because the new reason code did not exist yet.
+That proves nothing, so I did not count it as red. The mapping test and the probe are the evidence.
+
+**The fix:**
+
+- `place_evidence_on_card` sets `provenance_mode` from `markup.evidence.snapshot` and documents why.
+- New `VerificationCheck.PROVENANCE_MATCHES_SNAPSHOT`, which is in `REQUIRED_CHECKS`, and new
+  `ReasonCode.PROVENANCE_MISMATCH`. The comparison is in `check_against_snapshot`, next to the
+  article check, against the record the verifier already holds. Like the article check, it does not
+  stop the quotation being reconstructed and compared.
+- No change to `application/evidence_verifier.py` was needed.
+- `VERIFIER_VERSION` is now `evidence-verifier-v2`, and its docstring records what v1 and v2 check.
+- `card_from_markup` now builds its blank card as `PASTED`, which no fixture snapshot has. Every
+  fixture card therefore depends on the mapping replacing the mode. That is why mutant P1 below fails
+  86 tests.
+- `VerificationWorld.add_source` takes a `provenance_mode`.
+- Tests, all new:
+  - `test_card_mapping_takes_provenance_from_the_snapshot_not_the_card`;
+  - `test_a_card_claiming_another_provenance_than_its_snapshots_is_a_provenance_mismatch` (exact
+    detail, and every check ran);
+  - `test_a_card_overstating_its_provenance_is_a_provenance_mismatch` (the honest user-supplied card
+    verifies, and the same card claiming `PUBLISHER_RETRIEVED` does not);
+  - a `provenance` case in `test_ensure_finished_raises_for_every_unverified_card`.
+- Format doc: verification step 3, a reason-code row, a "What VERIFIED guarantees" bullet with the
+  version, and a guarantees-table row naming the three tests.
+
+**Mutants.** Same runner, `-n0 --no-cov`, the seven t07 test files, and a fresh, empty
+`HYPOTHESIS_STORAGE_DIRECTORY` per run. All four caught, none ERROR:
+
+| Mutant | Failed / run | Caught by |
+|---|---|---|
+| P1: the mapping keeps the card's own provenance | 86 / 250 | `test_card_mapping_takes_provenance_from_the_snapshot_not_the_card`, and every fixture card (now PROVENANCE_MISMATCH) |
+| P2: the verifier's comparison dropped, check still recorded as run | 3 / 250 | both provenance-mismatch tests and `ensure_finished[provenance]` |
+| P3: the verifier's check removed entirely, not recorded as run | 22 / 250 | every test expecting VERIFIED (the result refuses VERIFIED with a required check missing) |
+| P1 and P2 together | 4 / 250 | the mapping test and the three verifier tests |
+
+The combined row shows each half has its own test. The verifier tests still catch a card that never
+went through the mapping, and the mapping test still catches the mapping when the verifier is blind.
+
+**A slip in how this run happened.** I imported the first runner from the new one to reuse its
+helpers. The first runner has no `__main__` guard, so the import ran all 20 original mutants first,
+then the four new ones. That took 4 min 24 s, past the two-minute hand-off line, and ran in the
+background. Each mutant restored its file in a `finally`. Afterwards, `git status` showed only my
+intended edits, and the mapping's and verifier's key lines checked out. It also re-ran the original
+20 against the final code, with a fresh database each: **all 20 still caught**. The suite counts
+grew, from 230 to 250 tests, for the same catching tests.
+
+### Reruns after both changes
+
+- `uv run pytest packages/debate_core/tests/evidence packages/debate_core/tests/domain` →
+  `1159 passed in 18.02s`. `card_mapping.py` 100%, `application/evidence_verifier.py` 100%,
+  `verifier.py` 99% (the same unreachable no-offsets guard as before).
+- `uv run pytest -q --no-cov` (whole repository) → `3676 passed, 1 skipped in 30.20s`.
+- `uv run pyright packages/debate_core tests/fixtures` → `0 errors, 0 warnings, 0 informations`.
+- `uv run ruff check .` and `uv run ruff format --check .` → clean.
+- `uv run lint-imports` → `Contracts: 11 kept, 0 broken.`
+- `uv run scripts/validate_specs.py` → `OK: 298 files, 38 epics, 240 tasks, 20 releases`.
+- `uv run python scripts/check_links.py` → OK.
+
+The phase stays `Succeeded`.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->

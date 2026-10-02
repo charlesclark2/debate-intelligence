@@ -13,6 +13,11 @@ dependencies = [
     "pydantic-settings>=2.6",
     "pyyaml>=6.0",
     "python-ulid>=3.0",
+    # Card manifests (v1-e03-t06-verify-command): `debate-research verify` checks a manifest against
+    # its published JSON Schema before reading a card, and reports the failing JSON path. The
+    # reference implementation, so the schema's meaning is the standard's, not ours. It resolves
+    # only the schemas it is handed and never fetches a `$ref`.
+    "jsonschema>=4.23",
 ]
 
 # boto3 is optional on purpose. The domain and application layers never import it — the

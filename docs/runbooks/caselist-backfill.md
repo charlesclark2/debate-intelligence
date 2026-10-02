@@ -339,8 +339,11 @@ du -sk "$DATA/blobs"                                   # bytes on disk, every so
 **NEW is not "new to the store".** The weekly importer classifies each archive against the week
 before only. A file that was in July, missing from the next few windows, and back in August is
 NEW again. On backfill day 1, the three August weeks reported 25 NEW, but only 16 had never been
-stored. `first_seen_rows` gives the number that means new evidence, and it matches the run's
-`blobs_stored`.
+stored. `first_seen_rows` gives the number that means new to the caselist. It matches the run's
+`blobs_stored` except for files whose bytes the store already held under another caselist or as a
+camp file: those are first seen in this caselist, but they are not new blobs. They still get a
+bucket key under this caselist, which is why `objects_published` can exceed `blobs_stored`
+(run 5: 1,723 against 1,721, two Policy disclosures identical to camp files).
 
 All three functions were checked against the synthetic test archives
 (`tests/fixtures/caselist/build_synthetic_archives.py`) and against the five weeklies already

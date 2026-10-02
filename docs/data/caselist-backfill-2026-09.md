@@ -72,12 +72,17 @@ junk: macOS metadata, `.DS_Store`, Word lock files, unsafe paths.
 | hspolicy26 | 2026-08-25 | 2026-08-18 | 4 | 3 | 1 | 0 | 0 | 2 | 0 | 0 | 4 | 3 | 0 | 0 | 1 | 1 |
 | hspolicy26 | 2026-09-01 | 2026-08-25 | 115 | 100 | 1 | 0 | 14 | 3 | 0 | 0 | 101 | 114 | 0 | 0 | 1 | 1 |
 | hspolicy26 | 2026-09-08 | 2026-09-01 | 74 | 40 | 10 | 1 | 23 | 104 | 0 | 0 | 65 | 74 | 0 | 0 | 0 | 2 |
+| hspolicy26 | 2026-09-15 | 2026-09-08 | 631 | 568 | 7 | 0 | 56 | 67 | 0 | 0 | 579 | 621 | 0 | 6 | 4 | 11 |
+| hspolicy26 | 2026-09-22 | 2026-09-15 | 1018 | 838 | 42 | 0 | 138 | 589 | 0 | 0 | 932 | 1010 | 0 | 6 | 2 | 20 |
+| hspolicy26 | 2026-09-29 | 2026-09-22 | 497 | 344 | 67 | 8 | 78 | 943 | 0 | 0 | 452 | 491 | 0 | 3 | 3 | 15 |
 | hspf26 | 2026-07-07 | none | 9 | 8 | 0 | 0 | 1 | 0 | 0 | 0 | 8 | 7 | 0 | 1 | 1 | 0 |
 | hspf26 | 2026-07-14 | 2026-07-07 | 42 | 34 | 0 | 0 | 8 | 9 | 0 | 0 | 34 | 18 | 0 | 23 | 1 | 0 |
 | hspf26 | 2026-07-21 | 2026-07-14 | 2 | 2 | 0 | 0 | 0 | 42 | 0 | 0 | 2 | 0 | 0 | 2 | 0 | 0 |
 | hspf26 | 2026-07-28 | 2026-07-21 | 357 | 300 | 0 | 0 | 57 | 2 | 0 | 0 | 300 | 156 | 0 | 201 | 0 | 17 |
 | hspf26 | 2026-08-04 | 2026-07-28 | 3 | 3 | 0 | 0 | 0 | 357 | 0 | 0 | 3 | 1 | 0 | 2 | 0 | 0 |
 | hspf26 | 2026-08-11 | 2026-08-04 | 16 | 13 | 0 | 0 | 3 | 3 | 0 | 0 | 13 | 8 | 0 | 8 | 0 | 0 |
+| hspf26 | 2026-08-18 | 2026-08-11 | 3 | 3 | 0 | 0 | 0 | 16 | 0 | 0 | 3 | 2 | 0 | 0 | 1 | 1 |
+| hspf26 | 2026-09-01 | 2026-08-18 | 28 | 27 | 0 | 0 | 1 | 3 | 0 | 0 | 27 | 13 | 0 | 15 | 0 | 1 |
 
 The five rows above are the weeklies the `v1-e34-t02` validation run pulled on 2026-09-24 (run
 `20260924T042300Z`, dev). A re-import would be a no-op that writes nothing new, so the counts were
@@ -120,6 +125,13 @@ duplicate, 158 new blobs, in 32.0 s. The hspf26 08-04 weekly reports 357 paths n
 against a week of 3 members: every path of the 07-28 window, the path-level figure behaving
 exactly as described at the top of this document.
 
+Run 5 ran at 01:17 UTC on 2026-10-02 (run `20261002T011748Z`, 8:17 pm Central on 1 October). It
+imported hspolicy26 09-15, 09-22 and 09-29, which makes **Policy complete through the newest
+listing**, and hspf26 08-18 and 09-01: 2,177 members, 273 duplicate, 1,721 new blobs, 1,723
+objects published, in 161.5 s. The two extra objects are Policy disclosures byte-identical to
+camp files already in the store: no new blob, but a new key under `raw/caselist/hspolicy26/`.
+hspf26 has no 08-25 row because the site lists no 08-25 weekly for it.
+
 **The site's cap is per date, not a rolling 24 hours.** Run 3 started 20 h 34 min after day 2's
 five downloads and was granted all five. A rolling-24-hour limiter would have refused them. The withdrawal figure is deferred to `v1-e34-t04` (below).
 
@@ -132,8 +144,10 @@ records them.
 before only, so a file stored in July, absent for a few windows, and back in August counts as NEW
 again. The column that means never stored before is *First seen here*: distinct files in the
 snapshot that no earlier snapshot of the same caselist held. It comes from the runbook's
-`first_seen_rows`, and per run it equals the run's `blobs_stored`: 242 for the five July-August
-weeks, and 16 for 08-11 to 08-25, against 25 NEW. For the three hand imports it equals each
+`first_seen_rows`. Per run it equals the run's `blobs_stored` (242 for the five July-August
+weeks, and 16 for 08-11 to 08-25, against 25 NEW), except where the bytes were already stored
+under another caselist or as a camp file. Run 5 is the one case so far: 1,723 first seen, 1,721
+new blobs, because 2 Policy disclosures are byte-identical to camp files. For the three hand imports it equals each
 import's own `newly_stored_blobs` (58, 659, 1,380).
 
 | Caselist | Snapshot | Distinct files | First seen here |
@@ -160,12 +174,17 @@ import's own `newly_stored_blobs` (58, 659, 1,380).
 | hspolicy26 | 2026-08-25 | 4 | 3 |
 | hspolicy26 | 2026-09-01 | 101 | 99 |
 | hspolicy26 | 2026-09-08 | 65 | 41 |
+| hspolicy26 | 2026-09-15 | 579 | 567 |
+| hspolicy26 | 2026-09-22 | 932 | 823 |
+| hspolicy26 | 2026-09-29 | 452 | 303 |
 | hspf26 | 2026-07-07 | 8 | 8 |
 | hspf26 | 2026-07-14 | 34 | 34 |
 | hspf26 | 2026-07-21 | 2 | 2 |
 | hspf26 | 2026-07-28 | 300 | 300 |
 | hspf26 | 2026-08-04 | 3 | 3 |
 | hspf26 | 2026-08-11 | 13 | 12 |
+| hspf26 | 2026-08-18 | 3 | 3 |
+| hspf26 | 2026-09-01 | 27 | 27 |
 
 ## OpenEv camp files
 
@@ -202,13 +221,13 @@ when `v1-e30-t03` measured them (its session report): an **11% saving**. The fiv
 | hsld26 (the five held weeks only, 07-07 to 08-04) | 5 | 255 | 242 | 5.1% | 49,107,328 |
 | hsld26 (07-07 to 09-22, after day 1) | 12 | 3,629 | 3,036 | 16.3% | 408,918,566 |
 | hsld26 (all, 07-07 to 09-29, complete as of the 09-29 listing) | 13 | 4,456 | 3,612 | 18.9% | 486,608,876 |
-| hspolicy26 | _not yet run_ | | | | |
+| hspolicy26 (all, 07-07 to 09-29, complete as of the 09-29 listing) | 11 | 2,350 | 1,843 | 21.6% | 479,442,733 |
 | hspf26 | _not yet run_ | | | | |
 
 **Bytes stored**, all sources on disk (`du -sk` of the store's `blobs/`): _not yet run_ for the
 finished backfill. It was 48,428 KiB for the five held weeks before the backfill began, and
 460,988 KiB after day 1 (HS LD complete, one Policy week, the camp files), 554,628 KiB after
-day 2, 694,108 KiB after run 3, and 736,460 KiB after run 4.
+day 2, 694,108 KiB after run 3, 736,460 KiB after run 4, and 1,186,508 KiB after run 5.
 
 ## Withdrawals against the complete archive
 
@@ -231,6 +250,7 @@ The 2026-09-24 validation runs are in `docs/data/caselist-sync-runs.md` and not 
 | 2 (run Mon 28 Sep, 11:44 pm Central) | `20260929T044458Z` | all three | 5 | 5 (hsld26 09-29; hspolicy26 07-14, 07-28; hspf26 07-07, 07-14) | 19 | 880 | 619 | 619 | 51.4 s |
 | 3 (Tue 29 Sep, 8:18 pm Central) | `20260930T011818Z` | all three | 5 | 5 (hspolicy26 08-04, 08-11, 08-18; hspf26 07-21, 07-28) | 14 | 366 | 306 | 306 | 123.6 s |
 | 4 (Wed 30 Sep, 8:07 pm Central) | `20261001T010726Z` | all three | 5 | 5 (hspolicy26 08-25, 09-01, 09-08; hspf26 08-04, 08-11) | 9 | 212 | 158 | 158 | 32.0 s |
+| 5 (Thu 1 Oct, 8:17 pm Central) | `20261002T011748Z` | all three | 5 | 5 (hspolicy26 09-15, 09-22, 09-29; hspf26 08-18, 09-01) | 4 | 2,177 | 1,721 | 1,723 | 161.5 s |
 
 ## Dev publish
 

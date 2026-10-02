@@ -65,6 +65,7 @@ __all__ = [
     "MINIMUM_BLOCK_PARAGRAPHS",
     "PR_SUBSET_SIZE",
     "RARE_UNITS",
+    "REJECTIONS_PATH",
     "REPOSITORY_ROOT",
     "SAMPLING_PLAN_PATH",
     "TARGET_SAMPLING_RATE",
@@ -80,6 +81,9 @@ __all__ = [
     "Manifest",
     "ManifestEntry",
     "ParagraphLabel",
+    "RejectedFile",
+    "RejectionList",
+    "RejectionReason",
     "ReviewerRole",
     "SamplingPlan",
     "SpanLabel",
@@ -89,8 +93,11 @@ __all__ = [
     "load_label_file",
     "load_label_files",
     "load_manifest",
+    "load_rejections",
     "load_sampling_plan",
+    "rejection_conflicts",
     "status_counts",
+    "stratum_of",
     "validate_against_texts",
     "validate_label_file",
     "write_label_file",
@@ -100,6 +107,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 EVAL_FIXTURE_DIRECTORY = REPOSITORY_ROOT / "tests" / "fixtures" / "debate_files" / "eval"
 MANIFEST_PATH = EVAL_FIXTURE_DIRECTORY / "manifest.json"
 SAMPLING_PLAN_PATH = EVAL_FIXTURE_DIRECTORY / "sampling-plan.json"
+REJECTIONS_PATH = EVAL_FIXTURE_DIRECTORY / "rejections.json"
 LABELS_DIRECTORY = EVAL_FIXTURE_DIRECTORY / "labels"
 
 _DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -202,6 +210,86 @@ class Manifest(_Record):
 
 def load_manifest(path: Path = MANIFEST_PATH) -> Manifest:
     return Manifest.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+# --------------------------------------------------------------------------------------------
+# Rejected files
+# --------------------------------------------------------------------------------------------
+
+
+class RejectionReason(StrEnum):
+    """Why a file was taken out of the selection. A code, never a description of what is in it."""
+
+    NOT_DEBATE_CONTENT = "NOT_DEBATE_CONTENT"
+    """Not debate material at all: no tags, citations or arguments (say, a text uploaded in place
+    of a case). Scoring the parser on it measures nothing, and every row would be OTHER."""
+
+
+class RejectedFile(_Record):
+    """A file a person looked at and ruled out. Keyed and described like a manifest entry, no more.
+
+    The stratum is kept so the replacement can be checked against it once the file has left the
+    manifest; `replaced_by` names the manifest entry that took its place.
+    """
+
+    digest: Digest = Field(description="Keyed digest of the rejected file, as it was in the manifest.")
+    reason: RejectionReason
+    rejected_on: str = Field(pattern=r"^20\d\d-\d\d-\d\d$", description="The date it was rejected.")
+    category: Category
+    season: str = Field(pattern=_SEASON.pattern)
+    debate_format: DebateFormat
+    template_family: TemplateFamily
+    pr_subset: bool
+    replaced_by: Digest | None = Field(default=None, description="The manifest entry that replaced it.")
+
+
+class RejectionList(_Record):
+    """Files the selection must never choose again. Committed beside the manifest."""
+
+    description: str = ""
+    rejections: tuple[RejectedFile, ...] = ()
+
+    @model_validator(mode="after")
+    def _unique(self) -> RejectionList:
+        if len({rejection.digest for rejection in self.rejections}) != len(self.rejections):
+            raise ValueError("a file is rejected twice")
+        return self
+
+    @property
+    def digests(self) -> frozenset[str]:
+        return frozenset(rejection.digest for rejection in self.rejections)
+
+
+def load_rejections(path: Path = REJECTIONS_PATH) -> RejectionList:
+    """The rejection list, or an empty one where none has been written."""
+    if not path.is_file():
+        return RejectionList()
+    return RejectionList.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def rejection_conflicts(manifest: Manifest, rejections: RejectionList) -> list[str]:
+    """Where the manifest and the rejection list disagree. Empty when they are consistent."""
+    problems: list[str] = []
+    listed = {entry.digest: entry for entry in manifest.entries}
+    for rejection in rejections.rejections:
+        if rejection.digest in listed:
+            problems.append(f"{rejection.digest[:12]}… is rejected but still in the manifest")
+        if rejection.replaced_by is None:
+            continue  # rejected, then the whole selection was made again: nothing replaced it
+        replacement = listed.get(rejection.replaced_by)
+        if replacement is None:
+            problems.append(f"{rejection.digest[:12]}…'s replacement is not in the manifest")
+            continue
+        if stratum_of(replacement) != stratum_of(rejection):
+            problems.append(f"{rejection.digest[:12]}…'s replacement is from a different stratum")
+    return problems
+
+
+def stratum_of(
+    item: ManifestEntry | RejectedFile,
+) -> tuple[Category, str, DebateFormat, TemplateFamily, bool]:
+    """What a replacement must share with the file it replaces, PR-subset membership included."""
+    return (item.category, item.season, item.debate_format, item.template_family, item.pr_subset)
 
 
 #: The PR subset is "about 6 files" in the spec; exactly six keeps the PR run's cost predictable.

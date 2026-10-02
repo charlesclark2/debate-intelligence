@@ -59,12 +59,15 @@ counted as team files as well. Reading styles only, a few thousand files take se
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import re
 import sys
+import unicodedata
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterator, Sequence
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
@@ -78,15 +81,34 @@ from tests.evals.parser.digests import create_key, key_location, keyed_digest, l
 from tests.evals.parser.labels_schema import (  # noqa: E402
     MANIFEST_PATH,
     PR_SUBSET_SIZE,
+    REJECTIONS_PATH,
     Category,
     DebateFormat,
     Manifest,
     ManifestEntry,
+    RejectedFile,
+    RejectionList,
+    RejectionReason,
     TemplateFamily,
     coverage_shortfalls,
+    load_manifest,
+    load_rejections,
+    rejection_conflicts,
 )
 
-__all__ = ["Candidate", "infer_format", "infer_season", "main", "propose_selection"]
+__all__ = [
+    "Candidate",
+    "ContentHints",
+    "NoReplacementError",
+    "content_hints",
+    "infer_format",
+    "infer_season",
+    "main",
+    "propose_selection",
+    "rekey_manifest",
+    "rekey_rejections",
+    "replace_rejected",
+]
 
 _SEASON_FOLDER = re.compile(r"^(20\d\d)-(20\d\d)$")
 _FORMAT_PATTERNS: tuple[tuple[re.Pattern[str], DebateFormat], ...] = (
@@ -145,6 +167,56 @@ def _paragraph_count(path: Path) -> int | None:
     return data.count(b"<w:p>") + data.count(b"<w:p ")
 
 
+_PARAGRAPH_END = re.compile(r"</w:p>")
+_TEXT_RUN = re.compile(r"<w:t(?:\s[^>]*)?>([^<]*)</w:t>")
+#: A year is the one thing every debate citation carries, in every family and format.
+_CITATION_LIKE = re.compile(r"\b(?:19|20)\d\d\b")
+#: Above this share of letters outside the Latin script, a file is unlikely to be an English case.
+NON_LATIN_SHARE = 0.5
+
+
+@dataclass(frozen=True)
+class ContentHints:
+    """Two signs that a file may not be debate material. A hint for the coach, never a rule.
+
+    Measured on the 30 files selected on 2026-09-21: the file the operator rejected as not debate
+    material was 88% non-Latin letters with no paragraph holding a year; every other file was 0%
+    non-Latin, and all but one had dozens of paragraphs holding a year.
+    """
+
+    no_citation_like_paragraph: bool
+    mostly_non_latin: bool
+
+    @property
+    def flagged(self) -> bool:
+        return self.no_citation_like_paragraph or self.mostly_non_latin
+
+
+def content_hints(path: Path) -> ContentHints:
+    """Read a file's text to count two things, and keep nothing else. The text is never printed."""
+    try:
+        with ZipFile(path) as archive:
+            xml = archive.read("word/document.xml").decode("utf-8", errors="replace")
+    except (BadZipFile, KeyError, OSError):
+        return ContentHints(no_citation_like_paragraph=True, mostly_non_latin=False)
+    citation_like = False
+    letters = non_latin = 0
+    for chunk in _PARAGRAPH_END.split(xml):
+        text = html.unescape("".join(_TEXT_RUN.findall(chunk)))
+        citation_like = citation_like or _CITATION_LIKE.search(text) is not None
+        for character in text:
+            if character.isalpha():
+                letters += 1
+                non_latin += not unicodedata.name(character, "").startswith("LATIN")
+    return ContentHints(
+        no_citation_like_paragraph=not citation_like,
+        mostly_non_latin=letters > 0 and non_latin / letters > NON_LATIN_SHARE,
+    )
+
+
+Stratum = tuple[Category, str, DebateFormat, TemplateFamily]
+
+
 @dataclass(frozen=True)
 class Candidate:
     """One file that could be selected. `path` never leaves this process except into the path map."""
@@ -156,6 +228,10 @@ class Candidate:
     debate_format: DebateFormat
     template_family: TemplateFamily
     paragraphs: int
+
+    @property
+    def stratum(self) -> Stratum:
+        return (self.category, self.season, self.debate_format, self.template_family)
 
     def entry(self, *, pr_subset: bool) -> ManifestEntry:
         return ManifestEntry(
@@ -296,8 +372,13 @@ def _pr_subset(selected: Sequence[Candidate]) -> set[str]:
 
 
 def propose_selection(
-    candidates: Sequence[Candidate], *, max_paragraphs: int = DEFAULT_MAX_PARAGRAPHS
+    candidates: Sequence[Candidate],
+    *,
+    max_paragraphs: int = DEFAULT_MAX_PARAGRAPHS,
+    rejected: Collection[str] = frozenset(),
 ) -> tuple[Manifest, dict[str, Path]]:
+    """A new selection from scratch. A rejected file is never a candidate."""
+    candidates = [c for c in candidates if c.digest not in rejected]
     selected = [c for category in Category for c in _select_category(candidates, category, max_paragraphs)]
     subset = _pr_subset(selected)
     manifest = Manifest(
@@ -305,6 +386,50 @@ def propose_selection(
         entries=tuple(c.entry(pr_subset=c.digest in subset) for c in selected),
     )
     return manifest, {c.digest: c.path for c in selected}
+
+
+class NoReplacementError(ValueError):
+    """A rejected file's stratum has no other candidate. Never filled from another stratum."""
+
+
+def replace_rejected(
+    manifest: Manifest,
+    candidates: Sequence[Candidate],
+    rejected: Collection[str],
+    *,
+    max_paragraphs: int = DEFAULT_MAX_PARAGRAPHS,
+) -> tuple[Manifest, dict[str, str]]:
+    """Swap each rejected file in an existing selection for another from its stratum, in place.
+
+    Every other entry stays exactly where and as it was: the selection has been looked at, and a
+    rejection is a correction to one file, not a reason to choose again. The replacement shares
+    the rejected file's category, season, format, template family and PR-subset membership, is not
+    already selected and has never been rejected. Within the stratum the choice follows the rule
+    that made the original: the shortest file for the PR subset, which runs on every pull request,
+    and the first by keyed digest otherwise; files over `max_paragraphs` only when nothing shorter
+    is left. Returns the new manifest and each rejected digest's replacement.
+    """
+    excluded = {entry.digest for entry in manifest.entries} | set(rejected)
+    entries: list[ManifestEntry] = []
+    replacements: dict[str, str] = {}
+    for entry in manifest.entries:
+        if entry.digest not in rejected:
+            entries.append(entry)
+            continue
+        stratum: Stratum = (entry.category, entry.season, entry.debate_format, entry.template_family)
+        eligible = [c for c in candidates if c.stratum == stratum and c.digest not in excluded]
+        if not eligible:
+            raise NoReplacementError(
+                f"no other candidate in the stratum {entry.category.value} {entry.season} "
+                f"{entry.debate_format.value} {entry.template_family.value}"
+            )
+        order = (lambda c: (c.paragraphs, c.digest)) if entry.pr_subset else (lambda c: c.digest)
+        within = [c for c in eligible if c.paragraphs <= max_paragraphs]
+        chosen = min(within, key=order) if within else min(eligible, key=lambda c: (c.paragraphs, c.digest))
+        excluded.add(chosen.digest)
+        replacements[entry.digest] = chosen.digest
+        entries.append(chosen.entry(pr_subset=entry.pr_subset))
+    return manifest.model_copy(update={"entries": tuple(entries)}), replacements
 
 
 def _parse_input(value: str) -> tuple[Category, Path]:
@@ -351,6 +476,56 @@ def rekey_manifest(manifest_path: Path, old_path_map: Path, key: bytes) -> tuple
     return Manifest(description=MANIFEST_DESCRIPTION, entries=tuple(entries)), path_map
 
 
+def rekey_rejections(
+    rejections: RejectionList, old_path_map: Path, key: bytes
+) -> tuple[RejectionList, dict[str, Path]]:
+    """Re-key the rejection list alongside the manifest, so a rejected file stays rejected.
+
+    A rejection the path map can no longer locate is an error, as it is for the manifest: under a
+    new key its old digest would match nothing, and the file could be selected again.
+    """
+    locations: dict[str, str] = json.loads(old_path_map.read_text(encoding="utf-8"))
+
+    def rekeyed(old: str) -> tuple[str, Path]:
+        location = locations.get(old)
+        if location is None or not Path(location).is_file():
+            raise SystemExit(f"a rejected file ({old[:12]}…) is no longer where the path map says")
+        path = Path(location)
+        return keyed_digest(path.read_bytes(), key), path
+
+    records: list[RejectedFile] = []
+    path_map: dict[str, Path] = {}
+    for rejection in rejections.rejections:
+        digest, path = rekeyed(rejection.digest)
+        path_map[digest] = path
+        replaced_by = rekeyed(rejection.replaced_by)[0] if rejection.replaced_by else None
+        records.append(rejection.model_copy(update={"digest": digest, "replaced_by": replaced_by}))
+    return rejections.model_copy(update={"rejections": tuple(records)}), path_map
+
+
+#: What the rejection list says about itself.
+REJECTIONS_DESCRIPTION = (
+    "Files a person looked at and ruled out of the parser evaluation, by keyed digest, with a "
+    "reason code and the date. No content and no file name. scripts/select_eval_files.py never "
+    "selects a file listed here."
+)
+
+
+def _resolve_in_manifest(manifest: Manifest, prefix: str) -> ManifestEntry:
+    matches = [entry for entry in manifest.entries if entry.digest.startswith(prefix.lower())]
+    if len(matches) != 1:
+        raise SystemExit(f"--reject {prefix}: {len(matches)} manifest entries match; give a longer prefix")
+    return matches[0]
+
+
+def _load_locations(path_map_path: Path) -> dict[str, Path]:
+    if not path_map_path.is_file():
+        raise SystemExit(
+            "no path map on this machine; replacing a file needs the one the manifest was made with"
+        )
+    return {digest: Path(p) for digest, p in json.loads(path_map_path.read_text(encoding="utf-8")).items()}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--input", action="append", type=_parse_input, default=[], help="CATEGORY=PATH")
@@ -359,14 +534,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Re-key the existing manifest instead of choosing files: same files, new digests.",
     )
+    parser.add_argument(
+        "--reject",
+        action="append",
+        default=[],
+        metavar="DIGEST_PREFIX",
+        help="Reject a manifest file and replace it from its own stratum; every other file stays.",
+    )
+    parser.add_argument("--reason", type=RejectionReason, choices=list(RejectionReason), default=None)
+    parser.add_argument("--rejected-on", default=date.today().isoformat(), help="YYYY-MM-DD; default today.")
     parser.add_argument("--exclude-dir", action="append", default=[], help="Folder name to skip.")
     parser.add_argument("--max-paragraphs", type=int, default=DEFAULT_MAX_PARAGRAPHS)
     parser.add_argument("--min-paragraphs", type=int, default=DEFAULT_MIN_PARAGRAPHS)
     parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
+    parser.add_argument("--rejections", type=Path, default=REJECTIONS_PATH)
     parser.add_argument("--path-map", type=Path, default=None, help="Defaults to the evaluation's path map.")
     args = parser.parse_args(argv)
     if not args.input and not args.rekey:
         parser.error("give --input CATEGORY=PATH to choose files, or --rekey to re-key the manifest")
+    if args.reject and args.rekey:
+        parser.error("--reject and --rekey are separate steps")
+    if args.reject and args.reason is None:
+        parser.error("--reject needs a --reason")
 
     path_map_path: Path = (args.path_map or path_map_location()).expanduser().resolve()
     try:
@@ -386,8 +575,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             "It is never committed; keep it with the path map."
         )
 
+    rejections = load_rejections(args.rejections)
+    replacements: dict[str, str] = {}
     if args.rekey:
         manifest, path_map = rekey_manifest(args.manifest, path_map_path, key)
+        rejections, rejected_paths = rekey_rejections(rejections, path_map_path, key)
+        path_map |= rejected_paths
         labeling_rows = None
         oversized = 0
     else:
@@ -401,24 +594,87 @@ def main(argv: Sequence[str] | None = None) -> int:
                 min_paragraphs=args.min_paragraphs,
             )
         )
-        manifest, path_map = propose_selection(candidates, max_paragraphs=args.max_paragraphs)
         by_digest = {c.digest: c for c in candidates}
-        oversized = sum(1 for digest in path_map if by_digest[digest].paragraphs > args.max_paragraphs)
-        labeling_rows = sum(by_digest[digest].paragraphs for digest in path_map)
         print(f"candidates: {len(candidates)}; skipped: {dict(sorted(skipped.items()))}")
+        if args.reject:
+            current = load_manifest(args.manifest)
+            locations = _load_locations(path_map_path)
+            records = list(rejections.rejections)
+            for prefix in args.reject:
+                entry = _resolve_in_manifest(current, prefix)
+                records.append(
+                    RejectedFile(
+                        digest=entry.digest,
+                        reason=args.reason,
+                        rejected_on=args.rejected_on,
+                        category=entry.category,
+                        season=entry.season,
+                        debate_format=entry.debate_format,
+                        template_family=entry.template_family,
+                        pr_subset=entry.pr_subset,
+                    )
+                )
+            rejected = {record.digest for record in records}
+            try:
+                manifest, replacements = replace_rejected(
+                    current, candidates, rejected, max_paragraphs=args.max_paragraphs
+                )
+            except NoReplacementError as error:
+                print(f"NOT REPLACED: {error}; nothing written")
+                return 1
+            records = [
+                r.model_copy(update={"replaced_by": replacements[r.digest]})
+                if r.digest in replacements
+                else r
+                for r in records
+            ]
+            rejections = RejectionList(description=REJECTIONS_DESCRIPTION, rejections=tuple(records))
+            known = locations | {c.digest: c.path for c in candidates}
+            path_map = {d: known[d] for d in [*(e.digest for e in manifest.entries), *rejected] if d in known}
+        else:
+            manifest, path_map = propose_selection(
+                candidates, max_paragraphs=args.max_paragraphs, rejected=rejections.digests
+            )
+            # A rejection keeps its digest; one whose replacement this new selection dropped keeps no
+            # replacement. Rejected files stay in the path map so a re-key can carry them forward.
+            selected = {e.digest for e in manifest.entries}
+            rejections = rejections.model_copy(
+                update={
+                    "rejections": tuple(
+                        r if r.replaced_by in selected else r.model_copy(update={"replaced_by": None})
+                        for r in rejections.rejections
+                    )
+                }
+            )
+            path_map |= {d: by_digest[d].path for d in rejections.digests if d in by_digest}
+        in_manifest = [by_digest[e.digest] for e in manifest.entries if e.digest in by_digest]
+        oversized = sum(1 for c in in_manifest if c.paragraphs > args.max_paragraphs)
+        labeling_rows = sum(c.paragraphs for c in in_manifest)
 
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    if rejections.rejections:
+        args.rejections.parent.mkdir(parents=True, exist_ok=True)
+        args.rejections.write_text(rejections.model_dump_json(indent=2) + "\n", encoding="utf-8")
     path_map_path.parent.mkdir(parents=True, exist_ok=True)
     path_map_path.write_text(
         json.dumps({digest: str(p) for digest, p in path_map.items()}, indent=2), encoding="utf-8"
     )
 
+    # The hint reads each selected file's text to count two things. Only counts are printed.
+    hints = {e.digest: content_hints(path_map[e.digest]) for e in manifest.entries if e.digest in path_map}
     by_stratum = Counter(
         (e.category.value, e.template_family.value, e.debate_format.value, e.season) for e in manifest.entries
     )
+    hinted_by_stratum = Counter(
+        (e.category.value, e.template_family.value, e.debate_format.value, e.season)
+        for e in manifest.entries
+        if e.digest in hints and hints[e.digest].flagged
+    )
     if args.rekey:
         print(f"re-keyed {len(manifest.entries)} files under the key at {key_location()}")
+        if rejections.rejections:
+            print(f"re-keyed {len(rejections.rejections)} rejected file(s) with them")
         print("labels and the sampling plan carry the same digests: regenerate them before labeling")
     else:
         print(
@@ -426,13 +682,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"{labeling_rows} paragraphs in them; {oversized} over {args.max_paragraphs} paragraphs "
             "(taken only for a stratum no shorter file meets)"
         )
+    if replacements:
+        hinted_replacements = sum(1 for new in replacements.values() if hints[new].flagged)
+        print(
+            f"replaced {len(replacements)} rejected file(s) from the same stratum; the other "
+            f"{len(manifest.entries) - len(replacements)} entries are unchanged; "
+            f"{hinted_replacements} replacement(s) carry a content hint"
+        )
+    if rejections.rejections:
+        print(f"{len(rejections.rejections)} rejected file(s) on the list; none can be selected")
     for (category, family, debate_format, season), count in sorted(by_stratum.items()):
-        print(f"  {category:8} {family:15} {debate_format:6} {season}: {count}")
+        hinted = hinted_by_stratum[(category, family, debate_format, season)]
+        note = f" ({hinted} with a content hint)" if hinted else ""
+        print(f"  {category:8} {family:15} {debate_format:6} {season}: {count}{note}")
+    flagged = [h for h in hints.values() if h.flagged]
+    print(
+        f"content hints: {len(flagged)} of {len(hints)} selected files may not be debate material "
+        f"({sum(h.no_citation_like_paragraph for h in flagged)} with no paragraph holding a year, "
+        f"{sum(h.mostly_non_latin for h in flagged)} mostly non-Latin text). A hint for the coach; "
+        "reject a file with --reject DIGEST_PREFIX --reason NOT_DEBATE_CONTENT"
+    )
     shortfalls = coverage_shortfalls(manifest)
     for shortfall in shortfalls:
         print(f"SHORTFALL: {shortfall}")
+    conflicts = rejection_conflicts(manifest, rejections)
+    for conflict in conflicts:
+        print(f"REJECTION CONFLICT: {conflict}")
     print("manifest written; path map written outside the repository")
-    return 1 if shortfalls else 0
+    return 1 if shortfalls or conflicts else 0
 
 
 if __name__ == "__main__":

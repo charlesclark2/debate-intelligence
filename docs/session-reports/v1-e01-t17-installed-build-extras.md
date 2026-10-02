@@ -326,9 +326,52 @@ boto3). Use the script as it was before this task, then re-add the stopgap the w
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-02
 
 **Notes:**
+
+Accepted for a `--partial` merge; the Goal stays `InProgress` until ac4, which only the operator can
+run after a pre-release is published from this branch. Two small changes before the pull request
+(the last two items below).
+
+**Protecting the real install was done properly.** A wrapper that refuses unless `uv tool dir`
+resolves inside the scratchpad, a before-and-after fingerprint of the receipt, the binary and the
+site-packages listing, and `sandbox-exec` shown to block the network before relying on it. The
+stopgap the weekly agent depends on is intact, and the report proves it rather than asserting it.
+
+**Deriving the list from the installed container, and refusing what it cannot follow, is the design I
+wanted.** The dev905 mutant shows it working: wire the parser the way v1-e31-t06 will and drop
+`docx`, and the check finds the eighth integration itself. dev907 shows the coverage assertion is
+load-bearing. Running the same install in `dev-prerelease.yml` means an incomplete build is never
+published, which matters more than catching it on the coach's Mac.
+
+**Deviation 1 is my error.** The container does not wire the docx parser yet. Declaring `docx` anyway,
+for the reasons you give, is right, and calling the surviving drop-`docx` mutant equivalent rather
+than a gap is accurate. I have reworded ac1 in this branch with your wording.
+
+**Deviations 2 to 5 and Decisions 1 to 10 are accepted.** Declaring the extras on `debate-cli` keeps
+`debate-core` lean and makes the declaration true for every way the CLI is installed. Deviation 4 is a
+real defect in the spec's own advice: `uv sync --extra aws` fails at the workspace root.
+
+**The `uv.lock` incident is reported honestly and the lesson is general.** A mutation of a
+`pyproject.toml` re-locks under plain `uv run`, so the byte-restore misses the lockfile. Use
+`--frozen` for any such mutation.
+
+**Follow-ups, PM decisions.** Install-before-check is filed as `v1-e01-t14` ac5 in this branch: a
+rehearsal into a temporary tool directory, then the real install only if every check passes.
+Folding the check into `doctor` is noted there too. The launchd PATH is already `v1-e34-t10`. v1-e31-t06
+expecting `8/8` is noted for that task's kickoff. The adapters' advice: change 1 below.
+
+**Change 1: fix the adapters' checkout advice now.** `integrations/s3/__init__.py` line 52 and
+`packages/debate_core/README.md` lines 160 and 238 give `uv sync --extra …`, which you showed fails at
+the workspace root. They are message strings and documentation, not adapter behaviour, so they are
+not what the spec's "no change to the adapters" was protecting. Change them to
+`uv sync --all-packages --extra …`. I am authorising the edit; list it as a deviation.
+
+**Change 2: no `#` comments in operator command blocks.** The operator's shell is zsh, which does not
+treat `#` as a comment when typed or pasted interactively: in step 2, `grep -c … # 1 or more…` passes
+`#`, `1`, `or` and the rest to grep as file names. Move every expectation out of the code blocks and
+into the prose around them, in follow-ups 0 to 4 and the rollback.

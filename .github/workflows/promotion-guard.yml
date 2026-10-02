@@ -7,8 +7,10 @@
 # build (the carve-out is recorded in v1-e01-t04's spec).
 #
 #   promotion-source  the head is `dev` or `hotfix/<slug>` from this repository, and the description
-#                     fills in the "Dev build:" and "validate-dev run:" lines of the promotion or
-#                     hotfix template. `edited` is a trigger so that filling them in re-runs it.
+#                     fills in the "Dev build:" line of the promotion or hotfix template. `edited`
+#                     is a trigger so that filling it in re-runs it. The validate-dev run is not
+#                     asked for: protect-main requires the `validate-dev` status on the head commit
+#                     itself (v1-e01-t10).
 #   back-merge        main holds no non-merge commit that dev lacks, i.e. every hotfix was
 #                     back-merged. Passes for hotfix/* heads so a second fix is never blocked.
 #
@@ -62,7 +64,7 @@ jobs:
         run: >-
           python3 scripts/check_promotion_source.py source
           --base "$BASE_REF" --head "$HEAD_REF" --head-repo "$HEAD_REPO" --base-repo "$BASE_REPO"
-      - name: The Dev build and validate-dev run lines are filled in
+      - name: The Dev build line is filled in
         # Runs after a failed source check too, so one run reports everything that is wrong.
         if: ${{ !cancelled() }}
         env:

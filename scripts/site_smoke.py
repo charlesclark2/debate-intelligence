@@ -5,8 +5,9 @@
     uv run scripts/site_smoke.py --env prod --url https://wfbdebate.com --expect-sha "$(git rev-parse HEAD)"
 
 Spec: ``plan_specs/v1/e36-team-website/t05-site-deploy.yaml``. It runs after every deploy
-(``scripts/site_deploy.sh``), and ``tests/smoke/test_site.py`` runs it from ``validate-dev``
-before a dev-to-main promotion (ADR-0013).
+(``scripts/site_deploy.sh``), and ``tests/smoke/test_site.py`` runs it under pytest (``-m dev`` or
+``-m prod``). It is not part of ``validate-dev``: the site is deployed by hand, not once per dev
+commit, so its ``version.json`` is not the commit validate-dev validates (tests/smoke/README.md).
 
 It makes real HTTP requests, so it is the one thing in this repository that needs the network,
 and it needs nothing else: no AWS credentials, no state, no cookie. Everything it asserts is

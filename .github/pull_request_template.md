@@ -28,6 +28,8 @@ Session report: <!-- docs/session-reports/<task-name>.md -->
 
 - [ ] Every acceptance criterion in the spec is accounted for above
 - [ ] The Goal's `status.phase` is updated in this pull request
-- [ ] Smoke checks in `tests/smoke/` added or updated, or this changes no user-facing surface
+- [ ] Smoke checks in `tests/smoke/` added or updated, as
+      [Adding a smoke check](https://github.com/charlesclark2/debate-intelligence/blob/dev/tests/smoke/README.md#adding-a-smoke-check)
+      describes, or this changes no user-facing surface
 - [ ] CI (`ci`) is green
 - [ ] Squash-merge into `dev`

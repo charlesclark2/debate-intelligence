@@ -32,6 +32,7 @@ from tests.fixtures.openev.build_synthetic_openev import SYNTHETIC_YEAR as OPENE
 from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
+from debate_core.application.caselist.inbox_purge import CaselistInbox
 from debate_core.application.caselist.manifest import manifest_key, write_manifest, write_manifest_lines
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
@@ -45,7 +46,7 @@ from debate_core.application.caselist.suppression import (
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore, SqliteDatabase
-from debate_core.integrations.local.archive_reader import archive_digest, read_archive
+from debate_core.integrations.local.archive_reader import ZipArchiveRewriter, archive_digest, read_archive
 from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.suppression_list import (
@@ -134,6 +135,10 @@ class RemovalWorld:
     data_dir: Path
     bucket_name: str
     client: S3Client
+    removal_inbox: Path | None = None
+    """The inbox a removal purges, when not this machine's `<data_dir>/inbox`: a test of the pull that
+    stages the inbox's state by hand gives the removal one it cannot reach, as a removal made on
+    another machine is."""
 
     @property
     def bucket(self) -> S3EvidenceObjectStore:
@@ -151,6 +156,15 @@ class RemovalWorld:
     def repository(self) -> SqliteCaselistRepository:
         return SqliteCaselistRepository(SqliteDatabase.open(self.data_dir))
 
+    @property
+    def inbox(self) -> CaselistInbox:
+        """The sync's inbox where the composition root puts it when `caselist.inbox_dir` is unset."""
+        return CaselistInbox(
+            directory=self.removal_inbox or self.data_dir / "inbox",
+            state_dir=self.data_dir,
+            archives=ZipArchiveRewriter(**_LIMITS),
+        )
+
     def suppression(self) -> RecordedSuppressionList:
         """The local copy and the bucket's, as every bucket-holding command reads them."""
         return RecordedSuppressionList(
@@ -166,6 +180,7 @@ class RemovalWorld:
             local_parsed=FsEvidenceVersionStore(self.data_dir / "parsed"),
             remote=self.bucket,
             remote_versions=versions or S3EvidenceVersionStore(bucket=self.bucket_name, client=self.client),
+            inbox=self.inbox,
             suppression=self.suppression(),
             clock=FixedClock(REMOVAL_TIME),
             environment="dev",
@@ -189,6 +204,7 @@ class RemovalWorld:
             local=self.local,
             local_blobs=FsEvidenceVersionStore(self.data_dir / "blobs"),
             local_parsed=FsEvidenceVersionStore(self.data_dir / "parsed"),
+            inbox=self.inbox,
             remote=self.bucket,
             suppression=self.suppression(),
             local_suppression=local_suppression_list_file(self.data_dir),

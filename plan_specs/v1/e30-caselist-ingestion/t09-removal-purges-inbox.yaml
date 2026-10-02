@@ -66,7 +66,7 @@ spec:
         guard is mutated and shown caught. The removal runbook's manual inbox step is removed and the
         procedure describes what the command now does.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

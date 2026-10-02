@@ -42,6 +42,13 @@ parser reads a disclosure (:mod:`debate_core.application.caselist.path_parser`).
 drops every row of that team's in every manifest of the caselist — files, junk entries, `REMOVED`
 rows — because each one names the team.
 
+## The sync's inbox
+
+The plan also lists every file in the download inbox (`caselist pull`'s, `v1-e30-t09`) that holds
+something the list will stop once this plan's entries are appended, and whether it is deleted or
+rewritten without the removed entries: see :mod:`debate_core.application.caselist.inbox_purge`. An
+archive still waiting to be imported is never deleted.
+
 ## Re-running
 
 A removal that failed part-way is finished by running the same command again. The local records
@@ -68,6 +75,12 @@ from pathlib import Path
 from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence, local_file
+from debate_core.application.caselist.inbox_purge import (
+    CaselistInbox,
+    InboxFilePlan,
+    InboxTeamFilesLeft,
+    plan_inbox,
+)
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY, render_rows
 from debate_core.application.caselist.openev_manifest import openev_release_name, summary_row
 from debate_core.application.caselist.pipeline import (
@@ -326,6 +339,13 @@ class RemovalPlan:
     """Caselists whose manifests the removal touched, for the noncurrent-version sweep."""
     suppression_after: SuppressionState = field(default_factory=SuppressionState)
     """The list as it will read once this plan's entries are appended."""
+    inbox: tuple[InboxFilePlan, ...] = ()
+    """Every file in the sync's inbox holding something that list stops, and what happens to it."""
+    inbox_team_files_left: tuple[InboxTeamFilesLeft, ...] = ()
+    """Archives waiting to be imported that hold files of the team the store has never seen."""
+    inbox_directory: str = ""
+    inbox_exists: bool = False
+    """Whether that directory exists. Prod, which does not pull, has none; nothing is then created."""
 
     def of(self, disposition: Disposition) -> tuple[PlannedSource, ...]:
         return tuple(source for source in self.sources if source.disposition is disposition)
@@ -355,6 +375,7 @@ class RemovalPlan:
             and not self.objects
             and not self.suppression_entries
             and not any(source.local_blob for source in self.sources)
+            and not self.inbox
         )
 
 
@@ -430,6 +451,8 @@ class RemovalPlanner:
         remote: The environment's bucket through the everyday profile: listings, heads, manifests.
         remote_versions: The bucket's versions through whichever credential the composition root
             gives it; a denial means "not counted", not failure.
+        inbox: The sync's download inbox in this environment. Required, with no default, so that no
+            removal can be built that forgets it.
         suppression: The suppression list (local and bucket copies).
         clock: The time entries are recorded at.
         environment: `dev` or `prod`, for the plan and the log.
@@ -445,6 +468,7 @@ class RemovalPlanner:
         local_parsed: EvidenceVersionStore,
         remote: EvidenceObjectStore,
         remote_versions: EvidenceVersionStore,
+        inbox: CaselistInbox,
         suppression: SuppressionList,
         clock: Clock,
         environment: str,
@@ -456,6 +480,7 @@ class RemovalPlanner:
         self._local_parsed = local_parsed
         self._remote = remote
         self._remote_versions = remote_versions
+        self._inbox = inbox
         self._suppression = suppression
         self._clock = clock
         self._environment = environment
@@ -510,6 +535,15 @@ class RemovalPlanner:
         index = _BucketIndex(self._remote, self._remote_versions)
         rewrites = await self._manifest_rewrites(copies, selector, removed, withdrawn_paths, after, index)
         objects, counted = await self._objects(sources, caselists, copies, index)
+        inbox, team_files_left = plan_inbox(
+            self._inbox,
+            suppression=after,
+            imported_weeks=_imported_weeks(copies),
+            imported_openev_downloads=_imported_openev_downloads(copies),
+            team=(selector.caselist, selector.school, selector.team_code)
+            if isinstance(selector, TeamSelector)
+            else None,
+        )
         return RemovalPlan(
             selector=selector,
             request_id=request_id,
@@ -525,6 +559,10 @@ class RemovalPlanner:
             and all(rewrite.versions is not None for rewrite in rewrites if rewrite.side is Side.BUCKET),
             affected_caselists=_affected_caselists(sources, caselists),
             suppression_after=after,
+            inbox=inbox,
+            inbox_team_files_left=team_files_left,
+            inbox_directory=str(self._inbox.directory),
+            inbox_exists=self._inbox.directory.is_dir(),
         )
 
     # --------------------------------------------------------------------------------------
@@ -1038,6 +1076,33 @@ def _affected_caselists(sources: Sequence[PlannedSource], caselists: Sequence[st
     if not any(source.disposition is not Disposition.SKIP_SHARED for source in sources):
         return ()
     return tuple(sorted(caselists))
+
+
+def _imported_weeks(copies: Sequence[_ManifestCopy]) -> frozenset[tuple[str, date]]:
+    """The weeks this machine holds a manifest for: what the sync calls imported (`_decide_archive`).
+
+    This machine's copies only. The inbox is this machine's, and so is the sync's notion of what it
+    has imported; a manifest that is only in the bucket has not been imported here.
+    """
+    weeks: set[tuple[str, date]] = set()
+    for copy in copies:
+        if copy.side is Side.LOCAL and copy.caselist != OPENEV:
+            try:
+                weeks.add((copy.caselist, date.fromisoformat(copy.release)))
+            except ValueError:
+                continue
+    return frozenset(weeks)
+
+
+def _imported_openev_downloads(copies: Sequence[_ManifestCopy]) -> frozenset[str]:
+    """The download digests this machine's OpenEv manifest rows came from (each row's `archive_sha256`)."""
+    return frozenset(
+        str(row["archive_sha256"])
+        for copy in copies
+        if copy.side is Side.LOCAL and copy.caselist == OPENEV
+        for _, row in copy.rows
+        if isinstance(row.get("archive_sha256"), str)
+    )
 
 
 def _names_digest(key: str, digest: str) -> bool:

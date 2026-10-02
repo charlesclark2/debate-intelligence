@@ -204,7 +204,9 @@ again for the importer to refuse. The decision is read from the suppression list
 after `caselist unsuppress` the next run fetches it again, and says so in the select stage (*fetched
 before and neither recorded nor suppressed now*). Which bytes each OpenEv id delivered is kept in
 `<data_dir>/caselist-sync-openev-deliveries.json`; it holds digests only, and deleting it costs at
-most one download of each removed file, which the importer refuses.
+most one download of each removed file, which the importer refuses. `caselist remove` deletes a
+removed camp file's copy from the inbox, and writes its digests to that record first when the
+record does not have them (`v1-e30-t09`), so the copy going does not cost a download either.
 
 **A camp file shows `same_path_as_a_removed_file`.** OpenEv lists a new id at the path of a camp
 file that was removed; that is how a camp uploads a file again, since OpenEv cannot replace a file in

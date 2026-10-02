@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import zipfile
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
@@ -171,6 +172,7 @@ def test_a_team_is_removed_and_next_weeks_archive_does_not_bring_it_back(
     done = run(*REMOVE, "--execute")
     assert done["exit_code"] == ExitCode.OK, done
     assert done["data"]["outcome"] == "COMPLETED"
+    assert done["data"]["inbox_exists"] is False and not (data_dir / "inbox").exists(), "none created"
     keys = {key for key, _ in versions(bucket)}
     for sha in EXCLUSIVE:
         assert not any(sha in key for key in keys)
@@ -225,6 +227,7 @@ def test_the_dry_run_reads_as_a_plan_for_a_person(
         "FOR THE CONFIRMATION TO THE REQUESTER",
         "TO CARRY IT OUT",
         "DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal",
+        "): does not exist, so there is nothing to check or change",
     ):
         assert heading in result.stdout, heading
 
@@ -324,3 +327,49 @@ def test_a_removal_that_completes_but_cannot_be_logged_says_it_completed(
     keys = {key for key, _ in versions(bucket)}
     for sha in EXCLUSIVE:
         assert not any(sha in key for key in keys), "the deletes happened"
+
+
+def test_the_download_inbox_is_listed_by_the_dry_run_and_purged_by_the_execution(
+    installation: Path, bucket: S3Client, published: dict[date, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`v1-e30-t09`: the inbox `caselist pull` downloads into, where the composition root puts it.
+
+    The three weeks the store imported, as the pull names them, and next Monday's archive (the 09-15
+    bytes again) downloaded but not yet imported. The imported weeks go; next Monday's is rewritten
+    without the team's files, never deleted, because the next pull imports it from there.
+    """
+    inbox = installation / "dev" / "inbox"
+    inbox.mkdir(parents=True)
+    for week in SNAPSHOTS:
+        (inbox / f"{SYNTHETIC_CASELIST}-weekly-{week.snapshot}.zip").write_bytes(
+            published[week.snapshot].read_bytes()
+        )
+    waiting = inbox / f"{SYNTHETIC_CASELIST}-weekly-2026-09-22.zip"
+    waiting.write_bytes(published[SNAPSHOTS[-1].snapshot].read_bytes())
+    before = tree(inbox)
+
+    planned = run(*REMOVE)
+    shown = runner.invoke(create_app(), list(REMOVE))
+
+    assert planned["exit_code"] == ExitCode.OK, planned
+    assert [(one["name"], one["action"]) for one in planned["data"]["inbox"]] == [
+        (f"{SYNTHETIC_CASELIST}-weekly-2026-09-01.zip", "delete"),
+        (f"{SYNTHETIC_CASELIST}-weekly-2026-09-08.zip", "delete"),
+        (f"{SYNTHETIC_CASELIST}-weekly-2026-09-15.zip", "delete"),
+        (waiting.name, "rewrite"),
+    ]
+    assert f"DOWNLOAD INBOX ({inbox}): 4 file(s) hold removed files." in shown.stdout
+    assert tree(inbox) == before, "the dry run changed the inbox"
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*REMOVE, "--execute")
+
+    assert done["exit_code"] == ExitCode.OK, done
+    entry = json.loads(done["data"]["log_entry"])
+    assert (entry["inbox_files_deleted"], entry["inbox_files_rewritten"]) == (3, 1)
+    assert sorted(path.name for path in inbox.iterdir()) == [waiting.name]
+    with zipfile.ZipFile(waiting) as archive:
+        held = {hashlib.sha256(archive.read(info)).hexdigest() for info in archive.infolist()}
+        names = archive.namelist()
+    assert not held & EXCLUSIVE and not any("Maple Grove/QX/" in name for name in names)
+    assert any("Cedar Hollow/ZaLu/" in name for name in names), "another team's files are kept"

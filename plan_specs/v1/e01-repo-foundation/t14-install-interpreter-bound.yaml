@@ -80,6 +80,16 @@ spec:
         a hardcoded Python version outside that one declaration, `.python-version` and the CI matrix,
         and fails on a new one. The runbook describes how to check an install rather than which
         version to pass.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-02, from v1-e01-t17's follow-up work. `install_channel.sh` runs
+        `uv tool install --force` before any check, so a build that fails `--version`, the provenance
+        check or `python -m debate_cli.installation` has already replaced the build the weekly launchd
+        agent runs. The script installs into a temporary uv tool directory first, runs every check
+        there, and replaces the real install only if all of them pass. A test shows a build failing its
+        integration check leaves the previous install untouched. If `doctor` gains the ability to fail
+        here (ac2), it runs in that rehearsal too, so one command answers "is this installation
+        sound".
 status:
   phase: Pending
 ---

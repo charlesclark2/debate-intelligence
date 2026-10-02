@@ -57,6 +57,12 @@ Two more ceilings the site sets, both handled in code rather than here:
    for the agent until a new build is installed. `debate-research --json config show` run as the
    agent runs (same `DEBATE_ENV`, from `$HOME`) shows the value and, under `sources`, which
    bundled file it came from.
+
+   The build must also be complete: `install_channel.sh` ends with
+   `N/N wired integrations import; declared extras: aws, docx, opencaselist; complete` and refuses
+   a build that cannot import the S3 adapter or the OpenCaselist client (v1-e01-t17). Builds
+   published before that change lack boto3, so every `caselist pull` they run fails with exit 70.
+   Never add a package to the tool environment by hand to get past that; install a later tag.
 2. **A token.** `debate-research caselist auth login`, once, for that environment
    (`v1-e34-t01`). `caselist auth status --check` confirms it.
 3. **An AWS session**, if you want the run to publish: `aws sso login --profile

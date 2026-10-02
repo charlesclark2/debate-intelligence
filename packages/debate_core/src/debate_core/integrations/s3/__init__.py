@@ -49,7 +49,8 @@ import importlib.util
 if importlib.util.find_spec("boto3") is None:  # pragma: no cover - depends on how this was installed
     raise ModuleNotFoundError(
         "debate_core.integrations.s3 needs boto3, which is an optional dependency of debate-core: "
-        "install it with `uv sync --extra aws` (or `pip install 'debate-core[aws]'`)."
+        "install it with `uv sync --all-packages --extra aws` from the workspace root "
+        "(or `pip install 'debate-core[aws]'`)."
     )
 
 from debate_core.integrations.s3.client import (

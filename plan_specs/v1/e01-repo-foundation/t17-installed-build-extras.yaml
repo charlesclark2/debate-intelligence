@@ -47,9 +47,12 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        A build installed by `scripts/install_channel.sh` can import every integration the CLI's
-        container wires, including the S3 adapter and the docx parser. Shown failing first against
-        the current channel build, with the same exit-70 error the operator saw.
+        Reworded by the PM, 2026-10-02: as first written it said the container wires the docx parser,
+        which it does not yet (v1-e31-t06 wires it); the session showed that. A build installed by
+        `scripts/install_channel.sh` can import every integration the CLI's container wires (today the
+        local adapters, the OpenCaselist client and the S3 adapter) and carries the docx extra the
+        parse stage will need. Shown failing first against the current channel build, with the same
+        exit-70 error the operator saw.
     - id: ac2
       description: >-
         The channel's post-install verification imports or constructs every integration the
@@ -67,7 +70,7 @@ spec:
         stopgap (installing boto3 into the tool environment by hand). The operator runs this; the
         report records its output.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

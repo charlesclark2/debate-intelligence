@@ -95,7 +95,7 @@ def test_stamp_sets_both_versions_and_pins_debate_core(checkout: Path, tmp_path:
     cli = (checkout / sb.CLI_PYPROJECT).read_text(encoding="utf-8")
     assert 'version = "0.1.0.dev3"' in core
     assert 'version = "0.1.0.dev3"' in cli
-    assert '"debate-core[opencaselist]==0.1.0.dev3"' in cli
+    assert '"debate-core[aws,docx,opencaselist]==0.1.0.dev3"' in cli
 
 
 def test_stamp_writes_the_build_info_module_and_asset(checkout: Path, tmp_path: Path) -> None:
@@ -124,7 +124,9 @@ def test_stamp_bundles_the_committed_profiles_and_routing_files(checkout: Path, 
 
 def test_stamp_refuses_a_pyproject_it_cannot_edit_unambiguously(checkout: Path, tmp_path: Path) -> None:
     path = checkout / sb.CLI_PYPROJECT
-    path.write_text(path.read_text(encoding="utf-8").replace('"debate-core[opencaselist]"', '"typer"'))
+    path.write_text(
+        path.read_text(encoding="utf-8").replace('"debate-core[aws,docx,opencaselist]"', '"typer"')
+    )
 
     with pytest.raises(sb.StampError, match="unpinned debate-core"):
         sb.stamp(checkout, info(), tmp_path / "dist")

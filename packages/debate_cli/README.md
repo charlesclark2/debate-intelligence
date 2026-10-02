@@ -81,6 +81,20 @@ $ debate-research --version --json | jq .data
 | A dev pre-release | `dev` | `dev` | the `config/` bundled in the wheel |
 | A stable release (v1-e09-t06) | `stable` | `prod` | the `config/` bundled in the wheel |
 
+**What an installed build contains.** This package requires `debate-core[aws,docx,opencaselist]`:
+the extras behind the adapters `debate_cli.container` wires, so a channel install has boto3, lxml,
+httpx and keyring without anything added by hand. `scripts/install_channel.sh` proves it after every
+install with `python -m debate_cli.installation`. That check reads the list of
+`debate_core.integrations` modules from the installed container's own import statements, imports
+each one, and fails unless it tried and imported them all. It also confirms that every distribution
+behind the declared extras is installed. An adapter wired with an ordinary import is checked from the
+day it is wired; a dynamic import makes the check refuse rather than skip it (v1-e01-t17).
+
+If a command still meets a missing optional dependency, the failure says how to fix *this* kind
+of installation, judged from the build's channel. An installed build is told to reinstall with
+`scripts/install_channel.sh` at a fixed tag. A source checkout is told to run
+`uv sync --all-packages --extra <extra>` from the workspace root. The exit status stays 70.
+
 An explicit `DEBATE_ENV` always wins, and `DEBATE_PROFILE_DIR` overrides the bundled profiles.
 `debate_cli/build_info.py` reads the stamp that `scripts/stamp_build.py` writes into a published
 build (`_build_info.py` and `_bundled_config/`, both gitignored), and passes the channel and the

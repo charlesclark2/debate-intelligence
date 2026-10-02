@@ -230,6 +230,14 @@ How failures become reason codes:
 | The card's `article_id` is not its snapshot's | `ARTICLE_MISMATCH` |
 | The card's `provenance_mode` is not its snapshot's | `PROVENANCE_MISMATCH` |
 
+One more code appears in `debate-research verify` reports and never comes from the verifier:
+`CARD_INVALID`, for a manifest entry that passes the manifest's JSON Schema but is not a valid
+`Card` (for example one that breaks the length invariant below, which a schema cannot express).
+There is no card to compare, so nothing is checked against a snapshot; the rest of the manifest is
+still verified. `VerifyManifest`
+([`debate_core.application.verify_manifest`](../../packages/debate_core/src/debate_core/application/verify_manifest.py),
+`v1-e03-t06`) reports it.
+
 The first differing offset is in **evidence-text coordinates**: an index into the card's
 `evidence_text`. For a card with no omissions, the snapshot offset is `evidence_start_offset` plus
 it; past an omission, add the lengths of the omissions before it too. When one text is a prefix of the other, it is the shorter one's

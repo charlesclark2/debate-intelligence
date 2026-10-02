@@ -126,3 +126,20 @@ def test_a_manifest_lists_at_least_one_card(cards: tuple[Card, Card]) -> None:
     document = manifest_document(cards)
     document["cards"] = []
     assert violations(CARD_MANIFEST_SCHEMA_FILENAME, document) == [("$.cards", "minItems")]
+
+
+def test_the_rendering_refuses_a_schema_that_still_points_at_an_inlined_definition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Were a header field to start using a domain type, dropping `$defs` would leave a dangling
+    reference and a schema that no consumer could resolve."""
+    rendered = CardManifest.model_json_schema(mode="serialization")
+    rendered["properties"]["generated_at"] = {"$ref": "#/$defs/Citation"}
+
+    def with_a_dangling_reference(**_: object) -> dict[str, Any]:
+        return rendered
+
+    monkeypatch.setattr(CardManifest, "model_json_schema", with_a_dangling_reference)
+
+    with pytest.raises(ValueError, match="still refers to an inlined definition"):
+        render_card_manifest_schema()

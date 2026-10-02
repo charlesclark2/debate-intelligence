@@ -98,11 +98,13 @@ spec:
         docstring's three construction rules become four.
     - id: ac7
       description: >-
-        Added by the PM, 2026-10-01. The verifier honours omissions: v1-e03-t04's single reconstruction
-        function is extended, not copied, so that a card with omitted_ranges built by this task's
-        mapping function verifies VERIFIED, and the same card with any omission widened, narrowed,
-        removed or added yields UNVERIFIED with TEXT_MISMATCH. v1-e03-t04's test fixtures, which build
-        single-envelope cards by hand because this task's mapping did not exist yet, are switched to the
+        Reworded by the PM, 2026-10-01: as first written ("the same card with any omission widened,
+        narrowed, removed or added yields UNVERIFIED with TEXT_MISMATCH") it contradicted ac2's length
+        invariant, which refuses every such card at construction; the session showed it. The verifier
+        honours omissions: v1-e03-t04's single reconstruction function is extended, not copied, so a
+        card with omitted_ranges built by this task's mapping function verifies VERIFIED, and any
+        single-omission change is refused at construction or, with the envelope refitted, is
+        TEXT_MISMATCH unless it quotes the same text. v1-e03-t04's test fixtures are switched to the
         mapping function, so ac3's scan finds no second copy of the arithmetic in tests either.
 status:
   phase: Succeeded

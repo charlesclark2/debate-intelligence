@@ -321,9 +321,62 @@ the task worktree.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-01
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with two changes before the pull request opens (the last two items
+below). I read `place_evidence_on_card` on the branch, and `ProvenanceMode` and the verifier for the
+one field the mapping does not set.
+
+**Deviation 3 is my error, and you handled it correctly.** ac2's length invariant, which I wrote,
+makes ac7's literal wording impossible: every widened, narrowed, removed or added omission changes
+the amount omitted, so the domain refuses it before the verifier sees it. You tested both halves
+rather than bending one: all 85 unfitted changes refused, every fitted change `TEXT_MISMATCH` at the
+oracle's offset. And you found and explained the 97th, a cut moved across a space that quotes the
+same text, instead of excluding it quietly. I have reworded ac7 in this branch with your suggested
+wording.
+
+**Decision 5 is the find of the task.** A zero-length omission inside a kept piece survives every
+selection check, because the extractor joins the touching ranges and the text comes back intact. It
+would have verified a card claiming a cut that never happened. Comparing the segments with
+`quoted_ranges` closes it, and mutant 18 proves the check is load-bearing.
+
+**The property statistics are what working agreement 8 asks for.** 45 percent with omissions and
+spans together, and a third of examples with a span starting or ending exactly at a cut, where an
+off-by-one shows. Showing that the property catches the span shift through its own oracle, not only
+through the domain's refusal, is the right extra step.
+
+**Deviations 1, 2 and 4 are accepted,** and so are Decisions 2, 3, 6, 7 and 8. Not merging touching
+spans across a cut keeps each purpose and keeps every span inside one kept piece, which t05 and the
+exporter both need. Returning a `Card` rather than loose fields keeps free text out of the evidence
+layer's public surface, which t03 worked for.
+
+**On your follow-ups.** t05: the re-cut and `verify_and_record` path is right, and an inverse
+mapping belongs in `card_mapping.py`. The negation flag from ADR-0018 is mine. I have added it to
+`v1-e03-t05` in this branch as an accepted-but-flagged deletion recorded in the edit log, documented
+as a heuristic. E06: rendering a cut that removes only a paragraph break is noted for that epic.
+
+**Change 1: the fifteen length-changing fabrications must also reach the verifier.** Refusal at
+construction defends against honest mistakes. An adversary, or a model's output, fits the envelope
+to the text, and a card can arrive unvalidated through `model_construct` or `model_copy`. The
+fabrications refused today include a dropped "not", exactly the failure ADR-0006 exists for, and
+right now nothing shows the verifier catching it with a fitted envelope. Keep the construction
+refusal test, and add each of the fifteen with a fitted envelope, each `TEXT_MISMATCH` at a
+hand-counted offset. The offset is in evidence-text coordinates, so most should be unchanged; say
+which are not. `test_no_fabrication_passes` should then count all 28 as reaching the verifier in
+their fitted form.
+
+**Change 2: provenance must come from the snapshot.** `ProvenanceMode`'s docstring says it "travels
+from the snapshot onto every card cut from it". `place_evidence_on_card` keeps the card's own
+`provenance_mode`, and the verifier does not compare it with the snapshot's. So a tag-only card
+built with `PUBLISHER_RETRIEVED`, given evidence from a user-supplied snapshot, carries the strongest
+claim the platform makes about text it did not retrieve, and verifies. The verification fixture
+masks this by setting the snapshot's mode on the card before calling the mapping. Two parts: the
+mapping sets `provenance_mode` from the snapshot, and the verifier checks the card's mode against the
+snapshot's as a required check with a new reason code, `PROVENANCE_MISMATCH`, for the same reason
+t04 gained `ARTICLE_MISMATCH`: a card can arrive without passing through the mapping. A required
+check changes what VERIFIED means, so bump `VERIFIER_VERSION`.

@@ -231,5 +231,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t06-parse-pipeline
+    - id: t07
+      kind: Task
+      name: Labeling worksheets survive a spreadsheet round trip
+      description: >-
+        A check subcommand that reports every worksheet problem by its real cause, .numbers files read
+        directly, and a repair that restores text from the document without touching a label.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t07-worksheet-round-trip.yaml
+        goalRef: v1-e31-t07-worksheet-round-trip
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t07-worksheet-round-trip reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t07-worksheet-round-trip
 status:
   phase: Pending

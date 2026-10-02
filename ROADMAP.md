@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 30 | 22 | 191 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 30 | 24 | 191 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 32 | 21 | 280 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
@@ -107,7 +107,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [One source for the supported interpreter, enforced at install](plan_specs/v1/e01-repo-foundation/t14-install-interpreter-bound.yaml) `v1-e01-t14-install-interpreter-bound` | Pending | 2 | 6.0 |
 | [Re-run the promotion guards without waiting for an event](plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml) `v1-e01-t15-promotion-guard-sweep` | Pending | 1 | 7.0 |
 | [Generate the docs index instead of hand-editing it](plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml) `v1-e01-t16-generated-docs-index` | Pending | 1 | 6.5 |
-| [The installed build carries what its commands need](plan_specs/v1/e01-repo-foundation/t17-installed-build-extras.yaml) `v1-e01-t17-installed-build-extras` | Pending | 1 | 4.0 |
+| [The installed build carries what its commands need](plan_specs/v1/e01-repo-foundation/t17-installed-build-extras.yaml) `v1-e01-t17-installed-build-extras` | Succeeded | 1 | 4.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -130,7 +130,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [EvidenceVerifier and verification statuses](plan_specs/v1/e03-evidence-integrity/t04-verifier.yaml) `v1-e03-t04-verifier` | Succeeded | 1 | 7.0 |
 | [Evidence edit policy](plan_specs/v1/e03-evidence-integrity/t05-edit-constraints.yaml) `v1-e03-t05-edit-constraints` | Pending | 2 | 5.5 |
 | [`debate-research verify` command](plan_specs/v1/e03-evidence-integrity/t06-verify-command.yaml) `v1-e03-t06-verify-command` | Pending | 2 | 5.0 |
-| [Card omissions and the selection-to-card mapping](plan_specs/v1/e03-evidence-integrity/t07-card-omissions.yaml) `v1-e03-t07-card-omissions` | Pending | 2 | 10.0 |
+| [Card omissions and the selection-to-card mapping](plan_specs/v1/e03-evidence-integrity/t07-card-omissions.yaml) `v1-e03-t07-card-omissions` | Succeeded | 2 | 10.0 |
 
 
 ### v1.1 — Caselist evidence store

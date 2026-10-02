@@ -160,6 +160,8 @@ def test_every_other_fact_is_reported_and_never_fails_doctor(
 
 
 _FACT = st.one_of(
+    # The values a real report carries when something is missing, which random text rarely hits.
+    st.sampled_from([UNKNOWN_VERSION, False, "", []]),
     st.booleans(),
     st.text(max_size=12),
     st.lists(st.text(max_size=6), max_size=3),

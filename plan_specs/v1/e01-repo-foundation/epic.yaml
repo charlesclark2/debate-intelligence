@@ -446,5 +446,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t16-generated-docs-index
+    - id: t17
+      kind: Task
+      name: The installed build carries what its commands need
+      description: >-
+        The channel build has none of debate-core's optional extras, so every `caselist pull` fails on a
+        missing boto3, and the channel's checks never imported an integration. Fix the declaration and the
+        verification.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t17-installed-build-extras.yaml
+        goalRef: v1-e01-t17-installed-build-extras
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t17-installed-build-extras reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t17-installed-build-extras
 status:
   phase: Pending

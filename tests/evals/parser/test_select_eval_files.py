@@ -560,3 +560,19 @@ def test_pre_labeling_never_removes_a_corrected_file_of_a_rejected_entry(
 
     assert label_path_for(rejected, labels).exists()
     assert "left alone, delete it deliberately" in capsys.readouterr().out
+
+
+def test_the_selector_alone_brings_the_selection_tables_up_to_date(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Before the plan is regenerated, the tables already name the replacement, and say the plan is stale."""
+    evaluation = _invented_evaluation(tmp_path, monkeypatch)
+    _plan_and_prelabel(evaluation, tmp_path / "worksheets")
+    rejected_prefix = evaluation.pr_subset_prefix()
+
+    _reject(evaluation, rejected_prefix)
+
+    assert_summary_table_matches_manifest(evaluation.directory)
+    manifest_md = (evaluation.directory / "MANIFEST.md").read_text(encoding="utf-8")
+    assert "**This plan is out of date:** 1 file(s)" in manifest_md
+    assert "| NOT_DEBATE_CONTENT |" not in manifest_md and "`NOT_DEBATE_CONTENT`" in manifest_md

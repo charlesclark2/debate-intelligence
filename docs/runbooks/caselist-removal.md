@@ -236,10 +236,17 @@ DEBATE_ENV=prod uv run debate-research caselist status
       that the store had never seen): those files are still in the rewritten archive, because no
       selector could resolve them. Run `caselist pull`, which imports them, then the same removal
       again, which now finds and removes them.
-- [ ] **Copies outside the inbox.** The command reaches the store, the buckets and the inbox. An
-      archive or camp file you downloaded or unpacked by hand somewhere else — the backfill's and the
-      parser evaluations' working copies, for instance — is not reached: delete the removed files
-      from those copies by hand, or the copies themselves.
+- [ ] **Copies outside the inbox.** The command reaches the store, the buckets and the inbox. Copies
+      kept by hand elsewhere are not reached, so check each of these and delete the removed files from
+      it by hand. Decided by Charlie, 2026-10-01:
+      - **The CardMirror sample folders** (`cardmirror-sample/` and `cardmirror-roundtrip-out/` beside
+        the coach's debate working folders): kept on purpose as small test inputs for the parser work,
+        so they are always on this list.
+      - **The unpacked caselist archives and the hand-downloaded camp files** in the coach's season
+        folders: kept only until the parser evaluation (`v1-e31-t05`) no longer needs them, then deleted
+        (its ac6). Until then, check them too. After that, they are no longer on this list.
+      Any other copy you find is an incident under the policy: delete it in the same run and record it
+      in the register.
 
 ## Step 9 — Check nothing re-imports it
 

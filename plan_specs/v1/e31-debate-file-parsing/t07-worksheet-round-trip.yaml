@@ -46,8 +46,12 @@ spec:
       - Writing worksheet contents, or any card text, inside the repository or into test fixtures from real files
       - Network access in the tests for this task
   context:
+    # Depends on t03, not t05, by the PM's decision, 2026-10-02. This task changes t05's tooling
+    # (scripts/prelabel_docx.py, merged in #153), but t05 stays InProgress until the labeling is done,
+    # and this task exists to speed up that labeling. A t05 dependency would block it until the work
+    # it is meant to help was already finished.
     - kind: TaskRef
-      name: v1-e31-t05-parser-eval
+      name: v1-e31-t03-debate-docx-parser
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

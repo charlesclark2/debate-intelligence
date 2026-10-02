@@ -58,7 +58,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         item.nodeid
         for item in items
         if Path(item.path).resolve().is_relative_to(SMOKE_DIRECTORY)
-        and "installed_cli" not in item.fixturenames
+        and "installed_cli" not in getattr(item, "fixturenames", ())
     ]
     if offenders:
         raise pytest.UsageError(

@@ -36,6 +36,7 @@ if _LOG:
     import socket
     from typing import Any
 
+    _LOG_PATH: str = _LOG
     _RESOLVABLE = frozenset({"localhost", "127.0.0.1", "::1"})
     _INTERNET_FAMILIES = frozenset({socket.AF_INET, socket.AF_INET6})
 
@@ -43,7 +44,7 @@ if _LOG:
         """A process started by the smoke suite tried to reach the network."""
 
     def _refuse(call: str, target: object) -> None:
-        with open(_LOG, "a", encoding="utf-8") as log:  # noqa: PTH123 - no pathlib before the CLI loads
+        with open(_LOG_PATH, "a", encoding="utf-8") as log:  # noqa: PTH123 - no pathlib before the CLI loads
             log.write(json.dumps({"pid": os.getpid(), "call": call, "target": repr(target)}) + "\n")
         raise OutboundNetworkBlocked(
             f"{call}({target!r}) refused: the smoke suite runs with the network blocked "

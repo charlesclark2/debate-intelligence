@@ -59,6 +59,13 @@ spec:
       description: >-
         v1-e34-t07's pinned test is inverted rather than deleted, the change is shown failing first,
         and each guard is mutated and shown caught.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-01, from v1-e30-t09's Follow-up 4, because it is the same
+        `_judge_unrecorded` path. A camp release holding only junk (no real camp file) has a delivery
+        entry with no member digests, so it falls through to `already_in_inbox` and is imported again
+        on every run. After this task it is recognised as handled: imported once, then not again, shown
+        failing first.
 status:
   phase: Pending
 ---

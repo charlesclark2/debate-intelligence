@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 30 | 22 | 191 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 31 | 20 | 276 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 32 | 21 | 280 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -160,7 +160,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Initial caselist and camp-file backfill](plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml) `v1-e30-t06-initial-backfill` | Pending | 3 | 5.0 |
 | [Source removal and suppression list](plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml) `v1-e30-t07-source-removal` | Succeeded | 2 | 12.5 |
 | [Importer metadata defects found by the backfill](plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml) `v1-e30-t08-import-metadata-defects` | Pending | 3 | 7.0 |
-| [A removal leaves no removed bytes in the inbox](plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml) `v1-e30-t09-removal-purges-inbox` | Pending | 2 | 6.0 |
+| [A removal leaves no removed bytes in the inbox](plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml) `v1-e30-t09-removal-purges-inbox` | Succeeded | 2 | 6.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -187,6 +187,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A camp file uploaded again upstream is fetched](plan_specs/v1/e34-caselist-sync/t08-revised-camp-files.yaml) `v1-e34-t08-revised-camp-files` | Pending | 1 | 4.0 |
 | [Retire the legacy download ledger](plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml) `v1-e34-t09-retire-legacy-ledger` | Pending | 1 | 2.0 |
 | [The weekly agent runs nothing from a git checkout](plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) `v1-e34-t10-agent-outside-checkout` | Pending | 1 | 2.0 |
+| [Imported downloads leave the inbox](plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml) `v1-e34-t11-inbox-retention` | Pending | 1 | 4.0 |
 
 
 ### v1.2 — Argument landscape & file building

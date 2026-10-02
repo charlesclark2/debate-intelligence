@@ -170,9 +170,10 @@ _DATABASE = st.sampled_from(["15.0.0", "15.1.0", "16.0.0", "14.0.0", ""])
 
 
 @given(
-    other_facts=st.dictionaries(
-        st.sampled_from(
-            [
+    other_facts=st.fixed_dictionaries(
+        {
+            key: _FACT
+            for key in (
                 "cli_version",
                 "core_version",
                 "python_version",
@@ -180,9 +181,8 @@ _DATABASE = st.sampled_from(["15.0.0", "15.1.0", "16.0.0", "14.0.0", ""])
                 "platform",
                 "settings_configured",
                 "services",
-            ]
-        ),
-        _FACT,
+            )
+        }
     ),
     pinned=_DATABASE,
     running=_DATABASE,

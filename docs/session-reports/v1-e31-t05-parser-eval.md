@@ -388,11 +388,257 @@ re-keyed (`select_eval_files.py --rekey`, then regenerate the plan and labels).
   be under one block are labeled whole. If the PM wants a tighter budget, the knob is
   `--target-rate`/`--minimum-block`, and changing it means a new `plan_id` and a re-baseline.
 
-## PM review
+## Resumed 2026-10-02: rejecting non-debate files
+
+| | |
+|---|---|
+| Session status | PARTIAL: the change is done; the Goal stays `InProgress` |
+| Commits | `fdbfeaa`, `a568d5e`, `fca7d6a`, and the report commit |
+| Asked for by | The PM, after the operator opened the worksheet for `4b11269583a94621` before approving the selection |
+
+Everything above this section is the first session's report as the PM accepted it, left unchanged.
+Where it gives a number this section changes (rows, the plan id, the PR-subset size), **this section
+is current.**
+
+### Summary
+
+`4b11269583a94621` was not debate material: a non-English text uploaded to the caselist in place
+of a case, with no tags, citations or arguments, pre-labeled `OTHER` on every row. It was 55 of the
+435 rows the PR tier scores on every pull request. It is now **rejected and replaced**. Selection
+can record a rejection, a rejected file can never be selected again, and the sampling plan,
+pre-labels and worksheets are regenerated. **No file had been corrected, so nothing was lost.** The
+new sampling plan is **`06a5e928bf1fc90f`**.
+
+| | Before | After |
+|---|---|---|
+| PR-subset caselist wiki-converted file | `4b11269583a94621` (55 paragraphs) | `f791edc8c9c4a3b9` (30 paragraphs) |
+| Sampling plan | `792cad9c0f3fa456` | `06a5e928bf1fc90f` |
+| Rows to label | 1,876 of 5,788 (32.4%) | 1,851 of 5,763 (32.1%) |
+| PR-subset rows | 435 | 410 |
+| Other 29 manifest entries | | unchanged, in the same positions |
+| Their sampling blocks and pre-labels | | unchanged (pre-labels differ only in `plan_id`) |
+
+The Goal stays **`InProgress`**. The coach's approval of the selection and all of the labeling
+are still open, as they were.
+
+**Three things the PM should know first:**
+
+1. **This is the file the first PM review asked to keep.** Before the re-key, `4b11269583a94621`
+   was `02469e60…` (checked by hashing the file on this machine): the 55-paragraph wiki-converted
+   PR-subset file that pre-labeled to zero cards and that the review called "the most informative
+   file in the set". The zero cards were right, because there was nothing in it to find. It is
+   not a parser finding, and the Follow-up work note about it is closed.
+2. **The replacement also carries a content hint.** `f791edc8c9c4a3b9` has no paragraph holding a
+   year and pre-labels to zero cards (21 `OTHER`, 6 `EVIDENCE`, 3 `ANALYTIC`). Of the stratum's 31
+   wiki-converted caselist files, the hint flags exactly two: the rejected file and this one. The
+   rule that picks a PR-subset replacement (shortest in the stratum) picked it because it is the
+   shortest. I did not skip it. The hint is for the coach to weigh, and a case of analytics with no
+   cards is real debate material, so overriding the rule would have been my judgement standing in
+   for theirs. **The coach should open this file first.** If they reject it, the same command
+   picks `5677cb65ab6158b8` (40 paragraphs, no hint) and the regeneration takes under a minute.
+3. **A fresh re-run of the selector does not reproduce the committed selection.** Run under the
+   key today, it chooses a different thirty files, with only 3 in common. The committed thirty
+   were chosen on 2026-09-21 in plain-SHA-256 order and re-keyed afterwards, and the key changes
+   the order. The script's docstring claimed otherwise and is corrected. So "re-run selection"
+   is implemented as **replacement in place** (`--reject`), not as selecting again: selecting again
+   would have swapped 27 files, which is the opposite of what was asked.
+
+### What was asked, and what was done
+
+| Asked | Done | Evidence |
+|---|---|---|
+| A recorded rejection mechanism: by keyed digest, a reason code, the date, no content or filename; `select_eval_files.py` honours it | [`rejections.json`](../../tests/fixtures/debate_files/eval/rejections.json) beside the manifest, holding `RejectedFile` records (`labels_schema.py`): keyed digest, `reason` (`NOT_DEBATE_CONTENT`), `rejected_on`, the stratum, and `replaced_by`. The schema forbids extra fields. `--reject DIGEST_PREFIX --reason CODE` records a rejection. A fresh selection, a replacement and a re-key all honour the list. | `test_a_fresh_selection_never_chooses_a_rejected_file`, `test_a_file_rejected_earlier_is_not_brought_back_by_a_later_rejection`, `test_re_keying_re_keys_the_rejected_files_and_their_replacements`, `test_re_keying_refuses_a_rejected_file_it_cannot_find`, `test_nothing_in_the_eval_directory_names_a_file` (now also checks `rejections.json`'s fields) |
+| Re-run selection: the rejected file replaced from the same stratum, every other file unchanged, with a test asserting exactly that | `replace_rejected()` swaps each rejected entry in place for a file sharing its category, season, format, template family and PR-subset membership. It picks the shortest for the PR subset and the first by keyed digest otherwise, never one already selected or ever rejected. A stratum with nothing left raises, rather than borrowing from another stratum. | `test_a_rejected_file_is_replaced_from_its_own_stratum_and_nothing_else_moves` (invented corpus: entries before and after the position are identical, the new entry's stratum matches); `test_the_file_found_not_to_be_debate_material_was_replaced_from_its_own_stratum` (committed data: caselist, 2026-27, LD, wiki-converted, PR subset on both sides); the real run printed `replaced 1 rejected file(s) from the same stratum; the other 29 entries are unchanged`, and a diff of `manifest.json` against `HEAD` showed one changed position (17) with the same stratum fields |
+| Regenerate the sampling plan, pre-labels and worksheets; say nothing is lost and give the new plan id | Plan `06a5e928bf1fc90f`. 29 label files differ from before only in `plan_id`. The rejected file's label file is removed and the replacement's added. 30 worksheets (1,851 rows) are in `~/parser-eval-worksheets/`, and the rejected file's worksheet is deleted. | All 30 label files were `PRELABELED`. All 30 existing worksheets were **byte-identical** to worksheets regenerated from the committed pre-labels, so none had been edited, and the deleted one was provably unedited. After regeneration, 29 worksheets are byte-identical to before. The plan's other 29 file entries are identical (`plan_id` and `generated_on` are the only top-level changes). |
+| Optional: a selection-time warning, counts only | `content_hints()`: a file with no paragraph holding a year, or whose letters are mostly (> 50%) outside the Latin script. It prints a count line and a per-stratum count. It reads the selected files' text in-process and prints none of it. | Measured on the thirty first: the rejected file was 88% non-Latin with no year paragraph; every other file was 0% non-Latin, and all but `9d0a74b95ccf9269` had 6 to 234 year paragraphs. `test_the_selector_prints_counts_never_text_names_or_paths` runs `main()` over invented files whose text, names and school folder carry sentinels, and asserts none reaches stdout or stderr. |
+| Show the replacement failing first | See "Failing first" below | |
+| Keep the privacy rules exactly as they were | Unchanged. Nothing committed names a file. Every digest is keyed. The path map stays outside the repository (it now also holds the rejected file, so a re-key can carry the rejection forward). | `git diff --cached` of the fixtures, grepped for `/Users`, the home folder name, `.docx`, snapshot and folder names: **0** matches. The plain-digest scan now covers rejected files: with the rejected file's plain SHA-256 planted in `rejections.json`, the scan as it was passed (`1 passed`) and the scan now fails (`1 failed`). |
+
+### Failing first
+
+Run against the selector as it was, the new tests fail at the call (`14 failed`): `replace_rejected`,
+`content_hints` and the `rejected` parameter did not exist. That is an error, not a demonstration,
+so I also ran **mutations** of the finished code. Each one switches off one behaviour, runs
+`test_select_eval_files.py` and `test_labels_schema.py`, and restores the file from the commit.
+The first two are the old selector's behaviour.
+
+| Mutation | Result |
+|---|---|
+| A fresh selection ignores the rejection list (the old selector) | caught: `test_a_fresh_selection_never_chooses_a_rejected_file` |
+| The replacement keeps the rejected file (what the old `--rekey`, its only keep-the-selection path, does) | caught by 6 tests |
+| An earlier rejection is not excluded | **missed** on the first run; the test is fixed (see below) and it is now caught |
+| A PR-subset replacement chosen by digest, not shortest | caught |
+| The replacement moved to the front of the manifest | caught |
+| The stratum ignores template family | caught |
+| PR-subset membership not carried to the replacement | caught by 2 tests |
+| A re-key leaves `replaced_by` under the old key | caught |
+| The conflict check ignores the stratum | **missed** on the first run; now caught |
+| The non-Latin hint never fires | caught |
+| The citation test always passes | caught |
+| The hint prints the path it read | caught: `test_the_selector_prints_counts_never_text_names_or_paths` |
+
+The two misses were weak tests, not wrong code. In the invented corpus, the first rejected file was
+never the best remaining pick, so excluding it or not made no difference. The test now makes it the
+shortest by construction. No test gave the conflict check a replacement from the wrong stratum, and
+one now does. **Final run: 12 of 12 caught** (commit `a568d5e`).
+
+**On the real corpus**, with the selector from `origin/dev`:
+
+- its `--rekey` path, run on scratch copies of the manifest and path map, kept the rejected file:
+  `rejected file 4b11269583a94621 still selected = True`;
+- a fresh run, written to the scratchpad, did not choose it, but kept only **3 of the 30** committed
+  files (see point 3 above).
+
+The new committed-data checks were also shown failing for their own reasons. With the rejected
+file's pre-label put back, `test_no_rejected_file_is_in_the_manifest_the_plan_or_the_labels` and
+`test_every_committed_label_file_is_valid_and_listed` fail. With `replaced_by` pointed at a team
+file, the stratum test and the consistency test fail.
+
+### Acceptance criteria, as they stand
+
+Nothing that was PASS or NOT RUN has changed status. ac6 is new since the first report.
+
+| Criterion | Status | Evidence (command → result, 2026-10-01) |
+|---|---|---|
+| ac1 — at least 30 files labeled, none committed; strata; manifest by keyed digest; sampled labeling; coach reviewed | **NOT MET**: the selection is replaced and re-planned; labeling not started | `test_the_committed_manifest_meets_ac1` passes, and the selector printed no `SHORTFALL`. Plan `06a5e928bf1fc90f`: `1851 of 5763 paragraphs (32.1%), 6 file(s) labeled in full`. **0 of 30 files corrected; coach review not done.** |
+| ac2 — reports with every breakdown, the sampling rate and the row count | **PASS** (machinery) | `uv run pytest tests/evals/parser/test_metrics.py` → `26 passed` |
+| ac3 — targets recorded, met or ticketed | Recorded: PASS. Met or ticketed: **NOT RUN** | needs corrected labels |
+| ac4 — real tiers run where the corpus is and skip elsewhere; CI runs the harness on an invented file; the gate; the label validator; the plan guard | **PASS** (machinery). Real tiers: **NOT RUN** | `-m "eval and not slow"` → `1 skipped` ("6 of 6 pr-subset files are not yet corrected by a person"); `-m "eval and slow"` → `1 skipped` ("30 of 30") |
+| ac5 — corpus health report | **NOT RUN** (operator-only) | Operator follow-up 5, unchanged |
+| ac6 — the hand-unpacked caselist archives and hand-downloaded camp files are deleted when the evaluation no longer needs them, and the removal runbook updated (added by the PM 2026-10-01) | **NOT RUN** | Only possible after the evaluation; it is the operator's. See Operator follow-ups below. |
+| `collect-files` — manifest lists caselist and camp files | PASS | `grep -c caselist tests/fixtures/debate_files/eval/MANIFEST.md` → `31` |
+| `collect-files` — **custom:** coach approves the selection | **NOT RUN** (hand-off) | Follow-up 1, now with the two hinted files to open first |
+| `label-tooling` — label schema tests | PASS | `uv run pytest tests/evals/parser/test_labels_schema.py` → `28 passed` (was 26; the two new committed-data tests) |
+| `labeling` — labeling guide exists | PASS | `grep -c "labeling guide" …/labels/README.md` → `2` |
+| `labeling` — **custom:** coach spot-checks and signs off the guide | **NOT RUN** (hand-off) | Follow-ups 2 and 3 |
+| `metrics-and-gates` — metric unit tests | PASS | `test_metrics.py` → `26 passed` |
+| `metrics-and-gates` — labeled PR subset passes against the baseline | **NOT RUN** | `1 skipped`, as above; not recorded as a pass |
+| `metrics-and-gates` — baseline committed | PASS (placeholder) | `grep -c parser_version tests/evals/baselines/parser.json` → `1`; still `NOT_ESTABLISHED` |
+| `corpus-health-run` — report committed | **NOT RUN** | Follow-up 5 |
+
+Also run:
+
+| Check | Result |
+|---|---|
+| Whole repository suite | `uv run pytest` → `3741 passed, 1 skipped in 70.32s` (the skip is the real PR-subset tier) |
+| Eval modules | `test_select_eval_files.py` `14 passed`, `test_digests.py` `16 passed` (the plain-digest scan ran against the corpus here, covering the 30 manifest files and the rejected one), `test_prelabel.py` `21 passed`, `test_sampling.py` `14 passed`, `test_parser_eval.py` `12 passed, 1 skipped` |
+| Lint, format, imports | `ruff check` and `ruff format --check` over every changed file → clean; `uv run lint-imports` → `Contracts: 11 kept, 0 broken` |
+| Spec validation | `uv run scripts/validate_specs.py` → `OK: 302 files, 38 epics, 244 tasks, 20 releases` |
+| Runtimes | The replacement run took 16 s over 1,829 candidates; `plan_eval_sampling.py` 1.8 s; `prelabel --all` 1.8 s; 30 worksheets in seconds |
+
+### Files changed
+
+- `scripts/select_eval_files.py`: `--reject`, `--reason`, `--rejected-on` and `--rejections`;
+  `replace_rejected()`, `rekey_rejections()`, `content_hints()`; the `rejected` parameter on
+  `propose_selection()`; a corrected docstring.
+- `tests/evals/parser/labels_schema.py`: `RejectionReason`, `RejectedFile`, `RejectionList`,
+  `REJECTIONS_PATH`, `load_rejections()`, `rejection_conflicts()`, `stratum_of()`.
+- `tests/evals/parser/test_select_eval_files.py` (new, 14 tests), plus additions to
+  `test_labels_schema.py` (2 tests and the extended no-names check) and `test_digests.py` (the
+  scan covers rejected files).
+- `tests/fixtures/debate_files/eval/`: `rejections.json` (new), `manifest.json` (one entry),
+  `sampling-plan.json` (regenerated), `labels/` (one file removed, one added, 29 re-stamped with
+  the new `plan_id`), `MANIFEST.md` (the selection row, a "Rejected files" section, the plan and
+  its table), `labels/README.md` (a paragraph saying a non-debate file is rejected, not labeled).
+- Outside the repository: `~/parser-eval-worksheets/` (one worksheet replaced) and the path map
+  (one entry added).
+
+### Deviations
+
+8. **"Re-run selection" is a replacement in place, not a fresh selection.** A fresh run does not
+   reproduce the committed thirty (point 3 of the summary), so it could not leave "every other
+   selected file unchanged". `--reject` changes exactly the rejected entries. A fresh run still
+   honours the list, so a rejected file cannot come back either way.
+9. **The rejection record carries the stratum and `replaced_by`**, as well as the digest, reason
+   and date the prompt names. Once the file has left the manifest, the stratum is the only way to
+   check the replacement against it, and it is the same metadata the manifest already publishes
+   for every file. No content and no name.
+10. **The replacement follows the original rule even though it carries a hint** (point 2 of the
+    summary). Skipping hinted candidates would make the hint a rule, and it was asked for as a hint.
+    If the PM wants hinted files skipped automatically, that is one line in `replace_rejected()`
+    and a spec decision.
+11. **The rejection is dated 2026-10-01**, the date on this machine when it was recorded. The
+    section heading's date, 2026-10-02, is the one the PM's prompt gave.
+12. **The first PM review's heading and verdict label are renamed**, to "PM review of the first
+    session (2026-09-23)" and `**Verdict (first session):**`. Its text is otherwise unchanged.
+    `scripts/task_helper.py` reads the *first* `**Verdict:**` line in the report, so leaving it as
+    it was would have let `scripts/task pr` pass this change on the old ACCEPTED before anyone had
+    reviewed it. The prompt also asks for the report to end with an empty PM review section, which
+    follows below.
+13. **I deleted one file outside the worktree**: the rejected file's worksheet in
+    `~/parser-eval-worksheets/`. It held the rejected file's text, the tooling had written it, and
+    it was byte-identical to its generated state. Leaving it there invited labeling a file that is
+    no longer in the evaluation. The working agreements count a change outside the worktree as a
+    possible hand-off. I judged this one within the regeneration the prompt asked for, but the PM
+    may disagree.
+
+### Operator follow-ups (changes to the list above)
+
+**1. Approve the selection: open two files first.** Both carry a content hint and both are in
+the PR subset: `f791edc8c9c4a3b9` (the replacement) and `9d0a74b95ccf9269` (a team PF file with no
+paragraph holding a year). Where: your Mac, in the task worktree
+`debate-intelligence-worktrees/v1-e31-t05-parser-eval`.
+
+```bash
+uv run python -c "
+import json, subprocess, pathlib
+p = json.load(open(pathlib.Path.home() / '.debate-intelligence/parser-eval-paths.json'))
+for prefix in ('f791edc8c9c4a3b9', '9d0a74b95ccf9269'):
+    subprocess.run(['open', next(v for k, v in p.items() if k.startswith(prefix))])
+"
+```
+
+If either is not debate material, or you name more files after skimming the rest, reject each one
+the same way (about 20 s, then about 5 s to regenerate):
+
+```bash
+uv run python scripts/select_eval_files.py \
+  --input "team=$HOME/Documents/debate/2024-2025" \
+  --input "team=$HOME/Documents/debate/2025-2026" \
+  --input "team=$HOME/Documents/debate/2026-2027" \
+  --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0915" \
+  --input "camp=$HOME/Documents/debate/2026-2027/Policy Debate/Camp Files" \
+  --exclude-dir Opencaselist --exclude-dir "Camp Files" \
+  --reject <digest-prefix> --reason NOT_DEBATE_CONTENT
+uv run python scripts/plan_eval_sampling.py
+uv run python scripts/prelabel_docx.py prelabel --all
+git rm tests/fixtures/debate_files/eval/labels/<rejected-full-digest>.jsonl
+uv run python scripts/prelabel_docx.py worksheet <replacement-prefix> --out-dir ~/parser-eval-worksheets
+rm ~/parser-eval-worksheets/<rejected-digest16>.csv
+```
+
+Success looks like: `replaced 1 rejected file(s) from the same stratum; the other 29 entries are
+unchanged`, no `SHORTFALL` or `REJECTION CONFLICT` line, and `uv run pytest tests/evals/parser`
+passing apart from the one skip. `MANIFEST.md`'s two tables then need the swapped row
+(`test_the_manifest_summary_table_matches_manifest_json` fails until they have it). Or name the
+files to the PM and a session does all of this.
+
+**Do every rejection before any import.** A rejection changes the plan's `plan_id`. Labels already
+corrected under the old id stop validating, even though their blocks have not moved, and no tool
+re-stamps a corrected file. `prelabel` leaves it alone, and `--force` discards the correction.
+
+**2. Correct the labels**: now **1,851 rows**, the PR subset **410**.
+
+**8. ac6, after the evaluation.** Delete the hand-unpacked caselist archives and the hand-downloaded
+camp files in the coach's season folders, keep the CardMirror sample folders, and update the removal
+runbook's "Copies outside the inbox" step. ac6 is only possible once ac1, ac3 and ac5 no longer need
+those files, and they are the inputs to the commands in follow-ups 1 and 5.
+
+### Follow-up work
+
+- **Closed:** the note for `v1-e31-t03` about the zero-card wiki-converted file in the PR subset
+  (`02469e60…`). That file was not debate material, and it is now rejected.
+- **A re-stamp for corrected labels**, if rejections ever have to happen after labeling starts: a
+  command that moves a corrected file to a new `plan_id` when its blocks are unchanged. Not built,
+  because the rule above avoids needing it.
+- **The hint could print digest prefixes** rather than per-stratum counts. They are not content,
+  and they are already in `MANIFEST.md`. It prints counts because that is what was asked.
+
+## PM review of the first session (2026-09-23)
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** ACCEPTED
+**Verdict (first session):** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
 **Reviewed by / date:** PM, 2026-09-23
@@ -437,3 +683,14 @@ subset rather than swapping it for an easier one; it is the most informative fil
 
 Follow-ups accepted as filed. The `SourceOrigin` gap for a team's own file is real and goes to
 whoever owns `v1-e30-t02`/`v1-e31-t06`. `tests/README.md` is corrected in the same commit above.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

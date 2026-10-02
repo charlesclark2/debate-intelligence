@@ -1,0 +1,95 @@
+# TASK v1-e34-t10-agent-outside-checkout - The weekly agent runs nothing from a git checkout
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t10-agent-outside-checkout
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: The weekly agent runs nothing from a git checkout
+spec:
+  # Filed by the PM, 2026-10-01, from the operator's install of the weekly agent (v1-e34-t05).
+  description: >-
+    Two defects in `ops/launchd/install.sh`, found when the agent was installed on the coach's Mac.
+    First, the plist's ProgramArguments point at `ops/launchd/run-caselist-sync.sh` inside the working
+    checkout the installer was run from. The agent therefore runs whatever version of the wrapper the
+    checkout's current branch holds at 06:00 on Wednesday, and that checkout is the one the operator
+    switches between task, spec and hotfix branches every day. v1-e34-t05 forbids pointing the agent at
+    a console script inside a working tree for exactly this reason, and the wrapper is the same exposure
+    one step earlier. Second, `--debate-research <path>`, documented as giving the agent the full path to
+    the console script, is never written into the plist: the installer uses it only to decide whether to
+    print a warning, and the wrapper finds `debate-research` through the copied shell PATH, where
+    anaconda and pyenv directories come before `~/.local/bin` and could shadow the installed build. Copy
+    the wrapper to a location outside every git working tree at install time (and say where in the
+    runbook), and write the resolved console-script path into the plist as `DEBATE_RESEARCH_BIN`, which
+    the wrapper already honours. Out of scope: the sync service, the schedule, and the installed-build
+    extras (v1-e01-t17).
+  priority: 2
+  constraints:
+    packages: [ops/launchd, docs/runbooks]
+    forbidden:
+      - A plist that references any path inside a git working tree
+      - Resolving the console script through PATH when the installer knew its full path
+      - Changing the weekly cadence or RunAtLoad
+  context:
+    - kind: TaskRef
+      name: v1-e34-t05-enable-schedule
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `install.sh --dry-run` renders a plist whose ProgramArguments name a wrapper outside the
+        checkout, and a test fails if any rendered path lies inside the repository. Shown failing first
+        against the current installer.
+    - id: ac2
+      description: >-
+        The plist sets DEBATE_RESEARCH_BIN to the path given by `--debate-research`, or to the one found
+        on the installer's PATH when the flag is absent, and a test shows a different `debate-research`
+        earlier on PATH is not the one the wrapper execs.
+    - id: ac3
+      description: >-
+        Re-running the installer replaces the copied wrapper, so an updated wrapper reaches the agent by
+        reinstalling, and the scheduled-sync runbook says so. The operator reinstalls the agent and the
+        report records `launchctl print` showing the new program path.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t10-agent-outside-checkout-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Show both defects in a rendered plist, fix the installer, operator reinstalls.
+  goalRef:
+    name: v1-e34-t10-agent-outside-checkout
+  graph:
+    nodes:
+      - id: installer
+        kind: Task
+        name: Copy the wrapper out and pin the console script
+        description: >-
+          Render-time copy of the wrapper and DEBATE_RESEARCH_BIN in the plist, with tests over the
+          rendered output.
+        outputs: [ops/launchd/install.sh]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: custom
+            name: The rendered plist references nothing inside the repository
+            description: >-
+              A dry-run plist names a wrapper outside the checkout and sets DEBATE_RESEARCH_BIN; the
+              test fails against the current installer and passes after the change.
+status:
+  phase: Pending

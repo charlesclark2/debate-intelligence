@@ -51,7 +51,6 @@ from debate_core.domain import CardSpan, Citation
 from debate_core.evidence._runtime_checks import is_instance, is_tuple_of
 
 __all__ = [
-    "FORBIDDEN_EDIT_KINDS",
     "AddInterpolation",
     "DeleteRange",
     "EditCite",
@@ -84,12 +83,6 @@ class EditKind(StrEnum):
     INSERT_TEXT = "insert_text"
     REPLACE_TEXT = "replace_text"
     MOVE_TEXT = "move_text"
-
-
-FORBIDDEN_EDIT_KINDS: frozenset[EditKind] = frozenset(
-    {EditKind.INSERT_TEXT, EditKind.REPLACE_TEXT, EditKind.MOVE_TEXT}
-)
-"""The kinds that would change, add or reorder quoted characters, refused whatever their payload."""
 
 
 class EditProblem(StrEnum):

@@ -389,6 +389,8 @@ def test_removes_negation_reads_the_words_a_cut_touches(
         (21, 28, False),  # "nothing" is not on the list
         (32, 37, False),  # "knots", which contains "not"
         (42, 48, True),  # "cannot"
+        (44, 48, True),  # "nnot": only "cannot", widened to the left, is a negation
+        (42, 45, True),  # "can": only "cannot", widened to the right, is a negation
         (50, 57, True),  # "neither"
         (59, 66, True),  # "without"
     ],

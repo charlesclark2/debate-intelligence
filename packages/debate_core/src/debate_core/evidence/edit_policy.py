@@ -74,7 +74,6 @@ from debate_core.domain import (
 )
 from debate_core.evidence.card_mapping import place_evidence_on_card, snapshot_ranges_of
 from debate_core.evidence.edits import (
-    FORBIDDEN_EDIT_KINDS,
     AddInterpolation,
     DeleteRange,
     EditCite,
@@ -148,7 +147,7 @@ def apply_edit(
     Raises :class:`ValueError` if ``snapshot`` is not the card's.
     """
     kind = kind_of(edit)
-    if kind in FORBIDDEN_EDIT_KINDS:
+    if isinstance(edit, InsertText | ReplaceText | MoveText):
         raise ForbiddenEvidenceEdit(kind)
     if card.snapshot_id != snapshot.snapshot_id:
         raise ValueError(
@@ -179,8 +178,6 @@ def apply_edit(
             _check_cite_claims_nothing(card, edit)
             recited = card.evolve(citation=edit.citation)
             edited = _recut(kind, recited, snapshot, snapshot_text, kept, marks, card.interpolations)
-        case InsertText() | ReplaceText() | MoveText():  # pragma: no cover - refused above, by kind
-            raise ForbiddenEvidenceEdit(kind)
     _check_quotation(kind, edited, card.evidence_text)
     return EditedCard(edited, kind)
 

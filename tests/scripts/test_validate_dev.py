@@ -379,7 +379,8 @@ def test_the_smoke_tier_passes_against_the_build_it_installed(
         }
     ]
     assert (tmp_path / "installer.log").read_text(encoding="utf-8") == (
-        f"v0.1.0-dev.5 UV_TOOL_DIR={tmp_path / 'work' / 'tools'}\n"
+        # --no-path-warning: the scratch tool directory is never on PATH (v1-e01-t14 ac6).
+        f"--no-path-warning v0.1.0-dev.5 UV_TOOL_DIR={tmp_path / 'work' / 'tools'}\n"
     )
 
 

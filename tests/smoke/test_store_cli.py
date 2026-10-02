@@ -39,6 +39,10 @@ from debate_cli.exit_codes import ExitCode
 
 runner = CliRunner()
 
+# Drives the CLI through CliRunner in pytest's own process, against a real bucket: `live`, run by an
+# operator after an apply, never by `ci` or validate-dev (README.md).
+pytestmark = pytest.mark.in_process
+
 STORE_ENVIRONMENT = os.environ.get("STORE_SMOKE_ENV", "").strip()
 
 #: What `store ls` is asked for when it is asked for one prefix. Present in both environments from

@@ -41,6 +41,10 @@ if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
 
 runner = CliRunner()
 
+# Runs in pytest's own process, where moto answers S3, so it cannot run against an installed
+# build: `ci` runs it, and validate-dev's recorded tier deselects it (README.md).
+pytestmark = pytest.mark.in_process
+
 BUCKET = "debate-dev-evidence-smoke-moto"
 OPERATOR_PROFILE = "debate-dev-evidence"
 REMOVAL_PROFILE = "debate-dev-evidence-removal"

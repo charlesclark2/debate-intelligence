@@ -403,7 +403,7 @@ function pagesDirectory(contentDirectory: string): string {
   return join(contentDirectory, 'pages')
 }
 
-function formatIssues(error: z.ZodError): string {
+export function formatIssues(error: z.ZodError): string {
   return error.issues
     .map((issue) => {
       const field = issue.path.join('.')
@@ -412,8 +412,8 @@ function formatIssues(error: z.ZodError): string {
     .join('; ')
 }
 
-const EM_DASH = '—'
-const HOUSE_STYLE_REWRITE = 'House style: rewrite with a comma, a colon or two sentences.'
+export const EM_DASH = '—'
+export const HOUSE_STYLE_REWRITE = 'House style: rewrite with a comma, a colon or two sentences.'
 
 /**
  * `lineOffset` is the number of lines the front matter occupies, so the line number in the error
@@ -440,7 +440,7 @@ function assertNoEmDashesInFrontMatter(filePath: string, frontMatter: PageFrontM
   }
 }
 
-function assertAcronymsAreExpanded(filePath: string, text: string): void {
+export function assertAcronymsAreExpanded(filePath: string, text: string): void {
   for (const [acronym, expansion] of ACRONYM_EXPANSIONS) {
     const usesAcronym = new RegExp(`\\b${acronym}\\b`).test(text)
     if (usesAcronym && !text.includes(expansion)) {

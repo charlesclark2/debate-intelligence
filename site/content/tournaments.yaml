@@ -1,0 +1,255 @@
+# THE TOURNAMENT SCHEDULE
+# -----------------------
+# One entry per tournament. This file is the source of record for the season (ADR-0015, as
+# accepted 2026-10-01): the /schedule/ page and the calendar file parents subscribe to
+# (/schedule.ics) are both built from it, and nothing else. It was seeded from
+# docs/data/2026-27-tournament-schedule.md, which is no longer updated.
+#
+# Validated at build time by src/lib/tournaments.ts. A mistake fails the build naming the entry
+# and the field. How to add, change and remove a tournament, and how a change reaches the site:
+# docs/guides/coach-website-editing.md, "Events: the tournament schedule file".
+#
+# Everything here is public. Never write a student's name, an email address, a phone number, a
+# ride, a hotel room or a roster. The build refuses an email address, a phone number and any name
+# it has not been told about.
+#
+# Each entry:
+#
+#   id         Lower case and hyphens, with the year, e.g. glenbrooks-2026. NEVER change it once
+#              published, and never reuse one: a subscriber's calendar app knows the tournament by
+#              it, so a new id shows parents a second copy of the same tournament.
+#   name       The tournament's name.
+#   start      The first day, as 2026-11-21.
+#   end        The last day, for a tournament of more than one day. Leave it out for one day.
+#   events     Any of: policy, lincoln-douglas, public-forum (the ids in content/events.yaml).
+#   held       in-person, online-at-school (online, but debated at Whitefish Bay High School, so
+#              students come to school), or online-from-home.
+#   where      The town, or the host school and town. Required for in-person; left out for the two
+#              online kinds. "To be announced" is an answer.
+#   overnight  no, yes, or possibly.
+#   byEvent    Instead of events/held/where/overnight, when the events are held differently: one
+#              group per arrangement, each with its own events, held, where and overnight.
+#   status     confirmed, tentative, or conditional. A conditional entry also needs `condition`:
+#              the sentence that says what it depends on, which the page shows in full.
+#   signUpBy   Optional. The date families must have signed up by.
+#   notes      Optional. One or two short sentences.
+#   nationals  true for a national tournament, which the page lists in its own section.
+#
+# The order of entries here does not matter: the page sorts them by date. Two tournaments on the
+# same dates are found from the dates and both marked on the page; there is nothing to mark here.
+
+season: '2026-27'
+
+# The day this file was last changed. Update it with every edit: the page shows it, and calendar
+# apps are given it as the time each entry was issued.
+revised: 2026-10-01
+
+tournaments:
+  - id: neenah-2026
+    name: Neenah High School
+    start: 2026-10-10
+    events: [public-forum, lincoln-douglas]
+    held: in-person
+    where: Neenah, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: fort-atkinson-2026
+    name: Fort Atkinson
+    start: 2026-10-17
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Fort Atkinson, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: ronald-reagan-2026
+    name: Ronald Reagan High School
+    start: 2026-10-24
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Milwaukee, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: iowa-caucus-2026
+    name: Iowa Caucus
+    start: 2026-10-23
+    end: 2026-10-25
+    events: [policy]
+    held: online-at-school
+    overnight: no
+    status: confirmed
+
+  - id: west-bend-online-2026
+    name: West Bend High School
+    start: 2026-10-30
+    events: [public-forum, lincoln-douglas]
+    held: online-at-school
+    overnight: no
+    status: confirmed
+
+  - id: west-bend-2026
+    name: West Bend High School
+    start: 2026-11-07
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: West Bend, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: minneapple-2026
+    name: MinneApple
+    start: 2026-11-07
+    end: 2026-11-09
+    events: [lincoln-douglas, public-forum]
+    held: in-person
+    where: Apple Valley High School, Minnesota
+    overnight: yes
+    status: confirmed
+    notes: Varsity only.
+
+  - id: badgerland-2026
+    name: Badgerland
+    start: 2026-11-13
+    end: 2026-11-14
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Madison, Wisconsin
+    overnight: possibly
+    status: confirmed
+
+  - id: brookfield-east-2026
+    name: Brookfield East High School
+    start: 2026-11-21
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Brookfield, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: glenbrooks-2026
+    name: Glenbrooks
+    start: 2026-11-21
+    end: 2026-11-23
+    byEvent:
+      - events: [lincoln-douglas, public-forum]
+        held: online-at-school
+        overnight: no
+      - events: [policy]
+        held: in-person
+        where: Glenview, Illinois
+        overnight: yes
+    status: confirmed
+    notes: Varsity only.
+
+  - id: whitefish-bay-home-2026
+    name: Whitefish Bay home tournament
+    start: 2026-12-05
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Whitefish Bay, Wisconsin
+    overnight: no
+    status: conditional
+    condition: >-
+      Our team hosts this tournament. Our students compete in it only if enough families volunteer
+      to help run it and some students still need qualifying results, called legs, for the state
+      tournament.
+
+  - id: marquette-2026
+    name: Marquette University High School
+    start: 2026-12-12
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Milwaukee, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: blake-2026
+    name: Blake
+    start: 2026-12-19
+    end: 2026-12-21
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Minneapolis, Minnesota
+    overnight: yes
+    status: confirmed
+    notes: Varsity only.
+
+  - id: madison-west-2027
+    name: Madison West
+    start: 2027-01-02
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Madison, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: southern-wisconsin-nsda-qualifier-2027
+    name: Southern Wisconsin NSDA Qualifier
+    start: 2027-01-09
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Brookfield, Wisconsin
+    overnight: no
+    status: confirmed
+    notes: >-
+      By coach invitation. Every student has to be qualified for the state tournament by
+      January 9, which is why two qualifiers run that day.
+
+  - id: last-chance-qualifier-2027
+    name: Last Chance Qualifier
+    start: 2027-01-09
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Brookfield, Wisconsin
+    overnight: no
+    status: confirmed
+    notes: >-
+      For students not yet qualified for the state tournament. Every student has to be qualified
+      by January 9, which is why two qualifiers run that day.
+
+  - id: wisconsin-state-2027
+    name: Wisconsin State Debate Tournament
+    start: 2027-01-16
+    end: 2027-01-17
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: West Bend, Wisconsin
+    overnight: no
+    status: confirmed
+    notes: For students who qualified.
+
+  - id: milwaukee-ncfl-qualifier-2027
+    name: Milwaukee NCFL Qualifier
+    start: 2027-01-23
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: To be announced
+    overnight: no
+    status: tentative
+    notes: By coach invitation. The date is not yet confirmed.
+
+  - id: ncfl-nationals-2027
+    name: NCFL Nationals
+    start: 2027-05-29
+    end: 2027-05-30
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Minneapolis, Minnesota
+    overnight: yes
+    status: confirmed
+    notes: For students who qualify.
+    nationals: true
+
+  - id: nsda-nationals-2027
+    name: NSDA Nationals
+    start: 2027-06-13
+    end: 2027-06-18
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Phoenix, Arizona
+    overnight: yes
+    status: confirmed
+    notes: For students who qualify.
+    nationals: true

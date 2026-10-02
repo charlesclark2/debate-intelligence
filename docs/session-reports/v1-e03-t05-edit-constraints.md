@@ -375,9 +375,85 @@ scripts/task pr v1-e03-t05-edit-constraints
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-02
 
 **Notes:**
+
+The work is sound, and most of it is accepted as it stands. Two changes are needed before this
+merges. The first is a correction of my own kickoff instruction.
+
+**1. The save rule becomes "re-verify, then save with the verdict" (Decisions §5).** My instruction
+"unless it comes back VERIFIED, nothing is saved" contradicted three things:
+
+* the spec's own description ("tag and cite remain freely editable");
+* v2-e12-t05 ac4 ("if verification fails the card is saved as UNVERIFIED and the response says so");
+* v2-e14-t05 ac5.
+
+You were right to flag it. The instruction is withdrawn. Integrity comes from the policy, not from
+refusing to save:
+
+* every quotation edit is cut again from the snapshot;
+* the result must be exactly the text shown, less what was deleted (your §3);
+* forbidden kinds are refused;
+* only `verify_and_record` sets a status, so whatever is saved is truthful.
+
+Concretely:
+
+* **Every accepted edit is re-verified with `verify_and_record` and saved with its verdict,** VERIFIED
+  or not. `EditNotVerified` is no longer raised; remove it, or keep it only if something still raises
+  it. A VERIFIED card that loses all its markup is saved UNVERIFIED with the verifier's reason, and
+  adding markup back returns it to VERIFIED.
+* **`EditTag` and `EditCite` never re-cut the quotation and need no snapshot.** A card with no
+  evidence yet can have its tag and cite edited. `CARD_HAS_NO_EVIDENCE` applies only to the four
+  quotation edits.
+  * A tag edit on a card whose stored text no longer matches its snapshot is saved, with its evidence
+    untouched, and comes back UNVERIFIED with `TEXT_MISMATCH`. It is not repaired, and not refused.
+  * A changed required cite field still cannot claim verified (C1 stays). The card is saved UNVERIFIED
+    with the cite reason until E06's citation service re-resolves it (v1-e06-t01 ac5, filed).
+* **The quotation-does-not-match-snapshot refusal (§3) stays,** for the four quotation edits.
+* **The result and the audit entry carry the verification status before and after the edit,** and the
+  result carries the verifier's reasons. Statuses are not student data.
+* **Tests:**
+  * the four cases above;
+  * the property: the oracle predicts each status, and some examples start from a card that is
+    UNVERIFIED for having no markup;
+  * mutants on the save-with-verdict rule, on tag and cite edits not re-cutting, and on the
+    status fields in the entry.
+
+**2. The negation list gains `none`, `nothing`, `nobody` and `nowhere`.** Dropping "nothing"
+reverses a claim as surely as dropping "no". Update the "nothing" case in the 19, which is
+currently a non-flag, and the format doc. Hedges such as "hardly" stay out: they weaken a claim but
+do not negate it.
+
+**Accepted as they stand:**
+
+* Deviations 1 to 6. Deviation 3 (reading the text the deletion removed) is better than what I
+  specified.
+* Decisions §2 (the second scan detector), §3, §6 (spans split across a cut; span ids change on every
+  edit), §7, §8 (card first, then entry), §9, §10 as amended above, and §11.
+* The batch-2 overrun, which was acknowledged and handled correctly.
+
+**Spec amendments made in this branch, to commit with your changes:**
+
+* **t05 spec:**
+  * a PM note recording the save rule;
+  * the description ("freely editable: they never re-cut the quotation and need no snapshot"; "saved
+    with its verdict");
+  * ac5 (the card id and the statuses);
+  * ac6 (the text the deletion removed);
+  * `tests/fixtures/verify` added to the package list.
+* **v1-e06-t04 (DOCX renderer):**
+  * ac1 now allows the omission markers and interpolations the renderer adds;
+  * new ac6: omission markers come from the profile, and interpolations render through
+    `Interpolation.rendered`;
+  * ac5's LibreOffice check may no longer skip in validate-dev, because a skip fails the tier
+    (v1-e01-t10).
+* **v1-e06-t01 ac5:** re-resolving a student-changed cite field.
+* **v2-e12-t05 ac6:** a production `CardEditLog` adapter in one transaction with the card save;
+  authorisation in the route; refusals mapped to 422 without the payload.
+* **v2-e14-t05 ac6:** show negation flags; key spans on offsets, never span ids.
+
+`python3 scripts/validate_specs.py` reports OK on this branch.

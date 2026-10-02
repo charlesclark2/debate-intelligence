@@ -261,6 +261,31 @@
       "title": "CitationField[tuple[Annotated[str, StringConstraints], ...]]",
       "type": "object"
     },
+    "Interpolation": {
+      "additionalProperties": false,
+      "description": "Words a debater added to a quotation, shown in square brackets and never part of it.\n\n`anchor` is an offset **into the card's `evidence_text`**: the interpolation is read before the\ncharacter at that offset, or after the last character when it equals the text's length. `text`\nis stored without brackets; :attr:`rendered` is the only place they are added.",
+      "properties": {
+        "anchor": {
+          "description": "Offset into evidence_text the interpolation is read before; len(evidence_text) means after the last character.",
+          "minimum": 0,
+          "title": "Anchor",
+          "type": "integer"
+        },
+        "text": {
+          "description": "The interpolated words, without brackets. The renderer adds them; a bracket inside is refused.",
+          "minLength": 1,
+          "pattern": "^[^\\[\\]]+$",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "anchor",
+        "text"
+      ],
+      "title": "Interpolation",
+      "type": "object"
+    },
     "ProvenanceMode": {
       "description": "Where a snapshot's or card's text came from.\n\nThis travels from the snapshot onto every card cut from it, so a reader can always tell\npublisher-retrieved evidence from text a person supplied.",
       "enum": [
@@ -432,6 +457,15 @@
         "$ref": "#/$defs/CardOmission"
       },
       "title": "Omitted Ranges",
+      "type": "array"
+    },
+    "interpolations": {
+      "default": [],
+      "description": "Bracketed words a debater added, each anchored to an evidence_text offset, in strictly increasing anchor order. Never part of evidence_text, and not verified.",
+      "items": {
+        "$ref": "#/$defs/Interpolation"
+      },
+      "title": "Interpolations",
       "type": "array"
     },
     "normalized_text_hash": {

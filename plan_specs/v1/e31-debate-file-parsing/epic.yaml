@@ -241,7 +241,7 @@ spec:
         specRef: plan_specs/v1/e31-debate-file-parsing/t07-worksheet-round-trip.yaml
         goalRef: v1-e31-t07-worksheet-round-trip
       dependsOn:
-      - t05
+      - t03
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e31-t07-worksheet-round-trip reports phase Succeeded

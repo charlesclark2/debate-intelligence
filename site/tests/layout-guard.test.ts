@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import RootLayout from '@/app/layout'
+import type * as PublishingPolicy from '@/lib/publishing-policy'
 import type { PolicyInput } from '@/lib/publishing-policy'
 
 /**
@@ -16,7 +17,7 @@ import type { PolicyInput } from '@/lib/publishing-policy'
 const received = vi.hoisted(() => ({ inputs: [] as PolicyInput[] }))
 
 vi.mock('@/lib/publishing-policy', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/publishing-policy')>()
+  const actual = await importOriginal<typeof PublishingPolicy>()
   return {
     ...actual,
     enforcePublishingPolicy: (input: PolicyInput) => {

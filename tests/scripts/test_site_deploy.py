@@ -387,9 +387,9 @@ def test_dev_syncs_the_dev_bucket_with_cache_headers_by_path(world: World) -> No
 
     assert run.returncode == 0, run.output
     syncs = run.aws_calls_starting("s3", "sync")
-    assert len(syncs) == 3, syncs
+    assert len(syncs) == 4, syncs
 
-    hashed_assets, everything_else, prune = syncs
+    hashed_assets, everything_else, calendars, prune = syncs
 
     # Pass 1: the hashed chunks, cached for a year, and no --delete, so a page is never served
     # before the chunks it references exist.
@@ -403,10 +403,33 @@ def test_dev_syncs_the_dev_bucket_with_cache_headers_by_path(world: World) -> No
     assert "--delete" in everything_else
     assert "no-cache, must-revalidate" in everything_else
     assert "_next/static/*" in everything_else
+    excluded = [everything_else[index + 1] for index, arg in enumerate(everything_else) if arg == "--exclude"]
+    assert excluded == ["_next/static/*", "*.ics"]
 
-    # Pass 3: prune the chunks nothing references any more.
+    # Pass 3: only the calendar files, as text/calendar, with --delete limited to them.
+    assert calendars[3] == f"s3://{DEV_BUCKET}"
+    assert calendars[calendars.index("--content-type") + 1] == "text/calendar; charset=utf-8"
+    assert calendars[calendars.index("--exclude") + 1] == "*"
+    assert calendars[calendars.index("--include") + 1] == "*.ics"
+    assert "--delete" in calendars
+    assert "no-cache, must-revalidate" in calendars
+
+    # Pass 4: prune the chunks nothing references any more.
     assert prune[3] == f"s3://{DEV_BUCKET}/_next/static"
     assert "--delete" in prune
+
+
+def test_the_calendar_is_uploaded_as_text_calendar_and_nothing_else_is(world: World) -> None:
+    """The calendar's type is set by the script, not guessed from the deploying machine's
+    mimetypes table, and the content type is given to no other pass, where it would relabel every
+    page as a calendar."""
+    run = world.deploy("dev")
+
+    with_type = [call for call in run.aws_calls_starting("s3", "sync") if "--content-type" in call]
+    assert len(with_type) == 1
+    (calendars,) = with_type
+    assert calendars[calendars.index("--include") + 1] == "*.ics"
+    assert calendars[calendars.index("--exclude") + 1] == "*"
 
 
 def test_the_hashed_assets_go_up_before_the_html(world: World) -> None:

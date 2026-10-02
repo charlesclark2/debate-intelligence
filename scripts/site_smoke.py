@@ -32,9 +32,10 @@ version        ``/version.json`` parses and, with ``--expect-sha``, names the co
                meant to be deployed. This is what distinguishes "the deploy worked" from "the old
                build is still being served".
 panel          the home page carries the season-schedule panel (the parent-session panel until
-               v1-e37-t02), and on prod no page carries a gap badge. A gap badge on prod means a page went out with a fact nobody supplied, which
-               a prod build refuses (``site/src/lib/publishing-policy.ts``); seeing one live means
-               the build guard was bypassed, so this is the check that notices. On the preview a
+               v1-e37-t02), and on prod no page carries a gap badge. A gap badge on prod means
+               a page went out with a fact nobody supplied, which a prod build refuses
+               (``site/src/lib/publishing-policy.ts``); seeing one live means the build guard
+               was bypassed, so this is the check that notices. On the preview a
                gap is ordinary and is reported as a count, because that is how Charlie reviews the
                copy with the holes visible.
 calendar       ``/schedule.ics``, the tournament calendar parents subscribe to (v1-e37-t02), answers

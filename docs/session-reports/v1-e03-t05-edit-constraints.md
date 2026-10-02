@@ -371,6 +371,184 @@ scripts/task pr v1-e03-t05-edit-constraints
 - **The negation word list** is the spec's eight entries. "nothing", "none", "nobody" and "hardly"
   are obvious candidates, if the PM wants the heuristic broader.
 
+## Changes after PM review
+
+The PM asked for two changes. I committed the PM's spec amendments and review unchanged as `bfd9579`,
+then made both changes in `5041216` (code and tests) and a docs commit after it. Everything above
+this section is the record as reviewed. **Where it describes "nothing is saved unless VERIFIED",
+`EditNotVerified`, Decisions §5 or mutant R1, this section supersedes it.**
+
+### 1. Re-verify, then save with the verdict
+
+**The service.** `CardEditService.edit` now:
+
+- refuses forbidden kinds (`allowed_edit`);
+- checks the revision;
+- applies the edit;
+- calls `verify_and_record`;
+- **saves the card with whatever verdict comes back**, once, at the next revision;
+- appends the entry.
+
+`EditNotVerified` is deleted: nothing raised it any more. The service docstring states the rule and
+why integrity does not depend on refusing to save.
+
+**The policy splits by kind** (`evidence/edit_policy.py`):
+
+- `allowed_edit(edit)` refuses insert, replace and move by kind, with no card or snapshot needed.
+- `apply_quotation_edit(card, edit, snapshot, snapshot_text)` handles the four quotation edits. It
+  re-cuts and keeps the `QUOTATION_DOES_NOT_MATCH_SNAPSHOT` refusal. The service refuses one on a card
+  with no snapshot (`CARD_HAS_NO_EVIDENCE`).
+- `apply_tag_or_cite_edit(card, edit)` needs no snapshot and never re-cuts. It returns the card with
+  its evidence untouched and `UNVERIFIED`, for `verify_and_record` to judge. The C1 refusal (a
+  changed cite field claiming verified) stays here.
+- `edits.py` gains the aliases `QuotationEdit` and `TagOrCiteEdit`.
+
+**Statuses.** `CardEditEntry` gains `status_before` (the stored status the edit was made against)
+and `status_after` (the status saved). `CardEditResult` exposes both, and `reasons` (the verifier's).
+
+**Tests** (`test_card_edit_service.py`, `test_edit_policy.py`), all with hand-written expectations:
+
+| Case | Test | Result |
+|---|---|---|
+| A VERIFIED card loses all its markup, then gets it back | `test_a_verified_card_that_loses_its_markup_is_saved_unverified_and_markup_brings_it_back` | Delete 4-58 of the plain card: saved at revision 2 as `"The ."`, no spans, UNVERIFIED, reasons `(CARD_INCOMPLETE,)`, entry VERIFIED → UNVERIFIED. `SetMarkup` of 0-3: revision 3, VERIFIED, no reasons, entry UNVERIFIED → VERIFIED |
+| Markup cleared | `test_clearing_the_markup_is_saved_unverified_with_the_verifiers_reason` | Saved UNVERIFIED, `CARD_INCOMPLETE`, one entry |
+| A tag edit on a card with no snapshot | `test_a_card_that_quotes_nothing_can_have_its_tag_and_cite_edited` | Tag then cite saved at revisions 2 and 3, UNVERIFIED → UNVERIFIED, `SNAPSHOT_MISSING` among the reasons, two entries |
+| A quotation edit on that card | `test_a_quotation_edit_on_a_card_that_quotes_nothing_is_refused` | All four kinds give `CARD_HAS_NO_EVIDENCE`, card and log unchanged |
+| A tag edit on a card that does not match its snapshot | `test_a_tag_edit_on_a_card_that_does_not_match_its_snapshot_is_saved_untouched_and_unverified` | The stored card claims VERIFIED with "cooncil" for "council". Saved with that text untouched, the new tag, reasons `(TEXT_MISMATCH,)`, VERIFIED → UNVERIFIED |
+| A quotation edit on that card | `test_a_quotation_edit_on_that_card_is_still_refused` | `QUOTATION_DOES_NOT_MATCH_SNAPSHOT`, card unchanged |
+| A changed required cite field | `test_a_cite_edit_that_unverifies_a_required_field_is_saved_unverified` | Saved with the new title, `(CITATION_UNVERIFIED,)`, VERIFIED → UNVERIFIED |
+| A changed cite field claiming verified | `test_a_changed_cite_field_claiming_verification_is_still_refused` | `CITATION_CLAIMS_VERIFICATION`, card and log unchanged |
+| A tag edit loads nothing | `test_a_tag_edit_to_that_card_loads_nothing_and_is_saved_with_snapshot_missing` | A card whose snapshot record is gone is saved with `(SNAPSHOT_MISSING,)`. The same card's quotation edit still propagates `NotFound` |
+| Policy level | `test_a_tag_or_cite_edit_needs_no_evidence`, `test_a_tag_edit_on_a_card_that_does_not_match_its_snapshot_leaves_the_evidence_as_stored`, `test_the_quotation_path_will_not_re_cut_for_a_tag_or_cite_edit` | As named |
+
+The ac1 test now also asserts no reasons and VERIFIED → VERIFIED. The entry-fields test asserts the
+two new fields.
+
+**The property** (`test_any_sequence_of_allowed_edits_leaves_the_canonical_card_and_status_the_oracle_predicts`):
+
+- The oracle predicts the status: VERIFIED exactly when something is marked, since the source and
+  cite are intact.
+- After each accepted edit it checks the saved status, the reasons (`()` or `(CARD_INCOMPLETE,)`) and
+  the entry's before and after.
+- One draw in four starts from the cut card with no markup, stored UNVERIFIED (31.23% of examples
+  observed, below).
+- Deletions that strip every mark, and empty markup, are now accepted edits, not predicted refusals.
+
+At 10,000 examples, fresh `HYPOTHESIS_STORAGE_DIRECTORY`, `--hypothesis-show-statistics`:
+`1 passed, 42 deselected in 34.43s`, with 10,000 passing and 1,844 invalid. Percentages are of
+examples with at least one such event:
+
+- **Start:** VERIFIED 68.77%, UNVERIFIED with no markup 31.23%.
+- **Status transitions on accepted edits:**
+  - VERIFIED → VERIFIED: `DeleteRange` 55.23%, `AddInterpolation` 31.26%, `EditTag` 26.93%,
+    `SetMarkup` 22.75%, `RemoveInterpolation` 4.91%.
+  - VERIFIED → UNVERIFIED: `SetMarkup` 12.63%, `DeleteRange` 3.06%.
+  - UNVERIFIED → VERIFIED: `SetMarkup` 11.04%.
+  - UNVERIFIED → UNVERIFIED: `DeleteRange` 31.60%, `EditTag` 13.76%, `AddInterpolation` 12.88%,
+    `SetMarkup` 6.38%, `RemoveInterpolation` 1.98%.
+- **Deletions:** at an edge 59.64%, inside 56.21%, touching an omission 44.86%, merging omissions
+  44.78%, across a cut 37.11%, through a marked run 31.30% (down from 51.13%, because nearly a third of
+  examples now start unmarked), moving an interpolation 12.41%, an interpolation at its edge 8.04%.
+- **Markup across a cut:** 17.81%.
+- **Refusals predicted and seen:** `InvalidEvidenceEdit` for a remove 36.03%, a delete-everything
+  7.59% and an add 2.52%; `InterpolationBlocksDeletion` 6.73%.
+- **Omissions after an accepted edit:** 0 to 6, with 2 the most common (75.52%).
+
+### 2. The negation list
+
+`none`, `nothing`, `nobody` and `nowhere` join `NEGATION_WORDS`. The module docstring and the format
+doc say hedges such as "hardly" are left out on purpose. Hand-counted cases:
+
+- the "nothing" case (21-28) now expects a flag;
+- new cases: "None" 68-72, "nobody" 79-85, "nowhere" 87-94, all flagged;
+- "nonetheless" 96-107 is not flagged. It holds "none" but is not on the list, and the match is by
+  whole word.
+
+The fixture sentence gained " None came; nobody, nowhere, nonetheless." at its end, so the earlier
+offsets did not move. A plain slice confirmed the new offsets.
+
+### Mutation
+
+Same runner and suite as before, with each run on a new, empty `HYPOTHESIS_STORAGE_DIRECTORY`, and
+the property alone at 2,000 examples. The suite is now 167 tests. There were four batches of four or
+fewer mutants: 52.8 s, 44.7 s, 42.8 s and 27.6 s. All patterns matched exactly once. There were no
+ERRORs, and `git status` was clean after each batch. **14 of 14 caught.**
+
+| # | Mutant | Failed / 167 | One test that caught it | Property @ 2,000 |
+|---|---|---|---|---|
+| S1 | **Save-with-verdict:** a non-VERIFIED result is refused again (R1's meaning now) | 7 | `test_a_verified_card_that_loses_its_markup_is_saved_unverified_and_markup_brings_it_back` | caught |
+| R2 | The policy's card is saved, not the copy `verify_and_record` returned | 17 | `test_every_allowed_kind_of_edit_...[plain-DeleteRange]` | caught |
+| V1 | Revision: the save is skipped | 26 | same | caught |
+| V2 | Revision: the card is saved twice | 21 | same | caught |
+| V3 | Revision: the repository fake does not increment | 23 | same | caught |
+| V4 | The early stale check dropped (the save still checks) | 1 | `test_a_stale_revision_is_reported_before_the_edits_offsets_are_read` | passes |
+| Q1 | The quotation-does-what-it-says check dropped | 5 | `test_a_quotation_edit_to_a_card_that_does_not_match_its_snapshot_is_refused_not_repaired[DeleteRange]` | passes |
+| C1 | A changed cite field may claim verification | 2 | `test_a_cite_edit_may_change_a_field_but_not_claim_it_is_verified` | passes |
+| TG1 | **A tag edit that re-cuts** (tag applied, then the quotation re-cut with its own spans) | 4 | `test_a_tag_edit_on_a_card_that_does_not_match_its_snapshot_is_saved_untouched_and_unverified` | passes |
+| CT1 | **A cite edit that requires a snapshot** (refused on a card without one) | 1 | `test_a_card_that_quotes_nothing_can_have_its_tag_and_cite_edited` | passes |
+| CT2 | A cite edit sent down the quotation path | 5 | `test_every_allowed_kind_of_edit_...[plain-EditCite]` | passes |
+| ST1 | **Status missing from the entry:** `status_after` records the status before | 4 | `test_a_verified_card_that_loses_its_markup_...` | caught |
+| ST2 | **Status missing from the entry:** `status_before` records the status after | 4 | same | caught |
+| N8 | "nothing" dropped from the list | 1 | `test_removes_negation_folds_case_...[21-28-True]` | passes |
+
+Notes:
+
+- **TG1's first listed failure was a side effect:** the logged kind became `set_markup`, which
+  `test_successive_edits_each_add_one_revision_and_one_entry` catches. I re-ran it once with `-rf` on
+  a fresh database to see every failure. All three tests written for the rule catch it: the
+  no-evidence tag edit, the tag edit on a card that does not match its snapshot, and the tag edit
+  that loads nothing. The table names the most specific of them.
+- **The property passes the mutants it was not written for.** It never sends a cite edit, never
+  stores a tampered card or a card without evidence, and has no negation oracle. The example tests
+  hold each of those. It catches everything about the save rule and the statuses.
+- **The original families not re-run here** (A, T, N1-N7, M, F1, D1, I) are in code this change did
+  not touch, except F1. F1's refusal moved from `apply_edit` into `allowed_edit`.
+  `test_an_insertion_substitution_or_move_is_refused_by_kind_whatever_its_payload` and
+  `test_a_forbidden_edit_raises_and_leaves_the_stored_card_and_the_log_unchanged` still exercise it.
+
+### Files changed
+
+- `application/card_edit_service.py`: save with the verdict, dispatch by kind, statuses on the
+  result, `EditNotVerified` removed, docstring rewritten.
+- `application/ports/card_edit_log.py`: `status_before`, `status_after`.
+- `evidence/edit_policy.py`: `allowed_edit`, `apply_quotation_edit`, `apply_tag_or_cite_edit` in
+  place of `apply_edit`.
+- `evidence/edits.py`: `QuotationEdit`, `TagOrCiteEdit`, docstrings.
+- `evidence/negation.py`: the four words, and why hedges are out.
+- Tests: `test_card_edit_service.py`, `test_edit_policy.py`.
+- `docs/evidence/snapshot-text-format.md`: the editing section's save rule, the tag and cite
+  paragraph, the entry fields, the word list, and three guarantee rows changed or added.
+- Committed from the PM unchanged: the t05, v1-e06-t01, v1-e06-t04, v2-e12-t05 and v2-e14-t05
+  specs, and the PM review section.
+
+### Reruns
+
+- `uv run pytest packages/debate_core/tests/evidence/test_edit_policy.py` → `93 passed in 6.91s`.
+  `negation.py` 100%, `edit_policy.py` 100% of lines, with two partial branches. They are the
+  no-match exits of the two exhaustive `match` statements.
+- `uv run pytest packages/debate_core/tests/application/test_card_edit_service.py` → `43 passed in
+  6.29s`; `card_edit_service.py` 100%.
+- `uv run pytest -q --no-cov` (whole repository) → `3994 passed, 1 skipped in 39.92s`. The skip is the
+  existing `tests/evals/parser/test_parser_eval.py:279`.
+- `uv run ruff check .` → `All checks passed!`. `uv run ruff format --check .` → `489 files already
+  formatted`.
+- `uv run pyright packages tests/fixtures` → `0 errors, 0 warnings, 0 informations`.
+- `uv run lint-imports` → `Contracts: 11 kept, 0 broken.`
+- `uv run scripts/export_schemas.py --check` → `OK: 9 schemas in packages/debate_core/schemas are up
+  to date`. The schema does not change: the statuses are on the entry, which is not a published
+  schema.
+- `uv run python scripts/check_links.py` → `OK: 1218 relative links and anchors in 164 Markdown files`.
+- `uv run scripts/validate_specs.py` → `OK: 305 files, 38 epics, 247 tasks, 20 releases`.
+- Every test name the format doc cites exists (checked by grep).
+
+The phase stays `Succeeded`. No operator command is needed. After the PM's re-review, the usual step,
+from the task worktree:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e03-t05-edit-constraints
+scripts/task pr v1-e03-t05-edit-constraints
+```
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->

@@ -1,4 +1,4 @@
-{"record":"file","digest":"4f9115e33c3dbad3f7403d4b5f6c0250df73c42a87e05f90c0866fe7e0e46f39","paragraph_count":196,"blocks":[[20,39],[160,195]],"plan_id":"792cad9c0f3fa456","status":"PRELABELED","prelabel_parser_version":"2026.09.20-docx-1","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
+{"record":"file","digest":"4f9115e33c3dbad3f7403d4b5f6c0250df73c42a87e05f90c0866fe7e0e46f39","paragraph_count":196,"blocks":[[20,39],[160,195]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.09.20-docx-1","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
 {"record":"paragraph","index":20,"length":648,"text_digest":"8d01e955a6867a7dfda299e4480c84d923ee4880539733709698c5c5208acf3a","unit":"EVIDENCE","card":null}
 {"record":"paragraph","index":21,"length":740,"text_digest":"6350cd3bd64317591bfbb12277981418768dfd2893453dffd40299946bb45759","unit":"EVIDENCE","card":null}
 {"record":"paragraph","index":22,"length":613,"text_digest":"b25d70d761516d3f1c74b30bdf7d954f081042b622243fc49bcdd98e978b6452","unit":"EVIDENCE","card":null}

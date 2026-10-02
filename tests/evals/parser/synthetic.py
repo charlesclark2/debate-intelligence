@@ -31,7 +31,7 @@ from debate_core.domain.debate_files import CardCompleteness
 from debate_core.domain.style_profile import StructuralUnit
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
-__all__ = ["TEST_DIGEST_KEY", "SyntheticFile", "build_synthetic_file"]
+__all__ = ["TEST_DIGEST_KEY", "SyntheticFile", "build_invented_corpus_file", "build_synthetic_file"]
 
 #: Not a secret: this file is invented, so its digests protect nothing. Fixed so tests are stable.
 TEST_DIGEST_KEY = bytes.fromhex("5e" * 32)
@@ -187,3 +187,12 @@ def build_synthetic_file(
         spans=spans,
     )
     return SyntheticFile(content=content, labels=labels, key=key)
+
+
+def build_invented_corpus_file(number: int) -> bytes:
+    """The invented file with one numbered paragraph after it, so each copy has its own bytes.
+
+    For tests that need a folder of distinct files the selector, planner and pre-labeler all accept.
+    """
+    markup = "".join(markup for markup, _, _, _ in _PARAGRAPHS)
+    return build_docx(markup + paragraph_xml(run_xml(f"Invented corpus file {number}, 2026.")))

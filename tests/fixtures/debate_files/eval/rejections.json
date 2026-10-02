@@ -1,0 +1,16 @@
+{
+  "description": "Files a person looked at and ruled out of the parser evaluation, by keyed digest, with a reason code and the date. No content and no file name. scripts/select_eval_files.py never selects a file listed here.",
+  "rejections": [
+    {
+      "digest": "4b11269583a946212569b811437a1b7ce40f11cc15edbb131ef71f732513217b",
+      "reason": "NOT_DEBATE_CONTENT",
+      "rejected_on": "2026-10-01",
+      "category": "caselist",
+      "season": "2026-27",
+      "debate_format": "LD",
+      "template_family": "wiki-converted",
+      "pr_subset": true,
+      "replaced_by": "f791edc8c9c4a3b96cb2d6d7b646343891552a0325fa0584cbd1d9ad5ef53ce7"
+    }
+  ]
+}

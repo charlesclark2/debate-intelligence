@@ -31,6 +31,7 @@ from tests.evals.parser.labels_schema import (
     EVAL_FIXTURE_DIRECTORY,
     REPOSITORY_ROOT,
     load_manifest,
+    load_rejections,
 )
 
 CONTENT = b"an invented debate file's bytes"
@@ -146,12 +147,13 @@ def test_nothing_committed_holds_a_plain_digest_of_a_corpus_file() -> None:
         for path in sorted(EVAL_FIXTURE_DIRECTORY.rglob("*"))
         if path.is_file()
     )
-    manifest = load_manifest()
-    for entry in manifest.entries:
-        content = path_map[entry.digest].read_bytes()
+    # A rejected file has left the manifest, but its keyed digest is still committed beside it.
+    digests = [entry.digest for entry in load_manifest().entries] + sorted(load_rejections().digests)
+    for digest in digests:
+        content = path_map[digest].read_bytes()
         plain = hashlib.sha256(content).hexdigest()
         assert plain not in committed, f"a plain digest of a corpus file is committed ({plain[:12]}…)"
-        assert entry.digest == keyed_digest(content, key)
+        assert digest == keyed_digest(content, key)
 
 
 #: Phrasings that *claim* the digests are plain hashes. "never a plain SHA-256" and "HMAC-SHA256"
@@ -223,3 +225,5 @@ def test_the_committed_manifest_and_plan_agree_on_their_digests() -> None:
     plan = json.loads((EVAL_FIXTURE_DIRECTORY / "sampling-plan.json").read_text(encoding="utf-8"))
     assert {entry["digest"] for entry in manifest["entries"]} == {file["digest"] for file in plan["files"]}
     assert "sha256" not in json.dumps(manifest) and "sha256" not in json.dumps(plan)
+    rejections = (EVAL_FIXTURE_DIRECTORY / "rejections.json").read_text(encoding="utf-8")
+    assert "sha256" not in rejections

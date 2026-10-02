@@ -1,6 +1,6 @@
 {
-  "plan_id": "792cad9c0f3fa456",
-  "generated_on": "2026-09-23",
+  "plan_id": "06a5e928bf1fc90f",
+  "generated_on": "2026-10-01",
   "parser_version": "2026.09.20-docx-1",
   "target_rate": 0.25,
   "minimum_block": 20,
@@ -83,17 +83,6 @@
         ]
       ],
       "full": false
-    },
-    {
-      "digest": "4b11269583a946212569b811437a1b7ce40f11cc15edbb131ef71f732513217b",
-      "paragraphs": 55,
-      "blocks": [
-        [
-          0,
-          54
-        ]
-      ],
-      "full": true
     },
     {
       "digest": "4e5d4ca9ceb8217bc81f0494a7592dd4cc312d94c82a537f1851a589ec933ef2",
@@ -432,6 +421,17 @@
         ]
       ],
       "full": false
+    },
+    {
+      "digest": "f791edc8c9c4a3b96cb2d6d7b646343891552a0325fa0584cbd1d9ad5ef53ce7",
+      "paragraphs": 30,
+      "blocks": [
+        [
+          0,
+          29
+        ]
+      ],
+      "full": true
     },
     {
       "digest": "f897900ef90160ac7c4bdd5dacfde0e66fd5b06ef413ce88155d735b02782669",

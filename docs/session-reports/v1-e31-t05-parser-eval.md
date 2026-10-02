@@ -574,24 +574,26 @@ Also run:
 
 ### Operator follow-ups (changes to the list above)
 
-**1. Approve the selection: open two files first.** Both carry a content hint and both are in
-the PR subset: `f791edc8c9c4a3b9` (the replacement) and `9d0a74b95ccf9269` (a team PF file with no
-paragraph holding a year). Where: your Mac, in the task worktree
-`debate-intelligence-worktrees/v1-e31-t05-parser-eval`.
+**1. Approve the selection: open two files first, then reject before any import.** *(Rewritten
+after the PM review: one block, no hand edits, safe to paste into zsh.)* The current version, for the
+coach working without a session, is the [working reference](../../tests/fixtures/debate_files/eval/labels/README.md#working-reference)
+at the top of the labeling guide; this is the same sequence. Where: the main clone on `dev`, after
+this task merges (`git pull` and `uv sync --all-packages` first).
+
+Both hinted files are in the PR subset: `f791edc8c9c4a3b9` (the replacement) and
+`9d0a74b95ccf9269` (a team PF file with no paragraph holding a year).
 
 ```bash
-uv run python -c "
-import json, subprocess, pathlib
-p = json.load(open(pathlib.Path.home() / '.debate-intelligence/parser-eval-paths.json'))
-for prefix in ('f791edc8c9c4a3b9', '9d0a74b95ccf9269'):
-    subprocess.run(['open', next(v for k, v in p.items() if k.startswith(prefix))])
-"
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+uv run python scripts/prelabel_docx.py open f791edc8c9c4a3b9
+uv run python scripts/prelabel_docx.py open 9d0a74b95ccf9269
 ```
 
-If either is not debate material, or you name more files after skimming the rest, reject each one
-the same way (about 20 s, then about 5 s to regenerate):
+To reject a file, put its digest on the first line and paste the whole block. It takes under a
+minute. Left as `PASTE_DIGEST_PREFIX_HERE`, the selector matches nothing and the block stops there.
 
 ```bash
+reject=PASTE_DIGEST_PREFIX_HERE
 uv run python scripts/select_eval_files.py \
   --input "team=$HOME/Documents/debate/2024-2025" \
   --input "team=$HOME/Documents/debate/2025-2026" \
@@ -599,23 +601,38 @@ uv run python scripts/select_eval_files.py \
   --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0915" \
   --input "camp=$HOME/Documents/debate/2026-2027/Policy Debate/Camp Files" \
   --exclude-dir Opencaselist --exclude-dir "Camp Files" \
-  --reject <digest-prefix> --reason NOT_DEBATE_CONTENT
-uv run python scripts/plan_eval_sampling.py
-uv run python scripts/prelabel_docx.py prelabel --all
-git rm tests/fixtures/debate_files/eval/labels/<rejected-full-digest>.jsonl
-uv run python scripts/prelabel_docx.py worksheet <replacement-prefix> --out-dir ~/parser-eval-worksheets
-rm ~/parser-eval-worksheets/<rejected-digest16>.csv
+  --reject "${reject}" --reason NOT_DEBATE_CONTENT &&
+uv run python scripts/plan_eval_sampling.py &&
+uv run python scripts/prelabel_docx.py prelabel --all &&
+uv run python scripts/prelabel_docx.py worksheet --all --out-dir ~/parser-eval-worksheets &&
+git status --short
 ```
 
 Success looks like: `replaced 1 rejected file(s) from the same stratum; the other 29 entries are
-unchanged`, no `SHORTFALL` or `REJECTION CONFLICT` line, and `uv run pytest tests/evals/parser`
-passing apart from the one skip. `MANIFEST.md`'s two tables then need the swapped row
-(`test_the_manifest_summary_table_matches_manifest_json` fails until they have it). Or name the
-files to the PM and a session does all of this.
+unchanged`, no `SHORTFALL`, `REJECTION CONFLICT` or `REFUSED` line, and a `git status` listing
+changes under `tests/fixtures/debate_files/eval/` and nowhere else: `manifest.json`,
+`rejections.json`, `sampling-plan.json`, `MANIFEST.md`, `labels/README.md`, the rejected file's
+label file deleted, the replacement's added, and the other label files carrying the new plan id.
+The tables are regenerated, the rejected file's pre-label and worksheet are removed, and the
+replacement's worksheet is written. Nothing is edited by hand. Then commit it through a pull
+request, since `dev` refuses direct pushes:
 
-**Do every rejection before any import.** A rejection changes the plan's `plan_id`. Labels already
-corrected under the old id stop validating, even though their blocks have not moved, and no tool
-re-stamps a corrected file. `prelabel` leaves it alone, and `--force` discards the correction.
+```bash
+git switch -c "labels/rejections-$(date +%Y-%m-%d)"
+git add tests/fixtures/debate_files/eval
+git commit -m "Parser evaluation: reject files that are not debate material"
+git push -u origin HEAD
+gh pr create --base dev --fill
+git switch dev
+```
+
+**Every rejection comes before any import, and the selector enforces it.** `--reject` refuses,
+naming them, while any label file is `CORRECTED` or `COACH_REVIEWED`.
+`--discard-corrected-labels` overrides the refusal and names the corrections it discards.
+
+The first session's follow-ups 2 and 3, above, still show `<digest-prefix>`-style placeholders,
+which zsh reads as redirects. They are left as the first session wrote them; the working reference
+replaces them.
 
 **2. Correct the labels**: now **1,851 rows**, the PR subset **410**.
 
@@ -626,6 +643,10 @@ those files, and they are the inputs to the commands in follow-ups 1 and 5.
 
 ### Follow-up work
 
+- **Deviation 2, decided by the PM (2026-10-02): the full tier runs before a promotion, not
+  nightly.** Run `uv run pytest tests/evals/parser -m "eval and slow"` on the machine that holds
+  the corpus before any promotion whose `dev` contains a parser change, and record the result in
+  the promotion's description. No second launchd agent on the coach's Mac.
 - **Closed:** the note for `v1-e31-t03` about the zero-card wiki-converted file in the PR subset
   (`02469e60…`). That file was not debate material, and it is now rejected.
 - **A re-stamp for corrected labels**, if rejections ever have to happen after labeling starts: a
@@ -633,6 +654,116 @@ those files, and they are the inputs to the commands in follow-ups 1 and 5.
   because the rule above avoids needing it.
 - **The hint could print digest prefixes** rather than per-stratum counts. They are not content,
   and they are already in `MANIFEST.md`. It prints counts because that is what was asked.
+
+### Changes after PM review
+
+The PM accepted the resumed section for a `--partial` merge and asked for three changes first. The
+Goal stays **`InProgress`**: the coach's approval of the selection, the labeling, the baseline,
+the corpus health run and ac6 are all still open.
+
+Commits: `6b480da`, `f3e6171`, `7f6e513`, `31c0c22`, `d580577`, and the report commit. The PM's
+review was committed unchanged first, as `9c01736`.
+
+**1. "Every rejection before any import" is enforced, not just written down.** `--reject` now
+refuses while any label file is `CORRECTED` or `COACH_REVIEWED`. It prints
+`REFUSED: N label file(s) are already corrected: <digest16> CORRECTED, …`, explains that the plan id
+changes and no tool can move a correction to the new plan, and writes nothing.
+`--discard-corrected-labels` goes ahead and prints `DISCARDING N correction(s): …`, naming each one,
+with how to reset it and the note that a corrected file of a rejected entry is left for a person to
+delete. The labels directory and the rejection list now default to the manifest's own directory.
+
+*Failing first.* The refusal test runs the selector's `main()` over an invented on-disk corpus with
+a `CORRECTED` label file present, passing `--rejections` explicitly so the old code could not touch
+the committed list. Against the code before this change it **failed for its reason**: the old
+selector went ahead (`selected 6 files, 2 in the PR subset … manifest written`), so
+`assert 'REFUSED' in …` failed and the manifest was rewritten. The override test failed only on the
+unknown flag (`SystemExit: 2`), so it shows nothing; its real catch is in the mutation table below.
+The pre-label test passed on the old code too, which is correct, since pre-labels never blocked.
+
+**2. A rejection is one command block with no hand edits.**
+
+- `MANIFEST.md`'s selection, ac1-coverage, rejections and sampling-plan tables, and the guide's
+  PR-subset table, are generated from `manifest.json`, `rejections.json` and `sampling-plan.json`
+  between marker comments ([`manifest_summary.py`](../../tests/evals/parser/manifest_summary.py)).
+  `select_eval_files.py` and `plan_eval_sampling.py` rewrite them as their last step. A document
+  present without its markers is an error, not a skip. The first render reproduced every
+  hand-written row of the four existing tables exactly; the one addition is a PR-subset row in the
+  coverage table. Numbers that can change moved out of the prose and into the blocks.
+- `prelabel --all` removes a rejected entry's `PRELABELED` label file, and never a corrected one,
+  which it names and leaves.
+- `worksheet --all` writes every missing worksheet of a `PRELABELED` file, never overwrites one
+  already there (it may be half filled in), and removes a rejected file's worksheet.
+- `prelabel_docx.py open DIGEST_PREFIX` opens a file's `.docx` and prints only `<digest16>: opened`.
+- Follow-up 1 is rewritten to match: selector, plan, pre-labels, worksheets, then `git status`.
+
+*Proof on the invented corpus.* `test_a_rejection_needs_no_hand_edits` runs the coach's four
+commands on eight invented camp files, after one worksheet has been edited as if half filled in. It
+then runs **the same hand-written check as `test_the_manifest_summary_table_matches_manifest_json`**
+(refactored into `assert_summary_table_matches_manifest(directory)` and run against the scratch
+directory), plus a new hand-written check of the plan table against `sampling-plan.json`. It also
+checks: the rejected digest appears in `MANIFEST.md` only in the rejections table; the guide names
+the replacement and not the rejected file; no table says "out of date"; the rejected pre-label and
+worksheet are gone; the replacement's are there; every other worksheet is byte-identical,
+including the half-filled one. On the real data, the block's last three steps
+(`plan_eval_sampling.py`, `prelabel --all`, `worksheet --all`) are no-ops: plan
+`06a5e928bf1fc90f`, `0 worksheet(s) written, 30 left as they were`, and a clean `git status`.
+
+**3. A working reference at the top of the labeling guide.** In order: setup in the main clone on
+`dev` (`git pull`, `uv sync --all-packages`; the worktree is gone after the merge); approve the
+selection, opening `f791edc8c9c4a3b9` and `9d0a74b95ccf9269` first, and reject before any import
+with the one block above; the PR subset first, from a **generated** table (plan
+`06a5e928bf1fc90f`, 1,851 rows, 410 in the subset), so it cannot go stale the way the coach's
+earlier reference did; the per-file loop (open the `.docx` by digest prefix and the worksheet in
+Numbers or LibreOffice, never Excel; fill in the columns; import; delete the worksheet; commit the
+label file on a branch and open a small pull request, since `dev` refuses direct pushes); and the
+finish (three end-to-end spot-checks of team, caselist and camp files, `mark-reviewed`, the
+baseline, then the corpus health run). The units, cards, ambiguous conventions and spans sections
+are kept and linked rather than repeated. The old `#`-commented Workflow block is now prose naming
+the four commands, and the sampling-plan section no longer quotes the old row counts.
+
+*Safe to paste.* Each of the guide's 9 code blocks passes `zsh -n`. None has a `#` line, and none
+has a `<placeholder>`, which zsh reads as a redirect. A digest goes in a variable on the block's
+first line, defaulting to `PASTE_DIGEST_PREFIX_HERE`, which matches nothing, so an unedited paste
+stops at its first command. Multi-step blocks are joined with `&&`, so a refusal stops the rest.
+`test_the_guides_code_blocks_are_safe_to_paste_into_zsh` guards both rules. It **fails on the guide
+as it was before this change**, naming the `# 1.` to `# 4.` lines of the old Workflow block, and
+passes now.
+
+**Mutations.** Each one switches off one behaviour, runs `test_select_eval_files.py` and
+`test_labels_schema.py`, and restores the file from the commit:
+
+| Mutation | Result |
+|---|---|
+| The refusal is not checked (the code before change 1) | caught by 2 tests |
+| The override discards without saying what | caught |
+| The selector does not regenerate the tables | **missed** at first: the planner, run next in the block, regenerated them anyway. The selector's own regeneration matters when it runs alone, so `test_the_selector_alone_brings_the_selection_tables_up_to_date` now tests it, and it is caught. |
+| The planner does not regenerate the tables | caught |
+| `prelabel --all` keeps a rejected file's pre-label | caught by 2 tests |
+| A corrected file of a rejected entry is removed too | caught |
+| `worksheet --all` overwrites a worksheet already there | caught, by the half-filled worksheet; with regenerated bytes alone this would have passed |
+| `worksheet --all` keeps a rejected file's worksheet | caught |
+| The rejections table is never filled in | caught by 2 tests |
+
+Final runs: **9 of 9** caught. The first round's 12 mutations were re-run against the new code and
+are still **12 of 12** caught.
+
+**Checks run** (2026-10-01, from the task worktree):
+
+| Command | Result |
+|---|---|
+| `uv run pytest tests/evals/parser tests/scripts -q` | `462 passed, 1 skipped in 16.83s` (the skip is the real PR-subset tier, "6 of 6 pr-subset files are not yet corrected by a person") |
+| `uv run pytest tests/evals/parser/test_select_eval_files.py` | `21 passed` (was 14) |
+| `uv run pytest tests/evals/parser/test_labels_schema.py` | `31 passed` (was 28) |
+| `uv run ruff check .` / `uv run ruff format --check .` | `All checks passed!` / `466 files already formatted` |
+| `uv run lint-imports` | `Contracts: 11 kept, 0 broken.` |
+| `uv run scripts/validate_specs.py` | `OK: 302 files, 38 epics, 244 tasks, 20 releases` |
+
+Nothing that was PASS or NOT RUN in the table above has changed status.
+
+**What the operator runs next** (from the worktree, in order): `scripts/task sync
+v1-e31-t05-parser-eval`, then `scripts/task pr v1-e31-t05-parser-eval --partial`, then, after the
+merge, `scripts/task finish v1-e31-t05-parser-eval --partial`. After that the coach works from the
+main clone, starting at the guide's working reference.
 
 ## PM review of the first session (2026-09-23)
 

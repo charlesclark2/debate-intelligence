@@ -121,7 +121,7 @@ spec:
         script by hand still sees it. Both workflows pass the option, and a test shows the warning
         present without it and absent with it.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

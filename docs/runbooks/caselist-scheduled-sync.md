@@ -175,11 +175,12 @@ You should not have to go looking. A failed stage, an expired `caselist_token`, 
 session, and a cap backlog that has grown for two runs in a row each post a macOS notification
 naming the command that fixes it (`caselist.notifier`, `auto` by default). Every run also appends
 one record to the run log, `<data_dir>/caselist-sync-runs.jsonl`, and publishes it to
-`reports/sync-runs/<yyyy>/<run-id>.json` in the bucket (`v1-e34-t03`):
+`reports/sync-runs/<yyyy>/<run-id>.json` in the bucket (`v1-e34-t03`). The first command reads this
+machine's log, the second the bucket's copy:
 
 ```bash
-debate-research caselist runs --last 5            # this machine's log
-debate-research caselist runs --last 5 --remote   # the bucket's copy
+debate-research caselist runs --last 5
+debate-research caselist runs --last 5 --remote
 ```
 
 Its caption says how long ago the newest run started, and says the schedule may have stopped when

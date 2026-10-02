@@ -151,3 +151,17 @@ the example the first had found instead of finding it again.
   database isolation. Their conclusions about which checks are load-bearing stand; their timings
   are upper bounds on speed, not evidence of how readily a property finds a break from cold.
   (Added by the PM.)
+
+## 9. Command blocks are safe to paste into zsh
+
+The operator's shell is zsh, which does not treat `#` as a comment when commands are pasted
+interactively. A trailing comment becomes arguments: `git status --porcelain # must print nothing`
+reads the words as pathspecs and prints nothing even on a dirty tree, so the check it was meant to
+be always passes.
+
+* **No `#` comments inside a shell code block** that a person will paste: runbooks, guides,
+  READMEs and the operator follow-ups of a session report. Put the explanation in the prose.
+* Put one-time commands and every-time commands in separate blocks, rather than marking them with
+  a comment.
+* `v1-e01-t19` adds a check that enforces this.
+

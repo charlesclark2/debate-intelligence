@@ -44,6 +44,7 @@ dev = [
     "lxml-stubs>=0.5",
     # Answers the S3 adapters in-process (v1-e29-t04). The PR test suite reaches no AWS account.
     "moto[s3]>=5.0",
+    "numbers-parser>=4.19",
     "pre-commit>=4.0",
     "pre-commit-hooks>=5.0",
     "pyright[nodejs]>=1.1.400",

@@ -1,0 +1,127 @@
+# TASK v1-e31-t07-worksheet-round-trip - Labeling worksheets survive a spreadsheet round trip
+# Epic: E31 Debate File Parsing | Release: v1.1 (Caselist evidence store) | Major: V1
+# Architecture refs: §13 file parsing, §16 deterministic tests
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t07-worksheet-round-trip
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: Labeling worksheets survive a spreadsheet round trip
+    debate/architecture-refs: §13, §16
+spec:
+  # Filed by the PM, 2026-10-02, from the first two files Charlie labeled for v1-e31-t05. Every
+  # refusal in both files came from the spreadsheet, not from a label.
+  description: >-
+    v1-e31-t05's worksheets are edited in Numbers, and the round trip lost an evening on the first
+    two files. None of the problems was a labeling mistake. Cmd+S saved a `.numbers` file the
+    import never reads, and twice the CSV on disk was the untouched original. The import then
+    reported every row as unchecked, which looked like a labeling fault. Numbers changed the `text`
+    of six rows nobody had edited, in whitespace or line breaks, and the import refused them as
+    "text was edited". Cells emptied to mean "nothing underlined" were refused as "the text under
+    the markup was edited", which names the wrong cause. And the import reports only the first
+    problem in each row, so a fix uncovered the next problem in the same row one run at a time.
+    The PM worked around each of these with hand-written scripts, now in Charlie's local copy of
+    the labeling guide. This task makes the tool do it. A `check` subcommand runs every validation
+    without importing, reports every problem in every row, and names the cause in a person's
+    terms. `check` and `import` read a `.numbers` file directly. A repair option writes a corrected
+    worksheet: it restores `text` from the document, carries the marks onto the restored text,
+    fills an emptied sampled cell with its text and no marks, and clears cells on unsampled rows.
+    It prints every change and never touches a label. Out of scope: the labeling rules, the label
+    file format, the sampling plan, and anything that relaxes "text is never edited". Restoring
+    `text` from the document is how that rule is enforced.
+  priority: 1
+  constraints:
+    packages: [scripts, tests/evals/parser, tests/fixtures/debate_files/eval/labels/README.md, pyproject.toml, uv.lock]
+    forbidden:
+      - Changing, inferring or defaulting any label (unit, card, completeness, checked) during a check or a repair
+      - Accepting a worksheet whose text differs from the document; the repair restores the text, the import still compares it exactly
+      - A `.numbers` reader, or any other spreadsheet library, as a runtime dependency of debate-core or debate-cli
+      - Writing worksheet contents, or any card text, inside the repository or into test fixtures from real files
+      - Network access in the tests for this task
+  context:
+    - kind: TaskRef
+      name: v1-e31-t05-parser-eval
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `scripts/prelabel_docx.py check <digest> --worksheet <path>` runs every validation `import`
+        runs, writes nothing, and lists every problem in every row, not only the first in each. The
+        exit code is 0 when the import would succeed and 1 otherwise. `import` reports the same
+        complete list when it refuses. Each failure seen on 2026-10-02 has its own message, shown by
+        test with a synthetic worksheet:
+        - an empty `underline` or `highlight` cell on a sampled row ("empty: a row with nothing
+          marked keeps its text with no marks");
+        - `text` changed by the spreadsheet, naming the characters that differ;
+        - a worksheet with `checked` empty on every row and no label changed, which says the file
+          looks like the untouched original and points at the `.numbers` file if one sits beside it;
+        - an extra line above the header (Numbers' "Include table names").
+    - id: ac2
+      description: >-
+        `check` and `import` accept a `.numbers` path as `--worksheet` and read it directly, through
+        a reader in a development dependency group, never a runtime dependency of debate-core or
+        debate-cli. When both `<digest>.csv` and `<digest>.numbers` exist and the `--worksheet` given
+        is the older of the two, the command says so and stops. A test reads a small `.numbers` file
+        built from synthetic text.
+    - id: ac3
+      description: >-
+        `check --repair --out <path>` writes a repaired worksheet. It restores each row's `text` from
+        the document, carries the marks onto the restored text by aligning the two strings, fills an
+        empty sampled `underline` or `highlight` cell with its text and no marks, and empties those
+        cells on unsampled rows. It prints one line per change, naming the row and what was
+        restored. It refuses, and repairs nothing, when the text in a row differs by more than
+        whitespace, quotes, dashes, ellipses and line breaks, listing those rows for a person to
+        look at. Tests cover each kind of repair and the refusal, and show that labels are
+        byte-identical before and after.
+    - id: ac4
+      description: >-
+        The repository labeling guide's per-file loop uses the new commands: save in the spreadsheet,
+        `check --repair`, then import. It drops the claim that Numbers does not rewrite text. The
+        workaround scripts the PM put in the local copy of the guide are no longer needed, and the
+        report says so for the PM to update that copy. Each worksheet, and the `.numbers` file
+        beside it, is deleted after a successful import.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t07-worksheet-round-trip-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Collect every problem before reporting, then name causes, then read .numbers, then repair, then
+    rewrite the guide's loop.
+  goalRef:
+    name: v1-e31-t07-worksheet-round-trip
+  graph:
+    nodes:
+      - id: check-and-repair
+        kind: Task
+        name: check, .numbers reading and repair
+        description: >-
+          The check subcommand and its messages, the .numbers reader, the repair, and the guide.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Worksheet tests pass offline
+            command: uv
+            args: [run, pytest, tests/evals/parser/test_prelabel.py]
+          - type: artifact_exists
+            name: The guide's loop uses check
+            path: tests/fixtures/debate_files/eval/labels/README.md
+            contentMatch: "check --repair"
+status:
+  phase: Pending

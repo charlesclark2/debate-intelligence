@@ -67,7 +67,7 @@ spec:
         stopgap (installing boto3 into the tool environment by hand). The operator runs this; the
         report records its output.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

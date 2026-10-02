@@ -172,6 +172,7 @@ def test_a_team_is_removed_and_next_weeks_archive_does_not_bring_it_back(
     done = run(*REMOVE, "--execute")
     assert done["exit_code"] == ExitCode.OK, done
     assert done["data"]["outcome"] == "COMPLETED"
+    assert done["data"]["inbox_exists"] is False and not (data_dir / "inbox").exists(), "none created"
     keys = {key for key, _ in versions(bucket)}
     for sha in EXCLUSIVE:
         assert not any(sha in key for key in keys)
@@ -226,6 +227,7 @@ def test_the_dry_run_reads_as_a_plan_for_a_person(
         "FOR THE CONFIRMATION TO THE REQUESTER",
         "TO CARRY IT OUT",
         "DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal",
+        "): does not exist, so there is nothing to check or change",
     ):
         assert heading in result.stdout, heading
 

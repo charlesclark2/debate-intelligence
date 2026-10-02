@@ -319,7 +319,12 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
 
 def _inbox_lines(plan: RemovalPlan) -> list[str]:
     """The download inbox: each file holding a removed file, and whether it is deleted or rewritten."""
-    if not plan.inbox:
+    if not plan.inbox_exists:
+        lines = [
+            f"DOWNLOAD INBOX ({plan.inbox_directory}): does not exist, so there is nothing to check or "
+            "change (an environment that has never pulled has none)."
+        ]
+    elif not plan.inbox:
         lines = [f"DOWNLOAD INBOX ({plan.inbox_directory}): nothing in it holds a removed file."]
     else:
         lines = [
@@ -494,6 +499,7 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
         ],
         "suppression_entries": [entry.to_line() for entry in plan.suppression_entries],
         "inbox_directory": plan.inbox_directory,
+        "inbox_exists": plan.inbox_exists,
         "inbox": [
             {
                 "name": one.name,

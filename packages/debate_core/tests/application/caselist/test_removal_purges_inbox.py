@@ -907,3 +907,22 @@ def test_an_error_names_a_camp_download_by_its_id_never_its_title() -> None:
     message = str(InboxFileChanged(one.label))
 
     assert "openev-512" in message and "Estuary" not in message
+
+
+class TestAnEnvironmentWithNoInbox:
+    async def test_a_removal_where_there_is_no_inbox_completes_and_creates_none(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """Prod does not pull, so it has no inbox, and every takedown runs there after dev."""
+        inbox = removal_world.data_dir / "inbox"
+        assert not inbox.exists()
+
+        remover, plan = await plan_team(removal_world, include_shared=True)
+        assert (plan.inbox_exists, plan.inbox, plan.inbox_directory) == (False, (), str(inbox))
+        report = await remover.execute(plan)
+
+        assert report.completed and report.log_entry.outcome is RemovalOutcome.COMPLETED
+        assert (report.inbox_files_deleted, report.inbox_files_rewritten) == (0, 0)
+        assert not inbox.exists(), "nothing created where the inbox would be"
+        assert not (removal_world.data_dir / LOCK_FILENAME).exists(), "the inbox step did nothing at all"
+        assert not (removal_world.data_dir / OPENEV_DELIVERIES_FILENAME).exists()

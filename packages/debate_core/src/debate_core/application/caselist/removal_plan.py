@@ -344,6 +344,8 @@ class RemovalPlan:
     inbox_team_files_left: tuple[InboxTeamFilesLeft, ...] = ()
     """Archives waiting to be imported that hold files of the team the store has never seen."""
     inbox_directory: str = ""
+    inbox_exists: bool = False
+    """Whether that directory exists. Prod, which does not pull, has none; nothing is then created."""
 
     def of(self, disposition: Disposition) -> tuple[PlannedSource, ...]:
         return tuple(source for source in self.sources if source.disposition is disposition)
@@ -560,6 +562,7 @@ class RemovalPlanner:
             inbox=inbox,
             inbox_team_files_left=team_files_left,
             inbox_directory=str(self._inbox.directory),
+            inbox_exists=self._inbox.directory.is_dir(),
         )
 
     # --------------------------------------------------------------------------------------

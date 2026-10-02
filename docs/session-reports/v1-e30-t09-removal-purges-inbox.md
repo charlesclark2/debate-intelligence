@@ -320,9 +320,64 @@ Do **not** add `--execute`: it would append a permanent entry.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-01
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with two small additions before the pull request opens (the last two
+items below). I read `container.caselist_inbox` and `inbox_purge._inbox_files` on the branch for the
+one case the report does not mention: a removal run where there is no inbox.
+
+**The delete-or-rewrite call is right, and argued the way I want these calls argued.** An imported
+week is `ALREADY_IMPORTED` whether or not its zip is in the inbox, which you checked in the code and
+in a pull test rather than assuming. Its other contents are in the store under a manifest that
+names the upstream archive. And a rewrite would not help recovery, because the removed file is the
+one thing it leaves out. Each step closes off the objection to the next. The pending case gets the
+opposite answer for the opposite reason, which is what the kickoff asked for.
+
+**Recording the rewritten digest, with the before/after pair in the log and the zip's comment, is
+the honest answer to provenance.** `archive_sha256` means "the file imported", and keeping the
+sync's own already-imported check working matters more than a digest that names bytes nobody
+holds. Three records that a test checks against each other is better than one that has to be
+trusted.
+
+**Writing the delivery record before deleting a camp copy is the find of the task.** A camp file
+imported before v1-e34-t07, or whose record was lost, would have been fetched again the moment its
+inbox copy went. You established that by reading `_delivery_in_inbox`'s path, not by testing the
+happy case, and a mutation proves it.
+
+**The first-run survivor was the test's weakness, not the code's, and you said so.** "Anything under
+it" and "everything under it" were indistinguishable because the only directories in the fixture
+were all-or-nothing. Giving the archive a mixed wrapper directory is the right fix, and so is
+deleting the subsumed read-back check rather than inventing a test for it.
+
+**Deviations 1 to 5 are accepted.** The composition root is the only place that knows where the
+inbox is, and the pull now takes its inbox from the same method, so the two cannot drift. A
+removal on this machine purging this inbox is exactly why v1-e34-t07's tests needed an inbox the
+removal cannot reach. Both new INCOMPLETE conditions keep COMPLETED meaning what ac2 says. Purging
+from the whole list is the manifest rewrite's own rule and lets an earlier removal be finished by
+re-running. Dropping junk and directory entries that name only removed files follows
+`withheld_skipped_paths`, and a `~$` file holding a person's name is exactly what a takedown must
+not leave behind.
+
+**Follow-ups, PM decisions.** 1: the policy line is added as version 1.4; it tightens, so under the
+policy's change control it takes effect on merge. 2: the hand copies outside the store are put to
+Charlie as a decision, with the parser evaluation's dependence on them noted. 3: accepted as a
+procedural gap; the plan's `NOTE` and re-running after a pull close it, and it is not filed. 4: the
+junk-only camp release is folded into `v1-e34-t08`, which owns the same `_judge_unrecorded` path.
+5: below. Separately, your measurement (25 weekly zips, 527 MB) and your argument for deleting an
+imported week are together the case for a retention rule; that is filed as `v1-e34-t11`, built on
+your reasoning.
+
+**Change 1: test the removal with no inbox.** Prod has no inbox, and every takedown runs against
+prod after dev. `_inbox_files` returns nothing when the directory does not exist, which is right,
+but no test says so. Add one that plans and executes a removal whose inbox directory does not exist:
+the plan says there is no inbox, the run is COMPLETED rather than INCOMPLETE, and nothing is created
+on disk where the inbox would be. Check the CLI's `DOWNLOAD INBOX` line reads sensibly for that case.
+
+**Change 2: correct `ArchiveSnapshot.archive_sha256`'s description** (your Follow-up 5). It says
+"the downloaded archive file itself", which is now false for a week imported from a rewritten
+archive. One docstring in `debate_core.domain`; I am authorising the edit, so list it as a deviation.

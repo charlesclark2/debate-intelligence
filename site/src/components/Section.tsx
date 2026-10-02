@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 /**
  * The surface a section sits on. White is the default; the panel tint gives a band of the page
  * quiet contrast, and the inverse navy is reserved for the one block that has to outrank
- * everything else on the page (on the home page, the October 1 parent session).
+ * everything else on the page (on the home page, the pointer to the tournament schedule).
  */
 export type SectionTone = 'plain' | 'tinted' | 'inverse'
 

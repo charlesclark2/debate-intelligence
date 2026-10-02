@@ -8,10 +8,9 @@ import { describe, expect, it } from 'vitest'
 import { SiteFrame } from '@/components/SiteFrame'
 import { SourceLine } from '@/components/SourceLine'
 import HomePage from '@/app/page'
-import type { ParentSessionFact } from '@/lib/content'
 import {
   HOME_SLUG,
-  announcementFields,
+  SCHEDULE_SLUG,
   loadHomeContent,
   loadPage,
   loadPages,
@@ -24,8 +23,9 @@ import { describeViolations, findAccessibilityViolations } from './axe'
  * The home page (v1-e36-t06 acceptance criterion 2).
  *
  * A parent arriving from the school newsletter has one question, and the page is laid out to
- * answer it before anything else: the October 1 information session. So these assertions are
- * about order and prominence as much as about presence, and about where the words come from.
+ * answer it before anything else: when and where the tournaments are (until v1-e37-t02, the
+ * October 1 information session). So these assertions are about order and prominence as much as
+ * about presence, and about where the words come from.
  *
  * The page is rendered through the real SiteFrame rather than on its own, because the landmark
  * and heading rules axe checks only hold for a whole document.
@@ -43,14 +43,6 @@ function renderHome() {
     </SiteFrame>,
     { container: document.body },
   )
-}
-
-/**
- * What the panel shows for one fact: its value, or, while nobody has supplied it, the note that
- * says so. Every fact carries exactly one of the two (parentSessionFactSchema), so this is total.
- */
-function factText(fact: ParentSessionFact): string {
-  return fact.value ?? fact.unsetNote ?? ''
 }
 
 /** next/link settles its internal state a microtask after mount. */
@@ -80,93 +72,71 @@ describe('the hero', () => {
   })
 })
 
-describe('the October 1 parent session panel', () => {
-  it('shows the date, the time, the place and the room', () => {
+/**
+ * The panel under the hero points to the tournament schedule (v1-e37-t02). It replaced the
+ * October 1 parent-session panel once that session had happened, and it is built so that it
+ * cannot go stale the same way: it carries no date and no tournament of its own.
+ */
+describe('the season-schedule panel', () => {
+  it('links to the schedule page', () => {
     renderHome()
-    const panel = document.getElementById('parent-session')
-    expect(panel, 'no #parent-session panel on the home page').not.toBeNull()
-    for (const fact of content.parentSession.facts) {
-      expect(within(panel as HTMLElement).getByText(fact.label)).toBeDefined()
-      expect(within(panel as HTMLElement).getByText(factText(fact))).toBeDefined()
-    }
+    const panel = document.getElementById('season-schedule')
+    expect(panel, 'no #season-schedule panel on the home page').not.toBeNull()
+    const link = within(panel as HTMLElement).getByRole('link', {
+      name: content.seasonSchedule.action.label,
+    })
+    expect(link.getAttribute('href')?.replace(/\/$/, '')).toBe(`/${SCHEDULE_SLUG}`)
+    expect(content.seasonSchedule.action.href).toBe(loadPage(SCHEDULE_SLUG).route)
   })
 
   /**
-   * The room is the fact nobody has supplied yet, and v1-e36-t06 replaced the [[TBD]] marker that
-   * used to say so with an ordinary sentence, which left nothing flagging it. A fact is now
-   * either a value or an unsetNote, and an unsetNote shows in the same gap badge a [[TBD]] marker
-   * does, so the preview a reviewer reads still shows the gap as a gap.
+   * The site is deployed by hand, so a date written into the home page is wrong from the day
+   * after it until somebody redeploys. The October 1 panel was exactly that. The dates belong on
+   * /schedule/, which shows the whole season and so is right whenever it was built.
    */
-  it('shows an unset fact in the gap badge, not as ordinary copy', () => {
+  it('names no date, so it cannot go stale between deploys', () => {
     renderHome()
-    const panel = document.getElementById('parent-session') as HTMLElement
-    for (const fact of content.parentSession.facts) {
-      const shown = within(panel).getByText(factText(fact))
-      expect(
-        shown.classList.contains('placeholder'),
-        `the ${fact.label} fact should ${fact.value ? 'not ' : ''}be in the gap badge`,
-      ).toBe(fact.value === undefined)
-    }
+    const panel = document.getElementById('season-schedule') as HTMLElement
+    const months =
+      /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/
+    expect(panel.textContent).not.toMatch(months)
+    expect(panel.textContent).not.toMatch(/\b\d{1,2}:\d{2}\b|\b20\d{2}\b/)
   })
 
-  it('offers every fact in the panel to the publishing-policy guard as a field', () => {
-    const fields = announcementFields()
-    expect(fields.map((field) => field.label)).toEqual(
-      content.parentSession.facts.map((fact) => fact.label),
-    )
-    for (const field of fields) {
-      expect(field.location).toBe('content/home.yaml')
-      expect(field.announcement).toBe(content.parentSession.title)
-    }
-  })
-
-  /**
-   * The hero action used to point here, one screenful above, which asked a visitor to press a
-   * button to reach something already in front of them. It now goes to a page, and the panel
-   * carries its own action.
-   */
-  it('is not what the hero action points at, and carries an action of its own', () => {
-    renderHome()
+  it('is not what the hero action points at', () => {
     expect(content.hero.action.href).not.toMatch(/^#/)
+    expect(content.hero.action.href).not.toBe(content.seasonSchedule.action.href)
     const routes = new Set(loadPages().map((item) => item.route))
     expect(routes, `the hero action ${content.hero.action.href} is not a route`).toContain(
       content.hero.action.href,
     )
-
-    const panel = document.getElementById('parent-session') as HTMLElement
-    expect(
-      within(panel).getByRole('link', { name: content.parentSession.action.label }),
-    ).toBeDefined()
   })
 
   it('is the most prominent thing on the page after the hero', () => {
     const { container } = renderHome()
     const sections = [...container.querySelectorAll('main > section')]
     // Second band on the page, directly under the hero.
-    expect(sections[1]?.id).toBe('parent-session')
+    expect(sections[1]?.id).toBe('season-schedule')
     // And the only one on the inverse surface, which is what makes it outrank the cards below
     // without needing a larger heading than its neighbours.
     const inverse = container.querySelectorAll('.section--inverse')
     expect(inverse).toHaveLength(1)
-    expect(inverse[0]?.id).toBe('parent-session')
+    expect(inverse[0]?.id).toBe('season-schedule')
   })
 
   it('names itself for a screen reader moving by region', () => {
     renderHome()
-    const panel = document.getElementById('parent-session')
+    const panel = document.getElementById('season-schedule')
     const labelledBy = panel?.getAttribute('aria-labelledby')
-    expect(labelledBy).toBe('parent-session-title')
+    expect(labelledBy).toBe('season-schedule-title')
     expect(document.getElementById(labelledBy as string)?.textContent).toBe(
-      content.parentSession.title,
+      content.seasonSchedule.title,
     )
   })
 
-  it('lists what a parent will get out of coming', () => {
+  it('no longer carries the October 1 parent session', () => {
     renderHome()
-    const panel = document.getElementById('parent-session') as HTMLElement
-    for (const item of content.parentSession.whatToExpect) {
-      expect(within(panel).getByText(item)).toBeDefined()
-    }
+    expect(document.getElementById('parent-session')).toBeNull()
   })
 })
 
@@ -422,13 +392,10 @@ describe('the page holds no copy of its own', () => {
     page.title,
     content.hero.lead,
     content.hero.action.label,
-    content.parentSession.eyebrow,
-    content.parentSession.title,
-    content.parentSession.intro,
-    content.parentSession.note,
-    content.parentSession.action.label,
-    ...content.parentSession.facts.flatMap((fact) => [fact.label, factText(fact)]),
-    ...content.parentSession.whatToExpect,
+    content.seasonSchedule.eyebrow,
+    content.seasonSchedule.title,
+    content.seasonSchedule.intro,
+    content.seasonSchedule.action.label,
     content.entryPoints.eyebrow,
     content.entryPoints.title,
     content.entryPoints.intro,

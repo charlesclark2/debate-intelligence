@@ -28,6 +28,9 @@ export const FAQ_SLUG = 'faq'
 /** The events page, composed from content/events.yaml by src/app/events/page.tsx. */
 export const EVENTS_SLUG = 'events'
 
+/** The tournament schedule, composed from content/tournaments.yaml by src/app/schedule/page.tsx. */
+export const SCHEDULE_SLUG = 'schedule'
+
 /**
  * Pages that are composed by a route module of their own rather than rendered as one run of
  * Markdown by src/app/[slug]/page.tsx.
@@ -40,7 +43,7 @@ export const EVENTS_SLUG = 'events'
  * The generic [slug] route must not also generate these slugs: a static segment and a dynamic one
  * claiming the same path is a build error, not a silent preference.
  */
-export const COMPOSED_SLUGS: readonly string[] = [HOME_SLUG, FAQ_SLUG, EVENTS_SLUG]
+export const COMPOSED_SLUGS: readonly string[] = [HOME_SLUG, FAQ_SLUG, EVENTS_SLUG, SCHEDULE_SLUG]
 
 /**
  * Acronyms a parent or a new student cannot be expected to know. If a page uses one, the page
@@ -223,40 +226,21 @@ export const homeActionSchema = z.object({
   href: internalHref,
 })
 
-/**
- * One fact in the October 1 parent-session panel: a label, and either the value or, while nobody
- * has supplied it yet, the note the preview shows in its place.
- *
- * Exactly one of the two, which is the point of the shape. A published announcement that gives a
- * date, a time and a place, and simply says nothing about the room, reads as though a room were
- * never needed: the gap is invisible precisely because it is a gap. `unsetNote` makes it say so
- * out loud, src/lib/publishing-policy.ts fails a prod build while one remains, and a decision not
- * to name a room yet is written as a value ("To be announced") rather than as silence. A room of
- * "To be announced" is a decision; an empty one is an oversight.
- */
-export const parentSessionFactSchema = z
-  .object({
-    label: z.string().min(1),
-    value: z.string().min(1).optional(),
-    unsetNote: z.string().min(1).optional(),
-  })
-  .refine(
-    (fact) => (fact.value === undefined) !== (fact.unsetNote === undefined),
-    'needs exactly one of value (the fact) and unsetNote (why it is still missing)',
-  )
-
 export const homeContentSchema = z.object({
   hero: z.object({
     lead: z.string().min(1),
     action: homeActionSchema,
   }),
-  parentSession: z.object({
+  /**
+   * The panel directly under the hero: a pointer to the season's tournament schedule. It names no
+   * date and no tournament of its own, so it is right whenever the site was last built; the dates
+   * live on /schedule/, from content/tournaments.yaml. (Until v1-e37-t02 this panel announced the
+   * October 1 parent information session.)
+   */
+  seasonSchedule: z.object({
     eyebrow: z.string().min(1),
     title: z.string().min(1),
     intro: z.string().min(1),
-    facts: z.array(parentSessionFactSchema).min(1),
-    whatToExpect: z.array(z.string().min(1)).min(1),
-    note: z.string().min(1),
     action: homeActionSchema,
   }),
   entryPoints: z.object({
@@ -314,7 +298,6 @@ export const homeContentSchema = z.object({
 export type HomeAction = z.infer<typeof homeActionSchema>
 export type ClaimSource = z.infer<typeof claimSourceSchema>
 export type AcademicCaseClaim = z.infer<typeof academicCaseClaimSchema>
-export type ParentSessionFact = z.infer<typeof parentSessionFactSchema>
 export type HomeContent = z.infer<typeof homeContentSchema>
 
 export type PageFrontMatter = z.infer<typeof pageFrontMatterSchema>
@@ -676,17 +659,14 @@ export function loadNotFoundPage(
 
 /** Every string in the home content, in reading order, for the checks that scan copy. */
 function homeContentStrings(content: HomeContent): string[] {
-  const { hero, parentSession, entryPoints, prose, whatDebateBuilds } = content
+  const { hero, seasonSchedule, entryPoints, prose, whatDebateBuilds } = content
   return [
     hero.lead,
     hero.action.label,
-    parentSession.eyebrow,
-    parentSession.title,
-    parentSession.intro,
-    ...parentSession.facts.flatMap((fact) => [fact.label, fact.value ?? fact.unsetNote ?? '']),
-    ...parentSession.whatToExpect,
-    parentSession.note,
-    parentSession.action.label,
+    seasonSchedule.eyebrow,
+    seasonSchedule.title,
+    seasonSchedule.intro,
+    seasonSchedule.action.label,
     entryPoints.eyebrow,
     entryPoints.title,
     entryPoints.intro,
@@ -813,9 +793,9 @@ export function loadHomeContent(
 /**
  * A fact a published announcement promises its readers, and whether anyone has supplied it yet.
  *
- * The guard reads copy, and copy cannot tell it that a fact is missing: the October 1 panel with
- * no room in it is a perfectly well-formed panel. This is the shape that can, one entry per fact
- * in the announcement, carrying the note the preview shows while the fact is still owed.
+ * The guard reads copy, and copy cannot tell it that a fact is missing: a panel with no room in it
+ * is a perfectly well-formed panel. This is the shape that can, one entry per fact in the
+ * announcement, carrying the note the preview shows while the fact is still owed.
  * src/lib/publishing-policy.ts turns every one of those notes into an error, so a prod build
  * fails while a required announcement field is unset.
  */
@@ -831,20 +811,14 @@ export interface AnnouncementField {
 }
 
 /**
- * Every fact the site's announcements promise. Today that is the October 1 parent session in
- * content/home.yaml; E37's announcements and calendar entries join it here rather than growing a
- * second guard of their own.
+ * Every fact the site's announcements promise. None today: the October 1 parent-session panel
+ * in content/home.yaml, the one announcement with facts of this kind, was replaced by a pointer
+ * to the tournament schedule in v1-e37-t02 once the session had happened. The guard and its
+ * wiring in src/app/layout.tsx stay, because v1-e37-t03's announcements join it here rather than
+ * growing a second guard of their own.
  */
-export function announcementFields(
-  contentDirectory: string = defaultContentDirectory(),
-): AnnouncementField[] {
-  const { parentSession } = loadHomeContent(contentDirectory)
-  return parentSession.facts.map((fact) => ({
-    location: 'content/home.yaml',
-    announcement: parentSession.title,
-    label: fact.label,
-    unsetNote: fact.unsetNote ?? null,
-  }))
+export function announcementFields(): AnnouncementField[] {
+  return []
 }
 
 /**
@@ -865,9 +839,9 @@ export function homeContentAsPage(
     slug: 'home-content',
     route: '/',
     filePath: 'content/home.yaml',
-    title: content.parentSession.title,
+    title: content.seasonSchedule.title,
     description: content.hero.lead,
-    navLabel: content.parentSession.title,
+    navLabel: content.seasonSchedule.title,
     navOrder: Number.MAX_SAFE_INTEGER,
     excludeFromNavigation: true,
     draft: false,

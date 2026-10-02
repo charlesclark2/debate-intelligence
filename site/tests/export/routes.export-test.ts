@@ -13,7 +13,7 @@ import { exportDirectory, exportedPagePath } from './built-export'
  * core page, and an entry in the exported sitemap.xml. tests/routes.test.ts checks the sources.
  */
 
-const CORE_PAGES = ['home', 'about', 'events', 'join', 'coaches', 'faq', 'contact'] as const
+const CORE_PAGES = ['home', 'about', 'events', 'schedule', 'join', 'coaches', 'faq', 'contact'] as const
 
 describe('the static export', () => {
   it.each(CORE_PAGES)('writes %s to site/out/', (slug) => {

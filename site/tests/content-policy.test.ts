@@ -5,7 +5,6 @@ import {
   announcementFields,
   loadGuardedContent,
   loadSiteSettings,
-  parentSessionFactSchema,
   parsePage,
 } from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
@@ -18,6 +17,7 @@ import {
   resetPolicyReporting,
   unreviewedNames,
 } from '@/lib/publishing-policy'
+import { scheduleGuardedContent } from '@/lib/tournaments'
 
 /**
  * The content guard (v1-e36-t04 acceptance criterion 3).
@@ -295,20 +295,6 @@ describe('required announcement fields', () => {
     expect(announcementErrors([field({ unsetNote: null })])).toBe('')
   })
 
-  it('accepts "To be announced" as a value, because that is a decision', () => {
-    const decided = parentSessionFactSchema.parse({ label: 'Room', value: 'To be announced' })
-    expect(decided.unsetNote).toBeUndefined()
-    expect(announcementErrors([field({ unsetNote: null })])).toBe('')
-  })
-
-  it('refuses a fact that is neither given nor declared missing', () => {
-    expect(parentSessionFactSchema.safeParse({ label: 'Room' }).success).toBe(false)
-    expect(
-      parentSessionFactSchema.safeParse({ label: 'Room', value: 'Room 214', unsetNote: 'unknown' })
-        .success,
-    ).toBe(false)
-  })
-
   it('reports a prod build failure rather than a printed note', () => {
     expect(() =>
       enforcePublishingPolicy({ pages: [], settings, consent, announcements: [field()] }, PROD),
@@ -325,12 +311,13 @@ describe('required announcement fields', () => {
     expect(checkPublishingPolicy({ pages: [], settings, consent }).errors).toEqual([])
   })
 
-  it('carries the October 1 panel through from content/home.yaml', () => {
-    const labels = announcementFields().map((entry) => entry.label)
-    expect(labels).toContain('Room')
-    for (const entry of announcementFields()) {
-      expect(entry.location).toBe('content/home.yaml')
-    }
+  /**
+   * The October 1 panel was the one announcement with required facts, and v1-e37-t02 replaced it
+   * with a pointer to the tournament schedule once the session had happened. The guard above
+   * stays for v1-e37-t03's announcements; until they exist there is nothing to feed it.
+   */
+  it('has no announcement facts to carry since the October 1 panel was replaced', () => {
+    expect(announcementFields()).toEqual([])
   })
 })
 
@@ -381,8 +368,9 @@ describe('the content this site actually ships', () => {
   // content/home.yaml, content/faq.yaml and content/events.yaml hold copy as well, so they go
   // through the guard with the Markdown pages. src/app/layout.tsx passes exactly this list at
   // build time, which is what loadGuardedContent() is for: one definition of "everything with
-  // copy in it", so a new YAML content file cannot be added and quietly left unguarded.
-  const pages = loadGuardedContent()
+  // copy in it", so a new YAML content file cannot be added and quietly left unguarded. The
+  // schedule's files join it through scheduleGuardedContent(), which the layout passes too.
+  const pages = [...loadGuardedContent(), ...scheduleGuardedContent()]
 
   it('breaks no rule except the facts still waiting on Charlie', () => {
     const { errors } = checkPublishingPolicy({
@@ -398,9 +386,9 @@ describe('the content this site actually ships', () => {
    * This began life as a tripwire asserting the room was still missing, on the reasoning that it
    * should fail the day Charlie supplied it. It has now fired and been turned around: the room
    * carries "To be announced", a decision rather than a gap, and the gate this test guards is that
-   * no announcement fact goes back to being silently unset before October 1.
+   * no announcement fact goes back to being silently unset.
    */
-  it('leaves no October 1 announcement fact unset', () => {
+  it('leaves no announcement fact unset', () => {
     const { errors } = checkPublishingPolicy({
       pages,
       settings,
@@ -412,11 +400,18 @@ describe('the content this site actually ships', () => {
 
   it('puts every content file that carries copy through the guard', () => {
     const guarded = pages.map((page) => page.filePath)
-    for (const filePath of ['content/home.yaml', 'content/faq.yaml', 'content/events.yaml']) {
+    for (const filePath of [
+      'content/home.yaml',
+      'content/faq.yaml',
+      'content/events.yaml',
+      'content/schedule.yaml',
+    ]) {
       expect(guarded, `${filePath} is not checked by the publishing-policy guard`).toContain(
         filePath,
       )
     }
+    // Every tournament is guarded field by field, so a finding names the entry and the field.
+    expect(guarded).toContain('content/tournaments.yaml, tournament "glenbrooks-2026" (entry 10), field notes')
   })
 
   it('has a media-consent manifest for the current season', () => {

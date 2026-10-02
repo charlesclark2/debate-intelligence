@@ -9,6 +9,7 @@ import {
   EM_DASH,
   HOUSE_STYLE_REWRITE,
   PLACEHOLDER_PATTERN,
+  SCHEDULE_SLUG,
   assertAcronymsAreExpanded,
   defaultContentDirectory,
   formatIssues,
@@ -17,6 +18,8 @@ import {
   loadSiteSettings,
 } from './content'
 import type { ContentPage } from './content'
+
+export { SCHEDULE_SLUG }
 import { SEASON_PATTERN, loadMediaConsent, seasonStart } from './media-consent'
 import { checkPublishingPolicy } from './publishing-policy'
 
@@ -50,9 +53,6 @@ import { checkPublishingPolicy } from './publishing-policy'
 
 export const TOURNAMENTS_FILE = 'content/tournaments.yaml'
 export const SCHEDULE_CONTENT_FILE = 'content/schedule.yaml'
-
-/** The page that lists the schedule, composed by src/app/schedule/page.tsx. */
-export const SCHEDULE_SLUG = 'schedule'
 
 /** Where the calendar file is published, beside the page. See src/app/schedule.ics/route.ts. */
 export const CALENDAR_PATH = '/schedule.ics'
@@ -103,8 +103,8 @@ const calendarDate = z
 const entryId = z
   .string()
   .regex(
-    /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/,
-    'must be lower case words joined by hyphens, with the year, such as "glenbrooks-2026"',
+    /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-\d{4}$/,
+    'must be lower case words joined by hyphens, ending in the year, such as "glenbrooks-2026"',
   )
 
 const text = z.string().trim().min(1, 'must not be empty')
@@ -265,6 +265,8 @@ export interface Arrangement {
 
 export interface Tournament {
   id: string
+  /** Where the entry is in content/tournaments.yaml, from 1, so an error can point at it. */
+  position: number
   name: string
   /** First day, YYYY-MM-DD. */
   start: string
@@ -413,7 +415,7 @@ function entryError(entry: string, field: string, message: string): ContentValid
   return new ContentValidationError(TOURNAMENTS_FILE, `${entry}, field ${field}: ${message}`)
 }
 
-function normalise(entry: TournamentEntry, eventOrder: readonly string[]): Tournament {
+function normalise(entry: TournamentEntry, position: number, eventOrder: readonly string[]): Tournament {
   const ordered = (events: string[]) =>
     [...events].sort((left, right) => eventOrder.indexOf(left) - eventOrder.indexOf(right))
   const arrangements: Arrangement[] = entry.byEvent
@@ -433,6 +435,7 @@ function normalise(entry: TournamentEntry, eventOrder: readonly string[]): Tourn
       ]
   return {
     id: entry.id,
+    position,
     name: entry.name,
     start: entry.start,
     end: entry.end ?? entry.start,
@@ -525,7 +528,7 @@ export function loadSchedule(contentDirectory: string = defaultContentDirectory(
       }
     }
 
-    const tournament = normalise(value, eventOrder)
+    const tournament = normalise(value, index + 1, eventOrder)
     for (const { field, text: fieldText } of tournamentTextFields(tournament)) {
       if (fieldText.includes(EM_DASH)) {
         throw entryError(entry, field, `uses an em dash. ${HOUSE_STYLE_REWRITE}`)
@@ -542,7 +545,7 @@ export function loadSchedule(contentDirectory: string = defaultContentDirectory(
     return tournament
   })
 
-  assertTournamentsArePublishable(tournaments, contentDirectory, file.data.tournaments)
+  assertTournamentsArePublishable(tournaments, contentDirectory)
 
   return {
     season: file.data.season,
@@ -555,15 +558,12 @@ export function loadSchedule(contentDirectory: string = defaultContentDirectory(
  * Every text field of every entry, as the publishing-policy guard reads pages: one page per
  * field, so a finding says which entry and which field it is in.
  */
-export function tournamentFieldPages(
-  tournaments: readonly Tournament[],
-  rawEntries: readonly unknown[] = [],
-): ContentPage[] {
-  return tournaments.flatMap((tournament, index) =>
+export function tournamentFieldPages(tournaments: readonly Tournament[]): ContentPage[] {
+  return tournaments.flatMap((tournament) =>
     tournamentTextFields(tournament).map(({ field, text: fieldText }) => ({
       slug: `tournament-${tournament.id}-${field}`,
       route: `/${SCHEDULE_SLUG}/`,
-      filePath: `${TOURNAMENTS_FILE}, ${describeEntry(rawEntries[index] ?? tournament, index)}, field ${field}`,
+      filePath: `${TOURNAMENTS_FILE}, ${describeEntry(tournament, tournament.position - 1)}, field ${field}`,
       title: tournament.name,
       description: tournament.name,
       navLabel: tournament.name,
@@ -585,10 +585,9 @@ export function tournamentFieldPages(
 function assertTournamentsArePublishable(
   tournaments: readonly Tournament[],
   contentDirectory: string,
-  rawEntries: readonly unknown[],
 ): void {
   const { errors } = checkPublishingPolicy({
-    pages: tournamentFieldPages(tournaments, rawEntries),
+    pages: tournamentFieldPages(tournaments),
     settings: loadSiteSettings(contentDirectory),
     consent: loadMediaConsent(contentDirectory),
   })
@@ -829,4 +828,23 @@ export function loadScheduleView(contentDirectory: string = defaultContentDirect
     eventNames,
     facts,
   }
+}
+
+/**
+ * The schedule's copy as the layout's publishing-policy guard reads it: the words in
+ * content/schedule.yaml, and every text field of every tournament. loadSchedule() already refuses
+ * a tournament that breaks the policy, in every environment; passing the fields to the layout's
+ * guard as well keeps "everything published is in the guard's list" true without exceptions.
+ *
+ * It sits beside loadGuardedContent() in src/lib/content.ts rather than inside it because
+ * content.ts cannot import this module without a cycle, and src/app/layout.tsx and
+ * tests/content-policy.test.ts pass both.
+ */
+export function scheduleGuardedContent(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage[] {
+  return [
+    scheduleContentAsPage(contentDirectory),
+    ...tournamentFieldPages(loadSchedule(contentDirectory).tournaments),
+  ]
 }

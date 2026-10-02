@@ -25,7 +25,20 @@ spec:
     data dir. The manifest writer (JSON export) and DOCX verification belong to E06.
   priority: 1
   constraints:
-    packages: [debate_cli.commands.verify, debate_core.application]
+    packages:
+      - debate_cli.commands.verify
+      - debate_core.application
+      # added on the PM's instruction, 2026-10-02
+      - debate_core.evidence
+      - packages/debate_core/schemas
+      - tests/fixtures/verify
+      - tests/integration
+      - packages/debate_cli/README.md
+      # added with the operator's approval, 2026-10-01: the JSON Schema validator the manifest
+      # check needs, and the exporter that writes the manifest and result schemas
+      - packages/debate_core/pyproject.toml
+      - uv.lock
+      - scripts/export_schemas.py
     forbidden:
       - Verification logic inside debate_cli (the command only parses args, calls the use case, renders)
       - Reporting a card as VERIFIED when its snapshot is missing locally

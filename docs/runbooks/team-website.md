@@ -60,10 +60,11 @@ flight, the main clone once it has merged. It is not the same path as the last t
 stale one is the failure this block exists to catch — `cd` to a directory that no longer exists
 leaves you wherever you were, and the next `terraform` command runs against a checkout where
 `site.tf` does not exist yet. That looks like `Error: Value for undeclared variable`, and it
-happens after `init` has already run somewhere it should not have.
+happens after `init` has already run somewhere it should not have. A task worktree's path looks
+like `.../debate-intelligence-worktrees/v1-e36-t02-site-hosting`.
 
 ```bash
-WT=/path/to/your/checkout          # e.g. .../debate-intelligence-worktrees/v1-e36-t02-site-hosting
+WT=/path/to/your/checkout
 OWNER_EMAIL='you@example.com'
 SSO_USER_NAME='your-identity-center-user-name'
 
@@ -99,6 +100,11 @@ AWS_PROFILE=debate-admin aws s3api get-bucket-tagging \
   --bucket debate-prod-site-a7508de8 --query "TagSet[?Key=='Owner'].Value" --output text
 ```
 
+The block ends with `terraform fmt` because `scripts/terraform_checks.sh` runs
+`terraform fmt -check -recursive` over the working tree, and that includes gitignored `.tfvars`.
+Unaligned `=` here fails pre-commit on every later commit from this checkout, which is a confusing
+thing to debug later.
+
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`
 ```bash
@@ -110,9 +116,6 @@ site_publisher_user_names = ["$SSO_USER_NAME"]
 TFVARS
 done
 
-# scripts/terraform_checks.sh runs `terraform fmt -check -recursive` over the working tree, and
-# that includes gitignored .tfvars. Unaligned `=` here fails pre-commit on every later commit from
-# this checkout, which is a confusing thing to debug later. Format them now.
 terraform fmt infrastructure/envs/dev infrastructure/envs/prod
 cat infrastructure/envs/dev/owner.auto.tfvars
 ```
@@ -151,6 +154,10 @@ certificate step in step 3 sit for its full 30-minute timeout, so check first. T
 The `aws sso login` is part of this block on purpose: an expired token fails the two `aws` calls
 while `dig` still answers, which reads like a DNS result and is not one.
 
+The registry query keeps `NS` rows only. An answer that holds nothing but the TLD's own SOA means
+the registry has no delegation for this name, and reading its TTL as a name server is an easy
+mistake to make.
+
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere
 ```bash
@@ -177,8 +184,6 @@ for DOMAIN in wfbdebate.org wfbdebate.com; do
     | sed 's/^[[:space:]]*/   /' | head -12
 
   echo "-- what the registry itself publishes (authoritative; no resolver cache in the way):"
-  # NS rows only. An answer that holds nothing but the TLD's own SOA means the registry has no
-  # delegation for this name, and reading its TTL as a name server is an easy mistake to make.
   dig +noall +authority +answer NS "$DOMAIN" @$(dig +short NS "${DOMAIN##*.}." | head -1) \
     | awk '$4 == "NS" { print "   " $5 }'
 
@@ -634,6 +639,11 @@ defaults to `[]`, so an apply without it **destroys the account assignment** tha
 `var.owner`. The *Before you start* block above writes both files; do that now if `ls
 infrastructure/envs/dev/owner.auto.tfvars` says it is missing.
 
+The identity line should print an ARN containing `AWSReservedSSO_DebateBreakGlassAdmin`. The init
+uses `-reconfigure` because `scripts/terraform_checks.sh` inits these roots with
+`-backend=false`, and a real plan against that leftover configuration does not reach the remote
+state.
+
 **Operator command** (expected runtime ~6 min, mostly waiting on two applies)
 Where: `$WT`, with `WT` set to the checkout holding this change
 ```bash
@@ -645,10 +655,8 @@ test -f infrastructure/envs/dev/owner.auto.tfvars \
 
 export AWS_PROFILE=debate-admin
 aws sso login --sso-session debate
-aws sts get-caller-identity --query Arn --output text   # expect AWSReservedSSO_DebateBreakGlassAdmin
+aws sts get-caller-identity --query Arn --output text
 
-# -reconfigure because scripts/terraform_checks.sh inits these roots with -backend=false, and a
-# real plan against that leftover configuration does not reach the remote state.
 for env in dev prod; do
   terraform -chdir="infrastructure/envs/$env" init -reconfigure -input=false
   terraform -chdir="infrastructure/envs/$env" apply
@@ -753,6 +761,41 @@ Prod is refused unless the checkout is **clean**, on **main**, and **equal to `o
 call at all — so rehearse on dev, not on prod: a prod dry run from a task branch is refused for
 the same reason a prod deploy is.
 
+### The deploy worktrees
+
+Deploys run from two worktrees kept for nothing else: `dev-preview`, detached at `origin/dev`, and
+`prod-deploy`, on `main`. Never deploy by switching the main clone off `dev`: the weekly caselist
+sync agent runs a script from the main clone's working tree until `v1-e34-t10` moves it out, so
+whatever branch the main clone is on at 06:00 on Wednesday is what that agent runs.
+
+The paths below are the operator's Mac: the main clone and, beside it,
+`debate-intelligence-worktrees/`, the folder `scripts/task` puts task worktrees in.
+
+**One-time setup.** Skip it if `git worktree list` already shows both worktrees.
+
+**Operator command** (expected runtime ~1 min)
+Where: the main clone
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+git fetch origin
+git worktree add --detach ../debate-intelligence-worktrees/dev-preview origin/dev
+git worktree add ../debate-intelligence-worktrees/prod-deploy main
+terraform -chdir=../debate-intelligence-worktrees/dev-preview/infrastructure/envs/dev init -reconfigure
+terraform -chdir=../debate-intelligence-worktrees/prod-deploy/infrastructure/envs/prod init -reconfigure
+```
+Success looks like: `git worktree list` shows `dev-preview` with `(detached HEAD)` and
+`prod-deploy` with `[main]`, and both inits end `Terraform has been successfully initialized!`.
+`git worktree add ... main` fails if `main` is already checked out somewhere else; that other
+checkout is the one to stop using. The local `main` it starts from may be behind `origin/main`;
+every prod deploy below pulls before it builds.
+
+**Every deploy** moves its worktree to the commit first, then installs the site's dependencies,
+every time rather than once per clone. A pull can bring a new dependency, and `next build`
+type-checks the tests as well as the pages, so a `node_modules` installed before the pull fails the
+build on a test-only package. That is how the first attempt at the 2026-10-01 prod deploy stopped
+(see [What to record](#what-to-record)). `--frozen-lockfile` installs exactly what
+`site/pnpm-lock.yaml` names and never rewrites it, so the checkout stays clean for the prod guard.
+
 ### The order, every time
 
 1. deploy dev;
@@ -770,12 +813,15 @@ build prints the same problems and carries on, so the preview can be reviewed wi
 visible.
 
 **That failure is a precondition, not an obstacle.** Fill the fact in and commit it; do not
-deploy prod around it. Check before you start:
+deploy prod around it. Check before you start, against the `dev` head you mean to promote:
 
 **Operator command** (expected runtime ~1 min)
-Where: `$WT`
+Where: the `dev-preview` worktree
 ```bash
-cd "$WT"
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview
+git fetch origin
+git switch --detach origin/dev
+pnpm --dir site install --frozen-lockfile
 SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build
 ```
 Success looks like: the build completes and writes `site/out/`. A failure names the file and the
@@ -784,23 +830,30 @@ line: fix the copy, commit, and run it again.
 ### Deploy the dev preview
 
 **Operator command** (expected runtime ~4 min, most of it the invalidation)
-Where: `$WT`
+Where: the `dev-preview` worktree
 ```bash
-cd "$WT"
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview
+git fetch origin
+git switch --detach origin/dev
+pnpm --dir site install --frozen-lockfile
 aws sso login --sso-session debate
-pnpm --dir site install        # once per clone
 scripts/site_deploy.sh dev
 ```
 Success looks like: the bucket, distribution and URL it read from Terraform; a clean build; the
-`version.json` it wrote; three `aws s3 sync` passes; and `Deployed <sha> to dev:
+`version.json` it wrote; four `aws s3 sync` passes (the hashed assets, the pages, the calendar
+file as `text/calendar`, and a final pass that deletes stale assets); and `Deployed <sha> to dev:
 https://dev.wfbdebate.com`. Paste the last 20 lines back into the session.
+
+To preview a task branch before it merges, run the same block from that task's worktree without
+the `git fetch` and `git switch` lines. The next deploy from `dev-preview` puts the preview back on
+the `dev` head.
 
 ### Smoke-check the dev preview
 
 **Operator command** (expected runtime ~1 min)
-Where: `$WT`
+Where: the worktree you just deployed from
 ```bash
-cd "$WT"
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview
 uv run scripts/site_smoke.py --env dev --url https://dev.wfbdebate.com \
   --expect-sha "$(git rev-parse HEAD)"
 ```
@@ -813,25 +866,31 @@ cannot tell you whether the copy is right, and that is the part that matters mos
 
 ### Deploy prod
 
-After the promotion PR (`dev` → `main`) has merged.
+After the promotion PR (`dev` → `main`) has merged. The dependency install comes after the pull,
+for the reason given under [The deploy worktrees](#the-deploy-worktrees).
+`git status --porcelain` must print nothing.
 
 **Operator command** (expected runtime ~5 min)
-Where: your Mac, in the **main clone** on `main` (not a task worktree)
+Where: the `prod-deploy` worktree, on `main` (not the main clone, not a task worktree)
 ```bash
-git checkout main
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/prod-deploy
 git pull --ff-only
-git status --porcelain        # must print nothing
+pnpm --dir site install --frozen-lockfile
+git status --porcelain
 aws sso login --sso-session debate
 scripts/site_deploy.sh prod
 uv run scripts/site_smoke.py --env prod --url https://wfbdebate.com \
   --expect-sha "$(git rev-parse HEAD)"
 ```
-Success looks like: `clean, on main, and equal to origin/main.`, a clean prod build, the three
+Success looks like: `clean, on main, and equal to origin/main.`, a clean prod build, the four
 syncs, an invalidation that completes, and then `All N checks passed.` — with **no**
 `X-Robots-Tag` on prod and a `robots.txt` that allows crawling.
 
-A refusal here is the guard working. `prod refused: on branch 'dev', not main` means the
-promotion has not merged yet; `HEAD ... is not origin/main` means the local `main` is behind.
+A refusal here is the guard working. `prod refused: on branch 'dev', not main` means the block ran
+somewhere other than `prod-deploy`; `HEAD ... is not origin/main` means the pull did not run or did
+not fast-forward. The guard cannot tell that the promotion has merged: run before it, the block
+republishes the `main` already live. `git log -1 --oneline` after the pull should name the
+promotion's merge.
 
 ## Promotion checklist
 
@@ -847,11 +906,12 @@ how a page about a child goes out unreviewed.
 
 | | What has to be true | How you know |
 |---|---|---|
-| 1 | **The prod build is clean.** No unfilled placeholder, no unreviewed name, no address outside the allowlist, no image without a consent entry | `SITE_ENV=prod SITE_URL=https://wfbdebate.com site/scripts/export-checks.sh` gets past its build. A failure names the file and the field |
-| 2 | **The offline checks pass, against an export built from this commit** | `export-checks.sh` and `pnpm test` both exit 0: see the note below the table |
-| 3 | **The browser QA run is green.** Every page at or above 95 on accessibility and best practices, axe clean at 390, 768 and 1280px, nothing scrolling sideways | `pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95` exits 0. The report it writes goes in the session report |
-| 4 | **The pre-publication checklist is ticked** for the commit being promoted | [`docs/policies/website-publishing.md`](../policies/website-publishing.md), Pre-publication checklist, items 1 to 16 (17 and 18 too, on the season's first deploy) |
-| 5 | **You have read the site as a parent would**, on a phone, on the dev preview | Step 2 below |
+| 1 | **`ROADMAP.md` is current on `dev`.** CI runs this check only on pull requests into `main`, so `dev` never fails on it and a stale roadmap first shows up as a red `spec-validate` on the promotion (#154). The structural fix is `v1-e01-t16` ac5 | `uv run scripts/spec_index.py --check` in the `dev-preview` worktree at `origin/dev` exits 0. If it reports `ROADMAP.md is stale`, merge a pull request into `dev` that changes only `ROADMAP.md` ([Changes that are not a task](../process/task-workflow.md#changes-that-are-not-a-task)) before opening the promotion |
+| 2 | **The prod build is clean.** No unfilled placeholder, no unreviewed name, no address outside the allowlist, no image without a consent entry | `SITE_ENV=prod SITE_URL=https://wfbdebate.com site/scripts/export-checks.sh` gets past its build. A failure names the file and the field |
+| 3 | **The offline checks pass, against an export built from this commit** | `export-checks.sh` and `pnpm test` both exit 0: see the note below the table |
+| 4 | **The browser QA run is green.** Every page at or above 95 on accessibility and best practices, axe clean at 390, 768 and 1280px, nothing scrolling sideways | `pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95` exits 0. The report it writes goes in the session report |
+| 5 | **The pre-publication checklist is ticked** for the commit being promoted | [`docs/policies/website-publishing.md`](../policies/website-publishing.md), Pre-publication checklist, items 1 to 16 (17 and 18 too, on the season's first deploy) |
+| 6 | **You have read the site as a parent would**, on a phone, on the dev preview | Step 2 below |
 
 **The export checks run against an export built from this commit.** Ten of the site's test files
 read the built export in `site/out/`, the files CloudFront will serve. They live in
@@ -859,9 +919,9 @@ read the built export in `site/out/`, the files CloudFront will serve. They live
 checks; `pnpm --dir site test` does not run them. Until `v1-e36-t10` they ran inside `pnpm test`
 and skipped when there was no export, or read an export left over from an earlier commit and could
 pass against it. Now an export that is missing, or was not built from the tree in front of you with
-the same `SITE_*` settings, fails the run and says what differs. For preconditions 1 to 3, from the
-commit you mean to promote: the first line is precondition 1 and the export half of 2, the second
-the source half of 2, and the third precondition 3.
+the same `SITE_*` settings, fails the run and says what differs. For preconditions 2 to 4, from the
+commit you mean to promote: the first line is precondition 2 and the export half of 3, the second
+the source half of 3, and the third precondition 4.
 
 ```bash
 SITE_ENV=prod SITE_URL=https://wfbdebate.com site/scripts/export-checks.sh
@@ -880,7 +940,7 @@ the export on disk, and only for that.
                                  --url https://dev.wfbdebate.com --expect-sha $(git rev-parse HEAD)
 [ ] 3. Read it on a phone      https://dev.wfbdebate.com/ in Safari and in Chrome
 [ ] 4. Promote                 PR dev -> main, reviewed, merged
-[ ] 5. Deploy prod             from the main clone, on a clean main: scripts/site_deploy.sh prod
+[ ] 5. Deploy prod             from prod-deploy, on a clean main: scripts/site_deploy.sh prod
 [ ] 6. Smoke-check prod        uv run scripts/site_smoke.py --env prod \
                                  --url https://wfbdebate.com --expect-sha $(git rev-parse HEAD)
 [ ] 7. Record it               First prod launch and What to record, below
@@ -898,8 +958,9 @@ the export on disk, and only for that.
    overlapping, every disclosure opening on a tap.
 4. **Promote.** A pull request from `dev` into `main` ([ADR-0013](../adr/0013-two-environments-and-dev-main-promotion.md)).
    Prod can only ever be what is on `main`, and the deploy script refuses anything else.
-5. **Deploy prod.** From the **main clone on `main`**, not a task worktree. Full command block
-   under [Deploy prod](#deploy-prod). A refusal here is the guard working, not a problem to route
+5. **Deploy prod.** From the **`prod-deploy` worktree on `main`**, never the main clone or a task
+   worktree ([The deploy worktrees](#the-deploy-worktrees)). Full command block under
+   [Deploy prod](#deploy-prod). A refusal here is the guard working, not a problem to route
    around.
 6. **Smoke-check prod** with `--expect-sha`. On prod there must be **no** `X-Robots-Tag`, a
    `robots.txt` that allows crawling, and **no gap badge on any page**.
@@ -928,23 +989,57 @@ commit is wrong, the next deploy of it is wrong in the same way.
 The site is a static export of a commit, so a rollback is a deploy of a different commit. What
 differs is how that commit is reached.
 
-**dev**: check the commit out and deploy it. There is no guard.
+**dev**: move `dev-preview` to the commit and deploy it. There is no guard.
 
 ```bash
-git checkout <good-sha>
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview
+git fetch origin
+git switch --detach <good-sha>
+pnpm --dir site install --frozen-lockfile
 scripts/site_deploy.sh dev
 uv run scripts/site_smoke.py --env dev --url https://dev.wfbdebate.com --expect-sha <good-sha>
 ```
 
 **prod**: the guard means prod can only ever be what is on `main`, so rolling prod back means
 moving `main` back. Revert on a `hotfix/<slug>` branch, PR to `main`, merge, then deploy `main`
-and back-merge to `dev` the same day (docs/process/branching-and-environments.md).
+and back-merge to `dev` the same day (docs/process/branching-and-environments.md). The hotfix gets
+its own worktree, like a task, so the main clone stays on `dev`.
 
 ```bash
-git checkout -b hotfix/<slug> main
-git revert --no-edit <bad-sha>
-# PR into main, merge, then:
-git checkout main && git pull --ff-only
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+git fetch origin
+git worktree add -b hotfix/<slug> ../debate-intelligence-worktrees/hotfix-<slug> origin/main
+cd ../debate-intelligence-worktrees/hotfix-<slug>
+git log --no-walk --merges --oneline <bad-sha>
+```
+
+The last line tells you which revert you need. It prints the commit only if it is a **merge
+commit**, and nothing otherwise. Leave out `--no-walk` and it prints the newest merge *behind* the
+commit instead, which reads as a yes for any commit with a merge in its history: on `main`, all of
+them.
+
+* **It printed the commit**: a merge. Every commit on `main`'s own line is one, because `main`
+  accepts only merge commits: each promotion (`dev` → `main`) and each `hotfix/*` pull request.
+  Reverting the merge backs out everything it brought in. `-m 1` names `main`'s side as the one to
+  keep:
+
+  ```bash
+  git revert -m 1 --no-edit <merge-sha>
+  ```
+
+* **It printed nothing**: an ordinary commit, such as one task's squash commit from `dev` that a
+  promotion carried in. This backs out that one change and leaves the rest of the promotion live:
+
+  ```bash
+  git revert --no-edit <sha>
+  ```
+
+Open the pull request into `main` and merge it, then deploy from `prod-deploy`:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/prod-deploy
+git pull --ff-only
+pnpm --dir site install --frozen-lockfile
 scripts/site_deploy.sh prod
 ```
 
@@ -1046,6 +1141,9 @@ The October 1 room reads "To be announced". Replacing it is one line in `site/co
 and a redeploy; the guard accepts a chosen value and refuses an unset one, so the field cannot go
 silently empty.
 
+2026-10-02: v1-e37-t02 removed the room field from site/content/home.yaml; this paragraph describes
+the site as it stood at launch.
+
 ## What to record
 
 Fill this in as you go and commit it with the session report. Bucket names, distribution domains
@@ -1088,7 +1186,9 @@ shows `debate-dev-site` with `dev.wfbdebate.com` and `debate-prod-site` with `wf
 | Publishers allowed only their own site bucket and distribution | Both: `allowed` on their own bucket for `ListBucket`, `GetObject`, `PutObject`, `DeleteObject` and on their own distribution for `CreateInvalidation`; `implicitDeny` on the *other* environment's bucket and distribution, on the state bucket, and on `iam:CreateAccessKey`, `cloudfront:CreateDistribution`, `cloudfront:GetInvalidation` and `sso:CreatePermissionSet` | 2026-09-20 |
 | Publishers may read their own invalidation's progress (step 9, `v1-e36-t05`) | Applied 2026-09-20. Both permission sets' inline policies now list six actions ending `cloudfront:CreateInvalidation`, `cloudfront:GetInvalidation`, read back with `aws sso-admin get-inline-policy-for-permission-set`. Proven in use the same day: the dev deploy's `aws cloudfront wait invalidation-completed` returned instead of failing `AccessDenied` | 2026-09-20 |
 | First dev deploy and smoke check | 2026-09-20. `scripts/site_deploy.sh dev` from the task worktree at `f15fa16`: 71 objects uploaded, invalidation `IAM1U04QZPV5D7HUB6CQL4WGCH` created and waited on. `scripts/site_smoke.py --env dev` → **All 28 checks passed** (8 sitemap pages at 200, `301` to HTTPS, six security headers and `X-Robots-Tag: noindex` on every page, `robots.txt` disallowing everything, `version.json` at `f15fa16`) | 2026-09-20 |
-| First prod deploy and smoke check | _pending_ | |
+| First prod deploy and smoke check | 2026-09-21, recorded in full under [First prod launch](#first-prod-launch): `scripts/site_deploy.sh prod` at `113c722`, invalidation `I60MW4UQNCGPHVSRXUEM2VZM89`, **All 31 checks passed** | 2026-09-21 |
+| Dev deploys for promotion #154 (`v1-e37-t02` tournament schedule) | `scripts/site_deploy.sh dev` from the `dev-preview` worktree at `78c996d` (#152), where Charlie read the preview on a phone, confirmed the new public text and subscribed to the schedule in Apple Calendar; again at `50780bf` (#153), smoke check passed including `season schedule panel` and `calendar file` (`text/calendar`), `/schedule.ics` → `200 text/calendar; charset=utf-8` with 20 events; and again at `0867fbd` (#155, the dev head promoted, dev build `v0.1.0-dev.45`), `scripts/site_smoke.py --env dev --expect-sha` passed every check | 2026-10-01 |
+| Prod deploy of promotion #154 (tournament schedule, parent email signup) | First attempt stopped at the build with `Cannot find module 'ical.js'` and uploaded nothing: the `prod-deploy` worktree on `main` had installed `node_modules` before the `git pull` that brought `ical.js` (a `v1-e37-t02` test-only dependency), and `next build` type-checks the tests. The smoke check in the same block then ran against the previous build: 29 passed, 3 failed. Fixed by `pnpm --dir site install --frozen-lockfile` after the pull, now in the deploy blocks above. Second attempt deployed `5b8ff393314c7bcf1cf9176a919cee333c02cda0` (the merge of #154), invalidation `I3K4EPUZQ7Z40AGQUAGOYGQT12` on `E391JBUSDYT2GL` created and waited on. `scripts/site_smoke.py --env prod --expect-sha` → **All 35 checks passed**: 9 sitemap pages including `/schedule/`, all at 200 and indexable with six security headers; the season-schedule panel on the home page; no unfilled facts; 17 FAQ disclosures; the calendar file as `text/calendar` with 20 events; `robots.txt` allows crawling; `version.json` at `5b8ff39`. `curl` on `https://wfbdebate.com/schedule.ics` → `200 text/calendar; charset=utf-8` | 2026-10-01 |
 
 ## Recurring checks
 

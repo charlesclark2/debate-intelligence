@@ -12,8 +12,10 @@ by .github/workflows/promotion-guard.yml and .github/workflows/back-merge.yml.
 Subcommands:
   source      the head branch may merge into the base branch: into `main`, only `dev` or
               `hotfix/<slug>` from this repository (a fork can name its branch `dev` too)
-  template    the pull request body fills in the "Dev build:" and "validate-dev run:" lines of the
-              promotion or hotfix template
+  template    the pull request body fills in the "Dev build:" line of the promotion or hotfix
+              template. It asks for no validate-dev run link: protect-main requires the
+              `validate-dev` commit status on the head commit (v1-e01-t10), and that status links
+              its run, so a line in the description could only repeat it or disagree with it
   back-merge  `main` holds no non-merge commit that `dev` lacks, i.e. every hotfix was back-merged.
               A hotfix/* head passes without looking, so that a second urgent fix is never blocked
               by the first one not having been back-merged yet
@@ -46,7 +48,8 @@ GUARDED_BASE = "main"
 PROMOTION_HEAD = "dev"
 HOTFIX_PREFIX = "hotfix/"
 # The lines of .github/PULL_REQUEST_TEMPLATE/promotion.md and hotfix.md that must not be left blank.
-REQUIRED_FIELDS = ("Dev build", "validate-dev run")
+# "validate-dev run" was one until v1-e01-t10 made the `validate-dev` status itself required.
+REQUIRED_FIELDS = ("Dev build",)
 
 PASSED, FAILED, COULD_NOT_RUN = 0, 1, 2
 

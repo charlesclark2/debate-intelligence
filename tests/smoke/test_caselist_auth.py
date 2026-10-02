@@ -30,6 +30,7 @@ from typing import Any
 
 import pytest
 from pydantic import SecretStr
+from tests.smoke.installed_build import CliRun, InstalledCli
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -48,11 +49,8 @@ LIVE_SLUG = os.environ.get("CASELIST_LIVE_SLUG", "").strip()
 
 
 @pytest.fixture
-def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
-    """A dev profile of this check's own that keeps the token in a file, and no inherited DEBATE_*."""
-    for name in list(os.environ):
-        if name.startswith("DEBATE_"):
-            monkeypatch.delenv(name, raising=False)
+def installation(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[Path]:
+    """A dev profile of this check's own that keeps the token in a file, for the build under test."""
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
@@ -61,21 +59,22 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         '[caselist]\ntoken_backend = "file"\n',
         encoding="utf-8",
     )
-    monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
-    monkeypatch.setenv("DEBATE_ENV", "dev")
+    installed_cli.configure(DEBATE_PROFILE_DIR=str(profiles), DEBATE_ENV="dev", DEBATE_STORAGE__DATA_DIR=None)
     yield tmp_path / "data"
 
 
-def status(*extra: str) -> Result:
-    return runner.invoke(create_app(), ["--json", "caselist", "auth", "status", *extra])
+def status(cli: InstalledCli, *extra: str) -> CliRun:
+    return cli.run("--json", "caselist", "auth", "status", *extra)
 
 
-def data_of(result: Result) -> dict[str, Any]:
+def data_of(result: CliRun | Result) -> dict[str, Any]:
     return json.loads(result.stdout)["data"]
 
 
-def test_status_on_a_fresh_installation_reports_no_token_and_a_disabled_api(installation: Path) -> None:
-    result = status()
+def test_status_on_a_fresh_installation_reports_no_token_and_a_disabled_api(
+    installed_cli: InstalledCli, installation: Path
+) -> None:
+    result = status(installed_cli)
 
     assert result.exit_code == ExitCode.OK, result.stdout + result.stderr
     data = data_of(result)
@@ -84,14 +83,16 @@ def test_status_on_a_fresh_installation_reports_no_token_and_a_disabled_api(inst
     assert data["location"] == str(default_secret_file(installation))
 
 
-def test_status_reports_a_stored_token_and_never_prints_it(installation: Path) -> None:
+def test_status_reports_a_stored_token_and_never_prints_it(
+    installed_cli: InstalledCli, installation: Path
+) -> None:
     token = f"smoke-token-{secrets.token_hex(16)}"
     CaselistTokenStore(FileTokenBackend(default_secret_file(installation))).save(
         SecretStr(token), expires_at=None
     )
 
-    as_json = status()
-    as_table = runner.invoke(create_app(), ["caselist", "auth", "status"])
+    as_json = status(installed_cli)
+    as_table = installed_cli.run("caselist", "auth", "status")
 
     assert data_of(as_json)["token_stored"] is True
     for result in (as_json, as_table):
@@ -99,21 +100,19 @@ def test_status_reports_a_stored_token_and_never_prints_it(installation: Path) -
         assert token not in result.stdout + result.stderr
 
 
-def test_status_refuses_a_token_file_others_can_read(installation: Path) -> None:
+def test_status_refuses_a_token_file_others_can_read(installed_cli: InstalledCli, installation: Path) -> None:
     path = default_secret_file(installation)
     CaselistTokenStore(FileTokenBackend(path)).save(SecretStr(secrets.token_hex(8)), expires_at=None)
     path.chmod(0o644)
 
-    result = status()
+    result = status(installed_cli)
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE
     assert json.loads(result.stdout)["error"]["code"] == "INSECURE_TOKEN_FILE"
 
 
-def test_login_is_refused_while_the_api_is_disabled(installation: Path) -> None:
-    result = runner.invoke(
-        create_app(), ["--json", "caselist", "auth", "login", "--username", "nobody"], input="x\n"
-    )
+def test_login_is_refused_while_the_api_is_disabled(installed_cli: InstalledCli, installation: Path) -> None:
+    result = installed_cli.run("--json", "caselist", "auth", "login", "--username", "nobody", stdin="x\n")
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE
     assert json.loads(result.stdout.strip().splitlines()[-1])["error"]["code"] == "CASELIST_API_DISABLED"
@@ -125,12 +124,13 @@ def test_login_is_refused_while_the_api_is_disabled(installation: Path) -> None:
 
 
 @pytest.mark.live
+@pytest.mark.in_process
 @pytest.mark.enable_socket
 def test_live_the_stored_token_works_and_the_archives_list() -> None:
     if not LIVE_SLUG:
         pytest.skip("set CASELIST_LIVE_SLUG to the caselist to list, e.g. hsld26")
 
-    checked = status("--check")
+    checked = runner.invoke(create_app(), ["--json", "caselist", "auth", "status", "--check"])
     assert checked.exit_code == ExitCode.OK, checked.stdout + checked.stderr
     assert data_of(checked)["checked_now"] is True
 

@@ -69,6 +69,15 @@ spec:
         asks for instead. scripts/task_helper.py's kickoff prompt is corrected in the same way, so a
         session is not told one thing by the agreement and another by its prompt. Both cite this task
         so the reason survives the people who remember it.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-02. ROADMAP.md is checked only on pull requests into main, and task
+        sessions are told not to regenerate it so parallel PRs do not conflict, so it is stale on
+        dev every time: four promotions out of four have needed a ROADMAP-only PR first, discovered
+        when the promotion's check failed. The same fix should keep both generated files fresh:
+        either a workflow on pushes to dev regenerates them and opens or updates one pull request,
+        or the check runs on dev pull requests in a form that cannot make concurrent task PRs
+        conflict. Choose, justify it, and show a promotion PR no longer failing for this reason.
 status:
   phase: Pending
 ---

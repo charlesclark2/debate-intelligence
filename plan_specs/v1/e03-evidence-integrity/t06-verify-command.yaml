@@ -25,7 +25,26 @@ spec:
     data dir. The manifest writer (JSON export) and DOCX verification belong to E06.
   priority: 1
   constraints:
-    packages: [debate_cli.commands.verify, debate_core.application]
+    packages:
+      - debate_cli.commands.verify
+      - debate_core.application
+      # added on the PM's instruction, 2026-10-02
+      - debate_core.evidence
+      - packages/debate_core/schemas
+      - tests/fixtures/verify
+      - tests/integration
+      - packages/debate_cli/README.md
+      # added with the operator's approval, 2026-10-01: the JSON Schema validator the manifest
+      # check needs, and the exporter that writes the manifest and result schemas
+      - packages/debate_core/pyproject.toml
+      - uv.lock
+      - scripts/export_schemas.py
+      # needed by this task's own plan (wiring from the composition root, registering the command)
+      # and by the records that list services and reason codes
+      - packages/debate_cli/src/debate_cli/container.py
+      - packages/debate_cli/src/debate_cli/commands/__init__.py
+      - packages/debate_cli/tests/test_app.py
+      - docs/evidence/snapshot-text-format.md
     forbidden:
       - Verification logic inside debate_cli (the command only parses args, calls the use case, renders)
       - Reporting a card as VERIFIED when its snapshot is missing locally
@@ -53,7 +72,7 @@ spec:
       description: >-
         Exit codes are documented in `debate-research verify --help` and the CLI README.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -123,10 +142,14 @@ spec:
         outputs: [tests/fixtures/verify/]
         estimatedEffort: 1h
         acceptanceCriteria:
-          - type: command_succeeds
+          # Reworded by the PM, 2026-10-02 (session Deviation 2): run bare, the command reads the
+          # operator's dev data directory, which holds none of the fixture snapshots, and opening it
+          # would create or migrate the operator's database. The integration test builds its own data
+          # directory and runs the installed command against it.
+          - type: test_passes
             name: Verified-only manifest exits 0
             command: uv
-            args: [run, debate-research, --json, verify, tests/fixtures/verify/all_verified.json]
+            args: [run, pytest, tests/integration/test_verify_cli.py, -k, verified_only]
           - type: test_passes
             name: Mixed manifest exits 1 with reasons
             command: uv

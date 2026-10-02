@@ -147,72 +147,62 @@ def test_a_fork_into_dev_is_not_this_guards_business() -> None:
 
 
 # --------------------------------------------------------------------------------------------
-# template: the "Dev build:" and "validate-dev run:" lines
+# template: the "Dev build:" line. The validate-dev run is not asked for: protect-main requires
+# the `validate-dev` commit status on the head commit itself (v1-e01-t10), and that status links
+# the run, so a line in the description could only repeat it or disagree with it.
 # --------------------------------------------------------------------------------------------
 
 FILLED = """## Validation in dev
 
 Dev build: v1.1.0-dev.7
-validate-dev run: https://github.com/charlesclark2/debate-intelligence/actions/runs/123
 """
 
 
-def fill(template: str, dev_build: str, validate_dev: str) -> str:
-    """The template with its two required lines replaced, the way someone would fill them in."""
-    lines = []
-    for line in template.splitlines():
-        if line.startswith("Dev build:"):
-            line = f"Dev build: {dev_build}"
-        elif line.startswith("validate-dev run:"):
-            line = f"validate-dev run: {validate_dev}"
-        lines.append(line)
-    return "\n".join(lines)
+def fill(template: str, dev_build: str) -> str:
+    """The template with its required line replaced, the way someone would fill it in."""
+    return "\n".join(
+        f"Dev build: {dev_build}" if line.startswith("Dev build:") else line for line in template.splitlines()
+    )
 
 
 def test_a_filled_body_passes() -> None:
     verdict = guard.check_template(FILLED)
     assert verdict.passed
-    assert verdict.message == "Every required template line is filled in: Dev build, validate-dev run."
+    assert verdict.message == "Every required template line is filled in: Dev build."
 
 
 def test_the_field_values_are_read_from_their_lines() -> None:
-    assert guard.template_fields(FILLED) == {
-        "Dev build": "v1.1.0-dev.7",
-        "validate-dev run": "https://github.com/charlesclark2/debate-intelligence/actions/runs/123",
-    }
+    assert guard.template_fields(FILLED) == {"Dev build": "v1.1.0-dev.7"}
 
 
 @pytest.mark.parametrize("name", ["promotion.md", "hotfix.md"])
-def test_an_untouched_template_fails_with_both_lines_blank(name: str) -> None:
+def test_an_untouched_template_fails_with_the_dev_build_blank(name: str) -> None:
     body = (TEMPLATES / name).read_text(encoding="utf-8")
-    assert guard.template_fields(body) == {"Dev build": "", "validate-dev run": ""}
+    assert guard.template_fields(body) == {"Dev build": ""}
     verdict = guard.check_template(body)
     assert not verdict.passed
-    assert '  * "Dev build:" is blank\n  * "validate-dev run:" is blank' in verdict.message
+    assert '  * "Dev build:" is blank' in verdict.message
+    assert "validate-dev" not in verdict.message
 
 
 @pytest.mark.parametrize("name", ["promotion.md", "hotfix.md"])
-def test_a_filled_template_passes(name: str) -> None:
-    body = fill((TEMPLATES / name).read_text(encoding="utf-8"), "v1.1.0-dev.7", "https://example.test/runs/1")
+def test_a_template_with_the_dev_build_filled_passes_without_a_run_link(name: str) -> None:
+    """The case t08 refused: the validate-dev status, not a link in the body, is the evidence."""
+    body = fill((TEMPLATES / name).read_text(encoding="utf-8"), "v1.1.0-dev.7")
     assert guard.check_template(body).passed
 
 
 @pytest.mark.parametrize("name", ["promotion.md", "hotfix.md"])
-def test_a_template_with_only_the_dev_build_filled_fails_on_validate_dev(name: str) -> None:
-    body = fill((TEMPLATES / name).read_text(encoding="utf-8"), "v1.1.0-dev.7", "")
-    verdict = guard.check_template(body)
-    assert not verdict.passed
-    assert '"validate-dev run:" is blank' in verdict.message
-    assert '"Dev build:"' not in verdict.message
+def test_the_templates_point_at_the_required_status_and_ask_for_no_run_link(name: str) -> None:
+    text = (TEMPLATES / name).read_text(encoding="utf-8")
+    assert "validate-dev run:" not in text.lower()
+    visible = guard.HTML_COMMENT.sub("", text)
+    assert "`validate-dev` status" in visible
 
 
-@pytest.mark.parametrize("name", ["promotion.md", "hotfix.md"])
-def test_a_template_with_only_the_validate_dev_link_filled_fails_on_dev_build(name: str) -> None:
-    body = fill((TEMPLATES / name).read_text(encoding="utf-8"), "", "https://example.test/runs/1")
-    verdict = guard.check_template(body)
-    assert not verdict.passed
-    assert '"Dev build:" is blank' in verdict.message
-    assert '"validate-dev run:"' not in verdict.message
+def test_a_leftover_validate_dev_line_is_neither_required_nor_refused() -> None:
+    assert guard.check_template("Dev build: v1.1.0-dev.7\nvalidate-dev run:\n").passed
+    assert guard.check_template("Dev build: v1.1.0-dev.7\nvalidate-dev run: https://x.test/1\n").passed
 
 
 @pytest.mark.parametrize(
@@ -224,48 +214,44 @@ def test_a_template_with_only_the_validate_dev_link_filled_fails_on_dev_build(na
         "The Dev build: v1.1.0-dev.7 is here\n",  # the label has to start the line
     ],
 )
-def test_a_body_without_the_template_lines_fails_with_both_missing(body: str) -> None:
+def test_a_body_without_the_template_line_fails_with_it_missing(body: str) -> None:
     verdict = guard.check_template(body)
     assert not verdict.passed
-    assert '  * "Dev build:" is missing\n  * "validate-dev run:" is missing' in verdict.message
+    assert '  * "Dev build:" is missing' in verdict.message
+    assert "validate-dev" not in verdict.message
     assert "?template=promotion.md" in verdict.message
 
 
 @pytest.mark.parametrize(
     "body",
     [
-        "Dev build:\nvalidate-dev run: https://x.test/1\n",
-        "Dev build:    \nvalidate-dev run: https://x.test/1\n",
-        "Dev build:\t\nvalidate-dev run: https://x.test/1\n",
-        "Dev build: <!-- pre-release tag -->\nvalidate-dev run: https://x.test/1\n",
-        "Dev build: <!-- one --> <!-- two -->\nvalidate-dev run: https://x.test/1\n",
-        "Dev build: <!-- a comment\nthat runs on -->\nvalidate-dev run: https://x.test/1\n",
-        "Dev build: \r\nvalidate-dev run: https://x.test/1\r\n",  # the web editor sends CRLF
-        "- **Dev build:**\nvalidate-dev run: https://x.test/1\n",
+        "Dev build:\n",
+        "Dev build:    \n",
+        "Dev build:\t\n",
+        "Dev build: <!-- pre-release tag -->\n",
+        "Dev build: <!-- one --> <!-- two -->\n",
+        "Dev build: <!-- a comment\nthat runs on -->\n",
+        "Dev build: \r\n",  # the web editor sends CRLF
+        "- **Dev build:**\n",
     ],
 )
 def test_a_blank_dev_build_fails(body: str) -> None:
     verdict = guard.check_template(body)
     assert not verdict.passed
     assert '"Dev build:" is blank' in verdict.message
-    assert '"validate-dev run:"' not in verdict.message
 
 
 @pytest.mark.parametrize(
     ("body", "dev_build"),
     [
-        ("Dev build: v1.1.0-dev.7\r\nvalidate-dev run: https://x.test/1\r\n", "v1.1.0-dev.7"),
-        ("dev build: v1.1.0-dev.7\nVALIDATE-DEV RUN: https://x.test/1\n", "v1.1.0-dev.7"),
-        ("- Dev build: v1.1.0-dev.7\n* validate-dev run: https://x.test/1\n", "v1.1.0-dev.7"),
-        ("**Dev build:** v1.1.0-dev.7\n__validate-dev run:__ https://x.test/1\n", "v1.1.0-dev.7"),
-        ("Dev build : v1.1.0-dev.7\nvalidate-dev run: https://x.test/1\n", "v1.1.0-dev.7"),
-        ("   Dev build: v1.1.0-dev.7\nvalidate-dev run: https://x.test/1\n", "v1.1.0-dev.7"),
-        ("Dev build: v1.1.0-dev.7 <!-- tag -->\nvalidate-dev run: https://x.test/1\n", "v1.1.0-dev.7"),
-        (
-            "Dev build: none yet, v1-e01-t09 has not merged; ran the CLI from dev by hand\n"
-            "validate-dev run: none yet, v1-e01-t10 has not merged\n",
-            "none yet, v1-e01-t09 has not merged; ran the CLI from dev by hand",
-        ),
+        ("Dev build: v1.1.0-dev.7\r\n", "v1.1.0-dev.7"),
+        ("dev build: v1.1.0-dev.7\n", "v1.1.0-dev.7"),
+        ("- Dev build: v1.1.0-dev.7\n", "v1.1.0-dev.7"),
+        ("**Dev build:** v1.1.0-dev.7\n", "v1.1.0-dev.7"),
+        ("__Dev build:__ v1.1.0-dev.7\n", "v1.1.0-dev.7"),
+        ("Dev build : v1.1.0-dev.7\n", "v1.1.0-dev.7"),
+        ("   Dev build: v1.1.0-dev.7\n", "v1.1.0-dev.7"),
+        ("Dev build: v1.1.0-dev.7 <!-- tag -->\n", "v1.1.0-dev.7"),
     ],
 )
 def test_filled_lines_in_their_accepted_forms_pass(body: str, dev_build: str) -> None:
@@ -274,14 +260,14 @@ def test_filled_lines_in_their_accepted_forms_pass(body: str, dev_build: str) ->
 
 
 def test_the_first_line_for_a_field_is_the_one_that_counts() -> None:
-    body = "Dev build:\nvalidate-dev run: https://x.test/1\n\nDev build: v1.1.0-dev.7\n"
+    body = "Dev build:\n\nDev build: v1.1.0-dev.7\n"
     verdict = guard.check_template(body)
     assert not verdict.passed
     assert '"Dev build:" is blank' in verdict.message
 
 
 def test_a_field_inside_a_comment_does_not_count() -> None:
-    body = "<!--\nDev build: v1.1.0-dev.7\n-->\nvalidate-dev run: https://x.test/1\n"
+    body = "<!--\nDev build: v1.1.0-dev.7\n-->\n"
     verdict = guard.check_template(body)
     assert not verdict.passed
     assert '"Dev build:" is missing' in verdict.message

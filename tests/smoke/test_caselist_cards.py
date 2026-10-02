@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -37,21 +36,16 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
-from typer.testing import CliRunner, Result
+from tests.smoke.installed_build import InstalledCli
 
-from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
-
-runner = CliRunner()
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "fingerprints" / "parsed_cards_testcl26.jsonl"
 
 
 @pytest.fixture
-def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
-    for name in list(os.environ):
-        if name.startswith("DEBATE_"):
-            monkeypatch.delenv(name, raising=False)
+def installation(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[Path]:
+    """A dev profile of this check's own; the data directory comes from it, not the environment."""
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
@@ -59,17 +53,16 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
-    monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
-    monkeypatch.setenv("DEBATE_ENV", "dev")
+    installed_cli.configure(DEBATE_PROFILE_DIR=str(profiles), DEBATE_ENV="dev", DEBATE_STORAGE__DATA_DIR=None)
     yield tmp_path
 
 
 @pytest.fixture
-def imported(installation: Path) -> Path:
+def imported(installed_cli: InstalledCli, installation: Path) -> Path:
     """The three synthetic weeks imported, and a parsed directory holding the fixture."""
     zips = build_snapshot_zips(installation / "archives")
     for week in SNAPSHOTS:
-        result = invoke(
+        result = installed_cli.run(
             "caselist",
             "import",
             str(zips[week.snapshot]),
@@ -85,10 +78,7 @@ def imported(installation: Path) -> Path:
     return parsed
 
 
-def invoke(*arguments: str) -> Result:
-    return runner.invoke(create_app(), list(arguments))
-
-
+@pytest.mark.in_process
 def test_fixture_cards_come_from_the_synthetic_archives_files() -> None:
     """The fixture's source hashes are the archives' own bytes; this fails if either drifts."""
     archive_hashes = {hashlib.sha256(body).hexdigest() for body in DOCUMENT_BODIES.values()}
@@ -97,8 +87,8 @@ def test_fixture_cards_come_from_the_synthetic_archives_files() -> None:
     assert {row["provenance"]["source_sha256"] for row in rows} <= archive_hashes
 
 
-def test_caselist_cards_counts_the_synthetic_caselist(imported: Path) -> None:
-    result = invoke(
+def test_caselist_cards_counts_the_synthetic_caselist(installed_cli: InstalledCli, imported: Path) -> None:
+    result = installed_cli.run(
         "--json", "caselist", "cards", "--caselist", SYNTHETIC_CASELIST, "--parsed", str(imported)
     )
 
@@ -129,8 +119,8 @@ def test_caselist_cards_counts_the_synthetic_caselist(imported: Path) -> None:
         assert identity not in result.stdout
 
 
-def test_caselist_cards_as_of_the_first_week(imported: Path) -> None:
-    result = invoke(
+def test_caselist_cards_as_of_the_first_week(installed_cli: InstalledCli, imported: Path) -> None:
+    result = installed_cli.run(
         "--json",
         "caselist",
         "cards",
@@ -151,8 +141,8 @@ def test_caselist_cards_as_of_the_first_week(imported: Path) -> None:
     assert data["totals"]["teams"] == 2
 
 
-def test_caselist_cards_by_team_and_table(imported: Path) -> None:
-    by_team = invoke(
+def test_caselist_cards_by_team_and_table(installed_cli: InstalledCli, imported: Path) -> None:
+    by_team = installed_cli.run(
         "--json",
         "caselist",
         "cards",
@@ -171,7 +161,9 @@ def test_caselist_cards_by_team_and_table(imported: Path) -> None:
     ]
     assert "zzTEST" not in by_team.stdout
 
-    table = invoke("caselist", "cards", "--caselist", SYNTHETIC_CASELIST, "--parsed", str(imported))
+    table = installed_cli.run(
+        "caselist", "cards", "--caselist", SYNTHETIC_CASELIST, "--parsed", str(imported)
+    )
     assert table.exit_code == ExitCode.OK, table.output
     assert "Pellam 26" in table.output
     assert "zzTEST" not in table.output

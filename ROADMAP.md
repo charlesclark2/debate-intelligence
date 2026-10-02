@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 30 | 24 | 191 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 34 | 25 | 204 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 32 | 21 | 280 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
@@ -100,7 +100,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [debate_cli Typer + Rich skeleton](plan_specs/v1/e01-repo-foundation/t07-cli-skeleton.yaml) `v1-e01-t07-cli-skeleton` | Succeeded | 1 | 6.0 |
 | [dev→main promotion workflow and guards](plan_specs/v1/e01-repo-foundation/t08-branch-promotion-workflow.yaml) `v1-e01-t08-branch-promotion-workflow` | Succeeded | 2 | 7.5 |
 | [Dev pre-release channel and environment profiles for the CLI](plan_specs/v1/e01-repo-foundation/t09-dev-prerelease-channel.yaml) `v1-e01-t09-dev-prerelease-channel` | Succeeded | 3 | 9.0 |
-| [validate-dev smoke gate for promotions](plan_specs/v1/e01-repo-foundation/t10-validate-dev-gate.yaml) `v1-e01-t10-validate-dev-gate` | Pending | 2 | 9.0 |
+| [validate-dev smoke gate for promotions](plan_specs/v1/e01-repo-foundation/t10-validate-dev-gate.yaml) `v1-e01-t10-validate-dev-gate` | InProgress | 2 | 9.0 |
 | [Task lifecycle CLI and session workflow](plan_specs/v1/e01-repo-foundation/t11-task-workflow-cli.yaml) `v1-e01-t11-task-workflow-cli` | Succeeded | 1 | 8.0 |
 | [Re-run the promotion guards when main moves](plan_specs/v1/e01-repo-foundation/t12-promotion-guard-rerun.yaml) `v1-e01-t12-promotion-guard-rerun` | Succeeded | 1 | 3.5 |
 | [Empty the import-boundary exception lists](plan_specs/v1/e01-repo-foundation/t13-composition-root-cleanup.yaml) `v1-e01-t13-composition-root-cleanup` | Succeeded | 1 | 4.0 |
@@ -108,6 +108,10 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [Re-run the promotion guards without waiting for an event](plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml) `v1-e01-t15-promotion-guard-sweep` | Pending | 1 | 7.0 |
 | [Generate the docs index instead of hand-editing it](plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml) `v1-e01-t16-generated-docs-index` | Pending | 1 | 6.5 |
 | [The installed build carries what its commands need](plan_specs/v1/e01-repo-foundation/t17-installed-build-extras.yaml) `v1-e01-t17-installed-build-extras` | Succeeded | 1 | 4.0 |
+| [scripts/task restarts a task that merged partially](plan_specs/v1/e01-repo-foundation/t18-restart-partial-tasks.yaml) `v1-e01-t18-restart-partial-tasks` | Pending | 1 | 3.0 |
+| [Command blocks in the docs are safe to paste into zsh](plan_specs/v1/e01-repo-foundation/t19-paste-safe-command-blocks.yaml) `v1-e01-t19-paste-safe-command-blocks` | Pending | 1 | 3.0 |
+| [A failure that may succeed on retry never shares an exit code with a verdict](plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml) `v1-e01-t20-retryable-failures-exit-3` | Pending | 1 | 3.0 |
+| [The storage and OpenCaselist smoke checks run against the installed build](plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml) `v1-e01-t21-installed-smoke-stand-ins` | Pending | 1 | 4.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -129,7 +133,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [Span-addressed evidence extraction](plan_specs/v1/e03-evidence-integrity/t03-span-extraction.yaml) `v1-e03-t03-span-extraction` | Succeeded | 1 | 7.5 |
 | [EvidenceVerifier and verification statuses](plan_specs/v1/e03-evidence-integrity/t04-verifier.yaml) `v1-e03-t04-verifier` | Succeeded | 1 | 7.0 |
 | [Evidence edit policy](plan_specs/v1/e03-evidence-integrity/t05-edit-constraints.yaml) `v1-e03-t05-edit-constraints` | Pending | 2 | 5.5 |
-| [`debate-research verify` command](plan_specs/v1/e03-evidence-integrity/t06-verify-command.yaml) `v1-e03-t06-verify-command` | Pending | 2 | 5.0 |
+| [`debate-research verify` command](plan_specs/v1/e03-evidence-integrity/t06-verify-command.yaml) `v1-e03-t06-verify-command` | Succeeded | 2 | 5.0 |
 | [Card omissions and the selection-to-card mapping](plan_specs/v1/e03-evidence-integrity/t07-card-omissions.yaml) `v1-e03-t07-card-omissions` | Succeeded | 2 | 10.0 |
 
 

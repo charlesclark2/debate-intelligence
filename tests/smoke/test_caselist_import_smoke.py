@@ -24,7 +24,6 @@ this repository in any case (`docs/policies/caselist-data-use.md`).
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
@@ -44,27 +43,20 @@ from tests.fixtures.openev.build_synthetic_openev import (
     build_download_zips,
 )
 from tests.fixtures.openev.build_synthetic_openev import expected as expected_openev
-from typer.testing import CliRunner, Result
+from tests.smoke.installed_build import CliRun, InstalledCli
 
-from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
-
-runner = CliRunner()
 
 
 @pytest.fixture
-def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
-    """A data directory and a dev profile of this check's own, and no inherited DEBATE_* vars.
+def installation(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[Path]:
+    """A data directory and a dev profile of this check's own, for the build under test.
 
     A profile file rather than environment overrides for the data directory, because that is how
     a real installation is configured: the command has to resolve where to write from
     `config/profiles/<env>.toml`, and a check that bypassed that would not be checking the path
-    an operator uses.
+    an operator uses. So the smoke fixture's own `DEBATE_STORAGE__DATA_DIR` is removed.
     """
-    for name in list(os.environ):
-        if name.startswith("DEBATE_"):
-            monkeypatch.delenv(name, raising=False)
-
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
@@ -72,8 +64,7 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
-    monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
-    monkeypatch.setenv("DEBATE_ENV", "dev")
+    installed_cli.configure(DEBATE_PROFILE_DIR=str(profiles), DEBATE_ENV="dev", DEBATE_STORAGE__DATA_DIR=None)
     yield tmp_path / "data"
 
 
@@ -82,24 +73,21 @@ def archives(tmp_path: Path) -> dict[date, Path]:
     return build_snapshot_zips(tmp_path / "downloads")
 
 
-def import_week(archive: Path, snapshot: date) -> Result:
+def import_week(cli: InstalledCli, archive: Path, snapshot: date) -> CliRun:
     """Run the command exactly as an operator types it, asking for the machine-readable answer."""
-    return runner.invoke(
-        create_app(),
-        [
-            "--json",
-            "caselist",
-            "import",
-            str(archive),
-            "--caselist",
-            SYNTHETIC_CASELIST,
-            "--snapshot",
-            snapshot.isoformat(),
-        ],
+    return cli.run(
+        "--json",
+        "caselist",
+        "import",
+        str(archive),
+        "--caselist",
+        SYNTHETIC_CASELIST,
+        "--snapshot",
+        snapshot.isoformat(),
     )
 
 
-def reported(result: Result) -> dict[str, Any]:
+def reported(result: CliRun) -> dict[str, Any]:
     """The `data` object of the one JSON envelope the run printed, or a failure saying why not."""
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     assert len(lines) == 1, f"expected one line of JSON on stdout; got {lines!r}\n{result.stderr}"
@@ -113,13 +101,13 @@ def reported(result: Result) -> dict[str, Any]:
 
 
 def test_three_weekly_archives_import_into_a_new_data_directory(
-    installation: Path, archives: dict[date, Path]
+    installed_cli: InstalledCli, installation: Path, archives: dict[date, Path]
 ) -> None:
     """The check itself: import all three weeks and hold every count to the expected summary."""
     expected_weeks = {week["snapshot"]: week for week in written_expected_summary()["snapshots"]}  # pyright: ignore[reportIndexIssue, reportGeneralTypeIssues]
 
     for snapshot in SNAPSHOTS:
-        data = reported(import_week(archives[snapshot.snapshot], snapshot.snapshot))
+        data = reported(import_week(installed_cli, archives[snapshot.snapshot], snapshot.snapshot))
         expected = expected_weeks[snapshot.snapshot.isoformat()]
 
         assert data["counts"] == expected["classifications"], snapshot.archive_name
@@ -131,11 +119,11 @@ def test_three_weekly_archives_import_into_a_new_data_directory(
 
 
 def test_every_week_leaves_a_manifest_where_the_publisher_will_find_it(
-    installation: Path, archives: dict[date, Path]
+    installed_cli: InstalledCli, installation: Path, archives: dict[date, Path]
 ) -> None:
     """`manifests/<caselist>/<snapshot>.jsonl` in the evidence object store, ready for t05."""
     for snapshot in SNAPSHOTS:
-        import_week(archives[snapshot.snapshot], snapshot.snapshot)
+        import_week(installed_cli, archives[snapshot.snapshot], snapshot.snapshot)
 
     for snapshot in SNAPSHOTS:
         manifest = (
@@ -153,24 +141,24 @@ def test_every_week_leaves_a_manifest_where_the_publisher_will_find_it(
 
 
 def test_running_the_last_week_again_changes_nothing_on_disk(
-    installation: Path, archives: dict[date, Path]
+    installed_cli: InstalledCli, installation: Path, archives: dict[date, Path]
 ) -> None:
     """The property an operator relies on when they cannot remember whether a run finished."""
     for snapshot in SNAPSHOTS:
-        import_week(archives[snapshot.snapshot], snapshot.snapshot)
+        import_week(installed_cli, archives[snapshot.snapshot], snapshot.snapshot)
     before = _tree_of(installation)
 
-    data = reported(import_week(archives[SNAPSHOTS[-1].snapshot], SNAPSHOTS[-1].snapshot))
+    data = reported(import_week(installed_cli, archives[SNAPSHOTS[-1].snapshot], SNAPSHOTS[-1].snapshot))
 
     assert data["newly_stored_blobs"] == 0
     assert _tree_of(installation) == before
 
 
 def test_an_import_writes_only_inside_the_data_directory(
-    installation: Path, archives: dict[date, Path], tmp_path: Path
+    installed_cli: InstalledCli, installation: Path, archives: dict[date, Path], tmp_path: Path
 ) -> None:
     """The zip carries a `../escaped.docx` member; nothing may land beside the data directory."""
-    import_week(archives[SNAPSHOTS[-1].snapshot], SNAPSHOTS[-1].snapshot)
+    import_week(installed_cli, archives[SNAPSHOTS[-1].snapshot], SNAPSHOTS[-1].snapshot)
 
     assert not (tmp_path / "escaped.docx").exists()
     assert not (installation.parent / "escaped.docx").exists()
@@ -194,36 +182,33 @@ def camp_files(tmp_path: Path) -> Path:
     return build_download_zips(tmp_path / "openev")[_OPENEV_DOWNLOAD]
 
 
-def import_camp_files(download: Path, *extra: str) -> Result:
+def import_camp_files(cli: InstalledCli, download: Path, *extra: str) -> CliRun:
     """Run `import-openev` as an operator types it, with the fixture's invented-camp table."""
-    return runner.invoke(
-        create_app(),
-        [
-            "--json",
-            "caselist",
-            "import-openev",
-            str(download),
-            "--year",
-            "2026",
-            "--event",
-            "policy",
-            "--snapshot",
-            _OPENEV_IMPORTED_ON,
-            "--camp-aliases",
-            str(CAMP_ALIASES_PATH),
-            *extra,
-        ],
+    return cli.run(
+        "--json",
+        "caselist",
+        "import-openev",
+        str(download),
+        "--year",
+        "2026",
+        "--event",
+        "policy",
+        "--snapshot",
+        _OPENEV_IMPORTED_ON,
+        "--camp-aliases",
+        str(CAMP_ALIASES_PATH),
+        *extra,
     )
 
 
 def test_camp_files_import_beside_the_caselist_and_the_disclosed_one_is_stored_once(
-    installation: Path, archives: dict[date, Path], camp_files: Path
+    installed_cli: InstalledCli, installation: Path, archives: dict[date, Path], camp_files: Path
 ) -> None:
     """The first caselist week, then the camp files: counts, one shared blob, and the manifest."""
-    import_week(archives[SNAPSHOTS[0].snapshot], SNAPSHOTS[0].snapshot)
+    import_week(installed_cli, archives[SNAPSHOTS[0].snapshot], SNAPSHOTS[0].snapshot)
     blobs_before = _blob_count(installation)
 
-    data = reported(import_camp_files(camp_files))
+    data = reported(import_camp_files(installed_cli, camp_files))
 
     wanted = expected_openev()["first_download"]["after_caselist"]
     assert data["counts"] == wanted["counts"]
@@ -243,14 +228,14 @@ def test_camp_files_import_beside_the_caselist_and_the_disclosed_one_is_stored_o
 
 
 def test_running_the_camp_file_import_again_changes_nothing_on_disk(
-    installation: Path, camp_files: Path
+    installed_cli: InstalledCli, installation: Path, camp_files: Path
 ) -> None:
-    reported(import_camp_files(camp_files))
+    reported(import_camp_files(installed_cli, camp_files))
     before = _tree_of(installation)
     manifest = installation / "objects" / "manifests" / "openev" / "2026-policy.jsonl"
     manifest_bytes = manifest.read_bytes()
 
-    data = reported(import_camp_files(camp_files))
+    data = reported(import_camp_files(installed_cli, camp_files))
 
     assert data["newly_stored_blobs"] == 0
     assert data["counts"] == expected_openev()["first_download"]["re_import"]["counts"]
@@ -258,8 +243,10 @@ def test_running_the_camp_file_import_again_changes_nothing_on_disk(
     assert manifest.read_bytes() == manifest_bytes
 
 
-def test_a_camp_file_dry_run_writes_nothing(installation: Path, camp_files: Path) -> None:
-    data = reported(import_camp_files(camp_files, "--dry-run"))
+def test_a_camp_file_dry_run_writes_nothing(
+    installed_cli: InstalledCli, installation: Path, camp_files: Path
+) -> None:
+    data = reported(import_camp_files(installed_cli, camp_files, "--dry-run"))
 
     assert data["applied"] is False
     assert data["manifest"] is None

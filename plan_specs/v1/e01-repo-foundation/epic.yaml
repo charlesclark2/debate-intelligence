@@ -467,5 +467,85 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t17-installed-build-extras
+    - id: t18
+      kind: Task
+      name: 'scripts/task restarts a task that merged partially'
+      description: >-
+        Resuming a --partial task has no supported path, and the verdict check reads the first
+        review in a report.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t18-restart-partial-tasks.yaml
+        goalRef: v1-e01-t18-restart-partial-tasks
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t18-restart-partial-tasks reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t18-restart-partial-tasks
+    - id: t19
+      kind: Task
+      name: 'Command blocks in the docs are safe to paste into zsh'
+      description: >-
+        A check that fails on a # comment in a shell block in the Markdown a person pastes from, the
+        fixes, and the session prompt line.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t19-paste-safe-command-blocks.yaml
+        goalRef: v1-e01-t19-paste-safe-command-blocks
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t19-paste-safe-command-blocks reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t19-paste-safe-command-blocks
+    - id: t20
+      kind: Task
+      name: 'A failure that may succeed on retry never shares an exit code with a verdict'
+      description: >-
+        Retryable store failures exit 3 everywhere; filesystem stores translate operating-system
+        refusals.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml
+        goalRef: v1-e01-t20-retryable-failures-exit-3
+      dependsOn:
+      - ext-v1-e03-t06-verify-command
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t20-retryable-failures-exit-3 reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t20-retryable-failures-exit-3
+    - id: t21
+      kind: Task
+      name: 'The storage and OpenCaselist smoke checks run against the installed build'
+      description: >-
+        Loopback stand-ins (moto server, an OpenCaselist stand-in) so the publish, remove, pull and
+        runs smoke checks run against the installed pre-release in validate-dev.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml
+        goalRef: v1-e01-t21-installed-smoke-stand-ins
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t21-installed-smoke-stand-ins reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t21-installed-smoke-stand-ins
 status:
   phase: Pending

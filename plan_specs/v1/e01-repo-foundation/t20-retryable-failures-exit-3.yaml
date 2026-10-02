@@ -1,0 +1,91 @@
+# TASK v1-e01-t20-retryable-failures-exit-3 - A failure that may succeed on retry never shares an exit code with a verdict
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t20-retryable-failures-exit-3
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "A failure that may succeed on retry never shares an exit code with a verdict"
+spec:
+  # Filed by the PM, 2026-10-02, from v1-e03-t06's Follow-up work.
+  description: >-
+    `debate_cli.exit_codes.exit_code_for` maps every `StoreError` to exit 1, whose documented
+    meaning is that running the command again gives the same answer. An unreachable store, an
+    expired SSO session or a store that refuses access is not that: a retry may succeed.
+    v1-e03-t06 gave `verify` its own exit 3 for "could not run" because exit 1 there means
+    UNVERIFIED; `store sync` and the caselist commands still exit 1 for the same failures, and a
+    script or launchd wrapper reading the code cannot tell a verdict from an outage. Separately,
+    `FsSnapshotStore.get` catches only `FileNotFoundError`, so an operating-system refusal
+    (`PermissionError`) escapes untranslated, contradicting `StoreError`'s own docstring, and
+    reaches the CLI as exit 70, a bug. Map the retryable store failures to the CLI-wide
+    retrieval-failure code (3) everywhere, keep `NotFound` and other deterministic outcomes
+    where they are, and make the filesystem stores translate operating-system refusals into
+    `StoreAccessDenied`. Check what reads exit codes today (the launchd wrapper, run summaries,
+    runbooks) before changing any, and say what changed for each.
+  priority: 2
+  constraints:
+    packages: [debate_cli, debate_core.integrations.local, docs, ops/launchd]
+    forbidden:
+      - Changing an exit code without listing every consumer of it and what it now sees
+      - Mapping a deterministic outcome (NotFound, a refused manifest, an UNVERIFIED card) to the retryable code
+  context:
+    - kind: TaskRef
+      name: v1-e03-t06-verify-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every command maps StoreUnavailable, StoreCredentialsExpired and StoreAccessDenied to exit
+        3, and the README's exit-code table says so; a test per command family shows it. `verify`'s
+        own mapping is unchanged.
+    - id: ac2
+      description: >-
+        `FsSnapshotStore` (and any other filesystem store with the same gap) turns a PermissionError
+        into StoreAccessDenied naming the path's role, not its location; `verify` against an
+        unreadable blob directory exits 3, not 70. Shown failing first.
+    - id: ac3
+      description: >-
+        The report lists every consumer of these exit codes found in the repository (wrapper
+        scripts, run summaries, runbooks, tests) and what each now sees; nothing that treats exit 1
+        as a verdict is left reading an outage as one.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t20-retryable-failures-exit-3-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Inventory the consumers, change the mapping, translate the refusal.
+  goalRef:
+    name: v1-e01-t20-retryable-failures-exit-3
+  graph:
+    nodes:
+      - id: exit-codes
+        kind: Task
+        name: Retryable failures exit 3
+        description: >-
+          The mapping, the translation, the consumer inventory.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: custom
+            name: Shown failing first, then passing
+            description: >-
+              An expired session and an unreadable blob directory each exit 1 or 70 today and exit 3 after
+              the change, with every consumer listed.
+status:
+  phase: Pending

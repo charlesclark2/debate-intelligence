@@ -1,0 +1,97 @@
+# TASK v1-e01-t19-paste-safe-command-blocks - Command blocks in the docs are safe to paste into zsh
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t19-paste-safe-command-blocks
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "Command blocks in the docs are safe to paste into zsh"
+spec:
+  # Filed by the PM, 2026-10-02. The same defect has been caught in five reviews in two days, and
+  # in the team-website runbook it was silently changing what guard commands did.
+  description: >-
+    The operator pastes command blocks from runbooks, guides, READMEs and session reports into
+    zsh, which does not treat `#` as a comment in an interactive paste unless
+    `interactivecomments` is set. A trailing comment becomes arguments. Found so far: `git
+    branch -d x # empty, never pushed` tried to delete branches named `#`, `empty,` and so on.
+    `git status --porcelain # must print nothing` read the words as pathspecs and printed
+    nothing even on a dirty tree, so a safety check always passed. `WT=... # e.g.` never set WT.
+    `pnpm install # once per clone` passed four extra arguments. Reviews keep catching it, which
+    means nothing prevents it. Add a check that fails on a comment inside a shell code block in
+    the Markdown a person pastes from, fix every existing instance it finds in those files, and
+    tell implementation sessions about the rule in the prompt they are given.
+  priority: 2
+  constraints:
+    packages: [scripts, tests/scripts, docs, site/README.md, packages, tests/fixtures]
+    forbidden:
+      - Exempting a file a person is told to paste from
+      - Rewriting historical session reports to pass the check (they are records)
+      - A check that can pass by scanning nothing
+  context:
+    - kind: TaskRef
+      name: v1-e01-t07-cli-skeleton
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A check, run in CI, scans the shell code blocks (bash, sh, zsh, console) in docs/ (except
+        session reports), every README under the repository, and the evaluation labeling guide, and
+        fails naming the file and line of any `#` that zsh would pass as an argument: an unquoted
+        `#` at the start of a word. `#!` on a block's first line, `#` inside quotes and `${#var}`
+        are allowed. It asserts it scanned at least the runbooks it exists for, so it cannot pass by
+        finding nothing.
+    - id: ac2
+      description: >-
+        Session reports are checked only when they are added or changed in the pull request, so the
+        operator follow-ups of new reports are covered and historical records are left as written.
+    - id: ac3
+      description: >-
+        Every instance the check finds in the scanned files is fixed by moving the comment into the
+        prose around the block, and the check is shown failing on a planted comment and passing once
+        it is removed.
+    - id: ac4
+      description: >-
+        The implementation prompt written by `scripts/task_helper.py` tells sessions that operator
+        command blocks must contain no `#` comments because the operator's shell is zsh, and working
+        agreement 9 is linked from it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t19-paste-safe-command-blocks-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Measure the existing instances, build the check, fix them, then the prompt line.
+  goalRef:
+    name: v1-e01-t19-paste-safe-command-blocks
+  graph:
+    nodes:
+      - id: check
+        kind: Task
+        name: Check, fix, and tell the sessions
+        description: >-
+          The scan, the fixes, the prompt line.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: custom
+            name: Shown failing and passing
+            description: >-
+              A planted comment in a runbook block fails the check naming the line; after the fixes the
+              check passes over every scanned file.
+status:
+  phase: Pending

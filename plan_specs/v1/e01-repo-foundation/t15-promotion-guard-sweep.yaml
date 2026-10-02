@@ -83,6 +83,12 @@ spec:
         the backstop that does not depend on an event, the dispatch as the manual route, and the
         per-push re-run as the fast path. The current wording leans on a checklist item that a human
         ticks; say plainly what is now mechanical and what still is not.
+    - id: ac7
+      description: >-
+        Added by the PM, 2026-10-02, from v1-e01-t09's and v1-e01-t10's follow-up work. actionlint runs
+        in `ci` over every workflow, pinned to one version, so "clean across every workflow" (ac4) is
+        checked on each pull request rather than claimed in a report. A workflow with a known actionlint
+        finding is shown failing `ci` first.
 status:
   phase: Pending
 ---

@@ -199,6 +199,18 @@ def test_json_reports_every_card_of_the_mixed_manifest_with_its_status_and_reaso
     assert cards[2]["reasons"][0]["first_differing_offset"] == 22
 
 
+def test_a_person_sees_a_row_for_every_card_of_the_mixed_manifest() -> None:
+    """Including the two that never reached a snapshot comparison: invalid, and snapshot missing."""
+    result = invoke("verify", str(MIXED))
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    rows = [line for line in result.stdout.splitlines() if line.startswith(("│ 0CARD", "│ 0AWAY"))]
+    assert len(rows) == 5, result.stdout
+    assert ["UNVERIFIED" in row for row in rows] == [False, False, True, True, True]
+    assert "CARD_INVALID" in rows[3]
+    assert rows[4].startswith("│ 0AWAYCARD") and "SNAPSHOT_MISSING" in rows[4]
+
+
 def test_the_output_never_contains_evidence_text() -> None:
     texts = [card["evidence_text"] for card in json.loads(MIXED.read_bytes())["cards"]]
 

@@ -186,6 +186,14 @@ still caught, `git diff` clean. The byte-restore covered the file I mutated but 
    describes failures in its own words, because the adapter's text would tell an installer user to
    run `uv sync`.
 
+6. **`debate_core` edited after PM review, authorised by the PM.** The adapters' checkout advice now
+   reads `uv sync --all-packages --extra …` in `integrations/s3/__init__.py` (the `ModuleNotFoundError`
+   message) and in `packages/debate_core/README.md` (the `aws` and `docx` sections). Both are outside
+   `constraints.packages`; they are a message string and documentation, not adapter behaviour. I
+   also corrected the same advice in two comments in `packages/debate_core/pyproject.toml` (the `aws`
+   and `docx` extras), which the PM's list did not name. They are comment-only and carry the same
+   defect.
+
 ## Decisions and assumptions
 
 1. **Where the extras are declared: `debate-cli`.** The CLI is the delivery surface whose composition
@@ -231,10 +239,11 @@ still caught, `git diff` clean. The byte-restore covered the file I mutated but 
 **0. Full suite** — DONE by the operator: `3656 passed, 1 skipped in 69.26s` (see Whole-repo checks).
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t17-installed-build-extras
-git branch --show-current     # task/v1-e01-t17-installed-build-extras
+git branch --show-current
 uv run pytest -q
 ```
-Success: every test passes apart from any failure already present on `dev`. Paste the last 10 lines.
+`git branch --show-current` must print `task/v1-e01-t17-installed-build-extras`. Success: every test
+passes apart from any failure already present on `dev`. Paste the last 10 lines.
 
 **1. After this merges to `dev`: the publish gate ran** (~3 min after `ci` on `dev` is green).
 ```bash
@@ -256,11 +265,12 @@ Run steps 1–4 in one terminal: they share `${TAG}` and the downloaded script. 
 needed or touched.
 ```bash
 curl -fsSL https://raw.githubusercontent.com/charlesclark2/debate-intelligence/dev/scripts/install_channel.sh -o "${TMPDIR}install_channel.sh"
-grep -c "debate_cli.installation" "${TMPDIR}install_channel.sh"    # 1 or more: the new script
+grep -c "debate_cli.installation" "${TMPDIR}install_channel.sh"
 SCRATCH=$(mktemp -d)
 UV_TOOL_DIR="${SCRATCH}/tools" UV_TOOL_BIN_DIR="${SCRATCH}/bin" sh -c 'uv tool dir; sh "$0" "$1"' "${TMPDIR}install_channel.sh" "${TAG}"
 ```
-Success: the first line printed is `${SCRATCH}/tools`, not `~/.local/share/uv/tools`, and the run ends
+The `grep -c` must print 1 or more, which shows the downloaded script is the new one. Success: the
+first line the install prints is `${SCRATCH}/tools`, not `~/.local/share/uv/tools`, and the run ends
 `… complete` then `Installed debate-research … from ${TAG}`. If `uv tool dir` prints the real
 directory, stop.
 
@@ -275,8 +285,8 @@ Success: the install ends `7/7 wired integrations import; declared extras: aws, 
 complete`. The pull prints its dry-run summary ("… Nothing was written. Re-run without --dry-run
 to do it.") and `exit=0`. With an expired AWS session the run may say it read only this machine's
 suppression list (v1-e34-t07); that is still a pass. A `STORE_CREDENTIALS_EXPIRED` refusal is not a
-build problem: run `aws sso login --profile debate-dev-evidence` and repeat. Paste the pull's output
-into this report's ac4 row.
+build problem: run `aws sso login --profile debate-dev-evidence` and repeat. Keep the output for
+step 5.
 
 **4. The launchd agent runs the new build, and its boto3/lxml came from the build** (seconds):
 ```bash
@@ -296,10 +306,16 @@ Success, line by line:
   into the downloaded assets. No `boto3` or `lxml` entry: `--force` rebuilt the environment, so
   they are there because the build requires them, not because of the stopgap.
 
-**Rollback**, only if step 3 fails after step 2 passed:
-`sh "${TMPDIR}install_channel.sh" v0.1.0-dev.33` is refused by the new script (that build lacks
-boto3). Use the script as it was before this task, then re-add the stopgap the way you added it before:
-`curl -fsSL https://raw.githubusercontent.com/charlesclark2/debate-intelligence/91410a7/scripts/install_channel.sh -o "${TMPDIR}install_channel_old.sh" && sh "${TMPDIR}install_channel_old.sh" v0.1.0-dev.33`.
+**5. Hand ac4 to the PM.** Once step 4 succeeds, paste the output of steps 3 and 4 back to the PM, who
+records ac4 and closes the task with a small spec PR.
+
+**Rollback**, only if step 3 fails after step 2 passed. The new script refuses `v0.1.0-dev.33`,
+because that build lacks boto3, so reinstall it with the script as it was before this task:
+```bash
+curl -fsSL https://raw.githubusercontent.com/charlesclark2/debate-intelligence/91410a7/scripts/install_channel.sh -o "${TMPDIR}install_channel_old.sh"
+sh "${TMPDIR}install_channel_old.sh" v0.1.0-dev.33
+```
+Then re-add the stopgap the way you added it before.
 
 ## Follow-up work
 
@@ -321,6 +337,43 @@ boto3). Use the script as it was before this task, then re-add the stopgap the w
   `debate-research`, but a `pip install` into anaconda or a pyenv shim would silently win. v1-e34-t10
   (the agent runs nothing from a git checkout) is the natural place to give the plist the full path
   (`DEBATE_RESEARCH_BIN`).
+
+## Changes after PM review
+
+Committed the PM's amendments as given (`07fa2f1`): ac1 reworded in this task's spec, and ac5 in
+`v1-e01-t14` (install into a temporary tool directory, check there, replace only if every check
+passes). Then the two requested changes:
+
+1. **The adapters' checkout advice works from the workspace root** (Deviation 6). It is
+   `uv sync --all-packages --extra aws` in the S3 adapter's `ModuleNotFoundError` and in the
+   `debate_core` README's `aws` section, and `--extra docx` in its `docx` section. The README
+   alternatives (`pip install 'debate-core[…]'`) moved from `# or:` comments inside the code blocks
+   into the prose, for the same zsh reason as change 2. The same advice is corrected in the two
+   comments in `packages/debate_core/pyproject.toml`. No test pinned the old wording. The two strings
+   in `test_installation.py` that stand in for the adapter's message now match the new one. Those
+   tests still assert that no `uv sync` reaches an installed-build user, which matters more now that
+   the adapter's own text still says `uv sync`, only in a form that works.
+   `grep -rn "sync --extra"` over `packages scripts tests docs ops README.md .github`, excluding
+   session reports and the `--all-packages` form → nothing. Live, in the session's scratch checkout
+   venv (editable install of this worktree, boto3 removed):
+   `python -c "import debate_core.integrations.s3"` → ``ModuleNotFoundError: debate_core.integrations.s3 needs boto3, which is an optional dependency of debate-core: install it with `uv sync --all-packages --extra aws` from the workspace root (or `pip install 'debate-core[aws]'`).``
+2. **Operator command blocks are safe to paste into zsh.** I removed the `#` comments from follow-up 0
+   (after `git branch --show-current`) and follow-up 2 (after `grep -c`), and moved each expectation
+   into the prose. The rollback is now its own code block rather than an inline `&&` chain. I added
+   step 5: paste steps 3 and 4's output to the PM, who records ac4 and closes the task. Checked with
+   an extraction of every line inside the follow-ups' ```` ```bash ```` blocks → no `#` remains.
+
+Checks after these changes:
+
+* `uv run --frozen pytest packages/debate_cli/tests tests/scripts packages/debate_core/tests/integrations -q` → `1105 passed in 24.72s`.
+* `uv run --frozen ruff check .` → `All checks passed!`; `ruff format --check .` → `462 files already formatted`.
+* `uv run --frozen pyright` → `0 errors, 0 warnings, 0 informations`.
+* `uv run --frozen lint-imports` → `Contracts: 11 kept, 0 broken.`
+* `uv run scripts/validate_specs.py` → `OK: 302 files, 38 epics, 244 tasks, 20 releases`.
+* `uv run --frozen pytest tests/docs -q --no-cov` → `51 passed`. `uv lock --check` → the lock is
+  unchanged by the comment edits.
+
+The Goal stays `InProgress` until ac4.
 
 ## PM review
 

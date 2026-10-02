@@ -159,7 +159,7 @@ def test_an_integration_that_does_not_import_makes_the_installation_incomplete()
             # What debate_core.integrations.s3 raises without boto3: no `name`, a checkout's advice.
             raise ModuleNotFoundError(
                 "debate_core.integrations.s3 needs boto3, which is an optional dependency of "
-                "debate-core: install it with `uv sync --extra aws`"
+                "debate-core: install it with `uv sync --all-packages --extra aws` from the workspace root"
             )
         return object()
 
@@ -340,7 +340,7 @@ def test_a_checkout_is_told_which_uv_sync_to_run() -> None:
 
 def test_an_installed_build_is_told_to_reinstall_at_a_fixed_tag_and_never_to_run_uv_sync() -> None:
     error = ModuleNotFoundError(
-        "debate_core.integrations.s3 needs boto3: install it with `uv sync --extra aws`"
+        "debate_core.integrations.s3 needs boto3: install it with `uv sync --all-packages --extra aws`"
     )
     failure = incomplete_installation_failure(error, INSTALLED, installed=lambda name: name != "boto3")
 

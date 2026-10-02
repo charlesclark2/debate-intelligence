@@ -417,9 +417,63 @@ it for real: `3946 passed, 1 skipped in 64.05s`.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-02
 
 **Notes:**
+
+Accepted as a partial merge (`scripts/task pr --partial`). The phase stays `InProgress` until
+operator follow-ups 1 to 3 are done and I have recorded ac1, ac3 and the `require-and-prove` node.
+No code changes are requested.
+
+Checked at review:
+
+* `dev` is the default branch, so the `workflow_run` copy of `dev-prerelease.yml` that runs after
+  this merge is the one that holds the dispatch step. Follow-up 1 does not wait for the promotion.
+* Dev tags are lightweight (`v0.1.0-dev.49` is a commit object), so follow-up 1's
+  `git/ref/tags/<tag>` lookup returns the commit and not a tag object.
+* The jobs that run the validated commit's code never hold `statuses: write`, and no job is named
+  `validate-dev`.
+* The gate fails closed. A lost `workflow_run` or dispatch leaves the head with no status, which
+  blocks the merge, so validate-dev does not have the stale-green hole that v1-e01-t15 closes for the
+  guards.
+
+Deviations and decisions:
+
+* **Deviation 1 (dispatch plus `actions: write` on the publish job): accepted.** It is the only
+  route a `GITHUB_TOKEN` release allows, and it is scoped to one job.
+* **Decision 1 (no `validate-dev run:` line): accepted.** The required status is the record.
+* **Deviation 5:** accepted, and filed as **v1-e01-t21-installed-smoke-stand-ins**.
+* **Deviations 2, 3, 4 and 7:** accepted, and written into this task's spec.
+
+Spec amendments made in this branch, to commit with the rest:
+
+* **t10 spec:**
+  * the dispatch trigger;
+  * `slow and not live and not eval` in the description, ac2 and the `workflow` node;
+  * the driver's subcommands;
+  * the smoke-suite outputs (no `fixtures/verify_manifest.json`; `installed_build.py` and the
+    network guard instead);
+  * the extra packages.
+* **t08 spec (Deviation 6):** ac2, the description and the `guard-script` and `pr-templates` nodes.
+  The `pr-templates` criterion matched `validate-dev run:` in `promotion.md` and would now fail, so
+  it matches the new "status on the head commit is the validation" line instead.
+* **Tasks filed:**
+  * **v1-e01-t21** (new, with an epic entry): the publish, remove, pull and runs checks run against
+    the installed binary through loopback stand-ins.
+  * **v1-e01-t14 ac6:** an explicit option to quiet `install_channel.sh`'s PATH warning in automated
+    installs.
+  * **v1-e01-t15 ac7:** actionlint runs in `ci` over every workflow.
+* **Not filed: "`Dev build:` is free text".** Its checklist item ("the dev build above is the
+  pre-release the `validate-dev` status names") is enough for a human-readable label. The status
+  remains the gate.
+
+`python3 scripts/validate_specs.py` on this branch reports `OK: 306 files, 38 epics, 248 tasks,
+20 releases`.
+
+On operator follow-up 3b, the small pull request into `dev` can be whichever task PR lands next
+while the promotion is open. The whole ci → dev-prerelease → validate-dev chain, about 12 minutes,
+is the window in which the promotion should read `BLOCKED`. I will commit the ruleset export from
+follow-up 2 with the spec PR that closes this task.

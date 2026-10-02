@@ -16,12 +16,15 @@ metadata:
     debate/title: dev→main promotion workflow and guards
     debate/architecture-refs: §4, §6, §17, §18
 spec:
+  # Amended by the PM, 2026-10-02, at v1-e01-t10's review: the "validate-dev run:" line is gone from
+  # the templates and the guard, because protect-main requires the `validate-dev` status on the head
+  # commit itself, and that status is the record.
   description: >-
     Turn docs/process/branching-and-environments.md (ADR-0013: main = prod, dev = development environment)
     into enforced GitHub mechanics. Adds scripts/check_promotion_source.py and a promotion-guard workflow
     that posts two checks on every PR into main: `promotion-source` (fails unless the head branch is `dev`
     or `hotfix/*`, and for promotion and hotfix PRs alike fails if required template fields such as the
-    dev build id and the validate-dev run link are left empty) and `back-merge` (fails when main holds
+    dev build id is left empty; the validate-dev run itself is the required status v1-e01-t10 added) and `back-merge` (fails when main holds
     non-merge commits that dev lacks, i.e. a hotfix was never back-merged). Hotfixes get no exception to
     "validated in dev": a hotfix/* head is deployed to dev by manual workflow_dispatch (t09 pre-release
     in V1, v2-e12-t07 dev deploy in V2) and must carry a green `validate-dev` and Charlie's approval
@@ -56,9 +59,9 @@ spec:
     - id: ac2
       description: >-
         A promotion PR opened with ?template=promotion.md contains sections for included release/tasks,
-        dev pre-release or deploy id, validate-dev run link, evals and manual checks, and
-        `promotion-source` fails while the dev build id or validate-dev link is still blank; hotfix PRs
-        (?template=hotfix.md) require the same two fields.
+        dev pre-release or deploy id, evals and manual checks, and `promotion-source` fails while the Dev
+        build line is blank; hotfix PRs (?template=hotfix.md) require the same field. The validate-dev
+        status itself is required by protect-main (v1-e01-t10).
     - id: ac3
       description: >-
         When main contains a non-merge commit not reachable from dev (an un-back-merged hotfix), the
@@ -99,8 +102,8 @@ spec:
         description: >-
           scripts/check_promotion_source.py with subcommands `source` (base main accepts head dev or
           hotfix/*; anything else exits 1 with a message pointing at the process doc), `template` (parses
-          the PR body and fails if the "Dev build:" or "validate-dev run:" lines of the promotion or
-          hotfix template are empty) and `back-merge` (for dev heads runs `git rev-list --no-merges
+          the PR body and fails if the "Dev build:" line of the promotion or hotfix template is empty;
+          the "validate-dev run:" line was removed by v1-e01-t10) and `back-merge` (for dev heads runs `git rev-list --no-merges
           origin/dev..origin/main` and fails with the offending SHAs; reports success for hotfix/* heads
           so a second urgent fix is never blocked). Pure functions over inputs so tests need no network.
         outputs:
@@ -122,9 +125,9 @@ spec:
         description: >-
           Default template for task PRs (Spec: path, acceptance criteria ticked, Goal status updated,
           smoke checks added/updated if a user-facing surface changed); promotion.md (release and task
-          specs included, "Dev build:" pre-release tag or deploy id, "validate-dev run:" link, eval
+          specs included, "Dev build:" pre-release tag or deploy id, a pointer to the required validate-dev status, eval
           results from v1.3, manual checks, rollback note); hotfix.md (incident link, "Dev build:" id of
-          the workflow_dispatch dev deploy of the hotfix head, "validate-dev run:" link, back-merge
+          the workflow_dispatch dev deploy of the hotfix head, a pointer to the required validate-dev status, back-merge
           reminder). Link them from docs/process/branching-and-environments.md.
         outputs:
           - .github/pull_request_template.md
@@ -133,9 +136,9 @@ spec:
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: artifact_exists
-            name: Promotion template asks for the validate-dev run
+            name: Promotion template points at the required validate-dev status
             path: .github/PULL_REQUEST_TEMPLATE/promotion.md
-            contentMatch: "validate-dev run:"
+            contentMatch: "status on the head commit is the validation"
           - type: artifact_exists
             name: Task template asks for the spec path
             path: .github/pull_request_template.md

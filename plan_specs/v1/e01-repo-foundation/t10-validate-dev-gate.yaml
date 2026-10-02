@@ -16,15 +16,20 @@ metadata:
     debate/title: validate-dev smoke gate for promotions
     debate/architecture-refs: §4, §8, §16, §17
 spec:
+  # Amended by the PM, 2026-10-02, at review: the dispatch from dev-prerelease.yml (a release
+  # created with GITHUB_TOKEN starts no workflow), the slow-tier selection without `eval`, the
+  # driver's subcommands, the verify fixtures reused from v1-e03-t06, and the extra packages.
   description: >-
     Make "validated in dev" a machine-checked fact. A validate-dev workflow runs when a dev pre-release (t09)
-    is published: scripts/validate_dev.py resolves the release for the commit, downloads its assets, verifies
+    is published (dev-prerelease.yml dispatches it, since a release created with GITHUB_TOKEN starts no
+    workflow): scripts/validate_dev.py resolves the release for the commit, downloads its assets, verifies
     SHA256SUMS, installs that exact build into an isolated uv tool dir, asserts that `debate-research
     --version --json` reports the same commit SHA and channel dev, then runs the smoke suite in tests/smoke/
     against the installed binary (not the source tree) with DEBATE_ENV=dev and a temp data dir. The recorded
     tier (default, always run) covers --version, doctor, `config show` redaction and env selection, and
     `verify` on a fixture manifest (all-VERIFIED exits 0; a tampered card exits 1 and is reported UNVERIFIED).
-    An offline slow tier runs from the source at the same SHA (`uv run pytest -m "slow and not live"`): the
+    An offline slow tier runs from the source at the same SHA (`pytest -m "slow and not live and not eval"`; the parser evaluation needs a corpus that never
+    reaches a runner, and runs on Charlie's Mac before a promotion with a parser change): the
     suites later tasks mark `slow` to keep them out of the PR `ci` check (docs/process/working-agreements.md
     §1) run here, after the merge and before any promotion, and also on a nightly schedule against the dev
     head. A small opt-in live canary tier (pytest marker `live`, enabled by workflow_dispatch input or a repo
@@ -38,7 +43,8 @@ spec:
     against AWS dev extend this gate in v2-e12-t07; eval gates are E09.
   priority: 1
   constraints:
-    packages: [.github/workflows, scripts, tests/smoke, repo settings]
+    # .github/PULL_REQUEST_TEMPLATE, docs/process and tests/scripts added by the PM, 2026-10-02, at review.
+    packages: [.github/workflows, .github/PULL_REQUEST_TEMPLATE, scripts, tests/smoke, tests/scripts, docs/process, repo settings]
     forbidden:
       - Posting validate-dev for any SHA other than the one whose pre-release was installed and tested
       - Running the smoke suite from the source checkout instead of the installed pre-release
@@ -62,7 +68,7 @@ spec:
       description: >-
         The recorded smoke tier passes offline in under 5 minutes and includes a `verify` check where a
         tampered fixture card is reported UNVERIFIED with exit code 1; the offline slow tier
-        (`pytest -m "slow and not live"`) runs for the same SHA and validate-dev is green only if both pass.
+        (`pytest -m "slow and not live and not eval"`) runs for the same SHA and validate-dev is green only if both pass.
     - id: ac3
       description: >-
         protect-main requires `validate-dev`; a promotion PR whose head SHA has no or a failing
@@ -101,12 +107,14 @@ spec:
         name: Recorded smoke suite
         description: >-
           tests/smoke/conftest.py locates the binary from DEBATE_SMOKE_BIN, sets DEBATE_ENV=dev and a temp
-          data dir, and blocks sockets unless -m live; tests for --version/--json, doctor, config show
-          redaction and env, and verify on fixture manifests with snapshots (two VERIFIED, one tampered).
+          data dir, and blocks sockets for every check not marked `live`, in pytest's
+          process and in the CLI's (a sitecustomize guard that refuses and logs); tests for --version/--json, doctor, config show
+          redaction and env, and verify on v1-e03-t06's fixture manifests with snapshots (two VERIFIED, one tampered).
         outputs:
           - tests/smoke/conftest.py
           - tests/smoke/test_cli_smoke.py
-          - tests/smoke/fixtures/verify_manifest.json
+          - tests/smoke/installed_build.py
+          - tests/smoke/network_guard/sitecustomize.py
           - tests/smoke/README.md
         estimatedEffort: 3h
         acceptanceCriteria:
@@ -122,7 +130,8 @@ spec:
         kind: Task
         name: validate_dev.py install-and-verify driver
         description: >-
-          scripts/validate_dev.py --sha <sha> [--tag] [--live] [--post-status]: resolve the pre-release
+          scripts/validate_dev.py resolve | smoke | slow | conclude (or `run` for all four) --sha <sha>
+          [--tag] [--live] [--post-status]: resolve the pre-release
           for the SHA, download and checksum-verify assets, install into an isolated UV_TOOL_DIR, assert
           --version reports that SHA, run pytest tests/smoke, and post `validate-dev` via the statuses
           API; the same path serves dev and hotfix/* heads (no from-source shortcut). gh calls isolated
@@ -139,9 +148,10 @@ spec:
         kind: Task
         name: validate-dev workflow
         description: >-
-          validate-dev.yml on release (prereleased, which covers dev and hotfix/* pre-releases),
-          workflow_dispatch (sha, live) and a nightly schedule for the dev head; a slow-tier job checks out
-          the SHA and runs `uv run pytest -m "slow and not live"` offline; posts pending first, then the final
+          validate-dev.yml on workflow_dispatch (sha, tag, live) from dev-prerelease.yml after each publish,
+          dev and hotfix/* alike (a GITHUB_TOKEN release starts no workflow), on release: prereleased for a
+          manually published one, and a nightly schedule for the dev head; a slow-tier job checks out
+          the SHA and runs `pytest -m "slow and not live and not eval"` offline; posts pending first, then the final
           state with target_url = run link; permissions contents: read and statuses: write; exposes
           workflow_call inputs so v2-e12-t07 can add the cloud suite.
         dependsOn: [driver-script]

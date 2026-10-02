@@ -13,14 +13,20 @@ without being looked at:
    quarter of every other file, in contiguous blocks. The evaluation refuses a `PRELABELED` file.
 2. **`worksheet`** writes a CSV for the person to correct, with each paragraph's text beside its
    pre-label. Because it holds text, **it is written outside the repository** and the script
-   refuses a directory inside it. Open it in Numbers or LibreOffice (Excel rewrites some text on
-   import; the check in step 3 would catch that and refuse it).
-3. **`import`** reads the corrected worksheet back. It fails unless **every row is marked checked**
-   and **no text was edited** — text is never edited to make a label line up — and then writes the
-   label file as `CORRECTED`, recording which role corrected it and how many rows changed.
-4. **`mark-reviewed`** records that the coach spot-checked a corrected file end to end.
+   refuses a directory inside it. Open it in Numbers and save with Cmd+S, which writes
+   `<digest>.numbers` beside it. Never Excel, which rewrites numbers and dates.
+3. **`check`** reads the worksheet back, `.csv` or `.numbers`, runs every check `import` runs and
+   lists every problem in every row, writing nothing. Every spreadsheet changes some text: with
+   `--repair --out` it first writes a worksheet with each row's text restored from the document
+   and the person's marks carried onto it, and never touches a label (`tests/evals/parser/worksheets.py`).
+4. **`import`** reads the corrected worksheet back. It fails unless **every row is marked checked**
+   and **the text is exactly the document's** — text is never edited to make a label line up — and
+   then writes the label file as `CORRECTED`, recording which role corrected it and how many rows
+   changed.
+5. **`mark-reviewed`** records that the coach spot-checked a corrected file end to end.
 
-What it prints is counts and keyed-digest prefixes, never text or paths.
+What it prints is counts, keyed-digest prefixes, row numbers and worksheet file names, never paths,
+and of text only a few characters around a difference.
 
 ## Worksheet columns
 
@@ -41,6 +47,9 @@ See `tests/fixtures/debate_files/eval/labels/README.md` for the labeling guide.
 
     uv run python scripts/prelabel_docx.py prelabel --all
     uv run python scripts/prelabel_docx.py worksheet 4f2c91ab --out-dir ~/parser-eval-worksheets
+    uv run python scripts/prelabel_docx.py check 4f2c91ab \\
+        --worksheet ~/parser-eval-worksheets/4f2c91ab....numbers \\
+        --repair --out ~/parser-eval-worksheets/4f2c91ab....csv
     uv run python scripts/prelabel_docx.py import 4f2c91ab \\
         --worksheet ~/parser-eval-worksheets/4f2c91ab....csv --corrected-by coach
     uv run python scripts/prelabel_docx.py mark-reviewed 4f2c91ab --reviewer coach

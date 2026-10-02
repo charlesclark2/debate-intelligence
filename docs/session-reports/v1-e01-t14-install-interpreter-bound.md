@@ -192,6 +192,9 @@ never, always, wrong field) → each caught in 3–5 s.
   `packages/debate_cli/README.md` (`doctor` section and exit table); `README.md`,
   `docs/evidence/normalization.md`, `docs/architecture/architecture_proposal.md`, and a comment in
   `debate_core/application/snapshot_service.py` (Deviation 2).
+  In the runbook I also moved two trailing `#` comments out of the `caselist runs` block and into
+  the prose. They were there before this task, and pasted into zsh they become arguments (working
+  agreement 9).
 * **`plan_specs/…/t14-install-interpreter-bound.yaml`**: `constraints.packages` amended with the
   PM's comment; Goal `Succeeded`.
 

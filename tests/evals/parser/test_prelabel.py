@@ -24,6 +24,7 @@ from tests.evals.parser.labels_schema import (
     SamplingPlan,
     TemplateFamily,
     label_path_for,
+    load_label_file,
     validate_label_file,
     write_label_file,
 )
@@ -42,6 +43,7 @@ from debate_core.integrations.docx_parser import DebateDocxParser
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
 import prelabel_docx as prelabel  # noqa: E402
+from tests.evals.parser.worksheets import LABEL_COLUMNS  # noqa: E402
 
 PLAN_ID = "abcdef0123456789"
 
@@ -149,7 +151,7 @@ def test_markup_round_trips() -> None:
 
 
 def test_markup_that_changes_the_text_is_refused() -> None:
-    with pytest.raises(prelabel.WorksheetError, match="text under the markup was edited"):
+    with pytest.raises(prelabel.WorksheetError, match="text under the marks was edited"):
         prelabel.parse_markup("⟦Grid⟧ operator", "Grid operators", row=2, column="underline")
 
 
@@ -199,7 +201,7 @@ def test_an_unchecked_row_is_refused(
     labels = _prelabel(document, whole_file)
     rows = _checked(_rows(_worksheet(labels, document, tmp_path, whole_file)))
     rows[4] = {**rows[4], "checked": ""}
-    with pytest.raises(prelabel.WorksheetError, match="row 6: not marked checked"):
+    with pytest.raises(prelabel.WorksheetError, match="row 6, checked: empty"):
         _import(rows, labels, document, ReviewerRole.OPERATOR)
 
 
@@ -209,7 +211,7 @@ def test_an_uncorrected_worksheet_nobody_checked_is_refused(
     """The failure this whole evaluation exists to prevent: pre-labels passed through untouched."""
     labels = _prelabel(document, whole_file)
     rows = _rows(_worksheet(labels, document, tmp_path, whole_file))
-    with pytest.raises(prelabel.WorksheetError, match=f"{len(rows)} problem"):
+    with pytest.raises(prelabel.WorksheetError, match="looks like the worksheet as it was written"):
         _import(rows, labels, document, ReviewerRole.OPERATOR)
 
 
@@ -219,7 +221,7 @@ def test_edited_text_is_refused(
     labels = _prelabel(document, whole_file)
     rows = _checked(_rows(_worksheet(labels, document, tmp_path, whole_file)))
     rows[3] = {**rows[3], "text": rows[3]["text"] + "!"}
-    with pytest.raises(prelabel.WorksheetError, match="row 5: the text was edited"):
+    with pytest.raises(prelabel.WorksheetError, match="row 5, text: differs from the document"):
         _import(rows, labels, document, ReviewerRole.OPERATOR)
 
 
@@ -303,7 +305,7 @@ def test_a_sampled_worksheet_whose_rows_moved_is_refused(
     labels = _prelabel(document, sampled)
     rows = _checked(_rows(_worksheet(labels, document, tmp_path, sampled)))
     shuffled = [rows[1], rows[0], *rows[2:]]
-    with pytest.raises(prelabel.WorksheetError, match="rows were reordered or removed"):
+    with pytest.raises(prelabel.WorksheetError, match="rows were reordered"):
         _import(shuffled, labels, document)
 
 
@@ -574,3 +576,348 @@ def test_the_untouched_original_points_at_the_numbers_file_beside_it(
     assert code == 1
     assert "looks like the worksheet as it was written" in printed
     assert f"{evaluation.prefix}.numbers" in printed
+
+
+# --------------------------------------------------------------------------------------------
+# check: every validation import runs, writing nothing
+# --------------------------------------------------------------------------------------------
+
+
+def _printed(capsys: pytest.CaptureFixture[str]) -> str:
+    output = capsys.readouterr()
+    return output.out + output.err
+
+
+def _snapshot(*directories: Path) -> dict[Path, bytes]:
+    return {path: path.read_bytes() for directory in directories for path in sorted(directory.rglob("*"))}
+
+
+def _problem_lines(printed: str) -> list[str]:
+    return sorted(
+        line.strip() for line in printed.splitlines() if line.startswith("  ") and "note:" not in line
+    )
+
+
+def test_check_of_a_worksheet_import_accepts_exits_0_and_writes_nothing(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_csv(evaluation.csv, _checked(_rows(evaluation.csv)))
+    before = _snapshot(evaluation.labels, evaluation.worksheets)
+    capsys.readouterr()
+
+    assert evaluation.run("check", evaluation.prefix, "--worksheet", str(evaluation.csv)) == 0
+
+    assert "ready to import; 11 rows checked, 0 labeled differently from the pre-labels" in _printed(capsys)
+    assert _snapshot(evaluation.labels, evaluation.worksheets) == before
+
+
+def test_check_lists_exactly_the_problems_import_refuses_with(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rows = _checked(_rows(evaluation.csv))
+    _row_of(rows, 2).update(unit="POCKETT", checked="")
+    _row_of(rows, 6).update(card="7")
+    _row_of(rows, EVIDENCE_ROW).update(underline="", text=_row_of(rows, EVIDENCE_ROW)["text"] + " ")
+    _write_csv(evaluation.csv, rows)
+    before = _snapshot(evaluation.labels, evaluation.worksheets)
+    capsys.readouterr()
+
+    assert evaluation.run("check", evaluation.prefix, "--worksheet", str(evaluation.csv)) == 1
+    checked = _printed(capsys)
+    assert _snapshot(evaluation.labels, evaluation.worksheets) == before
+    assert (
+        evaluation.run(
+            "import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"
+        )
+        == 1
+    )
+    imported = _printed(capsys)
+
+    assert _problem_lines(checked) == _problem_lines(imported)
+    for expected in (
+        "row 2, checked: ",
+        "row 2, unit: ",
+        "row 5, card: card 0 has no CITE row",
+        "row 6, completeness: card 7 has no completeness",
+        "row 7, text: ",
+        "row 7, underline: ",
+    ):
+        assert any(line.startswith(expected) for line in _problem_lines(checked)), expected
+    assert evaluation.label_file.read_bytes() == before[evaluation.label_file]
+
+
+def test_check_catches_a_card_rule_import_used_to_meet_only_when_writing(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A card with no cite passed import's own checks and then failed inside write_label_file."""
+    rows = _checked(_rows(evaluation.csv))
+    _row_of(rows, 6).update(unit="EVIDENCE")
+    _write_csv(evaluation.csv, rows)
+    capsys.readouterr()
+
+    assert evaluation.run("check", evaluation.prefix, "--worksheet", str(evaluation.csv)) == 1
+
+    assert "row 5, card: card 0 has no CITE row" in _printed(capsys)
+
+
+def test_check_and_import_read_a_numbers_file_directly(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rows = _checked(_rows(evaluation.csv))
+    _row_of(rows, 9).update(unit="TAG", card="5", completeness="")
+    _row_of(rows, 9).update(unit="ANALYTIC", card="")
+    _write_numbers(evaluation.numbers, rows)
+    capsys.readouterr()
+
+    assert evaluation.run("check", evaluation.prefix, "--worksheet", str(evaluation.numbers)) == 0
+    assert "ready to import" in _printed(capsys)
+    assert (
+        evaluation.run(
+            "import", evaluation.prefix, "--worksheet", str(evaluation.numbers), "--corrected-by", "coach"
+        )
+        == 0
+    )
+    assert load_label_file(evaluation.label_file).header.status is LabelStatus.CORRECTED
+
+
+def test_a_numbers_file_older_than_the_csv_beside_it_is_refused(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_numbers(evaluation.numbers, _checked(_rows(evaluation.csv)))
+    _age(evaluation.numbers, 60)
+    capsys.readouterr()
+
+    assert evaluation.run("check", evaluation.prefix, "--worksheet", str(evaluation.numbers)) == 1
+
+    assert f"{evaluation.prefix}.numbers is older than {evaluation.prefix}.csv" in _printed(capsys)
+
+
+def test_the_newer_of_the_two_is_read_without_complaint(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_numbers(evaluation.numbers, _checked(_rows(evaluation.csv)))
+    _age(evaluation.csv, 60)
+    capsys.readouterr()
+
+    assert evaluation.run("check", evaluation.prefix, "--worksheet", str(evaluation.numbers)) == 0
+    assert "older" not in _printed(capsys)
+
+
+# --------------------------------------------------------------------------------------------
+# check --repair: the document's text back, marks carried onto it, no label touched
+# --------------------------------------------------------------------------------------------
+
+EVIDENCE_TEXT = OPENING + UNDERLINED + CLOSING
+UNDERLINED_RANGE = (len(OPENING), len(OPENING) + len(UNDERLINED))
+
+
+def _repair(evaluation: _Evaluation, worksheet: Path, out: Path | None = None) -> int:
+    out = out if out is not None else evaluation.csv
+    return evaluation.run(
+        "check", evaluation.prefix, "--worksheet", str(worksheet), "--repair", "--out", str(out)
+    )
+
+
+def _numbers_changes(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """What a spreadsheet does to text nobody edited: spacing, line breaks, dashes, quotes, dots."""
+    changed = [dict(row) for row in rows]
+    _row_of(changed, 4)["text"] = "AT:  Reserve Margin Turn"
+    _row_of(changed, 5)["text"] = "Moratoria collapse the reserve margin\n"
+    _row_of(changed, CITE_ROW)["text"] = "Okonkwo 26,\nGrid Analyst — Fictional Energy Review"
+    evidence = _row_of(changed, EVIDENCE_ROW)
+    evidence["text"] = EVIDENCE_TEXT.replace("warn that ", "warn that ").replace("summers.", "summers…")
+    _row_of(changed, 9)["text"] = "“Their turn is non–unique”"
+    return changed
+
+
+def test_repair_restores_every_row_the_spreadsheet_changed_and_then_imports(
+    evaluation: _Evaluation, document: ParsedDocument, capsys: pytest.CaptureFixture[str]
+) -> None:
+    original = _checked(_rows(evaluation.csv))
+    _write_numbers(evaluation.numbers, _numbers_changes(original))
+    capsys.readouterr()
+
+    assert _repair(evaluation, evaluation.numbers) == 0
+
+    printed = _printed(capsys)
+    for number in (4, 5, CITE_ROW, EVIDENCE_ROW, 9):
+        assert f"row {number}, text: restored the document's text" in printed, number
+    assert "a line break where the document has a space" in printed
+    assert "an em dash where the document has" in printed
+    assert 'an ellipsis character where the document has "."' in printed
+    assert "an opening curly double quote added" in printed
+    assert "an en dash where the document has a hyphen" in printed
+    assert "ready to import" in printed
+    assert [row["text"] for row in _rows(evaluation.csv)] == [s.text for s in document.sections]
+    assert (
+        evaluation.run(
+            "import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"
+        )
+        == 0
+    )
+
+
+def test_repair_carries_the_marks_onto_the_restored_text(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The person's marks, not the pre-label's: a mark they moved stays where they moved it."""
+    rows = _checked(_rows(evaluation.csv))
+    evidence = _row_of(rows, EVIDENCE_ROW)
+    evidence["text"] = EVIDENCE_TEXT.replace("warn that ", "warn that ").replace(
+        "margins fall", "margins\nfall"
+    )
+    evidence["underline"] = (
+        f"Grid operators warn that {prelabel.MARK_OPEN}reserve margins\nfall below safe levels"
+        f"{prelabel.MARK_CLOSE} within two summers."
+    )
+    evidence["highlight"] = (
+        f"{prelabel.MARK_OPEN}Grid operators{prelabel.MARK_CLOSE} warn that reserve margins\nfall "
+        "below safe levels within two summers."
+    )
+    _write_csv(evaluation.csv, rows)
+    capsys.readouterr()
+
+    assert _repair(evaluation, evaluation.csv) == 0
+
+    printed = _printed(capsys)
+    assert f"row {EVIDENCE_ROW}, underline: carried the marks onto the document's text" in printed
+    assert f"row {EVIDENCE_ROW}, highlight: carried the marks onto the document's text" in printed
+    repaired = _row_of(_rows(evaluation.csv), EVIDENCE_ROW)
+    assert repaired["text"] == EVIDENCE_TEXT
+    assert repaired["underline"] == prelabel.render_markup(EVIDENCE_TEXT, (UNDERLINED_RANGE,))
+    assert repaired["highlight"] == prelabel.render_markup(EVIDENCE_TEXT, ((0, len("Grid operators")),))
+
+
+def test_repair_fills_an_emptied_sampled_cell_with_its_text_and_no_marks(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rows = _checked(_rows(evaluation.csv))
+    _row_of(rows, EVIDENCE_ROW)["highlight"] = ""
+    _row_of(rows, 12)["underline"] = " "
+    _write_csv(evaluation.csv, rows)
+    capsys.readouterr()
+
+    assert _repair(evaluation, evaluation.csv) == 0
+
+    printed = _printed(capsys)
+    assert f"row {EVIDENCE_ROW}, highlight: was empty; filled with the row's text and no marks" in printed
+    assert "row 12, underline: was empty; filled with the row's text and no marks" in printed
+    repaired = _rows(evaluation.csv)
+    assert _row_of(repaired, EVIDENCE_ROW)["highlight"] == EVIDENCE_TEXT
+    assert (
+        evaluation.run(
+            "import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"
+        )
+        == 0
+    )
+    spans = {span.index: span for span in load_label_file(evaluation.label_file).spans}
+    assert spans[5].highlight == () and spans[5].underline == (UNDERLINED_RANGE,)
+    assert spans[10].underline == ()
+
+
+def test_check_notes_span_cells_on_unsampled_rows_and_repair_empties_them(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Import ignores them, so check passes with a note; the repair clears them."""
+    rows = _checked(_rows(evaluation.csv))
+    _row_of(rows, CITE_ROW)["underline"] = f"{prelabel.MARK_OPEN}Okonkwo 26{prelabel.MARK_CLOSE}"
+    _write_csv(evaluation.csv, rows)
+    capsys.readouterr()
+
+    assert evaluation.run("check", evaluation.prefix, "--worksheet", str(evaluation.csv)) == 0
+    assert f"note: row {CITE_ROW}, underline: this row is not sampled for spans" in _printed(capsys)
+    assert _repair(evaluation, evaluation.csv) == 0
+
+    assert f"row {CITE_ROW}, underline: emptied; this row is not sampled" in _printed(capsys)
+    assert _row_of(_rows(evaluation.csv), CITE_ROW)["underline"] == ""
+
+
+def test_repair_removes_the_table_name_line(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_csv(evaluation.csv, _checked(_rows(evaluation.csv)), above_header=["Table 1"])
+    capsys.readouterr()
+
+    assert _repair(evaluation, evaluation.csv) == 0
+
+    assert "removed the line above the header" in _printed(capsys)
+    with evaluation.csv.open(encoding="utf-8-sig", newline="") as handle:
+        assert next(csv.reader(handle)) == list(prelabel.WORKSHEET_COLUMNS)
+
+
+def test_repair_refuses_and_writes_nothing_when_letters_or_digits_changed(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rows = _checked(_numbers_changes(_rows(evaluation.csv)))
+    _row_of(rows, EVIDENCE_ROW)["text"] = EVIDENCE_TEXT.replace("Grid operators", "Grid Operators")
+    _row_of(rows, 12)["underline"] = (
+        f"{prelabel.MARK_OPEN}Moratoria shift load{prelabel.MARK_CLOSE} to older plant."
+    )
+    _write_numbers(evaluation.numbers, rows)
+    out = evaluation.worksheets / "repaired.csv"
+    capsys.readouterr()
+
+    assert _repair(evaluation, evaluation.numbers, out) == 1
+
+    printed = _printed(capsys)
+    assert not out.exists()
+    assert "REFUSED; nothing written" in printed
+    assert f"row {EVIDENCE_ROW}, text: letters or digits differ from the document" in printed
+    assert '"O" where the document has "o"' in printed
+    assert "row 12, underline: the text under the marks was edited" in printed
+    assert "restored" not in printed
+
+
+def test_repair_output_is_never_written_inside_the_repository(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    inside = REPOSITORY_ROOT / "build" / "worksheets" / "repaired.csv"
+    assert _repair(evaluation, evaluation.csv, inside) == 1
+    assert "outside the repository" in _printed(capsys)
+    assert not inside.exists()
+
+
+def test_repair_needs_somewhere_to_write(evaluation: _Evaluation) -> None:
+    with pytest.raises(SystemExit):
+        evaluation.run("check", evaluation.prefix, "--worksheet", str(evaluation.csv), "--repair")
+
+
+def _label_cells(path: Path) -> list[tuple[str, ...]]:
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        return [tuple(row[column] for column in LABEL_COLUMNS) for row in csv.DictReader(handle)]
+
+
+def test_labels_are_byte_identical_before_and_after_a_repair(
+    evaluation: _Evaluation, document: ParsedDocument, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Every kind of repair at once, over labels a person changed, and not one label cell moves."""
+    rows = _checked(_numbers_changes(_rows(evaluation.csv)))
+    _row_of(rows, 2).update(checked="Y ")
+    _row_of(rows, 9).update(unit="tag ")
+    _row_of(rows, 9).update(unit="ANALYTIC")
+    _row_of(rows, 3).update(unit="hat")
+    _row_of(rows, 10).update(card=" 1", completeness="full")
+    _row_of(rows, 11).update(card="1 ")
+    _row_of(rows, 12).update(card="1", underline="")
+    _row_of(rows, CITE_ROW).update(highlight="stray")
+    _write_csv(evaluation.numbers.with_suffix(".edited.csv"), rows)
+    before_labels = _label_cells(evaluation.numbers.with_suffix(".edited.csv"))
+    label_file_before = evaluation.label_file.read_bytes()
+    capsys.readouterr()
+
+    assert _repair(evaluation, evaluation.numbers.with_suffix(".edited.csv")) == 0
+
+    assert _label_cells(evaluation.csv) == before_labels
+    assert evaluation.label_file.read_bytes() == label_file_before
+    assert (
+        evaluation.run(
+            "import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"
+        )
+        == 0
+    )
+    by_hand = load_label_file(evaluation.label_file)
+    assert [p.unit.value for p in by_hand.paragraphs] == [
+        "POCKET", "HAT", "BLOCK", "TAG", "CITE", "EVIDENCE", "OTHER", "ANALYTIC", "TAG", "CITE", "EVIDENCE"
+    ]  # fmt: skip
+    assert [p.card for p in by_hand.paragraphs] == [None, None, None, 0, 0, 0, None, None, 1, 1, 1]
+    assert [s.underline for s in by_hand.spans] == [(), (UNDERLINED_RANGE,), ()]

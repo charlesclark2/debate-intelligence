@@ -81,7 +81,7 @@ spec:
         heuristic, documented as one: it draws a reader's attention, it does not judge whether a cut is
         fair, and it never refuses an edit.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

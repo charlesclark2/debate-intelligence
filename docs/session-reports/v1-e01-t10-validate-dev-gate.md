@@ -117,7 +117,8 @@ against the unchanged `check_promotion_source.py` → `22 failed, 90 passed`. Af
 
 ### Whole-repo checks
 
-* **Whole suite, run by the operator** (2026-10-02, this worktree after `scripts/task sync`): `uv run pytest -q` → `1 failed, 3944 passed, 1 skipped in 166.27s`. The failure was this task's: `test_a_request_the_cli_itself_makes_is_refused_and_logged` timed out (`subprocess.TimeoutExpired`), because the CLI waited on the operator's terminal for a password. Fixed; see "Fixed after the operator's full-suite run". The skip is the known parser eval at `test_parser_eval.py:279`. Re-run requested (follow-up 0).
+* **Whole suite, run by the operator** (2026-10-02, this worktree after `scripts/task sync`): `uv run pytest -q` → `1 failed, 3944 passed, 1 skipped in 166.27s`. The failure was this task's: `test_a_request_the_cli_itself_makes_is_refused_and_logged` timed out (`subprocess.TimeoutExpired`), because the CLI waited on the operator's terminal for a password. Fixed; see "Fixed after the operator's full-suite run". The skip is the known parser eval at `test_parser_eval.py:279`.
+* **Whole suite again, after the fix, run by the operator** (2026-10-02, at `339ad42`): `uv run pytest -q` → `3946 passed, 1 skipped, 1 warning in 64.05s`. 3946 = the first run's 3944 passed + its 1 failure + the new terminal check, so every test ran. The skip is the same parser eval (`6 of 6 pr-subset files are not yet corrected by a person`), and total coverage is 96%.
 * `uv run --frozen pytest tests/smoke tests/scripts tests/docs tests/integration packages/debate_cli/tests -q --no-cov` → `795 passed in 32.78s` (before the fix).
 * `uv run --frozen ruff check .` → `All checks passed!`; `ruff format --check .` → `491 files already formatted`.
 * `uv run --frozen pyright` → `0 errors`. The new files pass pyright when named explicitly, too. `tests/smoke/test_site.py`'s `site_smoke` import error was already there.
@@ -250,7 +251,7 @@ but this task is not yet on `main`, a hotfix branch (cut from `main`) has no val
 so a hotfix would be blocked until the promotion in step 3 merges.
 
 **0. The whole suite** (about 1 minute on your Mac; it crossed 2 minutes in some sessions).
-First run: `1 failed, 3944 passed, 1 skipped in 166.27s`, a defect in this task's harness, now fixed. Run it again.
+**Done.** First run: `1 failed, 3944 passed, 1 skipped in 166.27s`, a defect in this task's harness. After the fix: `3946 passed, 1 skipped, 1 warning in 64.05s`.
 Where: this task's worktree.
 
 ```bash
@@ -409,8 +410,8 @@ tier against the installed `v0.1.0-dev.49` → `27 passed in 5.30s`. `ruff check
 and pyright are clean.
 
 The new check only tells the two cases apart when run from a terminal. In CI it passes either way,
-because there is no terminal to inherit. The operator's re-run of the whole suite is what exercises
-it for real.
+because there is no terminal to inherit. The operator's re-run of the whole suite, run from a terminal, exercised
+it for real: `3946 passed, 1 skipped in 64.05s`.
 
 ## PM review
 

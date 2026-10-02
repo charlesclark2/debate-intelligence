@@ -1,0 +1,96 @@
+# TASK v1-e34-t11-inbox-retention - Imported downloads leave the inbox
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+# Architecture refs: ADR-0017, docs/policies/caselist-data-use.md (Retention)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t11-inbox-retention
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: Imported downloads leave the inbox
+spec:
+  # Filed by the PM, 2026-10-01, from v1-e30-t09's measurement of the real dev inbox (25 weekly zips,
+  # 527 MB) and the operator's listing the same night (about 530 MB added in one backfill run).
+  description: >-
+    Nothing ever clears the sync's download inbox. Every weekly archive and camp download stays after
+    it is imported, and the weeklies are cumulative, so the inbox grows by the size of the whole
+    season's caselist every week the agent runs. v1-e30-t09 established, for removals, that an
+    imported week's zip is safe to delete: `_decide_archive` calls a week dated on or before the newest
+    imported snapshot `ALREADY_IMPORTED` whether or not its zip is present, its contents are in the
+    store under a manifest whose `archive_sha256` names the upstream archive, and ADR-0017 records that
+    the site keeps a weekly back-catalogue to fetch it from again. v1-e34-t07's delivery record does the
+    same for camp downloads. Apply that reasoning as a retention rule: once a download is imported and
+    its snapshot is confirmed in the bucket (the run's report stage), remove it from the inbox, under
+    the sync's run lock, recording what was removed in the run summary. Decide and justify whether
+    anything is kept longer (for example the newest week, to make re-import after a failed publish
+    free), and how a first run clears the existing backlog. Out of scope: removal (v1-e30-t07, t09),
+    the store and the bucket, and hand-made copies outside the inbox.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, docs]
+    forbidden:
+      - Deleting a download that is not yet imported, or whose publish has not been confirmed
+      - Deleting a camp download the delivery record does not yet cover
+      - A retention step that runs without the sync's run lock or during a dry run
+  context:
+    - kind: TaskRef
+      name: v1-e30-t09-removal-purges-inbox
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        After a run that imports and publishes a week, that week's zip is gone from the inbox and the
+        run summary names it; a following run downloads nothing for it. Shown failing first.
+    - id: ac2
+      description: >-
+        A week that was downloaded but whose import or publish did not complete stays in the inbox and
+        is imported or published by the next run; a dry run removes nothing and lists what a run would.
+    - id: ac3
+      description: >-
+        A camp download is removed only once the delivery record holds its digests, and the next pull
+        does not fetch it again.
+    - id: ac4
+      description: >-
+        Each guard (import, publish confirmation, delivery record, run lock, dry run) is mutated and
+        shown caught, every run with a fresh Hypothesis database (working agreement 8). The scheduled-
+        sync runbook says what the inbox holds and when things leave it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t11-inbox-retention-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Show the inbox growing, add retention after the report stage, prove the guards.
+  goalRef:
+    name: v1-e34-t11-inbox-retention
+  graph:
+    nodes:
+      - id: retention
+        kind: Task
+        name: Remove imported, confirmed downloads from the inbox
+        description: >-
+          A retention step after the report stage, under the run lock, recorded in the run summary.
+        outputs: [packages/debate_core/src/debate_core/application/caselist_sync.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Imported weeks leave the inbox and pending ones stay
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist, -k, retention]
+status:
+  phase: Pending

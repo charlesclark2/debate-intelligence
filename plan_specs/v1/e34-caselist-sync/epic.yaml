@@ -75,6 +75,14 @@ spec:
   version: '1'
   graph:
     nodes:
+    - id: ext-v1-e30-t09-removal-purges-inbox
+      kind: External
+      name: 'Prerequisite from E30: A removal leaves no removed bytes in the inbox'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t09-removal-purges-inbox
+        specRef: plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml
     - id: ext-v1-e30-t01-caselist-data-use-policy
       kind: External
       name: 'Prerequisite from E30: Caselist and OpenEv data-use policy'
@@ -353,5 +361,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t10-agent-outside-checkout
+    - id: t11
+      kind: Task
+      name: Imported downloads leave the inbox
+      description: >-
+        Nothing clears the download inbox, and weeklies are cumulative. Once a download is imported and
+        its publish confirmed, remove it, on v1-e30-t09's reasoning for why an imported week is safe to delete.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml
+        goalRef: v1-e34-t11-inbox-retention
+      dependsOn:
+      - ext-v1-e30-t09-removal-purges-inbox
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t11-inbox-retention reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t11-inbox-retention
 status:
   phase: Pending

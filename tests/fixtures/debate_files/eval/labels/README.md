@@ -1,5 +1,177 @@
 # Parser evaluation labels: labeling guide
 
+## Working reference
+
+The steps in order, for the coach working without a session. Every code block is safe to paste
+into zsh as it stands. Where a command needs a file's digest, the first line of the block sets it
+in a variable: replace `PASTE_DIGEST_PREFIX_HERE` with the 16-character digest from a table below.
+Left unreplaced, it matches no file and the block stops at its first command. The guide after this
+section ([units](#units), [cards](#cards), [ambiguous conventions](#ambiguous-conventions),
+[spans](#spans)) says how to decide each label.
+
+### Setup
+
+Work in the main clone on `dev`. The task worktree `debate-intelligence-worktrees/v1-e31-t05-parser-eval`
+is removed once this task's pull request merges. The digest key, the path map
+(`~/.debate-intelligence/`) and the worksheets (`~/parser-eval-worksheets/`) are outside the
+repository and carry on as they are.
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+git switch dev
+git pull
+uv sync --all-packages
+```
+
+### 1. Approve the selection
+
+Open the two files the selector's content hint flagged first. Neither has a paragraph holding a
+year, and the first pre-labels to zero cards. Either may be a case of analytics, which is debate
+material, or something uploaded in place of a case, which is not.
+
+```bash
+uv run python scripts/prelabel_docx.py open f791edc8c9c4a3b9
+uv run python scripts/prelabel_docx.py open 9d0a74b95ccf9269
+```
+
+Then skim the rest, from the selection table in [`../MANIFEST.md`](../MANIFEST.md#the-selection),
+with the same command and each digest.
+
+**Reject before any import.** A rejection writes a new sampling plan, and labels corrected under
+the old one stop matching it, so the selector refuses a rejection once any label file is
+corrected. To reject a file that is not debate material, set its digest on the first line and paste
+the whole block. It replaces the file from the same stratum, regenerates the plan, the pre-labels,
+the tables and the replacement's worksheet, and removes the rejected file's pre-label and
+worksheet. It takes under a minute. Repeat it for each file you reject.
+
+```bash
+reject=PASTE_DIGEST_PREFIX_HERE
+uv run python scripts/select_eval_files.py \
+  --input "team=$HOME/Documents/debate/2024-2025" \
+  --input "team=$HOME/Documents/debate/2025-2026" \
+  --input "team=$HOME/Documents/debate/2026-2027" \
+  --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0915" \
+  --input "camp=$HOME/Documents/debate/2026-2027/Policy Debate/Camp Files" \
+  --exclude-dir Opencaselist --exclude-dir "Camp Files" \
+  --reject "${reject}" --reason NOT_DEBATE_CONTENT &&
+uv run python scripts/plan_eval_sampling.py &&
+uv run python scripts/prelabel_docx.py prelabel --all &&
+uv run python scripts/prelabel_docx.py worksheet --all --out-dir ~/parser-eval-worksheets &&
+git status --short
+```
+
+The selector should print `replaced 1 rejected file(s) from the same stratum; the other 29 entries
+are unchanged`. `git status` should list changes under `tests/fixtures/debate_files/eval/` and
+nowhere else: `manifest.json`, `rejections.json`, `sampling-plan.json`, `MANIFEST.md`,
+`labels/README.md`, the rejected file's label file deleted, the replacement's added, and the other
+label files carrying the new plan id. Commit all of it through a pull request, since `dev` refuses
+direct pushes:
+
+```bash
+git switch -c "labels/rejections-$(date +%Y-%m-%d)"
+git add tests/fixtures/debate_files/eval
+git commit -m "Parser evaluation: reject files that are not debate material"
+git push -u origin HEAD
+gh pr create --base dev --fill
+git switch dev
+```
+
+Wait for it to merge and `git pull` before labeling anything.
+
+### 2. Label the PR subset first
+
+These files are labeled in full and first, because they gate every pull request. The table is
+regenerated with every rejection.
+
+<!-- generated:pr-subset (written by the evaluation scripts; do not edit by hand) -->
+Sampling plan `06a5e928bf1fc90f`: **1,851 rows** to label across 30 files, **410** of them in the 6 PR-subset files below.
+
+| digest | Category | Format | Template family | Rows |
+|---|---|---|---|---|
+| `9d0a74b95ccf9269` | team | PF | other-heuristic | 29 |
+| `a888a5db95488218` | team | PF | verbatim | 31 |
+| `06e05b7abae54eb2` | caselist | LD | verbatim | 68 |
+| `f791edc8c9c4a3b9` | caselist | LD | wiki-converted | 30 |
+| `a99a55d4d1d282f2` | camp | Policy | other-heuristic | 198 |
+| `bad8c9119196b60a` | camp | Policy | verbatim | 54 |
+<!-- end generated:pr-subset -->
+
+The other files follow in any order. Their digests are in [`../MANIFEST.md`](../MANIFEST.md#the-selection).
+
+### 3. Each file
+
+Set the file's digest, then open its `.docx` and its worksheet side by side. Use Numbers, or
+LibreOffice with `open -a LibreOffice` in place of `open -a Numbers`, and never Excel, which
+rewrites some text and gets the import refused.
+
+```bash
+f=PASTE_DIGEST_PREFIX_HERE
+uv run python scripts/prelabel_docx.py open "${f}"
+open -a Numbers ~/parser-eval-worksheets/${f}.csv
+```
+
+Fill in `unit`, `card`, `completeness` and, on sampled rows, the span markup, following the guide
+below; put `y` in `checked` on every row; never edit `text`. Save it back as CSV under the same
+name (in Numbers, File, Export To, CSV). Then import it, delete the worksheet, and send the label
+file as its own small pull request. If the operator corrected it rather than the coach, write
+`--corrected-by operator`.
+
+```bash
+uv run python scripts/prelabel_docx.py import "${f}" --worksheet ~/parser-eval-worksheets/${f}.csv --corrected-by coach &&
+rm ~/parser-eval-worksheets/${f}.csv &&
+git switch -c "labels/${f}" &&
+git add tests/fixtures/debate_files/eval/labels &&
+git commit -m "Parser evaluation labels: ${f}" &&
+git push -u origin HEAD &&
+gh pr create --base dev --fill &&
+git switch dev
+```
+
+Import prints `CORRECTED by coach; N of M labeled rows changed from the pre-labels`. If it refuses
+the worksheet, it says which row and why; fix the worksheet and import again.
+
+### 4. The finish
+
+When every file is corrected and merged:
+
+1. **Spot-check three files end to end**: one team, one caselist and one camp file, each against
+   its `.docx` (see [Coach review](#coach-review)). Mark each one reviewed and send it as a small
+   pull request, as in step 3:
+
+   ```bash
+   f=PASTE_DIGEST_PREFIX_HERE
+   uv run python scripts/prelabel_docx.py mark-reviewed "${f}" --reviewer coach &&
+   git switch -c "labels/reviewed-${f}" &&
+   git add tests/fixtures/debate_files/eval/labels &&
+   git commit -m "Parser evaluation: coach review of ${f}" &&
+   git push -u origin HEAD &&
+   gh pr create --base dev --fill &&
+   git switch dev
+   ```
+
+2. **Establish the baseline.** It takes seconds. Read the report before committing it with
+   `tests/evals/baselines/parser.json`, and file every target marked MISSED against `v1-e31-t03`.
+
+   ```bash
+   uv run python scripts/run_parser_eval.py --write-baseline --report docs/data/parser-eval-2026-10.md &&
+   uv run pytest tests/evals/parser -m eval
+   ```
+
+3. **Run the corpus health check.** It takes 10 to 20 minutes and writes
+   `docs/data/parser-corpus-health.md`: counts only, no names.
+
+   ```bash
+   uv run python scripts/parser_corpus_health.py \
+     --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0901" \
+     --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0908" \
+     --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0915" \
+     --input "camp=$HOME/Documents/debate/2026-2027/Policy Debate/Camp Files" \
+     --output docs/data/parser-corpus-health.md
+   ```
+
+Then tell the PM: the baseline, its report and the health report go in through the task that
+closes this evaluation.
+
 This labeling guide says how to label a debate file for the parser evaluation
 (`v1-e31-t05-parser-eval`), and how to settle the cases where two careful people could disagree.
 The coach signs it off before it is used (the `labeling` node's manual criterion).
@@ -16,12 +188,10 @@ The format is documented in
 You do not label every paragraph of every file. [`../sampling-plan.json`](../sampling-plan.json)
 says which ones, and the tooling only ever shows you those:
 
-* the **six PR-subset files in full** (435 rows) — they gate every pull request, so they cannot be
-  partial;
-* about **a quarter of every other file** (1,441 of 5,353 rows), in contiguous blocks of at least
-  20 paragraphs.
+* the **six PR-subset files in full**: they gate every pull request, so they cannot be partial;
+* about **a quarter of every other file**, in contiguous blocks of at least 20 paragraphs.
 
-That is 1,876 rows rather than 5,788. Blocks are contiguous because card-boundary accuracy needs
+The current counts are in the [working reference](#2-label-the-pr-subset-first). Blocks are contiguous because card-boundary accuracy needs
 unbroken runs: a card split by a sampling gap cannot be scored at all. Which blocks were chosen is
 fixed and recorded; it is not yours to change, and the worksheet simply starts and stops where the
 plan does. **Row indices therefore jump** — a worksheet may run 0-19 and then 100-128. That is the
@@ -55,20 +225,17 @@ A file of analytics with no cards *is* debate material, and is labeled.
 
 ## Workflow
 
-```bash
-# 1. Seed pre-labels over the plan's rows (no text; kept in the repository while being corrected)
-uv run python scripts/prelabel_docx.py prelabel --all
+The [working reference](#working-reference) is the order to run things in, with blocks to paste.
+Behind it are four `scripts/prelabel_docx.py` commands:
 
-# 2. Write one file's worksheet OUTSIDE the repository; it holds paragraph text
-uv run python scripts/prelabel_docx.py worksheet 9d0a74b9 --out-dir ~/parser-eval-worksheets
+* `prelabel` seeds pre-labels over the plan's rows. They hold no text and are kept in the
+  repository while they are corrected; `prelabel --all` also removes a rejected file's pre-label.
+* `worksheet` writes a file's worksheet **outside** the repository, because it holds paragraph
+  text; `worksheet --all` writes every one that is missing and never overwrites one already there.
+* `import` reads a corrected worksheet back, and refuses one with an unchecked row or edited text.
+* `mark-reviewed` records the coach's end-to-end spot-check of a corrected file.
 
-# 3. Correct it in Numbers or LibreOffice, save as CSV, then import it
-uv run python scripts/prelabel_docx.py import 9d0a74b9 \
-    --worksheet ~/parser-eval-worksheets/9d0a74b95ccf9269.csv --corrected-by coach
-
-# 4. After the coach's end-to-end spot-check of a corrected file
-uv run python scripts/prelabel_docx.py mark-reviewed 9d0a74b9 --reviewer coach
-```
+`open` opens a file's `.docx` by its digest without printing where it is.
 
 A file is named by any unambiguous prefix of its keyed digest — the first column of the table in
 [`../MANIFEST.md`](../MANIFEST.md). Everything needs the digest key at

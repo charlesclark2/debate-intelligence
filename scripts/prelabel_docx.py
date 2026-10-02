@@ -56,6 +56,8 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import shutil
+import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
@@ -86,6 +88,7 @@ from tests.evals.parser.labels_schema import (  # noqa: E402
     label_path_for,
     load_label_file,
     load_manifest,
+    load_rejections,
     load_sampling_plan,
     validate_against_texts,
     write_label_file,
@@ -443,11 +446,77 @@ def _document(entry: ManifestEntry, key: bytes) -> ParsedDocument:
     return load_evaluation_document(entry, path_map, key)
 
 
+def _remove_rejected_prelabels(rejected: frozenset[str], labels_dir: Path) -> None:
+    """A rejected file's pre-label goes; a correction of one is never deleted by a tool."""
+    for digest in sorted(rejected):
+        path = label_path_for(digest, labels_dir)
+        if not path.exists():
+            continue
+        status = load_label_file(path).header.status
+        if status is LabelStatus.PRELABELED:
+            path.unlink()
+            print(f"{digest[:16]}: rejected; its PRELABELED label file removed")
+        else:
+            print(
+                f"{digest[:16]}: rejected, but its label file is {status}; left alone, delete it deliberately"
+            )
+
+
+def _all_worksheets(
+    manifest: Manifest, rejected: frozenset[str], labels_dir: Path, out_dir: Path, key: bytes
+) -> int:
+    """Write the worksheets that are missing, never over one that may be half filled in.
+
+    A rejected file's worksheet holds the text of a file no longer in the evaluation, so it goes.
+    """
+    directory = _outside_repository(out_dir)
+    written = kept = 0
+    for entry in manifest.entries:
+        path = label_path_for(entry.digest, labels_dir)
+        if not path.exists():
+            print(f"{entry.digest[:16]}: no label file; run prelabel --all first")
+            return 1
+        labels = load_label_file(path)
+        if (
+            labels.header.status is not LabelStatus.PRELABELED
+            or (directory / f"{entry.digest[:16]}.csv").exists()
+        ):
+            kept += 1
+            continue
+        write_worksheet(labels, _document(entry, key), directory, key, entry.digest)
+        written += 1
+        rows = len(labels.paragraphs)
+        print(f"{entry.digest[:16]}: worksheet of {rows} rows written outside the repository")
+    for digest in sorted(rejected):
+        stale = directory / f"{digest[:16]}.csv"
+        if stale.exists():
+            stale.unlink()
+            print(f"{digest[:16]}: rejected; its worksheet removed")
+    print(f"{written} worksheet(s) written, {kept} left as they were (already there, or already corrected)")
+    return 0
+
+
+def _open(entry: ManifestEntry) -> int:
+    """Open the file with the system's default application. The path is never printed."""
+    opener = shutil.which("open")
+    if opener is None:
+        raise SystemExit("`open` is the macOS command for opening a file; this machine has none")
+    path_map = load_path_map()
+    if path_map is None or entry.digest not in path_map:
+        raise SystemExit(f"{entry.digest[:16]}: not in this machine's path map")
+    subprocess.run([opener, str(path_map[entry.digest])], check=True)
+    print(f"{entry.digest[:16]}: opened")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
     parser.add_argument("--plan", type=Path, default=SAMPLING_PLAN_PATH)
     parser.add_argument("--labels-dir", type=Path, default=LABELS_DIRECTORY)
+    parser.add_argument(
+        "--rejections", type=Path, default=None, help="Defaults to rejections.json beside the manifest."
+    )
     commands = parser.add_subparsers(dest="command", required=True)
 
     prelabel = commands.add_parser("prelabel", help="Seed PRELABELED label files from parser output.")
@@ -458,8 +527,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     worksheet = commands.add_parser("worksheet", help="Write a correction worksheet outside the repository.")
-    worksheet.add_argument("digest")
+    worksheet.add_argument("digest", nargs="?", help="Keyed-digest prefix; or --all.")
+    worksheet.add_argument(
+        "--all",
+        action="store_true",
+        help="Write each missing worksheet of a PRELABELED file, and remove rejected files' worksheets.",
+    )
     worksheet.add_argument("--out-dir", type=Path, required=True)
+
+    opener = commands.add_parser("open", help="Open a file's .docx by keyed-digest prefix, printing no path.")
+    opener.add_argument("digest")
 
     importer = commands.add_parser("import", help="Read a corrected worksheet back as CORRECTED labels.")
     importer.add_argument("digest")
@@ -472,8 +549,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     manifest = load_manifest(args.manifest)
+    rejected = load_rejections(args.rejections or args.manifest.parent / "rejections.json").digests
     plan: SamplingPlan = load_sampling_plan(args.plan)
     key = require_key()
+
+    if args.command == "open":
+        return _open(_resolve(manifest, args.digest))
+    if args.command == "worksheet" and args.all:
+        return _all_worksheets(manifest, rejected, args.labels_dir, args.out_dir, key)
+    if args.command == "worksheet" and not args.digest:
+        parser.error("worksheet takes a digest prefix, or --all")
 
     if args.command == "prelabel":
         entries = list(manifest.entries) if args.all else [_resolve(manifest, p) for p in args.digest]
@@ -500,6 +585,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{len(labels.cards)} cards, {len(labels.spans)} span rows, PRELABELED "
                 f"(parser {DOCX_PARSER_VERSION})"
             )
+        if args.all:
+            _remove_rejected_prelabels(rejected, args.labels_dir)
         return 0
 
     entry = _resolve(manifest, args.digest)

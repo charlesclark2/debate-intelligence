@@ -113,6 +113,7 @@ from tests.evals.parser.labels_schema import (  # noqa: E402
     load_rejections,
     rejection_conflicts,
 )
+from tests.evals.parser.manifest_summary import write_summaries  # noqa: E402
 
 __all__ = [
     "Candidate",
@@ -773,6 +774,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     for conflict in conflicts:
         print(f"REJECTION CONFLICT: {conflict}")
     print("manifest written; path map written outside the repository")
+    summaries = write_summaries(args.manifest, rejections_path, args.manifest.parent / "sampling-plan.json")
+    print(f"tables regenerated in {len(summaries)} document(s) beside the manifest")
     return 1 if shortfalls or conflicts else 0
 
 

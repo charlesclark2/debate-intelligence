@@ -40,6 +40,7 @@ from tests.evals.parser.labels_schema import (
     validate_label_file,
     write_label_file,
 )
+from tests.evals.parser.manifest_summary import GUIDE_BLOCKS, MANIFEST_BLOCKS, render_blocks, replace_blocks
 from tests.evals.parser.synthetic import TEST_DIGEST_KEY, build_synthetic_file
 
 from debate_core.domain.debate_files import CardCompleteness
@@ -319,11 +320,11 @@ def test_the_committed_manifest_meets_ac1() -> None:
     assert coverage_shortfalls(load_manifest()) == []
 
 
-def test_the_manifest_summary_table_matches_manifest_json() -> None:
-    """MANIFEST.md is read by people; manifest.json by the tools. They must say the same thing."""
+def assert_summary_table_matches_manifest(directory: Path = EVAL_FIXTURE_DIRECTORY) -> None:
+    """MANIFEST.md's selection table says what manifest.json says. Reused on an invented evaluation."""
     rows = re.findall(
         r"^\| `([0-9a-f]{16})` \| (\w+) \| ([\d-]+) \| (\w+) \| ([\w-]+) \| (yes)? *\|$",
-        (EVAL_FIXTURE_DIRECTORY / "MANIFEST.md").read_text(encoding="utf-8"),
+        (directory / "MANIFEST.md").read_text(encoding="utf-8"),
         flags=re.MULTILINE,
     )
     table = {
@@ -339,9 +340,55 @@ def test_the_manifest_summary_table_matches_manifest_json() -> None:
             e.template_family.value,
             e.pr_subset,
         )
-        for e in load_manifest().entries
+        for e in load_manifest(directory / "manifest.json").entries
     }
     assert table == manifest
+
+
+def assert_plan_table_matches_plan(directory: Path = EVAL_FIXTURE_DIRECTORY) -> None:
+    """MANIFEST.md's sampling-plan table says what sampling-plan.json says, file by file."""
+    rows = re.findall(
+        r"^\| `([0-9a-f]{16})` \| (\w+) \| (\d+) \| (\d+) \| (\d+)% \| ([^|]+) \|$",
+        (directory / "MANIFEST.md").read_text(encoding="utf-8"),
+        flags=re.MULTILINE,
+    )
+    table = {(sha, int(total), int(labeled), blocks.strip()) for sha, _, total, labeled, _, blocks in rows}
+    plan = load_sampling_plan(directory / "sampling-plan.json")
+    expected = set()
+    for file_plan in plan.files:
+        blocks = (
+            "whole file"
+            if file_plan.full
+            else ", ".join(f"{first}-{last}" for first, last in file_plan.blocks)
+        )
+        expected.add((file_plan.digest[:16], file_plan.paragraphs, file_plan.labeled_rows, blocks))
+    assert table == expected
+
+
+def test_the_manifest_summary_table_matches_manifest_json() -> None:
+    """MANIFEST.md is read by people; manifest.json by the tools. They must say the same thing."""
+    assert_summary_table_matches_manifest()
+
+
+def test_the_sampling_plan_table_matches_sampling_plan_json() -> None:
+    assert_plan_table_matches_plan()
+
+
+def test_the_generated_tables_are_what_the_data_says() -> None:
+    """Nobody edited a generated block by hand, and none was left behind after a data change."""
+    before = {
+        path: path.read_text(encoding="utf-8")
+        for path in (EVAL_FIXTURE_DIRECTORY / "MANIFEST.md", LABELS_DIRECTORY / "README.md")
+    }
+    blocks = render_blocks(load_manifest(), load_rejections(), load_sampling_plan())
+    assert (
+        replace_blocks(before[EVAL_FIXTURE_DIRECTORY / "MANIFEST.md"], blocks, MANIFEST_BLOCKS)
+        == (before[EVAL_FIXTURE_DIRECTORY / "MANIFEST.md"])
+    )
+    assert (
+        replace_blocks(before[LABELS_DIRECTORY / "README.md"], blocks, GUIDE_BLOCKS)
+        == (before[LABELS_DIRECTORY / "README.md"])
+    )
 
 
 def test_nothing_in_the_eval_directory_names_a_file() -> None:

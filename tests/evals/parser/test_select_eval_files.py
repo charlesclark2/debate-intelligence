@@ -25,22 +25,33 @@ from tests.evals.parser.labels_schema import (
     REPOSITORY_ROOT,
     Category,
     DebateFormat,
+    FileLabelHeader,
     LabelStatus,
     Manifest,
     RejectedFile,
     RejectionList,
     RejectionReason,
+    ReviewerRole,
     TemplateFamily,
     coverage_shortfalls,
+    label_path_for,
+    load_label_file,
     load_manifest,
+    load_rejections,
     rejection_conflicts,
     stratum_of,
     write_label_file,
 )
 from tests.evals.parser.synthetic import build_invented_corpus_file, build_synthetic_file
+from tests.evals.parser.test_labels_schema import (
+    assert_plan_table_matches_plan,
+    assert_summary_table_matches_manifest,
+)
 
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
+import plan_eval_sampling as planner  # noqa: E402
+import prelabel_docx as prelabel  # noqa: E402
 import select_eval_files as selector  # noqa: E402
 
 _SEASONS = ("2024-25", "2025-26", "2026-27")
@@ -468,3 +479,84 @@ def test_pre_labels_do_not_block_a_rejection(
 
     assert "REFUSED" not in capsys.readouterr().out
     assert not any(e.digest.startswith(rejected) for e in load_manifest(evaluation.manifest).entries)
+
+
+def _plan_and_prelabel(evaluation: _InventedEvaluation, worksheets: Path) -> None:
+    """The rest of the coach's rejection block: plan, pre-labels, worksheets."""
+    directory = evaluation.directory
+    plan = directory / "sampling-plan.json"
+    assert planner.main(["--manifest", str(evaluation.manifest), "--output", str(plan)]) == 0
+    common = [
+        "--manifest",
+        str(evaluation.manifest),
+        "--plan",
+        str(plan),
+        "--labels-dir",
+        str(directory / "labels"),
+    ]
+    assert prelabel.main([*common, "prelabel", "--all"]) == 0
+    assert prelabel.main([*common, "worksheet", "--all", "--out-dir", str(worksheets)]) == 0
+
+
+def _rejected_digest(evaluation: _InventedEvaluation, prefix: str) -> str:
+    return next(e.digest for e in load_manifest(evaluation.manifest).entries if e.digest.startswith(prefix))
+
+
+def test_a_rejection_needs_no_hand_edits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The coach's block, run on an invented corpus: every table, label and worksheet follows."""
+    evaluation = _invented_evaluation(tmp_path, monkeypatch)
+    worksheets = tmp_path / "worksheets"
+    _plan_and_prelabel(evaluation, worksheets)
+    labels = evaluation.directory / "labels"
+    rejected_prefix = evaluation.pr_subset_prefix()
+    rejected = _rejected_digest(evaluation, rejected_prefix)
+    others = sorted(p for p in worksheets.iterdir() if not p.name.startswith(rejected_prefix))
+    others[0].write_bytes(others[0].read_bytes() + b"half filled in by the coach\n")
+    kept_worksheets = {p.name: p.read_bytes() for p in others}
+
+    assert _reject(evaluation, rejected_prefix) in (0, 1)  # 1 only for ac1 shortfalls: eight camp files
+    _plan_and_prelabel(evaluation, worksheets)
+
+    replacement = load_rejections(evaluation.directory / "rejections.json").rejections[0].replaced_by
+    assert replacement is not None
+    assert_summary_table_matches_manifest(evaluation.directory)
+    assert_plan_table_matches_plan(evaluation.directory)
+    manifest_md = (evaluation.directory / "MANIFEST.md").read_text(encoding="utf-8")
+    guide = (labels / "README.md").read_text(encoding="utf-8")
+    assert manifest_md.count(f"`{rejected_prefix}`") == 1  # only in the rejections table
+    assert f"`{replacement[:16]}`" in guide and f"`{rejected_prefix}`" not in guide
+    assert "out of date" not in manifest_md and "out of date" not in guide
+    assert not label_path_for(rejected, labels).exists()
+    assert load_label_file(label_path_for(replacement, labels)).header.status is LabelStatus.PRELABELED
+    assert not (worksheets / f"{rejected_prefix}.csv").exists()
+    assert (worksheets / f"{replacement[:16]}.csv").exists()
+    for name, content in kept_worksheets.items():
+        assert (worksheets / name).read_bytes() == content
+
+
+def test_pre_labeling_never_removes_a_corrected_file_of_a_rejected_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evaluation = _invented_evaluation(tmp_path, monkeypatch)
+    worksheets = tmp_path / "worksheets"
+    _plan_and_prelabel(evaluation, worksheets)
+    labels = evaluation.directory / "labels"
+    rejected_prefix = evaluation.pr_subset_prefix()
+    rejected = _rejected_digest(evaluation, rejected_prefix)
+    prelabeled = load_label_file(label_path_for(rejected, labels))
+    corrected = FileLabelHeader.model_validate(
+        {
+            **prelabeled.header.model_dump(),
+            "status": LabelStatus.CORRECTED,
+            "corrected_by": ReviewerRole.COACH,
+        }
+    )
+    label_path_for(rejected, labels).write_text(
+        replace(prelabeled, header=corrected).to_jsonl(), encoding="utf-8"
+    )
+
+    _reject(evaluation, rejected_prefix, "--discard-corrected-labels")
+    _plan_and_prelabel(evaluation, worksheets)
+
+    assert label_path_for(rejected, labels).exists()
+    assert "left alone, delete it deliberately" in capsys.readouterr().out

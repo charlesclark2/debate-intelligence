@@ -60,8 +60,9 @@ bytes and style references only, never text, and printed counts only.
   category allows.
 
 1,827 files were candidates (109 byte-identical duplicates, 24 files under 20 paragraphs, 1
-unreadable file and 1 file with no season or format folder were skipped). The 30 selected files
-held 5,788 paragraphs, and all 30 parse. After the one rejection below, they hold 5,763.
+unreadable file and 1 file with no season or format folder were skipped). The 30 files selected
+that day held 5,788 paragraphs, and all 30 parse. The current counts are in
+[the sampling plan](#the-sampling-plan) below.
 
 **Status: proposed, awaiting the coach's approval** (the `collect-files` node's manual criterion).
 Until the coach approves it, nothing is labeled.
@@ -71,30 +72,35 @@ Until the coach approves it, nothing is labeled.
 A file the coach or operator opens and finds is not debate material at all is **rejected**, not
 labeled: scoring the parser on it measures nothing. The rejection is recorded in
 [`rejections.json`](rejections.json) by keyed digest, with a reason code (`NOT_DEBATE_CONTENT`), the
-date and the file's stratum, never anything from inside it. Then:
-
-    uv run python scripts/select_eval_files.py <the --input and --exclude-dir options above> \
-        --reject <digest prefix> --reason NOT_DEBATE_CONTENT
-
-replaces it **in place** with another file from the same category, season, format, template
+date and the file's stratum, never anything from inside it. The command, one block with no hand
+edits, is in the labeling guide's [working reference](labels/README.md#working-reference). It
+replaces the file **in place** with another file from the same category, season, format, template
 family and PR-subset membership, and leaves every other entry exactly as it was. Within the stratum
 the replacement follows the rule that made the original: the shortest file for the PR subset,
 otherwise the first by keyed digest. A stratum with nothing left is an error, never a substitute
 from another stratum. A fresh selection never chooses a rejected file, and `--rekey` carries the
-list to a new key. After a rejection, the sampling plan, pre-labels and worksheets are regenerated.
+list to a new key. After a rejection, the sampling plan, pre-labels and worksheets are regenerated,
+and so are the tables in this file and the guide.
 
+A rejection is **refused while any label file is corrected**: it writes a new sampling plan id, and
+labels corrected under the old id stop validating, with no tool to move them to the new one. So
+every rejection comes before any import. `--discard-corrected-labels` overrides the refusal and
+names the corrections it discards.
+
+<!-- generated:rejections (written by the evaluation scripts; do not edit by hand) -->
 | Rejected | Reason | On | Stratum | Replaced by |
 |---|---|---|---|---|
 | `4b11269583a94621` | `NOT_DEBATE_CONTENT` | 2026-10-01 | caselist 2026-27 LD wiki-converted, PR subset | `f791edc8c9c4a3b9` |
+<!-- end generated:rejections -->
 
-`4b11269583a94621` is the 55-paragraph wiki-converted file that pre-labeled to zero cards: a
-non-English text uploaded to the caselist in place of a case, with no tags, citations or arguments.
-It was 55 of the PR subset's 435 rows, all of them `OTHER`.
+`4b11269583a94621`, rejected on 2026-10-01, is the 55-paragraph wiki-converted file that
+pre-labeled to zero cards: a non-English text uploaded to the caselist in place of a case, with no
+tags, citations or arguments. It was 55 of the PR subset's 435 rows then, all of them `OTHER`.
 
 **Content hints.** The selector also prints, as counts only, how many selected files may not be
 debate material: no paragraph holding a year (every debate citation has one), or mostly non-Latin
-text. It is a hint for the coach, never a rule. On the current selection it flags two files, both
-in the PR subset, with no paragraph holding a year: the replacement `f791edc8c9c4a3b9` (30
+text. It is a hint for the coach, never a rule. On 2026-10-01 it flagged two files, both in the PR
+subset, with no paragraph holding a year: the replacement `f791edc8c9c4a3b9` (30
 paragraphs, pre-labeled to zero cards; it and the rejected file are the only two of the stratum's
 31 files the hint flags) and the team file `9d0a74b95ccf9269`. Neither is rejected: a case of
 analytics with no cards is debate material, and only a person looking at the file can tell.
@@ -103,6 +109,7 @@ analytics with no cards is debate material, and only a person looking at the fil
 
 `digest` is the first 16 hex digits of the keyed digest; `manifest.json` has the full value.
 
+<!-- generated:selection (written by the evaluation scripts; do not edit by hand) -->
 | digest | Category | Season | Format | Template family | PR subset |
 |---|---|---|---|---|---|
 | `93c9db239ccfd360` | team | 2024-25 | LD | other-heuristic |  |
@@ -135,9 +142,11 @@ analytics with no cards is debate material, and only a person looking at the fil
 | `a99a55d4d1d282f2` | camp | 2026-27 | Policy | other-heuristic | yes |
 | `bad8c9119196b60a` | camp | 2026-27 | Policy | verbatim | yes |
 | `f3442236bb398f4b` | camp | 2026-27 | Policy | verbatim |  |
+<!-- end generated:selection -->
 
 ### Against Goal criterion ac1
 
+<!-- generated:coverage (written by the evaluation scripts; do not edit by hand) -->
 | Requirement | Selected |
 |---|---|
 | At least 30 files | 30 |
@@ -146,24 +155,23 @@ analytics with no cards is debate material, and only a person looking at the fil
 | At least 3 team files not on the Verbatim template | 6 (4 other-heuristic, 2 wiki-converted) |
 | At least 12 caselist files, 4 non-Verbatim, 2 wiki-converted | 12: 4 other-heuristic, 2 wiki-converted, 6 Verbatim-family |
 | At least 6 camp files | 6 |
+| The PR subset: six files, every category | 6: team 2, caselist 2, camp 2 |
+<!-- end generated:coverage -->
 
 `coverage_shortfalls()` in [`labels_schema.py`](../../../evals/parser/labels_schema.py) checks the
 same list, and `test_labels_schema.py` runs it against `manifest.json` on every PR.
 
 ### The sampling plan
 
-Labeling all thirty files in full is about 5,800 rows of judgment work. Plan `06a5e928bf1fc90f`
-(generated 2026-10-01 by [`scripts/plan_eval_sampling.py`](../../../../scripts/plan_eval_sampling.py),
-replacing `792cad9c0f3fa456` after the [rejection](#rejected-files); no file had been corrected, and
-every other file's blocks are unchanged) labels **1,851 of 5,763 paragraphs, 32.1%**: the six
-PR-subset files in full (410 rows, because they gate every pull request and cannot be partial) and
-1,441 of the other 5,353 rows, 26.9%, in contiguous blocks.
+Labeling all thirty files in full is about 5,800 rows of judgment work, so
+[`scripts/plan_eval_sampling.py`](../../../../scripts/plan_eval_sampling.py) samples them: the
+PR-subset files in full, because they gate every pull request and cannot be partial, and contiguous
+blocks of every other file. Plan `06a5e928bf1fc90f` replaced `792cad9c0f3fa456` on 2026-10-01, after
+the [rejection](#rejected-files); no file had been corrected, and every other file's blocks were
+unchanged.
 
-Blocks are at least 20 paragraphs, chosen deterministically from each file's keyed digest, and
-weighted toward blocks whose pre-labels hold `POCKET`, `UNDERTAG` or `ANALYTIC` — the sparsest units
-and the ones the parser is weakest on. The weighting changes *which* blocks are picked, never how
-many, so the rate does not move. A short file whose quarter would be under 20 paragraphs is labeled
-whole instead; that is why some rates below are well above 25%.
+<!-- generated:sampling-plan (written by the evaluation scripts; do not edit by hand) -->
+Plan `06a5e928bf1fc90f` (generated 2026-10-01) labels **1,851 of 5,763 paragraphs, 32.1%**: the 6 PR-subset files in full (410 rows) and 1,441 of the other 5,353 rows, 26.9%, in contiguous blocks.
 
 | digest | Category | Paragraphs | Labeled | Rate | Blocks |
 |---|---|---|---|---|---|
@@ -197,6 +205,13 @@ whole instead; that is why some rates below are well above 25%.
 | `a99a55d4d1d282f2` | camp | 198 | 198 | 100% | whole file |
 | `bad8c9119196b60a` | camp | 54 | 54 | 100% | whole file |
 | `f3442236bb398f4b` | camp | 457 | 135 | 30% | 0-22, 184-206, 230-252, 345-367, 414-456 |
+<!-- end generated:sampling-plan -->
+
+Blocks are at least 20 paragraphs, chosen deterministically from each file's keyed digest, and
+weighted toward blocks whose pre-labels hold `POCKET`, `UNDERTAG` or `ANALYTIC` — the sparsest units
+and the ones the parser is weakest on. The weighting changes *which* blocks are picked, never how
+many, so the rate does not move. A short file whose quarter would be under 20 paragraphs is labeled
+whole instead; that is why some rates in the table above are well over 25%.
 
 
 Two things the coach may want to weigh when approving: the caselist files are all LD and the camp

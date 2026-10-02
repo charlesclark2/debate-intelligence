@@ -63,12 +63,51 @@ Two more ceilings the site sets, both handled in code rather than here:
    a build that cannot import the S3 adapter or the OpenCaselist client (v1-e01-t17). Builds
    published before that change lack boto3, so every `caselist pull` they run fails with exit 70.
    Never add a package to the tool environment by hand to get past that; install a later tag.
+   How to check an install, and what the installer does before it replaces the agent's build, is
+   under [Checking an installed build](#checking-an-installed-build).
 2. **A token.** `debate-research caselist auth login`, once, for that environment
    (`v1-e34-t01`). `caselist auth status --check` confirms it.
 3. **An AWS session**, if you want the run to publish: `aws sso login --profile
    debate-<env>-evidence`. Without one the run still downloads and imports, and records the
    publish as pending.
 4. **A validation run in dev**, below. The schedule is enabled only after that has passed.
+
+## Checking an installed build
+
+**Which Python.** You never choose one. The supported interpreter is whatever the `debate_core`
+wheel's `Requires-Python` metadata admits (from `debate_core`'s `requires-python`), and
+`install_channel.sh` reads it from the wheel it is about to install and passes it to uv. It refuses,
+naming the wheel, if it cannot read it. Do not install the tool by hand with `uv tool install`: uv
+ignores the upper bound of a dependency's `Requires-Python`, so a hand-run install can land on a
+Python whose Unicode database the evidence normalizer is not pinned to
+([`docs/evidence/normalization.md`](../evidence/normalization.md)).
+
+**What the installer checks before it replaces anything.** `install_channel.sh` first installs the
+build into a temporary tool directory and checks it there: the wheels' provenance,
+`debate-research --version --json`, `python -m debate_cli.installation` (every wired integration
+imports) and `debate-research doctor`. Only if all of them pass does it install into the real tool
+directory, the one the agent runs, and repeat the checks. A build that fails in the rehearsal ends
+with `the installed debate-research was not touched`, and the agent keeps running the build it had.
+
+**Checking the build the agent runs now**, at any time, as the agent runs it:
+
+```bash
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" sh -c 'command -v debate-research; debate-research doctor; echo "doctor exit=$?"'
+```
+
+`doctor` reports the build's versions, its interpreter, its wiring, and its Unicode database beside
+the normalizer's pin. Its exit status:
+
+| Exit | Means | What to do |
+|---|---|---|
+| 0 | The report was produced and the interpreter's Unicode database is the one the normalizer is pinned to. | Nothing. |
+| 1 | The two Unicode databases differ (`UNICODE_DATABASE_MISMATCH`, naming both versions and the policy page). Every command that normalizes evidence text would refuse to run. | Reinstall a tag with `install_channel.sh`, which picks a Python the wheel admits. |
+| 70 | `doctor` could not determine the normalizer's pinned version at all. That is a bug in the build, not a verdict on the interpreter. | Install a different tag and report the build. |
+
+Nothing else `doctor` reports changes its exit status. Settings not loaded, an unknown package
+version or an unexpected platform are described, never failed: none of them is a failure it can
+state precisely.
 
 ## Step 1 — rehearse, in dev
 

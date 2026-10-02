@@ -35,7 +35,7 @@
 # `debate-core` nor `debate-cli` is registered on PyPI, and a find-links install keeps PyPI in the
 # resolution set for them. Pinning does not help. Dev versions are predictable from the public
 # tags, and a squatter who publishes `debate-core==0.1.0.devN` with a more specific wheel tag
-# (`cp312-none-any`) is preferred over our `py3-none-any` wheel at the very same version.
+# (a CPython one, `cpXY-none-any`) is preferred over our `py3-none-any` wheel at the very same version.
 # tests/scripts/test_install_channel.py shows the old command taking such a decoy and this script
 # refusing it. A requirement given as a URL is never looked up on any index, and uv uses it for every
 # reference to that name, including debate-cli's own `debate-core==<version>` dependency.

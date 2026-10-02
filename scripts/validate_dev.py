@@ -701,6 +701,7 @@ def build_parser() -> argparse.ArgumentParser:
     conclude_parser.add_argument("--smoke-commit")
     conclude_parser.add_argument("--slow-commit")
     conclude_parser.add_argument("--job", action="append", default=[], help="name=result, e.g. smoke=success")
+    conclude_parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
     status_options(conclude_parser)
 
     run_parser = sub.add_parser("run", help="resolve, smoke, slow and conclude in one process")
@@ -756,6 +757,7 @@ def main(argv: list[str] | None = None, *, github: GitHub | None = None) -> int:
             )
             if args.post_status:
                 post(client, conclusion, target_for(args))
+            write_outputs(args.github_output, {"state": conclusion.state, "status_sha": conclusion.sha})
             print(f"validate-dev: {conclusion.state} on {conclusion.sha}: {conclusion.description}")
             return PASSED if conclusion.state == "success" else PROBLEM
         return command_run(args, client)

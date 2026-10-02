@@ -744,3 +744,13 @@ def test_a_failing_status_post_is_a_problem_not_a_silent_pass() -> None:
 
     with pytest.raises(driver.ValidationProblem, match="HTTP 403"):
         driver.GhCli(REPO, runner).post_status(SHA, "success", RUN_URL, "validated")
+
+
+def test_conclude_tells_a_calling_workflow_the_state_and_the_commit_it_is_for(tmp_path: Path) -> None:
+    outputs = tmp_path / "outputs"
+    command = conclude_command(installed=OTHER_SHA)
+    command = command[: command.index("--post-status")] + ["--github-output", str(outputs)]
+
+    driver.main(command, github=FakeGitHub())
+
+    assert outputs.read_text(encoding="utf-8") == f"state=failure\nstatus_sha={SHA}\n"

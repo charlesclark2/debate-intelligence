@@ -477,3 +477,45 @@ On operator follow-up 3b, the small pull request into `dev` can be whichever tas
 while the promotion is open. The whole ci → dev-prerelease → validate-dev chain, about 12 minutes,
 is the window in which the promotion should read `BLOCKED`. I will commit the ruleset export from
 follow-up 2 with the spec PR that closes this task.
+
+### Close-out (PM, 2026-10-02)
+
+Charlie ran operator follow-ups 1 to 3 on 2026-10-02. ac1, ac3 and the `require-and-prove` node pass,
+and the Goal is `Succeeded`.
+
+* **ac1: PASS.** The merge of #160 made `dev`'s head `39d496a`. `dev-prerelease` published
+  `v0.1.0-dev.50` and dispatched validate-dev, run 36973541632 (`workflow_dispatch`, success).
+  * The log shows `== installed build: {"channel": "dev", "commit": "39d496a6f1b1e5849239bca9bdc8d57c10440522", "environment_source": "build-channel:dev", "tag": "v0.1.0-dev.50", "version": "0.1.0.dev50", …}`
+    and `== installed 0.1.0.dev50 from v0.1.0-dev.50: commit 39d496a…, validating 39d496a…`.
+  * `github-actions[bot]` posted `pending` (06:26:27Z), then `success` (06:27:05Z), both linking the
+    run.
+* **Ruleset.** protect-main requires `ci`, `promotion-source`, `back-merge` and `validate-dev`, each
+  with `integration_id` 15368, with strict mode off. The GitHub Actions source matched the statuses
+  the workflow token posts, so the fallback in follow-up 3 was not needed.
+  `docs/process/rulesets/protect-main.json` is updated in this change.
+* **ac3: PASS**, on promotion #161. This was proved more strongly than the plan asked:
+  * **A required check still running blocks the merge.** A merge attempt at 06:44:59Z came while
+    `promotion-source` and `back-merge` were re-running after a description edit. It was refused
+    (rule suite 4327977359: "2 of 4 required status checks are in progress").
+  * **The head moved.** #162 merged at 06:54:14Z and the head became `492419d`. That commit had no
+    validate-dev status until `pending` at 06:57:04Z and `success` at 06:57:50Z, from
+    `v0.1.0-dev.51`, 3.5 minutes after the merge. The PR's own `ci` finished at 06:57:49Z, so the
+    window in which only validate-dev held the merge lasted about a second and was not seen. The
+    in-progress refusal above shows the same rule for a check that has not yet passed.
+  * **A failing status blocks the merge on its own.** Charlie dispatched validate-dev for `492419d`
+    with `v0.1.0-dev.50`, which points at `39d496a`.
+    * Run 36976381676 failed at `resolve`, and the bot posted `failure` on `492419d` ("validation
+      failed: resolve failure, smoke skipped, slow skipped").
+    * With 18 checks passing and only validate-dev failing, `mergeStateStatus` was `BLOCKED`, and
+      `gh pr merge 161 --merge` was refused ("the base branch policy prohibits the merge").
+    * This also proved the driver's tag-to-commit guard in production.
+  * **Re-validated and merged.** Run 36976611834 succeeded and the state went to `CLEAN`. #161 merged
+    at 07:07:31Z as `b2d51b5`, with parents `5b8ff39` and `492419d`.
+* **`require-and-prove`: PASS.** The latest validate-dev run's conclusion is `success`.
+
+Follow-up 3b's small pull request was the first label PR (#162), not the PM's ROADMAP refresh.
+That changes nothing, because any merge into `dev` moves the head the same way.
+
+The hotfix window is closed: `main` now has validate-dev.yml, so a hotfix branch cut from it can be
+validated.
+

@@ -52,6 +52,10 @@
           {
             "context": "back-merge",
             "integration_id": 15368
+          },
+          {
+            "context": "validate-dev",
+            "integration_id": 15368
           }
         ]
       }

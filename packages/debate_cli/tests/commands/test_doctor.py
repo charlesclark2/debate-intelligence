@@ -95,6 +95,8 @@ def test_a_person_sees_the_report_and_then_the_mismatch(other_unicode_database: 
     assert PINNED in result.stderr
     assert other_unicode_database in result.stderr
     assert POLICY_PAGE in result.stderr
+    # The table already listed every fact; the panel does not repeat them.
+    assert "python_executable" not in result.stderr
 
 
 def test_an_unreadable_pin_is_a_bug_not_a_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:

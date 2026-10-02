@@ -36,6 +36,7 @@ import platform
 import sys
 import unicodedata
 from collections.abc import Mapping
+from dataclasses import replace
 
 import typer
 
@@ -50,6 +51,7 @@ __all__ = ["doctor"]
 
 UNICODE_DATABASE_MISMATCH_CODE = "UNICODE_DATABASE_MISMATCH"
 NORMALIZATION_POLICY_PAGE = "docs/evidence/normalization.md"
+_MISMATCH_FACTS = ("normalizer_version", "normalizer_unicode_version", "python_unicode_version")
 
 
 def doctor(ctx: typer.Context) -> None:
@@ -76,6 +78,9 @@ def doctor(ctx: typer.Context) -> None:
             display=TableSpec(columns=("Check", "Value"), rows=_rows(report), title="debate-research doctor"),
         )
     if failure is not None:
+        if not cli.output.is_json:
+            # The table above already lists every fact; the panel names the two that disagree.
+            failure = replace(failure, details={key: report[key] for key in _MISMATCH_FACTS})
         cli.output.failure(failure, command=command_name(ctx))
         raise typer.Exit(code=failure.exit_code)
 

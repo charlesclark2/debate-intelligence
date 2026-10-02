@@ -110,6 +110,8 @@ fi
 
 command -v uv >/dev/null 2>&1 || fail "uv is not installed: https://docs.astral.sh/uv/getting-started/installation/"
 
+TEMPORARY=${TMPDIR:-/tmp}
+TEMPORARY=${TEMPORARY%/}
 CLEANUP=""
 REHEARSAL=""
 cleanup() {
@@ -124,7 +126,7 @@ trap cleanup EXIT INT TERM
 
 if [ -z "${ASSETS}" ]; then
     command -v gh >/dev/null 2>&1 || fail "gh is not installed (or pass --dir with the assets already downloaded)"
-    ASSETS=$(mktemp -d "${TMPDIR:-/tmp}/debate-research-${TAG}.XXXXXX")
+    ASSETS=$(mktemp -d "${TEMPORARY}/debate-research-${TAG}.XXXXXX")
     CLEANUP=${ASSETS}
     echo "Downloading ${TAG} from ${REPOSITORY}..."
     gh release download "${TAG}" --repo "${REPOSITORY}" --dir "${ASSETS}" \
@@ -237,7 +239,7 @@ install_and_check() {
 
 echo "Rehearsing the install of debate-cli ${VERSION} (${CHANNEL} channel) from ${ASSETS_ABSOLUTE},"
 echo "on a Python matching '${REQUIRES_PYTHON}' (debate_core's Requires-Python), in a temporary tool directory..."
-REHEARSAL=$(mktemp -d "${TMPDIR:-/tmp}/debate-research-rehearsal.XXXXXX")
+REHEARSAL=$(mktemp -d "${TEMPORARY}/debate-research-rehearsal.XXXXXX")
 (
     UV_TOOL_DIR="${REHEARSAL}/tools"
     UV_TOOL_BIN_DIR="${REHEARSAL}/bin"

@@ -527,5 +527,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t20-retryable-failures-exit-3
+    - id: t21
+      kind: Task
+      name: 'The storage and OpenCaselist smoke checks run against the installed build'
+      description: >-
+        Loopback stand-ins (moto server, an OpenCaselist stand-in) so the publish, remove, pull and
+        runs smoke checks run against the installed pre-release in validate-dev.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml
+        goalRef: v1-e01-t21-installed-smoke-stand-ins
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t21-installed-smoke-stand-ins reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t21-installed-smoke-stand-ins
 status:
   phase: Pending

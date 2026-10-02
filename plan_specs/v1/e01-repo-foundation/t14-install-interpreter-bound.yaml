@@ -90,6 +90,15 @@ spec:
         integration check leaves the previous install untouched. If `doctor` gains the ability to fail
         here (ac2), it runs in that rehearsal too, so one command answers "is this installation
         sound".
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-02, from v1-e01-t10's follow-up work. `install_channel.sh` warns that
+        `debate-research` on this PATH is another build on every automated install, where the warning is
+        noise: validate-dev and dev-prerelease install into scratch tool directories that are never on
+        the PATH. An explicit option (not a guess from the environment) silences that one warning for
+        such installs; every other message, and every failure, is unchanged. A person running the
+        script by hand still sees it. Both workflows pass the option, and a test shows the warning
+        present without it and absent with it.
 status:
   phase: Pending
 ---

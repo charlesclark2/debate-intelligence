@@ -47,22 +47,70 @@ A promotion PR (`dev` → `main`) can merge only when **all** of these hold:
 1. **CI green** on the `dev` head commit (lint, types, tests, import boundaries, spec validation).
 2. **Deployed to dev**: the pre-release build (V1) or the dev AWS deploy (V2+) for that exact commit
    succeeded.
-3. **`validate-dev` passed**: the automated smoke suite ran against the dev environment for that
-   commit and posted a green `validate-dev` status. The suite grows with every release — any task
-   that changes a user-facing surface adds or updates its smoke checks (`tests/smoke/`, and
-   `tests/smoke/cloud/` from V2), and says so in its spec.
+3. **`validate-dev` passed**: the automated smoke suite ran against the dev build of that exact
+   commit and posted a green `validate-dev` commit status on it, which protect-main requires (see
+   [validate-dev](#validate-dev-the-status-protect-main-requires)). The suite grows with every
+   release — any task that changes a user-facing surface adds or updates its smoke checks
+   (`tests/smoke/`, and `tests/smoke/cloud/` from V2), and says so in its spec;
+   [tests/smoke/README.md](../../tests/smoke/README.md#adding-a-smoke-check) says how.
 4. **Evaluation gates** (from v1.3): prompt/model changes pass their promotion evals.
 5. **Your approval**: Charlie signs off the promotion checklist on the PR, and (V2+) approves the
    `production` GitHub Environment deployment.
 
 The promotion PR uses the [promotion template](../../.github/PULL_REQUEST_TEMPLATE/promotion.md):
-the release/tasks included, the dev build or deploy id, the `validate-dev` run link, evaluation
-results, a manual check note for anything automation cannot cover yet, and a rollback note. A
-hotfix PR uses the [hotfix template](../../.github/PULL_REQUEST_TEMPLATE/hotfix.md): the incident,
-the dev build of the hotfix head, its `validate-dev` run link and the back-merge reminder. Open
+the release/tasks included, the dev build or deploy id, evaluation results, a manual check note for
+anything automation cannot cover yet, and a rollback note. A hotfix PR uses the
+[hotfix template](../../.github/PULL_REQUEST_TEMPLATE/hotfix.md): the incident, the dev build of
+the hotfix head and the back-merge reminder. Neither asks for a link to the validate-dev run: the
+required `validate-dev` status on the head commit links it, and is the one record of whether that
+commit was validated. Open
 either by adding `?template=promotion.md` or `?template=hotfix.md` to the compare URL. Task PRs into
 `dev` use the [default template](../../.github/pull_request_template.md), which `scripts/task pr`
 fills in for you.
+
+## validate-dev: the status protect-main requires
+
+`validate-dev` is a commit status, posted by
+[`validate-dev.yml`](../../.github/workflows/validate-dev.yml) through
+[`scripts/validate_dev.py`](../../scripts/validate_dev.py), and required by protect-main. It is
+green on a commit only when all of these held for that exact commit:
+
+1. A published dev pre-release has its tag at that commit.
+2. That pre-release was installed with `scripts/install_channel.sh` into a scratch tool directory,
+   so its checksums, its wheels' provenance and its completeness were checked.
+3. The installed `debate-research --version --json`, with `DEBATE_ENV` unset, reported that commit,
+   that tag, channel `dev` and environment `dev`.
+4. The recorded smoke tier in `tests/smoke/` passed against **that installed binary**, offline,
+   from a checkout of the same commit, with nothing skipped.
+5. The offline slow tier, `pytest -m "slow and not live and not eval"`, passed from a checkout of
+   the same commit, with nothing skipped. The parser evaluation is left out because its corpus never
+   reaches a runner; it runs on Charlie's Mac before any promotion that changes the parser.
+
+Anything else posts `failure` (or `error`, if the run was cancelled) on the requested commit. The
+status's link is the run, whose log shows the installed version and commit, and its description
+names the pre-release.
+
+**When it runs.** `dev-prerelease.yml` dispatches it after publishing each pre-release: from `dev`
+for a merge to `dev`, and from the hotfix branch for a `hotfix/*` head, which is validated in
+exactly the same way. A release created with the workflow token starts no workflow by itself, so
+the dispatch is what triggers it. It also runs nightly against the head of `dev`, on
+`release: prereleased` for a pre-release a person publishes, and on a manual dispatch with a commit
+SHA. The opt-in live canary tier runs only when dispatched with `live: true` or with the repository
+variable `VALIDATE_DEV_LIVE` set to `true`, and never calls OpenCaselist.
+
+**Why a promotion whose `dev` moved is blocked.** The status belongs to a commit, and a promotion
+pull request's required checks are read from its current head. When another merge lands on `dev`
+while a promotion is open, the head becomes a commit with no `validate-dev` status yet, and the
+merge button stays blocked until that commit's own pre-release has been built and validated.
+
+**One record, not two.** Promotion and hotfix descriptions used to carry a `validate-dev run:`
+line, which `promotion-source` refused while blank. With the status required, that line could only
+repeat what the status already says, or say something different when `dev` moved after it was
+written, so it was removed (v1-e01-t10). `Dev build:` stays as the human-readable name of what is
+being promoted, and the status's description names the pre-release it installed, for comparison.
+
+[tests/smoke/README.md](../../tests/smoke/README.md) describes the tiers, the markers and how a
+task adds a smoke check.
 
 ## Guards on pull requests into `main`
 
@@ -72,12 +120,8 @@ request into `main`, both required by **protect-main**. Both run
 
 | Check | Fails when |
 |---|---|
-| `promotion-source` | The head is not `dev` or `hotfix/<slug>` from this repository (a fork can name its branch `dev` too), or the description leaves the `Dev build:` or `validate-dev run:` line blank. Editing the description re-runs it. |
+| `promotion-source` | The head is not `dev` or `hotfix/<slug>` from this repository (a fork can name its branch `dev` too), or the description leaves the `Dev build:` line blank. Editing the description re-runs it. |
 | `back-merge` | `main` holds a non-merge commit that `dev` lacks: a hotfix that was never back-merged. A `hotfix/*` head always passes it, so a second urgent fix is never blocked by the first one's back-merge. |
-
-Before `v1-e01-t09` (dev pre-releases) and `v1-e01-t10` (`validate-dev`) have merged there is no
-build or run to link. Write that on the line, with what was checked instead: the check refuses a
-blank line, not an honest one.
 
 **After a hotfix merges**, [`back-merge.yml`](../../.github/workflows/back-merge.yml) opens a
 "Back-merge main → dev" pull request, labelled `back-merge`, whose head is `main` itself. Merge it
@@ -126,8 +170,8 @@ Set now:
   approve your own PR; the manual approval is the promotion checklist and, from V2, the
   `production` environment approval), dismiss stale approvals, require conversation resolution,
   allowed merge method **Merge** only. No linear-history rule (promotions are merge commits).
-  Required status checks `ci`, `promotion-source` and `back-merge`, **not** "require branches to be
-  up to date": every promotion leaves a merge commit on `main` that `dev` never receives, so that
+  Required status checks `ci`, `promotion-source`, `back-merge` and `validate-dev`, **not**
+  "require branches to be up to date": every promotion leaves a merge commit on `main` that `dev` never receives, so that
   setting would report every later promotion out of date. `back-merge` checks what it was meant to.
 * Ruleset **protect-dev** (target: pattern `dev`, empty bypass list): restrict deletions, block
   force pushes, require a pull request with 0 approvals and conversation resolution, allowed merge
@@ -142,7 +186,8 @@ Added as the tasks land:
   (see [Guards on pull requests into `main`](#guards-on-pull-requests-into-main)), the task,
   promotion and hotfix PR templates, and Settings → Actions → General → **Allow GitHub Actions to
   create and approve pull requests**, which `back-merge.yml` needs to open its pull request.
-* `v1-e01-t10-validate-dev-gate` → require `validate-dev` on `main`.
+* `v1-e01-t10-validate-dev-gate` → require the `validate-dev` commit status on `main`, from the
+  GitHub Actions source (see [validate-dev](#validate-dev-the-status-protect-main-requires)).
 * `v2-e12-t07-promotion-pipeline` → `development` / `production` GitHub Environments with
   branch-scoped deploy rules and Charlie as required reviewer on `production`.
 

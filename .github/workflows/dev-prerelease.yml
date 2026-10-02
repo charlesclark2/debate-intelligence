@@ -15,13 +15,17 @@
 #      them with scripts/install_channel.sh into a throwaway tool directory and refuse a build that
 #      cannot import every integration the CLI wires (v1-e01-t17).
 #   3. publish a GitHub *pre-release* for that tag with the wheels, SHA256SUMS and build-info.json.
-#   4. prune: delete the release (never the tag) of dev pre-releases beyond the newest 30.
+#   4. ask validate-dev (v1-e01-t10) to validate the build: a dispatch of validate-dev.yml for this
+#      commit and tag, because a release created with GITHUB_TOKEN starts no workflow of its own.
+#   5. prune: delete the release (never the tag) of dev pre-releases beyond the newest 30.
 #
-# Not part of `ci`, and not a required check. It runs after a merge, on its own trigger, like
-# validate-dev will (v1-e01-t10); ci.yml's header records when a separate workflow is right.
+# Not part of `ci`, and not a required check. It runs after a merge, on its own trigger, and hands
+# each build to validate-dev (v1-e01-t10), whose status is what protect-main requires; ci.yml's
+# header records when a separate workflow is right.
 #
 # SECURITY. This workflow writes: it creates tags and releases, so the one job holds
-# `contents: write` and the workflow default is `contents: read`. It never runs on `pull_request`:
+# `contents: write`, plus `actions: write` to dispatch validate-dev, and the workflow default is
+# `contents: read`. It never runs on `pull_request`:
 # `workflow_run` executes the workflow file from the default branch against a commit already pushed
 # to dev, and `workflow_dispatch` is limited to hotfix/* branches of this repository, which only
 # maintainers can push. The checkout persists no credentials. The token reaches git only in the
@@ -69,6 +73,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      actions: write
     env:
       HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       VERSION_SOURCE: ${{ github.event_name == 'workflow_dispatch' && 'hotfix' || 'dev' }}
@@ -178,6 +183,26 @@ jobs:
           gh release create "$TAG" dist/*.whl dist/SHA256SUMS dist/build-info.json \
             --repo "$GITHUB_REPOSITORY" --prerelease --verify-tag \
             --title "debate-research ${TAG} (dev pre-release)" --notes-file release-notes.md
+
+      - name: Ask validate-dev to validate this build
+        # v1-e01-t10. validate-dev.yml also listens for `release: prereleased`, but a release created
+        # with GITHUB_TOKEN starts no workflow; a dispatch is the one event this token may cause. It
+        # runs validate-dev.yml from dev, or from the hotfix branch for a hotfix head, against exactly
+        # this commit and tag. Also on a re-run whose release already existed, so re-running this
+        # workflow re-validates. A commit from before validate-dev existed (a hotfix branch cut from a
+        # main that predates it) has no workflow to dispatch; that is reported, not failed.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.claim.outputs.tag }}
+          REF: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || 'dev' }}
+        run: |
+          if [ ! -f .github/workflows/validate-dev.yml ]; then
+            echo "::notice::${HEAD_SHA} predates validate-dev.yml; nothing to dispatch."
+            exit 0
+          fi
+          gh workflow run validate-dev.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" \
+            -f sha="$HEAD_SHA" -f tag="$TAG"
+          echo "Dispatched validate-dev.yml on ${REF} for ${TAG} at ${HEAD_SHA}."
 
       - name: Keep the newest 30 dev pre-releases
         # Deletes old releases and keeps their tags, so N keeps counting and is never reused.

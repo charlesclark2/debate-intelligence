@@ -1,0 +1,97 @@
+# TASK v1-e01-t21-installed-smoke-stand-ins - The storage and OpenCaselist smoke checks run against the installed build
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t21-installed-smoke-stand-ins
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The storage and OpenCaselist smoke checks run against the installed build"
+spec:
+  # Filed by the PM, 2026-10-02, from v1-e01-t10's Deviation 5 and Follow-up work.
+  description: >-
+    validate-dev (v1-e01-t10) runs tests/smoke against the installed pre-release, but four modules
+    cannot: the smoke checks for `caselist publish`, `remove`, `pull` and `runs` use moto and respx,
+    which patch the process they run in, and the installed binary is another process. They are
+    marked `in_process`, so `ci` runs them against the source tree and validate-dev does not run
+    them at all. The commands that touch the evidence store and OpenCaselist are therefore the ones
+    the gate covers least. This task gives those checks stand-ins the installed binary reaches over
+    loopback: moto in server mode for S3, and a small local stand-in for the OpenCaselist API that
+    serves recorded, synthetic responses. The binary reaches them through configuration it already
+    honours, or through an endpoint setting this task adds that only a dev environment accepts. The
+    network guard allows loopback for the checks that declare a stand-in and for no other check.
+    Out of scope: live calls (the canary tier), `store` against a real bucket (operator-run), and
+    the in-process tests, which may stay in `ci` as they are.
+  priority: 3
+  constraints:
+    packages: [tests/smoke, tests/fixtures, debate_cli, debate_core.integrations, docs]
+    forbidden:
+      - Allowing loopback, or any other network, for a check that has not declared a stand-in
+      - Real OpenCaselist responses, real caselist data, or any credential in a fixture
+      - An endpoint override that a prod environment accepts
+      - Patching the installed build's code from the test side (monkeypatching boto3 or httpx inside the binary)
+  context:
+    - kind: TaskRef
+      name: v1-e01-t10-validate-dev-gate
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `caselist publish`, `remove`, `pull` and `runs` each have a recorded smoke check that runs the
+        installed binary through `installed_cli` and passes in validate-dev's smoke job; none of the
+        four is `in_process` any more, and the report says what became of the in-process versions.
+    - id: ac2
+      description: >-
+        The network guard permits loopback only for a check that uses a stand-in fixture. A check
+        without one that connects to 127.0.0.1 is refused and logged, and a check with one that tries
+        a non-loopback address is refused and logged. Both shown failing first.
+    - id: ac3
+      description: >-
+        If the CLI needed a new endpoint setting, a prod environment refuses it with a message naming
+        the setting, shown by test, and `config show` reports it. If no new setting was needed, the
+        report names the existing configuration the stand-ins rely on.
+    - id: ac4
+      description: >-
+        The recorded tier still runs in under 5 minutes in validate-dev, every stand-in binds an
+        ephemeral port and is torn down, and tests/smoke/README.md says how a later check adds a
+        stand-in.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t21-installed-smoke-stand-ins-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Stand up the two stand-ins, scope the guard's loopback allowance to them, convert the four checks.
+  goalRef:
+    name: v1-e01-t21-installed-smoke-stand-ins
+  graph:
+    nodes:
+      - id: stand-ins
+        kind: Task
+        name: Loopback stand-ins and the installed-binary checks
+        description: >-
+          moto server and the OpenCaselist stand-in as fixtures, the guard's scoped loopback
+          allowance, and the four converted checks.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Recorded smoke tier passes against the local build
+            command: uv
+            args: [run, pytest, tests/smoke, -m, "not live"]
+status:
+  phase: Pending

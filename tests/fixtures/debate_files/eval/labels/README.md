@@ -111,9 +111,18 @@ open -a Numbers ~/parser-eval-worksheets/${f}.csv
 ```
 
 Fill in `unit`, `card`, `completeness` and, on sampled rows, the span markup, following the guide
-below; put `y` in `checked` on every row; never edit `text`. Save it back as CSV under the same
-name (in Numbers, File, Export To, CSV). Then import it, delete the worksheet, and send the label
-file as its own small pull request. If the operator corrected it rather than the coach, write
+below; put `y` in `checked` on every row; never edit `text`. A sampled row with nothing underlined
+or highlighted keeps its full text in that column with no marks: never leave the cell empty. Save it
+back as CSV under the same name. Then import it, delete the worksheet, and send the label file as its
+own small pull request.
+
+**Saving from Numbers.** Numbers edits a copy of the CSV, never the CSV itself. Cmd+S saves a
+`.numbers` file beside it, which import never reads; only File, Export To, CSV writes the worksheet.
+In the export options leave "Include table names" unticked, then go to `~/parser-eval-worksheets`
+(Cmd+Shift+G), keep the name and choose Replace. Turn off Numbers' auto-correction (smart quotes and
+dashes, spelling, capitalisation) before editing. If import reports every row as not checked, your
+work is in the `.numbers` file and the CSV is still the original. v1-e31-t07 makes `check` and
+`import` read the `.numbers` file directly and repair what the round trip changes. If the operator corrected it rather than the coach, write
 `--corrected-by operator`.
 
 ```bash
@@ -128,7 +137,9 @@ git switch dev
 ```
 
 Import prints `CORRECTED by coach; N of M labeled rows changed from the pre-labels`. If it refuses
-the worksheet, it says which row and why; fix the worksheet and import again.
+the worksheet, it says which row and why; fix the worksheet and import again. It reports only the
+first problem in each row, so a second run can find another in a row the first run named. Delete
+the `.numbers` copy too once the import succeeds: it holds the same text as the worksheet.
 
 ### 4. The finish
 
@@ -248,7 +259,9 @@ underlining and highlighting are only visible in Word.
 **Worksheets hold other programs' cards and sometimes names.** Keep them in one folder outside the
 repository, never attach or upload them, and delete each one once its import succeeds. Only the
 `.jsonl` it produces is committed. Excel rewrites some text when it opens a CSV (leading `=` or
-`+`, long numbers, dates), which import will then refuse. Numbers and LibreOffice do not.
+`+`, long numbers, dates), which import will then refuse. Numbers rewrites less, but not nothing:
+on 2026-10-02 it changed whitespace or line breaks in six rows nobody had edited, and import refused
+them as edited text. LibreOffice is untested.
 
 ## Units
 

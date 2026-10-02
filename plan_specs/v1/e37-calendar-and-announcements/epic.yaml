@@ -18,9 +18,9 @@ metadata:
     debate/architecture-refs: §14 (privacy), ADR-0012
 spec:
   description: >-
-    Coaches keep the site current without code: events come from a shared team Google Calendar that parents
-    can also subscribe to, and announcements and page text are edited through a lightweight CMS; the site
-    rebuilds when content changes; parents can sign up for email updates through a mailing service.
+    The team's tournament schedule and announcements are on the site, kept current from files in the
+    repository (ADR-0015 as accepted 2026-10-01), with an iCalendar file parents can subscribe to;
+    parents can sign up for email updates through a mailing service.
   priority: 7
   constraints:
     majorVersion: v1
@@ -164,6 +164,7 @@ spec:
     - id: t04
       kind: Task
       name: Automatic republish on content changes
+      # Cancelled 2026-10-01 (see the task spec). Kept because every task stays in its epic's plan.
       description: >-
         CMS webhook and a scheduled rebuild (e.g. hourly GitHub Actions or an EventBridge-triggered build)
         that runs the build and dev->prod deploy for content-only changes, with a failure notification;
@@ -176,14 +177,12 @@ spec:
       - t03
       - ext-v1-e36-t05-site-deploy
       acceptanceCriteria:
-      - type: command_succeeds
-        name: Task spec v1-e37-t04-auto-republish reports phase Succeeded
-        command: uv
-        args:
-        - run
-        - scripts/validate_specs.py
-        - --require-succeeded
-        - v1-e37-t04-auto-republish
+      - type: custom
+        name: Task v1-e37-t04-auto-republish is Cancelled
+        description: >-
+          Cancelled by the PM on 2026-10-01 when ADR-0015 was revised before acceptance: all content is in
+          the repository, so there is nothing external to republish for. This node is satisfied by the
+          cancellation and does not hold the epic open. Revisit with v2-e10-t03's keyless deploy roles.
     - id: t05
       kind: Task
       name: Parent email updates

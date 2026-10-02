@@ -1,6 +1,6 @@
-# TASK v1-e37-t03-announcements — Announcements and news
-# Epic: E37 Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
-# Architecture refs: §14 (privacy, minors), ADR-0012, ADR-0015, docs/policies/website-publishing.md
+# TASK v1-e37-t03-announcements - Announcements and news
+# Epic: E37 Calendar & Announcements | Release: v1.6 | Major: V1
+# Architecture refs: ADR-0015 (as accepted 2026-10-01), docs/policies/website-publishing.md
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -14,34 +14,34 @@ metadata:
     debate/epic: v1-e37-calendar-and-announcements
   annotations:
     debate/title: Announcements and news
-    debate/architecture-refs: §14, ADR-0012, ADR-0015
 spec:
+  # Rewritten by the PM, 2026-10-01, when ADR-0015 was revised before acceptance: announcements are
+  # Markdown files in the repository, not a Google Sheet or CMS, so the source adapter, its tokens and
+  # its last-good fallback are gone. ac1-ac3, ac6 and ac7 carry over unchanged in substance.
   description: >-
-    Let coaches post announcements (e.g. "Novice orientation Tuesday", "Congratulations to our PF teams at
-    the Marquette tournament") through the source chosen in ADR-0015, and render them in the static site: the
-    newest non-expired items on the home page, a /news list, and one page per item. Each announcement has a
-    title, publish date, Markdown body, optional expiry and optional pin; an optional image is allowed only
-    when the coach confirms district media consent. A source adapter hides whether content comes from
-    Markdown files in site/content/announcements/ (git-backed CMS) or a build-time export from a hosted CMS
-    or sheet (same last-good fallback as t02). A build-time validator enforces the publishing policy: schema
-    errors, a likely student full name that is not on the public-names allowlist (coaches, schools,
-    tournaments), email addresses, phone numbers, raw HTML/scripts and third-party embeds fail the build for
-    that item with a message a coach can act on. Two gaps in that guard, found by the v1-e36-t08 review,
-    close here because this is the task that first publishes an image: the name rules run over visible text
-    only, so a name in an alt attribute is invisible to them; and nothing stops the reviewed-phrase allowlist
-    decaying back into the bare words t08 removed. Expiry is evaluated at build time, so timely removal relies
-    on the scheduled rebuild in t04. Boundaries: events/calendar are t02, rebuild triggers and deploys are
-    t04, email distribution is t05; general page copy editing stays with whatever ADR-0015 decides and is not
-    migrated here beyond the announcements collection.
-  priority: 1
+    Publish announcements (for example "Novice orientation Tuesday" or "Congratulations to our PF
+    teams at Marquette") from Markdown files in site/content/announcements/, one file per item,
+    rendered by the static site: pinned items then the newest non-expired items on the home page, a
+    /news list, and one page per item. Each item has a title, publish date, Markdown body, optional
+    expiry and optional pin; an optional image is allowed only with a media-consent manifest entry.
+    A build-time validator enforces the publishing policy: schema errors, a likely student full name
+    that is not on the public-names allowlist, email addresses, phone numbers, raw HTML or scripts
+    and third-party embeds fail the build for that item with a message the editor can act on. Two
+    gaps in that guard, found by the v1-e36-t08 review, close here because this is the task that
+    first publishes an image: the name rules run over visible text only, so a name in an alt
+    attribute is invisible to them; and nothing stops the reviewed-phrase allowlist decaying back
+    into bare words. Expiry is evaluated at build time, so an expired item disappears at the next
+    deploy, not on its date; the guide says so. The coach guide's announcements section is rewritten
+    for these files. Out of scope: the schedule (t02), the parent email list (t05), and reading
+    Buttondown's archive feed, which ADR-0015 names as a later option.
+  priority: 2
   constraints:
-    packages: [site/lib/announcements, site/app/news, site/content/announcements]
+    packages: [site/content, site/src, site/scripts, site/tests, docs/guides]
     forbidden:
-      - Publishing student full names, student contact details, or photos without the media-consent flag
+      - Publishing student full names, student contact details, or photos without a media-consent entry
       - Rendering unsanitized HTML, scripts, iframes or third-party embeds from announcement bodies
-      - Committing CMS API tokens; tokens come only from environment variables
-      - Live CMS or network calls in `pnpm --dir site test`; tests use fixture content
-      - A runtime backend or client-side CMS fetch; content is baked in at build time
+      - Network calls at build time, in tests, or from a visitor's browser
+      - A runtime backend; content is baked in at build time
   context:
     - kind: TaskRef
       name: v1-e37-t01-content-editing-decision
@@ -52,36 +52,42 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        With fixture content, the home page shows pinned items first then the three newest non-expired
-        announcements, /news lists all non-expired items newest first, and each item has its own page with
-        title, date and rendered body.
+        With fixture content, the home page shows pinned items first then the three newest
+        non-expired announcements, /news lists all non-expired items newest first, and each item has
+        its own page with title, date and rendered body.
     - id: ac2
       description: >-
-        An announcement whose expiry date is before the build date appears on no page and is absent from the
-        sitemap.
+        An announcement whose expiry date is before the build date appears on no page and is absent
+        from the sitemap.
     - id: ac3
       description: >-
-        The validator rejects fixtures containing a non-allowlisted "First Last" student name, an email
-        address, a phone number, a script/iframe, or an image without the media-consent flag, naming the
-        item and the rule from docs/policies/website-publishing.md; valid items still publish.
+        The validator rejects fixtures containing a non-allowlisted "First Last" student name, an
+        email address, a phone number, a script or iframe, or an image without a media-consent
+        entry, naming the item and the rule from docs/policies/website-publishing.md; valid items
+        still publish.
     - id: ac4
       description: >-
-        The announcements source adapter for the ADR-0015 choice reads tokens only from the environment and
-        falls back to the last good content when the source is unreachable.
+        docs/guides/coach-website-editing.md explains how to add, change, pin, expire and remove an
+        announcement file, which publish path to use under ADR-0015 point 4, that expiry takes
+        effect at the next deploy, and what may never be written. It no longer describes a Google
+        Sheet.
     - id: ac5
       description: >-
-        `pnpm --dir site lint`, `test` and `build` pass offline, and a coach posts and expires one real
-        announcement end to end on the dev preview.
+        `pnpm --dir site lint`, `typecheck`, `test` and `build` pass offline, and Charlie publishes
+        and then expires one real announcement end to end through dev and prod; the report records
+        it.
     - id: ac6
       description: >-
-        The publishing-policy name rules read image alt text and figure captions as well as visible text, so
-        a non-allowlisted "First Last" in an alt attribute fails the build with the same message it would get
-        in body copy, with a fixture proving it; this must land before the first photograph is published.
+        The publishing-policy name rules read image alt text and figure captions as well as visible
+        text, so a non-allowlisted "First Last" in an alt attribute fails the build with the same
+        message it would get in body copy, with a fixture proving it; this must land before the
+        first photograph is published.
     - id: ac7
       description: >-
-        A check keeps the media-consent allowlist in reviewed phrases rather than bare words: every entry is
-        either multi-word or on a short, explicitly reviewed list of ordinary single words, and the check
-        fails on a new bare-word entry outside that list, so the v1-e36-t08 ruling cannot quietly erode.
+        A check keeps the media-consent allowlist in reviewed phrases rather than bare words: every
+        entry is either multi-word or on a short, explicitly reviewed list of ordinary single words,
+        and the check fails on a new bare-word entry outside that list, so the v1-e36-t08 ruling
+        cannot quietly erode.
 status:
   phase: Pending
 ---
@@ -97,104 +103,60 @@ metadata:
     debate/epic: v1-e37-calendar-and-announcements
 spec:
   description: >-
-    Define the schema and fixtures, build the policy validator, implement the source adapter chosen in
-    ADR-0015, render home/news pages, then run quality gates and a coach end-to-end check.
+    Schema and fixtures, the policy validator and its two gaps, the pages, then the guide.
   goalRef:
     name: v1-e37-t03-announcements
   graph:
     nodes:
       - id: schema-and-fixtures
         kind: Task
-        name: Announcement schema and fixture content
+        name: Announcement schema and fixtures
         description: >-
-          Define the Announcement zod schema (slug, title, date, body, expires, pinned, image,
-          mediaConsentConfirmed) and fixture items covering valid, expired, pinned and each policy violation.
-          Configure the CMS collection (fields, labels and help text a coach sees) per ADR-0015.
-        outputs:
-          - site/lib/announcements/schema.ts
-          - site/tests/fixtures/announcements/
+          Front-matter schema for site/content/announcements/*.md and fixtures covering every rule.
         estimatedEffort: 2h
         acceptanceCriteria:
-          - type: artifact_exists
-            name: Announcement schema exists
-            path: site/lib/announcements/schema.ts
-            contentMatch: "mediaConsentConfirmed"
+          - type: command_succeeds
+            name: The site tests pass
+            command: pnpm
+            args: [--dir, site, test]
       - id: policy-validator
         kind: Task
-        name: Publishing-policy content validator
+        name: Publishing-policy validator, alt text and the allowlist check
         description: >-
-          Implement a reusable validator: schema check, sanitize Markdown (no raw HTML, scripts, iframes or
-          external embeds), reject email addresses and phone numbers, flag likely "First Last" names not in
-          site/content/public-names.json (coaches, schools, tournaments, public figures), and require the
-          media-consent flag for images. Errors name the item and the policy rule in coach-readable wording.
+          Apply the policy rules to announcements, extend the name rules to alt text and captions, and
+          guard the reviewed-phrase allowlist.
         dependsOn: [schema-and-fixtures]
-        outputs:
-          - site/lib/content/validate-policy.ts
-          - site/content/public-names.json
-          - site/tests/announcements/validate.test.ts
-        estimatedEffort: 3h
+        estimatedEffort: 4h
         acceptanceCriteria:
-          - type: test_passes
-            name: Policy validator tests pass
-            command: pnpm
-            args: [--dir, site, test, tests/announcements/validate.test.ts]
-      - id: source-adapter
-        kind: Task
-        name: Source adapter for the ADR-0015 choice
-        description: >-
-          Implement AnnouncementSource for the chosen option (Markdown files for a git-backed CMS, or a
-          build-time export from a hosted CMS or sheet using an env-provided read token), with the same
-          timeout, last-good snapshot and warning behavior as the calendar fetch; placeholders in
-          site/.env.example.
-        dependsOn: [schema-and-fixtures]
-        outputs: [site/lib/announcements/source.ts, site/tests/announcements/source.test.ts]
-        estimatedEffort: 3h
-        acceptanceCriteria:
-          - type: test_passes
-            name: Source adapter and fallback tests pass offline
-            command: pnpm
-            args: [--dir, site, test, tests/announcements/source.test.ts]
+          - type: custom
+            name: Each rule is shown failing on a fixture and passing on a valid item
+            description: >-
+              Every rule in ac3, ac6 and ac7 has a fixture that fails the build naming the item and
+              the rule, and the valid fixtures publish.
       - id: pages
         kind: Task
-        name: Home feed, news list and item pages
+        name: Home, /news and item pages
         description: >-
-          Add the home-page announcements block (pinned then newest three, non-expired), /news and
-          /news/[slug] via generateStaticParams, exclude expired items from pages and sitemap, and render an
-          empty state when there are none.
-        dependsOn: [policy-validator, source-adapter]
-        outputs:
-          - site/app/news/page.tsx
-          - "site/app/news/[slug]/page.tsx"
-          - site/components/AnnouncementsFeed.tsx
-          - site/tests/announcements/pages.test.tsx
+          Pinned then newest on the home page, the /news list and per-item pages; expired items absent.
+        dependsOn: [policy-validator]
         estimatedEffort: 3h
         acceptanceCriteria:
-          - type: test_passes
-            name: Home feed, expiry and news page tests pass
-            command: pnpm
-            args: [--dir, site, test, tests/announcements/pages.test.tsx]
-      - id: quality-gates
-        kind: Task
-        name: Quality gates and coach end-to-end check
-        description: >-
-          Run lint, the full test suite and the static build offline; add /news to the deploy smoke checks;
-          after an operator deploy to dev, a coach posts and then expires a real announcement following
-          docs/guides/coach-website-editing.md.
-        dependsOn: [pages]
-        estimatedEffort: 1h
-        acceptanceCriteria:
           - type: command_succeeds
-            name: Site lint passes
-            command: pnpm
-            args: [--dir, site, lint]
-          - type: command_succeeds
-            name: Static export builds with fixture content
+            name: The site builds
             command: pnpm
             args: [--dir, site, build]
-          - type: custom
-            name: Coach posts and expires an announcement on dev
-            description: >-
-              A coach publishes an announcement and later sets it to expire using only the CMS; after the
-              operator rebuilds dev, it appears and then disappears as expected.
+      - id: guide
+        kind: Task
+        name: Rewrite the announcements section of the coach guide
+        description: >-
+          How to write, publish and expire an announcement file.
+        dependsOn: [pages]
+        outputs: [docs/guides/coach-website-editing.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: docs/guides/coach-website-editing.md
+            path: docs/guides/coach-website-editing.md
+            contentMatch: "site/content/announcements"
 status:
   phase: Pending

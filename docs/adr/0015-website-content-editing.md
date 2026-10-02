@@ -1,12 +1,50 @@
-# ADR-0015: Coaches edit the website through a team Google Calendar and a Google Sheet
+# ADR-0015: The coach edits website events and announcements as files in the repository
 
-- Status: Proposed
-- Date: 2026-09-29
-- Deciders: Charlie Clark (head coach, product owner); a second coach's dry-run is required before
-  this is Accepted
+- Status: Accepted
+- Date: 2026-10-01 (proposed 2026-09-29 as a team Google Calendar and a Google Sheet; revised
+  before acceptance, see [Decision, as accepted](#decision-as-accepted))
+- Deciders: Charlie Clark (head coach, product owner), PM
 - Architecture references:
   - [§14 Security, Privacy, and Student Safety](../architecture/architecture_proposal.md#14-security-privacy-and-student-safety)
   - [ADR-0012: Web hosting](0012-web-hosting.md), [ADR-0013: Two environments and dev→main promotion](0013-two-environments-and-dev-main-promotion.md)
+
+## Decision, as accepted
+
+**Tournaments and other events, and announcements, are files in `site/content/`, edited in git by
+Charlie and published by the normal site deploy. There is no Google account, no CMS and no build-time
+fetch.** Page text was already edited this way and stays so. Decided by Charlie on 2026-10-01.
+
+1. **Events: `site/content/tournaments.yaml`** (`v1-e37-t02`), validated by a schema at build time,
+   seeded with the 2026-27 schedule. The build renders the events pages **and publishes an iCalendar
+   file** generated from the same data, so parents can still subscribe in Google, Apple or Outlook.
+2. **Announcements: Markdown files in `site/content/announcements/`** (`v1-e37-t03`), one file per
+   item, with the publishing-policy validator applied at build time exactly as for page text.
+3. **Parent email stays on Buttondown** (`v1-e37-t05`). Having the site read Buttondown's public
+   archive feed, so one email is also a news item, is a later option and not adopted now.
+4. **How an edit reaches the site.** A content edit is a commit, so it follows ADR-0013: a pull
+   request into `dev`, published with the next promotion and deploy. An edit that cannot wait for the
+   next promotion (a date, time or room change inside the week) takes ADR-0013's hotfix path from
+   `main`, as the 2026-09-30 meeting-date correction did. No content path bypasses `main`.
+5. **No secrets, no fetch, no fallback.** Nothing is read from an external service, so there is no
+   key to protect, no outage to survive and no last-good snapshot that could quietly undo a takedown.
+   A removal from the site is a commit and a deploy, and the deploy is the moment it is complete.
+
+**Why the scoring below did not decide it.** The matrix was built for several coaches editing
+without code, and its double-weighted ownership-continuity criterion assumed two owners. There is no
+second coach this season, so the editor is the operator, who already edits `site/content/` in git
+and deploys. And a team Google identity would have had to sit beside the district's own Google
+infrastructure without overlapping it, a cost the matrix did not weigh and Charlie judged not worth
+it. With one editor at a season's cadence (about twenty tournaments and a handful of announcements),
+a commit and a deploy per change is cheap, and the design loses every external failure mode the
+Google proposal had to defend against.
+
+**What this gives up.** Nobody but Charlie can update the site without git, and nothing appears
+until a deploy runs. An announcement's expiry takes effect at the next build, not on its date.
+
+**Revisit triggers.** A second editor who will not use git. Edits needed more often than about
+weekly. Keyless CI deploy roles existing (`v2-e10-t03`), which would make deploy-on-merge cheap and
+reopen automatic republishing. The Google Calendar and Google Sheet proposal below, its scoring and
+its dry-run plan, are kept as the record of what was considered.
 
 ## Context
 
@@ -155,7 +193,7 @@ prose.
 
 Desk scores, 2026-09-29, before the coach dry-run. The dry-run confirms or corrects the usability
 and phone scores of the options it tries, and the corrections are recorded in
-[Dry-run](#dry-run).
+[Dry-run](#dry-run-not-run-no-second-coach-this-season).
 
 | | Google Calendar (events) | Git-backed CMS | Hosted headless CMS | Google Sheets |
 |---|---|---|---|---|
@@ -177,7 +215,7 @@ and phone scores of the options it tries, and the corrections are recorded in
 | Calendar + git-backed CMS | Two (Google, GitHub) | Two (GitHub, the CMS) | 33 + 15 |
 | Everything in a CMS | One or two | One, and no calendar for parents | Fails epic E37 ac2 without a site-generated feed |
 
-## Decision
+## The proposal of 2026-09-29 (not adopted)
 
 **Events come from a public team Google Calendar. Announcements come from a Google Sheet. Both are
 owned by one team Google account with at least two owners.** Page text stays where it is.
@@ -241,7 +279,7 @@ interval, not the team (see [References](#references)).
 publish-to-web behaviour. The district offers a role account that can own a public calendar (move
 the identity to it). A coach needs to edit page text regularly.
 
-## Dry-run
+## Dry-run (not run: no second coach this season)
 
 **Not yet run.** ADR-0015 stays Proposed until it is.
 

@@ -1,5 +1,12 @@
 # Runbook: website content accounts
 
+> **Not in use.** ADR-0015 was revised before acceptance on 2026-10-01: events and announcements are
+> files in `site/content/`, edited in git and deployed, so there is no team Google account and no
+> CMS. The only external account behind the website's audience is the parent email list, covered by
+> [parent-email-updates.md](../guides/parent-email-updates.md). What follows is the runbook written
+> for the Google proposal, kept as the record in case a revisit trigger in
+> [ADR-0015](../adr/0015-website-content-editing.md#decision-as-accepted) brings it back.
+
 The one team-owned identity behind the website's editable content, what it owns, who can get into
 it, how access is given and taken away, and how it is recovered when someone cannot get in or
 leaves. Spec:

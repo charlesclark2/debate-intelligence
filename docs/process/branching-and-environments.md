@@ -187,7 +187,13 @@ those verified wheels**, so no index can supply either name. Neither is register
 `--find-links` install would let anyone who registers `debate-core` there take the install over,
 even at the exact pinned version. Third-party dependencies still come from PyPI. The result lives in
 uv's tool directory (`uv tool dir --bin`), outside every checkout and project `.venv`, and stays that
-build until another tag is installed. Anything that
+build until another tag is installed. `debate-cli` requires the `debate-core` extras its composition
+root wires (`aws`, `docx`, `opencaselist`), so boto3, lxml, httpx and keyring arrive with it from
+PyPI. After installing, the script runs `python -m debate_cli.installation` in the new tool
+environment, which imports every integration the CLI wires and fails the install unless all of
+them import. `dev-prerelease.yml` runs the same install against every build before publishing it,
+so a build that cannot run `caselist pull` is never released (v1-e01-t17). Builds published before
+that change have no boto3 and are refused by the current script. Anything that
 runs on a schedule (the caselist launchd agent, v1-e34-t05) should run an installed tag, never a
 checkout's `.venv/bin/debate-research`, which `uv sync` rebuilds from whatever `dev` holds.
 

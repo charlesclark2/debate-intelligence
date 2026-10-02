@@ -1,0 +1,94 @@
+# TASK v1-e01-t18-restart-partial-tasks - scripts/task restarts a task that merged partially
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t18-restart-partial-tasks
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "scripts/task restarts a task that merged partially"
+spec:
+  # Filed by the PM, 2026-10-02, from resuming v1-e31-t05 after its --partial merge, and from that
+  # session's Deviation 12.
+  description: >-
+    A task merged with `scripts/task pr --partial` stays InProgress, and `scripts/task finish
+    --partial` removes its worktree and branch. Coming back to it has no supported path.
+    `resume` needs a worktree. `start` dies under `set -e` part-way through: the phase is
+    already InProgress and the report already exists, so its opening commit has nothing to
+    commit, after the worktree and branch have been created. On 2026-10-02 the operator rebuilt
+    the worktree by hand. Separately, `task_helper` reads the first `**Verdict:**` line in a
+    report, so a resumed task's report, which carries the first session's PM review as well as
+    the new one, would let `scripts/task pr` open on the old ACCEPTED before anyone reviewed the
+    new work. The resumed v1-e31-t05 session avoided that by renaming the old label by hand.
+    Make restarting a partly merged task a supported command, and make the verdict check read
+    the review of the work being merged.
+  priority: 2
+  constraints:
+    packages: [scripts, docs/process]
+    forbidden:
+      - Overwriting an existing session report or PM review
+      - A verdict check that can pass on a review of earlier work
+      - Leaving a half-created worktree or branch when a step fails
+  context:
+    - kind: TaskRef
+      name: v1-e01-t07-cli-skeleton
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        For an InProgress task with no worktree and no branch whose report already exists, one
+        documented command (a `resume` that recreates, or `start --resume`) creates the worktree and
+        branch from origin/dev, syncs the environment, writes `.task/prompt.md` with a note that
+        this is a resumed task and the report must be appended to, and commits nothing empty. Shown
+        failing first with today's `start`.
+    - id: ac2
+      description: >-
+        A step that fails part-way removes what that run created, so a retry starts clean; shown
+        with a forced failure after the worktree is created.
+    - id: ac3
+      description: >-
+        The verdict check reads the PM review that belongs to the current work, not the first one in
+        the file. A report holding an ACCEPTED review of earlier work and a PENDING one for the
+        current work is refused by `scripts/task pr`, shown with a fixture. The convention for a
+        resumed task's report (how the earlier review is labelled) is written into
+        docs/process/task-workflow.md and the report template.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t18-restart-partial-tasks-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Reproduce both failures, then the resume path, then the verdict rule.
+  goalRef:
+    name: v1-e01-t18-restart-partial-tasks
+  graph:
+    nodes:
+      - id: restart
+        kind: Task
+        name: Resume a partly merged task
+        description: >-
+          Recreate the worktree without an empty commit; read the right verdict.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: custom
+            name: Both failures shown, then fixed
+            description: >-
+              Today's start dies part-way on a partly merged task, and a two-review report passes the
+              verdict check; after the change, resume works and the check refuses the report.
+status:
+  phase: Pending

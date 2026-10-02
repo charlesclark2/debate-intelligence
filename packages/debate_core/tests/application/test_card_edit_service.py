@@ -17,7 +17,7 @@ from hypothesis import HealthCheck, event, given, settings
 from hypothesis import strategies as st
 from tests.fixtures.verification.verification_world import VERIFIED_CITATION, VerificationWorld, run
 
-from debate_core.application.card_edit_service import CardEditResult, CardEditService, EditNotVerified
+from debate_core.application.card_edit_service import CardEditResult, CardEditService
 from debate_core.application.errors import NotFound, RevisionMismatch
 from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import (
@@ -110,6 +110,16 @@ class EditWorld:
             )
         )
 
+    def cut_unmarked(self) -> Card:
+        """The cut card with no markup: stored UNVERIFIED (CARD_INCOMPLETE), as the verifier says."""
+        recorded, result = run(
+            self.verification.verifier.verify_and_record(
+                self.verification.cut_card_from_ranges(self.source, CUT_RANGES, ())
+            )
+        )
+        assert result.reason_codes == (ReasonCode.CARD_INCOMPLETE,)
+        return run(self.cards.create(recorded))
+
     def cut(self) -> Card:
         return self.store(
             self.verification.cut_card_from_ranges(
@@ -181,6 +191,11 @@ def test_every_allowed_kind_of_edit_keeps_a_verified_card_verified_at_the_next_r
 
     assert is_verified(result.card)
     assert result.verification.is_verified
+    assert result.reasons == ()
+    assert (result.status_before, result.status_after) == (
+        VerificationStatus.VERIFIED,
+        VerificationStatus.VERIFIED,
+    )
     assert result.card.revision == 3
     assert world.stored(card) == result.card
     assert (result.entry.revision_before, result.entry.revision_after) == (2, 3)
@@ -219,50 +234,82 @@ def test_successive_edits_each_add_one_revision_and_one_entry(world: EditWorld) 
 
 
 # =============================================================================================
-# Re-verification decides: nothing is saved unless the edited card is VERIFIED
+# Re-verify, then save with the verdict, whatever it is
 # =============================================================================================
 
+V, UNV = VerificationStatus.VERIFIED, VerificationStatus.UNVERIFIED
 
-def test_an_edit_that_leaves_no_markup_does_not_verify_and_is_not_saved(world: EditWorld) -> None:
+
+def statuses(result: CardEditResult) -> tuple[VerificationStatus, VerificationStatus]:
+    return result.entry.status_before, result.entry.status_after
+
+
+def test_a_verified_card_that_loses_its_markup_is_saved_unverified_and_markup_brings_it_back(
+    world: EditWorld,
+) -> None:
     """Delete 4-58 of the plain card: every underlined character goes, "The " and "." stay."""
     card = world.plain()
 
-    with pytest.raises(EditNotVerified) as refused:
-        world.edit(card, DeleteRange(4, 58))
+    stripped = world.edit(card, DeleteRange(4, 58))
 
-    assert refused.value.result.reason_codes == (ReasonCode.CARD_INCOMPLETE,)
-    assert refused.value.kind is EditKind.DELETE_RANGE
-    assert world.stored(card) == card
-    assert world.log.entries == []
+    assert stripped.card.evidence_text == "The ."
+    assert stripped.card.spans == ()
+    assert stripped.card.verification_status is UNV
+    assert stripped.verification.reason_codes == (ReasonCode.CARD_INCOMPLETE,)
+    assert [reason.code for reason in stripped.reasons] == [ReasonCode.CARD_INCOMPLETE]
+    assert statuses(stripped) == (V, UNV)
+    assert (stripped.card.revision, world.stored(card)) == (2, stripped.card)
+
+    remarked = world.edit(stripped.card, SetMarkup((build_card_span(start_offset=0, end_offset=3),)))
+
+    assert remarked.card.verification_status is V
+    assert remarked.reasons == ()
+    assert statuses(remarked) == (UNV, V)
+    assert remarked.card.revision == 3
+    assert [(entry.status_before, entry.status_after) for entry in world.log.entries] == [(V, UNV), (UNV, V)]
 
 
-def test_clearing_the_markup_does_not_verify_and_is_not_saved(world: EditWorld) -> None:
+def test_clearing_the_markup_is_saved_unverified_with_the_verifiers_reason(world: EditWorld) -> None:
     card = world.cut()
 
-    with pytest.raises(EditNotVerified) as refused:
-        world.edit(card, SetMarkup(()))
+    result = world.edit(card, SetMarkup(()))
 
-    assert refused.value.result.reason_codes == (ReasonCode.CARD_INCOMPLETE,)
-    assert world.stored(card) == card
-    assert world.log.entries == []
+    assert result.card.verification_status is UNV
+    assert result.verification.reason_codes == (ReasonCode.CARD_INCOMPLETE,)
+    assert world.stored(card) == result.card
+    assert world.log.entries == [result.entry]
 
 
-def test_a_cite_edit_that_unverifies_a_required_field_is_not_saved(world: EditWorld) -> None:
-    """The student may change the title, but their value is not verified, and a finished card needs it."""
+def test_a_cite_edit_that_unverifies_a_required_field_is_saved_unverified(world: EditWorld) -> None:
+    """The student may change the title. Their value is unverified until the citation service
+    re-resolves it (v1-e06-t01 ac5), so the card is saved UNVERIFIED with the cite reason meanwhile."""
     card = world.cut()
     title = CitationField[str](
         value="Reservoir plans stall", source=CitationFieldSource.BYLINE, verified=False
     )
 
-    with pytest.raises(EditNotVerified) as refused:
-        world.edit(card, EditCite(card.citation.evolve(title=title)))
+    result = world.edit(card, EditCite(card.citation.evolve(title=title)))
 
-    assert refused.value.result.reason_codes == (ReasonCode.CITATION_UNVERIFIED,)
+    assert result.card.citation.title == title
+    assert result.verification.reason_codes == (ReasonCode.CITATION_UNVERIFIED,)
+    assert statuses(result) == (V, UNV)
+    assert world.stored(card) == result.card
+
+
+def test_a_changed_cite_field_claiming_verification_is_still_refused(world: EditWorld) -> None:
+    card = world.cut()
+    forged = CitationField[str](value="An invented title", source=CitationFieldSource.CROSSREF, verified=True)
+
+    with pytest.raises(InvalidEvidenceEdit) as refused:
+        world.edit(card, EditCite(card.citation.evolve(title=forged)))
+
+    assert refused.value.problem is EditProblem.CITATION_CLAIMS_VERIFICATION
     assert world.stored(card) == card
+    assert world.log.entries == []
 
 
-def test_a_card_that_quotes_nothing_cannot_be_edited(world: EditWorld) -> None:
-    blank = run(
+def blank_card(world: EditWorld) -> Card:
+    return run(
         world.cards.create(
             Card(
                 owner_id=DEFAULT_OWNER_ID,
@@ -273,14 +320,76 @@ def test_a_card_that_quotes_nothing_cannot_be_edited(world: EditWorld) -> None:
         )
     )
 
+
+def test_a_card_that_quotes_nothing_can_have_its_tag_and_cite_edited(world: EditWorld) -> None:
+    blank = blank_card(world)
+    credentials = CitationField[str](value="Hydrologist", source=CitationFieldSource.BYLINE, verified=False)
+
+    retagged = world.edit(blank, EditTag("Still nothing cut"))
+    recited = world.edit(retagged.card, EditCite(blank.citation.evolve(author_credentials=credentials)))
+
+    assert (retagged.card.tag, retagged.card.revision, retagged.card.evidence_text) == (
+        "Still nothing cut",
+        2,
+        "",
+    )
+    assert recited.card.citation.author_credentials == credentials
+    assert recited.card.revision == 3
+    assert statuses(retagged) == statuses(recited) == (UNV, UNV)
+    assert ReasonCode.SNAPSHOT_MISSING in retagged.verification.reason_codes
+    assert world.stored(blank) == recited.card
+    assert len(world.log.entries) == 2
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [DeleteRange(0, 1), SetMarkup(()), AddInterpolation(0, "x"), RemoveInterpolation(0)],
+    ids=lambda operation: type(operation).__name__,
+)
+def test_a_quotation_edit_on_a_card_that_quotes_nothing_is_refused(
+    world: EditWorld, operation: EvidenceEdit
+) -> None:
+    blank = blank_card(world)
+
     with pytest.raises(InvalidEvidenceEdit) as refused:
-        world.edit(blank, EditTag("Still nothing cut"))
+        world.edit(blank, operation)
 
     assert refused.value.problem is EditProblem.CARD_HAS_NO_EVIDENCE
+    assert world.stored(blank) == blank
     assert world.log.entries == []
 
 
-def test_an_edit_to_a_card_whose_snapshot_is_gone_propagates_not_found(world: EditWorld) -> None:
+def test_a_tag_edit_on_a_card_that_does_not_match_its_snapshot_is_saved_untouched_and_unverified(
+    world: EditWorld,
+) -> None:
+    """The stored card claims VERIFIED but its text was altered in storage ("council" to "cooncil").
+    A tag edit neither repairs nor refuses it: the quotation is saved as it was, and the verifier says
+    TEXT_MISMATCH."""
+    card = world.cut()
+    tampered = run(world.cards.save(card.evolve(evidence_text="cooncil" + CUT_TEXT[7:]), expected_revision=1))
+    assert tampered.verification_status is V
+
+    result = world.edit(tampered, EditTag("Rationing is years away"))
+
+    assert result.card.evidence_text == "cooncil" + CUT_TEXT[7:]
+    assert result.card.tag == "Rationing is years away"
+    assert result.verification.reason_codes == (ReasonCode.TEXT_MISMATCH,)
+    assert statuses(result) == (V, UNV)
+    assert world.stored(card) == result.card
+
+
+def test_a_quotation_edit_on_that_card_is_still_refused(world: EditWorld) -> None:
+    card = world.cut()
+    tampered = run(world.cards.save(card.evolve(evidence_text="cooncil" + CUT_TEXT[7:]), expected_revision=1))
+
+    with pytest.raises(InvalidEvidenceEdit) as refused:
+        world.edit(tampered, DeleteRange(8, 13))
+
+    assert refused.value.problem is EditProblem.QUOTATION_DOES_NOT_MATCH_SNAPSHOT
+    assert world.stored(card) == tampered
+
+
+def test_a_quotation_edit_to_a_card_whose_snapshot_is_gone_propagates_not_found(world: EditWorld) -> None:
     orphan = run(
         world.cards.create(
             world.cut().evolve(card_id="0CRD0000000000000000000099", snapshot_id="0SNP0000000000000000000099")
@@ -288,8 +397,21 @@ def test_an_edit_to_a_card_whose_snapshot_is_gone_propagates_not_found(world: Ed
     )
 
     with pytest.raises(NotFound):
-        world.edit(orphan, EditTag("x"))
+        world.edit(orphan, DeleteRange(0, 4))
     assert world.log.entries == []
+
+
+def test_a_tag_edit_to_that_card_loads_nothing_and_is_saved_with_snapshot_missing(world: EditWorld) -> None:
+    orphan = run(
+        world.cards.create(
+            world.cut().evolve(card_id="0CRD0000000000000000000099", snapshot_id="0SNP0000000000000000000099")
+        )
+    )
+
+    result = world.edit(orphan, EditTag("x"))
+
+    assert result.verification.reason_codes == (ReasonCode.SNAPSHOT_MISSING,)
+    assert result.card.revision == 2
 
 
 # =============================================================================================
@@ -428,6 +550,8 @@ def test_an_accepted_edit_appends_one_entry_with_the_actor_kind_revisions_and_ti
         "edit_kind",
         "revision_before",
         "revision_after",
+        "status_before",
+        "status_after",
         "recorded_at",
         "negation_flag",
     }
@@ -435,6 +559,7 @@ def test_an_accepted_edit_appends_one_entry_with_the_actor_kind_revisions_and_ti
     assert result.entry.actor_id == ACTOR
     assert result.entry.edit_kind is EditKind.DELETE_RANGE
     assert (result.entry.revision_before, result.entry.revision_after) == (1, 2)
+    assert (result.entry.status_before, result.entry.status_after) == (V, V)
     assert result.entry.recorded_at == world.verification.clock.now()
     assert run(world.log.entries_for(card.card_id)) == (result.entry,)
 
@@ -497,7 +622,7 @@ def test_only_deletions_are_ever_flagged(world: EditWorld) -> None:
 
 
 # =============================================================================================
-# Property: any sequence of allowed edits leaves a VERIFIED card that quotes exactly what an oracle says
+# Property: any sequence of allowed edits leaves the card, and the status, an oracle predicts
 # =============================================================================================
 
 EXAMPLES = int(os.environ.get("CARD_EDIT_PROPERTY_EXAMPLES", "200"))
@@ -524,6 +649,11 @@ class Oracle:
             if right > left + 1
         ]
 
+    @property
+    def status(self) -> VerificationStatus:
+        """The source and cite are intact, so the card verifies exactly when something is marked."""
+        return V if self.marks else UNV
+
     def seams(self) -> list[int]:
         return [index for index in range(1, len(self.kept)) if self.kept[index] > self.kept[index - 1] + 1]
 
@@ -537,9 +667,11 @@ def marks_of(card: Card, kept: list[int]) -> dict[tuple[SpanStyle, int], SpanPur
     }
 
 
-def check_matches(card: Card, oracle: Oracle) -> None:
-    kept = oracle.kept
-    assert is_verified(card)
+def check_matches(result: CardEditResult, oracle: Oracle, status_before: VerificationStatus) -> None:
+    card, kept = result.card, oracle.kept
+    assert card.verification_status is oracle.status
+    assert result.verification.reason_codes == (() if oracle.status is V else (ReasonCode.CARD_INCOMPLETE,))
+    assert statuses(result) == (status_before, oracle.status)
     assert card.evidence_text == "".join(SOURCE[position] for position in kept)
     assert [p for start, end in card.quoted_ranges for p in range(start, end)] == kept
     assert (card.evidence_start_offset, card.evidence_end_offset) == (kept[0], kept[-1] + 1)
@@ -615,13 +747,9 @@ def step(data: st.DataObject, oracle: Oracle) -> tuple[EvidenceEdit, type[Except
         after = Oracle(kept, marks, anchors)
         if len(after.gaps()) < len(oracle.gaps()):
             event("delete: merged omissions")
-        if not marks:
-            return DeleteRange(start, end), EditNotVerified, oracle
         return DeleteRange(start, end), None, after
     elif kind == "markup":
         spans = draw_markup(data, n)
-        if not spans:
-            return SetMarkup(spans), EditNotVerified, oracle
         if any(
             any(start < seam < end for seam in oracle.seams())
             for start, end in ((s.start_offset, s.end_offset) for s in spans)
@@ -665,12 +793,15 @@ def step(data: st.DataObject, oracle: Oracle) -> tuple[EvidenceEdit, type[Except
 
 @settings(max_examples=EXAMPLES, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(data=st.data())
-def test_any_sequence_of_allowed_edits_leaves_a_verified_canonical_card_quoting_what_the_oracle_says(
+def test_any_sequence_of_allowed_edits_leaves_the_canonical_card_and_status_the_oracle_predicts(
     data: st.DataObject,
 ) -> None:
     world = EditWorld()
-    card = world.cut()
+    unmarked = data.draw(st.integers(0, 3), label="start") == 0
+    card = world.cut_unmarked() if unmarked else world.cut()
+    event(f"start: {'UNVERIFIED, no markup' if unmarked else 'VERIFIED'}")
     oracle = Oracle.of(card)
+    assert card.verification_status is oracle.status
     revision = 1
     for _ in range(data.draw(st.integers(1, 8), label="steps")):
         operation, expected, after = step(data, oracle)
@@ -678,11 +809,11 @@ def test_any_sequence_of_allowed_edits_leaves_a_verified_canonical_card_quoting_
         if expected is None:
             result = world.edit(before, operation)
             revision += 1
-            oracle = after
-            event(f"{type(operation).__name__}: accepted")
+            event(f"{type(operation).__name__}: accepted, {oracle.status.value} to {after.status.value}")
+            status_before, oracle = oracle.status, after
             assert result.card.revision == revision
             assert world.stored(card) == result.card
-            check_matches(result.card, oracle)
+            check_matches(result, oracle, status_before)
             event(f"omissions after an accepted edit: {len(result.card.omitted_ranges)}")
         else:
             with pytest.raises(expected):

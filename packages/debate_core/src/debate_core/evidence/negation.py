@@ -19,8 +19,9 @@ out of "not really" is not flagged for the "not" it kept.
 
 ## What it is not
 
-It is a word list, not a reading. It misses negation it has no word for ("hardly", "fails to",
-"un-"), and it flags cuts that change nothing ("no" in "No. 5"). It never refuses an edit and never
+It is a word list, not a reading. It misses negation it has no word for ("fails to", "un-", "lack
+of"), leaves out hedges such as "hardly" on purpose, and flags cuts that change nothing ("no" in
+"No. 5"). It never refuses an edit and never
 affects verification: :class:`~debate_core.application.card_edit_service.CardEditService` accepts
 the edit, and the result and the edit log say which omission carries the flag, so the CLI and the
 exporter can show it. Whether the cut is fair is the reader's call.
@@ -35,8 +36,14 @@ from debate_core.evidence.snapshot_text import SnapshotText
 
 __all__ = ["NEGATION_SUFFIX", "NEGATION_WORDS", "removes_negation"]
 
-NEGATION_WORDS: frozenset[str] = frozenset({"not", "no", "never", "without", "neither", "nor", "cannot"})
-"""Words that negate on their own. Lowercase, straight apostrophes."""
+NEGATION_WORDS: frozenset[str] = frozenset(
+    {"not", "no", "never", "without", "neither", "nor", "cannot", "none", "nothing", "nobody", "nowhere"}
+)
+"""Words that negate on their own. Lowercase, straight apostrophes.
+
+Hedges ("hardly", "scarcely", "barely") are left out on purpose: they weaken a claim but do not reverse
+it, and flagging them would bury the cuts that do.
+"""
 
 NEGATION_SUFFIX = "n't"
 """The contracted negation: any word ending in it is a negation."""

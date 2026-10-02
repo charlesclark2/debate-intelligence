@@ -1,15 +1,24 @@
-"""What an edit does to a card: §8 step 7 as a pure function.
+"""What an edit does to a card: §8 step 7 as pure functions.
 
-:func:`apply_edit` takes a card, an operation from :mod:`debate_core.evidence.edits` and the card's
-snapshot, and returns the edited card, or raises. It saves nothing and verifies nothing:
-:class:`~debate_core.application.card_edit_service.CardEditService` re-verifies the result and saves
-it only if it is VERIFIED.
+Three entry points, none of which saves or verifies anything:
 
-## Every accepted edit re-cuts the card from its snapshot
+* :func:`allowed_edit` refuses insertions, substitutions and moves by kind
+  (:class:`~debate_core.evidence.edits.ForbiddenEvidenceEdit`), before a card or a snapshot is looked
+  at, and returns the edit narrowed to the kinds that are allowed;
+* :func:`apply_quotation_edit` applies a deletion, a markup change or an interpolation change, cutting
+  the card again from its snapshot;
+* :func:`apply_tag_or_cite_edit` applies a tag or cite edit. It needs no snapshot and never re-cuts:
+  the tag and cite are the student's own, freely editable, and a card with no evidence yet has them too.
 
-No edit touches ``evidence_text``. Each one works out which snapshot ranges the card should quote and
-which snapshot characters each span should mark, and then the card is cut again, exactly as a new card
-is: :class:`~debate_core.evidence.extractor.EvidenceExtractor` slices the snapshot,
+Every edited card comes back ``UNVERIFIED``.
+:class:`~debate_core.application.card_edit_service.CardEditService` re-verifies it with
+``verify_and_record`` and saves it with whatever verdict comes back.
+
+## Every quotation edit re-cuts the card from its snapshot
+
+No edit touches ``evidence_text``. Each quotation edit works out which snapshot ranges the card
+should quote and which snapshot characters each span should mark, and then the card is cut again,
+exactly as a new card is: :class:`~debate_core.evidence.extractor.EvidenceExtractor` slices the snapshot,
 :class:`~debate_core.evidence.markup.CardMarkup` checks the markup against the slices, and
 :func:`~debate_core.evidence.card_mapping.place_evidence_on_card` sets the envelope, the omissions, the
 text and the spans. An edit therefore cannot produce text the snapshot does not hold at those offsets,
@@ -37,16 +46,17 @@ it.
    outcome naming the omission that now holds it, or none when the deletion shrank the envelope. It
    never refuses the edit.
 
-## Every edit does what it says and nothing else
+## Every quotation edit does what it says and nothing else
 
 After the re-cut, the new ``evidence_text`` must be the old one with exactly the deleted characters
-gone, or unchanged for any other kind of edit. Re-cutting is what makes the text verbatim; this check
+gone, or unchanged for a markup or interpolation edit. Re-cutting is what makes the text verbatim; this check
 is what makes it the text the student was looking at when they made the edit. They differ when the
 stored quotation does not match its snapshot. A same-length alteration passes the card's own
 invariants, so it can be stored, and re-cutting would silently replace it with the snapshot's text
 while the edit "succeeded". The verifier cannot see that: whatever is cut from a snapshot verifies.
 Such an edit is refused with ``QUOTATION_DOES_NOT_MATCH_SNAPSHOT``, and the card stays as it is for
-the verifier to report.
+the verifier to report. A tag or cite edit on such a card is not refused, because it does not re-cut:
+the evidence is left exactly as stored, and re-verification reports ``TEXT_MISMATCH``.
 
 ## Refused, never repaired
 
@@ -71,7 +81,9 @@ from debate_core.domain import (
     SourceSnapshot,
     SpanPurpose,
     SpanStyle,
+    VerificationStatus,
 )
+from debate_core.evidence._runtime_checks import is_instance
 from debate_core.evidence.card_mapping import place_evidence_on_card, snapshot_ranges_of
 from debate_core.evidence.edits import (
     AddInterpolation,
@@ -86,9 +98,11 @@ from debate_core.evidence.edits import (
     InterpolationBlocksDeletion,
     InvalidEvidenceEdit,
     MoveText,
+    QuotationEdit,
     RemoveInterpolation,
     ReplaceText,
     SetMarkup,
+    TagOrCiteEdit,
     kind_of,
 )
 from debate_core.evidence.extractor import EvidenceExtractor
@@ -97,7 +111,7 @@ from debate_core.evidence.negation import removes_negation
 from debate_core.evidence.selection import EvidenceSelection
 from debate_core.evidence.snapshot_text import SnapshotText
 
-__all__ = ["EditedCard", "NegationFlag", "apply_edit"]
+__all__ = ["EditedCard", "NegationFlag", "allowed_edit", "apply_quotation_edit", "apply_tag_or_cite_edit"]
 
 type _Ranges = tuple[tuple[int, int], ...]
 
@@ -118,7 +132,7 @@ class NegationFlag:
 
 @dataclass(frozen=True, slots=True)
 class EditedCard:
-    """The card an accepted edit produces: cut again from its snapshot, ``UNVERIFIED``, not saved."""
+    """The card an accepted edit produces: ``UNVERIFIED`` and not saved, for the verifier to judge."""
 
     card: Card
     kind: EditKind
@@ -134,21 +148,34 @@ class _Mark:
     purpose: SpanPurpose | None
 
 
-def apply_edit(
-    card: Card, edit: EvidenceEdit, snapshot: SourceSnapshot, snapshot_text: SnapshotText
+def allowed_edit(edit: EvidenceEdit) -> QuotationEdit | TagOrCiteEdit:
+    """``edit``, if it is a kind a student may make; otherwise :class:`ForbiddenEvidenceEdit`.
+
+    Decided by kind alone: the payload of an insertion, substitution or move is never read. Anything
+    that is not an edit at all is :class:`~debate_core.evidence.edits.InvalidEvidenceEdit`.
+    """
+    kind = kind_of(edit)
+    if isinstance(edit, InsertText | ReplaceText | MoveText):
+        raise ForbiddenEvidenceEdit(kind)
+    return edit
+
+
+def apply_quotation_edit(
+    card: Card, edit: QuotationEdit, snapshot: SourceSnapshot, snapshot_text: SnapshotText
 ) -> EditedCard:
-    """Return what ``edit`` makes of ``card``, cut again from ``snapshot``, or raise.
+    """Return what ``edit`` makes of ``card``'s quotation, cut again from ``snapshot``, or raise.
 
     ``snapshot_text`` must come from a verified load of ``snapshot`` (the extractor checks it belongs
     to the record). Raises :class:`~debate_core.evidence.edits.ForbiddenEvidenceEdit` for an insertion,
     substitution or move, :class:`~debate_core.evidence.edits.InterpolationBlocksDeletion` for a
     deletion an interpolation is in the way of, and
     :class:`~debate_core.evidence.edits.InvalidEvidenceEdit` for an edit that does not fit the card.
-    Raises :class:`ValueError` if ``snapshot`` is not the card's.
+    Raises :class:`ValueError` if ``snapshot`` is not the card's, or for a tag or cite edit, which never
+    re-cuts (:func:`apply_tag_or_cite_edit`).
     """
-    kind = kind_of(edit)
-    if isinstance(edit, InsertText | ReplaceText | MoveText):
-        raise ForbiddenEvidenceEdit(kind)
+    kind = kind_of(allowed_edit(edit))
+    if is_instance(edit, EditTag | EditCite):
+        raise ValueError(f"a {kind.value} edit never re-cuts the quotation; use apply_tag_or_cite_edit")
     if card.snapshot_id != snapshot.snapshot_id:
         raise ValueError(
             f"card {card.card_id} quotes snapshot {card.snapshot_id}, not {snapshot.snapshot_id}"
@@ -171,15 +198,26 @@ def apply_edit(
         case RemoveInterpolation():
             interpolations = _without_interpolation(card, edit)
             edited = _recut(kind, card, snapshot, snapshot_text, kept, marks, interpolations)
-        case EditTag():
-            retagged = _evolved(kind, EditProblem.INVALID_TAG, card, tag=edit.tag)
-            edited = _recut(kind, retagged, snapshot, snapshot_text, kept, marks, card.interpolations)
-        case EditCite():
-            _check_cite_claims_nothing(card, edit)
-            recited = card.evolve(citation=edit.citation)
-            edited = _recut(kind, recited, snapshot, snapshot_text, kept, marks, card.interpolations)
     _check_quotation(kind, edited, card.evidence_text)
     return EditedCard(edited, kind)
+
+
+def apply_tag_or_cite_edit(card: Card, edit: TagOrCiteEdit) -> EditedCard:
+    """Return ``card`` with its tag or cite replaced, its evidence exactly as it was, ``UNVERIFIED``.
+
+    Needs no snapshot and never re-cuts the quotation, so it applies to a card with no evidence yet and
+    to one whose stored quotation no longer matches its snapshot (re-verification reports that). A cite
+    field the student changed may not arrive marked verified
+    (:attr:`~debate_core.evidence.edits.EditProblem.CITATION_CLAIMS_VERIFICATION`).
+    """
+    kind = kind_of(edit)
+    match edit:
+        case EditTag():
+            edited = _evolved(kind, EditProblem.INVALID_TAG, card, tag=edit.tag)
+        case EditCite():
+            _check_cite_claims_nothing(card, edit)
+            edited = card.evolve(citation=edit.citation)
+    return EditedCard(edited.evolve(verification_status=VerificationStatus.UNVERIFIED), kind)
 
 
 def _delete(

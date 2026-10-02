@@ -5,9 +5,9 @@ Every edit :class:`~debate_core.application.card_edit_service.CardEditService` a
 
 ## What an entry holds, and what it never holds
 
-Who made the edit (an opaque actor id), which card, what kind of edit, the card's revision before
-and after, when, and whether the edit removed a negation (and which omission now holds it, as
-snapshot offsets). That is all.
+Who made the edit (an opaque actor id), which card, what kind of edit, the card's revision and
+verification status before and after, when, and whether the edit removed a negation (and which
+omission now holds it, as snapshot offsets). That is all. A status is not student data.
 
 It never holds evidence text, the text that was deleted, an interpolation's words, a tag, a cite, or
 any payload an editor sent. It holds no student data beyond the actor id: no name, no email, no
@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from debate_core.domain import Ulid
+from debate_core.domain import Ulid, VerificationStatus
 from debate_core.evidence.edit_policy import NegationFlag
 from debate_core.evidence.edits import EditKind
 
@@ -57,6 +57,12 @@ class CardEditEntry:
 
     revision_after: int
     """The card's revision once the edit was saved: one more than ``revision_before``."""
+
+    status_before: VerificationStatus
+    """The card's stored verification status when the edit was made against it."""
+
+    status_after: VerificationStatus
+    """The status the edited card was saved with: the verifier's verdict on it."""
 
     recorded_at: datetime
     """When the edit was saved, in UTC."""

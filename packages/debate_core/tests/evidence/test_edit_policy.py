@@ -1,4 +1,4 @@
-"""apply_edit: what each kind of edit does to a card, cut again from its snapshot.
+"""The edit policy: what each kind of edit does to a card, and which are refused.
 
 Every expected text, offset and span below is worked out by hand from ``SOURCE`` and written down,
 never captured from the code (`docs/process/working-agreements.md` §6). The source is invented.
@@ -23,7 +23,13 @@ from debate_core.domain import (
     VerificationStatus,
 )
 from debate_core.evidence.card_mapping import snapshot_ranges_of
-from debate_core.evidence.edit_policy import EditedCard, NegationFlag, apply_edit
+from debate_core.evidence.edit_policy import (
+    EditedCard,
+    NegationFlag,
+    allowed_edit,
+    apply_quotation_edit,
+    apply_tag_or_cite_edit,
+)
 from debate_core.evidence.edits import (
     AddInterpolation,
     DeleteRange,
@@ -37,6 +43,7 @@ from debate_core.evidence.edits import (
     InterpolationBlocksDeletion,
     InvalidEvidenceEdit,
     MoveText,
+    QuotationEdit,
     RemoveInterpolation,
     ReplaceText,
     SetMarkup,
@@ -44,6 +51,7 @@ from debate_core.evidence.edits import (
 )
 from debate_core.evidence.markup import EvidenceMarkupSpan
 from debate_core.evidence.negation import removes_negation
+from debate_core.evidence.verification_types import ReasonCode
 from debate_core.testing.builders import build_card_span
 
 #: Normalizes to itself: no doubled spaces, no trailing newline. Paragraphs by hand:
@@ -123,8 +131,8 @@ def cut(world: VerificationWorld, source: LoadedSnapshot) -> Card:
     )
 
 
-def edit(card: Card, operation: EvidenceEdit, source: LoadedSnapshot) -> EditedCard:
-    return apply_edit(card, operation, source.snapshot, source.normalized)
+def edit(card: Card, operation: QuotationEdit, source: LoadedSnapshot) -> EditedCard:
+    return apply_quotation_edit(card, operation, source.snapshot, source.normalized)
 
 
 def marked(card: Card) -> Marked:
@@ -386,21 +394,29 @@ def test_removes_negation_reads_the_words_a_cut_touches(
     [
         (5, 10, True),  # "won’t", curly apostrophe
         (17, 19, True),  # "No", capitalised
-        (21, 28, False),  # "nothing" is not on the list
+        (21, 28, True),  # "nothing"
         (32, 37, False),  # "knots", which contains "not"
         (42, 48, True),  # "cannot"
         (44, 48, True),  # "nnot": only "cannot", widened to the left, is a negation
         (42, 45, True),  # "can": only "cannot", widened to the right, is a negation
         (50, 57, True),  # "neither"
         (59, 66, True),  # "without"
+        (68, 72, True),  # "None"
+        (79, 85, True),  # "nobody"
+        (87, 94, True),  # "nowhere"
+        (96, 107, False),  # "nonetheless" contains "none" but is not on the list
     ],
 )
 def test_removes_negation_folds_case_and_curly_apostrophes_and_matches_whole_words(
     world: VerificationWorld, start: int, end: int, negates: bool
 ) -> None:
     # By hand: "won’t" 5-10, "No" 17-19, "nothing" 21-28, "knots" 32-37, "cannot" 42-48,
-    # "neither" 50-57, "without" 59-66.
-    words = "They won’t sign. No, nothing in knots; we cannot, neither, without."
+    # "neither" 50-57, "without" 59-66, "None" 68-72, "nobody" 79-85, "nowhere" 87-94,
+    # "nonetheless" 96-107.
+    words = (
+        "They won’t sign. No, nothing in knots; we cannot, neither, without. "
+        "None came; nobody, nowhere, nonetheless."
+    )
     other = world.add_source(words)
     assert other.normalized.text == words
     assert removes_negation(other.normalized, ((start, end),)) is negates
@@ -577,9 +593,9 @@ def test_set_markup_that_does_not_fit_is_refused(
 
 
 def test_the_tag_is_freely_editable_and_the_evidence_is_untouched(
-    world: VerificationWorld, source: LoadedSnapshot, cut: Card
+    world: VerificationWorld, cut: Card
 ) -> None:
-    card = edit(cut, EditTag("Rationing is years away"), source).card
+    card = apply_tag_or_cite_edit(cut, EditTag("Rationing is years away")).card
 
     assert card.tag == "Rationing is years away"
     assert (card.evidence_text, card.omitted_ranges, marked(card)) == (
@@ -587,26 +603,56 @@ def test_the_tag_is_freely_editable_and_the_evidence_is_untouched(
         cut.omitted_ranges,
         marked(cut),
     )
+    assert card.verification_status is VerificationStatus.UNVERIFIED
     assert world.verify(card).status is VerificationStatus.VERIFIED
 
     with pytest.raises(InvalidEvidenceEdit) as empty:
-        edit(cut, EditTag("   "), source)
+        apply_tag_or_cite_edit(cut, EditTag("   "))
     assert empty.value.problem is EditProblem.INVALID_TAG
 
 
+def test_a_tag_or_cite_edit_needs_no_evidence(cut: Card) -> None:
+    blank = Card(
+        owner_id=cut.owner_id,
+        article_id=cut.article_id,
+        tag="Nothing cut yet",
+        provenance_mode=cut.provenance_mode,
+    )
+
+    retagged = apply_tag_or_cite_edit(blank, EditTag("Still nothing cut")).card
+    credentials = CitationField[str](value="Hydrologist", source=CitationFieldSource.BYLINE, verified=False)
+    cite = blank.citation.evolve(author_credentials=credentials)
+    recited = apply_tag_or_cite_edit(blank, EditCite(cite)).card
+
+    assert (retagged.tag, retagged.evidence_text, retagged.snapshot_id) == ("Still nothing cut", "", None)
+    assert recited.citation == cite
+
+
+def test_a_tag_edit_on_a_card_that_does_not_match_its_snapshot_leaves_the_evidence_as_stored(
+    world: VerificationWorld, cut: Card
+) -> None:
+    """It does not re-cut, so it neither repairs "cooncil" nor refuses; the verifier reports it."""
+    altered = cut.evolve(evidence_text="cooncil" + cut.evidence_text[7:])
+
+    card = apply_tag_or_cite_edit(altered, EditTag("Rationing is years away")).card
+
+    assert card.evidence_text == altered.evidence_text
+    assert world.verify(card).reason_codes == (ReasonCode.TEXT_MISMATCH,)
+
+
 def test_a_cite_edit_may_change_a_field_but_not_claim_it_is_verified(
-    world: VerificationWorld, source: LoadedSnapshot, cut: Card
+    world: VerificationWorld, cut: Card
 ) -> None:
     credentials = CitationField[str](
         value="Professor of hydrology", source=CitationFieldSource.BYLINE, verified=False
     )
-    card = edit(cut, EditCite(cut.citation.evolve(author_credentials=credentials)), source).card
+    card = apply_tag_or_cite_edit(cut, EditCite(cut.citation.evolve(author_credentials=credentials))).card
     assert card.citation.author_credentials == credentials
     assert world.verify(card).status is VerificationStatus.VERIFIED
 
     forged = CitationField[str](value="An invented title", source=CitationFieldSource.CROSSREF, verified=True)
     with pytest.raises(InvalidEvidenceEdit) as refused:
-        edit(cut, EditCite(cut.citation.evolve(title=forged)), source)
+        apply_tag_or_cite_edit(cut, EditCite(cut.citation.evolve(title=forged)))
     assert refused.value.problem is EditProblem.CITATION_CLAIMS_VERIFICATION
     assert "An invented title" not in str(refused.value)
 
@@ -627,10 +673,11 @@ FORBIDDEN: list[tuple[EvidenceEdit, EditKind]] = [
 
 @pytest.mark.parametrize(("operation", "kind"), FORBIDDEN, ids=repr)
 def test_an_insertion_substitution_or_move_is_refused_by_kind_whatever_its_payload(
-    source: LoadedSnapshot, cut: Card, operation: EvidenceEdit, kind: EditKind
+    operation: EvidenceEdit, kind: EditKind
 ) -> None:
+    """The kind alone decides: no card or snapshot is needed to refuse one."""
     with pytest.raises(ForbiddenEvidenceEdit) as refused:
-        edit(cut, operation, source)
+        allowed_edit(operation)
 
     assert refused.value.kind is kind
     payload = getattr(operation, "text", "")
@@ -639,13 +686,18 @@ def test_an_insertion_substitution_or_move_is_refused_by_kind_whatever_its_paylo
         assert payload not in repr(operation)
 
 
-def test_a_forbidden_edit_is_refused_before_the_snapshot_is_looked_at(
+def test_the_quotation_path_refuses_a_forbidden_edit_before_it_looks_at_the_snapshot(
     world: VerificationWorld, cut: Card
 ) -> None:
-    """The kind alone decides: even a snapshot that is not the card's is never consulted."""
     other = world.add_source("An unrelated passage.")
     with pytest.raises(ForbiddenEvidenceEdit):
-        apply_edit(cut, InsertText(0, "x"), other.snapshot, other.normalized)
+        apply_quotation_edit(cut, InsertText(0, "x"), other.snapshot, other.normalized)  # type: ignore[arg-type]
+
+
+def test_the_quotation_path_will_not_re_cut_for_a_tag_or_cite_edit(source: LoadedSnapshot, cut: Card) -> None:
+    for operation in (EditTag("x"), EditCite(cut.citation)):
+        with pytest.raises(ValueError, match="never re-cuts"):
+            apply_quotation_edit(cut, operation, source.snapshot, source.normalized)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
@@ -676,31 +728,35 @@ def test_anything_that_is_not_an_edit_is_refused() -> None:
 
 
 # =============================================================================================
-# An edit does what it says and nothing else
+# A quotation edit does what it says and nothing else
 # =============================================================================================
 
 
 @pytest.mark.parametrize(
     "operation",
-    [DeleteRange(8, 13), EditTag("A new tag"), AddInterpolation(0, "x"), SetMarkup((build_card_span(),))],
+    [DeleteRange(8, 13), AddInterpolation(0, "x"), RemoveInterpolation(0), SetMarkup((build_card_span(),))],
     ids=repr,
 )
-def test_an_edit_to_a_card_that_does_not_match_its_snapshot_is_refused_not_repaired(
-    source: LoadedSnapshot, cut: Card, operation: EvidenceEdit
+def test_a_quotation_edit_to_a_card_that_does_not_match_its_snapshot_is_refused_not_repaired(
+    source: LoadedSnapshot, cut: Card, operation: QuotationEdit
 ) -> None:
     """ "council" altered to "cooncil": the same length, so the card is constructible and storable.
     Re-cutting would quietly restore the snapshot's word; the edit is refused instead."""
-    altered = cut.evolve(evidence_text="cooncil" + cut.evidence_text[7:])
+    altered = cut.evolve(
+        evidence_text="cooncil" + cut.evidence_text[7:], interpolations=(Interpolation(anchor=0, text="x"),)
+    )
+    if isinstance(operation, AddInterpolation):
+        altered = altered.evolve(interpolations=())
 
     with pytest.raises(InvalidEvidenceEdit) as refused:
         edit(altered, operation, source)
     assert refused.value.problem is EditProblem.QUOTATION_DOES_NOT_MATCH_SNAPSHOT
 
 
-def test_an_edit_needs_the_cards_own_snapshot(world: VerificationWorld, cut: Card) -> None:
+def test_a_quotation_edit_needs_the_cards_own_snapshot(world: VerificationWorld, cut: Card) -> None:
     other = world.add_source("An unrelated passage.")
     with pytest.raises(ValueError, match="quotes snapshot"):
-        apply_edit(cut, EditTag("x"), other.snapshot, other.normalized)
+        apply_quotation_edit(cut, DeleteRange(0, 4), other.snapshot, other.normalized)
 
 
 # =============================================================================================

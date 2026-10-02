@@ -18,7 +18,7 @@ offsets, so never sends one. The policy maps evidence-text offsets back to the s
 :class:`InsertText`, :class:`ReplaceText` and :class:`MoveText` are what an editor would send for
 typing into a quotation, overtyping it, or dragging a passage elsewhere. They are in the vocabulary
 so that the refusal is explicit and tested, not an accident of a missing case:
-:func:`~debate_core.evidence.edit_policy.apply_edit` raises :class:`ForbiddenEvidenceEdit` for each,
+:func:`~debate_core.evidence.edit_policy.allowed_edit` raises :class:`ForbiddenEvidenceEdit` for each,
 by kind, without reading its payload. Nothing stores a forbidden operation's text: not the card, not
 the edit log (refused edits are not logged), not the error, whose message names only the kind. The
 text fields are left out of ``repr`` so a stray log line does not print them either.
@@ -33,8 +33,8 @@ editor that offers dragging gets a typed answer.
 | ``set_markup`` | :class:`SetMarkup` | yes: replaces the underlines and highlights |
 | ``add_interpolation`` | :class:`AddInterpolation` | yes: bracketed words beside the quotation |
 | ``remove_interpolation`` | :class:`RemoveInterpolation` | yes |
-| ``edit_tag`` | :class:`EditTag` | yes |
-| ``edit_cite`` | :class:`EditCite` | yes, but a changed field may not claim to be verified |
+| ``edit_tag`` | :class:`EditTag` | yes, with no snapshot and no re-cut |
+| ``edit_cite`` | :class:`EditCite` | yes, likewise; a changed field may not claim verification |
 | ``insert_text`` | :class:`InsertText` | no: :class:`ForbiddenEvidenceEdit` |
 | ``replace_text`` | :class:`ReplaceText` | no: :class:`ForbiddenEvidenceEdit` |
 | ``move_text`` | :class:`MoveText` | no: :class:`ForbiddenEvidenceEdit` |
@@ -64,9 +64,11 @@ __all__ = [
     "InterpolationBlocksDeletion",
     "InvalidEvidenceEdit",
     "MoveText",
+    "QuotationEdit",
     "RemoveInterpolation",
     "ReplaceText",
     "SetMarkup",
+    "TagOrCiteEdit",
     "kind_of",
 ]
 
@@ -104,7 +106,7 @@ class EditProblem(StrEnum):
     """A deletion would leave nothing quoted. Deleting the card is a different operation."""
 
     CARD_HAS_NO_EVIDENCE = "card_has_no_evidence"
-    """The card quotes nothing yet, so there is nothing to edit or re-verify."""
+    """A quotation edit on a card that quotes nothing yet. Tag and cite edits are not refused."""
 
     INVALID_MARKUP = "invalid_markup"
     """The new markup overlaps itself within a style, or a highlight is not underlined."""
@@ -269,8 +271,9 @@ class EditCite:
     """Replace the card's cite.
 
     A field the student changes may not arrive marked verified: only the citation service verifies a
-    cite field (E06). A changed required field is therefore unverified, and the card will not
-    re-verify until the citation service confirms it.
+    cite field (E06). A changed required field is therefore unverified, and the card is saved
+    ``UNVERIFIED`` (``CITATION_UNVERIFIED``) until the citation service re-resolves it
+    (`v1-e06-t01` ac5).
     """
 
     kind: ClassVar[EditKind] = EditKind.EDIT_CITE
@@ -323,6 +326,12 @@ type EvidenceEdit = (
     | MoveText
 )
 """Any operation an editor can send."""
+
+type QuotationEdit = DeleteRange | SetMarkup | AddInterpolation | RemoveInterpolation
+"""The allowed edits to what a card quotes or how it is marked: each re-cuts from the snapshot."""
+
+type TagOrCiteEdit = EditTag | EditCite
+"""The allowed edits to the student's own words: they need no snapshot and never re-cut."""
 
 _EDIT_TYPES = (
     DeleteRange,

@@ -4,7 +4,10 @@ person has checked every row without touching the text."""
 from __future__ import annotations
 
 import csv
+import json
+import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -15,10 +18,14 @@ from tests.evals.parser.labels_schema import (
     DebateFormat,
     FileSamplingPlan,
     LabelStatus,
+    Manifest,
     ManifestEntry,
     ReviewerRole,
+    SamplingPlan,
     TemplateFamily,
+    label_path_for,
     validate_label_file,
+    write_label_file,
 )
 from tests.evals.parser.synthetic import (
     CLOSING,
@@ -298,3 +305,272 @@ def test_a_sampled_worksheet_whose_rows_moved_is_refused(
     shuffled = [rows[1], rows[0], *rows[2:]]
     with pytest.raises(prelabel.WorksheetError, match="rows were reordered or removed"):
         _import(shuffled, labels, document)
+
+
+# --------------------------------------------------------------------------------------------
+# The spreadsheet round trip (v1-e31-t07): each failure seen on 2026-10-02, on invented text
+# --------------------------------------------------------------------------------------------
+#
+# The worksheet below is the synthetic file's, written from its hand-written labels: spans are
+# sampled on paragraphs 3, 5 and 10. A paragraph's row is its index plus 2, since the header is
+# row 1 in Numbers. Paragraph 5 is the first card's body: OPENING, then UNDERLINED (underlined and
+# highlighted), then CLOSING.
+
+EVIDENCE_ROW = 7
+CITE_ROW = 6
+
+
+@pytest.fixture(scope="module")
+def prelabels():  # type: ignore[no-untyped-def]
+    return build_synthetic_file(LabelStatus.PRELABELED).labels
+
+
+def _row_of(rows: list[dict[str, str]], number: int) -> dict[str, str]:
+    return rows[number - 2]
+
+
+def _refusal(rows, prelabels, document) -> str:  # type: ignore[no-untyped-def]
+    with pytest.raises(prelabel.WorksheetError) as refused:
+        _import(rows, prelabels, document)
+    return str(refused.value)
+
+
+def test_an_emptied_sampled_span_cell_is_named_as_empty_not_as_edited_text(
+    document: ParsedDocument, prelabels, tmp_path: Path
+) -> None:
+    """2026-10-02: cells emptied to mean "nothing underlined" were refused as edited text."""
+    rows = _checked(_rows(_worksheet(prelabels, document, tmp_path, prelabels.header)))
+    _row_of(rows, EVIDENCE_ROW)["underline"] = ""
+
+    message = _refusal(rows, prelabels, document)
+
+    assert (
+        f"row {EVIDENCE_ROW}, underline: empty: a row with nothing marked keeps its text with no marks"
+        in (message)
+    )
+    assert "edited" not in message
+
+
+def test_text_the_spreadsheet_changed_is_named_by_the_characters_that_differ(
+    document: ParsedDocument, prelabels, tmp_path: Path
+) -> None:
+    """2026-10-02: Numbers changed whitespace, a non-breaking space and line breaks in six rows."""
+    rows = _checked(_rows(_worksheet(prelabels, document, tmp_path, prelabels.header)))
+    evidence = _row_of(rows, EVIDENCE_ROW)
+    evidence["text"] = evidence["text"].replace("warn that ", "warn that ")
+    cite = _row_of(rows, CITE_ROW)
+    cite["text"] = cite["text"].replace(", Grid Analyst", ",\nGrid Analyst")
+
+    message = _refusal(rows, prelabels, document)
+
+    assert f"row {EVIDENCE_ROW}, text: " in message
+    assert "a non-breaking space where the document has a space" in message
+    assert f"row {CITE_ROW}, text: " in message
+    assert "a line break where the document has a space" in message
+    assert "check --repair" in message
+    for text in (OPENING + UNDERLINED + CLOSING, "Okonkwo 26, Grid Analyst, Fictional Energy Review"):
+        assert text not in message.replace(" ", " ").replace("\n", " ")
+
+
+def test_every_problem_in_a_row_is_reported_not_only_the_first(
+    document: ParsedDocument, prelabels, tmp_path: Path
+) -> None:
+    """2026-10-02: each fix uncovered the next problem in the same row, one run at a time."""
+    rows = _checked(_rows(_worksheet(prelabels, document, tmp_path, prelabels.header)))
+    evidence = _row_of(rows, EVIDENCE_ROW)
+    evidence.update(checked="", unit="EVIDENSE", underline="", highlight=f"{prelabel.MARK_OPEN}{OPENING}")
+
+    message = _refusal(rows, prelabels, document)
+
+    for column in ("checked", "unit", "underline", "highlight"):
+        assert f"row {EVIDENCE_ROW}, {column}: " in message, column
+
+
+def test_an_untouched_worksheet_is_named_as_the_original_not_as_every_row_unchecked(
+    document: ParsedDocument, prelabels, tmp_path: Path
+) -> None:
+    """2026-10-02: Cmd+S saved a .numbers file, the CSV stayed as written, and import listed 31 rows."""
+    rows = _rows(_worksheet(prelabels, document, tmp_path, prelabels.header))
+
+    message = _refusal(rows, prelabels, document)
+
+    assert "looks like the worksheet as it was written" in message
+    assert "not marked checked" not in message and "checked: empty" not in message
+
+
+# --------------------------------------------------------------------------------------------
+# The command line, on an invented evaluation in a scratch directory
+# --------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _Evaluation:
+    options: list[str]
+    digest: str
+    labels: Path
+    worksheets: Path
+
+    @property
+    def prefix(self) -> str:
+        return self.digest[:16]
+
+    @property
+    def csv(self) -> Path:
+        return self.worksheets / f"{self.prefix}.csv"
+
+    @property
+    def numbers(self) -> Path:
+        return self.worksheets / f"{self.prefix}.numbers"
+
+    @property
+    def label_file(self) -> Path:
+        return label_path_for(self.digest, self.labels)
+
+    def run(self, *arguments: str) -> int:
+        return prelabel.main([*self.options, *arguments])
+
+
+@pytest.fixture
+def evaluation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _Evaluation:
+    """The synthetic file as a one-file evaluation: key, path map, manifest, plan and pre-labels."""
+    synthetic = build_synthetic_file(LabelStatus.PRELABELED)
+    private = tmp_path / "private"
+    private.mkdir()
+    (private / "digest.key").write_text(TEST_DIGEST_KEY.hex() + "\n", encoding="utf-8")
+    monkeypatch.setenv("DEBATE_PARSER_EVAL_KEY_FILE", str(private / "digest.key"))
+    docx = tmp_path / "corpus" / "invented.docx"
+    docx.parent.mkdir()
+    docx.write_bytes(synthetic.content)
+    (private / "paths.json").write_text(json.dumps({synthetic.digest: str(docx)}), encoding="utf-8")
+    monkeypatch.setenv("DEBATE_PARSER_EVAL_PATHS", str(private / "paths.json"))
+
+    directory = tmp_path / "eval"
+    labels = directory / "labels"
+    entry = ManifestEntry(
+        digest=synthetic.digest,
+        category=Category.TEAM,
+        season="2025-26",
+        debate_format=DebateFormat.LD,
+        template_family=TemplateFamily.VERBATIM,
+        pr_subset=True,
+    )
+    paragraphs = synthetic.labels.header.paragraph_count
+    plan = SamplingPlan(
+        plan_id=PLAN_ID,
+        generated_on="2026-10-02",
+        parser_version="test",
+        files=(
+            FileSamplingPlan(
+                digest=synthetic.digest, paragraphs=paragraphs, blocks=((0, paragraphs - 1),), full=True
+            ),
+        ),
+    )
+    labels.mkdir(parents=True)
+    (directory / "manifest.json").write_text(Manifest(entries=(entry,)).model_dump_json(), encoding="utf-8")
+    (directory / "sampling-plan.json").write_text(plan.model_dump_json(), encoding="utf-8")
+    write_label_file(synthetic.labels, labels, check_cards=False)
+    options = [
+        "--manifest",
+        str(directory / "manifest.json"),
+        "--plan",
+        str(directory / "sampling-plan.json"),
+        "--labels-dir",
+        str(labels),
+    ]
+    made = _Evaluation(
+        options=options, digest=synthetic.digest, labels=labels, worksheets=tmp_path / "worksheets"
+    )
+    assert made.run("worksheet", made.prefix, "--out-dir", str(made.worksheets)) == 0
+    return made
+
+
+def _write_csv(path: Path, rows: list[dict[str, str]], *, above_header: list[str] = ()) -> Path:  # type: ignore[assignment]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        for line in above_header:
+            writer.writerow([line])
+        writer.writerow(prelabel.WORKSHEET_COLUMNS)
+        writer.writerows([[row[column] for column in prelabel.WORKSHEET_COLUMNS] for row in rows])
+    return path
+
+
+def _write_numbers(path: Path, rows: list[dict[str, str]]) -> Path:
+    """A .numbers file holding these rows, the way Numbers stores them: indices and cards as numbers."""
+    from numbers_parser import Document
+
+    columns = prelabel.WORKSHEET_COLUMNS
+    document = Document(num_header_rows=1, num_header_cols=0, num_rows=len(rows) + 1, num_cols=len(columns))
+    table = document.sheets[0].tables[0]
+    for column, name in enumerate(columns):
+        table.write(0, column, name)
+    for number, row in enumerate(rows, start=1):
+        for column, name in enumerate(columns):
+            value = row[name]
+            if value:
+                table.write(number, column, int(value) if value.isdigit() else value)
+    document.save(str(path))
+    return path
+
+
+def _age(path: Path, seconds: int) -> None:
+    """Make a file look `seconds` older than now."""
+    stamp = path.stat().st_mtime - seconds
+    os.utime(path, (stamp, stamp))
+
+
+def test_a_table_name_line_above_the_header_is_named(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """2026-10-02: Numbers' export option "Include table names" puts a line above the header."""
+    rows = _checked(_rows(evaluation.csv))
+    _write_csv(evaluation.csv, rows, above_header=["Table 1"])
+    before = evaluation.label_file.read_bytes()
+
+    code = evaluation.run(
+        "import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"
+    )
+
+    output = capsys.readouterr()
+    assert code == 1
+    assert "Include table names" in output.out + output.err
+    assert evaluation.label_file.read_bytes() == before
+
+
+def test_a_csv_older_than_the_numbers_file_beside_it_is_refused(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """2026-10-02: Cmd+S wrote <digest>.numbers and the import read the untouched CSV, twice."""
+    _write_numbers(evaluation.numbers, _checked(_rows(evaluation.csv)))
+    _age(evaluation.csv, 60)
+    before = evaluation.label_file.read_bytes()
+    capsys.readouterr()
+
+    code = evaluation.run(
+        "import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"
+    )
+
+    output = capsys.readouterr()
+    printed = output.out + output.err
+    assert code == 1
+    assert f"{evaluation.prefix}.csv is older than {evaluation.prefix}.numbers" in printed
+    assert "not marked checked" not in printed and "checked: empty" not in printed
+    assert evaluation.label_file.read_bytes() == before
+
+
+def test_the_untouched_original_points_at_the_numbers_file_beside_it(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Even when the .numbers file is the older one, an untouched CSV names it as where the work may be."""
+    _write_numbers(evaluation.numbers, _rows(evaluation.csv))
+    _age(evaluation.numbers, 60)
+    capsys.readouterr()
+
+    code = evaluation.run(
+        "import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"
+    )
+
+    output = capsys.readouterr()
+    printed = output.out + output.err
+    assert code == 1
+    assert "looks like the worksheet as it was written" in printed
+    assert f"{evaluation.prefix}.numbers" in printed

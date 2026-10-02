@@ -82,7 +82,7 @@ spec:
         tests/smoke/README.md explains the tiers, markers and how a task adding a user-facing command adds
         its smoke check, and the task PR template links to it.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

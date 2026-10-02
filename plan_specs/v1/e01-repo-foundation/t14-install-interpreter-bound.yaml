@@ -55,8 +55,8 @@ spec:
       - uv.lock
       - README.md
       - docs/evidence/normalization.md
-      - docs/architecture/architecture_proposal.md
-      - debate_core.application.snapshot_service
+      - docs/architecture
+      - debate_core.application
     forbidden:
       - A fourth statement of the supported interpreter anywhere, including documentation that names
         a version rather than pointing at the metadata

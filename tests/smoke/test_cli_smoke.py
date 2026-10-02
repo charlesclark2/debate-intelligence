@@ -80,6 +80,9 @@ def test_doctor_reports_the_builds_own_interpreter_and_every_service(installed_c
     assert report["cli_version"] == report["core_version"] == version
     assert report["settings_configured"] is True
     assert "verify_manifest" in report["services"]
+    # doctor exits 1 on a mismatch, so data_of would already have failed; this names the check.
+    assert report["unicode_database_matches"] is True
+    assert report["python_unicode_version"] == report["normalizer_unicode_version"]
     interpreter = Path(report["python_executable"])
     assert interpreter.resolve() == installed_cli.build.interpreter.resolve()
     if installed_cli.build.installed:

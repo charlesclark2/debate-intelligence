@@ -39,6 +39,12 @@ spec:
       - packages/debate_core/pyproject.toml
       - uv.lock
       - scripts/export_schemas.py
+      # needed by this task's own plan (wiring from the composition root, registering the command)
+      # and by the records that list services and reason codes
+      - packages/debate_cli/src/debate_cli/container.py
+      - packages/debate_cli/src/debate_cli/commands/__init__.py
+      - packages/debate_cli/tests/test_app.py
+      - docs/evidence/snapshot-text-format.md
     forbidden:
       - Verification logic inside debate_cli (the command only parses args, calls the use case, renders)
       - Reporting a card as VERIFIED when its snapshot is missing locally
@@ -66,7 +72,7 @@ spec:
       description: >-
         Exit codes are documented in `debate-research verify --help` and the CLI README.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -1,5 +1,10 @@
 # Keeping the team website current: a guide for coaches
 
+> **Out of date.** This guide describes the Google Calendar and Google Sheet proposal, which
+> [ADR-0015](../adr/0015-website-content-editing.md#decision-as-accepted) did not adopt. Events and
+> announcements are now files in `site/content/`. `v1-e37-t02` and `v1-e37-t03` rewrite this guide
+> for the files they introduce.
+
 How a coach adds, changes and removes **events** and **announcements** on the Whitefish Bay debate
 team website, from a laptop or a phone, without touching code.
 

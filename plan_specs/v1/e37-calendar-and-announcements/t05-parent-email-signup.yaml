@@ -36,7 +36,8 @@ spec:
     forbidden:
       - Storing, logging or proxying subscriber email addresses in the platform, repo or AWS
       - Loading a mailing provider's JavaScript, pixels or trackers on the site
-      - A mailing list owned by a coach's personal account, or one without double opt-in and unsubscribe
+      # Amended by the PM, 2026-10-01: ownership by one person's account is now allowed for 2026-27 (ac6).
+      - A mailing list without double opt-in and unsubscribe
       - Collecting student contact information or targeting the signup at students
       - Committing provider API keys; creating accounts or lists from an agent session (operator steps)
   context:
@@ -66,20 +67,16 @@ spec:
         email, confirms, receives a test update and unsubscribes with one click.
     - id: ac6
       description: >-
-        At least two people can independently regain control of the list and its subscriber data,
-        and the recovery path has been tested rather than described. Amended by the PM on
-        2026-09-30, replacing "two owners": a second Buttondown seat costs $79 a month, which is
-        disproportionate for a high-school team, and it is also not the control that matters. The
-        risk is not that one person's seat is revoked; it is that nobody can get into the account at
-        all, and password recovery runs through the mailbox the account is registered to. So the
-        requirement is: the list is registered to the team identity ADR-0015 names, that identity's
-        mailbox has at least two people who can reach it, the credentials are held somewhere a
-        second person can retrieve them, the recovery path has been walked through at least once by
-        someone who is not Charlie, and a subscriber export is taken periodically and kept where the
-        team controls it, so the list survives the loss of the account entirely. Registering it to
-        one person's address with no second route in is acceptable only as an interim state with a
-        dated commitment to transfer, recorded in the guide; it is not acceptable as the end state,
-        because the data in that list belongs to parents who were promised they could leave it.
+        Amended a second time by the PM, 2026-10-01. The 2026-09-30 version required registration to
+        the team identity ADR-0015 named and a recovery walk-through by someone other than Charlie;
+        ADR-0015 as accepted creates no team identity, and there is no second coach this season. For
+        2026-27 the list may be registered to Charlie's own address with Charlie the only person who
+        can sign in. What must hold regardless: a subscriber export is taken at least monthly during
+        the season and kept somewhere Charlie controls outside Buttondown, never in the repository;
+        the guide records when the last one was taken; and the guide states the plan for a second
+        person to gain access, reviewed at the start of the 2027-28 season or as soon as a second
+        coach or another trusted adult can take it on. The export is the control that matters: it
+        keeps the parents' data, and their promised ability to leave, intact if the account is lost.
     - id: ac5
       description: >-
         The guide explains how a coach sends an update, the student rules as docs/policies/website-publishing.md

@@ -16,6 +16,11 @@ metadata:
     debate/title: Automatic republish on content changes
     debate/architecture-refs: §14, ADR-0012, ADR-0013, ADR-0015
 spec:
+  # Cancelled by the PM, 2026-10-01. This task existed because external content (a Google Calendar and
+  # a Google Sheet) could change without a commit, so something had to notice and rebuild. ADR-0015 as
+  # accepted keeps all content in the repository, so every change is a commit and reaches the site
+  # through the deploy that publishes any commit. Deploy-on-merge belongs with the keyless CI deploy
+  # roles of v2-e10-t03, which ADR-0015 names as a revisit trigger. The spec is kept as the record.
   description: >-
     Make coach edits reach the site without anyone running code by hand, without ever introducing long-lived
     AWS access keys. A GitHub Actions workflow (.github/workflows/site-content-refresh.yml) runs on a schedule
@@ -83,7 +88,7 @@ spec:
         dev (and later prod) deploys when the OIDC roles exist, webhook token ownership and rotation, and how
         to pause the schedule.
 status:
-  phase: Pending
+  phase: Cancelled
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

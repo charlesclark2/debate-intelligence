@@ -488,8 +488,15 @@ export function loadSchedule(contentDirectory: string = defaultContentDirectory(
     const parsed = tournamentEntrySchema.safeParse(rawEntry)
     if (!parsed.success) {
       const issue = parsed.error.issues[0]!
-      const field = issue.path.length > 0 ? issue.path.join('.') : '(the entry)'
-      throw entryError(entry, field, issue.message)
+      // A misspelt field is reported against the entry itself; name the key that was not known.
+      const unknownKeys = issue.code === 'unrecognized_keys' ? issue.keys : []
+      const where = [...issue.path, ...(unknownKeys.length > 0 ? [unknownKeys.join(', ')] : [])]
+      const field = where.length > 0 ? where.join('.') : '(the entry)'
+      const message =
+        unknownKeys.length > 0
+          ? 'is not a field a tournament has. Check the spelling against the list at the top of the file.'
+          : issue.message
+      throw entryError(entry, field, message)
     }
     const value = parsed.data
 

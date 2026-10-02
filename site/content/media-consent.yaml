@@ -96,6 +96,7 @@ permittedNamePhrases:
   - Public Forum
   # Page headings that are written in title case, so the guard reads them as a name.
   - Debate Events Offered
+  - Tournament Schedule
   # The schools and universities in Coach Clark's coaching history on content/pages/coaches.md,
   # each one reviewed with Charlie when he supplied the list. Every one is an institution; none is
   # a person, and a student name still never goes here.

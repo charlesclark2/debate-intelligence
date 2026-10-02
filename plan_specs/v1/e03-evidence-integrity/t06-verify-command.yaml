@@ -53,7 +53,7 @@ spec:
       description: >-
         Exit codes are documented in `debate-research verify --help` and the CLI README.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -553,8 +553,7 @@ scripts/task pr v1-e03-t05-edit-constraints
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** CHANGES_REQUESTED
-<!-- ACCEPTED / CHANGES_REQUESTED -->
+**Verdict (first review):** CHANGES_REQUESTED
 
 **Reviewed by / date:** PM, 2026-10-02
 
@@ -635,3 +634,39 @@ do not negate it.
 * **v2-e14-t05 ac6:** show negation flags; key spans on offsets, never span ids.
 
 `python3 scripts/validate_specs.py` reports OK on this branch.
+
+### Second review
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-02
+
+**Notes:**
+
+Accepted. The phase stays `Succeeded`. Both changes are made as asked. The section "Changes after PM
+review" supersedes the earlier record wherever they disagree.
+
+* **Save with the verdict.** The kind-split dispatch is cleaner than what I described:
+  * `allowed_edit` needs no card;
+  * `apply_quotation_edit` keeps the re-cut and the §3 refusal;
+  * `apply_tag_or_cite_edit` never touches the evidence.
+
+  Checked on the branch: nothing outside this report still names `EditNotVerified` or `apply_edit`.
+  The policy only ever hands the verifier an `UNVERIFIED` card, so t04's VERIFIED scan still holds.
+  The cases I asked for are tested:
+  * a VERIFIED card goes UNVERIFIED and back;
+  * a card with no snapshot can still have its tag and cite edited;
+  * a tag edit on a card that no longer matches its snapshot keeps its text as stored and is saved
+    UNVERIFIED;
+  * a changed required cite field is saved UNVERIFIED with the cite reason.
+* **The property now predicts the status**, and 31% of examples start unmarked. Every transition
+  happens with real frequency, in both directions. S1, ST1 and ST2 are caught by the property as
+  well as by the examples.
+* **Mutants:** 14 of 14 caught, in batches each finishing under a minute. The original A, T, M, D and
+  I families did not need to run again. Their code is the helpers behind `apply_quotation_edit`, which
+  this change only renamed around. F1's move is covered by the two forbidden-kind tests.
+* **Negation list:** the four words were added. "nonetheless" is the right negative case: it shows the
+  match is by whole word.
+
+No operator steps. Open the PR with `scripts/task pr v1-e03-t05-edit-constraints`.

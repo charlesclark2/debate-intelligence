@@ -63,6 +63,7 @@
       "evidence_start_offset": 0,
       "evidence_end_offset": 55,
       "omitted_ranges": [],
+      "interpolations": [],
       "normalized_text_hash": "e6cd51bc14a9715914dc36a036ae301a6edd11aa52364c34a78875afcb1cc744",
       "normalizer_version": "evidence-normalizer-v1",
       "spans": [
@@ -144,6 +145,7 @@
           "end_offset": 33
         }
       ],
+      "interpolations": [],
       "normalized_text_hash": "e6cd51bc14a9715914dc36a036ae301a6edd11aa52364c34a78875afcb1cc744",
       "normalizer_version": "evidence-normalizer-v1",
       "spans": [
@@ -227,6 +229,7 @@
       "evidence_start_offset": 57,
       "evidence_end_offset": 96,
       "omitted_ranges": [],
+      "interpolations": [],
       "normalized_text_hash": "e6cd51bc14a9715914dc36a036ae301a6edd11aa52364c34a78875afcb1cc744",
       "normalizer_version": "evidence-normalizer-v1",
       "spans": [

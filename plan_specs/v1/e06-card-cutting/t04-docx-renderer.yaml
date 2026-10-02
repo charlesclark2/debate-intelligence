@@ -49,8 +49,10 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        A rendered card's evidence paragraph concatenates to exactly Card.evidence_text, and runs carry
-        underline/highlight exactly over the CardSpan ranges (checked by reading the DOCX back).
+        A rendered card's evidence paragraph concatenates to exactly Card.evidence_text once the omission
+        markers and interpolations the renderer adds are taken out, and runs carry underline/highlight
+        exactly over the CardSpan ranges (checked by reading the DOCX back). Amended by the PM,
+        2026-10-02, after ADR-0018 and v1-e03-t05.
     - id: ac2
       description: >-
         Tags, cites and pocket/hat/block headings use the style names and outline levels from the selected
@@ -67,7 +69,15 @@ spec:
       description: >-
         The document opens without repair prompts in Word and LibreOffice (checked via a LibreOffice
         headless conversion test marked `slow`, so it runs in the validate-dev slow tier rather than the PR
-        `ci` check, and is skipped where soffice is absent).
+        `ci` check). Amended by the PM, 2026-10-02: validate-dev fails a tier on any skip (v1-e01-t10), so
+        its slow job installs LibreOffice and the check runs there; it may skip only on a laptop without
+        soffice.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-02, from ADR-0018 and v1-e03-t05. The renderer marks each of
+        Card.omitted_ranges at its evidence-text offset with the FormatProfile's omission marker, and
+        renders each of Card.interpolations at its anchor with Interpolation.rendered, the only code that
+        adds brackets. Neither is ever written into evidence_text or read back as evidence by t07.
 status:
   phase: Pending
 ---

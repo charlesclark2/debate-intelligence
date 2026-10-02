@@ -18,6 +18,7 @@ from debate_core.application.snapshot_service import LoadedSnapshot
 from debate_core.domain import (
     Card,
     CardOmission,
+    Interpolation,
     ProvenanceMode,
     SpanPurpose,
     SpanStyle,
@@ -207,6 +208,20 @@ def test_card_mapping_keeps_the_card_and_replaces_its_evidence(source: LoadedSna
     assert [(span.start_offset, span.end_offset) for span in recut.spans] == [(0, 11)]
 
 
+def test_card_mapping_drops_interpolations_whose_anchors_index_the_evidence_it_replaces(
+    source: LoadedSnapshot,
+) -> None:
+    """Anchor 7 is still inside the new 11-character text, so only the mapping dropping it removes it."""
+    first = place_evidence_on_card(blank_card(source), markup_for(source, KEPT, *MARKUP))
+    annotated = first.evolve(interpolations=(Interpolation(anchor=7, text="in the basin"),))
+
+    recut = place_evidence_on_card(
+        annotated, markup_for(source, ((0, 11),), EvidenceMarkupSpan.underline(0, 11, SpanPurpose.CLAIM))
+    )
+
+    assert recut.interpolations == ()
+
+
 def test_card_mapping_takes_provenance_from_the_snapshot_not_the_card(world: VerificationWorld) -> None:
     """ProvenanceMode "travels from the snapshot onto every card cut from it". A tag-only card made
     with the strongest claim, PUBLISHER_RETRIEVED, given text a user supplied, must say USER_SUPPLIED."""
@@ -277,6 +292,25 @@ def offset_shifts(tree: ast.AST) -> Iterator[ast.BinOp | ast.AugAssign]:
                 yield node
 
 
+def running_count_walks(tree: ast.AST) -> Iterator[ast.For]:
+    """Every loop over a card's ``quoted_ranges`` that keeps a running count with ``+=``.
+
+    That is the shape of the inverse mapping (``snapshot_ranges_of``, `v1-e03-t05`): walk the kept
+    pieces, counting the evidence-text characters before each. It works over local names, so
+    :func:`offset_shifts` cannot see it, and a copy of it elsewhere would otherwise pass.
+    """
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.For)
+            and isinstance(node.iter, ast.Attribute)
+            and node.iter.attr == "quoted_ranges"
+            and any(
+                isinstance(inner, ast.AugAssign) and isinstance(inner.op, ast.Add) for inner in ast.walk(node)
+            )
+        ):
+            yield node
+
+
 def _scanned_files() -> Iterator[Path]:
     for pattern in SCANNED:
         yield from REPOSITORY.glob(pattern)
@@ -294,18 +328,26 @@ def _calls_the_mapping(tree: ast.AST) -> bool:
 def test_card_mapping_arithmetic_exists_once_in_the_whole_tree() -> None:
     shifts: dict[str, list[str]] = {}
     callers: set[str] = set()
+    walkers: set[str] = set()
     for path in _scanned_files():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         relative = path.relative_to(REPOSITORY).as_posix()
-        found = [f"{relative}:{node.lineno}: {ast.unparse(node)}" for node in offset_shifts(tree)]
+        walks = [
+            f"{relative}:{node.lineno}: loop over quoted_ranges with a running count"
+            for node in running_count_walks(tree)
+        ]
+        found = [f"{relative}:{node.lineno}: {ast.unparse(node)}" for node in offset_shifts(tree)] + walks
         if found:
             shifts[relative] = found
+        if walks:
+            walkers.add(relative)
         if _calls_the_mapping(tree):
             callers.add(relative)
 
-    # The scan reached the mapping's own arithmetic and the code that exists to use it, so it cannot
-    # pass by reading nothing, or by reading production code only.
+    # The scan reached the mapping's own arithmetic, both directions of it, and the code that exists
+    # to use it, so it cannot pass by reading nothing, or by reading production code only.
     assert MAPPING_MODULE in shifts, "the scan did not see the mapping's own arithmetic"
+    assert MAPPING_MODULE in walkers, "the scan did not see the inverse mapping's walk over quoted_ranges"
     assert {FIXTURE_MODULE, "packages/debate_core/tests/evidence/test_card_mapping.py"} <= callers, (
         f"the scan did not see the mapping's call sites; it saw {sorted(callers)}"
     )
@@ -331,3 +373,19 @@ def test_card_mapping_arithmetic_exists_once_in_the_whole_tree() -> None:
 )
 def test_the_offset_shift_scan_flags_the_arithmetic_and_only_it(source: str, flagged: bool) -> None:
     assert bool(list(offset_shifts(ast.parse(source)))) is flagged
+
+
+@pytest.mark.parametrize(
+    ("source", "flagged"),
+    [
+        ("for a, b in card.quoted_ranges:\n    seen += b - a", True),
+        ("for a, b in self.card.quoted_ranges:\n    if a:\n        total += 1", True),
+        ("for a, b in card.quoted_ranges:\n    pieces.append((a, b))", False),
+        ("for a, b in ranges:\n    seen += b - a", False),
+        ("for a, b in card.quoted_ranges:\n    seen -= 1", False),
+    ],
+)
+def test_the_inverse_walk_scan_flags_a_running_count_over_quoted_ranges_and_only_it(
+    source: str, flagged: bool
+) -> None:
+    assert bool(list(running_count_walks(ast.parse(source)))) is flagged

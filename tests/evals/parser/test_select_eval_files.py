@@ -576,3 +576,31 @@ def test_the_selector_alone_brings_the_selection_tables_up_to_date(
     manifest_md = (evaluation.directory / "MANIFEST.md").read_text(encoding="utf-8")
     assert "**This plan is out of date:** 1 file(s)" in manifest_md
     assert "| NOT_DEBATE_CONTENT |" not in manifest_md and "`NOT_DEBATE_CONTENT`" in manifest_md
+
+
+def test_open_hands_the_path_to_the_system_and_prints_none_of_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evaluation = _invented_evaluation(tmp_path, monkeypatch)
+    _plan_and_prelabel(evaluation, tmp_path / "worksheets")
+    opened: list[list[str]] = []
+    monkeypatch.setattr(prelabel.shutil, "which", lambda name: "/usr/bin/open")
+    monkeypatch.setattr(prelabel.subprocess, "run", lambda command, check: opened.append(command))
+    prefix = evaluation.pr_subset_prefix()
+    capsys.readouterr()
+
+    prelabel.main(
+        [
+            "--manifest",
+            str(evaluation.manifest),
+            "--plan",
+            str(evaluation.directory / "sampling-plan.json"),
+            "open",
+            prefix,
+        ]
+    )
+
+    assert len(opened) == 1 and opened[0][1].endswith(".docx")
+    printed = capsys.readouterr().out
+    assert printed == f"{prefix}: opened\n"
+    assert str(tmp_path) not in printed

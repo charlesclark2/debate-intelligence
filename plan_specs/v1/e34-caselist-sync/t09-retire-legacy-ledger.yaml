@@ -1,0 +1,83 @@
+# TASK v1-e34-t09-retire-legacy-ledger - Retire the legacy download ledger
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t09-retire-legacy-ledger
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: Retire the legacy download ledger
+spec:
+  # Moved by the PM, 2026-10-01, from v1-e34-t05 ac6, which asked an operator-only task that forbids
+  # code changes to delete code.
+  description: >-
+    v1-e34-t06 replaced the calendar download ledger with a rolling window in a new file,
+    `caselist-sync-download-starts.json`, and kept reading the old `caselist-sync-downloads.json`
+    because the backfill was still running from an installed old-format build against the same state
+    directory: two files, so neither build reads the other's format as "nothing spent". Once the
+    weekly schedule runs a build that carries the rolling window (v1-e34-t05), and no old-format build
+    remains that writes to those directories, that stops being true, and a migration shim with no
+    removal trigger becomes a permanent one. Delete the legacy read and its tests. The operator
+    deletes `<data_dir>/caselist-sync-downloads.json` from the environments the agent runs in, after
+    the session states which build the agent runs and how it established that no old-format build
+    still writes there. Out of scope: the rolling window itself.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, docs]
+    forbidden:
+      - Deleting the legacy read while any old-format build can still write to an environment's state directory
+      - Changing the rolling window's behaviour
+  context:
+    - kind: TaskRef
+      name: v1-e34-t05-enable-schedule
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The legacy ledger read and its tests are removed, and the download cap is still enforced from
+        the rolling-window file alone, shown by the existing cap tests.
+    - id: ac2
+      description: >-
+        The report names the build the scheduled agent runs and how it was established that no
+        old-format build still writes to the agent's state directories, and the operator has deleted
+        the legacy file from each.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t09-retire-legacy-ledger-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Confirm no old-format writer remains, remove the read, operator deletes the file.
+  goalRef:
+    name: v1-e34-t09-retire-legacy-ledger
+  graph:
+    nodes:
+      - id: remove
+        kind: Task
+        name: Remove the legacy read
+        description: >-
+          Delete the legacy ledger read and its tests; keep the cap tests green.
+        outputs: [packages/debate_core/src/debate_core/application/caselist_sync.py]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: The cap is enforced from the rolling window alone
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, "budget or cap or download_starts"]
+status:
+  phase: Pending

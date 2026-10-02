@@ -313,5 +313,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t08-revised-camp-files
+    - id: t09
+      kind: Task
+      name: Retire the legacy download ledger
+      description: >-
+        Moved from t05 ac6: once the schedule runs a rolling-window build and no old-format build writes
+        to its state directories, delete the legacy ledger read, and the operator deletes the old file.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml
+        goalRef: v1-e34-t09-retire-legacy-ledger
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t09-retire-legacy-ledger reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t09-retire-legacy-ledger
 status:
   phase: Pending

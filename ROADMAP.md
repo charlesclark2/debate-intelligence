@@ -60,8 +60,8 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 29 | 21 | 187 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 29 | 19 | 272 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 30 | 22 | 191 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 30 | 20 | 274 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -107,6 +107,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [One source for the supported interpreter, enforced at install](plan_specs/v1/e01-repo-foundation/t14-install-interpreter-bound.yaml) `v1-e01-t14-install-interpreter-bound` | Pending | 2 | 6.0 |
 | [Re-run the promotion guards without waiting for an event](plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml) `v1-e01-t15-promotion-guard-sweep` | Pending | 1 | 7.0 |
 | [Generate the docs index instead of hand-editing it](plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml) `v1-e01-t16-generated-docs-index` | Pending | 1 | 6.5 |
+| [The installed build carries what its commands need](plan_specs/v1/e01-repo-foundation/t17-installed-build-extras.yaml) `v1-e01-t17-installed-build-extras` | Pending | 1 | 4.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -126,7 +127,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [Deterministic, versioned text normalization](plan_specs/v1/e03-evidence-integrity/t01-text-normalization.yaml) `v1-e03-t01-text-normalization` | Succeeded | 2 | 9.0 |
 | [SHA-256 provenance and snapshot creation](plan_specs/v1/e03-evidence-integrity/t02-hashing-provenance.yaml) `v1-e03-t02-hashing-provenance` | Succeeded | 2 | 6.0 |
 | [Span-addressed evidence extraction](plan_specs/v1/e03-evidence-integrity/t03-span-extraction.yaml) `v1-e03-t03-span-extraction` | Succeeded | 1 | 7.5 |
-| [EvidenceVerifier and verification statuses](plan_specs/v1/e03-evidence-integrity/t04-verifier.yaml) `v1-e03-t04-verifier` | Pending | 1 | 7.0 |
+| [EvidenceVerifier and verification statuses](plan_specs/v1/e03-evidence-integrity/t04-verifier.yaml) `v1-e03-t04-verifier` | Succeeded | 1 | 7.0 |
 | [Evidence edit policy](plan_specs/v1/e03-evidence-integrity/t05-edit-constraints.yaml) `v1-e03-t05-edit-constraints` | Pending | 2 | 5.5 |
 | [`debate-research verify` command](plan_specs/v1/e03-evidence-integrity/t06-verify-command.yaml) `v1-e03-t06-verify-command` | Pending | 2 | 5.0 |
 | [Card omissions and the selection-to-card mapping](plan_specs/v1/e03-evidence-integrity/t07-card-omissions.yaml) `v1-e03-t07-card-omissions` | Pending | 2 | 10.0 |
@@ -182,8 +183,9 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Periodic full-archive refresh](plan_specs/v1/e34-caselist-sync/t04-full-archive-refresh.yaml) `v1-e34-t04-full-archive-refresh` | Pending | 2 | 6.5 |
 | [Install and enable the weekly agent](plan_specs/v1/e34-caselist-sync/t05-enable-schedule.yaml) `v1-e34-t05-enable-schedule` | Pending | 5 | 1.5 |
 | [Defects found by operating the sync](plan_specs/v1/e34-caselist-sync/t06-sync-defects.yaml) `v1-e34-t06-sync-defects` | Succeeded | 1 | 7.0 |
-| [The sync does not re-download a file it has been told to remove](plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml) `v1-e34-t07-suppressed-downloads` | Pending | 2 | 7.0 |
+| [The sync does not re-download a file it has been told to remove](plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml) `v1-e34-t07-suppressed-downloads` | Succeeded | 2 | 7.0 |
 | [A camp file uploaded again upstream is fetched](plan_specs/v1/e34-caselist-sync/t08-revised-camp-files.yaml) `v1-e34-t08-revised-camp-files` | Pending | 1 | 4.0 |
+| [Retire the legacy download ledger](plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml) `v1-e34-t09-retire-legacy-ledger` | Pending | 1 | 2.0 |
 
 
 ### v1.2 — Argument landscape & file building

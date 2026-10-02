@@ -1,4 +1,4 @@
-{"record":"file","digest":"7847cb0097628fff436e78829e6eb93133a68b1e4d26ccdfa5f05141b3aabf94","paragraph_count":315,"blocks":[[0,19],[60,79],[140,159],[220,239]],"plan_id":"792cad9c0f3fa456","status":"PRELABELED","prelabel_parser_version":"2026.09.20-docx-1","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
+{"record":"file","digest":"7847cb0097628fff436e78829e6eb93133a68b1e4d26ccdfa5f05141b3aabf94","paragraph_count":315,"blocks":[[0,19],[60,79],[140,159],[220,239]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.09.20-docx-1","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
 {"record":"paragraph","index":0,"length":15,"text_digest":"cfc4a32df348728f7125bbac1bea1ba9410762ad6ce93dd70aeb719fcc74381b","unit":"POCKET","card":null}
 {"record":"paragraph","index":1,"length":8,"text_digest":"d05fb92b59ab3ff207efd801c4a955b8687975d8bef79628922ceb96b3db1e6f","unit":"HAT","card":null}
 {"record":"paragraph","index":2,"length":45,"text_digest":"b3d1871c6420a48581512039170e414f8f31903b2ad9c2b831bd46dbaf4c095a","unit":"ANALYTIC","card":null}

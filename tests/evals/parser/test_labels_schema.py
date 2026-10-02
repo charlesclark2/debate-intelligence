@@ -24,6 +24,7 @@ from tests.evals.parser.labels_schema import (
     LabelStatus,
     Manifest,
     ManifestEntry,
+    RejectionReason,
     ReviewerRole,
     SpanLabel,
     TemplateFamily,
@@ -31,7 +32,10 @@ from tests.evals.parser.labels_schema import (
     load_label_file,
     load_label_files,
     load_manifest,
+    load_rejections,
     load_sampling_plan,
+    rejection_conflicts,
+    stratum_of,
     validate_against_texts,
     validate_label_file,
     write_label_file,
@@ -355,6 +359,44 @@ def test_nothing_in_the_eval_directory_names_a_file() -> None:
             "template_family",
             "pr_subset",
         }
+    rejections = (EVAL_FIXTURE_DIRECTORY / "rejections.json").read_text(encoding="utf-8")
+    assert ".docx" not in rejections and "/" not in rejections.replace("scripts/select_eval_files.py", "")
+    for rejection in json.loads(rejections)["rejections"]:
+        assert set(rejection) == {
+            "digest",
+            "reason",
+            "rejected_on",
+            "category",
+            "season",
+            "debate_format",
+            "template_family",
+            "pr_subset",
+            "replaced_by",
+        }
+
+
+def test_no_rejected_file_is_in_the_manifest_the_plan_or_the_labels() -> None:
+    manifest, rejections = load_manifest(), load_rejections()
+    assert rejection_conflicts(manifest, rejections) == []
+    planned = {file_plan.digest for file_plan in load_sampling_plan().files}
+    labeled = set(load_label_files(LABELS_DIRECTORY))
+    assert rejections.digests.isdisjoint(planned | labeled)
+
+
+def test_the_file_found_not_to_be_debate_material_was_replaced_from_its_own_stratum() -> None:
+    """The operator opened it before approving the selection: a non-English text, no tags or cites."""
+    rejected = {r.digest[:16]: r for r in load_rejections().rejections}["4b11269583a94621"]
+    assert rejected.reason is RejectionReason.NOT_DEBATE_CONTENT
+    assert rejected.replaced_by is not None
+    caselist_wiki_converted_pr_subset = (
+        Category.CASELIST,
+        "2026-27",
+        DebateFormat.LD,
+        TemplateFamily.WIKI_CONVERTED,
+        True,
+    )
+    assert stratum_of(rejected) == caselist_wiki_converted_pr_subset
+    assert stratum_of(load_manifest().entry(rejected.replaced_by)) == caselist_wiki_converted_pr_subset
 
 
 def test_every_committed_label_file_is_valid_and_listed() -> None:

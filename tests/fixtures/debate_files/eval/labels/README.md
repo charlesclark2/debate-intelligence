@@ -46,6 +46,13 @@ homework, so:
 When the parser is wrong, the label says what is right and the evaluation counts the miss. The
 bug is filed against `v1-e31-t03`'s parser. Nobody patches the parser inside this task.
 
+**A file that is not debate material at all is not labeled.** If a file has no tags, citations or
+arguments (say, a text uploaded to the caselist in place of a case), stop and have it rejected
+rather than marking every row `OTHER`: it measures nothing, and in the PR subset it is rows every
+pull request pays for. The operator rejects it with `scripts/select_eval_files.py --reject`, which
+replaces it from the same stratum and records why ([`../MANIFEST.md`](../MANIFEST.md#rejected-files)).
+A file of analytics with no cards *is* debate material, and is labeled.
+
 ## Workflow
 
 ```bash

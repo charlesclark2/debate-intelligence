@@ -4,8 +4,8 @@
 `v1-e31-t05-parser-eval` labels about thirty real files: team files, caselist uploads and camp
 files. **None of them enters the repository**, scrubbed or otherwise (`caselist-data-use.md`
 prohibitions 1, 9 and 10). This script walks the folders that hold them, reads each `.docx`'s
-bytes and style information (never its text), and proposes a stratified selection that meets
-Goal criterion ac1. It writes two things:
+bytes and style information, and proposes a stratified selection that meets Goal criterion ac1.
+It reads the text of the selected files only, to count two content hints (below). It writes:
 
 * `tests/fixtures/debate_files/eval/manifest.json` — committed. Each file by **keyed digest**,
   category, season, format and template family, and whether it is in the six-file PR subset. **No
@@ -13,22 +13,39 @@ Goal criterion ac1. It writes two things:
   caselist archives are public, so a plain digest is a join key straight back to
   `<School>/<TeamCode>/<filename>`. Digests are HMAC-SHA256 under a key kept beside the path map
   and never committed (`tests/evals/parser/digests.py`).
+* `tests/fixtures/debate_files/eval/rejections.json` — committed. Files a person ruled out, by
+  keyed digest, reason code, date and stratum, and the entry that replaced each. Nothing from
+  inside a file, and no name.
 * the **path map** — keyed digest to local path, which is how the evaluation finds each file again.
   It names schools and team codes, so it is written outside the repository
   (`~/.debate-intelligence/parser-eval-paths.json`, or `$DEBATE_PARSER_EVAL_PATHS`) and the script
-  refuses a location inside it.
+  refuses a location inside it. Rejected files stay in it, so a re-key can carry them forward.
 
-What it prints is counts. It never prints a path or a file name.
+What it prints is counts and keyed-digest prefixes. It never prints a path, a file name or text.
 
 **The selection is a proposal.** The coach approves it before anyone labels a file (the
-`collect-files` node's manual criterion). Re-running it with the same folders, options and key
+`collect-files` node's manual criterion). A fresh run with the same folders, options and key
 produces the same selection: candidates are ordered by their keyed digest, which is stable and has
-nothing to do with who wrote a file or what it is called.
+nothing to do with who wrote a file or what it is called. **The committed selection is not a fresh
+run's**, though: it was chosen on 2026-09-21 in plain-SHA-256 order and then re-keyed, so a fresh
+run under the key today chooses a different thirty (3 in common, measured 2026-10-01). Change the
+committed selection with `--reject`, never by selecting again.
+
+**`--reject DIGEST_PREFIX --reason CODE` rules a file out** and replaces it in place: another file
+from the same category, season, format, template family and PR-subset membership, the shortest for
+the PR subset and otherwise the first by keyed digest, with every other entry left exactly as it
+was. A stratum with nothing left is an error, not a file from another stratum. A rejected file is
+never chosen again, by a replacement or by a fresh run.
+
+**Content hints**, printed as counts only: a selected file with no paragraph holding a year (every
+debate citation carries one), or whose letters are mostly outside the Latin script, may not be
+debate material. A hint for the coach's approval, never a reason the script acts on.
 
 **`--rekey` re-keys the files already in the manifest** instead of choosing new ones: it reads the
 existing manifest, finds each file through the old path map, and rewrites the manifest and the path
 map under the digest key, keeping the same files, the same PR subset and the same metadata. That is
-how a manifest written under plain SHA-256 is repaired without re-running the choice.
+how a manifest written under plain SHA-256 is repaired without re-running the choice. It re-keys
+the rejection list with it, so a rejected file stays rejected under the new key.
 
 ## How the fields are decided
 

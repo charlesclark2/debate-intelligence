@@ -9,6 +9,8 @@ the corpus on the operator's machine. What the repository holds is described her
   **keyed digest**, category, season, format and template family — never by file name, and never by
   a plain SHA-256, which over a public corpus in a public repository is a join key rather than an
   anonymiser (see :mod:`tests.evals.parser.digests`);
+* a **rejection list** (`rejections.json`) of files a person ruled out, which the selection never
+  chooses again;
 * a **sampling plan** (`sampling-plan.json`) saying which paragraphs of each file are labeled;
 * one **label file** per evaluation file (`labels/<digest>.jsonl`) saying what each labeled
   paragraph *is*, keyed by its index in the document body and a keyed digest of its text. No

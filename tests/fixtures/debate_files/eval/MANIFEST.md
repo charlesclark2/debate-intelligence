@@ -16,6 +16,7 @@ What the repository holds instead:
 | File | What it is |
 |---|---|
 | [`manifest.json`](manifest.json) | Each evaluation file by [keyed digest](#why-the-digests-are-keyed), category, season, format and template family, and whether it is in the PR subset. The machine-readable manifest; the table below is its summary. |
+| [`rejections.json`](rejections.json) | Files a person looked at and [ruled out](#rejected-files), by keyed digest, with a reason code, the date, the stratum and the file that replaced it. No content and no file name. The selector never chooses a file listed here. |
 | [`sampling-plan.json`](sampling-plan.json) | Which paragraphs of each file are labeled: the PR subset in full, contiguous blocks covering about a quarter of every other file. Generated once, before labeling. |
 | [`labels/`](labels/) | One `<digest>.jsonl` per file once it is labeled: each labeled paragraph's unit and card, keyed by paragraph index and a [keyed digest](#why-the-digests-are-keyed) of its text. No text. The [labeling guide](labels/README.md) says how. |
 | [`../../../evals/baselines/parser.json`](../../../evals/baselines/parser.json) | The scores the regression gate holds the parser to. |
@@ -60,10 +61,43 @@ bytes and style references only, never text, and printed counts only.
 
 1,827 files were candidates (109 byte-identical duplicates, 24 files under 20 paragraphs, 1
 unreadable file and 1 file with no season or format folder were skipped). The 30 selected files
-hold 5,788 paragraphs, and all 30 parse.
+held 5,788 paragraphs, and all 30 parse. After the one rejection below, they hold 5,763.
 
 **Status: proposed, awaiting the coach's approval** (the `collect-files` node's manual criterion).
 Until the coach approves it, nothing is labeled.
+
+### Rejected files
+
+A file the coach or operator opens and finds is not debate material at all is **rejected**, not
+labeled: scoring the parser on it measures nothing. The rejection is recorded in
+[`rejections.json`](rejections.json) by keyed digest, with a reason code (`NOT_DEBATE_CONTENT`), the
+date and the file's stratum, never anything from inside it. Then:
+
+    uv run python scripts/select_eval_files.py <the --input and --exclude-dir options above> \
+        --reject <digest prefix> --reason NOT_DEBATE_CONTENT
+
+replaces it **in place** with another file from the same category, season, format, template
+family and PR-subset membership, and leaves every other entry exactly as it was. Within the stratum
+the replacement follows the rule that made the original: the shortest file for the PR subset,
+otherwise the first by keyed digest. A stratum with nothing left is an error, never a substitute
+from another stratum. A fresh selection never chooses a rejected file, and `--rekey` carries the
+list to a new key. After a rejection, the sampling plan, pre-labels and worksheets are regenerated.
+
+| Rejected | Reason | On | Stratum | Replaced by |
+|---|---|---|---|---|
+| `4b11269583a94621` | `NOT_DEBATE_CONTENT` | 2026-10-01 | caselist 2026-27 LD wiki-converted, PR subset | `f791edc8c9c4a3b9` |
+
+`4b11269583a94621` is the 55-paragraph wiki-converted file that pre-labeled to zero cards: a
+non-English text uploaded to the caselist in place of a case, with no tags, citations or arguments.
+It was 55 of the PR subset's 435 rows, all of them `OTHER`.
+
+**Content hints.** The selector also prints, as counts only, how many selected files may not be
+debate material: no paragraph holding a year (every debate citation has one), or mostly non-Latin
+text. It is a hint for the coach, never a rule. On the current selection it flags two files, both
+in the PR subset, with no paragraph holding a year: the replacement `f791edc8c9c4a3b9` (30
+paragraphs, pre-labeled to zero cards; it and the rejected file are the only two of the stratum's
+31 files the hint flags) and the team file `9d0a74b95ccf9269`. Neither is rejected: a case of
+analytics with no cards is debate material, and only a person looking at the file can tell.
 
 ## The selection
 
@@ -94,7 +128,7 @@ Until the coach approves it, nothing is labeled.
 | `15be67df9cfaa272` | caselist | 2026-27 | LD | verbatim |  |
 | `bcfba63d8d9d6a29` | caselist | 2026-27 | LD | verbatim |  |
 | `0bf568786e7dc6bb` | caselist | 2026-27 | LD | wiki-converted |  |
-| `4b11269583a94621` | caselist | 2026-27 | LD | wiki-converted | yes |
+| `f791edc8c9c4a3b9` | caselist | 2026-27 | LD | wiki-converted | yes |
 | `71ce5ee012203a7e` | camp | 2026-27 | Policy | cardmirror |  |
 | `930a44726db76488` | camp | 2026-27 | Policy | cardmirror |  |
 | `18346891306c5a9d` | camp | 2026-27 | Policy | other-heuristic |  |
@@ -118,11 +152,12 @@ same list, and `test_labels_schema.py` runs it against `manifest.json` on every 
 
 ### The sampling plan
 
-Labeling all thirty files in full is about 5,800 rows of judgment work. Plan `792cad9c0f3fa456`
-(generated 2026-09-23 by [`scripts/plan_eval_sampling.py`](../../../../scripts/plan_eval_sampling.py))
-labels **1,876 of 5,788 paragraphs, 32.4%**: the six PR-subset files in full (435 rows, because they
-gate every pull request and cannot be partial) and 1,441 of the other 5,353 rows, 26.9%, in
-contiguous blocks.
+Labeling all thirty files in full is about 5,800 rows of judgment work. Plan `06a5e928bf1fc90f`
+(generated 2026-10-01 by [`scripts/plan_eval_sampling.py`](../../../../scripts/plan_eval_sampling.py),
+replacing `792cad9c0f3fa456` after the [rejection](#rejected-files); no file had been corrected, and
+every other file's blocks are unchanged) labels **1,851 of 5,763 paragraphs, 32.1%**: the six
+PR-subset files in full (410 rows, because they gate every pull request and cannot be partial) and
+1,441 of the other 5,353 rows, 26.9%, in contiguous blocks.
 
 Blocks are at least 20 paragraphs, chosen deterministically from each file's keyed digest, and
 weighted toward blocks whose pre-labels hold `POCKET`, `UNDERTAG` or `ANALYTIC` — the sparsest units
@@ -155,7 +190,7 @@ whole instead; that is why some rates below are well above 25%.
 | `15be67df9cfaa272` | caselist | 77 | 20 | 26% | 0-19 |
 | `bcfba63d8d9d6a29` | caselist | 129 | 49 | 38% | 0-19, 100-128 |
 | `0bf568786e7dc6bb` | caselist | 62 | 20 | 32% | 0-19 |
-| `4b11269583a94621` | caselist | 55 | 55 | 100% | whole file |
+| `f791edc8c9c4a3b9` | caselist | 30 | 30 | 100% | whole file |
 | `71ce5ee012203a7e` | camp | 466 | 120 | 26% | 0-23, 120-143, 168-191, 288-311, 408-431 |
 | `930a44726db76488` | camp | 108 | 20 | 19% | 0-19 |
 | `18346891306c5a9d` | camp | 321 | 80 | 25% | 100-119, 140-179, 280-299 |

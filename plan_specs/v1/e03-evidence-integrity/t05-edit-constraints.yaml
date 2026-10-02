@@ -35,7 +35,17 @@ spec:
     with a typed error. The V2 rich-text editor enforces this same service; its UI is out of scope.
   priority: 2
   constraints:
-    packages: [debate_core.evidence, debate_core.application]
+    packages:
+      - debate_core.evidence
+      - debate_core.application
+      # The five entries below were added on the PM's instruction, 2026-10-02: the interpolation
+      # field on Card, the CardEditLog port, its in-memory fake, the regenerated card schema, and
+      # the format doc that records the edit policy and the negation heuristic.
+      - debate_core.domain
+      - debate_core.application.ports
+      - debate_core.testing
+      - packages/debate_core/schemas
+      - docs/evidence
     forbidden:
       - Any code path that writes evidence text directly rather than via offsets
       - Unbracketed interpolations or interpolations merged into verified evidence text

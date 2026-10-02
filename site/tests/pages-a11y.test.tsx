@@ -1,13 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import ContentPageRoute from '@/app/[slug]/page'
 import EventsPage from '@/app/events/page'
 import FaqPage from '@/app/faq/page'
+import SchedulePage from '@/app/schedule/page'
 import HomePage from '@/app/page'
 import { Prose } from '@/components/Prose'
 import { SiteFrame } from '@/components/SiteFrame'
@@ -15,6 +13,7 @@ import {
   EVENTS_SLUG,
   FAQ_SLUG,
   HOME_SLUG,
+  SCHEDULE_SLUG,
   buildNavigation,
   loadNotFoundPage,
   loadPages,
@@ -32,9 +31,10 @@ import { describeViolations, findAccessibilityViolations } from './axe'
  *
  *   1. Every content page rendered through the real frame. This always runs, including in CI,
  *      where `pnpm test` comes before `pnpm build` and there is no export yet.
- *   2. The exported HTML in site/out/, when a build has produced it. That is the artefact
- *      CloudFront serves, so it is the one the criterion is really about: it includes the head,
- *      the lang attribute, Next's own markup and the icon links, none of which pass 1 sees.
+ *   2. The exported HTML in site/out/, in tests/export/pages-a11y.export-test.ts, which runs
+ *      after every build. That is the artefact CloudFront serves, so it is the one the criterion
+ *      is really about: it includes the head, the lang attribute, Next's own markup and the icon
+ *      links, none of which pass 1 sees.
  *
  * axe cannot evaluate colour contrast under jsdom, which has no layout engine. tests/axe.ts
  * disables that rule explicitly and tests/tokens.test.ts asserts the ratios against the design
@@ -44,15 +44,6 @@ import { describeViolations, findAccessibilityViolations } from './axe'
 const settings = loadSiteSettings()
 const pages = loadPages()
 const navigation = buildNavigation()
-const outDirectory = join(process.cwd(), 'out')
-const hasExport = existsSync(join(outDirectory, 'index.html'))
-
-function exportedPath(slug: string): string {
-  return slug === HOME_SLUG
-    ? join(outDirectory, 'index.html')
-    : join(outDirectory, slug, 'index.html')
-}
-
 /**
  * Landmark rules only hold when banner, main and contentinfo are top level, so the frame goes
  * straight into document.body rather than the wrapper testing-library adds by default.
@@ -88,6 +79,9 @@ async function routeFor(slug: string): Promise<ReactNode> {
   }
   if (slug === EVENTS_SLUG) {
     return <EventsPage />
+  }
+  if (slug === SCHEDULE_SLUG) {
+    return <SchedulePage />
   }
   return ContentPageRoute({ params: Promise.resolve({ slug }) })
 }
@@ -159,42 +153,5 @@ describe('every image carries alt text', () => {
     for (const image of document.querySelectorAll('img')) {
       expect(image.getAttribute('alt'), `${page.filePath}: ${image.getAttribute('src')}`).not.toBeNull()
     }
-  })
-})
-
-/**
- * The exported files, which is what the acceptance criterion means by "every built page". The
- * whole document is replaced, head and all, so document-level rules such as html-has-lang and
- * document-title are evaluated as a browser would evaluate them.
- */
-describe.runIf(hasExport)('every built page in site/out/', () => {
-  const originalLang = document.documentElement.lang
-
-  afterEach(() => {
-    document.documentElement.lang = originalLang
-    document.documentElement.innerHTML = '<head></head><body></body>'
-  })
-
-  function loadBuiltPage(slug: string) {
-    const html = readFileSync(exportedPath(slug), 'utf8')
-    document.documentElement.lang = /<html[^>]*\blang="([^"]*)"/.exec(html)?.[1] ?? ''
-    const head = /<head>([\s\S]*?)<\/head>/.exec(html)?.[1] ?? ''
-    const body = /<body[^>]*>([\s\S]*?)<\/body>/.exec(html)?.[1] ?? ''
-    document.documentElement.innerHTML = `<head>${head}</head><body>${body}</body>`
-  }
-
-  it.each([...pages.map((page) => page.slug), '404'])(
-    '%s has no WCAG 2.1 AA violation',
-    async (slug) => {
-      loadBuiltPage(slug)
-      const violations = await findAccessibilityViolations(document.documentElement)
-      expect(violations, `${slug}:\n${describeViolations(violations)}`).toEqual([])
-    },
-  )
-
-  it.each([...pages.map((page) => page.slug)])('%s declares a language and a title', (slug) => {
-    loadBuiltPage(slug)
-    expect(document.documentElement.lang).toBe('en')
-    expect(document.title.length).toBeGreaterThan(0)
   })
 })

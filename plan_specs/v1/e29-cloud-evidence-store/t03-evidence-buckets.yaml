@@ -75,6 +75,10 @@ spec:
         Lifecycle configuration transitions noncurrent versions to STANDARD_IA after 30 days and expires
         them after 365 days in prod (30 in dev), aborts incomplete multipart uploads after 7 days,
         expires objects under exports/ after 1 day, and has no other rule that expires current versions.
+    # PM note, 2026-10-01: v1-e29-t06 adds a read-only s3:ListBucketVersions for EvidenceOperator,
+    # under the removable-prefix condition, so a removal's dry run can count versions. Once that
+    # task lands, the "grants only" list below is superseded by it; this task's own evidence for
+    # ac3, recorded when it was Succeeded, stands as it was.
     - id: ac3
       description: >-
         The EvidenceOperator permission set grants only ListBucket (scoped to the documented prefixes),

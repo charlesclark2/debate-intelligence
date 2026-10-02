@@ -18,8 +18,17 @@
 # approve pull requests"; without it `gh pr create` is refused and this job fails, which is the
 # signal to back-merge by hand.
 #
+# A second job re-runs promotion-guard.yml on every pull request open against main
+# (v1-e01-t12-promotion-guard-rerun). Merging into main re-runs nothing on pull requests already
+# open against it, GitHub has no "base branch moved" event, and "require branches to be up to date"
+# is off on purpose, so without this a promotion opened before a hotfix keeps a stale green
+# `back-merge` and can merge a combination dev never validated. The re-run is how its `back-merge`
+# learns main moved.
+#
 # Runs only on push to main, never on a pull request, so no fork's code ever runs with the write
-# permission below; it is scoped to the one job that needs it.
+# permissions below. Each is scoped to the one job that needs it, and the job holding
+# `actions: write` checks out nothing: it reads pull requests and runs through the API and never
+# executes pull-request code.
 
 name: Back-merge main into dev
 
@@ -99,3 +108,75 @@ jobs:
           } > body.md
           gh pr create --repo "$REPO" --base dev --head main --label back-merge \
             --title "Back-merge main → dev" --body-file body.md
+
+  rerun-promotion-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write # re-run promotion-guard.yml runs
+      pull-requests: read # list the pull requests open against main
+    # No checkout, on purpose: this job holds a write permission, so it must never run code from a
+    # pull request, and it needs none of the repository's own code either.
+    steps:
+      - name: Re-run promotion-guard on every pull request open against main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        # A re-run replays the original pull_request event, including its description, which is
+        # the newest one because this re-runs the newest run for the head commit. The `back-merge`
+        # job fetches main's and dev's live tips itself, so its re-run sees the push that started
+        # this workflow.
+        #
+        # A run still in progress may have fetched main before this push, so wait for it to finish
+        # and then re-run it; GitHub refuses to re-run a run in progress. A pull request with no
+        # run at all is already blocked, because its required checks never reported. A failed
+        # re-run fails this job, which is the signal to re-run that pull request's checks by hand.
+        run: |
+          set -euo pipefail
+          # base=main in the query, and checked again here: nothing based on another branch is touched.
+          gh api --paginate "repos/$REPO/pulls?state=open&base=main&per_page=100" \
+            | jq -r '.[] | select(.base.ref == "main")
+                     | [.number, .head.sha, .head.ref, (.head.repo.full_name // "")] | @tsv' \
+            > open_prs.tsv
+          if [ ! -s open_prs.tsv ]; then
+            echo "No pull requests are open against main."
+            exit 0
+          fi
+
+          # The newest promotion-guard run for this pull request's head commit, as "id status".
+          # Only one open pull request into main can have a given head branch and repository.
+          newest_run() {
+            gh api "repos/$REPO/actions/workflows/promotion-guard.yml/runs?event=pull_request&head_sha=$1&per_page=100" \
+              | jq -r --arg ref "$2" --arg repo "$3" '
+                  [.workflow_runs[]
+                   | select(.head_branch == $ref and .head_repository.full_name == $repo)]
+                  | sort_by(.created_at) | last // empty | "\(.id) \(.status)"'
+          }
+
+          failed=0
+          while IFS=$'\t' read -r number sha ref head_repo; do
+            if [ -z "$head_repo" ]; then
+              echo "::warning::#$number: its head repository is gone; promotion-source fails it anyway."
+              continue
+            fi
+            run=$(newest_run "$sha" "$ref" "$head_repo")
+            waited=0
+            while [ -n "$run" ] && [ "${run#* }" != completed ] && [ "$waited" -lt 300 ]; do
+              echo "#$number: promotion-guard run ${run% *} is ${run#* }; waiting for it to finish."
+              sleep 15
+              waited=$((waited + 15))
+              run=$(newest_run "$sha" "$ref" "$head_repo")
+            done
+            if [ -z "$run" ]; then
+              echo "::warning::#$number: no promotion-guard run for head $sha, so there is nothing to re-run."
+            elif [ "${run#* }" != completed ]; then
+              echo "::error::#$number: promotion-guard run ${run% *} did not finish within 5 minutes. Re-run its checks by hand."
+              failed=1
+            elif gh api -X POST "repos/$REPO/actions/runs/${run% *}/rerun" > /dev/null; then
+              echo "#$number: re-running promotion-guard run ${run% *} for head $sha."
+            else
+              echo "::error::#$number: could not re-run promotion-guard run ${run% *}. Re-run its checks by hand."
+              failed=1
+            fi
+          done < open_prs.tsv
+          exit "$failed"

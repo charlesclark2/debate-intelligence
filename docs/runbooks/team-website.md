@@ -847,25 +847,26 @@ how a page about a child goes out unreviewed.
 
 | | What has to be true | How you know |
 |---|---|---|
-| 1 | **The October 1 room is filled in.** `content/home.yaml` gives the Room fact a `value`, not an `unsetNote`. "To be announced" is a value; leaving it unset is not | `SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build` exits 0 |
-| 2 | **The prod build is clean.** No unfilled placeholder, no unreviewed name, no address outside the allowlist, no image without a consent entry | The same build. A failure names the file and the field |
-| 3 | **The offline checks pass, against an export built from this commit** | Build first, then test, in that order: see the note below the table |
-| 4 | **The browser QA run is green.** Every page at or above 95 on accessibility and best practices, axe clean at 390, 768 and 1280px, nothing scrolling sideways | `pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95` exits 0. The report it writes goes in the session report |
-| 5 | **The pre-publication checklist is ticked** for the commit being promoted | [`docs/policies/website-publishing.md`](../policies/website-publishing.md), Pre-publication checklist, items 1 to 16 (17 and 18 too, on the season's first deploy) |
-| 6 | **You have read the site as a parent would**, on a phone, on the dev preview | Step 2 below |
+| 1 | **The prod build is clean.** No unfilled placeholder, no unreviewed name, no address outside the allowlist, no image without a consent entry | `SITE_ENV=prod SITE_URL=https://wfbdebate.com site/scripts/export-checks.sh` gets past its build. A failure names the file and the field |
+| 2 | **The offline checks pass, against an export built from this commit** | `export-checks.sh` and `pnpm test` both exit 0: see the note below the table |
+| 3 | **The browser QA run is green.** Every page at or above 95 on accessibility and best practices, axe clean at 390, 768 and 1280px, nothing scrolling sideways | `pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95` exits 0. The report it writes goes in the session report |
+| 4 | **The pre-publication checklist is ticked** for the commit being promoted | [`docs/policies/website-publishing.md`](../policies/website-publishing.md), Pre-publication checklist, items 1 to 16 (17 and 18 too, on the season's first deploy) |
+| 5 | **You have read the site as a parent would**, on a phone, on the dev preview | Step 2 below |
 
-**Build before you test, every time.** Nine of the site's test suites read the built export in
-`site/out/` from disk. When there is no export they skip, which is harmless. When there is an
-export **from an earlier commit**, they check that old HTML instead of the code in front of you,
-and they can pass. A green run then proves nothing about what is about to be promoted, and nothing
-on screen says so. `site/scripts/pre-commit-checks.sh` runs `test` before `build`, so on its own
-it reads whatever the previous run left behind. For preconditions 2 to 4, run them in this order,
-from the commit you mean to promote, with nothing edited in between:
+**The export checks run against an export built from this commit.** Ten of the site's test files
+read the built export in `site/out/`, the files CloudFront will serve. They live in
+`site/tests/export/` and run from `site/scripts/export-checks.sh`, which builds first and then
+checks; `pnpm --dir site test` does not run them. Until `v1-e36-t10` they ran inside `pnpm test`
+and skipped when there was no export, or read an export left over from an earlier commit and could
+pass against it. Now an export that is missing, or was not built from the tree in front of you with
+the same `SITE_*` settings, fails the run and says what differs. For preconditions 1 to 3, from the
+commit you mean to promote: the first line is precondition 1 and the export half of 2, the second
+the source half of 2, and the third precondition 3.
 
 ```bash
-SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build   # preconditions 1 and 2
-pnpm --dir site lint && pnpm --dir site typecheck && pnpm --dir site test   # precondition 3
-pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95         # precondition 4
+SITE_ENV=prod SITE_URL=https://wfbdebate.com site/scripts/export-checks.sh
+pnpm --dir site lint && pnpm --dir site typecheck && pnpm --dir site test
+pnpm --dir site qa -- --min-accessibility 95 --min-best-practices 95
 ```
 
 The QA command reads `site/out/` too, so the same rule applies to it: its scores are evidence for
@@ -886,13 +887,14 @@ the export on disk, and only for that.
 ```
 
 1. **Deploy dev.** Full command block under [Deploy the dev preview](#deploy-the-dev-preview).
-2. **Smoke-check dev.** `All N checks passed.` Since `v1-e36-t08` this also confirms the October 1
-   panel is on the home page, the parent FAQ's answers still open individually, and how many pages
-   still carry a gap badge. On the preview a gap is reported rather than failed; **if that count is
+2. **Smoke-check dev.** `All N checks passed.` Beyond the pages and headers, this confirms the
+   season-schedule panel is on the home page, the tournament calendar `/schedule.ics` is served as
+   `text/calendar` (`v1-e37-t02`), the parent FAQ's answers still open individually, and how many
+   pages still carry a gap badge. On the preview a gap is reported rather than failed; **if that count is
    not zero, stop here**: the same commit cannot build for prod.
 3. **Read it on a phone.** The smoke check cannot tell you whether the copy is right, and that is
-   the part that matters most. Open the home page, the October 1 panel, the events cards and the
-   FAQ on an iPhone in Safari and on an Android phone in Chrome. Nothing cut off, nothing
+   the part that matters most. Open the home page, the tournament schedule (`/schedule/`), the
+   events cards and the FAQ on an iPhone in Safari and on an Android phone in Chrome. Nothing cut off, nothing
    overlapping, every disclosure opening on a tap.
 4. **Promote.** A pull request from `dev` into `main` ([ADR-0013](../adr/0013-two-environments-and-dev-main-promotion.md)).
    Prod can only ever be what is on `main`, and the deploy script refuses anything else.
@@ -952,13 +954,29 @@ matches no branch is how a page nobody reviewed stays up for a month without any
 ### The emergency lever
 
 If something about a student is live and must be gone in minutes rather than in a PR cycle, the
-publisher profile can delete the object and invalidate it:
+publisher profile can delete the page's objects and invalidate them.
+
+A page's words are not only in its `index.html`. The export also writes `index.txt` and the
+`__next.*.txt` payloads beside it, which the browser fetches when a visitor moves between pages, so
+the whole folder goes:
 
 ```bash
-AWS_PROFILE=debate-prod-site aws s3 rm s3://debate-prod-site-a7508de8/<path>/index.html
-AWS_PROFILE=debate-prod-site aws cloudfront create-invalidation \
-  --distribution-id <prod-distribution-id> --paths '/<path>/*'
+AWS_PROFILE=debate-prod-site aws s3 rm --recursive s3://debate-prod-site-a7508de8/<path>/
+AWS_PROFILE=debate-prod-site aws cloudfront create-invalidation --distribution-id <prod-distribution-id> --paths '/<path>/*'
 ```
+
+**For the tournament schedule** (`v1-e37-t02`), the same text is in two places: the page folder
+`schedule/` (`schedule/index.html`, `schedule/index.txt` and the payloads) and the calendar file
+`schedule.ics`, which subscribed calendar apps fetch on their own. Remove both:
+
+```bash
+AWS_PROFILE=debate-prod-site aws s3 rm --recursive s3://debate-prod-site-a7508de8/schedule/
+AWS_PROFILE=debate-prod-site aws s3 rm s3://debate-prod-site-a7508de8/schedule.ics
+AWS_PROFILE=debate-prod-site aws cloudfront create-invalidation --distribution-id <prod-distribution-id> --paths '/schedule/*' '/schedule.ics'
+```
+
+A calendar app that already fetched the file keeps its copy until it next checks, and nothing on
+the team's side can reach into it; for a student's details, contact the families directly as well.
 
 This is a stop-gap and leaves the site inconsistent with `main`: the **next deploy puts the page
 back**. Follow it with the takedown below the same day.

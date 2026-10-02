@@ -48,6 +48,7 @@ from tests.evals.parser.labels_schema import (  # noqa: E402
     load_manifest,
     load_sampling_plan,
 )
+from tests.evals.parser.manifest_summary import write_summaries  # noqa: E402
 from tests.evals.parser.sampling import build_sampling_plan  # noqa: E402
 
 __all__ = ["main"]
@@ -111,7 +112,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"  {file_plan.digest[:12]}… {file_plan.labeled_rows:5d} of {file_plan.paragraphs:5d} "
             f"({file_plan.rate:5.1%}) {'full  ' if file_plan.full else 'blocks'} {blocks}"
         )
-    print(f"written to {args.output.relative_to(REPO_ROOT)}")
+    print(f"written to {args.output.name} beside the manifest")
+    summaries = write_summaries(args.manifest, args.manifest.parent / "rejections.json", args.output)
+    print(f"tables regenerated in {len(summaries)} document(s) beside the manifest")
     return 0
 
 

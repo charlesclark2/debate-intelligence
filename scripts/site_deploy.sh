@@ -36,7 +36,7 @@
 #   4. builds site/ with that environment's SITE_ENV and SITE_URL;
 #   5. writes site/out/version.json with the commit sha, so a deployed site can be identified;
 #   6. syncs site/out/ into the bucket, long cache for the hashed assets and no-cache for
-#      everything else;
+#      everything else, with the calendar file uploaded as text/calendar;
 #   7. creates a CloudFront invalidation and waits for it to complete.
 #
 # Step 7 waits on purpose. The publishing policy gives a 24-hour clock for removing something
@@ -63,6 +63,12 @@ readonly IMMUTABLE_CACHE_CONTROL="public, max-age=31536000, immutable"
 # be revalidated. CloudFront honours this (the cache behaviour is Managed-CachingOptimized), which
 # is why the invalidation only has to deal with what is already in an edge cache.
 readonly MUTABLE_CACHE_CONTROL="no-cache, must-revalidate"
+# The tournament calendar parents subscribe to (site/content/tournaments.yaml, v1-e37-t02). Set
+# here rather than left to `aws s3 sync`, which guesses a type from the deploying machine's
+# mimetypes table: a machine without an .ics entry would upload binary/octet-stream, and a
+# calendar app served that stops updating without saying so.
+readonly CALENDAR_PATTERN="*.ics"
+readonly CALENDAR_CONTENT_TYPE="text/calendar; charset=utf-8"
 
 usage() {
   cat <<'USAGE'
@@ -256,14 +262,16 @@ cat "${EXPORT_DIR}/version.json"
 
 # --- Upload -----------------------------------------------------------------------------------
 #
-# Three passes, in this order and for this reason:
+# Four passes, in this order and for this reason:
 #
 #   1. the hashed assets go up first, with no --delete, so that a page can never be served before
 #      the chunks it references exist;
 #   2. then everything else, with --delete, so a page removed from the site leaves the bucket in
 #      the same deploy. The hashed prefix is excluded, which also excludes it from the deletion
-#      pass — that is what makes pass 1's ordering hold;
-#   3. then the hashed prefix again, with --delete, to remove the chunks no page references any
+#      pass — that is what makes pass 1's ordering hold. Calendar files are excluded too;
+#   3. then only the calendar files, as text/calendar whatever the machine's mimetypes table says,
+#      with --delete limited to them so a removed calendar still leaves the bucket;
+#   4. then the hashed prefix again, with --delete, to remove the chunks no page references any
 #      more. It uploads nothing: pass 1 already did.
 #
 # --delete only ever names this environment's own bucket, and the publisher profile can reach no
@@ -287,6 +295,15 @@ run_aws s3 sync "${EXPORT_DIR}" "s3://${bucket_name}" \
   --no-progress \
   --delete \
   --exclude "${IMMUTABLE_PREFIX}/*" \
+  --exclude "${CALENDAR_PATTERN}" \
+  --cache-control "${MUTABLE_CACHE_CONTROL}"
+
+run_aws s3 sync "${EXPORT_DIR}" "s3://${bucket_name}" \
+  --no-progress \
+  --delete \
+  --exclude "*" \
+  --include "${CALENDAR_PATTERN}" \
+  --content-type "${CALENDAR_CONTENT_TYPE}" \
   --cache-control "${MUTABLE_CACHE_CONTROL}"
 
 run_aws s3 sync "${EXPORT_DIR}/${IMMUTABLE_PREFIX}" "s3://${bucket_name}/${IMMUTABLE_PREFIX}" \

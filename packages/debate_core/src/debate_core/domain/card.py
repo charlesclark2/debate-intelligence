@@ -4,21 +4,49 @@ A :class:`Card` is the platform's output: a tag, a cite, a verbatim quotation, a
 and highlighting a debater reads from. Its invariants exist to make one failure mode impossible —
 quoted evidence that is not traceable to a stored snapshot.
 
-Three rules are enforced here, at construction:
+## Envelope and omissions (ADR-0018)
+
+A card quotes one passage of its snapshot and records what it left out of it. Cutting a card means
+removing words from the middle of a passage, so this is the ordinary case, not an exception.
+
+* `evidence_start_offset` and `evidence_end_offset` are the **envelope**: the first character of the
+  passage the card quotes from, and the position just past its last, in the snapshot's normalized
+  text.
+* `omitted_ranges` lists what was removed from inside the envelope, as snapshot offsets, in
+  **canonical form**: sorted, non-overlapping, non-adjacent (two touching omissions are one
+  omission), non-empty, and strictly inside the envelope, touching neither boundary (an omission at
+  an edge is a smaller envelope). One card therefore has exactly one representation.
+* `evidence_text` is the envelope with the omissions removed, the pieces concatenated with **no
+  joiner**: no ellipsis, bracket or space is ever stored, because any of them is text no snapshot
+  contains. Whether and how a cut is shown (an ellipsis, a paragraph break) is decided by the
+  exporter from `omitted_ranges` when it renders the card.
+* `CardSpan` offsets index `evidence_text`, never the snapshot, so a span cannot mark omitted text.
+
+`debate_core.evidence.card_mapping.place_evidence_on_card` is the one function that turns an
+extracted selection and its markup into these fields; nothing else does that offset arithmetic.
+
+## Construction rules
+
+Four rules are enforced here, at construction:
 
 1. A card that holds evidence text must say where the text came from: a `snapshot_id` and the
-   offsets of the quotation inside that snapshot's normalized text.
-2. A card can only be `VERIFIED` if it has everything re-verification needs: the snapshot, the
+   envelope of the quotation inside that snapshot's normalized text.
+2. Omissions are in canonical form, and the envelope's length minus the total length of the
+   omissions equals `len(evidence_text)`. That length invariant needs no snapshot to check.
+3. A card can only be `VERIFIED` if it has everything re-verification needs: the snapshot, the
    `normalizer_version` the offsets were taken under, and at least one marked span.
-3. Spans must fall inside the evidence text, and two spans of the same style may not overlap.
+4. Spans must fall inside the evidence text, and two spans of the same style may not overlap.
 
-The domain deliberately does *not* check that `evidence_text` equals the snapshot slice. That
-comparison is the evidence verifier's job (E03): a tampered or edited card has to be constructible
-so the verifier can report `TEXT_MISMATCH` on it, rather than blowing up before it can be checked.
+The domain deliberately does *not* check that `evidence_text` equals the snapshot's text at those
+offsets. That comparison is the evidence verifier's job (E03): a tampered or edited card has to be
+constructible so the verifier can report `TEXT_MISMATCH` on it, rather than blowing up before it can
+be checked. The length invariant is consistent with that: it compares the card with itself, and a
+card whose text was altered without changing its length is still constructible and still reported.
 """
 
 from __future__ import annotations
 
+import itertools
 from typing import Self
 
 from pydantic import Field, model_validator
@@ -36,7 +64,7 @@ from debate_core.domain.base import (
 from debate_core.domain.citation import Citation
 from debate_core.domain.enums import ProvenanceMode, SpanPurpose, SpanStyle, VerificationStatus
 
-__all__ = ["Card", "CardSpan"]
+__all__ = ["Card", "CardOmission", "CardSpan"]
 
 #: Format profile applied when a card does not name one. The profiles themselves are declarative
 #: config loaded by the renderer (E06), not code.
@@ -77,13 +105,43 @@ class CardSpan(DomainModel):
         return self.start_offset < other.end_offset and other.start_offset < self.end_offset
 
 
+class CardOmission(DomainModel):
+    """Characters of the snapshot a card left out of the passage it quotes.
+
+    Offsets are character positions **into the snapshot's normalized text**, like the card's
+    `evidence_start_offset` and `evidence_end_offset`, half-open (`start_offset` inclusive,
+    `end_offset` exclusive). This is the opposite of :class:`CardSpan`, whose offsets index
+    `evidence_text`: an omission names text that is, by definition, not in `evidence_text`.
+
+    It holds no text. Whoever audits the card reads what was removed from the snapshot at these
+    offsets, and the exporter decides how to show the cut.
+    """
+
+    start_offset: int = Field(ge=0, description="Inclusive start offset of the omitted text in the snapshot.")
+    end_offset: int = Field(gt=0, description="Exclusive end offset of the omitted text in the snapshot.")
+
+    @model_validator(mode="after")
+    def _check_bounds(self) -> Self:
+        if self.start_offset >= self.end_offset:
+            raise ValueError(
+                f"an omission must remove at least one character; start_offset ({self.start_offset}) "
+                f"must be before end_offset ({self.end_offset})"
+            )
+        return self
+
+    @property
+    def length(self) -> int:
+        """Number of snapshot characters omitted."""
+        return self.end_offset - self.start_offset
+
+
 class Card(DomainEntity):
     """A piece of evidence cut from a source snapshot.
 
-    `evidence_text` is verbatim: it is extracted from the stored snapshot at
-    `[evidence_start_offset:evidence_end_offset]`, never written or paraphrased by a model. A model
-    may choose *which* span to cut and may write the `tag`, but the quotation itself only ever
-    comes out of the snapshot (architecture proposal §8).
+    `evidence_text` is verbatim: it is the stored snapshot's text from `evidence_start_offset` to
+    `evidence_end_offset` with `omitted_ranges` taken out (see the module docstring), never written
+    or paraphrased by a model. A model may choose *which* span to cut and may write the `tag`, but
+    the quotation itself only ever comes out of the snapshot (architecture proposal §8).
 
     `provenance_mode` has no default on purpose. Defaulting it would make
     `PUBLISHER_RETRIEVED` — the strongest claim the platform can make about a piece of text — the
@@ -106,10 +164,21 @@ class Card(DomainEntity):
         default="", description="Verbatim quotation taken from the snapshot; empty until extraction runs."
     )
     evidence_start_offset: int | None = Field(
-        default=None, ge=0, description="Inclusive start offset of the quotation in the normalized snapshot."
+        default=None,
+        ge=0,
+        description="Inclusive start offset of the quotation's envelope in the normalized snapshot.",
     )
     evidence_end_offset: int | None = Field(
-        default=None, gt=0, description="Exclusive end offset of the quotation in the normalized snapshot."
+        default=None,
+        gt=0,
+        description="Exclusive end offset of the quotation's envelope in the normalized snapshot.",
+    )
+    omitted_ranges: tuple[CardOmission, ...] = Field(
+        default=(),
+        description=(
+            "Snapshot ranges left out from inside the envelope, in canonical form: sorted, separated by "
+            "at least one kept character, and touching neither end of the envelope."
+        ),
     )
     normalized_text_hash: Sha256Hex | None = Field(
         default=None, description="SHA-256 of the snapshot's normalized text the offsets refer to."
@@ -161,6 +230,42 @@ class Card(DomainEntity):
         return self
 
     @model_validator(mode="after")
+    def _check_omissions(self) -> Self:
+        """Omissions are canonical, and the envelope minus them is exactly as long as the text."""
+        start, end = self.evidence_start_offset, self.evidence_end_offset
+        if start is None or end is None:
+            if self.omitted_ranges:
+                raise ValueError("a card with no evidence envelope cannot omit anything from it")
+            return self
+        for omission in self.omitted_ranges:
+            if not start < omission.start_offset or not omission.end_offset < end:
+                raise ValueError(
+                    f"omission {omission.start_offset}-{omission.end_offset} is not strictly inside the "
+                    f"envelope {start}-{end}; an omission at an edge is a smaller envelope"
+                )
+        for previous, omission in itertools.pairwise(self.omitted_ranges):
+            # One rule: each omission starts after the previous one ends, with a kept character
+            # between them. The label only says which way a refused pair breaks it.
+            if omission.start_offset <= previous.end_offset:
+                if omission.start_offset < previous.start_offset:
+                    problem = "are out of order"
+                elif omission.start_offset < previous.end_offset:
+                    problem = "overlap"
+                else:
+                    problem = "touch; two touching omissions are one omission"
+                raise ValueError(
+                    f"omissions {previous.start_offset}-{previous.end_offset} and "
+                    f"{omission.start_offset}-{omission.end_offset} {problem}"
+                )
+        quoted = (end - start) - sum(omission.length for omission in self.omitted_ranges)
+        if quoted != len(self.evidence_text):
+            raise ValueError(
+                f"the envelope {start}-{end} minus {len(self.omitted_ranges)} omission(s) quotes {quoted} "
+                f"characters, but evidence_text has {len(self.evidence_text)}"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _check_spans(self) -> Self:
         """Spans mark up the evidence, so they must fall inside it and not collide."""
         if not self.spans:
@@ -203,6 +308,23 @@ class Card(DomainEntity):
                 "a card that cannot be re-verified stays UNVERIFIED"
             )
         return self
+
+    @property
+    def quoted_ranges(self) -> tuple[tuple[int, int], ...]:
+        """The snapshot ranges `evidence_text` is made of, in order: the envelope minus the omissions.
+
+        Empty for a card with no evidence. Half-open `(start, end)` pairs into the snapshot's
+        normalized text; each is non-empty, and consecutive ones never touch.
+        """
+        if self.evidence_start_offset is None or self.evidence_end_offset is None:
+            return ()
+        ranges: list[tuple[int, int]] = []
+        kept_from = self.evidence_start_offset
+        for omission in self.omitted_ranges:
+            ranges.append((kept_from, omission.start_offset))
+            kept_from = omission.end_offset
+        ranges.append((kept_from, self.evidence_end_offset))
+        return tuple(ranges)
 
     @property
     def is_finished_evidence(self) -> bool:

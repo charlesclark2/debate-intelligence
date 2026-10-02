@@ -16,6 +16,41 @@ metadata:
     debate/title: EvidenceVerifier and verification statuses
     debate/architecture-refs: §8, ADR-006, §11, §16, §20 step 2
 spec:
+  # PM notes, 2026-10-01. The v1-e03-t02 note below was first written inside the description's
+  # folded block, where a leading # is text and not a comment, so it was rendering into
+  # ROADMAP.md as prose. Moved here, where these are actually comments.
+  #
+  # From v1-e03-t02's report: t02 stores the raw bytes and the normalized text, not the
+  # extractor's output, so "re-normalizes" can only mean re-running the normalizer on the
+  # normalized text (an idempotence check) or re-running the extractor on the raw bytes, which is
+  # reproducible only if the extractor is deterministic for its extractor_version. Settle which
+  # before building, and if this task needs the extracted text, that is a change to t02's blob
+  # layout and not something t04 can add alone. t02 also exposes a SnapshotIntegrityCheck enum to
+  # map to reason codes; its report suggests UNKNOWN_NORMALIZER_VERSION gets its own code, the
+  # hash, size, malformed and version-mismatch checks map to HASH_MISMATCH, and NotFound maps to
+  # SNAPSHOT_MISSING.
+  #
+  # From v1-e03-t03's report: t03's EvidenceExtractor slices the stored normalized text by offsets
+  # and paragraph IDs and never reads the raw bytes, so it settles nothing about whether the E04
+  # content extractor is deterministic for its extractor_version; the question above is still open.
+  # What t03 does give this task: EvidenceExtractor.extract over a loaded snapshot with a card's
+  # stored offsets reproduces the evidence exactly, checks the text against the record's
+  # normalized_text_hash and normalizer_version, and re-derives the paragraph map from the text and
+  # refuses a mismatch before resolving a paragraph ID. t03 suggests SnapshotTextMismatch ->
+  # HASH_MISMATCH and InvalidSelection / InvalidMarkup -> SPAN_OUT_OF_RANGE.
+  # PM decision, 2026-10-01: adopt that mapping and add no new codes. A paragraph map that disagrees
+  # with its text can only arrive through a SnapshotText that did not come intact through
+  # SnapshotService.load, so it is an integrity failure and HASH_MISMATCH is the honest code; and a
+  # selection that no longer fits a byte-identical snapshot is what SPAN_OUT_OF_RANGE already means.
+  # (Corrected the same day: an earlier version of this paragraph conflated the two extractors and
+  # credited t03 with codes it did not propose. The t03 session caught both.)
+  #
+  # Open and mine, not t04's: a Card today holds one evidence_text with CardSpan offsets relative
+  # to it, which cannot express evidence with cuts in the middle. t03 therefore returns its own
+  # snapshot-relative EvidenceMarkupSpan rather than a domain CardSpan. Single-segment evidence
+  # maps cleanly either way, so t04 may proceed on single-segment cards, but it must not invent a
+  # multi-segment Card shape along the way. The PM is settling it in ADR-0018 and landing it as
+  # v1-e03-t07; t04 is not blocked on either.
   description: >-
     Implement EvidenceVerifier, the gate that decides whether a card is finished evidence. It loads the
     card's snapshot with integrity checks, re-normalizes under the card's recorded normalizer_version,
@@ -27,7 +62,9 @@ spec:
     CLI surfacing is t06; edit re-verification is t05; DOCX export is E06.
   priority: 1
   constraints:
-    packages: [debate_core.evidence, debate_core.application]
+    # docs/evidence added by the PM, 2026-10-01, before the task started: the verifier changes what
+    # the format doc's guarantees table can promise, and t01, t02 and t03 all needed it.
+    packages: [debate_core.evidence, debate_core.application, docs/evidence]
     forbidden:
       - Fuzzy or similarity-based matching for evidence text (exact match after normalization only)
       - Setting VERIFIED anywhere except EvidenceVerifier
@@ -56,7 +93,7 @@ spec:
       description: >-
         A mutation-style test suite of fabricated and paraphrased evidence fixtures has a 0% pass rate.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

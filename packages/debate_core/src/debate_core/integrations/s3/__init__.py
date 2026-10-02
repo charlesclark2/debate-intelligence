@@ -15,6 +15,9 @@ Two adapters, matching the two shapes evidence comes in:
 * :class:`~debate_core.integrations.s3.object_store.S3EvidenceObjectStore` —
   :class:`~debate_core.application.ports.evidence_store.EvidenceObjectStore` over objects with names:
   `manifests/*.jsonl`, `reports/*`.
+* :class:`~debate_core.integrations.s3.version_store.S3EvidenceVersionStore` —
+  :class:`~debate_core.application.ports.evidence_versions.EvidenceVersionStore`: every version of an
+  object, and deleting them. Takedowns only (`v1-e30-t07`).
 
 ## Wiring
 
@@ -46,7 +49,8 @@ import importlib.util
 if importlib.util.find_spec("boto3") is None:  # pragma: no cover - depends on how this was installed
     raise ModuleNotFoundError(
         "debate_core.integrations.s3 needs boto3, which is an optional dependency of debate-core: "
-        "install it with `uv sync --extra aws` (or `pip install 'debate-core[aws]'`)."
+        "install it with `uv sync --all-packages --extra aws` from the workspace root "
+        "(or `pip install 'debate-core[aws]'`)."
     )
 
 from debate_core.integrations.s3.client import (
@@ -63,6 +67,7 @@ from debate_core.integrations.s3.snapshot_store import (
     SHA256_METADATA_NAME,
     S3SnapshotStore,
 )
+from debate_core.integrations.s3.version_store import S3EvidenceVersionStore
 
 __all__ = [
     "BLOB_KEY_SEGMENT",
@@ -72,6 +77,7 @@ __all__ = [
     "SHA256_METADATA_NAME",
     "S3Call",
     "S3EvidenceObjectStore",
+    "S3EvidenceVersionStore",
     "S3SnapshotStore",
     "build_s3_client",
     "build_transfer_config",

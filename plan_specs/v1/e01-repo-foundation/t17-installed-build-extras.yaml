@@ -1,0 +1,120 @@
+# TASK v1-e01-t17-installed-build-extras - The installed build carries what its commands need
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+# Architecture refs: v1-e01-t09 (dev pre-release channel), §4
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t17-installed-build-extras
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: The installed build carries what its commands need
+spec:
+  # Filed by the PM, 2026-10-01, from the operator's first attempt at v1-e34-t05: the installed
+  # v0.1.0-dev build failed `caselist pull`, even with --dry-run, with "debate_core.integrations.s3
+  # needs boto3", exit 70.
+  description: >-
+    `scripts/install_channel.sh` (v1-e01-t09) installs `debate-cli` as a uv tool together with
+    `debate-core`, but without any of debate-core's optional extras, and `debate-cli` itself depends
+    only on `debate-core[opencaselist]`. So the installed build has no boto3 and no lxml. Every
+    command whose composition root wires the S3 adapter fails, and since v1-e30-t07 that includes
+    every `caselist pull`, because the importers read the bucket's copy of the suppression list. The
+    channel was verified by `debate-research --version` and `config show`, which import none of the
+    integrations, so it passed while the build could not do the job the schedule installs it for:
+    a check that never exercised the path it certified. The error also tells an installed-build user
+    to run `uv sync --extra aws`, which only applies to a checkout. Make the installed build complete,
+    and make the channel's own verification prove it. Decide where the extras are declared and
+    justify it; the likely answer is that `debate-cli` depends on what its container wires, because
+    the CLI is the delivery surface that imports those adapters, rather than the installer patching
+    over a missing dependency. Out of scope: the release workflow for v1.5 (v1-e09-t06), and any
+    change to the adapters themselves.
+  priority: 1
+  constraints:
+    packages: [packages/debate_cli, scripts, docs]
+    forbidden:
+      - Making boto3 or lxml a dependency of debate_core's domain, evidence or application layers
+      - A post-install check that can pass without importing the integrations the CLI wires
+      - Telling an installed-build user to run a checkout-only command
+  context:
+    - kind: TaskRef
+      name: v1-e01-t09-dev-prerelease-channel
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Reworded by the PM, 2026-10-02: as first written it said the container wires the docx parser,
+        which it does not yet (v1-e31-t06 wires it); the session showed that. A build installed by
+        `scripts/install_channel.sh` can import every integration the CLI's container wires (today the
+        local adapters, the OpenCaselist client and the S3 adapter) and carries the docx extra the
+        parse stage will need. Shown failing first against the current channel build, with the same
+        exit-70 error the operator saw.
+    - id: ac2
+      description: >-
+        The channel's post-install verification imports or constructs every integration the
+        container wires, not just `--version`, and is shown failing on a build with the extra
+        removed. It asserts it covered the list of integrations the container actually wires, so a
+        new integration added later is not silently left out.
+    - id: ac3
+      description: >-
+        When an optional dependency is missing at runtime, the message distinguishes an installed
+        build (reinstall with install_channel.sh at a fixed tag) from a checkout (`uv sync --extra`).
+    - id: ac4
+      description: >-
+        On a fresh install of the resulting pre-release, `DEBATE_ENV=dev debate-research caselist
+        pull --caselist hsld26 --dry-run`, run from $HOME, completes without the operator's manual
+        stopgap (installing boto3 into the tool environment by hand). The operator runs this; the
+        report records its output.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t17-installed-build-extras-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Reproduce the incomplete build, declare the extras where they belong, make verification prove it.
+  goalRef:
+    name: v1-e01-t17-installed-build-extras
+  graph:
+    nodes:
+      - id: reproduce
+        kind: Task
+        name: Show the installed build failing
+        description: >-
+          Install the current channel build into a scratch tool directory and show `caselist pull
+          --dry-run` failing on the missing boto3.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: The exit-70 failure is captured before the change
+            description: >-
+              A channel install of the current build fails `caselist pull --dry-run` with the missing
+              boto3 error, and the output is captured in the report.
+      - id: declare
+        kind: Task
+        name: Declare the extras and strengthen verification
+        description: >-
+          Fix the dependency declaration and make install_channel.sh verify every wired integration.
+        dependsOn: [reproduce]
+        outputs: [packages/debate_cli/pyproject.toml, scripts/install_channel.sh]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: custom
+            name: A complete build installs and its verification fails on an incomplete one
+            description: >-
+              A channel install imports every wired integration; the verification fails when an
+              extra is removed and passes when it is restored.
+status:
+  phase: Pending

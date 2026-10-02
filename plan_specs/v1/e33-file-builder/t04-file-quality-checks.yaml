@@ -40,6 +40,10 @@ spec:
     - kind: TaskRef
       name: v1-e33-t02-lossless-card-writer
       relation: dependsOn
+    # Added by the PM, 2026-10-01, from v1-e30-t07's Follow-up work item 3. See ac6.
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -62,6 +66,13 @@ spec:
       description: >-
         <file>.quality.json validates against docs/data/file-quality-report.schema.json and records
         checker_version, parser_version, style_profile_version and overall status.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-01, from v1-e30-t07's Follow-up work item 3. A built file that
+        contains a card from a source on the suppression list is flagged by the quality checks, which
+        name the card by its fingerprint and the suppression entry by its request id, never by school,
+        team or filename. The removal runbook's step 8 (flag built files that quoted a removed card) is
+        manual until this exists; for files this tool builds, it then has a command behind it.
 status:
   phase: Pending
 ---

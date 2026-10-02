@@ -39,7 +39,10 @@ spec:
   constraints:
     packages: [docs/adr, docs/guides, docs/runbooks]
     forbidden:
-      - Choosing a tool whose content or logins are owned by one coach's personal account
+      # Removed by the PM, 2026-10-01: "Choosing a tool whose content or logins are owned by one coach's
+      # personal account". ADR-0015 as accepted keeps content in the repository, which, like all of
+      # the site, is on Charlie's GitHub account; with no second coach this season there is no team
+      # identity to own it. ADR-0015's revisit triggers name when this comes back.
       - Any option that requires storing student names, contact details or photos outside the publishing policy
       - Committing calendar API keys, CMS tokens, OAuth client secrets or webhook secrets to the repository
       - Options that need a runtime server or database for the public site (static export only)
@@ -49,35 +52,24 @@ spec:
     - kind: TaskRef
       name: v1-e36-t03-site-scaffold
       relation: dependsOn
+  # Amended by the PM, 2026-10-01, when ADR-0015 was revised before acceptance. Charlie decided that
+  # events and announcements are files in the repository, edited by him and deployed: there is no
+  # second coach this season, and a team Google identity beside the district's own infrastructure was
+  # judged not worth it. The criteria for a coach dry-run (ac3), team accounts with two owners (ac4)
+  # and a no-code coach guide (ac5) no longer apply; the guide is rewritten by v1-e37-t02 and t03 for
+  # the files they introduce. ac1 and ac2 are met by the revised, Accepted ADR-0015.
   acceptanceCriteria:
     - id: ac1
       description: >-
-        docs/adr/0015-website-content-editing.md is Accepted and scores Google Calendar (events), a
-        Decap/Sveltia-style git-backed CMS, a hosted headless CMS free tier and Google Docs/Sheets against
-        coach usability, $0 cost, no student PII, static-export fit and ownership continuity, plus Charlie's
-        added criteria, and names one events source and one announcements/page source.
+        docs/adr/0015-website-content-editing.md is Accepted, keeps the options matrix as the record
+        of what was considered, and names one events source and one announcements source.
     - id: ac2
       description: >-
-        The ADR states that keys/tokens live only in the operator's environment or CI secret store (never in
-        git), that content is fetched at build time with a last-good fallback, and how content-only edits
-        relate to the ADR-0013 dev→main flow (e.g. whether git-backed content commits land on dev or main).
-    - id: ac3
-      description: >-
-        A coach other than Charlie completes a dry-run on the prototype of the chosen option(s): adds one
-        test event and one test announcement using only the guide, with no code or terminal, and the time
-        taken and any friction (including GitHub sign-up, if applicable) are recorded in the ADR.
-    - id: ac4
-      description: >-
-        The team calendar and CMS accounts exist under a team/district-owned identity with at least two
-        owners and a documented recovery path, recorded in docs/runbooks/website-content-accounts.md
-        (no secrets in the file).
-    - id: ac5
-      description: >-
-        docs/guides/coach-website-editing.md explains, in plain language, how to add/edit/remove an event
-        and an announcement, what may never be posted about students, how long until changes appear, and who
-        to contact when something fails.
+        The ADR states that no secret is needed to publish content, and how a content edit relates
+        to the ADR-0013 dev to main flow, including the path for an edit that cannot wait for a
+        promotion.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

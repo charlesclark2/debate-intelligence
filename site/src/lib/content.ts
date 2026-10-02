@@ -28,6 +28,9 @@ export const FAQ_SLUG = 'faq'
 /** The events page, composed from content/events.yaml by src/app/events/page.tsx. */
 export const EVENTS_SLUG = 'events'
 
+/** The tournament schedule, composed from content/tournaments.yaml by src/app/schedule/page.tsx. */
+export const SCHEDULE_SLUG = 'schedule'
+
 /**
  * Pages that are composed by a route module of their own rather than rendered as one run of
  * Markdown by src/app/[slug]/page.tsx.
@@ -40,7 +43,7 @@ export const EVENTS_SLUG = 'events'
  * The generic [slug] route must not also generate these slugs: a static segment and a dynamic one
  * claiming the same path is a build error, not a silent preference.
  */
-export const COMPOSED_SLUGS: readonly string[] = [HOME_SLUG, FAQ_SLUG, EVENTS_SLUG]
+export const COMPOSED_SLUGS: readonly string[] = [HOME_SLUG, FAQ_SLUG, EVENTS_SLUG, SCHEDULE_SLUG]
 
 /**
  * Acronyms a parent or a new student cannot be expected to know. If a page uses one, the page
@@ -223,40 +226,21 @@ export const homeActionSchema = z.object({
   href: internalHref,
 })
 
-/**
- * One fact in the October 1 parent-session panel: a label, and either the value or, while nobody
- * has supplied it yet, the note the preview shows in its place.
- *
- * Exactly one of the two, which is the point of the shape. A published announcement that gives a
- * date, a time and a place, and simply says nothing about the room, reads as though a room were
- * never needed: the gap is invisible precisely because it is a gap. `unsetNote` makes it say so
- * out loud, src/lib/publishing-policy.ts fails a prod build while one remains, and a decision not
- * to name a room yet is written as a value ("To be announced") rather than as silence. A room of
- * "To be announced" is a decision; an empty one is an oversight.
- */
-export const parentSessionFactSchema = z
-  .object({
-    label: z.string().min(1),
-    value: z.string().min(1).optional(),
-    unsetNote: z.string().min(1).optional(),
-  })
-  .refine(
-    (fact) => (fact.value === undefined) !== (fact.unsetNote === undefined),
-    'needs exactly one of value (the fact) and unsetNote (why it is still missing)',
-  )
-
 export const homeContentSchema = z.object({
   hero: z.object({
     lead: z.string().min(1),
     action: homeActionSchema,
   }),
-  parentSession: z.object({
+  /**
+   * The panel directly under the hero: a pointer to the season's tournament schedule. It names no
+   * date and no tournament of its own, so it is right whenever the site was last built; the dates
+   * live on /schedule/, from content/tournaments.yaml. (Until v1-e37-t02 this panel announced the
+   * October 1 parent information session.)
+   */
+  seasonSchedule: z.object({
     eyebrow: z.string().min(1),
     title: z.string().min(1),
     intro: z.string().min(1),
-    facts: z.array(parentSessionFactSchema).min(1),
-    whatToExpect: z.array(z.string().min(1)).min(1),
-    note: z.string().min(1),
     action: homeActionSchema,
   }),
   entryPoints: z.object({
@@ -314,7 +298,6 @@ export const homeContentSchema = z.object({
 export type HomeAction = z.infer<typeof homeActionSchema>
 export type ClaimSource = z.infer<typeof claimSourceSchema>
 export type AcademicCaseClaim = z.infer<typeof academicCaseClaimSchema>
-export type ParentSessionFact = z.infer<typeof parentSessionFactSchema>
 export type HomeContent = z.infer<typeof homeContentSchema>
 
 export type PageFrontMatter = z.infer<typeof pageFrontMatterSchema>
@@ -356,8 +339,10 @@ export interface ContentPage {
   /** Markdown body rendered to HTML at build time. */
   html: string
   /**
-   * Everything published on the page, as HTML: the body plus the lead and the at-a-glance values
-   * that live in the front matter and are rendered by the route module rather than by Prose.
+   * Everything published on the page, as HTML: the body, plus the front matter the page publishes
+   * outside it: the title (the <h1> and the <title>), the description (the meta description a
+   * search result or a shared link shows), the navigation label, the lead and the at-a-glance
+   * values.
    *
    * src/lib/publishing-policy.ts reads this rather than `html`. A value in a summary block is
    * published copy exactly as a paragraph is, and the guard cannot have a blind spot wherever a
@@ -403,7 +388,7 @@ function pagesDirectory(contentDirectory: string): string {
   return join(contentDirectory, 'pages')
 }
 
-function formatIssues(error: z.ZodError): string {
+export function formatIssues(error: z.ZodError): string {
   return error.issues
     .map((issue) => {
       const field = issue.path.join('.')
@@ -412,8 +397,8 @@ function formatIssues(error: z.ZodError): string {
     .join('; ')
 }
 
-const EM_DASH = '—'
-const HOUSE_STYLE_REWRITE = 'House style: rewrite with a comma, a colon or two sentences.'
+export const EM_DASH = '—'
+export const HOUSE_STYLE_REWRITE = 'House style: rewrite with a comma, a colon or two sentences.'
 
 /**
  * `lineOffset` is the number of lines the front matter occupies, so the line number in the error
@@ -440,7 +425,7 @@ function assertNoEmDashesInFrontMatter(filePath: string, frontMatter: PageFrontM
   }
 }
 
-function assertAcronymsAreExpanded(filePath: string, text: string): void {
+export function assertAcronymsAreExpanded(filePath: string, text: string): void {
   for (const [acronym, expansion] of ACRONYM_EXPANSIONS) {
     const usesAcronym = new RegExp(`\\b${acronym}\\b`).test(text)
     if (usesAcronym && !text.includes(expansion)) {
@@ -576,6 +561,14 @@ export function parsePage(slug: string, filePath: string, source: string): Conte
     // mailto link a visitor actually gets, which is what the guard and tests/contact.test.ts are
     // really asking about.
     guardedHtml: [
+      // The title is the page's <h1> and its <title>, the description its meta description and
+      // the text a search result or a shared link shows, and a navLabel is printed in the
+      // navigation. All three are published. Until v1-e37-t02's review only the export checks
+      // read them, and scripts/site_deploy.sh runs no checks, so a name in a title reached prod
+      // through a clean prod build.
+      `<p>${frontMatter.title}</p>`,
+      `<p>${frontMatter.description}</p>`,
+      ...(frontMatter.navLabel ? [`<p>${frontMatter.navLabel}</p>`] : []),
       ...(frontMatter.lead ? [`<p>${frontMatter.lead}</p>`] : []),
       ...(atAGlance
         ? [
@@ -676,17 +669,14 @@ export function loadNotFoundPage(
 
 /** Every string in the home content, in reading order, for the checks that scan copy. */
 function homeContentStrings(content: HomeContent): string[] {
-  const { hero, parentSession, entryPoints, prose, whatDebateBuilds } = content
+  const { hero, seasonSchedule, entryPoints, prose, whatDebateBuilds } = content
   return [
     hero.lead,
     hero.action.label,
-    parentSession.eyebrow,
-    parentSession.title,
-    parentSession.intro,
-    ...parentSession.facts.flatMap((fact) => [fact.label, fact.value ?? fact.unsetNote ?? '']),
-    ...parentSession.whatToExpect,
-    parentSession.note,
-    parentSession.action.label,
+    seasonSchedule.eyebrow,
+    seasonSchedule.title,
+    seasonSchedule.intro,
+    seasonSchedule.action.label,
     entryPoints.eyebrow,
     entryPoints.title,
     entryPoints.intro,
@@ -813,9 +803,9 @@ export function loadHomeContent(
 /**
  * A fact a published announcement promises its readers, and whether anyone has supplied it yet.
  *
- * The guard reads copy, and copy cannot tell it that a fact is missing: the October 1 panel with
- * no room in it is a perfectly well-formed panel. This is the shape that can, one entry per fact
- * in the announcement, carrying the note the preview shows while the fact is still owed.
+ * The guard reads copy, and copy cannot tell it that a fact is missing: a panel with no room in it
+ * is a perfectly well-formed panel. This is the shape that can, one entry per fact in the
+ * announcement, carrying the note the preview shows while the fact is still owed.
  * src/lib/publishing-policy.ts turns every one of those notes into an error, so a prod build
  * fails while a required announcement field is unset.
  */
@@ -831,20 +821,14 @@ export interface AnnouncementField {
 }
 
 /**
- * Every fact the site's announcements promise. Today that is the October 1 parent session in
- * content/home.yaml; E37's announcements and calendar entries join it here rather than growing a
- * second guard of their own.
+ * Every fact the site's announcements promise. None today: the October 1 parent-session panel
+ * in content/home.yaml, the one announcement with facts of this kind, was replaced by a pointer
+ * to the tournament schedule in v1-e37-t02 once the session had happened. The guard and its
+ * wiring in src/app/layout.tsx stay, because v1-e37-t03's announcements join it here rather than
+ * growing a second guard of their own.
  */
-export function announcementFields(
-  contentDirectory: string = defaultContentDirectory(),
-): AnnouncementField[] {
-  const { parentSession } = loadHomeContent(contentDirectory)
-  return parentSession.facts.map((fact) => ({
-    location: 'content/home.yaml',
-    announcement: parentSession.title,
-    label: fact.label,
-    unsetNote: fact.unsetNote ?? null,
-  }))
+export function announcementFields(): AnnouncementField[] {
+  return []
 }
 
 /**
@@ -865,9 +849,9 @@ export function homeContentAsPage(
     slug: 'home-content',
     route: '/',
     filePath: 'content/home.yaml',
-    title: content.parentSession.title,
+    title: content.seasonSchedule.title,
     description: content.hero.lead,
-    navLabel: content.parentSession.title,
+    navLabel: content.seasonSchedule.title,
     navOrder: Number.MAX_SAFE_INTEGER,
     excludeFromNavigation: true,
     draft: false,
@@ -1249,9 +1233,180 @@ export function eventsContentAsPage(
   )
 }
 
+/*
+ * ---------------------------------------------------------------------------------------------
+ * The parent email-updates section: content/email-updates.json (v1-e37-t05).
+ *
+ * The one place a visitor hands data to another company (docs/policies/website-publishing.md,
+ * Analytics and third parties). The site's whole part in it is a plain link to the mailing
+ * service's hosted signup page: no form, no input, no provider script. The address a parent types
+ * goes from their browser to the provider and never passes through this site, this repository or
+ * AWS, because there is nothing here that could receive it.
+ *
+ * Which provider that is was still provisional when this was written: the district's own parent
+ * messaging tool was preferred if the activities director allows team use. So the provider lives
+ * in two fields, `providerName` and `signupUrl`, and every sentence that names it says
+ * `{provider}` instead. Changing provider is an edit to those two fields and a deploy.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+export const EMAIL_UPDATES_FILE = 'email-updates.json'
+
+/** The anchor the section carries on every page it appears on, e.g. /#email-updates. */
+export const EMAIL_UPDATES_ID = 'email-updates'
+
+/** The only token a sentence in content/email-updates.json may use. */
+const PROVIDER_TOKEN = '{provider}'
+
+/**
+ * Where the signup link goes: the provider's hosted signup page, over https, or the
+ * `[[TBD: ...]]` marker until the operator has created the list and supplied its address. The
+ * marker shows as a gap badge in a dev preview and fails a prod build, like every other one.
+ *
+ * No credentials in the URL, because the only thing the site is ever given is the public page.
+ */
+const signupUrlSchema = z.union([
+  z.string().regex(PLACEHOLDER_ONLY_PATTERN),
+  z
+    .string()
+    .refine((value) => {
+      try {
+        const url = new URL(value)
+        return url.protocol === 'https:' && url.username === '' && url.password === ''
+      } catch {
+        return false
+      }
+    }, 'signupUrl must be the provider\'s https signup page (no credentials), or a [[TBD: ...]] marker'),
+])
+
+export const emailUpdatesContentSchema = z
+  .object({
+    providerName: z.string().min(1),
+    signupUrl: signupUrlSchema,
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    points: z.array(z.string().min(1)).min(1).max(4),
+    action: z
+      .object({ label: z.string().min(1), externalLinkNote: z.string().min(1) })
+      .strict(),
+  })
+  .strict()
+
+type EmailUpdatesSource = z.infer<typeof emailUpdatesContentSchema>
+
+/** The section as a page renders it, with `{provider}` already filled in. */
+export interface EmailUpdatesContent {
+  providerName: string
+  /** The provider's signup page, or null while it is still a [[TBD]] marker. */
+  signupUrl: string | null
+  eyebrow: string
+  title: string
+  intro: string
+  points: string[]
+  action: { label: string; externalLinkNote: string }
+  /** The notes on any placeholder left in the file, for the publishing-policy guard. */
+  placeholders: string[]
+}
+
+function emailUpdatesStrings(content: Omit<EmailUpdatesContent, 'placeholders'>): string[] {
+  return [
+    content.eyebrow,
+    content.title,
+    content.intro,
+    ...content.points,
+    content.action.label,
+    content.action.externalLinkNote,
+  ]
+}
+
+export function loadEmailUpdatesContent(
+  contentDirectory: string = defaultContentDirectory(),
+): EmailUpdatesContent {
+  const filePath = `content/${EMAIL_UPDATES_FILE}`
+  const absolutePath = join(contentDirectory, EMAIL_UPDATES_FILE)
+  if (!existsSync(absolutePath)) {
+    throw new ContentValidationError(filePath, 'file is missing')
+  }
+  let data: unknown
+  try {
+    data = JSON.parse(readFileSync(absolutePath, 'utf8'))
+  } catch (error) {
+    throw new ContentValidationError(filePath, `is not valid JSON (${(error as Error).message})`)
+  }
+  const result = emailUpdatesContentSchema.safeParse(data)
+  if (!result.success) {
+    throw new ContentValidationError(
+      filePath,
+      `invalid email-updates content (${formatIssues(result.error)})`,
+    )
+  }
+
+  const source: EmailUpdatesSource = result.data
+  for (const text of emailUpdatesStrings(source)) {
+    const unknownToken = text.replaceAll(PROVIDER_TOKEN, '').match(/\{[^}]*\}/)
+    if (unknownToken) {
+      throw new ContentValidationError(
+        filePath,
+        `uses ${unknownToken[0]}; the only token a sentence may use is ${PROVIDER_TOKEN}`,
+      )
+    }
+  }
+  const fill = (text: string) => text.replaceAll(PROVIDER_TOKEN, source.providerName)
+  const signupIsPlaceholder = PLACEHOLDER_ONLY_PATTERN.test(source.signupUrl)
+  const content = {
+    providerName: source.providerName,
+    signupUrl: signupIsPlaceholder ? null : source.signupUrl,
+    eyebrow: fill(source.eyebrow),
+    title: fill(source.title),
+    intro: fill(source.intro),
+    points: source.points.map(fill),
+    action: {
+      label: fill(source.action.label),
+      externalLinkNote: fill(source.action.externalLinkNote),
+    },
+  }
+  assertYamlHouseStyle(filePath, emailUpdatesStrings(content))
+
+  const placeholders = findPlaceholders(
+    [source.providerName, ...emailUpdatesStrings(content)].join('\n'),
+  )
+  if (signupIsPlaceholder) {
+    const note = findPlaceholders(source.signupUrl)[0]
+    placeholders.push(`${note || 'TBD'} (signupUrl)`)
+  }
+  return { ...content, placeholders }
+}
+
+/**
+ * content/email-updates.json as the publishing-policy guard sees it, for the same reason
+ * homeContentAsPage exists. Its placeholders include an unset signupUrl, so a prod build cannot
+ * ship a signup section with nowhere to sign up.
+ */
+export function emailUpdatesContentAsPage(
+  contentDirectory: string = defaultContentDirectory(),
+): ContentPage {
+  const content = loadEmailUpdatesContent(contentDirectory)
+  const text = emailUpdatesStrings(content).join('\n\n')
+  return {
+    slug: 'email-updates-content',
+    route: `/#${EMAIL_UPDATES_ID}`,
+    filePath: `content/${EMAIL_UPDATES_FILE}`,
+    title: content.title,
+    description: content.title,
+    navLabel: content.title,
+    navOrder: Number.MAX_SAFE_INTEGER,
+    excludeFromNavigation: true,
+    draft: false,
+    html: text,
+    guardedHtml: text,
+    placeholders: content.placeholders,
+  }
+}
+
 /**
  * Every content file that carries copy, as the publishing-policy guard sees it: the Markdown
- * pages plus the three YAML files that hold the rest of the words. src/app/layout.tsx passes
+ * pages plus the YAML and JSON files that hold the rest of the words. src/app/layout.tsx passes
  * exactly this at build time, and tests/content-policy.test.ts checks exactly this.
  */
 export function loadGuardedContent(
@@ -1263,6 +1418,7 @@ export function loadGuardedContent(
     homeContentAsPage(contentDirectory),
     faqContentAsPage(contentDirectory),
     eventsContentAsPage(contentDirectory),
+    emailUpdatesContentAsPage(contentDirectory),
   ]
 }
 

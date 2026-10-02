@@ -62,7 +62,7 @@ spec:
         `uv run lint-imports` reports every contract kept with no ignore_imports for these cases, and
         `uv run scripts/check_thin_handlers.py` passes with both exception lists empty.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

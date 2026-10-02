@@ -122,13 +122,25 @@
     display: none;
   }
 
+  /*
+   * Seven items since v1-e37-t02 added Schedule. Between 48rem and 64rem the bar is only just wide
+   * enough for them beside the lockup, so the gap is the link's own padding plus a hairline; with
+   * the full gap "Parent FAQ" broke over two lines at 768px. The links keep their 44px targets.
+   */
   .site-nav__list,
   .site-nav__list--open {
     display: flex;
     position: static;
-    gap: var(--space-4);
+    gap: var(--space-1);
     border-bottom: none;
     padding: 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  .site-nav__list,
+  .site-nav__list--open {
+    gap: var(--space-4);
   }
 }
 

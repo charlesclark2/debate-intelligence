@@ -283,5 +283,47 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e36-t09-home-academic-case
+    - id: t10
+      kind: Task
+      name: The export checks run against an export
+      description: >-
+        The four tests that check the built site are runIf(hasExport), and the site checks run tests
+        before the build with site/out gitignored, so in CI they skip in silence and have never run.
+        They are the publishing-policy guarantees for what actually ships.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t10-export-checks-in-ci.yaml
+        goalRef: v1-e36-t10-export-checks-in-ci
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t10-export-checks-in-ci reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t10-export-checks-in-ci
+    - id: t11
+      kind: Task
+      name: Visual QA refuses a stale export
+      description: >-
+        `pnpm --dir site qa` serves site/out without consulting t10's export fingerprint, so it will
+        certify a build from another commit. Use the same guard and refuse a missing or stale export.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t11-visual-qa-freshness.yaml
+        goalRef: v1-e36-t11-visual-qa-freshness
+      dependsOn:
+      - t10
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t11-visual-qa-freshness reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t11-visual-qa-freshness
 status:
   phase: Pending

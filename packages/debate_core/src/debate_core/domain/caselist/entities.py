@@ -147,13 +147,22 @@ class ArchiveSnapshot(DomainModel):
     along: a source document's first and last seen snapshots, a re-import's no-op check, and the
     refusal to import an archive older than the latest one already in the store all read it.
 
-    `archive_sha256` is the hash of the downloaded archive itself, which is what makes "we already
-    imported this exact file" answerable without re-reading its members.
+    `archive_sha256` is the hash of the archive file that was imported, which is what makes "we
+    already imported this exact file" answerable without re-reading its members. That is the
+    archive as downloaded, except for a week imported from a copy a removal rewrote in the sync's
+    inbox without the removed files (`v1-e30-t09`): then it is the rewritten file's digest, and the
+    digest of the archive as downloaded is in the removal log entry's `inbox_rewrites`, paired with
+    this one.
     """
 
     caselist: CaselistSlug = Field(description="The caselist this archive was published for.")
     snapshot: SnapshotDate = Field(description="The date the archive was published.")
-    archive_sha256: Sha256Hex = Field(description="SHA-256 of the downloaded archive file itself.")
+    archive_sha256: Sha256Hex = Field(
+        description=(
+            "SHA-256 of the archive file imported: as downloaded, or as a removal rewrote it in the inbox "
+            "(the removal log's inbox_rewrites pairs it with the downloaded archive's digest)."
+        )
+    )
     acquisition: Acquisition = Field(description="Whether the archive was downloaded by hand or via an API.")
     file_count: int = Field(ge=0, description="How many member files the archive contained.")
 

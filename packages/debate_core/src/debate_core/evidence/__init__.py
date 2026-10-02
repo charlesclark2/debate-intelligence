@@ -5,6 +5,12 @@ read and write them. It may read files that ship inside the package — the styl
 are data files, not configuration — but it still makes no network calls and touches no cloud SDK.
 """
 
+from debate_core.evidence.normalization import (
+    NORMALIZER_VERSION,
+    SUPPORTED_NORMALIZER_VERSIONS,
+    NormalizedText,
+    normalize,
+)
 from debate_core.evidence.style_classifier import (
     ParagraphDescription,
     RunDescription,
@@ -22,6 +28,9 @@ from debate_core.evidence.style_profile_loader import (
 
 __all__ = [
     "DEFAULT_STYLE_PROFILE_NAME",
+    "NORMALIZER_VERSION",
+    "SUPPORTED_NORMALIZER_VERSIONS",
+    "NormalizedText",
     "ParagraphDescription",
     "RunDescription",
     "StyleProfileError",
@@ -30,5 +39,6 @@ __all__ = [
     "classify_run",
     "load_style_profile",
     "load_style_profile_from_text",
+    "normalize",
     "resolve_based_on_chain",
 ]

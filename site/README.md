@@ -24,10 +24,12 @@ pnpm --dir site install
 | `pnpm --dir site typecheck` | `tsc --noEmit` against a strict config |
 | `pnpm --dir site test` | vitest with jsdom: content, tokens, layout, SEO, routes, contact, the login flag, the content guard, page accessibility and the offline guards |
 | `pnpm --dir site build` | Static export into `site/out/` |
+| `site/scripts/export-checks.sh` | Builds the export and runs the export checks against it: the tests that read `site/out/`. See [The export checks](#the-export-checks) |
 | `pnpm --dir site qa` | Pre-launch visual QA in a real browser. **Operator only, needs the network**: see [Pre-launch visual QA](#pre-launch-visual-qa) |
 
-`site/scripts/pre-commit-checks.sh` runs the first four. The `site-checks` pre-commit hook runs it
-whenever anything under `site/` changes; together they take about ten seconds.
+`site/scripts/pre-commit-checks.sh` runs lint, typecheck and test, then `export-checks.sh`. The
+`site-checks` pre-commit hook runs it whenever anything under `site/` changes; together they take
+about twenty seconds.
 
 Node 22.13 or newer and pnpm 10.15 are required. Install pnpm with
 `npm install -g pnpm@10.15.0`: corepack 0.30.0 cannot fetch it, because the npm signing key it
@@ -55,6 +57,8 @@ No page component contains copy. Everything a visitor reads is a file under `sit
 ```
 content/
   site.yaml            site-wide strings, the email allowlist and the Debater login label
+  email-updates.json   the parent email-updates section: the mailing provider's name, its signup
+                       page address and the section's copy (v1-e37-t05)
   media-consent.yaml   who may be named, which images may be published, and when each was checked
   pages/<slug>.md      one page each; home.md renders at /, every other file at /<slug>/
   not-found.md         the 404 page, kept out of pages/ so it never enters the navigation or sitemap
@@ -105,6 +109,27 @@ file name, so a page missing a title fails `pnpm --dir site build` instead of sh
    approved list in [`docs/data/academic-case-sources.md`](../docs/data/academic-case-sources.md).
 6. **Home entry-point cards carry the title of the page they open.** A card whose `href` is not a
    page in `content/pages/`, or whose `title` differs from that page's title, fails the build.
+
+### The parent email-updates section
+
+`content/email-updates.json` drives the "Email updates for parents and guardians" band on the home
+page (directly under the parent session) and at the foot of the contact page. The band is one
+plain link to the mailing provider's hosted signup page. There is no form, no input and no
+provider script, so the site never receives a parent's address.
+
+| Field | Meaning |
+|---|---|
+| `providerName` | The service's name. Every sentence below writes `{provider}` and the loader fills it in |
+| `signupUrl` | The provider's public signup page, `https://` only, no credentials. While it is `[[TBD: ...]]` the band shows the gap badge and a prod build fails |
+| `eyebrow`, `title`, `intro`, `points`, `action` | The copy. `action.externalLinkNote` is shown in the button, because every link that leaves the site says so |
+
+**Changing provider** (for example to the district's parent messaging tool) is an edit to
+`providerName` and `signupUrl` and a deploy. No code changes. The coach-facing side, including who
+owns the list, is in [`docs/guides/parent-email-updates.md`](../docs/guides/parent-email-updates.md).
+
+`tests/no-third-party-scripts.test.ts` checks the built export: no script, pixel, iframe or form
+target from another origin, no mention of a mailing provider's domain outside the signup link,
+and nowhere on any page to type anything. Build first, as for the other export-reading suites.
 
 ## The content guard
 
@@ -187,28 +212,51 @@ landmarks, one visible focus style, 44px touch targets and a navigation menu tha
 Enter or Space and closes with Escape, returning focus to its button.
 
 `tests/layout.test.tsx` runs axe-core over the real frame and components on the WCAG 2.1 A and AA
-rule sets. `tests/pages-a11y.test.tsx` runs it over **every page**, twice: once rendered through
-the frame, which always runs, and once over the exported HTML in `site/out/` when a build has
-produced it. The second pass is the one the acceptance criterion is about, because it includes
+rule sets. It runs over **every page** twice: `tests/pages-a11y.test.tsx` renders each through
+the frame, and `tests/export/pages-a11y.export-test.ts` reads the exported HTML in `site/out/`
+after every build. The second pass is the one the acceptance criterion is about, because it includes
 the head, the `lang` attribute and Next's own markup, so `html-has-lang` and `document-title` are
 evaluated as a browser would evaluate them.
 
 axe cannot evaluate colour contrast under jsdom, which has no layout engine, so contrast is
 asserted against the tokens instead, in `tests/tokens.test.ts`.
 
-**`pnpm test` before `pnpm build` means no export yet**, which is the order CI uses, so the
-suites that read `site/out/` skip themselves when it is absent rather than failing.
+## The export checks
 
-**A stale export is the dangerous case.** An export left over from an earlier commit is not
-absent, so those suites do not skip: they check the old HTML instead of the code in front of you,
-and they can pass. `site/scripts/pre-commit-checks.sh` runs test then build, so every run of it
-after the first reads the export the previous run left, which is only the right one if nothing has
-changed since. Build first, from the same source, whenever the export-reading suites are meant to
-count:
+Some guarantees only the built site can show: that the export publishes no address outside the
+allowlist, loads nothing from another origin and embeds no iframe, that the contact page carries
+its mailto, that every FAQ answer is in the exported HTML, that every page links its stylesheet.
+The tests that check them read `site/out/` and live in `tests/export/`, named `*.export-test.ts`,
+so `pnpm test` does not run them and stays fast straight after an edit.
+
+They run from `site/scripts/export-checks.sh`, which builds first and then checks:
 
 ```bash
-pnpm --dir site build && pnpm --dir site test
+site/scripts/export-checks.sh
 ```
+
+`pre-commit-checks.sh`, and so CI, ends with it. Until `v1-e36-t10` these tests ran inside
+`pnpm test`, ahead of the build, written to skip when there was no export. On every CI runner there
+was none, so they skipped and the suite reported green; on a developer's machine they read
+whatever export was left over, and failed or passed for reasons that had nothing to do with the
+tree under test.
+
+Now an absent or stale export fails. `scripts/build-export.mjs` runs the build and records what it
+was built from: every file under `site/` that git sees (minus `tests/`, plus any `.env*` file),
+the `SITE_*` and `NEXT_PUBLIC_*` variables, and a hash of everything it exported. The record lives
+in `node_modules/.cache/`, never in `site/out/`, so it cannot be deployed. `tests/export/built-export.ts`,
+which every export check reads the export through, refuses to load unless that record matches the
+tree and the export, and says what differs: no export, an export nothing recorded (a plain
+`pnpm build`), a source file or setting changed since the build, or an export edited after it. To
+re-run the checks against an export `export-checks.sh` just built, without rebuilding:
+
+```bash
+SITE_ENV=dev pnpm --dir site exec vitest run --config tests/export/vitest.config.ts
+```
+
+`tests/export-checks-run.test.ts`, in the ordinary `pnpm test`, fails if a test anywhere in
+`tests/` uses `runIf`, `skipIf`, `skip`, `todo` or `only`, or if `pre-commit-checks.sh` stops
+running the export checks.
 
 ## Pre-launch visual QA
 
@@ -280,8 +328,9 @@ describes what that job does:
 - run: pnpm --dir site lint
 - run: pnpm --dir site typecheck
 - run: pnpm --dir site test
-- run: SITE_ENV=dev pnpm --dir site build
+- run: SITE_ENV=dev node site/scripts/build-export.mjs
+- run: pnpm --dir site exec vitest run --config tests/export/vitest.config.ts
 ```
 
-That is about ten seconds of work plus the install, well inside the CI budget in
+That is about twenty seconds of work plus the install, well inside the CI budget in
 [`docs/process/working-agreements.md`](../docs/process/working-agreements.md).

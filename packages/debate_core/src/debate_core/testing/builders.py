@@ -36,6 +36,7 @@ from debate_core.domain import (
     Article,
     ArticleIdentifiers,
     Card,
+    CardOmission,
     CardSpan,
     Citation,
     CitationField,
@@ -366,6 +367,7 @@ def build_card(
     evidence_text: str = DEFAULT_EVIDENCE_TEXT,
     evidence_start_offset: int | None = 0,
     evidence_end_offset: int | None = len(DEFAULT_EVIDENCE_TEXT),
+    omitted_ranges: tuple[CardOmission, ...] = (),
     normalized_text_hash: Sha256Hex | None = None,
     normalizer_version: NonEmptyText | None = DEFAULT_NORMALIZER_VERSION,
     spans: tuple[CardSpan, ...] = DEFAULT_SPANS,
@@ -388,6 +390,10 @@ def build_card(
     and a builder that handed out `VERIFIED` cards would let a test assert on a status nothing
     had checked. Pass it explicitly when the test is *about* a verified card.
 
+    `omitted_ranges` defaults to none. A caller passing omissions also passes an envelope
+    (`evidence_start_offset`, `evidence_end_offset`) whose length minus the omissions is
+    `len(evidence_text)`, or the card is refused (ADR-0018).
+
     For a tag-only card — one nothing has been cut for yet — evolve the result::
 
         bare = build_card().evolve(
@@ -406,6 +412,7 @@ def build_card(
         evidence_text=evidence_text,
         evidence_start_offset=evidence_start_offset,
         evidence_end_offset=evidence_end_offset,
+        omitted_ranges=omitted_ranges,
         normalized_text_hash=(
             sha256_of(DEFAULT_NORMALIZED_TEXT.encode("utf-8"))
             if normalized_text_hash is None

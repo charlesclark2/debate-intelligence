@@ -24,6 +24,7 @@ from tests.evals.parser.labels_schema import (
     LabelStatus,
     Manifest,
     ManifestEntry,
+    RejectionReason,
     ReviewerRole,
     SpanLabel,
     TemplateFamily,
@@ -31,11 +32,15 @@ from tests.evals.parser.labels_schema import (
     load_label_file,
     load_label_files,
     load_manifest,
+    load_rejections,
     load_sampling_plan,
+    rejection_conflicts,
+    stratum_of,
     validate_against_texts,
     validate_label_file,
     write_label_file,
 )
+from tests.evals.parser.manifest_summary import GUIDE_BLOCKS, MANIFEST_BLOCKS, render_blocks, replace_blocks
 from tests.evals.parser.synthetic import TEST_DIGEST_KEY, build_synthetic_file
 
 from debate_core.domain.debate_files import CardCompleteness
@@ -315,11 +320,11 @@ def test_the_committed_manifest_meets_ac1() -> None:
     assert coverage_shortfalls(load_manifest()) == []
 
 
-def test_the_manifest_summary_table_matches_manifest_json() -> None:
-    """MANIFEST.md is read by people; manifest.json by the tools. They must say the same thing."""
+def assert_summary_table_matches_manifest(directory: Path = EVAL_FIXTURE_DIRECTORY) -> None:
+    """MANIFEST.md's selection table says what manifest.json says. Reused on an invented evaluation."""
     rows = re.findall(
         r"^\| `([0-9a-f]{16})` \| (\w+) \| ([\d-]+) \| (\w+) \| ([\w-]+) \| (yes)? *\|$",
-        (EVAL_FIXTURE_DIRECTORY / "MANIFEST.md").read_text(encoding="utf-8"),
+        (directory / "MANIFEST.md").read_text(encoding="utf-8"),
         flags=re.MULTILINE,
     )
     table = {
@@ -335,9 +340,55 @@ def test_the_manifest_summary_table_matches_manifest_json() -> None:
             e.template_family.value,
             e.pr_subset,
         )
-        for e in load_manifest().entries
+        for e in load_manifest(directory / "manifest.json").entries
     }
     assert table == manifest
+
+
+def assert_plan_table_matches_plan(directory: Path = EVAL_FIXTURE_DIRECTORY) -> None:
+    """MANIFEST.md's sampling-plan table says what sampling-plan.json says, file by file."""
+    rows = re.findall(
+        r"^\| `([0-9a-f]{16})` \| (\w+) \| (\d+) \| (\d+) \| (\d+)% \| ([^|]+) \|$",
+        (directory / "MANIFEST.md").read_text(encoding="utf-8"),
+        flags=re.MULTILINE,
+    )
+    table = {(sha, int(total), int(labeled), blocks.strip()) for sha, _, total, labeled, _, blocks in rows}
+    plan = load_sampling_plan(directory / "sampling-plan.json")
+    expected = set()
+    for file_plan in plan.files:
+        blocks = (
+            "whole file"
+            if file_plan.full
+            else ", ".join(f"{first}-{last}" for first, last in file_plan.blocks)
+        )
+        expected.add((file_plan.digest[:16], file_plan.paragraphs, file_plan.labeled_rows, blocks))
+    assert table == expected
+
+
+def test_the_manifest_summary_table_matches_manifest_json() -> None:
+    """MANIFEST.md is read by people; manifest.json by the tools. They must say the same thing."""
+    assert_summary_table_matches_manifest()
+
+
+def test_the_sampling_plan_table_matches_sampling_plan_json() -> None:
+    assert_plan_table_matches_plan()
+
+
+def test_the_generated_tables_are_what_the_data_says() -> None:
+    """Nobody edited a generated block by hand, and none was left behind after a data change."""
+    before = {
+        path: path.read_text(encoding="utf-8")
+        for path in (EVAL_FIXTURE_DIRECTORY / "MANIFEST.md", LABELS_DIRECTORY / "README.md")
+    }
+    blocks = render_blocks(load_manifest(), load_rejections(), load_sampling_plan())
+    assert (
+        replace_blocks(before[EVAL_FIXTURE_DIRECTORY / "MANIFEST.md"], blocks, MANIFEST_BLOCKS)
+        == (before[EVAL_FIXTURE_DIRECTORY / "MANIFEST.md"])
+    )
+    assert (
+        replace_blocks(before[LABELS_DIRECTORY / "README.md"], blocks, GUIDE_BLOCKS)
+        == (before[LABELS_DIRECTORY / "README.md"])
+    )
 
 
 def test_nothing_in_the_eval_directory_names_a_file() -> None:
@@ -355,6 +406,44 @@ def test_nothing_in_the_eval_directory_names_a_file() -> None:
             "template_family",
             "pr_subset",
         }
+    rejections = (EVAL_FIXTURE_DIRECTORY / "rejections.json").read_text(encoding="utf-8")
+    assert ".docx" not in rejections and "/" not in rejections.replace("scripts/select_eval_files.py", "")
+    for rejection in json.loads(rejections)["rejections"]:
+        assert set(rejection) == {
+            "digest",
+            "reason",
+            "rejected_on",
+            "category",
+            "season",
+            "debate_format",
+            "template_family",
+            "pr_subset",
+            "replaced_by",
+        }
+
+
+def test_no_rejected_file_is_in_the_manifest_the_plan_or_the_labels() -> None:
+    manifest, rejections = load_manifest(), load_rejections()
+    assert rejection_conflicts(manifest, rejections) == []
+    planned = {file_plan.digest for file_plan in load_sampling_plan().files}
+    labeled = set(load_label_files(LABELS_DIRECTORY))
+    assert rejections.digests.isdisjoint(planned | labeled)
+
+
+def test_the_file_found_not_to_be_debate_material_was_replaced_from_its_own_stratum() -> None:
+    """The operator opened it before approving the selection: a non-English text, no tags or cites."""
+    rejected = {r.digest[:16]: r for r in load_rejections().rejections}["4b11269583a94621"]
+    assert rejected.reason is RejectionReason.NOT_DEBATE_CONTENT
+    assert rejected.replaced_by is not None
+    caselist_wiki_converted_pr_subset = (
+        Category.CASELIST,
+        "2026-27",
+        DebateFormat.LD,
+        TemplateFamily.WIKI_CONVERTED,
+        True,
+    )
+    assert stratum_of(rejected) == caselist_wiki_converted_pr_subset
+    assert stratum_of(load_manifest().entry(rejected.replaced_by)) == caselist_wiki_converted_pr_subset
 
 
 def test_every_committed_label_file_is_valid_and_listed() -> None:
@@ -363,3 +452,21 @@ def test_every_committed_label_file_is_valid_and_listed() -> None:
     for digest, labels in load_label_files(LABELS_DIRECTORY).items():
         check_cards = labels.header.status is not LabelStatus.PRELABELED
         assert validate_label_file(labels, manifest, plan, check_cards=check_cards) == [], digest[:12]
+
+
+def test_the_guides_code_blocks_are_safe_to_paste_into_zsh() -> None:
+    """zsh treats `#` as an argument unless interactive_comments is set, and `<` as a redirect.
+
+    The coach pastes these blocks into zsh as they stand, so explanations belong in the prose and a
+    digest goes in a variable on the block's first line, never as a `<placeholder>`.
+    """
+    offenders: list[str] = []
+    for path in (EVAL_FIXTURE_DIRECTORY / "MANIFEST.md", LABELS_DIRECTORY / "README.md"):
+        text = path.read_text(encoding="utf-8")
+        for block in re.findall(
+            r"^[ \t]*```(?:bash|sh|zsh)?\n(.*?)^[ \t]*```", text, re.DOTALL | re.MULTILINE
+        ):
+            for line in block.splitlines():
+                if line.lstrip().startswith("#") or re.search(r"<[A-Za-z]", line):
+                    offenders.append(f"{path.name}: {line.strip()}")
+    assert not offenders, "\n".join(offenders)

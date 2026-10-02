@@ -31,6 +31,7 @@ from debate_core.application.caselist.publish_plan import (
     remote_source_prefix,
     snapshot_of_manifest_key,
     sources_in_manifest,
+    stored_rows_in_manifest,
     validate_publish_target,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
@@ -91,6 +92,7 @@ async def read_local_snapshots(
                 snapshot=named,
                 sources=sources_in_manifest(info.key, lines),
                 manifest_size=info.size,
+                stored_rows=stored_rows_in_manifest(lines),
             )
         )
     return tuple(sorted(found, key=lambda local_snapshot: local_snapshot.snapshot))

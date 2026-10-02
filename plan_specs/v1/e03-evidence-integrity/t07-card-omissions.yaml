@@ -1,0 +1,185 @@
+# TASK v1-e03-t07-card-omissions - Card omissions and the selection-to-card mapping
+# Epic: E03 Evidence Integrity | Release: v1.0 | Major: V1
+# Architecture refs: ADR-0018 (envelope and omissions), ADR-0006 (exact-source verification), §8
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e03-t07-card-omissions
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+  annotations:
+    debate/title: Card omissions and the selection-to-card mapping
+spec:
+  # Filed by the PM, 2026-10-01, from v1-e03-t03's Deviation 2 follow-up. E03's epic node for t03
+  # said t03 covered "ellipsis/omitted-range representation" and the task spec written from it
+  # carried no criterion for any such thing, so the work fell between the two and nothing failed
+  # when it did. ADR-0018 settles the representation; this task lands it.
+  description: >-
+    Implement ADR-0018 in the domain and give the evidence layer the one function that maps a
+    selection onto a card. A Card today holds one contiguous range of the snapshot and cannot say
+    that anything inside the quotation was left out, which is what cutting a card means and what
+    v1-e03-t05's clause (a) requires. ADR-0018's model: evidence_start_offset and
+    evidence_end_offset become the envelope, a new omitted_ranges field lists what was removed from
+    inside it in canonical form, evidence_text is the envelope minus the omissions concatenated with
+    no joiner, and CardSpan offsets stay relative to evidence_text. The ellipsis is a rendering
+    decision made by the exporter from omitted_ranges and is never stored, because a stored "..." is
+    text no snapshot contains. v1-e03-t03 returns snapshot-relative EvidenceMarkupSpans describing a
+    selection; converting those into a card's envelope, omissions and evidence_text-relative
+    CardSpans is offset arithmetic that must exist exactly once, in one tested place, because it is
+    the step where a span quietly acquires the wrong coordinates. Out of scope: the verifier
+    (v1-e03-t04), edit policy (v1-e03-t05), how an exporter renders an ellipsis (E06), and any
+    change to what v1-e03-t03 already returns.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.evidence, docs/evidence]
+    forbidden:
+      - An ellipsis, bracket, space or any other joiner stored inside evidence_text
+      - Non-canonical omitted_ranges (unsorted, overlapping, adjacent, empty, or touching an envelope boundary)
+      - CardSpan offsets measured against the snapshot rather than evidence_text
+      - A second copy of the selection-to-card offset arithmetic anywhere in the tree
+      - Comparing evidence_text against the snapshot in the domain (that is the verifier's job)
+  context:
+    - kind: TaskRef
+      name: v1-e03-t03-span-extraction
+      relation: dependsOn
+    # Added by the PM, 2026-10-01, before either task started. t07 changes what a card is, and
+    # v1-e03-t04's verifier reconstructs a card's evidence from the snapshot. Run in parallel, the
+    # verifier would be written for contiguous cards only and a card with omissions would then fail
+    # TEXT_MISMATCH with nobody's spec saying whose job the fix was. Run in this order, t04 writes
+    # reconstruction once for one envelope and t07 extends that one function (ac7). It also keeps two
+    # sessions out of debate_core.evidence at the same time.
+    - kind: TaskRef
+      name: v1-e03-t04-verifier
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Card carries omitted_ranges, defaulting to empty, and construction rejects any
+        non-canonical set: out of order, overlapping, adjacent (two touching omissions are one
+        omission), zero-length, outside the envelope, or touching either boundary. An omission at an
+        edge is a smaller envelope, so one card has exactly one representation. Every card that was
+        valid before this task is still valid and still means the same thing.
+    - id: ac2
+      description: >-
+        The domain enforces the length invariant at construction: the envelope's length minus the
+        total length of the omissions equals len(evidence_text). This is checkable without the
+        snapshot, which preserves the existing rule that the domain does not compare a card against
+        its source, so a tampered card stays constructible and the verifier stays the thing that
+        reports it.
+    - id: ac3
+      description: >-
+        One named, public function in debate_core.evidence converts a v1-e03-t03 selection and its
+        EvidenceMarkupSpans into an envelope, omitted_ranges, evidence_text and CardSpans. A
+        repository-wide scan shows no other code computing that mapping, and the scan asserts it saw
+        the call sites it exists for, so it cannot pass by finding nothing.
+    - id: ac4
+      description: >-
+        A property test over generated snapshots, envelopes, omissions and markup shows that
+        reconstructing from the snapshot reproduces evidence_text exactly, and that no resulting
+        CardSpan maps back onto an omitted range. The generators are shown, with
+        --hypothesis-show-statistics, to reach the with-omissions and with-spans cases often enough
+        for either to be tested rather than nominally covered.
+    - id: ac5
+      description: >-
+        Mutation proves the invariants rather than arguing for them. At minimum: drop the adjacency
+        rule, drop the ordering rule, drop the length invariant, and shift a CardSpan by the length
+        of a preceding omission. Each turns the suite red and is restored. Per working agreement 8,
+        every run uses a fresh HYPOTHESIS_STORAGE_DIRECTORY and the report says so; a check that
+        mutation cannot tell apart from its absence is removed rather than justified.
+    - id: ac6
+      description: >-
+        docs/evidence/snapshot-text-format.md and the card module docstring record the envelope and
+        omission model, the no-joiner rule, and that the ellipsis belongs to rendering. The card
+        docstring's three construction rules become four.
+    - id: ac7
+      description: >-
+        Reworded by the PM, 2026-10-01: as first written ("the same card with any omission widened,
+        narrowed, removed or added yields UNVERIFIED with TEXT_MISMATCH") it contradicted ac2's length
+        invariant, which refuses every such card at construction; the session showed it. The verifier
+        honours omissions: v1-e03-t04's single reconstruction function is extended, not copied, so a
+        card with omitted_ranges built by this task's mapping function verifies VERIFIED, and any
+        single-omission change is refused at construction or, with the envelope refitted, is
+        TEXT_MISMATCH unless it quotes the same text. v1-e03-t04's test fixtures are switched to the
+        mapping function, so ac3's scan finds no second copy of the arithmetic in tests either.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e03-t07-card-omissions-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e03-evidence-integrity
+spec:
+  description: >-
+    The domain shape and its invariants first, then the one mapping function, then mutation.
+  goalRef:
+    name: v1-e03-t07-card-omissions
+  graph:
+    nodes:
+      - id: domain-shape
+        kind: Task
+        name: omitted_ranges, canonical form and the length invariant
+        description: >-
+          Add the field and the validators, keeping every existing card valid and unchanged in
+          meaning.
+        outputs: [packages/debate_core/src/debate_core/domain/card.py]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card rejects every non-canonical omission set and enforces the length invariant
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain, -k, omission]
+      - id: mapping
+        kind: Task
+        name: One function from selection to card
+        description: >-
+          Convert a v1-e03-t03 selection and its snapshot-relative markup into an envelope,
+          omissions, evidence_text and evidence_text-relative CardSpans.
+        dependsOn: [domain-shape]
+        outputs: [packages/debate_core/src/debate_core/evidence]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Reconstruction reproduces evidence_text and no span lands on an omission
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence, -k, "omission or card_mapping"]
+      - id: mutation
+        kind: Task
+        name: Prove the invariants by mutation
+        description: >-
+          Four mutations minimum, each red then restored, every run with a fresh Hypothesis
+          database per working agreement 8.
+        dependsOn: [mapping]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: custom
+            name: Four mutations each turn the suite red under a fresh Hypothesis database
+            description: >-
+              Dropping the adjacency rule, dropping the ordering rule, dropping the length invariant
+              and shifting a CardSpan past a preceding omission each turn the suite red. Each run
+              uses a fresh HYPOTHESIS_STORAGE_DIRECTORY, the report says so, and any check that
+              survives is removed or explained.
+      - id: docs
+        kind: Task
+        name: Record the model where someone will look for it
+        description: >-
+          The format doc's guarantees and the card docstring's construction rules.
+        dependsOn: [mapping]
+        outputs: [docs/evidence/snapshot-text-format.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: docs/evidence/snapshot-text-format.md
+            path: docs/evidence/snapshot-text-format.md
+status:
+  phase: Pending

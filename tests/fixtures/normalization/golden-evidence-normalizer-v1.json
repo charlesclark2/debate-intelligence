@@ -1,0 +1,86 @@
+{
+  "normalizer_version": "evidence-normalizer-v1",
+  "about": "Invented text only: every place, person, organisation and figure is made up. Each raw string exhibits the character phenomena of one kind of extracted source. Every expected value was written by hand from docs/evidence/normalization.md, never produced by running the normalizer. Non-ASCII and invisible characters are written as \\u escapes so they can be reviewed.",
+  "cases": [
+    {
+      "name": "news article with CRLF paragraphs",
+      "genre": "news",
+      "phenomena": "curly quotes and apostrophes, en and em dashes, no-break spaces, trailing spaces, CRLF blank lines, a run of extra blank lines",
+      "raw": "The Harlow County water board voted 5–2 on Tuesday to ration irrigation — a first in the valley’s history.  \r\n\r\n“We are drawing down an aquifer that took ten thousand years to fill,” said board chair Imelda Voss.  \r\n\r\n\r\nThe measure takes effect on 1 June.",
+      "expected_paragraphs": [
+        "The Harlow County water board voted 5–2 on Tuesday to ration irrigation — a first in the valley’s history.",
+        "“We are drawing down an aquifer that took ten thousand years to fill,” said board chair Imelda Voss.",
+        "The measure takes effect on 1 June."
+      ],
+      "expected_raw_paragraphs": [
+        "The Harlow County water board voted 5–2 on Tuesday to ration irrigation — a first in the valley’s history.",
+        "“We are drawing down an aquifer that took ten thousand years to fill,” said board chair Imelda Voss.",
+        "The measure takes effect on 1 June."
+      ]
+    },
+    {
+      "name": "PDF extraction with hyphenation and ligatures",
+      "genre": "pdf",
+      "phenomena": "soft hyphen inside a word, hard hyphen at a line end, fi and fl ligatures, hard-wrapped lines, a form feed page break mid-paragraph, decomposed accents, leading and trailing spaces",
+      "raw": "Groundwater de­pletion in the Tessaly Basin has acceler-\nated since 2011, when the regional ofﬁce stopped\nmetering private wells.\fThe résumé of pumping permits\nshows 412 new licences.\n\n  Table 3 lists the ﬂow rates by district.  ",
+      "expected_paragraphs": [
+        "Groundwater depletion in the Tessaly Basin has acceler- ated since 2011, when the regional ofﬁce stopped metering private wells. The résumé of pumping permits shows 412 new licences.",
+        "Table 3 lists the ﬂow rates by district."
+      ],
+      "expected_raw_paragraphs": [
+        "Groundwater de­pletion in the Tessaly Basin has acceler-\nated since 2011, when the regional ofﬁce stopped\nmetering private wells.\fThe résumé of pumping permits\nshows 412 new licences.",
+        "Table 3 lists the ﬂow rates by district."
+      ]
+    },
+    {
+      "name": "think-tank brief with Unicode separators",
+      "genre": "think-tank",
+      "phenomena": "byte-order mark, paragraph and line separators, narrow no-break space before a percent sign, em space indent, zero width space, superscript footnote marker, en dash range",
+      "raw": "﻿Policy Brief No. 14 — Coastal Retreat Financing Executive summary: managed retreat costs 30–45 % less than seawall construction over a 40-year horizon.¹ Municipal bonds alone cannot close the gap;​ federal matching funds are needed.   Recommendations follow in section 2.",
+      "expected_paragraphs": [
+        "Policy Brief No. 14 — Coastal Retreat Financing",
+        "Executive summary: managed retreat costs 30–45 % less than seawall construction over a 40-year horizon.¹ Municipal bonds alone cannot close the gap; federal matching funds are needed.",
+        "Recommendations follow in section 2."
+      ],
+      "expected_raw_paragraphs": [
+        "Policy Brief No. 14 — Coastal Retreat Financing",
+        "Executive summary: managed retreat costs 30–45 % less than seawall construction over a 40-year horizon.¹ Municipal bonds alone cannot close the gap;​ federal matching funds are needed.",
+        "Recommendations follow in section 2."
+      ]
+    },
+    {
+      "name": "PDF table with tabs and bare carriage returns",
+      "genre": "pdf",
+      "phenomena": "tab-separated columns, bare CR line endings, a blank line made of two CRs, minus signs, thin spaces before units",
+      "raw": "Region\tWells\tDecline\rNorth\t1,204\t−3.1 m\rSouth\t  877\t−1.4 m\r\rSource: invented survey data, 2025.",
+      "expected_paragraphs": [
+        "Region Wells Decline North 1,204 −3.1 m South 877 −1.4 m",
+        "Source: invented survey data, 2025."
+      ],
+      "expected_raw_paragraphs": [
+        "Region\tWells\tDecline\rNorth\t1,204\t−3.1 m\rSouth\t  877\t−1.4 m",
+        "Source: invented survey data, 2025."
+      ]
+    },
+    {
+      "name": "news article quoting several scripts",
+      "genre": "news",
+      "phenomena": "Persian with a zero width non-joiner, a left-to-right mark, Korean written as decomposed jamo, a Devanagari composition exclusion",
+      "raw": "Posters read “می‌خواهیم”‎ beside the Korean 한 and the Hindi क़ानून — all invented slogans for an invented campaign.",
+      "expected_paragraphs": [
+        "Posters read “می‌خواهیم”‎ beside the Korean 한 and the Hindi क़ानून — all invented slogans for an invented campaign."
+      ],
+      "expected_raw_paragraphs": [
+        "Posters read “می‌خواهیم”‎ beside the Korean 한 and the Hindi क़ानून — all invented slogans for an invented campaign."
+      ]
+    },
+    {
+      "name": "extraction that found no text",
+      "genre": "pdf",
+      "phenomena": "only whitespace and invisible characters",
+      "raw": "\r\n ­​\n\n\f",
+      "expected_paragraphs": [],
+      "expected_raw_paragraphs": []
+    }
+  ]
+}

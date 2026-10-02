@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
@@ -8,26 +8,15 @@ import sitemap from '@/app/sitemap'
 import { COMPOSED_SLUGS, HOME_SLUG, loadPages, loadRoutedPages } from '@/lib/content'
 
 /**
- * The core pages parents need before the October 1 information session (v1-e36-t04 acceptance
- * criterion 1): every one of them exists, carries its own title and description, has a route in
+ * The core pages parents need (v1-e36-t04 acceptance criterion 1, and the tournament schedule
+ * from v1-e37-t02): every one of them exists, carries its own title and description, has a route in
  * the static export, appears in the navigation, and is listed in sitemap.xml.
  *
- * The export itself is only checked when site/out/ is present, because `pnpm --dir site test`
- * runs before `pnpm --dir site build` in CI and building here would blow the CI budget in
- * docs/process/working-agreements.md. `site/scripts/pre-commit-checks.sh` runs both, in that
- * order, so a developer machine checks the real files as well.
+ * The files the build writes are checked in tests/export/routes.export-test.ts, which runs after
+ * every build: `pnpm --dir site test` reads only sources, so it stays fast straight after an edit.
  */
 
-const CORE_PAGES = ['home', 'about', 'events', 'join', 'coaches', 'faq', 'contact'] as const
-
-const outDirectory = join(process.cwd(), 'out')
-const hasExport = existsSync(join(outDirectory, 'index.html'))
-
-function exportedPath(slug: string): string {
-  return slug === HOME_SLUG
-    ? join(outDirectory, 'index.html')
-    : join(outDirectory, slug, 'index.html')
-}
+const CORE_PAGES = ['home', 'about', 'events', 'schedule', 'join', 'coaches', 'faq', 'contact'] as const
 
 describe('the core pages exist as content', () => {
   const pages = loadPages()
@@ -47,9 +36,9 @@ describe('the core pages exist as content', () => {
     }
   })
 
-  it('orders the navigation for a parent: about, events, join, coaches, then the questions', () => {
+  it('orders the navigation for a parent: about, events, the schedule, join, coaches, then the questions', () => {
     const order = pages.map((page) => page.slug)
-    expect(order.slice(0, 7)).toEqual([...CORE_PAGES])
+    expect(order.slice(0, CORE_PAGES.length)).toEqual([...CORE_PAGES])
   })
 
   // The navigation is a single row from --breakpoint-nav up. "Accessibility", at 13 characters,
@@ -97,38 +86,5 @@ describe('the static export', () => {
     expect(sitemap().map((entry) => entry.url)).toContain(
       `https://wfbdebate.example.invalid${page!.route}`,
     )
-  })
-
-  it.runIf(hasExport).each(CORE_PAGES)('writes %s to site/out/', (slug) => {
-    expect(existsSync(exportedPath(slug)), exportedPath(slug)).toBe(true)
-  })
-
-  it.runIf(hasExport)('gives every built page its own <title> and meta description', () => {
-    const seen = new Map<string, string>()
-    for (const slug of CORE_PAGES) {
-      const html = readFileSync(exportedPath(slug), 'utf8')
-      const title = /<title>([^<]*)<\/title>/.exec(html)?.[1]
-      const description = /<meta name="description" content="([^"]*)"/.exec(html)?.[1]
-      expect(title, `${slug} <title>`).toBeTruthy()
-      expect(description, `${slug} meta description`).toBeTruthy()
-      expect(seen.has(title!), `${slug} reuses the title of ${seen.get(title!)}`).toBe(false)
-      seen.set(title!, slug)
-    }
-  })
-
-  it.runIf(hasExport).each(CORE_PAGES)('reaches %s from the navigation on every page', (slug) => {
-    const route = loadPages().find((page) => page.slug === slug)!.route
-    for (const other of CORE_PAGES) {
-      const html = readFileSync(exportedPath(other), 'utf8')
-      expect(html, `${other} does not link to ${route}`).toContain(`href="${route}"`)
-    }
-  })
-
-  it.runIf(hasExport)('lists every core page in the exported sitemap.xml', () => {
-    const xml = readFileSync(join(outDirectory, 'sitemap.xml'), 'utf8')
-    for (const slug of CORE_PAGES) {
-      const route = loadPages().find((page) => page.slug === slug)!.route
-      expect(xml, `sitemap.xml is missing ${route}`).toContain(`${route}</loc>`)
-    }
   })
 })

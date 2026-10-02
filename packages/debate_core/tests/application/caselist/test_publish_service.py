@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -42,9 +43,17 @@ from debate_core.application.caselist.publish_service import (
     PublishReport,
     SourceResult,
 )
+from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.errors import StoreCredentialsExpired, StoreUnavailable
 from debate_core.application.ports.evidence_store import ObjectKey
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    SuppressionList,
+)
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
+from debate_core.testing.fakes import InMemoryAppendOnlyRecord, empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -75,8 +84,13 @@ def put_keys(s3_client: S3Client) -> list[str]:
     return recorded
 
 
-def service_over(local: LocalEvidence, remote: Any, **options: Any) -> CaselistPublishService:
-    return CaselistPublishService(local=local, remote=remote, **options)
+def service_over(
+    local: LocalEvidence, remote: Any, *, suppression: SuppressionList | None = None, **options: Any
+) -> CaselistPublishService:
+    """The publisher, with an explicitly empty suppression list unless the test brings its own."""
+    return CaselistPublishService(
+        local=local, remote=remote, suppression=suppression or empty_suppression_list(), **options
+    )
 
 
 async def publish(service: CaselistPublishService, snapshot: str | None = None) -> PublishReport:
@@ -458,17 +472,41 @@ class TestFailedSourcesWithholdTheManifest:
 # ------------------------------------------------------------------------------------------------
 
 
-async def test_a_suppressed_source_is_never_uploaded_and_does_not_hold_back_the_manifest(
+async def test_a_suppressed_source_is_never_uploaded_and_a_manifest_naming_it_is_withheld(
     local: LocalEvidence, bucket: S3EvidenceObjectStore, s3_client: S3Client, evidence_bucket: str
 ) -> None:
+    """The 09-01 manifest was written before the file was suppressed, so it still has the row.
+
+    Publishing it would put the removed path, school and team code into the bucket; the source
+    stays home and so does the manifest, until `caselist remove` rewrites it. The other sources
+    still go up: they are other teams' files.
+    """
     suppressed = digest_of_body("harbor-octas-neg")
+    suppression = RecordedSuppressionList(
+        InMemoryAppendOnlyRecord(
+            "suppression list",
+            [
+                SuppressionEntry(
+                    action=SuppressionAction.SUPPRESS,
+                    sha256=suppressed,
+                    recorded_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
+                    reason=ReasonCode.REQUESTED_BY_TEAM,
+                    request_id="RM-2026-01",
+                ).to_line()
+            ],
+        )
+    )
 
-    report = await publish(service_over(local, bucket, suppressed={suppressed}), "2026-09-01")
+    report = await publish(service_over(local, bucket, suppression=suppression), "2026-09-01")
 
-    assert report.succeeded
+    assert not report.succeeded
+    (outcome,) = report.snapshots
+    assert outcome.manifest is ManifestOutcome.WITHHELD
+    assert suppressed in str(outcome.manifest_error)
     landed = bucket_keys(s3_client, evidence_bucket)
     assert expected_source_key("harbor-octas-neg") not in landed
-    assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" in landed
+    assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" not in landed
+    assert len(outcome.of(SourceResult.UPLOADED)) == len(outcome.sources) - 1
 
 
 async def test_no_school_team_code_or_filename_reaches_a_key_metadata_log_or_error(

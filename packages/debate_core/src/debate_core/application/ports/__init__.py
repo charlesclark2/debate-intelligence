@@ -15,6 +15,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `CaselistRepository` | `caselist` | Imported caselist and camp-file records (E30) |
 | `ArchiveMember` / `SkippedMember` | `archive` | What reading a weekly archive yields (E30) |
 | `CaselistArchiveSource` | `caselist_source` | OpenCaselist archive and OpenEv listings and downloads (E34) |
+| `CaselistLoginSession` | `caselist_session` | The operator's OpenCaselist login and stored token (E34) |
 | `DebateFileParser` | `debate_files` | Reading a debate `.docx` into sections and cards (E31) |
 | `Notifier` | `notifier` | Telling the operator an unattended run needs attention (E34) |
 | `SearchProvider` | `providers` | One discovery source |

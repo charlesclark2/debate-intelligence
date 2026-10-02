@@ -25,6 +25,7 @@ from debate_core.application.ports import BlobKey, SnapshotStore
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3SnapshotStore
 from debate_core.testing.contracts import (
     ASYNC_BACKEND,
+    BlobCopyCounter,
     BlobCorruptor,
     SnapshotStoreContract,
     SnapshotStoreFactory,
@@ -88,6 +89,15 @@ class TestS3SnapshotStore(SnapshotStoreContract):
             )
 
         return rewrite
+
+    @pytest.fixture
+    def count_stored_blobs(
+        self, evidence_bucket: str, blob_prefix: str, s3_client: S3Client
+    ) -> BlobCopyCounter:
+        """Every object under the store's prefix in the test bucket."""
+        return lambda: s3_client.list_objects_v2(Bucket=evidence_bucket, Prefix=f"{blob_prefix}/").get(
+            "KeyCount", 0
+        )
 
 
 class TestTheKeyAnObjectLandsUnder:

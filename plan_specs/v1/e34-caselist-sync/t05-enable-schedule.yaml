@@ -42,8 +42,34 @@ spec:
     - kind: TaskRef
       name: v1-e34-t02-scheduled-sync
       relation: dependsOn
+    # Added by the PM, 2026-09-29. v1-e34-t06's description already said the unattended schedule
+    # must not be enabled until at least its retry defect (ac1) is fixed - an agent that cannot
+    # recover from one failed import fails silently every week thereafter - but it said so in t06's
+    # prose, which `scripts/task ready` cannot read. Without this edge t05 is offered as startable
+    # and the constraint holds only if whoever picks it up has read another task's description. A
+    # dependency that matters is an edge, not a paragraph.
+    - kind: TaskRef
+      name: v1-e34-t06-sync-defects
+      relation: dependsOn
+    # Added by the PM, 2026-10-01. Without v1-e34-t07, every removed camp file is downloaded again
+    # each week and refused, and an unattended agent is exactly what makes that invisible. The
+    # removal holds either way; the maintainer's download budget does not.
+    - kind: TaskRef
+      name: v1-e34-t07-suppressed-downloads
+      relation: dependsOn
     - kind: TaskRef
       name: v1-e01-t09-dev-prerelease-channel
+      relation: dependsOn
+    # Added by the PM, 2026-10-01, for the same reason as the t06 edge above. v1-e30-t07 builds the
+    # suppression list that the archive and OpenEv importers consult, and its own description says
+    # why: "so a cumulative weekly archive can never re-import a removed file". The archives are
+    # cumulative. Until that list exists and the importers read it, a removal honoured under
+    # docs/policies/caselist-data-use.md is silently undone by the next import - and this task is
+    # what makes that import unattended and weekly. The policy promises removal within 7 calendar
+    # days, and the removal contact address started working on 2026-09-30, so a request can now
+    # actually arrive. An unattended agent that reverses takedowns is worse than no agent.
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -80,6 +106,9 @@ spec:
         docs/runbooks/caselist-scheduled-sync.md names the installed-build prerequisite in its
         "Before you install anything" list, with the install_channel.sh command, so the next person to
         install the agent does not point it at a checkout.
+    # ac6 (retire the legacy download ledger) moved to v1-e34-t09 by the PM, 2026-10-01. It needs a
+    # code change, and this task is operator-only and forbids changes to the sync service.
+    # That contradiction was the PM's, introduced when ac6 was added on 2026-09-30.
 status:
   phase: Pending
 ---

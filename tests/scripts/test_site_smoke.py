@@ -50,11 +50,15 @@ SECURITY_HEADERS = {
 
 PAGE_PATHS = ("/", "/about/", "/faq/")
 
-#: A home page as the export actually serves it: the October 1 panel with every fact filled in.
+#: A home page as the export actually serves it: the season-schedule panel (v1-e37-t02).
 HOME_BODY = (
     "<!doctype html><title>/</title>"
-    '<section id="parent-session"><dl><dt>Room</dt><dd>Room 214</dd></dl></section>'
+    '<section id="season-schedule"><a href="/schedule/">See the tournament schedule</a></section>'
+    "<dl><dt>Room</dt><dd>Room 214</dd></dl>"
 )
+
+#: The calendar file as the export serves it: an iCalendar object, as text/calendar.
+CALENDAR_BODY = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
 
 #: The parent FAQ as v1-e36-t07 built it: native disclosures, one per question.
 FAQ_BODY = (
@@ -87,6 +91,9 @@ class DeployedSite:
         self.version_body = json.dumps({"commit": DEPLOYED_SHA, "environment": environment})
         self.redirect_status = 301
         self.redirect_location = f"{origin}/"
+        self.calendar_status = 200
+        self.calendar_body = CALENDAR_BODY
+        self.calendar_content_type = "text/calendar"
 
     def default_headers(self) -> dict[str, str]:
         headers = dict(SECURITY_HEADERS)
@@ -111,6 +118,13 @@ class DeployedSite:
         )
         self.router.get(f"{self.origin}/version.json").mock(
             return_value=httpx.Response(self.version_status, text=self.version_body)
+        )
+        self.router.get(f"{self.origin}/schedule.ics").mock(
+            return_value=httpx.Response(
+                self.calendar_status,
+                text=self.calendar_body,
+                headers={"content-type": self.calendar_content_type},
+            )
         )
         for path in PAGE_PATHS:
             self.router.get(f"{self.origin}{path}").mock(
@@ -329,14 +343,58 @@ def test_a_prod_robots_txt_that_disallows_everything_fails(prod_site: DeployedSi
 # --------------------------------------------------------------------------------------
 
 
-def test_a_home_page_without_the_parent_session_panel_fails(dev_site: DeployedSite) -> None:
+def test_a_home_page_without_the_season_schedule_panel_fails(dev_site: DeployedSite) -> None:
     """The panel is the reason most parents open the site at all."""
     dev_site.page_bodies["/"] = "<!doctype html><title>/</title><p>Welcome.</p>"
 
     results = dev_site.run()
 
-    assert [result.name for result in failures(results)] == ["parent session panel"]
+    assert [result.name for result in failures(results)] == ["season schedule panel"]
     assert "missing from the home page" in failure_text(results)
+
+
+def test_the_old_parent_session_panel_no_longer_satisfies_the_check(dev_site: DeployedSite) -> None:
+    """v1-e37-t02 replaced the October 1 panel; a home page still serving it is an old build."""
+    dev_site.page_bodies["/"] = '<!doctype html><title>/</title><section id="parent-session"></section>'
+
+    results = dev_site.run()
+
+    assert [result.name for result in failures(results)] == ["season schedule panel"]
+
+
+def test_a_missing_calendar_file_fails(dev_site: DeployedSite) -> None:
+    """Subscribed calendar apps stop updating silently when the file goes, so the check says so."""
+    dev_site.calendar_status = 404
+
+    results = dev_site.run()
+
+    assert [result.name for result in failures(results)] == ["calendar file"]
+    assert "returned 404" in failure_text(results)
+
+
+def test_a_calendar_served_as_a_download_fails(dev_site: DeployedSite) -> None:
+    dev_site.calendar_content_type = "binary/octet-stream"
+
+    results = dev_site.run()
+
+    assert [result.name for result in failures(results)] == ["calendar file"]
+    assert "not text/calendar" in failure_text(results)
+
+
+def test_a_calendar_address_serving_a_page_fails(dev_site: DeployedSite) -> None:
+    dev_site.calendar_body = "<!doctype html><title>Not found</title>"
+
+    results = dev_site.run()
+
+    assert [result.name for result in failures(results)] == ["calendar file"]
+
+
+def test_a_working_calendar_reports_its_events(dev_site: DeployedSite) -> None:
+    results = dev_site.run()
+
+    calendar = next(result for result in results if result.name == "calendar file")
+    assert calendar.passed
+    assert calendar.detail == "text/calendar, 1 events"
 
 
 def test_a_gap_badge_on_prod_fails(prod_site: DeployedSite) -> None:

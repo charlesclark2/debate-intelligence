@@ -75,6 +75,14 @@ spec:
   version: '1'
   graph:
     nodes:
+    - id: ext-v1-e30-t09-removal-purges-inbox
+      kind: External
+      name: 'Prerequisite from E30: A removal leaves no removed bytes in the inbox'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t09-removal-purges-inbox
+        specRef: plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml
     - id: ext-v1-e30-t01-caselist-data-use-policy
       kind: External
       name: 'Prerequisite from E30: Caselist and OpenEv data-use policy'
@@ -240,6 +248,7 @@ spec:
       dependsOn:
       - t02
       - t06
+      - t07
       - ext-v1-e01-t09-dev-prerelease-channel
       acceptanceCriteria:
       - type: command_succeeds
@@ -271,5 +280,106 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t06-sync-defects
+    - id: t07
+      kind: Task
+      name: The sync does not re-download a file it has been told to remove
+      description: >-
+        After v1-e30-t07 drops suppressed members from the manifest, `_recorded_openev` cannot see them
+        and the weekly pull re-downloads every removed camp file for the importer to refuse, spending the
+        maintainer's download budget each week. Skip against the suppression list, one authority.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml
+        goalRef: v1-e34-t07-suppressed-downloads
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t07-suppressed-downloads reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t07-suppressed-downloads
+    - id: t08
+      kind: Task
+      name: A camp file uploaded again upstream is fetched
+      description: >-
+        A revision upstream is a new id at the same path, and t06's path matching holds it as already
+        imported, so revised camp files are never fetched. Fetch revisions; keep t07's removed-path hold.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t08-revised-camp-files.yaml
+        goalRef: v1-e34-t08-revised-camp-files
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t08-revised-camp-files reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t08-revised-camp-files
+    - id: t09
+      kind: Task
+      name: Retire the legacy download ledger
+      description: >-
+        Moved from t05 ac6: once the schedule runs a rolling-window build and no old-format build writes
+        to its state directories, delete the legacy ledger read, and the operator deletes the old file.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml
+        goalRef: v1-e34-t09-retire-legacy-ledger
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t09-retire-legacy-ledger reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t09-retire-legacy-ledger
+    - id: t10
+      kind: Task
+      name: The weekly agent runs nothing from a git checkout
+      description: >-
+        The installed plist runs the wrapper from the operator's working checkout, and --debate-research
+        is never written into it. Copy the wrapper out at install time and pin DEBATE_RESEARCH_BIN.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml
+        goalRef: v1-e34-t10-agent-outside-checkout
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t10-agent-outside-checkout reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t10-agent-outside-checkout
+    - id: t11
+      kind: Task
+      name: Imported downloads leave the inbox
+      description: >-
+        Nothing clears the download inbox, and weeklies are cumulative. Once a download is imported and
+        its publish confirmed, remove it, on v1-e30-t09's reasoning for why an imported week is safe to delete.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml
+        goalRef: v1-e34-t11-inbox-retention
+      dependsOn:
+      - ext-v1-e30-t09-removal-purges-inbox
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t11-inbox-retention reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t11-inbox-retention
 status:
   phase: Pending

@@ -34,9 +34,17 @@ difference.
 OpenCaselist limits each user to **5 bulk downloads per day** (`weeklyLimiter` upstream, found by
 `v1-e34-t01`), separately from the 10-file-per-minute limit the transport paces itself against.
 That ceiling is budgeted in :meth:`CaselistSyncService.plan` across the configured caselists —
-decided before anything is fetched rather than discovered when the server says no — and what a run
-spends is recorded in a per-day ledger, so a second run on the same day starts from what is left
-rather than from five.
+decided before anything is fetched rather than discovered when the server says no — and every
+bulk download this machine starts is recorded in a ledger, so a second run starts from what is
+left rather than from five.
+
+The budget is a **rolling 24 hours**, not a calendar day (`v1-e34-t06`): a download may start only
+if fewer than five started in the 24 hours before it. `v1-e34-t01` established the ceiling but not
+which day the server counts, and neither does the data-use policy, so any calendar would be a guess
+— and a calendar key hands out a fresh five at its midnight, which is twice the limit across a
+boundary. It is :class:`~debate_core.integrations.opencaselist.pacing.RequestPacer`'s rule for the
+per-minute limit one scale up, and it is conservative against a limiter counting any calendar in
+any timezone. See :class:`DownloadLedger`.
 
 If the server refuses anyway, a :class:`~debate_core.application.errors.ProviderRateLimited`
 carrying a wait longer than :data:`SKIP_TODAY_SECONDS` means *skip today*: the remaining archives
@@ -74,6 +82,52 @@ Downloads land in one directory, which is what the importer reads. Two rules com
   identical file as `already_present`, but it streams the whole thing first, and every archive
   fetched spends one of the day's five.
 
+## What is imported
+
+The import stage works from the inbox against the manifests, not from what this run happened to
+download (`v1-e34-t06`). Every weekly newer than a caselist's latest manifest that is in the inbox
+is imported, whether this run fetched it or an earlier one did, so an archive whose import failed
+is imported by the next run without spending a download on it. The same holds for an OpenEv file
+in the inbox that its release manifest does not yet record.
+
+A caselist's weeklies are imported oldest first, because the importer classifies each against the
+one before it, and **a caselist stops at its first gap**: an import that fails, or an older week
+this run did not obtain (the cap deferred it, or its download failed). Everything newer waits in the
+inbox for a later run. Importing past a gap would give the newer week a manifest, the older week
+would then no longer be newer than the latest manifest, and no run would ever fetch or import it.
+
+## A camp file that was removed
+
+A removal (`caselist remove`, `v1-e30-t07`) puts the file's sha256 on the suppression list and
+takes its rows out of the release manifest, so nothing the manifest says marks the camp file as
+handled any more. Left alone, every run would fetch it again — or import it again from the inbox —
+for the importer to refuse, spending a download from a budget the site's maintainer sets
+(`v1-e34-t07`). The run skips it instead, as :attr:`SelectionDecision.SKIPPED_AS_REMOVED`.
+
+**The suppression list is the only record of what was removed.** The list is keyed by sha256, and
+the listing gives an id and a path but no digest, so the run needs to know which bytes an id
+delivered. :class:`OpenEvDeliveries` remembers that, per id, when an import of it completes: the
+download's digest, the digest of its upstream path, and the digest of every member the importer
+classified. It holds no removal state at all. Whether an id is removed is decided on every run, by
+reading the list — the union of this machine's copy and the bucket's, when there is a bucket — and
+asking whether it suppresses every member that id delivered. A removal made on another machine is
+therefore honoured as soon as the bucket's copy says so; an `unsuppress` is honoured the same way,
+and the file is fetched again. A remembered id whose bytes are neither recorded in the manifest nor
+suppressed is reported in the select stage and fetched, never skipped on the memory's word.
+
+What the memory does not know, it cannot use. A camp file this machine never imported, removed
+somewhere else, is fetched once; the importer refuses it, the memory records what it delivered, and
+the next run skips it. A file still in the inbox is read there instead, so it costs nothing.
+
+**A camp file changes upstream only under a new id.** OpenCaselist has no route that replaces a
+file's bytes: `POST /openev` refuses a path that exists, `DELETE /openev/{id}` is the only other
+write, and ids are `AUTO_INCREMENT` (`server/v1/controllers/openev/`, `server/v1/db/caselist.sql`,
+upstream). A re-uploaded file therefore arrives as a new id, usually at the same path. A removal
+covers a camp's later upload of the same file (PM decision, `v1-e34-t07`): the request was about the
+material, and a revised file normally still contains it. Such an id is held back as
+:attr:`SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE` and logged. If the data-use policy is read the
+other way, that decision becomes a download.
+
 ## Credentials, and stages that come back later
 
 The local stages need no AWS session. If the operator's SSO session has expired, the S3 adapter
@@ -81,6 +135,23 @@ raises :class:`~debate_core.application.errors.StoreCredentialsExpired`; the pub
 stages are then recorded as **pending** in a small local file, and the next run — or
 `caselist pull --publish-pending` — completes them. Nothing that was captured is lost by a login
 that timed out overnight.
+
+The one thing the local stages read from the bucket is the removal suppression list: the importers
+and the skip of a removed camp file read both copies when there is a bucket. When the bucket's copy
+cannot be read for want of a login — credentials missing or expired, and nothing else — they read
+this machine's copy alone, and the run says so: `suppression_list_local_copy_only` in the summary
+carries the reason, and the select or import stage that fell back adds a sentence to its own. An
+access denial or an unreadable list is not a login that timed out, and still fails the import. See
+:class:`~debate_core.application.caselist.suppression.LocalFallbackSuppressionList` for why this is
+safe while one machine imports, and the condition for revisiting it.
+
+## Which run a `caselist pull` is
+
+:func:`run_pull` chooses between the three things the command can be asked for — a dry run, a
+whole run, or completing the publishes an earlier run deferred — and runs the two that write
+anything inside :class:`~debate_core.application.sync_runs.SyncRunMonitor`. It takes a factory for
+this service rather than the service itself, because building it is where an API this installation
+has not turned on is refused, and that refusal has to be recorded like any other.
 
 ## One run at a time
 
@@ -99,16 +170,18 @@ written for an operator and for `v1-e34-t03`'s run log, and it carries no person
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from types import TracebackType
-from typing import Final, Protocol, Self, cast
+from typing import TYPE_CHECKING, Final, Protocol, Self, cast
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence, read_local_snapshots
 from debate_core.application.caselist.import_service import CaselistImportService, ImportReport
@@ -123,18 +196,20 @@ from debate_core.application.caselist.openev_import_service import (
     OpenEvImportService,
 )
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
-from debate_core.application.caselist.pipeline import Classification
+from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
 from debate_core.application.caselist.publish_service import (
     CaselistPublishService,
     NothingToPublish,
     SourceResult,
 )
 from debate_core.application.caselist.status_service import CaselistStatusService, NoCaselistEvidence
+from debate_core.application.caselist.suppression import LocalFallbackSuppressionList, load_suppression_state
 from debate_core.application.errors import (
     DomainError,
     ProviderRateLimited,
     StoreAccessDenied,
     StoreCredentialsExpired,
+    UnreadableArchive,
 )
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember
 from debate_core.application.ports.caselist_source import (
@@ -145,13 +220,21 @@ from debate_core.application.ports.caselist_source import (
     OpenEvFile,
     openev_inbox_name,
 )
+from debate_core.application.ports.suppression import SuppressionAction, SuppressionList, SuppressionState
 from debate_core.domain.caselist import Acquisition, Event
 
+if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its types are named only
+    from debate_core.application.sync_runs import SyncRunMonitor, SyncRunRecord
+
 __all__ = [
+    "BULK_DOWNLOAD_WINDOW",
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "INBOX_PARTIAL_DIRECTORY",
+    "LEGACY_DOWNLOAD_LEDGER_FILENAME",
     "LOCK_FILENAME",
+    "OPENEV_DELIVERIES_FILENAME",
     "PENDING_WORK_FILENAME",
+    "RUN_SUMMARY_SCHEMA_VERSION",
     "SKIP_TODAY_SECONDS",
     "ArchiveReader",
     "ArchiveSelection",
@@ -161,9 +244,12 @@ __all__ = [
     "LandscapeStage",
     "LandscapeStageResult",
     "NoCaselistsConfigured",
+    "OpenEvDeliveries",
+    "OpenEvDelivery",
     "OpenEvSelection",
     "ParseStageResult",
     "PendingWork",
+    "PulledRun",
     "RunSummary",
     "SelectionDecision",
     "StageOutcome",
@@ -173,6 +259,8 @@ __all__ = [
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "openev_id_of_inbox_name",
+    "run_pull",
     "within_daily_budget",
 ]
 
@@ -194,7 +282,33 @@ INBOX_PARTIAL_DIRECTORY: Final = ".partial"
 
 LOCK_FILENAME: Final = "caselist-sync.lock"
 PENDING_WORK_FILENAME: Final = "caselist-sync-pending.json"
-DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-downloads.json"
+DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-download-starts.json"
+"""When each bulk download started, for the rolling window. See :class:`DownloadLedger`."""
+
+LEGACY_DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-downloads.json"
+"""The calendar-day ledger builds before `v1-e34-t06` kept: `{"date": ..., "bulk_downloads": N}`.
+
+Read, never written. See :class:`DownloadLedger` for why it is still read, and how.
+"""
+
+OPENEV_DELIVERIES_FILENAME: Final = "caselist-sync-openev-deliveries.json"
+"""What each OpenEv id delivered when this machine imported it. See :class:`OpenEvDeliveries`."""
+
+OPENEV_DELIVERIES_SCHEMA_VERSION: Final = 1
+
+BULK_DOWNLOAD_WINDOW: Final = timedelta(hours=24)
+"""How far back the daily bulk-download ceiling counts: a rolling day, not a calendar one."""
+
+DOWNLOAD_LEDGER_SCHEMA_VERSION: Final = 1
+
+RUN_SUMMARY_SCHEMA_VERSION: Final = 2
+"""The shape of :meth:`RunSummary.as_json`.
+
+Version 2 (`v1-e34-t06`) reports the download window as `bulk_download_window_start` and
+`bulk_downloads_spent_in_window`. The summaries written before it carry no version and report
+`bulk_downloads_spent_today` instead; nothing reads them back, and `caselist runs` reads the run
+log (:mod:`debate_core.application.sync_runs`), whose records have neither field.
+"""
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
 OPENEV_PUBLISH_TARGET: Final = "openev"
@@ -271,7 +385,7 @@ class SelectionDecision(StrEnum):
     """Its date is not newer than the latest snapshot the local manifests hold."""
 
     ALREADY_IN_INBOX = "already_in_inbox"
-    """A file of that name is in the inbox; fetching it again would spend the day's allowance."""
+    """In the inbox and not yet in a manifest: imported from there, without fetching it again."""
 
     FULL_ARCHIVE_NOT_PULLED_WEEKLY = "full_archive_not_pulled_weekly"
     """`<slug>-all-<date>.zip`. A weekly run pulls weeklies; see this module's docstring."""
@@ -287,6 +401,28 @@ class SelectionDecision(StrEnum):
 
     NO_EVENT_CONFIGURED = "no_event_configured"
     """An OpenEv file whose event neither its tags nor the configuration state."""
+
+    SKIPPED_AS_REMOVED = "skipped_as_removed"
+    """An OpenEv file every member of which the removal suppression list stops.
+
+    Fetching it would only hand the importer bytes it must refuse. Decided from the list on every
+    run; see "A camp file that was removed" in this module's docstring.
+    """
+
+    SAME_PATH_AS_A_REMOVED_FILE = "same_path_as_a_removed_file"
+    """A new OpenEv id at the upstream path of a camp file that was removed.
+
+    How OpenEv re-publishes a file, since nothing upstream replaces bytes under an id. Held back
+    rather than fetched: a removal covers a camp's later upload of the same file (PM decision,
+    `v1-e34-t07`), and the run says which id it held back.
+    """
+
+    SUPPRESSION_LIST_UNREADABLE = "suppression_list_unreadable"
+    """Fetched by this machine before, recorded nowhere now, and the list could not be read.
+
+    It may have been removed, and nothing can say until the list can be read, so it is left for a
+    run that can read it rather than fetched on a guess.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -349,6 +485,8 @@ class OpenEvSelection:
     event: Event | None
     decision: SelectionDecision
     file: OpenEvFile | None = None
+    note: str | None = None
+    """Why the decision deserves an operator's eye, when it does. Ids and codes only, never a path."""
 
     @property
     def wanted(self) -> bool:
@@ -361,6 +499,7 @@ class OpenEvSelection:
             "year": self.year,
             "event": str(self.event) if self.event is not None else None,
             "decision": str(self.decision),
+            "note": self.note,
         }
 
 
@@ -372,9 +511,13 @@ class SyncPlan:
     archives: tuple[ArchiveSelection, ...]
     openev: tuple[OpenEvSelection, ...]
     bulk_downloads_allowed: int
-    """What was left of the day's 5 when this plan was made."""
+    """What was left of the five when this plan was made."""
 
-    bulk_downloads_spent_today: int
+    bulk_downloads_spent_in_window: int
+    """Bulk downloads started in the 24 hours before this plan was made."""
+
+    bulk_download_window_start: datetime
+    """Where those 24 hours began: the plan's own time less :data:`BULK_DOWNLOAD_WINDOW`."""
 
     @property
     def archives_to_download(self) -> tuple[ArchiveSelection, ...]:
@@ -586,33 +729,259 @@ class PendingWork:
 
 
 class DownloadLedger:
-    """How many bulk archive downloads this machine has spent today, against OpenCaselist's five.
+    """When this machine started each bulk archive download, counted over a rolling 24 hours.
 
-    Keyed by the calendar date the run starts on, in local time, because the server's limiter is a
-    per-day counter and the operator's day is the one they will compare against. A ledger for any
-    other date is replaced rather than accumulated: yesterday's count is not a debt.
+    A download may start at `now` only if fewer than `limit` started in `(now - 24h, now]`: the
+    rule :class:`~debate_core.integrations.opencaselist.pacing.RequestPacer` applies to the
+    per-minute limit, one scale up (see this module's docstring). Five at `T` are still counted at
+    `T + 23h59m` and released at `T + 24h`. A start later than `now` counts too, so a clock set
+    back cannot hand out an allowance.
+
+    The file is `{"schema_version": 1, "bulk_download_starts": [<ISO 8601 UTC>, ...]}`, pruned to
+    the window on every write.
+
+    ## Reading what it cannot trust
+
+    An unreadable ledger does not say "nothing spent", because nothing spent means five available.
+    A file here that is not a ledger this class wrote is read as `limit` downloads started when
+    the file was last written (its mtime): fully spent for 24 hours, then released.
+
+    The calendar-day ledger of the builds before `v1-e34-t06`
+    (:data:`LEGACY_DOWNLOAD_LEDGER_FILENAME`) is still read, and never written. Its
+    `{"date": ..., "bulk_downloads": N}` becomes `N` downloads started at its mtime: every write
+    replaced the file, so each of the `N` started at or before that moment, and counting them there
+    keeps them in the window for as long as any of them could be. It is read on every run rather than
+    migrated once, because an installed build still on the old format writes it — `v1-e30-t06`'s
+    backfill runs from one — and what that build spends must still count against this one. An old
+    build does not read this file, so it may spend what this one already has; the server's own
+    limiter absorbs that as a deferral (:data:`SKIP_TODAY_SECONDS`), which is a wasted run and not
+    a breach.
     """
 
-    def __init__(self, path: Path, *, limit: int = DEFAULT_BULK_DOWNLOADS_PER_DAY) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        limit: int = DEFAULT_BULK_DOWNLOADS_PER_DAY,
+        legacy_path: Path | None = None,
+    ) -> None:
         self.path = Path(path)
         self.limit = limit
+        self.legacy_path = Path(legacy_path) if legacy_path is not None else None
 
-    def spent_on(self, day: date) -> int:
-        body = _read_json_object(self.path)
-        if body is None or body.get("date") != day.isoformat():
-            return 0
-        spent = body.get("bulk_downloads")
-        return spent if isinstance(spent, int) and spent >= 0 else 0
+    @staticmethod
+    def window_start(now: datetime) -> datetime:
+        """The start of the 24 hours a download at `now` is counted against. Not itself inside it."""
+        return now - BULK_DOWNLOAD_WINDOW
 
-    def remaining_on(self, day: date) -> int:
-        return max(self.limit - self.spent_on(day), 0)
+    def starts(self) -> tuple[datetime, ...]:
+        """Every download start this ledger and the legacy one account for, oldest first."""
+        recorded = list(self._own_starts())
+        if self.legacy_path is not None:
+            recorded.extend(self._legacy_starts(self.legacy_path))
+        return tuple(sorted(recorded))
 
-    def record(self, day: date, downloads: int) -> None:
-        """Add `downloads` to the count for `day`. A dry run never calls this."""
-        if downloads <= 0:
-            return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(self.path, {"date": day.isoformat(), "bulk_downloads": self.spent_on(day) + downloads})
+    def spent_in_window(self, now: datetime) -> int:
+        """Downloads started in the 24 hours before `now`, or after it."""
+        since = self.window_start(now)
+        return sum(1 for started in self.starts() if started > since)
+
+    def remaining_at(self, now: datetime) -> int:
+        return max(self.limit - self.spent_in_window(now), 0)
+
+    def record(self, started_at: datetime) -> None:
+        """Add one download that started at `started_at`. A dry run never calls this."""
+        _require_aware(started_at)
+        since = self.window_start(started_at)
+        kept = [started for started in self._own_starts() if started > since]
+        kept.append(started_at)
+        _write_json(
+            self.path,
+            {
+                "schema_version": DOWNLOAD_LEDGER_SCHEMA_VERSION,
+                "bulk_download_starts": [started.astimezone(UTC).isoformat() for started in sorted(kept)],
+            },
+        )
+
+    def _own_starts(self) -> tuple[datetime, ...]:
+        if not self.path.is_file():
+            return ()
+        starts = _parsed_starts(_read_json_object(self.path))
+        if starts is None:
+            logger.warning(
+                "caselist sync: the download ledger is not one this build wrote; counting it as spent"
+            )
+            return self._spent_when_written(self.path, self.limit)
+        return starts
+
+    def _legacy_starts(self, path: Path) -> tuple[datetime, ...]:
+        if not path.is_file():
+            return ()
+        body = _read_json_object(path)
+        spent = body.get("bulk_downloads") if body is not None else None
+        if body is None or not isinstance(body.get("date"), str) or not isinstance(spent, int) or spent < 0:
+            logger.warning("caselist sync: the old download ledger is unreadable; counting it as spent")
+            return self._spent_when_written(path, self.limit)
+        return self._spent_when_written(path, spent)
+
+    @staticmethod
+    def _spent_when_written(path: Path, downloads: int) -> tuple[datetime, ...]:
+        """`downloads` starts at the moment `path` was last written, the latest any of them can be."""
+        try:
+            written = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+        except OSError:  # gone since it was found: there is nothing left to count
+            return ()
+        return (written,) * downloads
+
+
+def _parsed_starts(body: dict[str, object] | None) -> tuple[datetime, ...] | None:
+    """The starts a ledger this class wrote records, or `None` if `body` is not one."""
+    if body is None or body.get("schema_version") != DOWNLOAD_LEDGER_SCHEMA_VERSION:
+        return None
+    raw = body.get("bulk_download_starts")
+    if not isinstance(raw, list):
+        return None
+    starts: list[datetime] = []
+    for value in cast("list[object]", raw):
+        if not isinstance(value, str):
+            return None
+        try:
+            started = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        if started.tzinfo is None:
+            return None
+        starts.append(started)
+    return tuple(starts)
+
+
+def _require_aware(moment: datetime) -> datetime:
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise ValueError("a download start must be timezone-aware")
+    return moment
+
+
+@dataclass(frozen=True, slots=True)
+class OpenEvDelivery:
+    """What one OpenEv id's download held when this machine last imported it. Digests only."""
+
+    download_sha256: str
+    """The download itself: the single document, or the camp release's zip."""
+
+    path_sha256: str | None
+    """The SHA-256 of the file's upstream path (`OpenEvFile.path`), never the path itself."""
+
+    member_sha256: frozenset[str]
+    """Every member the importer classified, stored or refused. Junk it skipped has no digest."""
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "download_sha256": self.download_sha256,
+            "path_sha256": self.path_sha256,
+            "member_sha256": sorted(self.member_sha256),
+        }
+
+
+class OpenEvDeliveries:
+    """Which bytes each OpenEv id delivered, so a removed one can be recognised before it is fetched.
+
+    The suppression list names digests and the OpenEv listing names ids, and a digest is only known
+    once the bytes are in hand. This file joins the two for every id this machine has imported:
+    `{"schema_version": 1, "deliveries": {"<openev id>": {"download_sha256": ..., "path_sha256":
+    ..., "member_sha256": [...]}}}`.
+
+    **It records no removal.** There is no field here that says an id was removed, suppressed or
+    refused, so it cannot disagree with the suppression list about any of those: whether an id is
+    removed is asked of the list on every run (:meth:`CaselistSyncService._select_openev`). What it
+    records is a fact about upstream — these bytes came from that id — which no removal and no
+    un-suppress changes. Like the suppression list it holds no name: digests and ids only.
+
+    Written after each import of an OpenEv download completes, never by a dry run, and by a removal
+    that deletes an id's copy from the inbox when this record does not yet know what the id
+    delivered (`v1-e30-t09`, :meth:`remember_if_unknown`): the inbox copy was the only other place
+    those digests could be read from, and without them the next run would fetch the removed file
+    again. A file that cannot be read is treated as empty, with a warning: what it would have said is
+    recovered by the next download of each id, which costs that download once and nothing worse,
+    since the importer refuses a removed file on its own.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+
+    def read(self) -> dict[int, OpenEvDelivery]:
+        """Every id this machine has imported, and what it delivered."""
+        if not self.path.is_file():
+            return {}
+        deliveries = _parsed_deliveries(_read_json_object(self.path))
+        if deliveries is None:
+            logger.warning(
+                "caselist sync: the OpenEv delivery record is not one this build wrote; ignoring it, "
+                "so a removed camp file this machine cannot recognise may be fetched once more"
+            )
+            return {}
+        return deliveries
+
+    def remember_if_unknown(self, openev_id: int, delivery: OpenEvDelivery) -> bool:
+        """Record `delivery` for `openev_id` unless the record already holds that id. True if it wrote.
+
+        What an import recorded is never replaced: it carries the upstream path's digest, which a
+        removal reading the bytes off the inbox cannot know.
+        """
+        if openev_id in self.read():
+            return False
+        self.record(openev_id, delivery)
+        return True
+
+    def record(self, openev_id: int, delivery: OpenEvDelivery) -> None:
+        """Remember what `openev_id` delivered, replacing anything remembered for it before."""
+        deliveries = self.read()
+        deliveries[openev_id] = delivery
+        _write_json(
+            self.path,
+            {
+                "schema_version": OPENEV_DELIVERIES_SCHEMA_VERSION,
+                "deliveries": {str(one): deliveries[one].as_json() for one in sorted(deliveries)},
+            },
+        )
+
+
+_SHA256_HEX: Final = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _parsed_deliveries(body: dict[str, object] | None) -> dict[int, OpenEvDelivery] | None:
+    """The deliveries a record :class:`OpenEvDeliveries` wrote holds, or `None` if `body` is not one."""
+    if body is None or body.get("schema_version") != OPENEV_DELIVERIES_SCHEMA_VERSION:
+        return None
+    raw = body.get("deliveries")
+    if not isinstance(raw, dict):
+        return None
+    deliveries: dict[int, OpenEvDelivery] = {}
+    for key, value in cast("dict[str, object]", raw).items():
+        if not key.isdigit() or not isinstance(value, dict):
+            return None
+        fields = cast("dict[str, object]", value)
+        download = fields.get("download_sha256")
+        path = fields.get("path_sha256")
+        members = fields.get("member_sha256")
+        if (
+            not _is_sha256(download)
+            or not (path is None or _is_sha256(path))
+            or not isinstance(members, list)
+        ):
+            return None
+        listed = cast("list[object]", members)
+        if not all(_is_sha256(one) for one in listed):
+            return None
+        deliveries[int(key)] = OpenEvDelivery(
+            download_sha256=cast("str", download),
+            path_sha256=cast("str | None", path),
+            member_sha256=frozenset(cast("list[str]", listed)),
+        )
+    return deliveries
+
+
+def _is_sha256(value: object) -> bool:
+    return isinstance(value, str) and _SHA256_HEX.match(value) is not None
 
 
 def _read_json_object(path: Path) -> dict[str, object] | None:
@@ -681,7 +1050,20 @@ class RunSummary:
     snapshots_imported: tuple[str, ...] = ()
     pending_publish: tuple[str, ...] = ()
     bulk_downloads_allowed: int = 0
-    bulk_downloads_spent_today: int = 0
+    """What was left of the five when the run planned."""
+
+    bulk_downloads_spent_in_window: int = 0
+    """Bulk downloads started in the 24 hours before the run planned, by this run's ledger."""
+
+    bulk_download_window_start: datetime | None = None
+    """Where those 24 hours began, or `None` when the run never planned (`--publish-pending`)."""
+
+    suppression_list_local_copy_only: str | None = None
+    """Why the suppression list was read from this machine's copy alone, or `None` if it was not.
+
+    Set when the bucket's copy needed a login the run did not have; see "Credentials, and stages
+    that come back later" in the module docstring.
+    """
 
     @property
     def archives_seen(self) -> int:
@@ -701,6 +1083,11 @@ class RunSummary:
         (`v1-e34-t03` ac5).
         """
         return sum(1 for one in self.archives if one.wanted or one.deferred_by_cap)
+
+    @property
+    def openev_skipped_as_removed(self) -> int:
+        """Camp files not fetched because the suppression list stops everything they deliver."""
+        return sum(1 for one in self.openev if one.decision is SelectionDecision.SKIPPED_AS_REMOVED)
 
     @property
     def duration_seconds(self) -> float:
@@ -741,6 +1128,7 @@ class RunSummary:
     def as_json(self) -> dict[str, object]:
         """The summary as it is written to disk and returned by `caselist pull --json`."""
         return {
+            "schema_version": RUN_SUMMARY_SCHEMA_VERSION,
             "run_id": self.run_id,
             "started_at": self.started_at.isoformat(),
             "finished_at": self.finished_at.isoformat(),
@@ -756,6 +1144,7 @@ class RunSummary:
             "archives_deferred": self.archives_deferred,
             "openev_seen": len(self.openev),
             "openev_downloaded": self.openev_downloaded,
+            "openev_skipped_as_removed": self.openev_skipped_as_removed,
             "files_imported": self.files_imported,
             "files_duplicate": self.files_duplicate,
             "files_skipped": self.files_skipped,
@@ -767,7 +1156,11 @@ class RunSummary:
             "snapshots_imported": list(self.snapshots_imported),
             "pending_publish": list(self.pending_publish),
             "bulk_downloads_allowed": self.bulk_downloads_allowed,
-            "bulk_downloads_spent_today": self.bulk_downloads_spent_today,
+            "bulk_downloads_spent_in_window": self.bulk_downloads_spent_in_window,
+            "bulk_download_window_start": (
+                self.bulk_download_window_start.isoformat() if self.bulk_download_window_start else None
+            ),
+            "suppression_list_local_copy_only": self.suppression_list_local_copy_only,
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -804,10 +1197,30 @@ class _RunTally:
     published: list[PendingSnapshot] = field(default_factory=lambda: list[PendingSnapshot]())
     pending_publish: list[PendingSnapshot] = field(default_factory=lambda: list[PendingSnapshot]())
     bulk_downloads_allowed: int = 0
-    bulk_downloads_spent_today: int = 0
+    bulk_downloads_spent_in_window: int = 0
+    bulk_download_window_start: datetime | None = None
+    suppression_list_local_copy_only: str | None = None
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
+
+    def add_to_reason(self, stage: SyncStage, sentence: str) -> None:
+        """Append `sentence` to the reason the latest record of `stage` gives."""
+        for index in range(len(self.stages) - 1, -1, -1):
+            record = self.stages[index]
+            if record.stage is stage:
+                reason = f"{record.reason}; {sentence}" if record.reason else sentence
+                self.stages[index] = StageRecord(stage=stage, outcome=record.outcome, reason=reason)
+                return
+
+
+@dataclass(frozen=True, slots=True)
+class _ImportQueue:
+    """One caselist's weeklies for the import stage: those to import in order, and those behind a gap."""
+
+    ready: tuple[tuple[ArchiveSelection, Path], ...]
+    waiting: int
+    """In the inbox, and newer than a week this run could not import or did not obtain."""
 
 
 class CaselistSyncService:
@@ -824,6 +1237,7 @@ class CaselistSyncService:
             event_for_caselist=event_for_caselist,
             inbox=settings.caselist.inbox_dir,
             state_dir=settings.storage.data_dir,
+            suppression=container.suppression_list(),  # the importers' list: both copies
             publisher=container.caselist_publish(),   # None when no bucket is configured
         )
 
@@ -838,8 +1252,12 @@ class CaselistSyncService:
             not know. A caselist whose event is unknown is not imported, because the event decides
             which sides are legal on a disclosure.
         inbox: Where downloads land and where the importer reads them from.
-        state_dir: Where the run lock, the pending-work file, the download ledger and the run
-            summaries live. The environment's data directory.
+        state_dir: Where the run lock, the pending-work file, the download ledger, the OpenEv
+            delivery record and the run summaries live. The environment's data directory.
+        suppression: The removal suppression list, read to skip camp files a removal has taken
+            out. Required, with no default, and it should be the very list the importers were
+            built with — the union of this machine's copy and the bucket's when there is a bucket —
+            so the skip and the importers' refusal can never read two different lists.
         publisher: The S3 publisher (`v1-e30-t05`), or `None` for an environment with no bucket.
         status: The local-against-bucket comparison used by the report stage, or `None`.
         parse: The parse pipeline (`v1-e31-t06`), or `None` — the normal case today.
@@ -848,7 +1266,7 @@ class CaselistSyncService:
         openev_year: The OpenEv release year to list, or `None` for the API's current year.
         bulk_downloads_per_day: The upstream ceiling; never raised above
             :data:`DEFAULT_BULK_DOWNLOADS_PER_DAY`.
-        clock: Returns an aware `datetime`; the run's timestamps and the ledger's day come from it.
+        clock: Returns an aware `datetime`; the run's timestamps and the download window come from it.
     """
 
     def __init__(
@@ -862,6 +1280,7 @@ class CaselistSyncService:
         event_for_caselist: Callable[[str], Event | None],
         inbox: Path,
         state_dir: Path,
+        suppression: SuppressionList,
         publisher: CaselistPublishService | None = None,
         status: CaselistStatusService | None = None,
         parse: CaselistParseStage | None = None,
@@ -889,8 +1308,11 @@ class CaselistSyncService:
         self._ledger = DownloadLedger(
             self._state_dir / DOWNLOAD_LEDGER_FILENAME,
             limit=min(bulk_downloads_per_day, DEFAULT_BULK_DOWNLOADS_PER_DAY),
+            legacy_path=self._state_dir / LEGACY_DOWNLOAD_LEDGER_FILENAME,
         )
         self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME)
+        self._suppression = suppression
+        self._deliveries = OpenEvDeliveries(self._state_dir / OPENEV_DELIVERIES_FILENAME)
 
     # --------------------------------------------------------------------------------------
     # Entry points
@@ -909,8 +1331,8 @@ class CaselistSyncService:
         """
         if not caselists:
             raise NoCaselistsConfigured
-        today = self._clock().date()
-        allowed = self._ledger.remaining_on(today)
+        now = self._clock()
+        allowed = self._ledger.remaining_at(now)
         inbox_names = self._inbox_names()
         selections: list[ArchiveSelection] = []
         for caselist in caselists:
@@ -922,7 +1344,8 @@ class CaselistSyncService:
             archives=tuple(selections),
             openev=tuple(openev),
             bulk_downloads_allowed=allowed,
-            bulk_downloads_spent_today=self._ledger.spent_on(today),
+            bulk_downloads_spent_in_window=self._ledger.spent_in_window(now),
+            bulk_download_window_start=self._ledger.window_start(now),
         )
 
     async def run(self, caselists: Sequence[str], *, dry_run: bool = False) -> RunSummary:
@@ -940,7 +1363,9 @@ class CaselistSyncService:
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
             tally = _RunTally()
+            fallbacks = self._suppression_fallbacks()
             plan = await self._selection_stage(caselists, tally)
+            self._note_local_copy_only(tally, SyncStage.SELECT, since=fallbacks)
             if dry_run:
                 self._plan_remaining_stages(plan, tally)
             else:
@@ -984,31 +1409,40 @@ class CaselistSyncService:
         try:
             plan = await self.plan(caselists)
         except ProviderRateLimited as limited:
+            now = self._clock()
             plan = SyncPlan(
                 caselists=tuple(caselists),
                 archives=(),
                 openev=(),
                 bulk_downloads_allowed=0,
-                bulk_downloads_spent_today=self._ledger.spent_on(self._clock().date()),
+                bulk_downloads_spent_in_window=self._ledger.spent_in_window(now),
+                bulk_download_window_start=self._ledger.window_start(now),
             )
             tally.record(SyncStage.SELECT, StageOutcome.SKIPPED, f"OpenCaselist is rate limiting: {limited}")
             tally.archives, tally.openev = plan.archives, plan.openev
             return plan
         tally.archives, tally.openev = plan.archives, plan.openev
         tally.bulk_downloads_allowed = plan.bulk_downloads_allowed
-        tally.bulk_downloads_spent_today = plan.bulk_downloads_spent_today
+        tally.bulk_downloads_spent_in_window = plan.bulk_downloads_spent_in_window
+        tally.bulk_download_window_start = plan.bulk_download_window_start
         fetch = len(plan.archives_to_download) + len(plan.openev_to_download)
         deferred = sum(1 for one in plan.archives if one.deferred_by_cap)
         listed = f"{len(plan.archives)} archive(s) and {len(plan.openev)} OpenEv file(s) listed; "
+        # What the run counted against, so nobody has to open the ledger to see it (ac2b).
+        window = (
+            f"{plan.bulk_downloads_spent_in_window} of {self._ledger.limit} bulk download(s) spent in "
+            f"the 24 hours from {plan.bulk_download_window_start.astimezone(UTC):%Y-%m-%d %H:%M} UTC, "
+            f"{plan.bulk_downloads_allowed} left"
+        )
         if deferred:
             wanted = fetch + deferred
             detail = (
                 f"{listed}{fetch} to fetch of {wanted} wanted, {deferred} deferred by the daily "
-                f"download cap ({plan.bulk_downloads_allowed} of today's allowance left)"
+                f"download cap; {window}"
             )
         else:
-            detail = f"{listed}{fetch} to fetch"
-        tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, detail)
+            detail = f"{listed}{fetch} to fetch; {window}"
+        tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, detail + _removal_sentence(plan.openev))
         return plan
 
     async def _select_archives(self, caselist: str, *, inbox_names: frozenset[str]) -> list[ArchiveSelection]:
@@ -1041,26 +1475,59 @@ class CaselistSyncService:
         return max(found) if found else None
 
     async def _select_openev(self, *, inbox_names: frozenset[str]) -> list[OpenEvSelection]:
-        """Decide about every OpenEv camp file the API lists for the configured year."""
+        """Decide about every OpenEv camp file the API lists for the configured year.
+
+        "Already imported" is decided against what the release manifest records, not against the
+        name the sync would give the file (`v1-e34-t06` ac3): a camp file imported by hand through
+        `caselist import-openev` is recorded under its own path. See :func:`_held_openev_ids`. A
+        file the manifest does not record is then judged against the suppression list before it is
+        fetched or imported from the inbox (`v1-e34-t07`): see :meth:`_judge_unrecorded`.
+        """
         files = await self._source.list_openev(year=self._openev_year)
-        recorded: dict[tuple[int, Event], frozenset[str]] = {}
-        selections: list[OpenEvSelection] = []
+        placed: list[tuple[OpenEvFile, int, Event | None]] = []
+        by_release: dict[tuple[int, Event], list[OpenEvFile]] = {}
         for file in files:
-            inbox_name = openev_inbox_name(file)
             event = _openev_event_of(file, self._openev_event)
             year = file.year or self._openev_year or self._clock().year
+            placed.append((file, year, event))
+            if event is not None:
+                by_release.setdefault((year, event), []).append(file)
+        recorded = {release: self._recorded_openev(*release) for release in by_release}
+        held = {
+            release: _held_openev_ids(listed, recorded[release].paths)
+            for release, listed in by_release.items()
+        }
+        remembered = self._deliveries.read()
+        suppression = _SuppressionReadOnce(self._suppression)
+        selections: list[OpenEvSelection] = []
+        for file, year, event in placed:
+            inbox_name = openev_inbox_name(file)
+            note: str | None = None
             if event is None:
                 decision = SelectionDecision.NO_EVENT_CONFIGURED
-            elif inbox_name in inbox_names:
-                decision = SelectionDecision.ALREADY_IN_INBOX
+            elif file.openev_id in held[(year, event)]:
+                decision = SelectionDecision.ALREADY_IMPORTED
             else:
-                if (year, event) not in recorded:
-                    recorded[(year, event)] = self._openev_manifest_paths(year, event)
-                decision = (
-                    SelectionDecision.ALREADY_IMPORTED
-                    if inbox_name in recorded[(year, event)]
-                    else SelectionDecision.DOWNLOAD
-                )
+                release = recorded[(year, event)]
+                in_inbox = inbox_name in inbox_names
+                inbox_digest = _digest_of(self._inbox / inbox_name) if in_inbox else None
+                if inbox_digest is not None and inbox_digest in release.download_digests:
+                    # Imported already: a manifest row came from these very bytes (a camp release
+                    # that is a zip records its members, not its own name).
+                    decision = SelectionDecision.ALREADY_IMPORTED
+                else:
+                    judged, note = await self._judge_unrecorded(
+                        file,
+                        release,
+                        remembered,
+                        suppression,
+                        in_inbox=(self._inbox / inbox_name, inbox_digest) if inbox_digest else None,
+                    )
+                    # Otherwise in the inbox, its import failed or never ran, and this run imports
+                    # it (v1-e34-t06 ac1); or it is new, and this run fetches it.
+                    decision = judged or (
+                        SelectionDecision.ALREADY_IN_INBOX if in_inbox else SelectionDecision.DOWNLOAD
+                    )
             selections.append(
                 OpenEvSelection(
                     openev_id=file.openev_id,
@@ -1069,13 +1536,116 @@ class CaselistSyncService:
                     event=event,
                     decision=decision,
                     file=file,
+                    note=note,
                 )
             )
         return selections
 
-    def _openev_manifest_paths(self, year: int, event: Event) -> frozenset[str]:
-        """Every member path the release's manifest already records, for the "already imported" check."""
+    async def _judge_unrecorded(
+        self,
+        file: OpenEvFile,
+        release: _RecordedOpenEv,
+        remembered: Mapping[int, OpenEvDelivery],
+        suppression: _SuppressionReadOnce,
+        *,
+        in_inbox: tuple[Path, str] | None,
+    ) -> tuple[SelectionDecision | None, str | None]:
+        """Whether a camp file the manifest does not record was removed, and so must not be fetched.
+
+        Returns a decision, or `None` to fetch it (or import it from the inbox) as before, and a
+        note for the operator. The suppression list decides; the delivery record and the inbox only
+        say which digests to ask it about (see "A camp file that was removed" in the module
+        docstring):
+
+        * Every member this id delivered is suppressed: `SKIPPED_AS_REMOVED`.
+        * Every member is recorded in the release manifest or suppressed — a camp release some of
+          whose members were removed: `ALREADY_IMPORTED`.
+        * A remembered id whose bytes are neither: fetched, with a note. The usual cause is an
+          `unsuppress`, which is why it is fetched rather than skipped on the record's word.
+        * An id never seen, at the upstream path of a remembered id whose members are all
+          suppressed: `SAME_PATH_AS_A_REMOVED_FILE`, a policy default.
+
+        With a list that cannot be read, nothing here can tell removed from not: a remembered id or
+        a re-upload is left for a later run, and a file in the inbox goes on to an import that will
+        meet the same unreadable list and fail with its own reason.
+        """
+        delivery = remembered.get(file.openev_id)
+        from_record = delivery is not None
+        if delivery is None and in_inbox is not None:
+            delivery = self._delivery_in_inbox(*in_inbox)
+        if delivery is not None and delivery.member_sha256:
+            members = delivery.member_sha256
+            state = await suppression.state()
+            if state is None:
+                if members <= release.stored_digests:
+                    return SelectionDecision.ALREADY_IMPORTED, None
+                return (SelectionDecision.SUPPRESSION_LIST_UNREADABLE if from_record else None), None
+            if all(state.suppresses_source(one) for one in members):
+                return SelectionDecision.SKIPPED_AS_REMOVED, None
+            recorded = members & release.stored_digests
+            if recorded and all(one in recorded or state.suppresses_source(one) for one in members):
+                return SelectionDecision.ALREADY_IMPORTED, None
+            if not from_record:
+                return None, None
+            lifted = any(
+                (latest := state.latest.get(one)) is not None
+                and latest.action is SuppressionAction.UNSUPPRESS
+                for one in members
+            )
+            note = (
+                "fetched by this machine before; neither recorded in the release manifest nor "
+                "suppressed now" + (", its suppression having been lifted" if lifted else "")
+            )
+            logger.warning("caselist sync: OpenEv file %d was %s; fetching it again", file.openev_id, note)
+            return None, note
+        if delivery is None:
+            path = _path_digest(file.path)
+            earlier = [
+                one
+                for openev_id, one in remembered.items()
+                if openev_id != file.openev_id and one.path_sha256 == path and one.member_sha256
+            ]
+            if not earlier:
+                return None, None
+            state = await suppression.state()
+            if state is None:
+                return SelectionDecision.SUPPRESSION_LIST_UNREADABLE, None
+            if any(all(state.suppresses_source(member) for member in one.member_sha256) for one in earlier):
+                note = "a new id at the upstream path of a camp file that was removed; the removal covers it"
+                logger.warning("caselist sync: OpenEv file %d is %s", file.openev_id, note)
+                return SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE, note
+        return None, None
+
+    def _delivery_in_inbox(self, path: Path, digest: str) -> OpenEvDelivery | None:
+        """What a download still in the inbox delivered, read from its bytes: a zip's members, or itself.
+
+        `None` for a zip that cannot be read, which the import will then refuse with its reason.
+        """
+        if path.suffix.lower() != ".zip":
+            return OpenEvDelivery(download_sha256=digest, path_sha256=None, member_sha256=frozenset({digest}))
+        try:
+            members = frozenset(
+                entry.sha256 for entry in self._read_archive(path) if isinstance(entry, ArchiveMember)
+            )
+        except (DomainError, OSError):
+            return None
+        return OpenEvDelivery(download_sha256=digest, path_sha256=None, member_sha256=members)
+
+    def _recorded_openev(self, year: int, event: Event) -> _RecordedOpenEv:
+        """What the release's manifest already records, for the "already imported" checks.
+
+        Every row with a classification is a stored member. A member the removal suppression list
+        stops has no row at all (`v1-e30-t07`), and a removal takes the rows of the file it removes
+        out, so a removed camp file is not recognised from here: it is judged against the list
+        (:meth:`_judge_unrecorded`). A skipped member (macOS junk such as `__MACOSX/…/._<name>.docx`)
+        has a row with no classification; it is not a camp file, and its name can read like one. Nor
+        does its row say the download it came from was imported: a camp release whose every file
+        was removed keeps its `.DS_Store` row, and that row alone must not make it "already
+        imported".
+        """
         paths: set[str] = set()
+        stored: set[str] = set()
+        digests: set[str] = set()
         for line in read_manifest_lines(self._manifest_path(openev_manifest_key(year, event))):
             try:
                 row: object = json.loads(line)
@@ -1083,10 +1653,21 @@ class CaselistSyncService:
                 continue
             if not isinstance(row, dict):
                 continue
-            path = cast("dict[str, object]", row).get("path")
+            fields = cast("dict[str, object]", row)
+            if fields.get("classification") is None:
+                continue
+            path = fields.get("path")
             if isinstance(path, str):
                 paths.add(path)
-        return frozenset(paths)
+            sha256 = fields.get("sha256")
+            if fields.get("classification") in _STORED_CLASSIFICATION_NAMES and isinstance(sha256, str):
+                stored.add(sha256)
+            download = fields.get("archive_sha256")
+            if isinstance(download, str):
+                digests.add(download)
+        return _RecordedOpenEv(
+            paths=frozenset(paths), stored_digests=frozenset(stored), download_digests=frozenset(digests)
+        )
 
     def _inbox_names(self) -> frozenset[str]:
         """The files already in the inbox, by name.
@@ -1109,6 +1690,9 @@ class CaselistSyncService:
     def _plan_remaining_stages(self, plan: SyncPlan, tally: _RunTally) -> None:
         """Say what each remaining stage would do, and do none of it (ac2)."""
         fetch = len(plan.archives_to_download) + len(plan.openev_to_download)
+        in_inbox = sum(
+            1 for one in (*plan.archives, *plan.openev) if one.decision is SelectionDecision.ALREADY_IN_INBOX
+        )
         tally.record(
             SyncStage.DOWNLOAD,
             StageOutcome.PLANNED,
@@ -1117,7 +1701,8 @@ class CaselistSyncService:
         tally.record(
             SyncStage.IMPORT,
             StageOutcome.PLANNED,
-            f"would import {fetch} downloaded file(s) and write their manifests",
+            f"would import {fetch} downloaded file(s) and {in_inbox} already in the inbox, oldest first, "
+            "and write their manifests",
         )
         tally.record(
             SyncStage.PUBLISH,
@@ -1150,7 +1735,9 @@ class CaselistSyncService:
 
     async def _execute(self, plan: SyncPlan, tally: _RunTally) -> None:
         await self._download_stage(plan, tally)
+        fallbacks = self._suppression_fallbacks()
         await self._import_stage(tally)
+        self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
         await self._publish_stage(tally, drain_pending=True)
         await self._parse_stage(plan, tally)
         await self._landscape_stage(plan, tally)
@@ -1185,6 +1772,7 @@ class CaselistSyncService:
             listing = selection.listing
             if listing is None:  # pragma: no cover - a selection to download always carries one
                 continue
+            started = self._clock()
             try:
                 downloaded = await self._source.download_archive(listing, self._inbox)
             except ProviderRateLimited as limited:
@@ -1198,8 +1786,9 @@ class CaselistSyncService:
                 failure = f"{selection.name}: {refused}"
                 break
             tally.downloaded_archives.append((selection, downloaded))
-            if not downloaded.already_present:
-                self._ledger.record(self._clock().date(), 1)
+            # Recorded even when the bytes were `already_present`: the client streamed the whole
+            # archive before it could tell, and the server counted the download.
+            self._ledger.record(started)
 
         if deferred_from is not None:
             tally.archives = _mark_deferred(tally.archives, wanted[deferred_from:])
@@ -1227,33 +1816,114 @@ class CaselistSyncService:
         )
 
     async def _import_stage(self, tally: _RunTally) -> None:
-        """Import every file that reached the inbox, archives before camp files, and write manifests."""
-        if not tally.downloaded_archives and not tally.downloaded_openev:
-            tally.record(SyncStage.IMPORT, StageOutcome.SKIPPED, "nothing was downloaded")
+        """Import what is in the inbox and not yet in a manifest, archives before camp files.
+
+        See "What is imported" in this module's docstring: the inbox rather than this run's
+        downloads, oldest first per caselist, and a caselist stops at its first gap.
+        """
+        archive_queues = self._archive_import_queues(tally)
+        openev_queue = self._openev_import_queue(tally)
+        if not any(queue.ready for queue in archive_queues) and not openev_queue:
+            waiting = sum(queue.waiting for queue in archive_queues)
+            tally.record(
+                SyncStage.IMPORT,
+                StageOutcome.SKIPPED,
+                f"nothing to import; {waiting} archive(s) in the inbox wait for an older week"
+                if waiting
+                else "nothing to import",
+            )
             return
         failures: list[str] = []
-        for selection, downloaded in tally.downloaded_archives:
+        held_back = 0
+        for queue in archive_queues:
+            for position, (selection, path) in enumerate(queue.ready):
+                try:
+                    await self._import_archive(
+                        selection, self._downloaded(tally, selection.name, path), tally
+                    )
+                except DomainError as refused:
+                    failures.append(f"{selection.name}: {refused}")
+                    held_back += len(queue.ready) - position - 1 + queue.waiting
+                    break
+            else:
+                held_back += queue.waiting
+        for openev_selection, path in openev_queue:
             try:
-                await self._import_archive(selection, downloaded, tally)
-            except DomainError as refused:
-                failures.append(f"{selection.name}: {refused}")
-        for openev_selection, downloaded in tally.downloaded_openev:
-            try:
-                await self._import_openev(openev_selection, downloaded, tally)
+                await self._import_openev(
+                    openev_selection, self._downloaded(tally, openev_selection.inbox_name, path), tally
+                )
             except DomainError as refused:
                 failures.append(f"openev-{openev_selection.openev_id}: {refused}")
+        waiting = (
+            f"; {held_back} archive(s) in the inbox held back for a later run, behind an older week"
+            if held_back
+            else ""
+        )
         if failures:
             tally.record(
                 SyncStage.IMPORT,
                 StageOutcome.FAILED,
-                f"{len(tally.snapshots_imported)} imported; {len(failures)} refused: " + "; ".join(failures),
+                f"{len(tally.snapshots_imported)} imported; {len(failures)} refused: "
+                + "; ".join(failures)
+                + waiting,
             )
             return
         tally.record(
             SyncStage.IMPORT,
             StageOutcome.COMPLETED,
-            f"{len(tally.snapshots_imported)} snapshot(s) imported, {tally.blobs_stored} new file(s) stored",
+            f"{len(tally.snapshots_imported)} snapshot(s) imported, {tally.blobs_stored} new file(s) stored"
+            + waiting,
         )
+
+    def _archive_import_queues(self, tally: _RunTally) -> list[_ImportQueue]:
+        """Per caselist, the weeklies to import in order, up to its first gap, and what waits behind it.
+
+        The candidates are every weekly newer than the caselist's latest manifest, which is exactly
+        the selections decided `DOWNLOAD`, `ALREADY_IN_INBOX` or deferred by the cap. One is ready
+        when it is in the inbox: fetched by this run, or decided `ALREADY_IN_INBOX`. The first that
+        is not — deferred, or its download failed — is a gap, and nothing newer is imported.
+        """
+        fetched = {selection.name for selection, _ in tally.downloaded_archives}
+        by_caselist: dict[str, list[ArchiveSelection]] = {}
+        for selection in tally.archives:
+            if selection.decision in _NEWER_THAN_HELD and selection.archive_date is not None:
+                by_caselist.setdefault(selection.caselist, []).append(selection)
+        queues: list[_ImportQueue] = []
+        for candidates in by_caselist.values():
+            candidates.sort(key=lambda one: (one.archive_date or date.min, one.name))
+            ready: list[tuple[ArchiveSelection, Path]] = []
+            waiting = 0
+            gap = False
+            for selection in candidates:
+                in_inbox = (
+                    selection.name in fetched or selection.decision is SelectionDecision.ALREADY_IN_INBOX
+                )
+                if in_inbox and not gap:
+                    ready.append((selection, self._inbox / selection.name))
+                    continue
+                gap = True
+                waiting += 1 if in_inbox else 0
+            queues.append(_ImportQueue(ready=tuple(ready), waiting=waiting))
+        return queues
+
+    def _openev_import_queue(self, tally: _RunTally) -> list[tuple[OpenEvSelection, Path]]:
+        """The camp files to import: fetched by this run, or already in the inbox and not recorded."""
+        fetched = {selection.openev_id for selection, _ in tally.downloaded_openev}
+        return [
+            (selection, self._inbox / selection.inbox_name)
+            for selection in sorted(tally.openev, key=lambda one: one.openev_id)
+            if selection.openev_id in fetched or selection.decision is SelectionDecision.ALREADY_IN_INBOX
+        ]
+
+    def _downloaded(self, tally: _RunTally, name: str, path: Path) -> DownloadedFile:
+        """What this run's download of `name` returned, or the same facts read off the inbox file."""
+        for selection, downloaded in tally.downloaded_archives:
+            if selection.name == name:
+                return downloaded
+        for openev_selection, downloaded in tally.downloaded_openev:
+            if openev_selection.inbox_name == name:
+                return downloaded
+        return _inbox_file(path)
 
     async def _import_archive(
         self, selection: ArchiveSelection, downloaded: DownloadedFile, tally: _RunTally
@@ -1294,11 +1964,25 @@ class CaselistSyncService:
             recorded_manifest=read_manifest_lines(path),
         )
         write_manifest_lines(report.manifest_lines, path)
+        # Which bytes this id delivered, so that a later run can ask the suppression list about
+        # them before fetching it again. Refused members are included: they are what it delivered.
+        self._deliveries.record(
+            selection.openev_id,
+            OpenEvDelivery(
+                download_sha256=downloaded.sha256,
+                path_sha256=_path_digest(selection.file.path) if selection.file is not None else None,
+                member_sha256=frozenset(
+                    entry.sha256
+                    for entry in report.entries
+                    if entry.sha256 is not None and entry.classification is not None
+                ),
+            ),
+        )
         self._count_openev(report, tally)
-        release = report.release
-        if release not in tally.snapshots_imported:
-            tally.snapshots_imported.append(f"{OPENEV_PUBLISH_TARGET} {release}")
-        target = PendingSnapshot(caselist=OPENEV_PUBLISH_TARGET, snapshot=release)
+        label = f"{OPENEV_PUBLISH_TARGET} {report.release}"
+        if label not in tally.snapshots_imported:
+            tally.snapshots_imported.append(label)
+        target = PendingSnapshot(caselist=OPENEV_PUBLISH_TARGET, snapshot=report.release)
         if target not in tally.publish_targets:
             tally.publish_targets.append(target)
 
@@ -1504,6 +2188,22 @@ class CaselistSyncService:
         tally.files_skipped += sum(report.skipped.values())
         tally.blobs_stored += report.newly_stored_blobs
 
+    def _suppression_fallbacks(self) -> int:
+        """How many reads of the list have fallen back to this machine's copy so far."""
+        if isinstance(self._suppression, LocalFallbackSuppressionList):
+            return self._suppression.fallbacks
+        return 0
+
+    def _note_local_copy_only(self, tally: _RunTally, stage: SyncStage, *, since: int) -> None:
+        """Say on `stage`, and in the summary, that it read this machine's copy of the list alone."""
+        if not isinstance(self._suppression, LocalFallbackSuppressionList):
+            return
+        if self._suppression.fallbacks == since:
+            return
+        reason = self._suppression.local_only_reason
+        tally.suppression_list_local_copy_only = reason
+        tally.add_to_reason(stage, f"this machine's copy of the suppression list alone was read: {reason}")
+
     def _manifest_path(self, key: str) -> Path:
         path_for = self._local.object_path_for
         if path_for is None:
@@ -1536,7 +2236,9 @@ class CaselistSyncService:
             snapshots_imported=tuple(tally.snapshots_imported),
             pending_publish=tuple(f"{one.caselist} {one.snapshot}" for one in tally.pending_publish),
             bulk_downloads_allowed=tally.bulk_downloads_allowed,
-            bulk_downloads_spent_today=tally.bulk_downloads_spent_today,
+            bulk_downloads_spent_in_window=tally.bulk_downloads_spent_in_window,
+            bulk_download_window_start=tally.bulk_download_window_start,
+            suppression_list_local_copy_only=tally.suppression_list_local_copy_only,
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:
@@ -1551,12 +2253,91 @@ class CaselistSyncService:
 
 
 # ------------------------------------------------------------------------------------------------
+# Run modes
+# ------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class PulledRun:
+    """What one `caselist pull` produced, in whichever mode it ran."""
+
+    summary: RunSummary
+    record: SyncRunRecord | None
+    """The run log's record of this run (`v1-e34-t03`), or `None` for a dry run, which records nothing."""
+    summary_path: Path | None
+    """Where the run's JSON summary was written, or `None` for a dry run, which writes nothing."""
+
+
+async def run_pull(
+    sync_service: Callable[[], CaselistSyncService],
+    caselists: Sequence[str],
+    *,
+    dry_run: bool,
+    publish_pending: bool,
+    monitor: Callable[[], SyncRunMonitor],
+    progress: Callable[[str], None],
+) -> PulledRun:
+    """Run one `caselist pull`: a dry run, a whole run, or `--publish-pending`.
+
+    Args:
+        sync_service: Builds (or returns the already built) :class:`CaselistSyncService`. Called
+            only once the run has started, so that a refusal to build it is part of the run.
+        caselists: The slugs to pull; empty for `--publish-pending`.
+        dry_run: List what would be fetched, write nothing and record nothing.
+        publish_pending: Only complete the publishes an earlier run deferred. Never together with
+            `dry_run`; the command refuses that combination before calling this.
+        monitor: Builds the run monitor. Not called for a dry run.
+        progress: Where a one-line account of what is starting goes (the CLI's `--verbose`).
+
+    Raises :class:`NoCaselistsConfigured` when asked to pull no caselist, and whatever the service
+    or the monitor raise; the monitor has recorded and announced it first.
+    """
+    record: SyncRunRecord | None = None
+    if dry_run:
+        # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
+        if not caselists:
+            raise NoCaselistsConfigured
+        progress(f"pulling {', '.join(caselists)} (dry run)")
+        summary = await sync_service().run(caselists, dry_run=True)
+    else:
+
+        async def one_run() -> RunSummary:
+            # Inside the monitor, so that a refusal — no caselist, the API not turned on, an
+            # expired token, another run holding the lock — is recorded and announced too.
+            if publish_pending:
+                progress("completing the publishes an earlier run deferred")
+                return await sync_service().publish_pending()
+            if not caselists:
+                raise NoCaselistsConfigured
+            progress(f"pulling {', '.join(caselists)}")
+            return await sync_service().run(caselists)
+
+        monitored = await monitor().watch(
+            one_run, caselists=caselists, mode="publish_pending" if publish_pending else "run"
+        )
+        summary, record = monitored.summary, monitored.record
+
+    written_to = sync_service().summary_path(summary) if not summary.dry_run else None
+    return PulledRun(summary=summary, record=record, summary_path=written_to)
+
+
+# ------------------------------------------------------------------------------------------------
 # Selection rules
 # ------------------------------------------------------------------------------------------------
 
 _DEFERRED_BY_CAP: Final = frozenset(
     {SelectionDecision.OVER_DAILY_BUDGET, SelectionDecision.DEFERRED_BY_RATE_LIMIT}
 )
+
+_NEWER_THAN_HELD: Final = frozenset(
+    {
+        SelectionDecision.DOWNLOAD,
+        SelectionDecision.ALREADY_IN_INBOX,
+        SelectionDecision.OVER_DAILY_BUDGET,
+        SelectionDecision.DEFERRED_BY_RATE_LIMIT,
+    }
+)
+"""The decisions a weekly newer than the caselist's latest manifest can get: the import candidates."""
 
 _NO_BUCKET: Final = "this environment names no evidence bucket, so nothing is published from here"
 _NO_PARSE_PIPELINE: Final = "no parse pipeline is installed (v1-e31-t06 has not shipped)"
@@ -1625,6 +2406,33 @@ def _mark_deferred(
     return tuple(one.deferred() if (one.caselist, one.name) in names else one for one in selections)
 
 
+def _removal_sentence(openev: Sequence[OpenEvSelection]) -> str:
+    """What the removal suppression list did to this run's camp files, for the select stage's reason.
+
+    The run log keeps that reason, so `caselist runs --json` shows a removed file as skipped rather
+    than as nothing at all. Counts and ids only.
+    """
+
+    def ids(decision: SelectionDecision) -> list[int]:
+        return [one.openev_id for one in openev if one.decision is decision]
+
+    parts: list[str] = []
+    if skipped := ids(SelectionDecision.SKIPPED_AS_REMOVED):
+        parts.append(f"{len(skipped)} OpenEv file(s) skipped as removed")
+    if same_path := ids(SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE):
+        listed = ", ".join(f"openev-{one}" for one in same_path)
+        parts.append(f"{len(same_path)} held back as a new id at a removed file's path ({listed})")
+    if unreadable := ids(SelectionDecision.SUPPRESSION_LIST_UNREADABLE):
+        parts.append(f"{len(unreadable)} not fetched because the suppression list could not be read")
+    taken_again = (SelectionDecision.DOWNLOAD, SelectionDecision.ALREADY_IN_INBOX)
+    if noted := [one.openev_id for one in openev if one.decision in taken_again and one.note is not None]:
+        listed = ", ".join(f"openev-{one}" for one in noted)
+        parts.append(
+            f"{len(noted)} fetched before and neither recorded nor suppressed now, so taken again ({listed})"
+        )
+    return "; " + "; ".join(parts) if parts else ""
+
+
 def _is_daily_limiter(limited: ProviderRateLimited) -> bool:
     """Whether a rate limit means "not today" rather than "in a moment"."""
     wait = limited.retry_after_seconds
@@ -1643,6 +2451,162 @@ def _openev_event_of(file: OpenEvFile, configured: Event | None) -> Event | None
             if tag.strip().upper() == str(event).upper():
                 return event
     return configured
+
+
+@dataclass(frozen=True, slots=True)
+class _RecordedOpenEv:
+    """What one OpenEv release manifest records: member paths and bytes, and the downloads they came from."""
+
+    paths: frozenset[str]
+    stored_digests: frozenset[str]
+    download_digests: frozenset[str]
+
+
+_STORED_CLASSIFICATION_NAMES: Final = frozenset(str(one) for one in STORED_CLASSIFICATIONS)
+
+
+class _SuppressionReadOnce:
+    """The suppression list as one selection reads it: at most once, and only if a decision needs it.
+
+    Most runs list no camp file the manifest has lost track of, and those never read the list. A
+    list that cannot be read — the bucket's copy refused, or a torn line; an expired session falls
+    back to this machine's copy before it gets here — is `None` here, logged once, and the
+    decisions that need it say so (see :meth:`CaselistSyncService._judge_unrecorded`); the
+    selection itself does not fail.
+    """
+
+    def __init__(self, suppression: SuppressionList) -> None:
+        self._suppression = suppression
+        self._read = False
+        self._state: SuppressionState | None = None
+
+    async def state(self) -> SuppressionState | None:
+        if not self._read:
+            self._read = True
+            try:
+                self._state = await load_suppression_state(self._suppression)
+            except (DomainError, OSError) as unreadable:
+                logger.warning(
+                    "caselist sync: the suppression list could not be read (%s), so no camp file "
+                    "this machine has fetched before is fetched this run",
+                    type(unreadable).__name__,
+                )
+        return self._state
+
+
+def _path_digest(path: str) -> str:
+    """The SHA-256 of an OpenEv file's upstream path: what the delivery record keeps instead of it."""
+    return hashlib.sha256(path.encode("utf-8")).hexdigest()
+
+
+_OPENEV_INBOX_PREFIX: Final = re.compile(r"^openev-(\d+)-")
+"""What the sync puts in front of a camp file's name (`openev_inbox_name`), and which file it was."""
+
+
+def openev_id_of_inbox_name(name: str) -> int | None:
+    """The OpenEv id an inbox file was downloaded as (`openev-<id>-…`), or `None` for any other name."""
+    prefixed = _OPENEV_INBOX_PREFIX.match(name)
+    return int(prefixed.group(1)) if prefixed is not None else None
+
+
+_PATH_SEPARATORS: Final = re.compile(r"[\\/]+")
+_NOT_A_NAME_CHARACTER: Final = re.compile(r"[\W_]+")
+
+
+def _comparable_components(path: str) -> tuple[str, ...]:
+    """A path's components as names rather than spellings: case, spacing and punctuation aside.
+
+    `Tamarack/TSF-Estuary Solvency Advocate.docx`, as imported by hand, and
+    `openev-512-TSF-Estuary_Solvency_Advocate.docx`, as the sync names it once its prefix is off,
+    end in the same component.
+    """
+    return tuple(
+        comparable
+        for part in _PATH_SEPARATORS.split(path)
+        if (comparable := _NOT_A_NAME_CHARACTER.sub("_", part.casefold()).strip("_"))
+    )
+
+
+def _held_openev_ids(listed: Sequence[OpenEvFile], recorded_paths: Iterable[str]) -> frozenset[int]:
+    """The listed camp files a release manifest already records, however they were imported.
+
+    A recorded path names a listed file in one of two ways:
+
+    * **By id.** A file name starting `openev-<id>-` is one the sync downloaded, or a copy of one,
+      and `<id>` says which.
+    * **By path.** Compared component by component from the file name up with each listed file's
+      own path, the listed file sharing the longest tail is the one recorded — provided no other
+      listed file shares a tail as long. A tie decides nothing: two camps' `Topicality.docx`
+      imported without its folder could be either, and a wrong guess would leave a camp file the
+      store does not hold undownloaded for good. Both are fetched instead, and the one already held
+      costs a download and a `DUPLICATE` row.
+    """
+    ids = {file.openev_id for file in listed}
+    by_name: dict[str, list[tuple[int, tuple[str, ...]]]] = {}
+    for file in listed:
+        components = _comparable_components(file.path)
+        if components:
+            by_name.setdefault(components[-1], []).append((file.openev_id, components))
+    held: set[int] = set()
+    for path in recorded_paths:
+        *folders, name = _PATH_SEPARATORS.split(path)
+        prefixed = _OPENEV_INBOX_PREFIX.match(name)
+        if prefixed is not None:
+            if int(prefixed.group(1)) in ids:
+                held.add(int(prefixed.group(1)))
+                continue
+            name = name[prefixed.end() :]
+        components = _comparable_components("/".join([*folders, name]))
+        if not components:
+            continue
+        shared = [
+            (_shared_tail(components, candidate), openev_id)
+            for openev_id, candidate in by_name.get(components[-1], [])
+        ]
+        longest = max((length for length, _ in shared), default=0)
+        winners = [openev_id for length, openev_id in shared if length == longest]
+        if len(winners) == 1:
+            held.add(winners[0])
+    return frozenset(held)
+
+
+def _shared_tail(one: tuple[str, ...], other: tuple[str, ...]) -> int:
+    """How many trailing components two paths have in common."""
+    shared = 0
+    for left, right in zip(reversed(one), reversed(other), strict=False):
+        if left != right:
+            break
+        shared += 1
+    return shared
+
+
+_DIGEST_CHUNK_BYTES: Final = 1024 * 1024
+
+
+def _digest_of(path: Path) -> str | None:
+    """The SHA-256 of a file's bytes, or `None` when it cannot be read."""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(_DIGEST_CHUNK_BYTES), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
+def _inbox_file(path: Path) -> DownloadedFile:
+    """A file an earlier run left in the inbox, described the way its download was."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    digest = _digest_of(path) if size else None
+    if digest is None:
+        raise UnreadableArchive(path.name, "the file in the inbox is empty or could not be read")
+    return DownloadedFile(
+        path=path, sha256=digest, byte_size=size, source_name=path.name, already_present=True
+    )
 
 
 def _parsed_date(value: str) -> date | None:

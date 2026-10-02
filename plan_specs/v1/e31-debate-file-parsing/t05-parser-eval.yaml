@@ -101,6 +101,14 @@ spec:
       description: >-
         An operator-run corpus health report for the hsld26 snapshots and camp files is committed under
         docs/data/ with parse success rate at least 0.98 of .docx files and every failure reason counted.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-01, on Charlie's decision. When this evaluation no longer needs them,
+        the operator deletes the hand-unpacked caselist archives and the hand-downloaded camp files in
+        the coach's season folders (the store holds everything they contain), keeps the small CardMirror
+        sample folders as test inputs, and updates the removal runbook's "Copies outside the inbox" step
+        to match. Until then they are copies a takedown must be applied to by hand, which is why they do
+        not outlive the evaluation.
 status:
   phase: InProgress
 ---

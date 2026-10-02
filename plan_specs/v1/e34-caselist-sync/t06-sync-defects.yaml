@@ -26,7 +26,11 @@ spec:
     and anything about the cadence or the cap, which are the maintainer's and are fixed by the policy.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_cli.commands, docs/runbooks]
+    # `debate_cli.container` added by the PM, 2026-09-29, after the fact: ac2b requires the CLI
+    # container to agree on the window and a test to pin a clock proving it, and the container had
+    # no clock to pin. The criterion named the container; the package list did not. The spec was
+    # wrong, not the session.
+    packages: [debate_core.application, debate_cli.commands, debate_cli.container, docs/runbooks]
     forbidden:
       - Raising the daily bulk-download ceiling, the per-minute rate or the weekly cadence
       - Live network or AWS calls in CI tests (respx, moto and fakes only)
@@ -47,27 +51,49 @@ spec:
         clean re-run.
     - id: ac2
       description: >-
-        The download ledger's day and its documentation agree, and the choice is justified against the
-        upstream cap rather than assumed. `DownloadLedger`'s docstring says local time; the service
-        defaults its clock to `datetime.now(UTC)` and the CLI container passes none, so the ledger
-        rolls at midnight UTC. That is 7pm CDT, which means two runs twenty minutes apart on the same
-        evening each get a fresh allowance of five and can spend ten against a cap of five. Whichever
-        day boundary is chosen, the docstring, the CLI and the runbooks say the same thing, and the
-        summary reports the ledger's day explicitly so an operator can see which day a run counted
-        against. This is a correctness defect, not a documentation one, and it is already visible:
-        the CLI tests of v1-e34-t03 ac5/ac6 write the budget with
-        `datetime.now(UTC).astimezone().date()` while the service reads `self._clock().date()` over a
-        UTC clock, so after 19:00 CDT the two disagree, the service finds nothing spent, and the cap
-        does not apply at all. Four tests fail on a developer's machine in the evening and pass every
-        time in CI, where the runner's local time is UTC. A test that passes at 14:00 and fails at
-        21:43 is worse than no test: it teaches people to re-run until green.
+        The daily download budget is enforced over a rolling 24-hour window rather than a calendar
+        day, and the ledger records download timestamps rather than a date and a count. Today
+        `DownloadLedger` is a single slot, `{"date": ..., "bulk_downloads": N}`, keyed on
+        `self._clock().date()` over a UTC clock while its own docstring says local time and gives a
+        reason for local ("the operator's day is the one they will compare against"). The live
+        ledger proves the code wins: on the operator's machine it read
+        `{"date": "2026-09-29", "bulk_downloads": 5}` with an mtime of 23:45:11 CDT on 2026-09-28,
+        booking that evening's five downloads to the following day. And because `spent_on` returns 0
+        whenever the stored date differs from the day asked about, `record` then overwrites rather
+        than accumulates - a day change does not shift the count, it resets it - so two runs forty
+        minutes apart across 19:00 CDT each get a fresh five.
+        A calendar key is the wrong shape, not the wrong timezone, and this repository has already
+        written down why. `RequestPacer` in integrations/opencaselist/pacing.py enforces the
+        per-minute limit over a rolling 60-second window precisely because "a fixed per-minute bucket
+        would allow twice the limit across a bucket boundary". The daily ceiling is the same rule one
+        scale up and takes the same technique: a bulk download may start only if fewer than the limit
+        started in the preceding 24 hours. That is conservative against a limiter counting any
+        calendar in any timezone - which is what is needed, because v1-e34-t01 established the 5/day
+        ceiling (`weeklyLimiter`) but not the day it counts, and docs/policies/caselist-data-use.md
+        does not state it either. Choosing a timezone would be guessing; a rolling window removes the
+        question.
+        Scope note, correcting this criterion's original framing: the 5/day ceiling is enforced
+        upstream by OpenCaselist and a refusal is already absorbed - a `ProviderRateLimited` carrying
+        a wait above `SKIP_TODAY_SECONDS` means skip today, the remaining archives are recorded as
+        deferred, and the run still imports, publishes and exits successfully. The maintainer
+        agreement (clause 12) is the 10-file-per-minute rate, which `RequestPacer` enforces
+        separately and correctly. So this is a correctness and efficiency defect whose worst outcome
+        is a wasted run, not a policy breach, and it does not gate v1-e34-t05 - only ac1 does.
+        For the record, no ceiling has been exceeded. Across the six runs in the operator's run log
+        (2026-09-23 through 2026-09-28) the spend is 5, 5 and 5, identical under the local and the
+        UTC calendar alike. The exposure is that two of those six ran within forty minutes of local
+        midnight, so the doubling is a scheduling accident away rather than a hypothetical.
     - id: ac2b
       description: >-
-        The ledger's day is the same day on every side - the service, the CLI container, the test
-        helpers and the runbooks - and a test pins a clock on both sides of the day boundary to prove
-        the budget is found and enforced there. No test may derive the ledger's day from the machine's
-        real clock or timezone, which is what makes today's four failures time-of-day flaky rather
-        than reproducible.
+        The window is the same on every side - the service, the CLI container, the test helpers and
+        the runbooks - and a test pins a clock to prove it. A rolling window admits a sharper test
+        than a day boundary did: five downloads at T are still counted at T+23h59m and released at
+        T+24h01m, and five at T followed by five at T+40m are refused wherever a midnight falls
+        between them. No test may derive the window from the machine's real clock or timezone, which
+        is what makes today's four failures time-of-day flaky rather than reproducible - a test that
+        passes at 14:00 and fails at 21:43 is worse than no test, because it teaches people to re-run
+        until green. The run summary reports the window's start and the spend inside it, so an
+        operator can see what a run counted against without reading the ledger file.
     - id: ac3
       description: >-
         OpenEv selection recognises a camp file already imported by hand. It matches on the inbox name
@@ -82,7 +108,7 @@ spec:
         docs/runbooks/caselist-scheduled-sync.md no longer tells the operator to recover a failed
         import by re-running the same command.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -115,26 +141,27 @@ spec:
             name: Retry tests pass
             command: uv
             args: [run, pytest, packages/debate_core/tests/application/test_caselist_sync.py, -k, retry]
-      - id: ledger-day
+      - id: download-window
         kind: Task
-        name: The ledger's day is stated and consistent
+        name: The download budget is a rolling 24-hour window
         description: >-
-          Settle the day boundary, make the docstring, the container and the runbooks agree, and report
-          the ledger's day in the run summary.
+          Replace the single-slot date/count ledger with recorded download timestamps and a rolling
+          24-hour window, following RequestPacer's precedent; make the docstring, the container and
+          the runbooks agree, and report the window and its spend in the run summary.
         dependsOn: [retry-failed-import]
         estimatedEffort: 1.5h
         acceptanceCriteria:
           - type: test_passes
-            name: Ledger day tests pass
+            name: Rolling-window budget tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/application/test_caselist_sync.py, -k, ledger]
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_sync.py, -k, window]
       - id: openev-already-held
         kind: Task
         name: OpenEv selection sees hand-imported camp files
         description: >-
           Decide OpenEv candidates against the manifest rather than the inbox name, so a hand-imported
           camp file is ALREADY_IMPORTED.
-        dependsOn: [ledger-day]
+        dependsOn: [download-window]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes

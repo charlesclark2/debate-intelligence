@@ -58,9 +58,9 @@ __all__ = ["CaselistRepository"]
 class CaselistRepository(Protocol):
     """Stores what an import of disclosed or camp evidence learned.
 
-    The importers (v1-e30-t03, t04) write through it, the publisher (t05) and the removal command
-    (t07) read and delete through it, and the E31 parser and E32 reports read through it. It is
-    the only way any of them reach caselist storage.
+    The importers (v1-e30-t03, t04) write through it, the publisher (t05) reads through it, the
+    removal command (t07) reads and deletes through it, and the E31 parser and E32 reports read
+    through it. It is the only way any of them reach caselist storage.
     """
 
     # ------------------------------------------------------------------------------------
@@ -204,4 +204,28 @@ class CaselistRepository(Protocol):
         cursor: str | None = None,
     ) -> Page[CampFile]:
         """List camp files, newest snapshot first, then by title ascending. Filters combine with AND."""
+        ...
+
+    # ------------------------------------------------------------------------------------
+    # Removal (v1-e30-t07)
+    # ------------------------------------------------------------------------------------
+
+    async def delete_source(self, sha256: Sha256Hex) -> bool:
+        """Delete the source document with this hash. True if there was one, False if not.
+
+        Deletes the record only: its disclosures and camp files are deleted by their own calls,
+        and its bytes are the blob store's. Absence is an ordinary answer rather than `NotFound`,
+        because a removal that failed part-way is finished by running it again, and the second run
+        finds some of what it is deleting already gone.
+        """
+        ...
+
+    async def delete_disclosure(
+        self, caselist: CaselistSlug, snapshot: SnapshotDate, source_path: str
+    ) -> bool:
+        """Delete one disclosure by its natural key. True if there was one, False if not."""
+        ...
+
+    async def delete_camp_file(self, source_sha256: Sha256Hex, year: int, event: Event) -> bool:
+        """Delete one camp-file record by its natural key. True if there was one, False if not."""
         ...

@@ -22,12 +22,17 @@ skipLinkLabel: Skip to main content
 # email, the coaches page in the nav carries the address already, and the footer is where a visitor
 # looks for a contact link. It is linked from the footer of every page.
 #
+# Schedule sits straight after Events: a parent who has just read what the three events are asks
+# next when and where the tournaments are, and the two side by side keep "Events" (what the debate
+# events are) from being mistaken for the list of dates.
+#
 # src/lib/content.ts validates it at build time: a slug here that is not a published page fails
 # the build naming the slug, so renaming a page cannot silently empty a nav item.
 primaryNavigation:
   - home
   - about
   - events
+  - schedule
   - join
   - coaches
   - faq

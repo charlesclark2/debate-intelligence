@@ -26,7 +26,13 @@ spec:
     and extraction are E04; span extraction and verification are t03/t04.
   priority: 1
   constraints:
-    packages: [debate_core.evidence, debate_core.application]
+    # `docs/evidence` added by the PM, 2026-10-01. This task defines `debate-snapshot-text/1`,
+    # a stored format that v1-e03-t03 and v1-e03-t04 read, and its only specification was a
+    # module docstring. v1-e03-t01 put `normalization.md` in `docs/evidence/` for exactly this
+    # reason and the working agreements' table says stored formats live there. The package list
+    # was mine and it excluded the directory the agreement requires - the fourth time in this
+    # project that a list I wrote has done that.
+    packages: [debate_core.evidence, debate_core.application, docs/evidence]
     forbidden:
       - Mutating or overwriting a stored snapshot or blob
       - Hashing anything other than exact stored bytes (no re-encoding before hashing raw bytes)
@@ -55,7 +61,7 @@ spec:
       description: >-
         Hash helpers match known SHA-256 test vectors and hash normalized text as UTF-8 without BOM.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

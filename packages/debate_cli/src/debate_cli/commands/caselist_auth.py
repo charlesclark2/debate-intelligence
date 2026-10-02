@@ -37,8 +37,7 @@ from pydantic import SecretStr
 
 from debate_cli.context import cli_context, command_name
 from debate_cli.output import JsonValue, TableSpec
-from debate_core.integrations.opencaselist import OpenCaselistClient, StoredCaselistToken
-from debate_core.integrations.opencaselist.auth import IssuedToken
+from debate_core.application.ports.caselist_session import CaselistLoginSession, IssuedToken, StoredToken
 
 __all__ = ["login", "logout", "status"]
 
@@ -128,7 +127,7 @@ def logout(ctx: typer.Context) -> None:
 
 
 def status_summary(
-    stored: StoredCaselistToken | None,
+    stored: StoredToken | None,
     *,
     backend: str,
     location: str,
@@ -173,12 +172,12 @@ def _status_table(summary: dict[str, JsonValue]) -> TableSpec:
     )
 
 
-async def _login(client: OpenCaselistClient, username: str, password: SecretStr) -> IssuedToken:
+async def _login(client: CaselistLoginSession, username: str, password: SecretStr) -> IssuedToken:
     async with client:
         return await client.login(username, password)
 
 
-async def _check(client: OpenCaselistClient) -> None:
+async def _check(client: CaselistLoginSession) -> None:
     async with client:
         await client.list_caselists()
 

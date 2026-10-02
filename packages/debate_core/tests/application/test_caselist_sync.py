@@ -35,12 +35,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Sequence
-from datetime import UTC, date, datetime
+import os
+import tempfile
+from collections.abc import Callable, Iterable, Sequence
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from tests.fixtures.caselist.build_synthetic_archives import (
     SNAPSHOTS,
     SYNTHETIC_CASELIST,
@@ -51,16 +56,24 @@ from tests.fixtures.openev.build_synthetic_openev import expected as expected_op
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
-from debate_core.application.caselist.manifest import manifest_key, write_manifest
+from debate_core.application.caselist.manifest import (
+    manifest_key,
+    read_manifest_lines,
+    write_manifest,
+    write_manifest_lines,
+)
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
+from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist_sync import (
     DEFAULT_BULK_DOWNLOADS_PER_DAY,
     DOWNLOAD_LEDGER_FILENAME,
+    LEGACY_DOWNLOAD_LEDGER_FILENAME,
     LOCK_FILENAME,
     PENDING_WORK_FILENAME,
     RUN_SUMMARY_DIRECTORY,
+    RUN_SUMMARY_SCHEMA_VERSION,
     ArchiveSelection,
     CaselistSyncService,
     DownloadLedger,
@@ -73,12 +86,15 @@ from debate_core.application.caselist_sync import (
     StageOutcome,
     SyncRunInProgress,
     SyncStage,
+    _held_openev_ids,  # pyright: ignore[reportPrivateUsage]
     within_daily_budget,
 )
 from debate_core.application.errors import (
     ProviderRateLimited,
     StoreCredentialsExpired,
+    UnreadableArchive,
 )
+from debate_core.application.ports.archive import ArchiveEntry
 from debate_core.application.ports.caselist_source import (
     ArchiveKind,
     ArchiveListing,
@@ -99,10 +115,11 @@ from debate_core.application.sync_runs import (
 )
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore, SqliteDatabase
-from debate_core.integrations.local.archive_reader import read_archive
+from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.local.macos_notifier import MacOsNotifier
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.s3 import S3EvidenceObjectStore
+from debate_core.testing.fakes import empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -282,7 +299,9 @@ async def import_first_week(data_dir: Path, archives: dict[date, Path]) -> None:
     """Import `2026-09-01` the way an earlier run would have, so the run under test has a baseline."""
     database = SqliteDatabase.open(data_dir)
     service = CaselistImportService(
-        caselists=SqliteCaselistRepository(database), blobs=FsSnapshotStore(data_dir)
+        suppression=empty_suppression_list(),
+        caselists=SqliteCaselistRepository(database),
+        blobs=FsSnapshotStore(data_dir),
     )
     first = SNAPSHOTS[0].snapshot
     report = await service.import_archive(
@@ -365,19 +384,24 @@ def build_service(
     landscape: object | None = None,
     bulk_downloads_per_day: int = DEFAULT_BULK_DOWNLOADS_PER_DAY,
     clock: Callable[[], datetime] = lambda: RUN_CLOCK,
+    reader: Callable[[Path], Iterable[ArchiveEntry]] | None = None,
+    openev_importer: Callable[[SqliteCaselistRepository, FsSnapshotStore], OpenEvImportService] | None = None,
 ) -> CaselistSyncService:
     database = SqliteDatabase.open(data_dir)
     repository = SqliteCaselistRepository(database)
     blobs = FsSnapshotStore(data_dir)
     return CaselistSyncService(
         source=source,
-        archive_importer=CaselistImportService(caselists=repository, blobs=blobs),
-        openev_importer=OpenEvImportService(caselists=repository, blobs=blobs),
+        archive_importer=CaselistImportService(
+            suppression=empty_suppression_list(), caselists=repository, blobs=blobs
+        ),
+        openev_importer=(openev_importer or _openev_importer)(repository, blobs),
         local=local_evidence(data_dir),
-        read_archive=lambda path: read_archive(path, **_LIMITS),
+        read_archive=reader or (lambda path: read_archive(path, **_LIMITS)),
         event_for_caselist=lambda slug: Event.LD if slug.startswith("testcl") else None,
         inbox=inbox,
         state_dir=data_dir,
+        suppression=empty_suppression_list(),
         publisher=publisher,
         status=status,
         parse=parse,  # type: ignore[arg-type]
@@ -385,6 +409,10 @@ def build_service(
         bulk_downloads_per_day=bulk_downloads_per_day,
         clock=clock,
     )
+
+
+def _openev_importer(repository: SqliteCaselistRepository, blobs: FsSnapshotStore) -> OpenEvImportService:
+    return OpenEvImportService(suppression=empty_suppression_list(), caselists=repository, blobs=blobs)
 
 
 @pytest.fixture
@@ -552,6 +580,416 @@ async def test_an_openev_file_already_in_the_release_manifest_is_not_fetched_aga
 
 
 # ------------------------------------------------------------------------------------------------
+# A failed import is retried by the next run (v1-e34-t06 ac1)
+# ------------------------------------------------------------------------------------------------
+
+
+class ReaderThatFailsOnce:
+    """The archive reader, except that the first read of each named archive is refused.
+
+    What a failed import looks like from the run's side: the archive reached the inbox, and the
+    importer could not read it. `UnreadableArchive` is what a truncated zip raises. The second read
+    of the same file succeeds, as it would once the operator had fixed whatever was wrong.
+    """
+
+    def __init__(self, *names: str) -> None:
+        self.failing = set(names)
+
+    def __call__(self, path: Path) -> Iterable[ArchiveEntry]:
+        if path.name in self.failing:
+            self.failing.discard(path.name)
+            raise UnreadableArchive(path.name, "not a readable zip file")
+        return read_archive(path, **_LIMITS)
+
+
+def manifest_held(data_dir: Path, snapshot: date) -> bool:
+    return FsEvidenceObjectStore(data_dir).path_for(manifest_key(SYNTHETIC_CASELIST, snapshot)).is_file()
+
+
+async def test_retry_an_archive_whose_import_failed_is_imported_by_the_next_run_without_a_download(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The defect as the spec states it: the newest weekly downloads and its import fails.
+
+    Before v1-e34-t06 the next run decided `already_in_inbox` for it, and its import stage imported
+    only what that run had downloaded, which was nothing. The archive sat in the inbox unimported
+    for good, and re-running the command changed nothing.
+    """
+    await import_first_week(data_dir, archives)
+    reader = ReaderThatFailsOnce(weekly_name(date(2026, 9, 15)))
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, reader=reader)
+    failed = await service.run([SYNTHETIC_CASELIST])
+    assert failed.stage(SyncStage.IMPORT).outcome is StageOutcome.FAILED  # type: ignore[union-attr]
+    assert not failed.succeeded
+    assert not manifest_held(data_dir, date(2026, 9, 15))
+    fetched = [weekly_name(date(2026, 9, 8)), weekly_name(date(2026, 9, 15))]
+    assert source.archive_fetches == fetched
+
+    retried = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == fetched, "the retry spent a download on an archive it already had"
+    assert decisions(retried.archives)[weekly_name(date(2026, 9, 15))] == str(
+        SelectionDecision.ALREADY_IN_INBOX
+    )
+    assert retried.snapshots_imported == (f"{SYNTHETIC_CASELIST} 2026-09-15",)
+    assert retried.stage(SyncStage.IMPORT).outcome is StageOutcome.COMPLETED  # type: ignore[union-attr]
+    assert retried.succeeded
+    assert manifest_held(data_dir, date(2026, 9, 15))
+    # 09-15's own row of the first test's arithmetic: 2 + 12 + 0 + 0 = 14 stored members, and
+    # 14 - 12 = 2 blobs the store did not already hold.
+    assert (retried.files_imported, retried.blobs_stored) == (14, 2)
+
+
+async def test_retry_a_failed_import_holds_back_the_newer_weeks_of_that_caselist(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The same gap by a second road: the older week fails and the newer one imports past it.
+
+    A caselist's weeklies are imported oldest first because each is classified against the one
+    before it. Before v1-e34-t06 a failed 09-08 did not stop 09-15, whose manifest then made 09-08
+    `already_imported` on every later run: never fetched and never imported again. A failure now
+    holds that caselist's newer weeks in the inbox, and the next run imports them in order.
+    """
+    await import_first_week(data_dir, archives)
+    reader = ReaderThatFailsOnce(weekly_name(date(2026, 9, 8)))
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, reader=reader)
+
+    failed = await service.run([SYNTHETIC_CASELIST])
+
+    assert not manifest_held(data_dir, date(2026, 9, 8))
+    assert not manifest_held(data_dir, date(2026, 9, 15)), "a newer week was imported past a failed one"
+    assert failed.snapshots_imported == ("openev 2026-policy",)
+    reason = failed.stage(SyncStage.IMPORT).reason or ""  # type: ignore[union-attr]
+    assert "1 archive(s) in the inbox held back for a later run" in reason
+
+    retried = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8)), weekly_name(date(2026, 9, 15))]
+    assert retried.snapshots_imported == (
+        f"{SYNTHETIC_CASELIST} 2026-09-08",
+        f"{SYNTHETIC_CASELIST} 2026-09-15",
+    )
+    assert retried.succeeded
+
+
+async def test_retry_an_inbox_archive_waits_behind_an_older_week_the_cap_deferred(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """An archive already in the inbox is imported only once every older wanted week is in.
+
+    09-15 is in the inbox; 09-08 is not, and the cap leaves no download for it today. Importing
+    09-15 now would make 09-08 `already_imported` for good, so 09-15 waits in the inbox too.
+    """
+    await import_first_week(data_dir, archives)
+    inbox.mkdir(parents=True, exist_ok=True)
+    (inbox / weekly_name(date(2026, 9, 15))).write_bytes(archives[date(2026, 9, 15)].read_bytes())
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, bulk_downloads_per_day=0)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == []
+    assert decisions(summary.archives)[weekly_name(date(2026, 9, 8))] == str(
+        SelectionDecision.OVER_DAILY_BUDGET
+    )
+    assert not manifest_held(data_dir, date(2026, 9, 15))
+    assert f"{SYNTHETIC_CASELIST} 2026-09-15" not in summary.snapshots_imported
+
+
+class OpenEvImporterThatFailsOnce(OpenEvImportService):
+    """The OpenEv importer, refusing its first release import the way an unreadable file would."""
+
+    failed = False
+
+    async def import_release(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def, override]
+        if not OpenEvImporterThatFailsOnce.failed:
+            OpenEvImporterThatFailsOnce.failed = True
+            raise UnreadableArchive("openev-512", "not a readable document")
+        return await super().import_release(*args, **kwargs)  # type: ignore[arg-type]
+
+
+async def test_retry_a_camp_file_whose_import_failed_is_imported_from_the_inbox(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The OpenEv half of the same defect: the camp file sat in the inbox, `already_in_inbox`."""
+    await import_first_week(data_dir, archives)
+    OpenEvImporterThatFailsOnce.failed = False
+    service = build_service(
+        source=source,
+        data_dir=data_dir,
+        inbox=inbox,
+        openev_importer=lambda repository, blobs: OpenEvImporterThatFailsOnce(
+            suppression=empty_suppression_list(), caselists=repository, blobs=blobs
+        ),
+    )
+    failed = await service.run([SYNTHETIC_CASELIST])
+    assert "openev 2026-policy" not in failed.snapshots_imported
+
+    retried = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.openev_fetches == [OPENEV_FILE_ID], "the retry fetched the camp file again"
+    assert [one.decision for one in retried.openev] == [SelectionDecision.ALREADY_IN_INBOX]
+    assert retried.snapshots_imported == ("openev 2026-policy",)
+    assert FsEvidenceObjectStore(data_dir).path_for("manifests/openev/2026-policy.jsonl").is_file()
+
+    third = await service.run([SYNTHETIC_CASELIST])
+
+    assert [one.decision for one in third.openev] == [SelectionDecision.ALREADY_IMPORTED]
+    assert third.nothing_new, "an imported camp file left in the inbox was imported again"
+
+
+# ------------------------------------------------------------------------------------------------
+# OpenEv selection sees camp files imported by hand (v1-e34-t06 ac3)
+# ------------------------------------------------------------------------------------------------
+#
+# The sync names a camp file it downloads `openev-<id>-<file name>`, and used to decide "already
+# imported" by looking for that name in the release manifest. A camp file imported by hand through
+# `caselist import-openev` is recorded under its own path — `Tamarack/TSF-Estuary Solvency
+# Advocate.docx` — which that check could never see. The listing's own path is what the two share.
+
+OPENEV_MANIFEST = openev_manifest_key(OPENEV_YEAR, Event.POLICY)
+
+
+async def import_openev_by_hand(data_dir: Path, download: Path) -> None:
+    """What `caselist import-openev <download> --year 2026 --event policy` does to the store."""
+    database = SqliteDatabase.open(data_dir)
+    service = OpenEvImportService(
+        suppression=empty_suppression_list(),
+        caselists=SqliteCaselistRepository(database),
+        blobs=FsSnapshotStore(data_dir),
+    )
+    manifest = FsEvidenceObjectStore(data_dir).path_for(OPENEV_MANIFEST)
+    report = await service.import_release(
+        read_archive(download, **_LIMITS),
+        year=OPENEV_YEAR,
+        event=Event.POLICY,
+        imported_on=date(2026, 9, 10),
+        archive_sha256=archive_digest(download),
+        recorded_manifest=read_manifest_lines(manifest),
+    )
+    write_manifest_lines(report.manifest_lines, manifest)
+
+
+def manifest_paths(data_dir: Path) -> list[str]:
+    rows = [
+        json.loads(line)
+        for line in read_manifest_lines(FsEvidenceObjectStore(data_dir).path_for(OPENEV_MANIFEST))
+    ]
+    return [row["path"] for row in rows if row.get("kind") == "member"]
+
+
+def camp_file(openev_id: int, path: str) -> OpenEvFile:
+    return OpenEvFile(
+        openev_id=openev_id, path=path, filename=path.rsplit("/", 1)[-1], year=OPENEV_YEAR, tags=("policy",)
+    )
+
+
+async def test_openev_a_camp_file_imported_by_hand_is_already_imported_and_costs_no_download(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path], tmp_path: Path
+) -> None:
+    """The addendum download holds `Tamarack/TSF-Estuary Solvency Advocate.docx`: OpenEv file 512.
+
+    Before v1-e34-t06 the sync fetched it again and recorded it a second time, as a DUPLICATE row
+    under `openev-512-TSF-Estuary_Solvency_Advocate.docx`, beside the row it already had.
+    """
+    await import_first_week(data_dir, archives)
+    await import_openev_by_hand(
+        data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy-addendum"]
+    )
+    held = manifest_paths(data_dir)
+    assert "Tamarack/TSF-Estuary Solvency Advocate.docx" in held
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.openev_fetches == [], "a camp file already held was downloaded again"
+    assert [one.decision for one in summary.openev] == [SelectionDecision.ALREADY_IMPORTED]
+    assert manifest_paths(data_dir) == held, "the release manifest gained a second row for the same file"
+
+
+@pytest.mark.parametrize(
+    "listed_path",
+    [
+        f"openev/{OPENEV_YEAR}/Tamarack/TSF-Estuary Solvency Advocate.docx",
+        f"openev/{OPENEV_YEAR}/tamarack/TSF-Estuary_Solvency_Advocate.docx",
+        f"{OPENEV_YEAR}/Tamarack/TSF  Estuary Solvency Advocate.DOCX",
+    ],
+    ids=["as-listed", "case-and-underscores", "spacing-and-extension-case"],
+)
+async def test_openev_a_hand_imported_file_is_matched_through_spelling_differences(
+    listed_path: str, source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    await import_openev_by_hand(
+        data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy-addendum"]
+    )
+    source.archives = {}
+    source.openev_files = [(camp_file(OPENEV_FILE_ID, listed_path), DOCUMENT_BODIES["estuary-solvency"])]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert [one.decision for one in plan.openev] == [SelectionDecision.ALREADY_IMPORTED]
+
+
+async def test_openev_the_folder_decides_between_two_listed_files_of_one_name(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """`Tamarack/TSF-Borrowed Grove Aff.docx` is held; another camp's file of that name is not."""
+    await import_openev_by_hand(data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy"])
+    source.archives = {}
+    source.openev_files = [
+        (camp_file(601, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Borrowed Grove Aff.docx"), b"held"),
+        (camp_file(602, f"openev/{OPENEV_YEAR}/Brightwater/TSF-Borrowed Grove Aff.docx"), b"not held"),
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert {one.openev_id: one.decision for one in plan.openev} == {
+        601: SelectionDecision.ALREADY_IMPORTED,
+        602: SelectionDecision.DOWNLOAD,
+    }
+
+
+async def test_openev_a_bare_name_that_two_listed_files_share_holds_neither(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """`Brightwater Workshop - Orchard Kritik.docx` was imported with no folder to tell them apart.
+
+    Calling either one held would be a guess, and a wrong guess never downloads a camp file the
+    store does not have. Both are fetched; the one already held costs a download and a DUPLICATE row.
+    """
+    await import_openev_by_hand(data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy"])
+    source.archives = {}
+    source.openev_files = [
+        (
+            camp_file(701, f"openev/{OPENEV_YEAR}/Brightwater/Brightwater Workshop - Orchard Kritik.docx"),
+            b"a",
+        ),
+        (
+            camp_file(702, f"openev/{OPENEV_YEAR}/Quillfeather/Brightwater Workshop - Orchard Kritik.docx"),
+            b"b",
+        ),
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert [one.decision for one in plan.openev] == [SelectionDecision.DOWNLOAD, SelectionDecision.DOWNLOAD]
+
+
+async def test_openev_a_file_the_sync_named_is_matched_by_its_id(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """The first download holds `openev-417-TSF-Spillway Advantage.docx`, a name the sync writes."""
+    await import_openev_by_hand(data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy"])
+    source.archives = {}
+    source.openev_files = [
+        (camp_file(417, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Spillway Advantage (final).docx"), b"renamed"),
+        (camp_file(418, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Spillway Advantage.docx"), b"another id"),
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert {one.openev_id: one.decision for one in plan.openev} == {
+        417: SelectionDecision.ALREADY_IMPORTED,
+        418: SelectionDecision.DOWNLOAD,
+    }
+
+
+async def test_openev_macos_junk_that_reads_like_a_camp_file_does_not_hold_it(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """`__MACOSX/Tamarack/._TSF-Canal Subsidies Counterplan.docx` is skipped, and is no camp file."""
+    download = tmp_path / "junk-and-one-file"
+    (download / "__MACOSX" / "Tamarack").mkdir(parents=True)
+    (download / "__MACOSX" / "Tamarack" / "._TSF-Canal Subsidies Counterplan.docx").write_bytes(
+        b"\x00\x05\x16\x07"
+    )
+    (download / "Tamarack").mkdir()
+    (download / "Tamarack" / "TSF-Estuary Solvency Advocate.docx").write_bytes(
+        DOCUMENT_BODIES["estuary-solvency"]
+    )
+    await import_openev_by_hand(data_dir, download)
+    assert "__MACOSX/Tamarack/._TSF-Canal Subsidies Counterplan.docx" in manifest_paths(data_dir)
+    source.archives = {}
+    source.openev_files = [
+        (camp_file(801, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Canal Subsidies Counterplan.docx"), b"canal"),
+        (camp_file(802, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Estuary Solvency Advocate.docx"), b"estuary"),
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert {one.openev_id: one.decision for one in plan.openev} == {
+        801: SelectionDecision.DOWNLOAD,
+        802: SelectionDecision.ALREADY_IMPORTED,
+    }
+
+
+async def test_openev_a_sync_named_file_whose_id_is_no_longer_listed_is_matched_by_its_path(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
+) -> None:
+    """`openev-417-TSF-Spillway Advantage.docx` with 417 gone from the listing is still that file."""
+    await import_openev_by_hand(data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy"])
+    source.archives = {}
+    source.openev_files = [
+        (camp_file(999, f"openev/{OPENEV_YEAR}/Tamarack/TSF-Spillway Advantage.docx"), b"x")
+    ]
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    plan = await service.plan([SYNTHETIC_CASELIST])
+
+    assert [one.decision for one in plan.openev] == [SelectionDecision.ALREADY_IMPORTED]
+
+
+_SMALL_NAMES = st.sampled_from(
+    ["Tamarack", "tamarack", "Brightwater", "Juniors Lab", "Aff.docx", "aff_docx", "Neg.pdf"]
+)
+
+
+@st.composite
+def listings_and_imports(draw: st.DrawFn) -> tuple[list[OpenEvFile], set[int], list[str]]:
+    """Listed camp files over a small alphabet, so names collide, and what was imported of them.
+
+    Each imported file is recorded the way a hand import would record it: some tail of its listed
+    path, from the file name up, as the download it came in happened to be laid out.
+    """
+    count = draw(st.integers(min_value=1, max_value=8))
+    listed = [
+        camp_file(
+            100 + index,
+            "/".join(["openev", str(OPENEV_YEAR), *draw(st.lists(_SMALL_NAMES, min_size=1, max_size=3))]),
+        )
+        for index in range(count)
+    ]
+    imported = draw(st.sets(st.sampled_from([file.openev_id for file in listed])))
+    recorded: list[str] = []
+    for file in listed:
+        if file.openev_id in imported:
+            parts = file.path.split("/")
+            recorded.append("/".join(parts[-draw(st.integers(min_value=1, max_value=len(parts) - 2)) :]))
+    return listed, imported, recorded
+
+
+@settings(max_examples=300, deadline=None)
+@given(listings_and_imports())
+def test_openev_matching_never_holds_a_listed_file_nobody_imported(
+    case: tuple[list[OpenEvFile], set[int], list[str]],
+) -> None:
+    """A held camp file is never downloaded again, so holding one nobody imported loses it for good.
+
+    Every recorded path is a tail of an imported file's listed path, so the imported file shares
+    that whole tail. Another listed file can at most tie with it, and a tie holds neither.
+    """
+    listed, imported, recorded = case
+
+    held = _held_openev_ids(listed, recorded)
+
+    assert held <= imported, f"held {sorted(held - imported)} that nobody imported"
+
+
+# ------------------------------------------------------------------------------------------------
 # The daily bulk-download budget
 # ------------------------------------------------------------------------------------------------
 
@@ -602,19 +1040,381 @@ async def test_a_run_never_plans_more_downloads_than_the_day_has_left(
     )
 
 
-async def test_what_a_run_spent_is_carried_into_the_next_run_on_the_same_day(
+async def test_window_what_a_run_spent_is_carried_into_the_next_run_for_24_hours(
     source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
 ) -> None:
-    """The five are a day's allowance, not a run's. A second run today starts from what is left."""
+    """The five are a rolling day's allowance, not a run's. A second run starts from what is left."""
     await import_first_week(data_dir, archives)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox, bulk_downloads_per_day=2)
 
     await service.run([SYNTHETIC_CASELIST])
     ledger = DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME, limit=2)
 
-    assert ledger.spent_on(RUN_CLOCK.date()) == 2
-    assert ledger.remaining_on(RUN_CLOCK.date()) == 0
-    assert ledger.remaining_on(date(2026, 9, 17)) == 2, "yesterday's count is not a debt"
+    assert ledger.starts() == (RUN_CLOCK, RUN_CLOCK)
+    assert ledger.remaining_at(RUN_CLOCK) == 0
+    assert ledger.remaining_at(RUN_CLOCK + timedelta(hours=23, minutes=59)) == 0, (
+        "a new date is not a new five"
+    )
+    assert ledger.remaining_at(RUN_CLOCK + timedelta(hours=24, minutes=1)) == 2
+
+
+# ------------------------------------------------------------------------------------------------
+# The download budget is a rolling 24 hours (v1-e34-t06 ac2, ac2b)
+# ------------------------------------------------------------------------------------------------
+#
+# Every time here is pinned. None comes from the machine's clock or its timezone: a test of a
+# window that read either would pass at 14:00 and fail at 21:43, which is what the calendar-day
+# ledger's tests did.
+
+OPERATOR_EVENING = datetime(2026, 9, 29, 4, 45, 11, tzinfo=UTC)
+"""23:45:11 CDT on 2026-09-28: when the operator's calendar ledger was last written."""
+
+A_ROLLING_DAY = timedelta(hours=24)
+"""Written here rather than imported: a test that took the window from the module under test
+would agree with whatever window the module had."""
+
+OPERATOR_LEGACY_LEDGER = b'{\n  "bulk_downloads": 5,\n  "date": "2026-09-29"\n}\n'
+"""The operator's old-format ledger, byte for byte as the calendar-day build wrote it."""
+
+
+def spend_allowance(data_dir: Path, downloads: int, *, at: datetime) -> None:
+    """Record `downloads` bulk downloads started at `at`, as an earlier run would have."""
+    ledger = DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME)
+    for _ in range(downloads):
+        ledger.record(at)
+
+
+def written_at(path: Path, moment: datetime) -> None:
+    """Give `path` the modification time `moment`, which is what an old-format ledger is read by."""
+    os.utime(path, (moment.timestamp(), moment.timestamp()))
+
+
+def test_window_five_downloads_at_t_are_still_counted_at_23h59m_and_released_at_24h01m(
+    tmp_path: Path,
+) -> None:
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME)
+    for _ in range(5):
+        ledger.record(OPERATOR_EVENING)
+
+    assert ledger.spent_in_window(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 5
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 0
+    # Released at exactly 24 hours, as RequestPacer releases a download at exactly 60 seconds.
+    assert ledger.remaining_at(OPERATOR_EVENING + A_ROLLING_DAY) == 5
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 5
+    assert ledger.spent_in_window(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 0
+
+
+def test_window_a_start_after_now_still_counts_so_a_clock_set_back_frees_nothing(tmp_path: Path) -> None:
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME)
+    for _ in range(5):
+        ledger.record(OPERATOR_EVENING)
+
+    assert ledger.remaining_at(OPERATOR_EVENING - timedelta(hours=2)) == 0
+
+
+def test_window_the_ledger_keeps_only_what_is_inside_the_window(tmp_path: Path) -> None:
+    path = tmp_path / DOWNLOAD_LEDGER_FILENAME
+    ledger = DownloadLedger(path)
+    ledger.record(OPERATOR_EVENING)
+    ledger.record(OPERATOR_EVENING + timedelta(hours=25))
+
+    body = json.loads(path.read_text(encoding="utf-8"))
+
+    assert body == {
+        "schema_version": 1,
+        "bulk_download_starts": ["2026-09-30T05:45:11+00:00"],
+    }
+
+
+@pytest.mark.parametrize(
+    "zone", ["UTC", "America/Chicago", "Pacific/Kiritimati", "Etc/GMT+12", "Asia/Kolkata", "Europe/London"]
+)
+async def test_window_five_at_t_then_five_forty_minutes_later_are_refused_across_a_midnight(
+    zone: str, source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The doubling the calendar ledger allowed, wherever the midnight is.
+
+    The calendar-day build keyed the ledger on the date of a UTC clock, so five at 23:40 and five
+    at 00:20 were two days' allowances. The window has no midnight to cross.
+    """
+    midnight = datetime(2026, 9, 16, tzinfo=ZoneInfo(zone))
+    first = midnight - timedelta(minutes=20)
+    second = first + timedelta(minutes=40)
+    assert first.date() != second.astimezone(ZoneInfo(zone)).date(), "the two runs must straddle a midnight"
+    await import_first_week(data_dir, archives)
+    spend_allowance(data_dir, 5, at=first)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, clock=lambda: second)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == []
+    assert {
+        decisions(summary.archives)[weekly_name(day)] for day in (date(2026, 9, 8), date(2026, 9, 15))
+    } == {str(SelectionDecision.OVER_DAILY_BUDGET)}
+    assert summary.bulk_downloads_allowed == 0
+    assert summary.bulk_downloads_spent_in_window == 5
+    assert summary.bulk_download_window_start == second - timedelta(hours=24)
+
+
+async def test_window_a_second_run_forty_minutes_later_across_utc_midnight_gets_no_fresh_allowance(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The doubling itself, through two runs and nothing else.
+
+    With an allowance of one, the 23:50 UTC run fetches 09-08 and defers 09-15. The calendar-day
+    ledger keyed on the UTC date, so the 00:30 run found a new date, a fresh allowance, and fetched
+    09-15: two downloads in forty minutes against a limit of one.
+    """
+    await import_first_week(data_dir, archives)
+    before_midnight = datetime(2026, 9, 16, 23, 50, tzinfo=UTC)
+    after_midnight = before_midnight + timedelta(minutes=40)
+    first = build_service(
+        source=source, data_dir=data_dir, inbox=inbox, bulk_downloads_per_day=1, clock=lambda: before_midnight
+    )
+    await first.run([SYNTHETIC_CASELIST])
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8))]
+    second = build_service(
+        source=source, data_dir=data_dir, inbox=inbox, bulk_downloads_per_day=1, clock=lambda: after_midnight
+    )
+
+    summary = await second.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8))], (
+        "a new date handed out a fresh allowance"
+    )
+    assert decisions(summary.archives)[weekly_name(date(2026, 9, 15))] == str(
+        SelectionDecision.OVER_DAILY_BUDGET
+    )
+
+
+async def test_window_a_run_records_each_download_at_the_moment_it_started(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The service writes the window in its own clock's instants, not in dates."""
+    await import_first_week(data_dir, archives)
+    moments = iter(OPERATOR_EVENING + timedelta(seconds=10 * tick) for tick in range(1000))
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, clock=lambda: next(moments))
+
+    await service.run([SYNTHETIC_CASELIST])
+
+    starts = DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME).starts()
+    assert len(starts) == 2
+    assert all(OPERATOR_EVENING < one < OPERATOR_EVENING + timedelta(minutes=10) for one in starts)
+    assert starts[0] < starts[1]
+
+
+class SourceWhoseBytesAreAlreadyThere(FakeCaselistSource):
+    """Every archive comes back `already_present`, as if the inbox had gained it mid-run."""
+
+    async def download_archive(self, archive: ArchiveListing, inbox: Path) -> DownloadedFile:
+        downloaded = await super().download_archive(archive, inbox)
+        return downloaded.model_copy(update={"already_present": True})
+
+
+async def test_window_a_download_whose_bytes_were_already_present_is_still_counted(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The client streams the whole archive before it can tell; the server has counted it."""
+    await import_first_week(data_dir, archives)
+    already = SourceWhoseBytesAreAlreadyThere()
+    already.archives, already.openev_files = source.archives, source.openev_files
+    service = build_service(source=already, data_dir=data_dir, inbox=inbox)
+
+    await service.run([SYNTHETIC_CASELIST])
+
+    assert DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME).spent_in_window(RUN_CLOCK) == 2
+
+
+async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    await import_first_week(data_dir, archives)
+    spend_allowance(data_dir, 2, at=RUN_CLOCK - timedelta(hours=23))
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+    written = json.loads(service.summary_path(summary).read_text(encoding="utf-8"))
+
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 2
+    assert written["bulk_download_window_start"] == "2026-09-15T06:00:00+00:00"
+    assert written["bulk_downloads_spent_in_window"] == 2
+    assert written["bulk_downloads_allowed"] == 3
+    assert "bulk_downloads_spent_today" not in written
+    reason = summary.stage(SyncStage.SELECT).reason or ""  # type: ignore[union-attr]
+    assert reason.endswith(
+        "3 to fetch; 2 of 5 bulk download(s) spent in the 24 hours from 2026-09-15 06:00 UTC, 3 left"
+    )
+
+
+async def test_window_the_first_run_after_the_upgrade_counts_the_old_calendar_ledger(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The operator's own ledger, forty minutes after it was written, is five spent — not none.
+
+    A new ledger that read the old file as saying nothing would hand out a free five on the first
+    run after the upgrade, on top of the five already spent.
+    """
+    await import_first_week(data_dir, archives)
+    legacy = data_dir / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    legacy.write_bytes(OPERATOR_LEGACY_LEDGER)
+    written_at(legacy, OPERATOR_EVENING)
+    forty_minutes_later = OPERATOR_EVENING + timedelta(minutes=40)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, clock=lambda: forty_minutes_later)
+
+    refused = await service.run([SYNTHETIC_CASELIST])
+
+    assert source.archive_fetches == []
+    assert refused.bulk_downloads_spent_in_window == 5
+    assert legacy.read_bytes() == OPERATOR_LEGACY_LEDGER, "the old ledger is read, never rewritten"
+
+    next_evening = OPERATOR_EVENING + timedelta(hours=24, minutes=1)
+    later = build_service(source=source, data_dir=data_dir, inbox=inbox, clock=lambda: next_evening)
+    allowed = await later.run([SYNTHETIC_CASELIST])
+
+    assert allowed.bulk_downloads_allowed == 5
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8)), weekly_name(date(2026, 9, 15))]
+
+
+def test_window_an_old_ledger_counts_from_when_it_was_written_not_from_its_date(tmp_path: Path) -> None:
+    """Its `date` is a UTC calendar day; its mtime is the latest any of its downloads can be.
+
+    The operator's five were spent at 04:45 UTC on 2026-09-29. Counted from that date's midnight
+    they would be released at 00:00 UTC on 09-30, almost five hours early.
+    """
+    legacy = tmp_path / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    legacy.write_bytes(OPERATOR_LEGACY_LEDGER)
+    written_at(legacy, OPERATOR_EVENING)
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+
+    assert ledger.starts() == (OPERATOR_EVENING,) * 5
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 0
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 5
+
+
+def test_window_an_old_ledger_with_room_left_leaves_that_room(tmp_path: Path) -> None:
+    legacy = tmp_path / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    legacy.write_bytes(b'{\n  "bulk_downloads": 2,\n  "date": "2026-09-29"\n}\n')
+    written_at(legacy, OPERATOR_EVENING)
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(minutes=40)) == 3
+
+
+def test_window_an_old_build_spending_after_this_one_still_counts(tmp_path: Path) -> None:
+    """The backfill runs from an installed build on the old format; what it spends is counted."""
+    legacy = tmp_path / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+    ledger.record(OPERATOR_EVENING)
+    ledger.record(OPERATOR_EVENING)
+    legacy.write_bytes(b'{\n  "bulk_downloads": 3,\n  "date": "2026-09-29"\n}\n')
+    written_at(legacy, OPERATOR_EVENING + timedelta(minutes=5))
+
+    assert ledger.spent_in_window(OPERATOR_EVENING + timedelta(minutes=40)) == 5
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(minutes=40)) == 0
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"",
+        b"not json",
+        b"[]",
+        b'{"date": "2026-09-29"}',
+        b'{"date": "2026-09-29", "bulk_downloads": -1}',
+        b'{"date": "2026-09-29", "bulk_downloads": "five"}',
+    ],
+    ids=["empty", "not-json", "not-an-object", "no-count", "negative-count", "count-not-a-number"],
+)
+def test_window_an_unreadable_old_ledger_is_counted_as_fully_spent(tmp_path: Path, body: bytes) -> None:
+    legacy = tmp_path / LEGACY_DOWNLOAD_LEDGER_FILENAME
+    legacy.write_bytes(body)
+    written_at(legacy, OPERATOR_EVENING)
+    ledger = DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 0
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 5
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"not json",
+        OPERATOR_LEGACY_LEDGER,
+        b'{"schema_version": 2, "bulk_download_starts": []}',
+        b'{"schema_version": 1, "bulk_download_starts": "2026-09-29T04:45:11+00:00"}',
+        b'{"schema_version": 1, "bulk_download_starts": ["yesterday"]}',
+        b'{"schema_version": 1, "bulk_download_starts": ["2026-09-29T04:45:11"]}',
+    ],
+    ids=[
+        "not-json",
+        "old-format-under-the-new-name",
+        "unknown-version",
+        "not-a-list",
+        "not-a-time",
+        "naive-time",
+    ],
+)
+def test_window_an_unrecognised_ledger_is_counted_as_fully_spent(tmp_path: Path, body: bytes) -> None:
+    path = tmp_path / DOWNLOAD_LEDGER_FILENAME
+    path.write_bytes(body)
+    written_at(path, OPERATOR_EVENING)
+    ledger = DownloadLedger(path)
+
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=23, minutes=59)) == 0
+    assert ledger.remaining_at(OPERATOR_EVENING + timedelta(hours=24, minutes=1)) == 5
+
+
+def test_window_a_naive_start_is_refused_rather_than_guessed(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        DownloadLedger(tmp_path / DOWNLOAD_LEDGER_FILENAME).record(datetime(2026, 9, 29, 4, 45))  # noqa: DTZ001
+
+
+@settings(max_examples=150, deadline=None)
+@given(
+    gaps=st.lists(st.integers(min_value=0, max_value=30 * 3600), min_size=1, max_size=40),
+    wanted=st.lists(st.integers(min_value=0, max_value=7), min_size=40, max_size=40),
+    legacy_spent=st.one_of(st.none(), st.integers(min_value=0, max_value=5)),
+    legacy_age_seconds=st.integers(min_value=0, max_value=30 * 3600),
+)
+def test_window_no_24_hours_ever_holds_more_than_five_starts(
+    gaps: list[int], wanted: list[int], legacy_spent: int | None, legacy_age_seconds: int
+) -> None:
+    """Runs at arbitrary gaps, each fetching as much as it wants of what the window allows.
+
+    Every run reads the ledger afresh, as separate processes do. Whatever the gaps, the starts in
+    any 24 hours ending at a start — the old calendar ledger's included — never exceed five, and
+    24 hours with nothing started always leaves the whole five.
+
+    The starts are counted from this test's own account of what it recorded and planted, never
+    read back through the ledger: an oracle that asked the code under test what had been spent
+    was blind to a ledger that forgot something (found by a deep run, v1-e34-t06).
+    """
+    with tempfile.TemporaryDirectory() as directory:
+        state = Path(directory)
+        legacy = state / LEGACY_DOWNLOAD_LEDGER_FILENAME
+        now = OPERATOR_EVENING
+        spent: list[datetime] = []
+        if legacy_spent is not None:
+            legacy.write_text(
+                json.dumps({"date": "2026-09-29", "bulk_downloads": legacy_spent}), encoding="utf-8"
+            )
+            planted = now - timedelta(seconds=legacy_age_seconds)
+            written_at(legacy, planted)
+            # Truncated to the second, as the file system keeps it and the ledger reads it.
+            spent.extend([datetime.fromtimestamp(int(planted.timestamp()), UTC)] * legacy_spent)
+        for gap, want in zip(gaps, wanted, strict=False):
+            now += timedelta(seconds=gap)
+            ledger = DownloadLedger(state / DOWNLOAD_LEDGER_FILENAME, legacy_path=legacy)
+            allowed = ledger.remaining_at(now)
+            if all(started <= now - A_ROLLING_DAY for started in spent):
+                assert allowed == DEFAULT_BULK_DOWNLOADS_PER_DAY, "24 idle hours must leave the whole five"
+            for second in range(min(want, allowed)):
+                ledger.record(now + timedelta(seconds=second))
+                spent.append(now + timedelta(seconds=second))
+            now += timedelta(seconds=min(want, allowed))
+        for end in spent:
+            inside = [one for one in spent if end - A_ROLLING_DAY < one <= end]
+            assert len(inside) <= DEFAULT_BULK_DOWNLOADS_PER_DAY, (end, inside)
 
 
 async def test_a_day_long_retry_after_defers_the_rest_and_the_run_still_imports(
@@ -682,8 +1482,8 @@ async def test_a_run_publishes_the_snapshots_it_imported(
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local, remote=bucket),
-        status=CaselistStatusService(local=local, remote=bucket),
+        publisher=CaselistPublishService(suppression=empty_suppression_list(), local=local, remote=bucket),
+        status=CaselistStatusService(suppression=empty_suppression_list(), local=local, remote=bucket),
     )
 
     summary = await service.run([SYNTHETIC_CASELIST])
@@ -704,8 +1504,12 @@ async def test_expired_credentials_leave_the_local_stages_done_and_the_rest_pend
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local_evidence(data_dir), remote=ExpiredBucket()),
-        status=CaselistStatusService(local=local_evidence(data_dir), remote=ExpiredBucket()),
+        publisher=CaselistPublishService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
+        status=CaselistStatusService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
     )
 
     summary = await service.run([SYNTHETIC_CASELIST])
@@ -736,7 +1540,9 @@ async def test_publish_pending_completes_what_the_expired_run_left(
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local_evidence(data_dir), remote=ExpiredBucket()),
+        publisher=CaselistPublishService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
     )
     await expired.run([SYNTHETIC_CASELIST])
 
@@ -745,8 +1551,8 @@ async def test_publish_pending_completes_what_the_expired_run_left(
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local, remote=bucket),
-        status=CaselistStatusService(local=local, remote=bucket),
+        publisher=CaselistPublishService(suppression=empty_suppression_list(), local=local, remote=bucket),
+        status=CaselistStatusService(suppression=empty_suppression_list(), local=local, remote=bucket),
     )
     drained = await logged_in.publish_pending()
 
@@ -776,8 +1582,8 @@ async def test_a_dry_run_lists_what_it_would_do_and_changes_nothing(
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local, remote=bucket),
-        status=CaselistStatusService(local=local, remote=bucket),
+        publisher=CaselistPublishService(suppression=empty_suppression_list(), local=local, remote=bucket),
+        status=CaselistStatusService(suppression=empty_suppression_list(), local=local, remote=bucket),
     )
     before = _fingerprint(data_dir)
 
@@ -1001,6 +1807,13 @@ async def test_an_openev_release_that_is_a_zip_is_read_as_one(
     assert summary.files_imported == 38
     assert summary.files_skipped == 10
 
+    again = await service.run([SYNTHETIC_CASELIST])
+
+    # Its manifest names the release's members, never the zip's own inbox name, so it is the
+    # download digest the rows carry that says these bytes were imported (v1-e34-t06 ac1).
+    assert [one.decision for one in again.openev] == [SelectionDecision.ALREADY_IMPORTED]
+    assert again.nothing_new, "a camp release left in the inbox was imported again"
+
 
 async def test_a_camp_file_whose_event_nobody_states_is_listed_and_left_alone(
     source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
@@ -1059,9 +1872,9 @@ def test_an_unreadable_pending_work_file_reads_as_nothing_owed(tmp_path: Path) -
 # are wanted — 2026-09-08 and 2026-09-15. Every count below is those two, split by hand.
 
 
-def spend_todays_allowance(data_dir: Path, downloads: int = DEFAULT_BULK_DOWNLOADS_PER_DAY) -> None:
-    """Record `downloads` bulk downloads as already spent today, as an earlier run would have."""
-    DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME).record(RUN_CLOCK.date(), downloads)
+def spend_allowance_before_the_run(data_dir: Path, downloads: int = DEFAULT_BULK_DOWNLOADS_PER_DAY) -> None:
+    """Record `downloads` bulk downloads an hour before `RUN_CLOCK`, as an earlier run would have."""
+    spend_allowance(data_dir, downloads, at=RUN_CLOCK - timedelta(hours=1))
 
 
 async def test_a_run_the_cap_blocked_entirely_is_not_nothing_new(
@@ -1070,7 +1883,7 @@ async def test_a_run_the_cap_blocked_entirely_is_not_nothing_new(
     """The second and third dev runs of 2026-09-24: nothing fetched because nothing was allowed."""
     source.openev_files = []  # none were listed on the dev day either
     await import_first_week(data_dir, archives)
-    spend_todays_allowance(data_dir)
+    spend_allowance_before_the_run(data_dir)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
 
     summary = await service.run([SYNTHETIC_CASELIST])
@@ -1100,7 +1913,7 @@ async def test_a_run_the_cap_truncated_states_wanted_and_deferred(
     """The first dev run of 2026-09-24, in miniature: one of two fetched, one left for later."""
     source.openev_files = []  # none were listed on the dev day either
     await import_first_week(data_dir, archives)
-    spend_todays_allowance(data_dir, DEFAULT_BULK_DOWNLOADS_PER_DAY - 1)
+    spend_allowance_before_the_run(data_dir, DEFAULT_BULK_DOWNLOADS_PER_DAY - 1)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
 
     summary = await service.run([SYNTHETIC_CASELIST])
@@ -1270,8 +2083,12 @@ async def test_an_expired_sso_session_leaves_a_run_record_and_one_notify_naming_
         source=source,
         data_dir=data_dir,
         inbox=inbox,
-        publisher=CaselistPublishService(local=local_evidence(data_dir), remote=ExpiredBucket()),
-        status=CaselistStatusService(local=local_evidence(data_dir), remote=ExpiredBucket()),
+        publisher=CaselistPublishService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
+        status=CaselistStatusService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=ExpiredBucket()
+        ),
     )
     notifier = RecordingNotifier()
 
@@ -1294,7 +2111,7 @@ async def test_a_cap_blocked_run_record_is_cap_deferred_and_does_not_notify(
     """ac5: a backlog that has not grown for two runs is recorded, not announced."""
     source.openev_files = []
     await import_first_week(data_dir, archives)
-    spend_todays_allowance(data_dir)
+    spend_allowance_before_the_run(data_dir)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
     notifier = RecordingNotifier()
 

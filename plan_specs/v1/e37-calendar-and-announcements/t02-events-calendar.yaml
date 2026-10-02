@@ -1,6 +1,6 @@
-# TASK v1-e37-t02-events-calendar — Events and tournaments calendar
-# Epic: E37 Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
-# Architecture refs: §14 (privacy), §15 (external source failures), ADR-0012, ADR-0015
+# TASK v1-e37-t02-events-calendar - Events and tournaments calendar
+# Epic: E37 Calendar & Announcements | Release: v1.6 | Major: V1
+# Architecture refs: ADR-0015 (as accepted 2026-10-01), ADR-0012 (static export)
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -14,30 +14,39 @@ metadata:
     debate/epic: v1-e37-calendar-and-announcements
   annotations:
     debate/title: Events and tournaments calendar
-    debate/architecture-refs: §14, §15, ADR-0012, ADR-0015
 spec:
+  # Rewritten by the PM, 2026-10-01, when ADR-0015 was revised before acceptance: events are a file in
+  # the repository, not a team Google Calendar. The earlier version fetched a public ICS feed at build
+  # time with a last-good fallback; none of that remains.
   description: >-
-    Turn the team Google Calendar chosen in ADR-0015 into site pages at build time. A prebuild step in
-    site/ fetches the public ICS feed (or the Calendar API with a read-only key from the environment, never
-    from git), normalizes events (America/Chicago time zone, all-day and multi-day tournaments, recurring
-    practices expanded for a bounded window), and writes a typed events dataset the static export renders
-    into an upcoming-events page and per-tournament pages (dates, location, entry deadline, travel notes,
-    event types such as Policy/LD/PF where the coach tagged them). Parents get a subscribe link (webcal/ICS
-    plus an add-to-Google link) that works in Google, Apple and Outlook calendars. When the fetch fails or
-    returns an invalid feed, the build uses the last good snapshot and shows its "last updated" date instead
-    of failing or publishing an empty calendar. Event text is public: the build drops email addresses and
-    phone numbers from descriptions and warns. Boundaries: announcements are t03, scheduled rebuilds and
-    deploy triggers are t04, account setup and conventions are t01; the existing "events explained" copy
-    from v1-e36-t04 is linked, not rewritten.
+    Put the team's tournament schedule on the site from a file in the repository.
+    site/content/tournaments.yaml holds one entry per tournament, validated by a schema at build
+    time: name, a date or date range, where, how it is held (in person, online but debated at
+    Whitefish Bay High School, or online from home), the events it offers, whether it is overnight,
+    a status (confirmed, tentative, or conditional with the condition stated), an optional
+    sign-up-by date, and short notes. It is seeded with every entry in
+    docs/data/2026-27-tournament-schedule.md, after which the YAML file is the source of record. The
+    build renders a /schedule page (the /events route already explains the three debate events and
+    is not renamed) listing the whole season in date order, with nationals in their own section, and
+    publishes an iCalendar file generated from the same data so parents can subscribe in Google,
+    Apple or Outlook. Three things a parent must not be misled about: two tournaments on the same
+    weekend are both shown and visibly marked as overlapping, never merged or dropped; a tournament
+    held online but debated at the high school says so, because it decides whether a student needs a
+    ride; and the page does not depend on when it was last deployed to be correct, so it does not
+    hide past tournaments by build date. Tournament text is public and passes the publishing-policy
+    validator: an email address, phone number or likely student name fails the build, naming the
+    entry. The coach guide's events section is rewritten for this file. Out of scope: announcements
+    (t03), the parent email list (t05), and any external calendar service.
   priority: 1
   constraints:
-    packages: [site/lib/calendar, site/app/events, site/scripts]
+    packages: [site/content, site/src, site/scripts, site/tests, docs/guides]
     forbidden:
-      - Committing calendar API keys or the private ICS ("secret address") URL; env-provided values only
-      - Client-side calls to Google from visitors' browsers or embedding Google's calendar iframe
-      - Live network calls in `pnpm --dir site test`; tests use recorded ICS fixtures and an injected fetcher
-      - Failing the build or publishing an empty calendar because the calendar source is unreachable
-      - Publishing student names, contact details or rosters from event text
+      - Fetching anything from an external service at build time or in a visitor's browser
+      - Hiding or reordering tournaments by build date
+      - Merging, dropping or silently resolving two tournaments on the same dates
+      - Describing a tournament debated online from the high school as simply "online"
+      - Student names, contact details or rosters in tournament data
+      - iCalendar UIDs that change when an unrelated field of an entry is edited
   context:
     - kind: TaskRef
       name: v1-e37-t01-content-editing-decision
@@ -48,30 +57,34 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        `pnpm --dir site build` with the recorded fixture feed produces /events listing upcoming events in
-        date order (past events hidden) and one page per tournament showing dates, location, entry deadline
-        and travel notes, all times rendered in America/Chicago.
+        site/content/tournaments.yaml is validated by a schema at build time and holds every entry
+        in docs/data/2026-27-tournament-schedule.md. An invalid entry fails the build with a message
+        naming the entry and the field, and the publishing-policy validator rejects an email
+        address, phone number or non-allowlisted student name in any text field.
     - id: ac2
       description: >-
-        When the calendar fetch errors, times out or returns an unparseable feed, the build succeeds using
-        the last good snapshot, logs a warning with the snapshot age, and the page shows a "last updated"
-        date; with no snapshot at all it renders a "calendar temporarily unavailable" message plus the
-        subscribe link.
+        `pnpm --dir site build` produces /schedule: the whole season in date order and nationals
+        separately, each entry showing dates, name, where, how it is held, events, overnight, status
+        and sign-up-by where set. Entries with overlapping dates are visibly marked as such, and
+        /schedule is reachable from the site navigation.
     - id: ac3
       description: >-
-        The subscribe section offers a webcal:// link, the plain https ICS URL and an add-to-Google link, and
-        the ICS URL is the calendar's public address (not the secret address).
+        The build publishes an iCalendar file with one event per entry. A test parses it back and
+        checks all-day and multi-day dates (exclusive end dates), and that each entry's UID is
+        unchanged when its notes are edited. The schedule page offers a webcal:// link and the plain
+        https link to it.
     - id: ac4
       description: >-
-        The calendar URL/key are read only from environment variables documented in site/.env.example, the
-        repository contains no key, and descriptions containing an email address or phone number are
-        stripped of it with a build warning.
+        docs/guides/coach-website-editing.md explains how to add, change and remove a tournament in
+        the file, which publish path to use under ADR-0015 point 4 (the next promotion, or the
+        hotfix path for a change inside the week), and what may never be written there. It no longer
+        describes Google Calendar.
     - id: ac5
       description: >-
-        Pages pass the site's accessibility and lint checks and the calendar tests run offline in under ten
-        seconds.
+        `pnpm --dir site lint`, `typecheck`, `test` and `build` pass offline, and the export's
+        accessibility checks cover /schedule.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -85,120 +98,59 @@ metadata:
     debate/epic: v1-e37-calendar-and-announcements
 spec:
   description: >-
-    Record fixtures, build the parser and normalizer, add the fetch step with last-good fallback, render the
-    pages and subscribe links, then run the full offline quality gates.
+    Schema and seed data, the page, the iCalendar file, then the guide.
   goalRef:
     name: v1-e37-t02-events-calendar
   graph:
     nodes:
-      - id: fixtures-and-model
+      - id: data
         kind: Task
-        name: Recorded ICS fixtures and event model
+        name: Tournament schema and seed data
         description: >-
-          Export the test calendar from t01 as recorded ICS fixtures (normal, all-day multi-day tournament,
-          recurring practice, DST boundary, malformed feed) with any real names removed, and define the
-          TeamEvent type and zod schema (id, title, kind, start, end, allDay, location, entryDeadline,
-          travelNotes, divisions, sourceUpdatedAt).
-        outputs:
-          - site/tests/fixtures/calendar/team.ics
-          - site/tests/fixtures/calendar/malformed.ics
-          - site/lib/calendar/types.ts
-        estimatedEffort: 2h
-        acceptanceCriteria:
-          - type: artifact_exists
-            name: Recorded calendar fixture exists
-            path: site/tests/fixtures/calendar/team.ics
-            contentMatch: "BEGIN:VCALENDAR"
-          - type: artifact_exists
-            name: Event schema defined
-            path: site/lib/calendar/types.ts
-            contentMatch: "entryDeadline"
-      - id: parse-normalize
-        kind: Task
-        name: ICS parsing and normalization
-        description: >-
-          Parse ICS with a maintained library (e.g. ical.js), expand recurrences for a bounded window, convert
-          to America/Chicago, extract entry deadline / travel notes / division tags using the conventions from
-          the coach guide, classify tournaments vs. other events, and strip emails and phone numbers from
-          descriptions with a warning.
-        dependsOn: [fixtures-and-model]
-        outputs: [site/lib/calendar/parse.ts, site/tests/calendar/parse.test.ts]
+          The schema, the validator hookup and tournaments.yaml seeded from the 2026-27 schedule.
+        outputs: [site/content/tournaments.yaml]
         estimatedEffort: 3h
         acceptanceCriteria:
-          - type: test_passes
-            name: Parsing and normalization tests pass
-            command: pnpm
-            args: [--dir, site, test, tests/calendar/parse.test.ts]
-      - id: fetch-with-fallback
-        kind: Task
-        name: Build-time fetch with last-good fallback
-        description: >-
-          Add a prebuild script that reads SITE_CALENDAR_ICS_URL (or GOOGLE_CALENDAR_ID plus
-          GOOGLE_CALENDAR_API_KEY) from the environment, fetches with a timeout and one retry through an
-          injectable fetcher, validates the result, writes the dataset and refreshes the last-good snapshot
-          only on success; on failure it falls back to the snapshot with a warning. Document variables in
-          site/.env.example (placeholders) and keep .env*.local and the cache dir gitignored.
-        dependsOn: [parse-normalize]
-        outputs:
-          - site/scripts/fetch-calendar.ts
-          - site/.env.example
-          - site/tests/calendar/fetch.test.ts
-        estimatedEffort: 3h
-        acceptanceCriteria:
-          - type: test_passes
-            name: Fetch success, timeout, bad feed and no-snapshot cases pass offline
-            command: pnpm
-            args: [--dir, site, test, tests/calendar/fetch.test.ts]
           - type: artifact_exists
-            name: Calendar variables documented with placeholders
-            path: site/.env.example
-            contentMatch: "SITE_CALENDAR_ICS_URL="
-      - id: pages-and-subscribe
+            name: site/content/tournaments.yaml
+            path: site/content/tournaments.yaml
+            contentMatch: "Wisconsin State Debate Tournament"
+      - id: page
         kind: Task
-        name: Events pages and subscribe links
+        name: The schedule page
         description: >-
-          Render /events (upcoming list grouped by month, tournament badge, "last updated" note) and
-          /events/[slug] tournament pages via generateStaticParams, add an upcoming-events teaser to the home
-          page, link to the "events explained" page, and add the subscribe block (webcal, https ICS,
-          add-to-Google). Update the sitemap.
-        dependsOn: [fetch-with-fallback]
-        outputs:
-          - site/app/events/page.tsx
-          - "site/app/events/[slug]/page.tsx"
-          - site/components/SubscribeCalendar.tsx
-          - site/tests/calendar/pages.test.tsx
-        estimatedEffort: 3h
+          /schedule in date order, overlaps marked, held-at-school stated, nationals separate.
+        dependsOn: [data]
+        estimatedEffort: 4h
         acceptanceCriteria:
-          - type: test_passes
-            name: Events page rendering tests pass
-            command: pnpm
-            args: [--dir, site, test, tests/calendar/pages.test.tsx]
           - type: command_succeeds
-            name: Static export builds from fixture data
+            name: The site builds
             command: pnpm
             args: [--dir, site, build]
-      - id: quality-gates
+      - id: ical
         kind: Task
-        name: Offline quality gates and smoke check
+        name: The iCalendar file and subscribe links
         description: >-
-          Run lint, the full offline test suite and the build with the network-free fixture fetcher; add
-          /events to the site smoke checks used by the deploy flow from v1-e36-t05; verify on the dev preview
-          (after an operator deploy) that the subscribe link imports in Google, Apple and Outlook.
-        dependsOn: [pages-and-subscribe]
-        estimatedEffort: 1h
+          Generated from the same data at build time, with stable UIDs, and tested by parsing it back.
+        dependsOn: [data]
+        estimatedEffort: 3h
         acceptanceCriteria:
           - type: command_succeeds
-            name: Site lint passes
-            command: pnpm
-            args: [--dir, site, lint]
-          - type: test_passes
-            name: Full site test suite passes offline
+            name: The site tests pass
             command: pnpm
             args: [--dir, site, test]
-          - type: custom
-            name: Subscribe link works in three calendar apps
-            description: >-
-              Charlie subscribes to the feed from the dev preview in Google Calendar, Apple Calendar and
-              Outlook and sees the test tournament with the right local time.
+      - id: guide
+        kind: Task
+        name: Rewrite the events section of the coach guide
+        description: >-
+          How to edit the file and publish a change, for whoever maintains the site.
+        dependsOn: [page, ical]
+        outputs: [docs/guides/coach-website-editing.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: docs/guides/coach-website-editing.md
+            path: docs/guides/coach-website-editing.md
+            contentMatch: "tournaments.yaml"
 status:
   phase: Pending

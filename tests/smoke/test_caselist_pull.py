@@ -20,6 +20,7 @@ The archives are the invented ones from `tests/fixtures/caselist/` and the camp 
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Iterator
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import boto3
+import httpx
 import pytest
 import respx
 from moto import mock_aws
@@ -42,6 +44,8 @@ from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired
+from debate_core.integrations.s3 import S3EvidenceObjectStore
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -50,6 +54,7 @@ runner = CliRunner()
 
 BUCKET = "debate-dev-evidence-pull-moto"
 AWS_PROFILE_NAME = "debate-dev-evidence"
+REMOVAL_PROFILE = "debate-dev-evidence-removal"
 API = "https://api.opencaselist.example.invalid/v1"
 FILE_HOST = "https://files.opencaselist.example.invalid"
 OPENEV_FILE_ID = 512
@@ -68,10 +73,17 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         if name.startswith("DEBATE_"):
             monkeypatch.delenv(name, raising=False)
     config = tmp_path / "aws-config"
-    config.write_text(f"[profile {AWS_PROFILE_NAME}]\nregion = us-east-1\n", encoding="utf-8")
+    # The takedown profile too, for the check that removes the camp file (v1-e34-t07).
+    config.write_text(
+        "".join(f"[profile {name}]\nregion = us-east-1\n" for name in (AWS_PROFILE_NAME, REMOVAL_PROFILE)),
+        encoding="utf-8",
+    )
     credentials = tmp_path / "aws-credentials"
     credentials.write_text(
-        f"[{AWS_PROFILE_NAME}]\naws_access_key_id = testing\naws_secret_access_key = testing\n",
+        "".join(
+            f"[{name}]\naws_access_key_id = testing\naws_secret_access_key = testing\n"
+            for name in (AWS_PROFILE_NAME, REMOVAL_PROFILE)
+        ),
         encoding="utf-8",
     )
     for name, value in {
@@ -119,9 +131,33 @@ def bucket(installation: Path) -> Iterator[S3Client]:
         yield client
 
 
+def camp_file(openev_id: int, camp: str, filename: str) -> dict[str, Any]:
+    """One OpenEv file as `GET /openev` lists it."""
+    return {
+        "openev_id": openev_id,
+        "path": f"/openev/{OPENEV_YEAR}/{camp}/{filename}",
+        "filename": filename,
+        "year": OPENEV_YEAR,
+        "camp": camp,
+        "tags": {"policy": True},
+    }
+
+
 @pytest.fixture
-def site(installation: Path) -> Iterator[respx.MockRouter]:
-    """OpenCaselist: three weekly archives, one full archive, and one new OpenEv camp file."""
+def camp_files() -> dict[str, tuple[dict[str, Any], bytes]]:
+    """What OpenEv lists, by upstream path: the listing entry and the bytes `/download` serves.
+
+    A test adds to it to have the next run list a new camp file.
+    """
+    listed = camp_file(OPENEV_FILE_ID, "Tamarack", OPENEV_FILENAME)
+    return {str(listed["path"]): (listed, DOCUMENT_BODIES["estuary-solvency"])}
+
+
+@pytest.fixture
+def site(
+    installation: Path, camp_files: dict[str, tuple[dict[str, Any], bytes]]
+) -> Iterator[respx.MockRouter]:
+    """OpenCaselist: three weekly archives, one full archive, and the OpenEv files in `camp_files`."""
     zips = build_snapshot_zips(installation / "published")
     listing = [
         {"name": weekly_name(week.snapshot), "url": f"{FILE_HOST}/{weekly_name(week.snapshot)}"}
@@ -129,18 +165,17 @@ def site(installation: Path) -> Iterator[respx.MockRouter]:
     ]
     full = f"{SYNTHETIC_CASELIST}-all-{SNAPSHOTS[-1].snapshot.isoformat()}.zip"
     listing.append({"name": full, "url": f"{FILE_HOST}/{full}"})
-    camp_file = {
-        "openev_id": OPENEV_FILE_ID,
-        "path": f"/openev/{OPENEV_YEAR}/Tamarack/{OPENEV_FILENAME}",
-        "filename": OPENEV_FILENAME,
-        "year": OPENEV_YEAR,
-        "camp": "Tamarack Summer Forum",
-        "tags": {"policy": True},
-    }
+
+    def download(request: httpx.Request) -> httpx.Response:
+        # The client takes the leading `/` off a listed path before asking for it.
+        return httpx.Response(200, content=camp_files["/" + request.url.params["path"]][1])
+
     with respx.mock(assert_all_called=False) as router:
         router.get(f"{API}/caselists/{SYNTHETIC_CASELIST}/downloads").respond(200, json=listing)
-        router.get(f"{API}/openev").respond(200, json=[camp_file])
-        router.get(f"{API}/download").respond(200, content=DOCUMENT_BODIES["estuary-solvency"])
+        router.get(f"{API}/openev").mock(
+            side_effect=lambda _: httpx.Response(200, json=[listed for listed, _ in camp_files.values()])
+        )
+        router.get(f"{API}/download").mock(side_effect=download)
         for week in SNAPSHOTS:
             router.get(f"{FILE_HOST}/{weekly_name(week.snapshot)}").respond(
                 200, content=zips[week.snapshot].read_bytes()
@@ -220,6 +255,187 @@ def test_the_full_archive_is_listed_and_never_fetched_by_a_weekly_run(
     full = f"{SYNTHETIC_CASELIST}-all-{SNAPSHOTS[-1].snapshot.isoformat()}.zip"
     assert decisions[full] == "full_archive_not_pulled_weekly"
     assert not any(call.request.url.path.endswith(full) for call in site.calls)
+
+
+def test_a_camp_file_removed_from_another_machine_is_not_requested_again(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v1-e34-t07 ac1, through the installed commands and the real composition root.
+
+    The camp file is pulled, then removed with `caselist remove --execute`. The next pull runs as a
+    machine that did not make the removal would: its own copy of the suppression list has no entry,
+    and its inbox no longer holds the file. Only the bucket's copy of the list can keep the request
+    away from OpenCaselist, so this fails if the pull's skip reads anything less than the union.
+    """
+    data = installation / "data"
+    assert run("caselist", "pull")["exit_code"] == ExitCode.OK
+    removed_file = hashlib.sha256(DOCUMENT_BODIES["estuary-solvency"]).hexdigest()
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    removed = run(
+        "caselist",
+        "remove",
+        "--source",
+        removed_file,
+        "--request",
+        "RM-2026-01",
+        "--reason",
+        "REQUESTED_BY_CAMP",
+        "--execute",
+    )
+    assert removed["exit_code"] == ExitCode.OK, removed
+    monkeypatch.delenv("DEBATE_REMOVAL_PROFILE")
+    (data / "suppression" / "suppression-list.jsonl").unlink()
+    for copy in (data / "inbox").glob(f"openev-{OPENEV_FILE_ID}-*"):
+        copy.unlink()
+    requested = sum(1 for call in site.calls if call.request.url.path.endswith("/download"))
+    assert requested == 1
+
+    again = run("caselist", "pull")
+
+    assert again["exit_code"] == ExitCode.OK, again
+    assert [one["decision"] for one in again["data"]["openev_selections"]] == ["skipped_as_removed"]
+    assert again["data"]["openev_skipped_as_removed"] == 1
+    assert sum(1 for call in site.calls if call.request.url.path.endswith("/download")) == requested
+
+
+# ------------------------------------------------------------------------------------------------
+# The AWS session behind the bucket's copy of the suppression list (v1-e34-t07, after PM review)
+# ------------------------------------------------------------------------------------------------
+
+SUPPRESSION_LIST_KEY = "manifests/_suppression/suppression-list.jsonl"
+
+
+def expire_the_session(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    only: str | None = None,
+    error: type[Exception] = StoreCredentialsExpired,
+) -> None:
+    """Make the S3 adapter refuse as it does once the operator's SSO session has expired.
+
+    With `only`, just a read of that key refuses (and with `error`, refuses that way); everything
+    else still reaches moto.
+    """
+
+    def refuse(*_: object) -> None:
+        if error is StoreAccessDenied:
+            raise StoreAccessDenied("GetObject", only or "the bucket", hint="a grant is missing")
+        raise StoreCredentialsExpired(hint=f"aws sso login --profile {AWS_PROFILE_NAME}")
+
+    original = S3EvidenceObjectStore.get_file
+
+    async def get_file(self: S3EvidenceObjectStore, key: str, destination: Path) -> Any:
+        if only is None or key == only:
+            refuse()
+        return await original(self, key, destination)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(S3EvidenceObjectStore, "get_file", get_file)
+    if only is None:
+        for name in ("list_objects", "head", "put_file"):
+
+            async def refused(self: S3EvidenceObjectStore, *arguments: object) -> Any:
+                refuse()
+
+            monkeypatch.setattr(S3EvidenceObjectStore, name, refused)
+
+
+def list_two_new_camp_files(camp_files: dict[str, tuple[dict[str, Any], bytes]]) -> None:
+    """513 holds the removed camp file's bytes under another camp's path; 514 is new material."""
+    for listed, body in (
+        (camp_file(513, "Brightwater", "BWW-Estuary Copy.docx"), DOCUMENT_BODIES["estuary-solvency"]),
+        (camp_file(514, "Brightwater", "BWW-Orchard Kritik.docx"), DOCUMENT_BODIES["orchard-kritik"]),
+    ):
+        camp_files[str(listed["path"])] = (listed, body)
+
+
+def run_summary(envelope: dict[str, Any]) -> dict[str, Any]:
+    """The run summary, from `data` on success or the failure's `details` (`CASELIST_PULL_INCOMPLETE`)."""
+    return envelope["data"] if envelope["data"] is not None else envelope["error"]["details"]
+
+
+def release_manifest(installation: Path) -> list[dict[str, Any]]:
+    path = installation / "data" / "objects" / "manifests" / "openev" / f"{OPENEV_YEAR}-policy.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def test_an_expired_session_still_imports_and_what_was_removed_here_stays_out(
+    installation: Path,
+    bucket: S3Client,
+    site: respx.MockRouter,
+    camp_files: dict[str, tuple[dict[str, Any], bytes]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The weekly run as launchd will usually make it: the SSO session has expired.
+
+    `v1-e34-t02` built the run so the local stages need no session and publish pends. The pull's
+    suppression list falls back to this machine's copy when the bucket's cannot be read for want of
+    credentials, and says so. The camp file removed on this machine is still skipped, its bytes
+    under another id are still refused, and the new file is imported.
+    """
+    assert run("caselist", "pull")["exit_code"] == ExitCode.OK
+    removed = hashlib.sha256(DOCUMENT_BODIES["estuary-solvency"]).hexdigest()
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    remove = (
+        "caselist",
+        "remove",
+        "--source",
+        removed,
+        "--request",
+        "RM-2026-01",
+        "--reason",
+        "REQUESTED_BY_CAMP",
+    )
+    assert run(*remove, "--execute")["exit_code"] == ExitCode.OK
+    monkeypatch.delenv("DEBATE_REMOVAL_PROFILE")
+    list_two_new_camp_files(camp_files)
+    expire_the_session(monkeypatch)
+
+    again = run("caselist", "pull")
+
+    data = run_summary(again)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["import"]["outcome"] == "completed", stages["import"]
+    assert again["exit_code"] == ExitCode.OK, again
+    decisions = {one["openev_id"]: one["decision"] for one in data["openev_selections"]}
+    assert decisions == {OPENEV_FILE_ID: "skipped_as_removed", 513: "download", 514: "download"}
+    assert data["blobs_stored"] == 1, "only 514's bytes are new and not removed"
+    # 513 is the removed bytes under another camp's path: refused, so no row and nothing imported.
+    # (The release summary's SUPPRESSED count describes only the latest import, which was 514's.)
+    assert data["files_imported"] == 1
+    rows = [row for row in release_manifest(installation) if row["kind"] == "member"]
+    assert not any(row["sha256"] == removed or "openev-513-" in row["path"] for row in rows)
+    assert any("openev-514-" in row["path"] for row in rows)
+    assert stages["publish"]["outcome"] == "pending"
+    assert "aws sso login" in data["suppression_list_local_copy_only"]
+    assert "this machine's copy of the suppression list alone" in stages["import"]["reason"]
+
+
+@pytest.mark.parametrize("failure", ["access_denied", "torn_line"])
+def test_a_bucket_copy_that_is_refused_or_torn_still_fails_the_import_closed(
+    installation: Path,
+    bucket: S3Client,
+    site: respx.MockRouter,
+    camp_files: dict[str, tuple[dict[str, Any], bytes]],
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    """Only missing or expired credentials fall back. A denial or an unreadable list is not a login
+    that timed out, and importing past it could bring a removed file back."""
+    assert run("caselist", "pull")["exit_code"] == ExitCode.OK
+    list_two_new_camp_files(camp_files)
+    if failure == "access_denied":
+        expire_the_session(monkeypatch, only=SUPPRESSION_LIST_KEY, error=StoreAccessDenied)
+    else:
+        bucket.put_object(Bucket=BUCKET, Key=SUPPRESSION_LIST_KEY, Body=b'{"schema_version":1,"act')
+
+    again = run("caselist", "pull")
+
+    assert again["exit_code"] != ExitCode.OK, again
+    data = run_summary(again)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["import"]["outcome"] == "failed", stages["import"]
+    assert data["blobs_stored"] == 0
+    assert data.get("suppression_list_local_copy_only") is None
 
 
 @pytest.mark.live

@@ -2,12 +2,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.1 |
-| Status | **Approved**, version 1.1, 2026-09-19. See [Approval](#approval). |
+| Policy version | 1.4 |
+| Status | **Approved**, version 1.4, 2026-10-01. See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1) and 2026-10-01 (versions 1.3 and 1.4) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -352,6 +352,8 @@ weighed.
 - Deletes `raw/` and `parsed/` objects **and every noncurrent version** from the environment's
   evidence bucket, and rewrites manifests with superseded versions purged.
 - Deletes the parsed cards derived from it.
+- Deletes or rewrites the downloaded archives and camp files in the sync's download inbox that
+  hold it, so no downloaded copy keeps the removed bytes.
 - **Appends the sha256 to the suppression list**, which the importers and the publisher consult, so
   the next cumulative weekly archive cannot bring the file back.
 - Flags every built file whose provenance sidecar cites that source, for rebuild or withdrawal.
@@ -373,8 +375,9 @@ coach, who explains the outcome to the requester within the same 7 days.
 
 **Steps:** [docs/runbooks/caselist-removal.md](../runbooks/caselist-removal.md), built around
 `debate-research caselist remove --source <sha256> | --team <caselist>/<school>/<team>`
-(v1-e30-t07), run against dev and then prod. Until t07 ships, the runbook's manual section is the
-procedure.
+(v1-e30-t07), run against dev and then prod. The command covers the store, the bucket and the
+suppression list and the sync's download inbox. One part of the runbook is still done by hand:
+flagging built files that quoted a removed card.
 
 ## Dev environment exception
 
@@ -521,7 +524,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.2 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.4 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -532,16 +535,27 @@ loosens nothing: the rule that no school, team code or filename may appear in a 
 is unchanged, and the corrected form is narrower, because it also rules out the file extension.
 Raised by the v1-e30-t05 session.
 
+Version 1.3 replaces a sentence in [Removal](#removal) that said the runbook's manual section was
+the procedure until v1-e30-t07 shipped. It has shipped; the sentence now says which parts the
+command covers and which two are still manual. It loosens nothing. Version 1.3 also records the
+approval of version 1.2's correction to rule 3: that text was written into this section, but the
+header and the table below were never bumped, so under the standing rule below it had not been
+recorded as approved. This approval covers both.
+
+Version 1.4 adds the download inbox to [What removal does](#removal), now that v1-e30-t09 purges
+it, and drops the inbox from the list of manual steps. It tightens the policy, so under
+[Review and change control](#review-and-change-control) it takes effect on merge.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.1 (1.0 approved earlier the same day) |
+| Policy version | 1.4; 1.3 included version 1.2's correction to rule 3 (1.0 and 1.1 approved 2026-09-19) |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-09-19 |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.1, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-01 (versions 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.4, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — school or district review, before V2 student accounts |

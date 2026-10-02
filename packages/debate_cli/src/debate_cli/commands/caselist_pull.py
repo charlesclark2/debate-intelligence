@@ -7,7 +7,8 @@ One command, three shapes::
     debate-research caselist pull --publish-pending               # after `aws sso login`
 
 Every decision in it belongs to
-:class:`~debate_core.application.caselist_sync.CaselistSyncService`: which archives are new, what
+:class:`~debate_core.application.caselist_sync.CaselistSyncService`, and which of the three a run
+is to :func:`~debate_core.application.caselist_sync.run_pull`: which archives are new, what
 the day's five bulk downloads are spent on, what a `Retry-After` of a day means, which stages are
 optional, and what happens when the AWS session has expired. What is here is the command-line
 surface — which flags mean what, which caselists are pulled when none are named, and how a run is
@@ -50,11 +51,10 @@ from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist_sync import (
-    CaselistSyncService,
-    NoCaselistsConfigured,
     RunSummary,
     StageOutcome,
     SyncStage,
+    run_pull,
 )
 from debate_core.application.settings import Settings
 from debate_core.application.sync_runs import SyncRunRecord
@@ -90,39 +90,19 @@ def pull(
         raise ConflictingPullMode
     slugs = [] if publish_pending else list(caselist) if caselist else list(settings.caselist.sync_caselists)
 
-    def sync_service() -> CaselistSyncService:
-        return cli.services.caselist_sync(event_for_caselist=event_for_caselist)
-
-    record: SyncRunRecord | None = None
-    if dry_run:
-        # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
-        if not slugs:
-            raise NoCaselistsConfigured
-        cli.output.detail(f"pulling {', '.join(slugs)} (dry run)")
-        summary = _run(sync_service().run(slugs, dry_run=True))
-    else:
-
-        async def one_run() -> RunSummary:
-            # Inside the monitor, so that a refusal — no caselist, the API not turned on, an
-            # expired token, another run holding the lock — is recorded and announced too.
-            if publish_pending:
-                cli.output.detail("completing the publishes an earlier run deferred")
-                return await sync_service().publish_pending()
-            if not slugs:
-                raise NoCaselistsConfigured
-            cli.output.detail(f"pulling {', '.join(slugs)}")
-            return await sync_service().run(slugs)
-
-        monitored = _run(
-            cli.services.caselist_sync_monitor().watch(
-                one_run, caselists=slugs, mode="publish_pending" if publish_pending else "run"
-            )
+    pulled = _run(
+        run_pull(
+            lambda: cli.services.caselist_sync(event_for_caselist=event_for_caselist),
+            slugs,
+            dry_run=dry_run,
+            publish_pending=publish_pending,
+            monitor=cli.services.caselist_sync_monitor,
+            progress=cli.output.detail,
         )
-        summary, record = monitored.summary, monitored.record
-
-    written_to = sync_service().summary_path(summary) if not summary.dry_run else None
-    payload = pull_summary(summary, settings, written_to, record)
-    display = _pull_table(summary, settings, record)
+    )
+    summary = pulled.summary
+    payload = pull_summary(summary, settings, pulled.summary_path, pulled.record)
+    display = _pull_table(summary, settings, pulled.record)
     if summary.succeeded:
         cli.output.success(command_name(ctx), payload, display=display)
         return
@@ -194,7 +174,7 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
     if summary.dry_run:
         wanted = sum(1 for one in summary.archives if one.wanted)
         camp = sum(1 for one in summary.openev if one.wanted)
-        over_cap = f" ({deferred} more wanted, over today's download cap)" if deferred else ""
+        over_cap = f" ({deferred} more wanted, over the 24-hour download cap)" if deferred else ""
         return (
             f"{summary.archives_seen} archive(s) listed; would download {wanted} archive(s){over_cap} "
             f"and {camp} OpenEv file(s). Nothing was written. Re-run without --dry-run to do it."

@@ -54,8 +54,7 @@ That is the whole list, and a student does not have to know which event they wan
 3. **Join the team's Remind group** with the code @debatewfb, which is how practice changes,
    tournament deadlines and travel details reach students and families.
 
-Parents are welcome to email on a student's behalf, and welcome to come to the
-[parent information session](/) on October 1.
+Parents are welcome to email on a student's behalf.
 
 ## What happens next
 

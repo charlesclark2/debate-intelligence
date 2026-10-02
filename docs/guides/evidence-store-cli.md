@@ -118,7 +118,7 @@ debate-research store sync --prefix manifests/hsld26/
 |---|---|
 | `new` | Not in the bucket. Will be uploaded. |
 | `changed` | In the bucket with different bytes. Will be overwritten. **Named objects only** — a manifest that gained rows is the normal case. |
-| `skipped` | Already there and identical, or outside the documented prefixes. |
+| `skipped` | Already there and identical, or outside the documented prefixes. Also, either way: anything under `manifests/_suppression/` (the suppression list and removal log, which only `caselist remove` and `unsuppress` append to), and a blob whose sha256 is on the removal suppression list (`v1-e30-t07`). |
 | `would_delete` | In the bucket and not on your machine. **Reported and left alone.** |
 | `mismatched` | A content-addressed key whose two sides differ. Never written over, and it fails the run — see below. |
 

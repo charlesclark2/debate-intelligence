@@ -16,8 +16,11 @@ which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`);
 and :meth:`ServiceContainer.caselist_sync`, which `debate-research caselist pull` and the weekly
 launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
 :meth:`ServiceContainer.caselist_sync_monitor` and read back by
-:meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`). The rest of V1's
-services and their adapters arrive in E02–E08 and slot in the same way.
+:meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`). The import
+commands also read archives and place manifests through it (:meth:`ServiceContainer.read_archive`,
+:meth:`ServiceContainer.archive_digest`, :meth:`ServiceContainer.evidence_object_path`), so no
+command imports an adapter (`v1-e01-t13-composition-root-cleanup`). The rest of V1's services and
+their adapters arrive in E02–E08 and slot in the same way.
 
 ## Adding a service
 
@@ -48,27 +51,71 @@ because there are none.
 a container around settings it made up, and it is why loading is lazy: the callable is not run
 until a command actually asks for `settings`, so `--help` and `--version` read no files.
 
+## Which copy of the suppression list a service reads
+
+Every service that can store or publish a caselist source is built with the removal suppression
+list (`v1-e30-t07`), and none of them has a default to fall back on. Which *copies* it reads follows
+one rule: everything the command can reach without being given anything new to reach. The importers
+run offline and read this environment's local copy (:meth:`ServiceContainer.local_suppression_list`);
+publish, status, sync and the weekly pull already hold the bucket and read the union of the local
+copy and `manifests/_suppression/suppression-list.jsonl` (:meth:`ServiceContainer.suppression_list`).
+
+## The takedown credential
+
+:meth:`ServiceContainer.caselist_removal` is the one service built with two AWS credentials: the
+everyday evidence profile for everything a dry run does, and — only when `--execute` asks for it,
+through a factory the service calls itself — the `EvidenceRemoval` profile named by
+`DEBATE_REMOVAL_PROFILE` (:attr:`~debate_core.application.settings.Settings.removal_profile`). A dry
+run therefore never builds a takedown client, and an execution with the variable unset stops with
+:class:`~debate_core.application.caselist.removal_service.TakedownNotConfigured` before anything is
+read with it, let alone deleted.
+
 ## Why the AWS adapters are imported inside the factory
 
 `debate_core.integrations.s3` is imported where it is used rather than at the top of this module,
 and the reason is not style: boto3 is an *optional* dependency of `debate-core`, under the `aws`
-extra, so a V1 installation running against a local evidence directory does not have it. A
-module-level import here would make `debate-research --help` fail on a machine that has no AWS SDK
-and no use for one. Imported inside the factory, the missing dependency arrives only when someone
-runs `store`, and it arrives as the `uv sync --extra aws` message that package raises.
+extra, and `debate-research --help` should not depend on it. `debate-cli` itself requires the
+extras its wiring needs (`aws`, `docx`, `opencaselist`, v1-e01-t17), so an installed build has
+them. If one is missing anyway, the missing dependency arrives only when a command reaches the
+factory, and the root error handler reports it with the fix for that kind of installation:
+reinstall at a fixed tag for an installed build, `uv sync` for a checkout
+(:func:`debate_cli.installation.incomplete_installation_failure`).
+
+## The post-install check reads this module
+
+`python -m debate_cli.installation`, which `scripts/install_channel.sh` runs after every channel
+install, imports every `debate_core.integrations` module this file imports, and finds them by
+reading this file's import statements. Wire an adapter with an ordinary `import` or `from … import`
+statement, here or inside a factory, and it is checked from that day on. A dynamic import, or an
+integration's module name in a string, makes the check refuse rather than skip it.
 """
 
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
+from debate_core.application.caselist.inbox_purge import CaselistInbox
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
+from debate_core.application.caselist.removal_plan import RemovalPlanner
+from debate_core.application.caselist.removal_service import (
+    CaselistRemovalService,
+    TakedownAccess,
+    TakedownNotConfigured,
+)
 from debate_core.application.caselist.status_service import CaselistStatusService
+from debate_core.application.caselist.suppression import (
+    SUPPRESSION_LIST_KEY,
+    LocalFallbackSuppressionList,
+    ObjectStoreAppendOnlyRecord,
+    RecordedSuppressionList,
+)
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_sync import CaselistSyncService
 from debate_core.application.evidence_sync import (
@@ -76,8 +123,10 @@ from debate_core.application.evidence_sync import (
     SyncJournal,
     SyncKeyspace,
 )
-from debate_core.application.ports.evidence_store import EvidenceObjectStore
+from debate_core.application.ports.archive import ArchiveEntry
+from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.notifier import Notifier, NullNotifier
+from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.settings import ConfigurationError, Environment, Settings, SyncNotifierKind
 from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
@@ -91,8 +140,14 @@ from debate_core.integrations.local import (
     FsEvidenceObjectStore,
     FsSnapshotStore,
     SqliteDatabase,
+    archive_reader,
 )
+from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+from debate_core.integrations.local.suppression_list import (
+    local_removal_log_file,
+    local_suppression_list_file,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
@@ -109,6 +164,7 @@ __all__ = [
 SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_import",
     "caselist_publish",
+    "caselist_removal",
     "caselist_status",
     "caselist_sync",
     "caselist_sync_history",
@@ -157,6 +213,24 @@ class SettingsNotConfigured(RuntimeError):
         )
 
 
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+class _PortClock:
+    """:meth:`ServiceContainer.clock` as the :class:`~debate_core.application.ports.providers.Clock` port."""
+
+    def __init__(self, now: Callable[[], datetime]) -> None:
+        self._now = now
+
+    def now(self) -> datetime:
+        return self._now()
+
+
+PARSED_DIRECTORY: Final = Path("parsed")
+"""Where E31's parse pipeline keeps parsed cards in the data directory (`v1-e31-t06`)."""
+
+
 class ServiceContainer:
     """Builds and caches the application services the CLI's commands use.
 
@@ -202,6 +276,14 @@ class ServiceContainer:
         """Register `instance` under `name`, so a test can supply a fake before a command runs."""
         self._instances[name] = instance
 
+    def clock(self) -> Callable[[], datetime]:
+        """Now, in UTC: the one clock `caselist pull` and its run log read.
+
+        The run's timestamps and its rolling 24-hour download window (`v1-e34-t06`) come from it,
+        so they cannot disagree, and a CLI test pins them both by overriding `"clock"`.
+        """
+        return self.singleton("clock", lambda: _utc_now)
+
     @property
     def database(self) -> SqliteDatabase:
         """This environment's SQLite file, opened and migrated once per run.
@@ -211,6 +293,49 @@ class ServiceContainer:
         the transaction boundary singular (see `debate_core.integrations.local.sqlite_db`).
         """
         return self.singleton("database", lambda: SqliteDatabase.open(self.settings.storage.data_dir))
+
+    def read_archive(self, source: Path) -> Iterator[ArchiveEntry]:
+        """Read a caselist archive (a `.zip` or a directory) within this installation's size ceilings.
+
+        The local archive reader, bound to `caselist.max_archive_bytes` and
+        `caselist.max_unpacked_bytes`: what `caselist import`, `caselist import-openev` and the
+        weekly pull all read an archive with.
+        """
+        caselist = self.settings.caselist
+        return archive_reader.read_archive(
+            source,
+            max_archive_bytes=caselist.max_archive_bytes,
+            max_unpacked_bytes=caselist.max_unpacked_bytes,
+        )
+
+    def caselist_inbox(self) -> CaselistInbox:
+        """The directory `caselist pull` downloads into, as a removal purges it (`v1-e30-t09`).
+
+        The same directory the pull is built with, so the removal cannot purge one inbox while the
+        pull reads another; zips are listed and rewritten under the reader's own ceilings.
+        """
+        settings = self.settings
+        caselist = settings.caselist
+        return CaselistInbox(
+            directory=self._inbox_directory(),
+            state_dir=settings.storage.data_dir,
+            archives=archive_reader.ZipArchiveRewriter(
+                max_archive_bytes=caselist.max_archive_bytes,
+                max_unpacked_bytes=caselist.max_unpacked_bytes,
+            ),
+        )
+
+    def _inbox_directory(self) -> Path:
+        settings = self.settings
+        return settings.caselist.inbox_dir or settings.storage.data_dir / DEFAULT_INBOX_DIRECTORY
+
+    def archive_digest(self, source: Path) -> str:
+        """The SHA-256 an import records for the archive itself, by the same reader's rules."""
+        return archive_reader.archive_digest(source)
+
+    def evidence_object_path(self, key: ObjectKey) -> Path:
+        """The file this machine's evidence store keeps the named object `key` at: a manifest."""
+        return FsEvidenceObjectStore(self.settings.storage.data_dir).path_for(key)
 
     def caselist_card_stats(self) -> CaselistCardStatsService:
         """Build the card statistics over this machine's recorded disclosures (`v1-e31-t04`).
@@ -237,6 +362,37 @@ class ServiceContainer:
         return CaselistImportService(
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
+            suppression=self.local_suppression_list(),
+        )
+
+    def local_suppression_list(self) -> RecordedSuppressionList:
+        """This environment's local copy of the suppression list, and nothing else.
+
+        What the offline importers read. Reading it creates nothing: an environment that has never
+        had a removal has no `suppression/` directory, and an import does not give it one.
+        """
+        return self.singleton(
+            "local_suppression_list",
+            lambda: RecordedSuppressionList(local_suppression_list_file(self.settings.storage.data_dir)),
+        )
+
+    def suppression_list(self) -> RecordedSuppressionList:
+        """The local copy and the bucket's, read as one: what every bucket-holding command consults.
+
+        Read through the everyday evidence profile, which may read `manifests/_suppression/`.
+        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket.
+        """
+        return self.singleton("suppression_list", self._build_suppression_list)
+
+    def _build_suppression_list(self) -> RecordedSuppressionList:
+        bucket = self._evidence_bucket()
+        return RecordedSuppressionList(
+            local_suppression_list_file(self.settings.storage.data_dir),
+            ObjectStoreAppendOnlyRecord(
+                bucket,
+                SUPPRESSION_LIST_KEY,
+                location=f"s3://{self.settings.storage.s3.bucket}/{SUPPRESSION_LIST_KEY}",
+            ),
         )
 
     def openev_import(self) -> OpenEvImportService:
@@ -251,6 +407,7 @@ class ServiceContainer:
         return OpenEvImportService(
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
+            suppression=self.local_suppression_list(),
         )
 
     def evidence_sync(self, *, blob_prefix: str | None = None) -> EvidenceSyncService:
@@ -293,7 +450,16 @@ class ServiceContainer:
 
         named_objects = FsEvidenceObjectStore(storage.data_dir)
         blobs = FsEvidenceObjectStore(storage.data_dir, subdirectory=BLOB_DIRECTORY.parent)
+        suppression = RecordedSuppressionList(
+            local_suppression_list_file(storage.data_dir),
+            ObjectStoreAppendOnlyRecord(
+                bucket_store(),
+                SUPPRESSION_LIST_KEY,
+                location=f"s3://{storage.s3.bucket}/{SUPPRESSION_LIST_KEY}",
+            ),
+        )
         return EvidenceSyncService(
+            suppression=suppression,
             keyspaces=(
                 SyncKeyspace(
                     name="objects",
@@ -321,19 +487,110 @@ class ServiceContainer:
     def caselist_publish(self) -> CaselistPublishService:
         """Build the publisher from this machine's evidence store to this environment's bucket.
 
-        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket. The
-        suppression list is `v1-e30-t07`'s; until it ships nothing is suppressed here.
+        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket. Built
+        with :meth:`suppression_list`, the local and bucket copies read as one.
         """
         return self.singleton(
             "caselist_publish",
-            lambda: CaselistPublishService(local=self._local_evidence(), remote=self._evidence_bucket()),
+            lambda: CaselistPublishService(
+                local=self._local_evidence(),
+                remote=self._evidence_bucket(),
+                suppression=self.suppression_list(),
+            ),
         )
 
     def caselist_status(self) -> CaselistStatusService:
         """Build the comparison between this machine's caselist snapshots and the bucket's."""
         return self.singleton(
             "caselist_status",
-            lambda: CaselistStatusService(local=self._local_evidence(), remote=self._evidence_bucket()),
+            lambda: CaselistStatusService(
+                local=self._local_evidence(),
+                remote=self._evidence_bucket(),
+                suppression=self.suppression_list(),
+            ),
+        )
+
+    def caselist_removal(self) -> CaselistRemovalService:
+        """Build `caselist remove` and `caselist unsuppress` for this environment (`v1-e30-t07`).
+
+        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket: a removal
+        is from this machine *and* the bucket, never one of them.
+        """
+        return self.singleton("caselist_removal", self._build_caselist_removal)
+
+    def _build_caselist_removal(self) -> CaselistRemovalService:
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.s3 import S3EvidenceVersionStore, build_s3_client
+
+        settings = self.settings
+        storage = settings.storage
+        bucket = self._evidence_bucket()
+        data_dir = storage.data_dir
+        suppression = self.suppression_list()
+        clock = _PortClock(self.clock())
+        planner = RemovalPlanner(
+            caselists=SqliteCaselistRepository(self.database),
+            local=self._local_evidence(),
+            local_blobs=FsEvidenceVersionStore(data_dir / BLOB_DIRECTORY.parent),
+            local_parsed=FsEvidenceVersionStore(data_dir / PARSED_DIRECTORY),
+            remote=bucket,
+            # The everyday profile, which may not list versions today: the plan then says so.
+            remote_versions=S3EvidenceVersionStore(
+                bucket=str(storage.s3.bucket),
+                profile=storage.s3.aws_profile,
+                client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
+            ),
+            inbox=self.caselist_inbox(),
+            suppression=suppression,
+            clock=clock,
+            environment=settings.environment.value,
+            bucket=str(storage.s3.bucket),
+        )
+        return CaselistRemovalService(
+            planner=planner,
+            caselists=SqliteCaselistRepository(self.database),
+            local=self._local_evidence(),
+            local_blobs=FsEvidenceVersionStore(data_dir / BLOB_DIRECTORY.parent),
+            local_parsed=FsEvidenceVersionStore(data_dir / PARSED_DIRECTORY),
+            inbox=self.caselist_inbox(),
+            remote=bucket,
+            suppression=suppression,
+            local_suppression=local_suppression_list_file(data_dir),
+            local_removal_log=local_removal_log_file(data_dir),
+            takedown=self.takedown_access,
+            clock=clock,
+            environment=settings.environment.value,
+        )
+
+    def takedown_access(self) -> TakedownAccess:
+        """The `EvidenceRemoval` profile's reach into this environment's bucket, built on demand.
+
+        Raises :class:`~debate_core.application.caselist.removal_service.TakedownNotConfigured`
+        when `DEBATE_REMOVAL_PROFILE` is unset. Overridable as `"takedown_access"` for a test.
+        """
+        return self.singleton("takedown_access", self._build_takedown_access)
+
+    def _build_takedown_access(self) -> TakedownAccess:
+        from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore, build_s3_client
+
+        settings = self.settings
+        storage = settings.storage
+        profile = settings.removal_profile
+        if not profile:
+            raise TakedownNotConfigured
+        if not storage.s3.bucket:
+            raise EvidenceStoreNotConfigured(settings.environment)
+        client = build_s3_client(region=storage.s3.region, profile=profile)
+        return TakedownAccess(
+            versions=S3EvidenceVersionStore(bucket=str(storage.s3.bucket), profile=profile, client=client),
+            objects=S3EvidenceObjectStore(
+                bucket=str(storage.s3.bucket),
+                client=client,
+                profile=profile,
+                multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
+            ),
+            profile=profile,
+            bucket=str(storage.s3.bucket),
         )
 
     def _local_evidence(self) -> LocalEvidence:
@@ -385,35 +642,46 @@ class ServiceContainer:
         return self.singleton("caselist_sync", lambda: self._build_caselist_sync(event_for_caselist))
 
     def _build_caselist_sync(self, event_for_caselist: Callable[[str], Event | None]) -> CaselistSyncService:
-        from debate_core.integrations.local.archive_reader import read_archive
-
         settings = self.settings
         caselist = settings.caselist
         repository = SqliteCaselistRepository(self.database)
         blobs = FsSnapshotStore(settings.storage.data_dir)
         publisher: CaselistPublishService | None = None
         status: CaselistStatusService | None = None
+        # The pull's importers read the bucket's copy of the list too when there is a bucket: the
+        # run is about to publish to it anyway, and an unattended weekly import is exactly the one
+        # that must not bring back a file a removal made from another machine took out. When that
+        # copy needs a login the run does not have, they read this machine's copy alone and the run
+        # says so, so an expired SSO session pends the publish rather than failing the import
+        # (v1-e34-t07, PM decision). Safe while one machine imports, as `caselist import`'s local
+        # read is (v1-e30-t07 Deviation 7); revisit both the day a second machine imports.
+        suppression: SuppressionList = self.local_suppression_list()
         if settings.storage.s3.bucket:
             publisher = self.caselist_publish()
             status = self.caselist_status()
+            suppression = LocalFallbackSuppressionList(
+                self.suppression_list(), local=self.local_suppression_list()
+            )
         return CaselistSyncService(
             source=self.opencaselist_client(),
-            archive_importer=CaselistImportService(caselists=repository, blobs=blobs),
-            openev_importer=OpenEvImportService(caselists=repository, blobs=blobs),
-            local=self._local_evidence(),
-            read_archive=lambda path: read_archive(
-                path,
-                max_archive_bytes=caselist.max_archive_bytes,
-                max_unpacked_bytes=caselist.max_unpacked_bytes,
+            archive_importer=CaselistImportService(
+                caselists=repository, blobs=blobs, suppression=suppression
             ),
+            openev_importer=OpenEvImportService(caselists=repository, blobs=blobs, suppression=suppression),
+            local=self._local_evidence(),
+            read_archive=self.read_archive,
             event_for_caselist=event_for_caselist,
-            inbox=caselist.inbox_dir or settings.storage.data_dir / DEFAULT_INBOX_DIRECTORY,
+            inbox=self._inbox_directory(),
             state_dir=settings.storage.data_dir,
+            # The importers' own list, so the run's skip of a removed camp file (v1-e34-t07) and the
+            # importers' refusal of one can never read different copies.
+            suppression=suppression,
             publisher=publisher,
             status=status,
             openev_event=caselist.openev_event,
             openev_year=caselist.openev_year,
             bulk_downloads_per_day=caselist.bulk_downloads_per_day,
+            clock=self.clock(),
         )
 
     def caselist_sync_monitor(self) -> SyncRunMonitor:
@@ -435,6 +703,7 @@ class ServiceContainer:
             remote=self._evidence_bucket() if settings.storage.s3.bucket else None,
             aws_login_command=self._aws_login_command(),
             secrets=lambda: [token.get_secret_value()] if token is not None else [],
+            clock=self.clock(),
         )
 
     def caselist_sync_history(self) -> SyncRunHistory:

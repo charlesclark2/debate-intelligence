@@ -26,7 +26,7 @@ from debate_core.domain.base import (
     use_id_factory,
     utc_now,
 )
-from debate_core.domain.card import DEFAULT_FORMAT_PROFILE, Card, CardSpan
+from debate_core.domain.card import DEFAULT_FORMAT_PROFILE, Card, CardOmission, CardSpan
 from debate_core.domain.citation import REQUIRED_CITATION_FIELDS, Citation, CitationField
 from debate_core.domain.enums import (
     AccessStatus,
@@ -74,6 +74,7 @@ __all__ = [
     "Card",
     "CardMirrorMarkMapping",
     "CardMirrorNodeMapping",
+    "CardOmission",
     "CardSpan",
     "CharacterStyleRule",
     "Citation",

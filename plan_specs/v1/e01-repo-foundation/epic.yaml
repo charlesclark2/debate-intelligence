@@ -370,5 +370,102 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t13-composition-root-cleanup
+    - id: ext-v1-e03-t01-text-normalization
+      kind: External
+      name: 'Prerequisite from E03: the Unicode pin'
+      description: >-
+        Cross-epic prerequisite owned by v1-e03-evidence-integrity (release v1.0). It pins Unicode
+        15.0.0 for the evidence normalizer and sets `debate_core`'s `requires-python` upper bound to
+        match, which is the single declaration this task makes everything else derive from.
+      inputs:
+        goalRef: v1-e03-t01-text-normalization
+        specRef: plan_specs/v1/e03-evidence-integrity/t01-text-normalization.yaml
+    - id: t14
+      kind: Task
+      name: One source for the supported interpreter, enforced at install
+      description: >-
+        The supported Python is written in three places and the copy that actually protects an
+        install - `PYTHON_VERSION=3.12` in install_channel.sh - is tied to nothing, because uv
+        ignores upper bounds on a dependency's Requires-Python. The script derives it from the wheel
+        metadata instead, and `doctor` gains the ability to fail so a wrong-interpreter install is
+        caught at install time rather than at first use.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t14-install-interpreter-bound.yaml
+        goalRef: v1-e01-t14-install-interpreter-bound
+      dependsOn:
+      - t09
+      - ext-v1-e03-t01-text-normalization
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t14-install-interpreter-bound reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t14-install-interpreter-bound
+    - id: t15
+      kind: Task
+      name: Re-run the promotion guards without waiting for an event
+      description: >-
+        t12 closed the stale-green gap for every push that arrives. t12's own sandbox proved one may
+        not: a lost push produces no job, and a job that never ran cannot fail. A schedule and a
+        dispatch re-run the guards without depending on an event.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml
+        goalRef: v1-e01-t15-promotion-guard-sweep
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t15-promotion-guard-sweep reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t15-promotion-guard-sweep
+    - id: t16
+      kind: Task
+      name: Generate the docs index instead of hand-editing it
+      description: >-
+        docs/README.md is derived information kept by hand, so every doc-producing task collides
+        there and a renamed document goes unnoticed. Generate it as ROADMAP.md is generated, with a
+        --check mode, and correct the agreement that asks sessions to edit it.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml
+        goalRef: v1-e01-t16-generated-docs-index
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t16-generated-docs-index reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t16-generated-docs-index
+    - id: t17
+      kind: Task
+      name: The installed build carries what its commands need
+      description: >-
+        The channel build has none of debate-core's optional extras, so every `caselist pull` fails on a
+        missing boto3, and the channel's checks never imported an integration. Fix the declaration and the
+        verification.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t17-installed-build-extras.yaml
+        goalRef: v1-e01-t17-installed-build-extras
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t17-installed-build-extras reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t17-installed-build-extras
 status:
   phase: Pending

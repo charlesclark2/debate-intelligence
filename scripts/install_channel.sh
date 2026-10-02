@@ -12,9 +12,13 @@
 #   3. installs debate-cli and debate-core **by the file URLs of those two verified wheels**, which
 #      puts `debate-research` in uv's tool bin directory (`uv tool dir --bin`, normally
 #      ~/.local/bin), in its own environment, outside every checkout and every project .venv.
-#      Third-party dependencies (typer, pydantic, httpx…) still come from the default index;
-#   4. checks that both installed distributions record those wheel files as their source, and that
-#      the installed `debate-research --version --json` reports this version and channel.
+#      Third-party dependencies (typer, pydantic, httpx, boto3, lxml…) still come from the default
+#      index, including those of the debate-core extras debate-cli declares (aws, docx,
+#      opencaselist);
+#   4. checks that both installed distributions record those wheel files as their source, that
+#      the installed `debate-research --version --json` reports this version and channel, and that
+#      the build can import every integration the CLI's composition root wires
+#      (`python -m debate_cli.installation`, v1-e01-t17).
 #
 # Why direct URLs, not `--find-links <dir> debate-cli==<version>` (ac2b of the task spec): neither
 # `debate-core` nor `debate-cli` is registered on PyPI, and a find-links install keeps PyPI in the
@@ -165,6 +169,20 @@ printf '%s\n' "${REPORT}" | grep -Eq "\"version\": ?\"${VERSION}\"" \
     || fail "the installed debate-research does not report version ${VERSION}"
 printf '%s\n' "${REPORT}" | grep -Eq "\"channel\": ?\"${CHANNEL}\"" \
     || fail "the installed debate-research does not report channel ${CHANNEL}"
+
+# The build must hold everything its commands are wired to use (v1-e01-t17). `--version` imports
+# none of the integrations, so on its own it passed v0.1.0-dev.33, a build in which every
+# `caselist pull` failed on a missing boto3. This imports every debate_core.integrations module the
+# CLI's composition root imports, read from the installed container's own source, and fails unless
+# it tried every one of them and all imported. It also checks that the distributions behind each
+# debate-core extra the CLI declares were installed. It runs with the tool environment's own
+# interpreter, so it sees exactly what `debate-research` will. Builds published before this check
+# existed do not contain it and are refused; every one of them lacks boto3.
+TOOL_PYTHON="${TOOL_ENVIRONMENT}/bin/python"
+[ -x "${TOOL_PYTHON}" ] || fail "uv reported success but ${TOOL_PYTHON} does not exist"
+echo "Checking that the build can import every integration debate-research wires..."
+"${TOOL_PYTHON}" -m debate_cli.installation \
+    || fail "the build installed from ${TAG} is incomplete (see above), so commands that need those integrations will fail; install a different tag"
 
 ON_PATH=$(command -v debate-research || true)
 if [ "${ON_PATH}" != "${INSTALLED}" ]; then

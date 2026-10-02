@@ -33,6 +33,7 @@ from debate_cli.commands import register_commands
 from debate_cli.container import ServiceContainer
 from debate_cli.context import CliContext, command_name
 from debate_cli.exit_codes import ExitCode
+from debate_cli.installation import incomplete_installation_failure
 from debate_cli.output import CliOutput, CommandFailure, OutputMode
 from debate_core.application.errors import DomainError
 from debate_core.application.settings import resolve_environment
@@ -99,11 +100,36 @@ class DebateResearchGroup(TyperGroup):
         except Exception as exception:
             output = _output_of(ctx)
             output.detail(traceback.format_exc())
+            if isinstance(exception, ModuleNotFoundError):
+                incomplete = incomplete_installation_failure(exception, current_build_info())
+                if incomplete is not None:
+                    raise self._incomplete_installation(ctx, *incomplete) from exception
             raise self._reported(
                 ctx,
                 exception,
                 hint="This is a bug in debate-research. Re-run with --verbose for the traceback.",
             ) from exception
+
+    def _incomplete_installation(
+        self, ctx: Any, message: str, hint: str, details: dict[str, str]
+    ) -> typer.Exit:
+        """Report a missing optional dependency with the fix for this kind of installation.
+
+        Still exit 70, as any unmodelled exception is, so nothing that reads the exit code changes;
+        what changes is that the message no longer calls it a bug, and that an installed build is
+        never told to run `uv sync`, which only a checkout can (v1-e01-t17,
+        :func:`debate_cli.installation.incomplete_installation_failure`).
+        """
+        cli = _cli_of(ctx)
+        failure = CommandFailure(
+            code=ExitCode.INTERNAL_ERROR.name,
+            message=message,
+            exit_code=ExitCode.INTERNAL_ERROR,
+            details={"exception_type": ModuleNotFoundError.__name__, **details},
+            hint=hint,
+        )
+        _output_of(ctx).failure(failure, command=cli.command if cli is not None else None)
+        return typer.Exit(code=failure.exit_code)
 
     def _reported(self, ctx: Any, exception: Exception, *, hint: str | None = None) -> typer.Exit:
         """Report `exception` and return the `typer.Exit` that ends the run with its code."""

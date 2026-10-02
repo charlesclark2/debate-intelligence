@@ -30,11 +30,22 @@ Two more ceilings the site sets, both handled in code rather than here:
 * **10 file downloads per minute** (clause 12). The client paces itself below it and refuses a
   configuration above it.
 * **5 bulk archive downloads per user per day** (upstream `weeklyLimiter`). The run budgets for it
-  across the configured caselists before it fetches anything, and keeps a per-day ledger at
-  `<data_dir>/caselist-sync-downloads.json`. If the site applies the limiter anyway, the run
-  records the rest of the archives as deferred and goes on to import and publish what it already
-  has — a deferred archive is a delay, not a loss, because the site keeps a back-catalogue of the
-  weeklies (ADR-0017).
+  across the configured caselists before it fetches anything, counting over a **rolling 24
+  hours** rather than a calendar day: a download may start only if fewer than five started in the
+  24 hours before it. Which day the site itself counts has never been established, and a rolling
+  window is safe against any of them, where a calendar day hands out a fresh five at its midnight.
+  Every download's start time is kept in `<data_dir>/caselist-sync-download-starts.json`, and each
+  run's stage table and summary say what it counted against (`bulk_download_window_start`,
+  `bulk_downloads_spent_in_window`). If the site applies the limiter anyway, the run records the
+  rest of the archives as deferred and goes on to import and publish what it already has — a
+  deferred archive is a delay, not a loss, because the site keeps a back-catalogue of the weeklies
+  (ADR-0017).
+
+  Builds before `v1-e34-t06` kept a calendar-day ledger, `<data_dir>/caselist-sync-downloads.json`.
+  Newer builds still read it, counting its downloads from when it was last written, and never
+  write it, so a build of either kind can run beside the other without the newer one handing out
+  what the older one spent. Leave the file where it is; it stops counting 24 hours after its last
+  write.
 
 ## Before you install anything
 
@@ -46,6 +57,12 @@ Two more ceilings the site sets, both handled in code rather than here:
    for the agent until a new build is installed. `debate-research --json config show` run as the
    agent runs (same `DEBATE_ENV`, from `$HOME`) shows the value and, under `sources`, which
    bundled file it came from.
+
+   The build must also be complete: `install_channel.sh` ends with
+   `N/N wired integrations import; declared extras: aws, docx, opencaselist; complete` and refuses
+   a build that cannot import the S3 adapter or the OpenCaselist client (v1-e01-t17). Builds
+   published before that change lack boto3, so every `caselist pull` they run fails with exit 70.
+   Never add a package to the tool environment by hand to get past that; install a later tag.
 2. **A token.** `debate-research caselist auth login`, once, for that environment
    (`v1-e34-t01`). `caselist auth status --check` confirms it.
 3. **An AWS session**, if you want the run to publish: `aws sso login --profile
@@ -143,6 +160,7 @@ One JSON object per run on stdout. The fields to read first:
 | `succeeded` | Whether every stage that puts bytes somewhere durable finished |
 | `nothing_new` | A normal week with no new archive published yet. Never true when the cap deferred anything |
 | `archives_wanted`, `archives_downloaded`, `archives_deferred` | Newer than what was held; fetched; left by the daily cap for a later run |
+| `bulk_download_window_start`, `bulk_downloads_spent_in_window` | The 24 hours the run counted its downloads against, and what had already been spent in them |
 | `openev_downloaded` | Camp files fetched |
 | `files_imported`, `blobs_stored` | What the importers filed, and how much of it was new |
 | `objects_published` | What reached the bucket |
@@ -172,9 +190,50 @@ If it happens immediately after a fresh login, **stop** and do not retry: access
 suspended, which is the site's right (policy clause 10), and the next step is to contact the
 maintainer, not to work around it.
 
-**A download failed.** Everything that did download is in the inbox and imported. Run the same
-command again — an archive already in the inbox is not fetched a second time, which matters
-because each fetch spends one of the day's five.
+**A download failed.** What did download is in the inbox and imported, up to the first week that
+did not arrive; a newer week of the same caselist waits in the inbox behind it rather than being
+imported out of order. Nothing needs doing: the next scheduled run fetches the missing week and
+imports it and everything behind it, oldest first, and it does not fetch again anything already
+in the inbox — each fetch spends one of the five.
+
+**An import failed** (`import: failed`, with the archive and the reason in its detail). The archive
+stays in the inbox, and the next run imports it from there without downloading it again, then the
+newer weeks of that caselist that waited behind it. What the operator has to do is remove the
+cause the reason names — an archive over `caselist.max_archive_bytes`, a caselist slug this build
+does not know the event of, an unreadable zip — because a run meets the same archive again and,
+with the cause still there, fails the same way. An unreadable zip is the one case to delete by
+hand: remove it from the inbox, and the next run downloads it again.
+
+**A camp file shows `skipped_as_removed`** (and the select stage says *N OpenEv file(s) skipped as
+removed*). Nothing is wrong: it was taken out with `caselist remove`, and the run did not fetch it
+again for the importer to refuse. The decision is read from the suppression list on every run, so
+after `caselist unsuppress` the next run fetches it again, and says so in the select stage (*fetched
+before and neither recorded nor suppressed now*). Which bytes each OpenEv id delivered is kept in
+`<data_dir>/caselist-sync-openev-deliveries.json`; it holds digests only, and deleting it costs at
+most one download of each removed file, which the importer refuses. `caselist remove` deletes a
+removed camp file's copy from the inbox, and writes its digests to that record first when the
+record does not have them (`v1-e30-t09`), so the copy going does not cost a download either.
+
+**A camp file shows `same_path_as_a_removed_file`.** OpenEv lists a new id at the path of a camp
+file that was removed; that is how a camp uploads a file again, since OpenEv cannot replace a file in
+place. The run holds it back: a removal covers a camp's later upload of the same file, because the request
+was about the material and a revised file normally still contains it (PM decision, `v1-e34-t07`).
+Nothing needs doing. If the data-use policy is ever read the other way, this becomes a download; until
+then, fetching such a file by hand through `caselist import-openev` is a decision to record in the
+register.
+
+**A camp file shows `suppression_list_unreadable`.** The run could not read the suppression list:
+the bucket refused its copy (a missing grant, `access denied`) or a copy has a line nobody can read.
+It did not fetch any camp file it may have been told to remove, and the import stage fails for the
+same reason. Fix what the import stage's reason names; the next run decides it. An expired SSO
+session does not cause this (below).
+
+**The summary's `suppression_list_local_copy_only` is set** (and the select or import stage says
+*this machine's copy of the suppression list alone was read*). The SSO session had expired, so the
+run read this machine's copy of the list instead of both, imported as usual, and left the publish
+pending. That is safe while this is the only machine that imports, because every removal writes both
+copies; log in and run `caselist pull --publish-pending`. If a second machine ever imports, this is
+the day to revisit it (`v1-e34-t07`, `v1-e30-t07` Deviation 7).
 
 **The run says `over_daily_budget` week after week** (a *caselist backlog growing* notification,
 or `archives_deferred` rising in `caselist runs`). There is more back-catalogue than a weekly

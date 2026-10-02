@@ -1,0 +1,126 @@
+# TASK v1-e30-t09-removal-purges-inbox - A removal leaves no removed bytes in the inbox
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+# Architecture refs: docs/policies/caselist-data-use.md, docs/runbooks/caselist-removal.md
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t09-removal-purges-inbox
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: A removal leaves no removed bytes in the inbox
+spec:
+  # Filed by the PM, 2026-10-01, from v1-e34-t07's Follow-up work item 1.
+  description: >-
+    `caselist remove` (v1-e30-t07) deletes the store's blobs, records and manifests and the bucket's
+    objects and versions, but not the sync's inbox. After a removal the inbox still holds the removed
+    camp file as downloaded (`openev-<id>-...`) and every cumulative weekly archive that contains the
+    removed disclosure. Nothing re-imports them, because the importers refuse suppressed material and
+    v1-e34-t07's skip never selects them, but the bytes are on disk, and the data-use policy promises
+    removal from everywhere we store the material. Extend the removal so that, after a COMPLETED run,
+    no file in the inbox contains a removed sha256. A camp file whose every member is removed can
+    simply be deleted. A cumulative archive also holds other teams' disclosures, so it cannot just be
+    deleted if it is still needed for an import: whether it is rewritten without the removed members,
+    or deleted once everything it holds is imported (ADR-0017: the archives can be fetched again, and
+    a re-fetched archive is filtered by the importer), is this task's decision to make and justify.
+    Until it lands, the removal runbook carries a manual step. Out of scope: the store, the bucket and
+    the suppression list, which v1-e30-t07 already handles, and v1-e34-t07's delivery record, which
+    holds only digests.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, docs]
+    forbidden:
+      - Losing material that is still waiting to be imported, including other teams' disclosures in the same archive
+      - A dry run that changes anything in the inbox
+      - Deleting from the inbox anything the suppression list does not cover
+  context:
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t07-suppressed-downloads
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The removal plan lists every inbox file that contains a removed sha256, as a file or as an
+        archive member, and says what will happen to each. The dry run changes nothing.
+    - id: ac2
+      description: >-
+        After a COMPLETED removal, no file in the inbox contains a removed sha256. A test removes a
+        team's file that appears in a single camp download and in three cumulative weekly archives,
+        and scans the inbox afterwards.
+    - id: ac3
+      description: >-
+        Nothing still needed is lost. An archive in the inbox that has not yet been imported keeps
+        every member the list does not cover importable, shown by importing it after the removal and
+        storing exactly its non-removed members.
+    - id: ac4
+      description: >-
+        The behaviour is shown failing first, against the removal as v1-e30-t07 left it, and each
+        guard is mutated and shown caught. The removal runbook's manual inbox step is removed and the
+        procedure describes what the command now does.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t09-removal-purges-inbox-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Show the residue, plan it, purge it without losing anything pending, prove it.
+  goalRef:
+    name: v1-e30-t09-removal-purges-inbox
+  graph:
+    nodes:
+      - id: show-residue
+        kind: Task
+        name: Show removed bytes left in the inbox
+        description: >-
+          A removal followed by an inbox scan finding the removed sha256.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: The residue is shown before the change
+            description: >-
+              After a COMPLETED removal under the current code, a scan of the inbox finds the removed
+              sha256 in a camp download and in weekly archives. The output is captured in the report.
+      - id: purge
+        kind: Task
+        name: Plan and purge inbox copies
+        description: >-
+          Add inbox files to the removal plan and the executor, keeping anything still pending.
+        dependsOn: [show-residue]
+        outputs: [packages/debate_core/src/debate_core/application/caselist/removal_service.py]
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: A removal leaves no removed bytes in the inbox and loses nothing pending
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist, -k, inbox]
+      - id: runbook
+        kind: Task
+        name: Retire the manual inbox step
+        description: >-
+          The removal runbook describes what the command does instead of the interim manual step.
+        dependsOn: [purge]
+        outputs: [docs/runbooks/caselist-removal.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: docs/runbooks/caselist-removal.md
+            path: docs/runbooks/caselist-removal.md
+status:
+  phase: Pending

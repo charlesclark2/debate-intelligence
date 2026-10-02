@@ -1,4 +1,4 @@
-# The structured parts of the home page: the hero line, the October 1 parent session panel, the
+# The structured parts of the home page: the hero line, the season-schedule panel, the
 # entry-point cards, the "what debate builds" claims and the academic case. Validated by homeContentSchema in
 # src/lib/content.ts at build time, and read by src/app/page.tsx, which holds no copy of its own.
 #
@@ -24,40 +24,22 @@ hero:
     href: /join/
 
 # The single most important thing on this page. It renders as the one navy panel, directly under
-# the hero.
+# the hero, and points to the tournament schedule on /schedule/.
 #
-# Each fact carries either a `value`, or an `unsetNote` saying why it is still missing. The room
-# is the one nobody has yet: while it has an `unsetNote`, a dev preview shows that note in the
-# gap badge and a prod build fails naming the field (src/lib/publishing-policy.ts). Replace the
-# `unsetNote` with a `value` to fill it in. If the answer turns out to be that there is no room
-# to give yet, that is a `value` too: "To be announced" is a decision, an empty field is an
-# oversight.
-parentSession:
+# It names no date and no tournament: the site is deployed by hand, so anything dated here is
+# wrong from the day after it happens until someone redeploys. The dates live in
+# content/tournaments.yaml and are shown, all of them, on the schedule page. (Until v1-e37-t02 this
+# panel announced the October 1, 2026 parent information session.)
+seasonSchedule:
   eyebrow: For parents
-  title: Parent information session
+  title: The season's tournaments
   intro: >-
-    Come and hear how a season works: what the events are, what a tournament weekend looks like,
-    what it costs, and what the team asks of a family.
-  facts:
-    - label: Date
-      value: Thursday, October 1, 2026
-    - label: Time
-      value: 6:00 PM
-    - label: Place
-      value: Whitefish Bay High School
-    - label: Room
-      value: Room 264
-  whatToExpect:
-    - The three events the team competes in, explained in plain language.
-    - What a tournament weekend actually looks like, from Friday to Sunday.
-    - What a season costs, and what help is available.
-    - What the team asks of a family, and what it does not.
-  note: >-
-    Bring your questions. You do not need to know anything about debate to come, and your student
-    does not have to have decided anything yet.
+    Every tournament this season in one place: the dates, where each one is, whether your student
+    debates in person, from the high school or from home, and whether it is overnight. Add it to
+    your own calendar and changes reach you without checking back.
   action:
-    label: Read the questions parents ask
-    href: /faq/
+    label: See the tournament schedule
+    href: /schedule/
 
 entryPoints:
   eyebrow: Start here

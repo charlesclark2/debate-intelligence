@@ -157,8 +157,10 @@ place in the platform that imports boto3**, which an import-linter contract in t
 enforces; boto3 is an optional dependency, so this package needs the `aws` extra:
 
 ```bash
-uv sync --extra aws        # or: pip install 'debate-core[aws]'
+uv sync --all-packages --extra aws
 ```
+
+Run it from the workspace root; outside the workspace, `pip install 'debate-core[aws]'`.
 
 | Module | Contents |
 |---|---|
@@ -235,8 +237,10 @@ import-linter contract in the workspace root enforces; lxml is an optional depen
 package needs the `docx` extra:
 
 ```bash
-uv sync --extra docx       # or: pip install 'debate-core[docx]'
+uv sync --all-packages --extra docx
 ```
+
+Run it from the workspace root; outside the workspace, `pip install 'debate-core[docx]'`.
 
 | Module | Contents |
 |---|---|

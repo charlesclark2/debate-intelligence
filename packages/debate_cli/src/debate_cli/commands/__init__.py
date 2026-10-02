@@ -44,6 +44,7 @@ from debate_cli.commands import (
     caselist_auth,
     caselist_cards,
     caselist_pull,
+    caselist_remove,
     caselist_runs,
     config,
     doctor,
@@ -67,8 +68,10 @@ def register_commands(app: typer.Typer) -> None:
     disclosed_evidence.command("import-openev")(caselist.import_openev)
     disclosed_evidence.command("publish")(caselist.publish)
     disclosed_evidence.command("pull")(caselist_pull.pull)
+    disclosed_evidence.command("remove")(caselist_remove.remove)
     disclosed_evidence.command("runs")(caselist_runs.runs)
     disclosed_evidence.command("status")(caselist.status)
+    disclosed_evidence.command("unsuppress")(caselist_remove.unsuppress)
 
     opencaselist_session = command_group("auth", "Log in to OpenCaselist and manage the stored token.")
     opencaselist_session.command("login")(caselist_auth.login)

@@ -52,7 +52,7 @@
  *
  * Rows the design pass in v1-e36-t06 added, and what they are for:
  *   --color-focus-ring on --color-surface-panel    the focus ring where a section is tinted;
- *   --color-focus-ring-inverse on navy             the focus ring inside the October 1 panel
+ *   --color-focus-ring-inverse on navy             the focus ring inside the home page's navy panel
  *                                                  and the footer, both of which sit on navy;
  *   --color-brand-navy on --color-surface          the white action button inside that panel,
  *                                                  whose label is navy on white;

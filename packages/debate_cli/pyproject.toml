@@ -5,8 +5,15 @@ description = "debate-research command-line interface (thin surface over debate_
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    # `caselist auth` and the scheduled pull (E34) need the OpenCaselist client's extra.
-    "debate-core[opencaselist]",
+    # The CLI is the delivery surface that wires debate-core's adapters (debate_cli.container), so it
+    # depends on the extras those adapters need; debate-core's own install stays free of them
+    # (ADR-0001, and the import-linter contracts in the workspace root). `aws`: the S3 adapter,
+    # which every `caselist pull` reaches for the bucket's copy of the suppression list
+    # (v1-e30-t07), and `store`, `publish`, `status` and `remove`. `opencaselist`: `caselist auth`
+    # and the scheduled pull (E34). `docx`: the debate .docx parser, which the parse stage of the
+    # same pull wires in v1-e31-t06. A published build installs exactly what is written here
+    # (v1-e01-t17); `python -m debate_cli.installation` checks it after every channel install.
+    "debate-core[aws,docx,opencaselist]",
     "rich>=13.9",
     "typer>=0.15",
 ]

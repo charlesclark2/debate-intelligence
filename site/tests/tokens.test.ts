@@ -132,7 +132,7 @@ describe('normal text meets WCAG 2.1 AA (4.5:1)', () => {
     ['hovered links on white', () => token('color-link-hover'), surface],
     ['inverse text on navy', () => token('color-text-inverse'), navy],
     ['inverse links on navy', () => token('color-link-inverse'), navy],
-    // The design pass puts a white action button inside the navy October 1 panel; its label is
+    // The design pass puts a white action button inside the home page's navy panel; its label is
     // navy on white, and the panel tint is used there as a rule and as a card surface.
     ['the navy label of a white button', () => token('color-brand-navy'), surface],
     ['the panel tint used on navy', () => token('color-surface-panel'), navy],

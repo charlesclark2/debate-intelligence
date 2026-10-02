@@ -53,8 +53,18 @@ spec:
     - id: ac2
       description: >-
         The `actions: write` permission is scoped to the single push-to-main job that performs the
-        re-run, the workflow's top-level permissions stay `contents: read`, and no job in either
-        promotion-guard.yml or back-merge.yml checks out pull-request code. actionlint is clean.
+        re-run, the workflow's top-level permissions grant no write, and no job holding a write
+        permission checks out or executes pull-request code. actionlint is clean.
+        Amended by the PM on 2026-09-30, because both halves as first written were wrong about this
+        repository and a session following them literally would have made it less safe.
+        `back-merge.yml`'s top level is `permissions: {}`, which v1-e01-t08 set and which grants
+        strictly less than `contents: read`; requiring `contents: read` would have widened the
+        default for no reason. And promotion-guard.yml's own two jobs do check out the pull
+        request's merge ref, by design, to run scripts/check_promotion_source.py against it - safe
+        because they hold only `contents: read`, persist no token and read no secrets, which is
+        t08's security model. The rule that actually matters is the one the forbidden list already
+        states, and this criterion now states the same rule rather than a stricter-sounding one
+        that forbids the design.
     - id: ac3
       description: >-
         Reproduced then fixed, in a sandbox repository: a promotion pull request open before a hotfix
@@ -67,7 +77,7 @@ spec:
         docs/process/branching-and-environments.md are updated to describe what now happens
         automatically, with the manual step kept as the fallback if the re-run itself fails.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -1,0 +1,152 @@
+# TASK v1-e01-t15-promotion-guard-sweep — Re-run the promotion guards without waiting for an event
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# Architecture refs: §4 (GitHub Actions), §17 (guardrails)
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t15-promotion-guard-sweep
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: Re-run the promotion guards without waiting for an event
+spec:
+  description: >-
+    v1-e01-t12 made a push to `main` re-run promotion-guard on every open pull request into it, which
+    closes the stale-green gap for every case where the push arrives. During t12's own sandbox proof
+    on 2026-09-30 one did not. GitHub never delivered the push for a merged hotfix: no workflow of
+    any kind ran, no check suite was created, the events feed showed the merge with no `PushEvent`,
+    and GitHub Status reported no incident. It stayed that way for more than seventeen minutes, and
+    throughout it the open promotion showed the stale green again, this time over the fix's own
+    commits. That is t12's exact failure mode arriving through a door t12 does not cover, and it is
+    worse than the original, because everything t12 built is push-triggered: a lost push produces no
+    job, a job that never ran cannot fail, and so there is no red anywhere to prompt the manual
+    fallback. The promotion simply stays mergeable and wrong. This task adds the two routes that do
+    not depend on an event being delivered: a low-frequency schedule that sweeps every open pull
+    request based on `main` whether or not anything happened, and a manual `workflow_dispatch` so an
+    operator who notices can act without editing every promotion's description. The schedule is the
+    substance; the dispatch is the convenience. Out of scope: the guards' own logic, `ci`, the
+    `validate-dev` status (v1-e01-t10), and anything about how the re-run itself works, which is
+    t12's and is reused rather than rewritten.
+  priority: 2
+  constraints:
+    packages: [.github/workflows, docs/process]
+    forbidden:
+      - Granting write permissions of any kind to a `pull_request`-triggered workflow
+      - Checking out or executing pull-request code in any job that holds a write permission
+      - Re-running anything on a pull request whose base is not `main`
+      - A schedule that re-runs guards on an unchanged repository every cycle
+      - Duplicating t12's re-run logic rather than reusing it
+  context:
+    - kind: TaskRef
+      name: v1-e01-t12-promotion-guard-rerun
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A scheduled trigger re-runs promotion-guard for every open pull request whose base is `main`,
+        with no push, merge or other event involved, and pull requests based on any other branch are
+        untouched. The interval is chosen and justified in the workflow against how long a promotion
+        may hold a stale green before anyone would act on it, not picked for tidiness.
+    - id: ac2
+      description: >-
+        The sweep is quiet when there is nothing to do. A pull request whose newest guard run already
+        reflects the current tip of `main` is not re-run, so a repository where nothing has moved
+        produces no re-runs and no log noise, and the schedule can therefore be frequent enough to be
+        useful. State how "already reflects" is decided, because that decision is the whole of this
+        criterion.
+    - id: ac3
+      description: >-
+        A manual `workflow_dispatch` performs the same sweep on demand, so an operator who notices a
+        lost push can act in one click rather than by editing each promotion's description.
+    - id: ac4
+      description: >-
+        The permission shape t12 established is unchanged: `actions: write` on the single job that
+        performs the re-run and nowhere else, the workflow's top-level permissions grant no write, no
+        job holding a write permission checks out or executes pull-request code, and actionlint is
+        clean across every workflow.
+    - id: ac5
+      description: >-
+        Proved against a real repository, with the lost push simulated rather than waited for: move
+        `main` in a way that delivers no push to the re-run job (a direct ref update, or the job's
+        push trigger temporarily removed), confirm the open promotion keeps a green `back-merge` and
+        that no job failed anywhere, then let the sweep run and confirm it turns red and the
+        promotion reports BLOCKED with nobody having touched it. Record what was done to suppress the
+        push, so the proof is reproducible rather than anecdotal.
+    - id: ac6
+      description: >-
+        docs/process/branching-and-environments.md and the hotfix template describe the schedule as
+        the backstop that does not depend on an event, the dispatch as the manual route, and the
+        per-push re-run as the fast path. The current wording leans on a checklist item that a human
+        ticks; say plainly what is now mechanical and what still is not.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t15-promotion-guard-sweep-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Make the re-run reusable, add the two event-free triggers, prove it with the push suppressed,
+    then correct the process doc.
+  goalRef:
+    name: v1-e01-t15-promotion-guard-sweep
+  graph:
+    nodes:
+      - id: sweep-triggers
+        kind: Task
+        name: Schedule and dispatch, reusing t12's re-run
+        description: >-
+          Factor t12's re-run so one implementation serves the push, the schedule and the dispatch,
+          then add the schedule and the dispatch. Decide and document how a guard run is judged to
+          already reflect the current tip of `main`.
+        outputs: [.github/workflows/back-merge.yml]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Workflows pass actionlint
+            command: actionlint
+            args: [.github/workflows/back-merge.yml, .github/workflows/promotion-guard.yml]
+      - id: lost-push-proof
+        kind: Task
+        name: Prove it with the push suppressed
+        description: >-
+          In a sandbox repository, move `main` without delivering a push to the re-run job, confirm
+          the stale green and that nothing failed, then let the sweep turn it red unaided.
+        dependsOn: [sweep-triggers]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: custom
+            name: The sweep turned a stale promotion red with no event
+            description: >-
+              Charlie confirms that `main` moved without a push reaching the re-run job, that the open
+              promotion kept a green `back-merge` and no job failed anywhere, and that the scheduled
+              sweep then turned it red and left the promotion BLOCKED with nobody touching it. How the
+              push was suppressed is recorded, so the proof can be run again.
+      - id: process-doc
+        kind: Task
+        name: Say which routes are mechanical
+        description: >-
+          Update branching-and-environments.md and the hotfix template so the fast path, the backstop
+          and the manual route are each named, and the remaining human step is stated honestly.
+        dependsOn: [lost-push-proof]
+        outputs: [docs/process/branching-and-environments.md, .github/PULL_REQUEST_TEMPLATE/hotfix.md]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Repository links still resolve
+            command: uv
+            args: [run, scripts/check_links.py]
+status:
+  phase: Pending

@@ -18,6 +18,7 @@ The hierarchy::
     │   └── RevisionMismatch
     ├── InvalidCursor
     ├── BlobIntegrityError
+    ├── SnapshotIntegrityError
     ├── ArchiveTooLarge
     ├── UnreadableArchive
     ├── StoreError
@@ -35,6 +36,8 @@ can render "card 01J… was edited by someone else" instead of parsing a string.
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 __all__ = [
     "AlreadyExists",
     "ArchiveTooLarge",
@@ -48,6 +51,8 @@ __all__ = [
     "ProviderRateLimited",
     "ProviderUnavailable",
     "RevisionMismatch",
+    "SnapshotIntegrityCheck",
+    "SnapshotIntegrityError",
     "StoreAccessDenied",
     "StoreCredentialsExpired",
     "StoreError",
@@ -169,6 +174,66 @@ class BlobIntegrityError(DomainError):
         """The digest the stored bytes actually produce, when it was computed."""
         found = "" if actual_sha256 is None else f"; stored bytes hash to {actual_sha256}"
         super().__init__(f"blob {key} failed its integrity check{found}")
+
+
+class SnapshotIntegrityCheck(StrEnum):
+    """Which of a snapshot's integrity checks failed. Values are stable, for logs and reason codes."""
+
+    UNKNOWN_NORMALIZER_VERSION = "unknown_normalizer_version"
+    """The snapshot names a normalizer version this installation does not have. Its text cannot be
+    re-verified here, so it is refused before anything is read."""
+
+    RAW_BYTES_HASH = "raw_bytes_hash"
+    """The raw blob's bytes do not hash to the snapshot's `sha256` or to its `raw_blob_key`."""
+
+    RAW_BYTE_SIZE = "raw_byte_size"
+    """The raw blob is not the `byte_size` the snapshot recorded."""
+
+    NORMALIZED_BLOB_HASH = "normalized_blob_hash"
+    """The normalized blob's bytes do not hash to the snapshot's `normalized_blob_key`."""
+
+    NORMALIZED_BLOB_MALFORMED = "normalized_blob_malformed"
+    """The normalized blob is not a canonical `debate-snapshot-text/1` document."""
+
+    NORMALIZER_VERSION_MISMATCH = "normalizer_version_mismatch"
+    """The normalized blob was written under a different normalizer version than the snapshot records."""
+
+    NORMALIZED_TEXT_HASH = "normalized_text_hash"
+    """The normalized text does not hash to the snapshot's `normalized_text_hash`."""
+
+
+class SnapshotIntegrityError(DomainError):
+    """A stored snapshot is not what its :class:`~debate_core.domain.SourceSnapshot` record says it is.
+
+    Raised by :meth:`~debate_core.application.snapshot_service.SnapshotService.load` when re-hashing
+    a snapshot's blobs, or reading its normalized text, disagrees with the record. Every card cut
+    from such a snapshot is unverifiable until the source is retrieved again; nothing is repaired
+    and no text is returned (architecture proposal §8).
+
+    A blob that is simply absent is :class:`NotFound`, not this: a missing snapshot and a damaged
+    one are different findings, and the verifier (`v1-e03-t04`) reports them differently.
+    """
+
+    def __init__(
+        self,
+        snapshot_id: str,
+        check: SnapshotIntegrityCheck,
+        *,
+        expected: str | None = None,
+        actual: str | None = None,
+    ) -> None:
+        self.snapshot_id = snapshot_id
+        """The snapshot whose stored content failed."""
+        self.check = check
+        """Which check failed."""
+        self.expected = expected
+        """What the snapshot record says, when the check compares against a recorded value."""
+        self.actual = actual
+        """What the stored content actually produced, when it could be computed."""
+        detail = ""
+        if expected is not None or actual is not None:
+            detail = f": expected {expected}, found {actual}"
+        super().__init__(f"snapshot {snapshot_id} failed its integrity check {check.value}{detail}")
 
 
 # --------------------------------------------------------------------------------------------

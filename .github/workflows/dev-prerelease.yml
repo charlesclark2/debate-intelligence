@@ -11,7 +11,9 @@
 #      anything is built. The push is the atomic claim; a rejected push means an overlapping run
 #      took that N, and the script lists the tags again and tries the next one.
 #   2. stamp the checkout (version X.Y.Z.devN, build info, bundled config/), build the debate_core
-#      and debate_cli wheels, and refuse them if they are not exactly what should ship.
+#      and debate_cli wheels, and refuse them if they are not exactly what should ship; then install
+#      them with scripts/install_channel.sh into a throwaway tool directory and refuse a build that
+#      cannot import every integration the CLI wires (v1-e01-t17).
 #   3. publish a GitHub *pre-release* for that tag with the wheels, SHA256SUMS and build-info.json.
 #   4. prune: delete the release (never the tag) of dev pre-releases beyond the newest 30.
 #
@@ -142,6 +144,19 @@ jobs:
         run: |
           sha256sum -- *.whl build-info.json > SHA256SUMS
           cat SHA256SUMS
+
+      - name: Install the build as its users will and check it can import everything it wires
+        # v1-e01-t17. The same install_channel.sh a coach and the launchd agent run, against the
+        # assets about to be published, into a throwaway tool directory. Its post-install check
+        # imports every integration the CLI's composition root wires, so a build that cannot do what
+        # its commands are wired to do (v0.1.0-dev.33 had no boto3) fails here and is never
+        # published. Its tag stays claimed and its number is skipped, as for any failed build.
+        if: steps.existing.outputs.published == 'false'
+        env:
+          TAG: ${{ steps.claim.outputs.tag }}
+        run: |
+          export UV_TOOL_DIR="$RUNNER_TEMP/verify-tools" UV_TOOL_BIN_DIR="$RUNNER_TEMP/verify-bin"
+          sh scripts/install_channel.sh --dir dist "$TAG"
 
       - name: Publish the GitHub pre-release
         if: steps.existing.outputs.published == 'false'

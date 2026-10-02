@@ -20,7 +20,8 @@ spec:
     Give parents and guardians a way to get team updates by email without the platform ever holding their
     addresses. Compare the district's existing parent messaging tool (preferred if the activities director
     allows team use, since the district already owns consent and lists) with a mailing service free tier
-    (double opt-in, one-click unsubscribe, list owned by a team/district account with two owners, open/click
+    (double opt-in, one-click unsubscribe, list controlled by a team/district identity that at least two
+    people can independently recover - see ac6 - open/click
     tracking disabled where possible), record the choice and Charlie's reasoning in
     docs/guides/parent-email-updates.md, and have the operator set it up. The site gets a "Get email updates"
     section on the home and contact pages that links out to the provider's hosted signup page (or a plain HTML
@@ -35,7 +36,8 @@ spec:
     forbidden:
       - Storing, logging or proxying subscriber email addresses in the platform, repo or AWS
       - Loading a mailing provider's JavaScript, pixels or trackers on the site
-      - A mailing list owned by a coach's personal account, or one without double opt-in and unsubscribe
+      # Amended by the PM, 2026-10-01: ownership by one person's account is now allowed for 2026-27 (ac6).
+      - A mailing list without double opt-in and unsubscribe
       - Collecting student contact information or targeting the signup at students
       - Committing provider API keys; creating accounts or lists from an agent session (operator steps)
   context:
@@ -63,12 +65,25 @@ spec:
       description: >-
         Charlie subscribes a test address through the dev preview, receives the confirmation (double opt-in)
         email, confirms, receives a test update and unsubscribes with one click.
+    - id: ac6
+      description: >-
+        Amended a second time by the PM, 2026-10-01. The 2026-09-30 version required registration to
+        the team identity ADR-0015 named and a recovery walk-through by someone other than Charlie;
+        ADR-0015 as accepted creates no team identity, and there is no second coach this season. For
+        2026-27 the list may be registered to Charlie's own address with Charlie the only person who
+        can sign in. What must hold regardless: a subscriber export is taken at least monthly during
+        the season and kept somewhere Charlie controls outside Buttondown, never in the repository;
+        the guide records when the last one was taken; and the guide states the plan for a second
+        person to gain access, reviewed at the start of the 2027-28 season or as soon as a second
+        coach or another trusted adult can take it on. The export is the control that matters: it
+        keeps the parents' data, and their promised ability to leave, intact if the account is lost.
     - id: ac5
       description: >-
-        The guide explains how a coach sends an update, the no-student-contact-info and first-names-only rules
+        The guide explains how a coach sends an update, the student rules as docs/policies/website-publishing.md
+        states them (cited, never restated, so email and site cannot diverge), the rules
         from the publishing policy, and who owns the list.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -121,7 +136,7 @@ spec:
           - type: custom
             name: List configured and team-owned
             description: >-
-              Charlie confirms double opt-in is on, the list has two owners on a team/district identity, and
+              Charlie confirms double opt-in is on, the list meets ac6's recovery requirement, and
               only the public signup URL was shared for the site.
       - id: signup-section
         kind: Task
@@ -149,8 +164,12 @@ spec:
             args: [--dir, site, build]
           - type: test_passes
             name: Built output has no third-party scripts
-            command: pnpm
-            args: [--dir, site, test, tests/no-third-party-scripts.test.ts]
+            # Path updated by the PM, 2026-10-01. v1-e36-t10 moved every export-reading test into
+            # site/tests/export/, where they run after the build instead of skipping when there is
+            # no build. The old command fails loudly rather than passing vacuously ("No test files
+            # found", exit 1), so nothing was silently lost; this is the equivalent today.
+            args: [site/scripts/export-checks.sh]
+            command: bash
       - id: verify-and-guide
         kind: Task
         name: Opt-in loop check and coach guide

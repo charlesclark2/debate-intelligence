@@ -1,0 +1,184 @@
+# TASK v1-e29-t06-removal-grant-scope-test - Removal grants: the scope is tested, and a plan can count versions
+# Epic: E29 Cloud Evidence Store | Release: v1.1 | Major: V1
+# Architecture refs: §14 private buckets, §17 guardrails
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t06-removal-grant-scope-test
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: "Removal grants: the scope is tested, and a plan can count versions"
+spec:
+  # Filed by the PM, 2026-10-01, from the v1-e30-t07 review, and corrected the same day. The first
+  # version of this comment said the s3:ListBucketVersions item on my list was "mine in error"
+  # because the grant already existed. It exists on EvidenceRemoval. The item on my list was
+  # v1-e30-t07's Operator follow-up 2: a read-only grant to EvidenceOperator, so a removal's dry run
+  # can count the versions it will delete. I conflated the two permission sets. Both halves are
+  # here now: test the scope of the grants that exist, and add the one that was proposed.
+  description: >-
+    Two changes to the evidence bucket's operator access, made together because they touch the same
+    policy, the same test file and the same operator apply. First, the coverage gap. The
+    EvidenceRemoval permission set grants s3:ListBucketVersions on the bucket ARN with a StringLike
+    condition on s3:prefix, which is right: ListBucketVersions is a bucket-level action, so granting
+    it on object ARNs silently matches nothing. The terraform test asserts the exact set of actions,
+    and asserts resources only for statements carrying an s3:Delete action or s3:PutObject. Nothing
+    asserts the ListBucketVersions statement's Resource or its condition, so rewriting that Resource
+    to an object ARN, the tidy-looking change someone will eventually make for consistency, leaves
+    every assertion green and produces an AccessDenied at the one moment the credential is used: a
+    takedown, under a removal request, on a seven-day clock. Second, the grant. EvidenceOperator can
+    read an object version by id (GetObjectVersion) but cannot list versions, so `caselist remove`'s
+    dry run prints "Versions not counted" (v1-e30-t07 Deviation 2, confirmed against the real dev
+    bucket). The operator's last look before an irreversible delete should show what will be
+    deleted. PM decision, 2026-10-01: grant EvidenceOperator s3:ListBucketVersions on the bucket ARN
+    under the same removable-prefix condition the removal statement uses. It is read-only and
+    exposes version metadata under prefixes the profile can already list and read by version id.
+    This supersedes the "grants only" list in v1-e29-t03 ac3. Once it lands, a read-only report of
+    noncurrent residue in `caselist status` (v1-e30-t07 Follow-up 6) becomes possible; that is
+    debate_core code and out of scope here. Also out of scope: any other grant, the removal procedure
+    (v1-e30-t07), and the dry run's code, which needs no change once the grant exists.
+  priority: 2
+  constraints:
+    packages: [infrastructure/modules/evidence_bucket, docs]
+    forbidden:
+      - Any grant change other than s3:ListBucketVersions for EvidenceOperator under the removable-prefix condition
+      - Any write, delete or KMS-encrypt permission for EvidenceOperator
+      - A resource assertion that covers some statements and leaves others uncovered
+      - Asserting coverage by listing statements by hand, so that a new statement is uncovered by default
+      - terraform apply from CI or an agent session (operator-run only)
+  context:
+    - kind: TaskRef
+      name: v1-e29-t03-evidence-buckets
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every statement in the EvidenceRemoval inline policy has its Resource asserted by the
+        terraform test, bucket-level and object-level actions each against the shape they require.
+        The assertion counts the statements it covered and fails if that is not every statement, so
+        a statement added later is uncovered loudly rather than quietly.
+    - id: ac2
+      description: >-
+        The s3:prefix condition on the EvidenceRemoval ListBucketVersions statement is asserted.
+        Removing the condition widens the grant from the removable prefixes to the whole bucket while
+        leaving the action set unchanged, and that must fail.
+    - id: ac3
+      description: >-
+        Mutation proves both. Changing the ListBucketVersions Resource from the bucket ARN to an
+        object ARN under raw/ turns `terraform test` red; removing the prefix condition turns it
+        red; each is shown passing against the test as it stands before this task, which is the
+        point of it. Both are restored and the tree confirmed clean.
+    - id: ac4
+      description: >-
+        The same statement-coverage assertion is applied to the EvidenceOperator inline policy, which
+        has the same shape and the same gap, and a mutation of its ListBucket resource is shown red.
+    - id: ac5
+      description: >-
+        EvidenceOperator grants s3:ListBucketVersions on the bucket ARN under the removable-prefix
+        condition, and nothing else changes. The EvidenceOperator exact action-set assertion includes
+        it, the ac4 coverage covers its Resource and condition, and pointing it at an object ARN or
+        dropping the condition turns `terraform test` red.
+    - id: ac6
+      description: >-
+        The operator has applied dev and then prod by the evidence-store runbook's procedure, and the
+        runbook records the dates. Afterwards, in dev, a `caselist remove` dry run for a digest held
+        nowhere, run with only the everyday profile, reports that versions were counted, where before
+        it reported "Versions not counted". The output is recorded in the session report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t06-removal-grant-scope-test-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Show the gap, close it with coverage that cannot miss a statement, add the read-only grant under
+    that coverage, prove both by mutation, then the operator applies.
+  goalRef:
+    name: v1-e29-t06-removal-grant-scope-test
+  graph:
+    nodes:
+      - id: show-the-gap
+        kind: Task
+        name: Show the mutation passing today
+        description: >-
+          Point the ListBucketVersions Resource at an object ARN and capture `terraform test`
+          green. That output is the baseline.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: The wrong resource is shown passing before the fix
+            description: >-
+              With ListBucketVersions scoped to an object ARN, `terraform test` reports green, and
+              the output is captured in the report before anything is changed.
+      - id: coverage
+        kind: Task
+        name: Assert every statement's resource and the prefix condition
+        description: >-
+          A single assertion over all statements of both policies that also checks it saw them all.
+        dependsOn: [show-the-gap]
+        outputs: [infrastructure/modules/evidence_bucket/tests/evidence_bucket.tftest.hcl]
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: terraform test passes on the unmodified module
+            command: terraform
+            args: [-chdir=infrastructure/modules/evidence_bucket, test]
+      - id: grant
+        kind: Task
+        name: Read-only version listing for EvidenceOperator
+        description: >-
+          Add the one statement, under the coverage the previous node built, so it is tested from
+          the moment it exists.
+        dependsOn: [coverage]
+        outputs: [infrastructure/modules/evidence_bucket/operator_access.tf]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: terraform test passes with the new grant
+            command: terraform
+            args: [-chdir=infrastructure/modules/evidence_bucket, test]
+      - id: mutation
+        kind: Task
+        name: Prove it
+        description: >-
+          Wrong resource and missing condition on both list-versions statements, and the
+          EvidenceOperator ListBucket resource.
+        dependsOn: [grant]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: custom
+            name: Each mutation turns terraform test red and is restored
+            description: >-
+              The object-ARN resource and the removed prefix condition, on each of the two
+              ListBucketVersions statements, and the EvidenceOperator ListBucket resource, each turn
+              `terraform test` red after the change. The EvidenceRemoval pair is also shown green
+              before it. All are restored and the tree confirmed clean.
+      - id: apply
+        kind: Task
+        name: Operator applies dev, then prod
+        description: >-
+          Operator-only, by the evidence-store runbook. Then the dry run in dev shows version counts
+          with the everyday profile.
+        dependsOn: [mutation]
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: custom
+            name: Applied in dev and prod, and the dry run counts versions
+            description: >-
+              The runbook records both apply dates, and a dev `caselist remove` dry run for a digest
+              held nowhere, under the everyday profile only, reports that versions were counted.
+status:
+  phase: Pending

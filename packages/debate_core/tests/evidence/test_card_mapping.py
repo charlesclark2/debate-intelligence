@@ -18,6 +18,7 @@ from debate_core.application.snapshot_service import LoadedSnapshot
 from debate_core.domain import (
     Card,
     CardOmission,
+    Interpolation,
     ProvenanceMode,
     SpanPurpose,
     SpanStyle,
@@ -205,6 +206,20 @@ def test_card_mapping_keeps_the_card_and_replaces_its_evidence(source: LoadedSna
     assert recut.evidence_text == "Groundwater"
     assert recut.omitted_ranges == ()
     assert [(span.start_offset, span.end_offset) for span in recut.spans] == [(0, 11)]
+
+
+def test_card_mapping_drops_interpolations_whose_anchors_index_the_evidence_it_replaces(
+    source: LoadedSnapshot,
+) -> None:
+    """Anchor 7 is still inside the new 11-character text, so only the mapping dropping it removes it."""
+    first = place_evidence_on_card(blank_card(source), markup_for(source, KEPT, *MARKUP))
+    annotated = first.evolve(interpolations=(Interpolation(anchor=7, text="in the basin"),))
+
+    recut = place_evidence_on_card(
+        annotated, markup_for(source, ((0, 11),), EvidenceMarkupSpan.underline(0, 11, SpanPurpose.CLAIM))
+    )
+
+    assert recut.interpolations == ()
 
 
 def test_card_mapping_takes_provenance_from_the_snapshot_not_the_card(world: VerificationWorld) -> None:

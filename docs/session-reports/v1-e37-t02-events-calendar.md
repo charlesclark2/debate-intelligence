@@ -112,7 +112,9 @@ Two more instances of "a check earns trust by failing" came up without a deliber
   mentions of "under the parent session" now say "under the tournament-schedule panel".
 - **Outside the stated packages** (see Deviations): `scripts/site_smoke.py`,
   `tests/scripts/test_site_smoke.py`, `tests/smoke/test_site.py`, `tests/smoke/README.md`,
-  `docs/adr/0015-website-content-editing.md` (one link).
+  `docs/adr/0015-website-content-editing.md` (one link), and after PM review, as authorised,
+  `scripts/site_deploy.sh`, `tests/scripts/test_site_deploy.py` and
+  `docs/runbooks/team-website.md`.
 
 ## Deviations from the spec
 
@@ -146,6 +148,12 @@ Two more instances of "a check earns trust by failing" came up without a deliber
    The schema requires events and ac2 requires them on every entry, so both nationals list Policy,
    Lincoln-Douglas and Public Forum, which both national tournaments offer, with the note "For
    students who qualify." Charlie should confirm.
+
+7. **`scripts/site_deploy.sh` edited** (after PM review, authorised by the PM): a dedicated sync
+   pass uploads `*.ics` as `text/calendar`, with its tests in `tests/scripts/test_site_deploy.py`.
+8. **`docs/runbooks/team-website.md` edited** (after PM review, authorised by the PM): the removed
+   panel's precondition and steps, and the emergency lever. The lever change goes slightly past the
+   brief; see Changes after PM review, change 3.
 
 ## Decisions and assumptions
 
@@ -237,29 +245,42 @@ removed `parentSessionFactSchema` were deleted with the schema.
 
 ## Operator follow-ups
 
-Nothing below is needed to merge this task. These are the steps that put it on the live site.
-Each block starts with its own `cd`. The sequence follows
-[`docs/runbooks/team-website.md`](../runbooks/team-website.md), "Deploying the site" and
-"Promotion checklist". The branch reaches `dev` the usual way: PM review, then
-`scripts/task pr`, then merge.
+Nothing below is needed to merge this task. These are the steps that put it on the live site,
+following [`docs/runbooks/team-website.md`](../runbooks/team-website.md), "Deploying the site" and
+"Promotion checklist". The branch reaches `dev` the usual way: `scripts/task sync
+v1-e37-t02-events-calendar`, then `scripts/task pr v1-e37-t02-events-calendar`, then the merge.
+
+The command blocks hold commands only. In zsh a pasted `#` is an argument, not a comment, so every
+explanation is in the text around them. Each block starts with its own `cd`.
 
 **1. Deploy `dev` to the preview** (expected runtime about 4 minutes, most of it the CloudFront
-invalidation). Where: a worktree checked out at the head of `dev`. Create one once if you have
-none; never switch the main checkout.
+invalidation). Where: a worktree checked out at the head of `dev`, never the main checkout.
+
+Once, if there is no such worktree yet, create it and set it up:
 
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence
 git fetch origin
-git worktree add --detach ../debate-intelligence-worktrees/dev-preview origin/dev   # once; later: cd there and git checkout --detach origin/dev
+git worktree add --detach ../debate-intelligence-worktrees/dev-preview origin/dev
 cd ../debate-intelligence-worktrees/dev-preview
-git log --oneline -1                      # should be the merge of v1-e37-t02
-pnpm --dir site install                   # once per worktree
-terraform -chdir=infrastructure/envs/dev init -reconfigure   # once per worktree
+pnpm --dir site install
+terraform -chdir=infrastructure/envs/dev init -reconfigure
+```
+
+Every time, move it to the current head of `dev` and deploy. The `git log` line should show the
+merge of `v1-e37-t02`:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview
+git fetch origin
+git checkout --detach origin/dev
+git log --oneline -1
 aws sso login --sso-session debate
 scripts/site_deploy.sh dev
 ```
 
-Success looks like: three `aws s3 sync` passes and `Deployed <sha> to dev: https://dev.wfbdebate.com`.
+Success looks like: **four** `aws s3 sync` passes (the third uploads only `schedule.ics`, with
+`--content-type text/calendar; charset=utf-8`) and `Deployed <sha> to dev: https://dev.wfbdebate.com`.
 
 **2. Check /schedule and the calendar on the preview** (about 2 minutes), in the same worktree:
 
@@ -274,11 +295,7 @@ Success looks like:
 
 - the smoke check says `All N checks passed.`, including `season schedule panel` and
   `calendar file: text/calendar, 20 events`;
-- the first `curl` prints `200 text/calendar`; the second prints `20`.
-
-If the content type is `binary/octet-stream`, the AWS CLI did not recognise `.ics` (Python's
-`mimetypes` maps it to `text/calendar` on this Mac). Stop and tell the PM: the fix is a
-content-type flag in `scripts/site_deploy.sh`.
+- the first `curl` prints `200 text/calendar; charset=utf-8`; the second prints `20`.
 
 Then by hand:
 
@@ -292,20 +309,32 @@ Then by hand:
   subscribe and then show the season.
 - Optionally, paste the https address into Google Calendar ("Other calendars", "From URL").
 - Remove the test subscription afterwards; the preview is not for parents.
+- Charlie confirms the new public text listed in the PM review.
 
 **3. Promote and deploy prod** (about 5 minutes), after the promotion pull request `dev` → `main`
-has merged. Where: a worktree on `main`, not a task worktree and not a switch in the main checkout.
+has merged. Where: a worktree on the `main` branch, not a task worktree and not a switch in the main
+checkout. It has to be on the branch, not detached, because the deploy refuses anything but `main`.
+
+Once, if there is no such worktree yet. If git says `main` is already checked out somewhere, use
+that checkout instead:
 
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence
 git fetch origin
-git worktree add ../debate-intelligence-worktrees/prod-deploy main   # once; later: cd there and git pull --ff-only
+git worktree add ../debate-intelligence-worktrees/prod-deploy main
 cd ../debate-intelligence-worktrees/prod-deploy
-git branch --show-current                 # must print: main
+pnpm --dir site install
+terraform -chdir=infrastructure/envs/prod init -reconfigure
+```
+
+Every time. `git branch --show-current` must print `main`, and `git status --porcelain` must print
+nothing; stop if either does not:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/prod-deploy
+git branch --show-current
 git pull --ff-only
-git status --porcelain                    # must print nothing
-pnpm --dir site install                   # once per worktree
-terraform -chdir=infrastructure/envs/prod init -reconfigure   # once per worktree
+git status --porcelain
 aws sso login --sso-session debate
 scripts/site_deploy.sh prod
 uv run scripts/site_smoke.py --env prod --url https://wfbdebate.com --expect-sha "$(git rev-parse HEAD)"
@@ -316,27 +345,111 @@ including `calendar file`. Then open `https://wfbdebate.com/schedule/` once more
 
 ## Follow-up work
 
-- **Runbook text describes the removed panel** (`docs/runbooks/team-website.md`, outside this
-  task's packages).
-  - Promotion checklist precondition 1 (line 850) still requires "The October 1 room is filled in".
-    That fact no longer exists, so the row can go.
-  - Step 2 (line 890) says the smoke check confirms the October 1 panel. It now confirms the
-    season-schedule panel and the calendar file.
-  - Step 3 (line 895) asks the reader to open "the October 1 panel". It should name the schedule
-    page.
-  - Lines 1006 to 1028 are the record of the first launch and should stay as written.
-  - Belongs to the PM, or to whichever task next edits the runbook.
 - **`site/README.md`** still cites the October 1 panel as its example at lines 94 and 264, and
-  does not mention `tournaments.yaml` or `schedule.yaml` among the content files. `site/README.md`
-  is not in this task's packages. It suits `v1-e37-t03`, which adds the next content file.
-- **The emergency lever** in the runbook deletes one page's `index.html`. For anything in the
-  schedule, the same text is also in `schedule/index.txt` and `schedule.ics`. The coach guide now
-  says to remove the schedule files, but the runbook's lever should name them too.
-- **The source guard never reads page titles** (`ContentPage.guardedHtml` covers the lead,
-  at-a-glance and body). Only the export pass sees a title. That is acceptable while every prod
-  deploy runs the export checks first, but a title naming a student would get through a prod build.
-  This is a candidate for `v1-e37-t03`'s published-names allowlist work.
+  does not mention `tournaments.yaml` or `schedule.yaml` among the content files. Left for
+  `v1-e37-t03`, as the PM directed.
+- **The first-launch record** in the runbook (now lines 1023 to 1045) still describes the October 1
+  panel. It is a record and stays as written.
+- **Pre-existing `#` comments in other runbook command blocks** (`docs/runbooks/team-website.md`),
+  outside the sections the PM authorised. A scan finds them at lines 66, 113–115, 180–181, 648,
+  650–651, 791, 823 and 946. Two are read during this promotion, and in zsh both misbehave:
+  - **line 791**, `pnpm --dir site install        # once per clone`, passes `#`, `once`, `per` and
+    `clone` to `pnpm install` as package names;
+  - **line 823**, `git status --porcelain        # must print nothing`, passes the words as
+    pathspecs that match no file. It therefore prints nothing **even on a dirty tree**: a check that
+    passes vacuously. `site_deploy.sh prod` has its own clean-tree guard, so prod is still
+    protected.
+  I did not edit them because the authorisation named specific lines. The fix is the one applied
+  in change 4: comments into prose.
 - **Spec**: consider adding a smoke-check node to this spec, retroactively, to record Deviation 2.
+- **Images are still unguarded in alt text** (`v1-e37-t03` ac6, already planned). Change 1 below
+  closes the title and description gap only.
+
+## Changes after PM review
+
+The PM accepted the task and asked for four changes before the pull request. All four are done,
+each in its own commit.
+
+**1. The source guard reads page titles, descriptions and navigation labels**
+(`site/src/lib/content.ts`). `ContentPage.guardedHtml` now starts with the title, the description
+and any `navLabel`, each in its own paragraph so the name heuristic cannot join words across two
+fields. The navigation label was not in the brief; it is published in the header or the footer of
+every page, so it belongs with the other two. New tests in `site/tests/content-policy.test.ts`
+cover five cases:
+
+- a student named in the title fails, and the same for the description and the navigation label;
+- an address and a phone number in a description fail;
+- the real schedule and events pages pass only because "Tournament Schedule" and "Debate Events
+  Offered" are reviewed phrases. With the phrase removed, each real page fails, as the PM expected.
+
+The demonstration, with a byte-copy restore script, using `SITE_ENV=prod
+SITE_URL=https://wfbdebate.com pnpm build` and `content/pages/schedule.md` titled "Tournament
+Schedule for Jordan Rivera":
+
+| Build | Result |
+|---|---|
+| With the fix | **exit 1**: `PublishingPolicyError ... content/pages/schedule.md: names "Jordan Rivera", which has no entry in content/media-consent.yaml` |
+| Fix reverted, same title | **exit 0**: `Generating static pages ... (16/16)`. The name builds for prod |
+| Both files restored | exit 0, the byte comparison holds, `git status` clean |
+
+**2. `.ics` is deployed as `text/calendar` explicitly** (`scripts/site_deploy.sh`). The general sync
+pass now also excludes `*.ics`. A new third pass syncs only `*.ics` (`--exclude "*" --include
+"*.ics"`) with `--content-type "text/calendar; charset=utf-8"` and the no-cache header, keeping
+`--delete`. Because the delete is limited by the same filters, a calendar removed from the site
+still leaves the bucket. The hashed-asset prune is now pass 4.
+
+`tests/scripts/test_site_deploy.py`, whose stubbed `aws` records every call, now checks two things:
+
+- the four passes, including pass 2's two exclusions and pass 3's type, filters and delete;
+- that only one pass carries a content type, so no page can be relabelled as a calendar.
+
+Shown failing for their reason, restored from a byte copy:
+
+| Mutant | Result |
+|---|---|
+| `--content-type` dropped from pass 3 | 2 failed |
+| the `*.ics` exclusion dropped from pass 2 | 1 failed |
+
+**3. Runbook** (`docs/runbooks/team-website.md`).
+
+- Precondition 1 ("The October 1 room is filled in") is removed and the rest renumbered. The
+  precondition command block lost its `#` comments for the zsh reason in change 4; the mapping from
+  command to precondition is in the sentence above the block.
+- Step 2 says the smoke check confirms the season-schedule panel and the calendar file as
+  `text/calendar`.
+- Step 3 names `/schedule/` instead of the October 1 panel.
+- The emergency lever now removes a page's whole folder, and gives a schedule-specific block that
+  removes `schedule/` (naming `schedule/index.html` and `schedule/index.txt`) and `schedule.ics`,
+  invalidating both.
+
+This goes slightly past the brief, which asked to name `schedule/index.txt` and `schedule.ics`.
+Checking the export showed the page's words are in four files under `schedule/`: `index.html`,
+`index.txt`, `__next._full.txt` and `__next.schedule.__PAGE__.txt`. The same holds for every page,
+so the old single `rm .../index.html` left the payloads that client-side navigation fetches. The
+lever now uses `aws s3 rm --recursive` on the page prefix. The publisher role has the
+`s3:ListBucket` and `s3:DeleteObject` this needs (`publisher_access.tf`).
+
+The first-launch record is unchanged. `uv run scripts/check_links.py` passes.
+
+**4. No `#` comments in operator command blocks.** The Operator follow-ups above are rewritten:
+
+- every comment is now prose;
+- one-time setup (`git worktree add`, `pnpm install`, `terraform init`) is in its own block, apart
+  from the every-time commands;
+- the dev worktree is moved to the head of `dev` with `git checkout --detach origin/dev`;
+- step 2's "stop and tell the PM" branch is gone, now that the type is set by the script.
+
+A scan of every bash block in this report (five) finds no `#` outside a URL, and the same scan over
+the runbook's promotion checklist and emergency lever finds none.
+
+**Checks after the changes**, all run from the worktree root on 2026-10-02:
+
+| Command | Result |
+|---|---|
+| `site/scripts/pre-commit-checks.sh` | exit 0: lint and typecheck clean; source tests `Test Files 24 passed, Tests 821 passed` (815 before, plus the 6 new front-matter tests); export checks `Test Files 11 passed, Tests 92 passed` |
+| `uv run pytest -q tests/scripts/test_site_smoke.py tests/scripts/test_site_deploy.py` | `59 passed` (37 smoke-check, 22 deploy-script) |
+| `uv run scripts/check_links.py` | `OK: 1183 relative links and anchors in 161 Markdown files` |
+| `uv run scripts/validate_specs.py` | `OK: 302 files, 38 epics, 244 tasks, 20 releases` |
 
 ## PM review
 

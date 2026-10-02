@@ -342,9 +342,63 @@ including `calendar file`. Then open `https://wfbdebate.com/schedule/` once more
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-02
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with four changes before the pull request (the last four items
+below). I read `scripts/site_deploy.sh` and `docs/runbooks/team-website.md` on the branch, because
+two of your follow-ups depend on what they do.
+
+**Deviation 1 corrects my brief.** I listed three overlapping weekends, and computing from the dates
+finds four: the two January 9 qualifiers share a day. That is exactly why the rule was "compute,
+don't hand-mark", and the tests' expected pairs are hand-written with all four.
+
+**Mutants 8 and 9 found a hole that predates this task.** Nothing in the suite called the layout, so
+the existing wiring that passes guarded content to the build guard could have been dropped
+silently. `tests/layout-guard.test.ts` closes it for every content file, not only yours.
+
+**The modelling is right where it matters to a parent.** "Online, debated at Whitefish Bay High
+School" is refused under any other label, Glenbrooks gets one line per arrangement, a condition
+prints in full, and no code reads the clock (tested by moving the date to July 2027). UIDs from the id
+alone, under a fixed domain, survive a date correction and a domain change. `DTSTAMP` from the file's
+`revised:` date, making rebuilds byte-identical and showing parents when the schedule last changed,
+is a better answer than the build time, and the cost (remember to update `revised`) is in the guide.
+
+**Deviations 2 to 5 are accepted.** Updating the smoke check is what working agreement 5 requires
+whenever a user-facing surface changes, and the new `calendar file` check reaches a file no page
+links into the sitemap. Making tournament findings fail in every environment is right for data with
+no placeholders. Deviation 6 goes to Charlie, below.
+
+**For Charlie to confirm on the dev preview**, because it is new public text: the home panel copy;
+the entry name "Whitefish Bay home tournament" and its condition sentence for December 5; "Varsity
+only." and "By coach invitation."; and both nationals listing Policy, Lincoln-Douglas and Public
+Forum (Deviation 6).
+
+**Change 1: the source guard reads page titles and descriptions.** You found that only the export
+pass reads a page's title. `site_deploy.sh` runs no checks itself, and the export checks happen only
+if the operator runs the runbook's precondition. So today a student's name in a page title or meta
+description gets through `site_deploy.sh prod`. Both are published, so both belong in
+`ContentPage.guardedHtml`. Show a title naming a non-allowlisted student failing a prod build before
+the change and passing it after the fix is reverted, then restore.
+
+**Change 2: deploy `.ics` as `text/calendar` explicitly.** The content type currently depends on the
+deploying machine's `mimetypes` table, and you already wrote the stop-and-call-the-PM step for when
+it is wrong. Set it in `scripts/site_deploy.sh` for `*.ics`, so it never depends on the machine.
+I am authorising the edit; list it as a deviation. Your step 2 `curl` check stays as the proof.
+
+**Change 3: update the runbook text that describes the removed panel** (your first follow-up).
+These lines will be read during the very promotion that ships this change. Remove precondition 1
+("The October 1 room is filled in"). Rewrite step 2 to say the smoke check confirms the
+season-schedule panel and the calendar file. Rewrite step 3 to name the schedule page instead of the
+October 1 panel. Make the emergency lever also name `schedule/index.txt` and `schedule.ics`. Leave
+the record of the first launch, lines 1006 to 1028, as written. `docs/runbooks/team-website.md` is
+authorised; list it as a deviation. `site/README.md` stays for `v1-e37-t03`.
+
+**Change 4: no `#` comments in the operator command blocks.** The operator's shell is zsh, which
+treats `#` as an argument when commands are pasted: `git worktree add … # once; later: …` passes
+`#`, `once;` and the rest to git. Step 1 and step 3 both have them. Move every comment into the prose,
+and split "once" commands from "every time" commands into separate blocks.

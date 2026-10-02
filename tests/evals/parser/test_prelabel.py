@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from hypothesis import assume, event, given, settings
+from hypothesis import strategies as st
 from tests.evals.parser.corpus import parse_evaluation_file
 from tests.evals.parser.labels_schema import (
     REPOSITORY_ROOT,
@@ -43,7 +45,12 @@ from debate_core.integrations.docx_parser import DebateDocxParser
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
 import prelabel_docx as prelabel  # noqa: E402
-from tests.evals.parser.worksheets import LABEL_COLUMNS  # noqa: E402
+from tests.evals.parser.worksheets import (  # noqa: E402
+    LABEL_COLUMNS,
+    carry_marks,
+    repair_worksheet,
+    text_difference,
+)
 
 PLAN_ID = "abcdef0123456789"
 
@@ -921,3 +928,186 @@ def test_labels_are_byte_identical_before_and_after_a_repair(
     ]  # fmt: skip
     assert [p.card for p in by_hand.paragraphs] == [None, None, None, 0, 0, 0, None, None, 1, 1, 1]
     assert [s.underline for s in by_hand.spans] == [(), (UNDERLINED_RANGE,), ()]
+
+
+# --------------------------------------------------------------------------------------------
+# Properties: alignment, the refusal threshold, labels, and how much text a message shows
+# --------------------------------------------------------------------------------------------
+
+PROPERTY_SETTINGS = settings(max_examples=300, deadline=None)
+
+#: What sits between words, before and after a spreadsheet: spacing, dashes, quotes, dots.
+SEPARATORS = (" ", "  ", " ", "\n", "\r\n", "\t", "", " - ", " – ", "—", ", ", "“", "”", "'", "’", "…", "...")
+WORDS = st.text(alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGH0123456789éß", min_size=1, max_size=8)
+
+
+def _assemble(
+    words: list[str], separators: list[str], marked: list[bool]
+) -> tuple[str, tuple[tuple[int, int], ...]]:
+    """Text from words and the separators around them, and a mark over each run of marked words."""
+    text = separators[0]
+    starts: list[int] = []
+    ends: list[int] = []
+    for word, separator in zip(words, separators[1:], strict=True):
+        starts.append(len(text))
+        text += word
+        ends.append(len(text))
+        text += separator
+    ranges: list[tuple[int, int]] = []
+    run_start: int | None = None
+    for position, mark in enumerate([*marked, False]):
+        if mark and run_start is None:
+            run_start = position
+        elif not mark and run_start is not None:
+            ranges.append((starts[run_start], ends[position - 1]))
+            run_start = None
+    return text, tuple(ranges)
+
+
+@st.composite
+def respaced(draw: st.DrawFn) -> tuple[str, tuple[tuple[int, int], ...], str, tuple[tuple[int, int], ...]]:
+    """A document's text with marks, and the same words and marks after a spreadsheet re-spaced it."""
+    words = draw(st.lists(WORDS, min_size=1, max_size=10))
+    original = draw(st.lists(st.sampled_from(SEPARATORS), min_size=len(words) + 1, max_size=len(words) + 1))
+    changed = [draw(st.sampled_from(SEPARATORS)) if draw(st.booleans()) else s for s in original]
+    marked = draw(st.lists(st.booleans(), min_size=len(words), max_size=len(words)))
+    text, ranges = _assemble(words, original, marked)
+    found, found_ranges = _assemble(words, changed, marked)
+    if ranges and found != text:
+        moved = any(a != b for (a, _), (b, _) in zip(ranges, found_ranges, strict=True))
+        event("a mark moved with the spacing" if moved else "the spacing changed but no mark moved")
+    return text, ranges, found, found_ranges
+
+
+@PROPERTY_SETTINGS
+@given(respaced())
+def test_marks_land_on_the_same_words_after_any_respacing(
+    case: tuple[str, tuple[tuple[int, int], ...], str, tuple[tuple[int, int], ...]],
+) -> None:
+    text, ranges, found, found_ranges = case
+    carried = carry_marks(prelabel.render_markup(found, found_ranges), text)
+    assert carried == prelabel.render_markup(text, ranges)
+
+
+def test_a_mark_over_a_space_the_spreadsheet_changed_keeps_the_space() -> None:
+    text = "reserve margins fall"
+    assert carry_marks("reserve⟦ margins⟧\nfall", text) == "reserve⟦ margins⟧ fall"
+    assert carry_marks("⟦reserve  ⟧margins fall", text) == "⟦reserve ⟧margins fall"
+
+
+#: Characters a one-character edit uses: letters and digits, Latin and not, and everything else.
+EDIT_CHARACTERS = "aZ7éßΩ²١  \n\t,.;:'\"‘’“”-–—…()?!/"
+
+
+@PROPERTY_SETTINGS
+@given(st.text(alphabet=EDIT_CHARACTERS, min_size=1, max_size=30), st.data())
+def test_a_row_is_refused_exactly_when_a_letter_or_digit_changed(text: str, data: st.DataObject) -> None:
+    kind = data.draw(st.sampled_from(["insert", "delete", "replace"]))
+    position = data.draw(st.integers(0, len(text) - (kind != "insert")))
+    character = data.draw(st.sampled_from(EDIT_CHARACTERS))
+    if kind == "insert":
+        found, touched = text[:position] + character + text[position:], character
+    elif kind == "delete":
+        found, touched = text[:position] + text[position + 1 :], text[position]
+    else:
+        found, touched = text[:position] + character + text[position + 1 :], text[position] + character
+    assume(found != text)
+    words_changed = any(c.isalnum() for c in touched)
+    event("refused" if words_changed else "repaired")
+    row = {**dict.fromkeys(prelabel.WORKSHEET_COLUMNS, ""), "index": "0", "checked": "y", "text": found}
+
+    repair = repair_worksheet(
+        prelabel.Worksheet(columns=prelabel.WORKSHEET_COLUMNS, rows=(row,)),
+        texts={0: text},
+        sampled=frozenset(),
+    )
+
+    assert bool(repair.refused) is words_changed
+    if not words_changed:
+        assert repair.worksheet.rows[0]["text"] == text
+
+
+LABEL_CELLS = st.text(alphabet="yYn TAGcitEVD0123456789 ,.-", max_size=6)
+
+
+@PROPERTY_SETTINGS
+@given(
+    st.lists(
+        st.tuples(
+            respaced(), LABEL_CELLS, LABEL_CELLS, LABEL_CELLS, LABEL_CELLS, st.booleans(), st.integers(0, 3)
+        ),
+        min_size=1,
+        max_size=4,
+    )
+)
+def test_a_repair_never_writes_a_label_cell(
+    rows: list[
+        tuple[
+            tuple[str, tuple[tuple[int, int], ...], str, tuple[tuple[int, int], ...]],
+            str,
+            str,
+            str,
+            str,
+            bool,
+            int,
+        ]
+    ],
+) -> None:
+    texts: dict[int, str] = {}
+    sampled: set[int] = set()
+    worksheet_rows = []
+    for index, (
+        (text, _, found, found_ranges),
+        checked,
+        unit,
+        card,
+        completeness,
+        is_sampled,
+        span_kind,
+    ) in enumerate(rows):
+        texts[index] = text
+        if is_sampled:
+            sampled.add(index)
+        span = ["", " ", prelabel.render_markup(found, found_ranges), f"⟦{found}"][span_kind]
+        worksheet_rows.append(
+            {
+                "index": str(index),
+                "checked": checked,
+                "unit": unit,
+                "card": card,
+                "completeness": completeness,
+                "text": found,
+                "underline": span,
+                "highlight": span,
+            }
+        )
+    worksheet = prelabel.Worksheet(columns=prelabel.WORKSHEET_COLUMNS, rows=tuple(worksheet_rows))
+
+    repair = repair_worksheet(worksheet, texts=texts, sampled=frozenset(sampled))
+
+    assert not repair.refused
+    event("some row repaired" if repair.changes else "nothing to repair")
+    for before, after in zip(worksheet.rows, repair.worksheet.rows, strict=True):
+        assert {column: after[column] for column in LABEL_COLUMNS} == {
+            column: before[column] for column in LABEL_COLUMNS
+        }
+    assert [row["text"] for row in repair.worksheet.rows] == [texts[i] for i in range(len(rows))]
+
+
+@PROPERTY_SETTINGS
+@given(st.text(alphabet="abcdefgh ", min_size=40, max_size=300), st.data())
+def test_a_message_never_shows_a_whole_cell(text: str, data: st.DataObject) -> None:
+    """Enough around each difference to find it, and never the paragraph itself."""
+    edits = data.draw(
+        st.lists(st.tuples(st.integers(0, len(text) - 1), st.sampled_from("X \n")), min_size=1, max_size=4)
+    )
+    found = list(text)
+    for position, character in edits:
+        found[position] = character
+    found_text = "".join(found)
+    assume(found_text != text)
+
+    message = text_difference(found_text, text)
+
+    for whole in (text, found_text):
+        assert whole.translate(str.maketrans("\n", "↵")) not in message

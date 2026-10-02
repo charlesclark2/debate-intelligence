@@ -464,30 +464,44 @@ def text_difference(found: str, expected: str, *, under_marks: bool = False) -> 
 # --------------------------------------------------------------------------------------------
 
 
-def position_map(old: str, new: str) -> list[int]:
+def position_map(old: str, new: str) -> tuple[list[int], list[int]]:
     """Where each position in `old` (0 to `len(old)`) falls in `new`, for texts with the same words.
 
     Letters and digits anchor the alignment: the k-th in `old` is the k-th in `new`. Between two
     anchors the texts differ only in spacing and punctuation, and that stretch is aligned
     character by character, so a mark at the edge of a word stays at the edge of that word.
+
+    Where `new` has characters inserted at a position, the position could go before them or after
+    them, so two maps come back: the earliest place each position can go, and the latest. A mark
+    ends at the earliest and starts at the latest, so inserted characters at its edges stay
+    unmarked: `word⟧\n` against a document's `word\r\n` gives `word⟧\r\n`, not `word\r⟧\n`.
     """
     old_anchors = [i for i, character in enumerate(old) if character.isalnum()]
     new_anchors = [j for j, character in enumerate(new) if character.isalnum()]
     if [old[i] for i in old_anchors] != [new[j] for j in new_anchors]:
         raise ValueError("the two texts differ in their letters or digits")
-    table = [0] * (len(old) + 1)
+    earliest: list[int | None] = [None] * (len(old) + 1)
+    latest: list[int | None] = [None] * (len(old) + 1)
     for (old_before, old_next), (new_before, new_next) in zip(
         pairwise([-1, *old_anchors, len(old)]), pairwise([-1, *new_anchors, len(new)]), strict=True
     ):
         old_start, new_start = old_before + 1, new_before + 1
-        table[old_start] = new_start
         gap = difflib.SequenceMatcher(None, old[old_start:old_next], new[new_start:new_next], autojunk=False)
         for tag, i1, i2, j1, j2 in gap.get_opcodes():
             for offset in range(i1, i2 + 1):
-                moved = j1 + offset - i1 if tag == "equal" else (j1 if offset < i2 else j2)
-                table[old_start + offset] = new_start + moved
-        table[old_next] = new_next
-    return table
+                if tag == "equal":
+                    places = (j1 + offset - i1,)
+                elif offset == i1 == i2 or i1 < offset < i2:
+                    places = (j1, j2)
+                else:
+                    places = (j1 if offset == i1 else j2,)
+                for place in places:
+                    if earliest[old_start + offset] is None:
+                        earliest[old_start + offset] = new_start + place
+                    latest[old_start + offset] = new_start + place
+        if earliest[old_start] is None:  # two empty stretches, between adjacent anchors
+            earliest[old_start] = latest[old_start] = new_start
+    return [p if p is not None else 0 for p in earliest], [p if p is not None else 0 for p in latest]
 
 
 def carry_marks(markup: str, text: str) -> str | None:
@@ -501,8 +515,8 @@ def carry_marks(markup: str, text: str) -> str | None:
         return markup
     if changes_words(plain, text):
         return None
-    table = position_map(plain, text)
-    carried = [(table[start], table[end]) for start, end in ranges]
+    earliest, latest = position_map(plain, text)
+    carried = [(latest[start], earliest[end]) for start, end in ranges]
     return render_markup(text, merge_ranges([(start, end) for start, end in carried if end > start]))
 
 

@@ -452,3 +452,21 @@ def test_every_committed_label_file_is_valid_and_listed() -> None:
     for digest, labels in load_label_files(LABELS_DIRECTORY).items():
         check_cards = labels.header.status is not LabelStatus.PRELABELED
         assert validate_label_file(labels, manifest, plan, check_cards=check_cards) == [], digest[:12]
+
+
+def test_the_guides_code_blocks_are_safe_to_paste_into_zsh() -> None:
+    """zsh treats `#` as an argument unless interactive_comments is set, and `<` as a redirect.
+
+    The coach pastes these blocks into zsh as they stand, so explanations belong in the prose and a
+    digest goes in a variable on the block's first line, never as a `<placeholder>`.
+    """
+    offenders: list[str] = []
+    for path in (EVAL_FIXTURE_DIRECTORY / "MANIFEST.md", LABELS_DIRECTORY / "README.md"):
+        text = path.read_text(encoding="utf-8")
+        for block in re.findall(
+            r"^[ \t]*```(?:bash|sh|zsh)?\n(.*?)^[ \t]*```", text, re.DOTALL | re.MULTILINE
+        ):
+            for line in block.splitlines():
+                if line.lstrip().startswith("#") or re.search(r"<[A-Za-z]", line):
+                    offenders.append(f"{path.name}: {line.strip()}")
+    assert not offenders, "\n".join(offenders)

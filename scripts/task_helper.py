@@ -227,6 +227,10 @@ How to work:
    A1/A2/Phase-B unless they are the domain's own terms.
 6. Commit to task/{task} with clear messages as you go. Do NOT push, open a pull request, merge, or
    touch dev/main; the operator does that with scripts/task after PM review.
+7. A document you add under docs/ starts with a one-line description as its first line,
+   `<!-- docs-index: What this document is for -->` (working agreement 3). Do NOT edit or
+   regenerate docs/README.md (no scripts/docs_index.py): it is generated, and a workflow refreshes
+   it on dev after merge (v1-e01-t16).
 
 When the work is complete:
 - Set the task Goal status.phase to Succeeded ONLY if every acceptance criterion actually passed
@@ -238,8 +242,8 @@ When the work is complete:
   `--partial` while staying InProgress. Reporting Succeeded with an open criterion is the one
   mistake that gets past both the PM and `scripts/task pr`.
   Then run `uv run scripts/validate_specs.py`. Do NOT regenerate ROADMAP.md (no
-  scripts/spec_index.py) unless ROADMAP.md is in this task's constraints.packages: the PM refreshes
-  it separately, because every task touching it makes parallel PRs conflict.
+  scripts/spec_index.py) unless ROADMAP.md is in this task's constraints.packages: a workflow
+  refreshes it on dev after merge, because every task touching it makes parallel PRs conflict.
 - Fill in the session report at docs/session-reports/{task}.md (already created from the template).
   Every acceptance criterion gets PASS/FAIL/NOT RUN with the evidence (command + result). Leave the
   "PM review" section exactly as it is; the PM fills it in.

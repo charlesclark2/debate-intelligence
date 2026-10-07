@@ -8,7 +8,8 @@ Everything between the BEGIN/END GENERATED markers in ROADMAP.md is rewritten; t
 hand-written sections around it (timeline, notes) are preserved. The output depends only on the
 spec files, so running it twice in a row produces no second diff.
 
-Who runs this: the PM, in a `specs/roadmap-refresh` PR of its own. Individual task PRs leave
+Who runs this: .github/workflows/refresh-generated-files.yml, after every merge into dev, which
+opens or updates one pull request with the result (v1-e01-t16). Individual task PRs leave
 ROADMAP.md alone, because every task that touched it would conflict with every other task's PR.
 That is why `--check` is not a pre-commit hook and is required only on pull requests into main
 (see v1-e01-t04); for live status use `uv run scripts/validate_specs.py --status`.

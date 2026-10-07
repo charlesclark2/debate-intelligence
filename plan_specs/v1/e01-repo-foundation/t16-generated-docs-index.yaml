@@ -31,7 +31,13 @@ spec:
     any document, the shape of docs/ itself, and ROADMAP.md, which already works this way.
   priority: 3
   constraints:
-    packages: [scripts, docs, .github/workflows]
+    packages:
+      - scripts
+      - docs
+      - .github/workflows
+      # added on the PM's instruction, 2026-10-07
+      - docs/runbooks
+      - tests/scripts
     forbidden:
       - A generated index whose descriptions are written in the generator rather than in the documents
       - A check that catches an added document but not a renamed, moved or deleted one

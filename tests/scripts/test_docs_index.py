@@ -33,9 +33,7 @@ DOCUMENTS: dict[str, str] = {
     "glossary.md": "<!-- docs-index: Terms the other documents use -->\n# Glossary\n",
     "adr/README.md": "<!-- docs-index: Architecture decision records -->\n# ADRs\n",
     "adr/0001-first-decision.md": "# ADR-0001: the first decision\n",
-    "process/working-agreements.md": (
-        "<!-- docs-index: Project rules: light CI, operator hand-off -->\n# Working agreements\n"
-    ),
+    "process/working-agreements.md": ("<!-- docs-index: Project rules, light CI -->\n# Working agreements\n"),
     "process/task-workflow.md": "<!-- docs-index: `scripts/task`: start → PR → finish -->\n# Task workflow\n",
     "runbooks/restore.md": "<!-- docs-index: Restoring the store from a backup -->\n# Restore\n",
     "guides/store-cli.md": "<!-- docs-index: Using `store sync\\|ls\\|get` -->\n# Store CLI\n",
@@ -49,7 +47,7 @@ EXPECTED_TABLE = """\
 | [glossary.md](glossary.md) | Terms the other documents use |
 | [guides/store-cli.md](guides/store-cli.md) | Using `store sync\\|ls\\|get` |
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → PR → finish |
-| [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off |
+| [process/working-agreements.md](process/working-agreements.md) | Project rules, light CI |
 | [runbooks/restore.md](runbooks/restore.md) | Restoring the store from a backup |"""
 
 HAND_WRITTEN_HEAD = "# Documentation index\n\nIntroduction, kept as written.\n\n"

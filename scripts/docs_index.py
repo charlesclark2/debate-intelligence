@@ -115,7 +115,8 @@ def rows(docs: Path) -> list[Row]:
     result, problems = [], []
     for label, target, path in sorted(indexed_files(docs), key=lambda found: found[1]):
         try:
-            result.append(Row(label, target, description_of(path, f"docs/{path.relative_to(docs).as_posix()}")))
+            shown_as = f"docs/{path.relative_to(docs).as_posix()}"
+            result.append(Row(label, target, description_of(path, shown_as)))
         except ValueError as exc:
             problems.append(str(exc))
     if problems:

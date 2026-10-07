@@ -24,6 +24,10 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
+  # refresh-generated-files.yml dispatches this on bot/refresh-generated-files (v1-e01-t16): a pull
+  # request opened with the workflow token starts no pull_request run, and protect-dev requires
+  # `ci` on its head commit. A dispatch runs every job, like a push.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -191,13 +195,22 @@ jobs:
       - *uv-sync
       - name: validate_specs.py
         run: uv run --frozen python scripts/validate_specs.py
-      - name: spec_index.py --check (pull requests into main only)
-        # github.base_ref is the pull request's target branch, and is empty on push events. Task PRs
-        # into dev change a spec phase and so leave ROADMAP.md stale by design: the PM refreshes it in
-        # a PR of its own so that parallel task PRs do not conflict on it. The dev-to-main promotion
-        # PR is where a stale ROADMAP.md is stopped (v1-e01-t05 ac4).
+      # Every trigger: each document under docs/ starts with its docs-index description. This never
+      # compares with the committed docs/README.md, so it cannot ask a task to regenerate it.
+      - name: docs_index.py --check-descriptions
+        run: uv run --frozen python scripts/docs_index.py --check-descriptions
+      - name: spec_index.py --check and docs_index.py --check (pull requests into main only)
+        # github.base_ref is the pull request's target branch, and is empty on push and dispatch
+        # events. Task PRs into dev change a spec phase or add a document, and so leave ROADMAP.md
+        # and docs/README.md stale by design: refresh-generated-files.yml regenerates both on dev in
+        # a pull request of its own, so that parallel task PRs never conflict on them (v1-e01-t16).
+        # The dev-to-main promotion PR is where a stale generated file is stopped (v1-e01-t05 ac4).
         if: github.base_ref == 'main'
-        run: uv run --frozen python scripts/spec_index.py --check
+        run: |
+          status=0
+          uv run --frozen python scripts/spec_index.py --check || status=1
+          uv run --frozen python scripts/docs_index.py --check || status=1
+          exit "$status"
 
   # Handed over by v1-e29-t02-terraform-bootstrap. Static checks only: fmt, validate with
   # -backend=false, tflint and mocked `terraform test`. No AWS credentials exist in this workflow;

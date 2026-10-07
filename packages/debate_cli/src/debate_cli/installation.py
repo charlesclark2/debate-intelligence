@@ -16,6 +16,11 @@ installed.
 The check exists because the channel's earlier verification, `--version --json`, imports none of
 the integrations. v0.1.0-dev.33 passed it while every `caselist pull` failed on a missing boto3.
 
+`debate-research doctor` runs :func:`check_installation` too, so a person checking a build by hand
+gets the same answer (v1-e01-t22). It fails only on a wired integration that does not import. A
+declared extra's missing distribution is information there, because nothing breaks until a wired
+integration needs it. This module's `main` still refuses it, which is why the installer runs both.
+
 **The missing-dependency message.** When a command does reach an optional dependency that is not
 installed, :func:`incomplete_installation_failure` says how to fix *this kind* of installation.
 An installed build (a stamped dev or stable build, :func:`~debate_cli.build_info.build_channel`)

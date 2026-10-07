@@ -177,7 +177,14 @@ def main(argv: list[str] | None = None) -> int:
 
     current = index.read_text(encoding="utf-8")
     if args.check:
-        # Stubbed while the drift tests are shown failing first; replaced in the next commit.
+        if new != current:
+            print(
+                f"docs/{INDEX} is stale. On dev, merge the open 'Refresh generated files' pull request; "
+                "outside a task, `uv run scripts/docs_index.py` rewrites it",
+                file=sys.stderr,
+            )
+            print(stale_diff(current, new), file=sys.stderr, end="")
+            return 1
         print(f"docs/{INDEX} is up to date")
         return 0
     if new == current:

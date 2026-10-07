@@ -1,3 +1,4 @@
+<!-- docs-index: CardMirror defects found during the evaluation, drafted for upstream and not filed -->
 # CardMirror upstream issues (drafted, not filed)
 
 Defects found during the CardMirror evaluation

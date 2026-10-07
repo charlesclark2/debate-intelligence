@@ -1,3 +1,4 @@
+<!-- docs-index: Evidence text normalization policy: the frozen, versioned rules every snapshot offset, hash and verification depends on -->
 # Evidence text normalization policy
 
 Owner task: `v1-e03-t01-text-normalization`. Implementation:

@@ -1,3 +1,4 @@
+<!-- docs-index: Applying the dev and prod evidence buckets and checking the operator and takedown credentials -->
 # Runbook: the evidence store
 
 | | |

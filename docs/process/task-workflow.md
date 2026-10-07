@@ -1,3 +1,4 @@
+<!-- docs-index: `scripts/task`: start → session → PM review → PR → finish -->
 # Task workflow: from spec to merged PR
 
 Every piece of implementation work is one PlanSpec task, done by one Claude session in its own

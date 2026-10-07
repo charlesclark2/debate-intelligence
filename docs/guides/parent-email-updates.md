@@ -1,3 +1,4 @@
+<!-- docs-index: Parent email updates: the channel chosen and why, how a parent's address travels, who owns the list, how a coach sends an update and what may not go in one about students -->
 # Parent email updates
 
 How parents and guardians get team news by email, who owns the list, and how a coach sends an

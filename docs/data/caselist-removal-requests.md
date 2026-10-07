@@ -1,3 +1,4 @@
+<!-- docs-index: The register of caselist and OpenEv removal requests, one row per request id; no school, team code, filename or name -->
 # Caselist removal requests
 
 The register of takedown requests handled under the

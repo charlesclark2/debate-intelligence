@@ -1,3 +1,4 @@
+<!-- docs-index: Standing up the team website's hosting, domains and publisher credentials, and deploying, rolling back or taking down the site -->
 # Runbook: team website hosting
 
 How the public Whitefish Bay debate team website is stood up in AWS, how the domains are wired to

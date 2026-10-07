@@ -1,3 +1,4 @@
+<!-- docs-index: Project rules: light CI, operator hand-off for long commands, doc locations, naming -->
 # Working agreements
 
 Rules every contributor and every Claude session follows on this project. Task specs, CI and

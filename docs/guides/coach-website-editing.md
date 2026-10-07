@@ -1,3 +1,4 @@
+<!-- docs-index: For coaches: adding, changing and removing events and announcements on the team website, with no code -->
 # Keeping the team website current: a guide for coaches
 
 > **Partly out of date.** The parts about **announcements** still describe the Google Sheet

@@ -31,6 +31,7 @@ from debate_core.evidence.normalization import (
     nfc_replaced_code_points,
     normalize,
     normalize_chars,
+    pinned_unicode_version,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -71,6 +72,21 @@ def test_chars_refuses_to_run_under_another_unicode_database(
     monkeypatch.setattr(unicodedata, "unidata_version", "16.0.0")
     with pytest.raises(UnicodeDatabaseMismatchError, match="15.0.0"):
         normalize("text", V1)
+
+
+def test_chars_the_pin_can_be_read_under_the_database_it_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `doctor` names both versions on exactly the interpreter normalize() refuses to run on.
+    monkeypatch.setattr(unicodedata, "unidata_version", "16.0.0")
+    assert pinned_unicode_version(V1) == "15.0.0"
+    with pytest.raises(UnicodeDatabaseMismatchError):
+        character_rules(V1)
+
+
+def test_chars_the_pin_of_an_unknown_version_is_refused_not_defaulted() -> None:
+    with pytest.raises(UnknownNormalizerVersionError):
+        pinned_unicode_version("evidence-normalizer-v2")
 
 
 def test_chars_v1_is_pinned_to_the_unicode_database_of_python_312() -> None:

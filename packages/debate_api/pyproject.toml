@@ -3,7 +3,7 @@ name = "debate-api"
 version = "0.1.0"
 description = "HTTP API service (thin surface over debate_core)."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = ["debate-core"]
 
 [tool.uv.sources]

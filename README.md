@@ -48,7 +48,8 @@ config/                   committed configuration: profiles/<env>.toml, model ro
 
 ## Development setup
 
-Python 3.12 (pinned in `.python-version`) and [uv](https://docs.astral.sh/uv/). The root
+Python, in a version `debate_core`'s `requires-python` admits (the one statement of the supported
+interpreter; `.python-version` picks it for a checkout), and [uv](https://docs.astral.sh/uv/). The root
 `pyproject.toml` is a uv workspace whose members are the four packages under `packages/`; it also
 holds the configuration for every quality tool.
 

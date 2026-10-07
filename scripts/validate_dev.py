@@ -393,7 +393,9 @@ def install_prerelease(
     env = dict(os.environ if environment is None else environment)
     env |= {"UV_TOOL_DIR": str(tools), "UV_TOOL_BIN_DIR": str(bin_dir)}
     print(f"== installing {tag} into {tools} with {' '.join(installer)}", flush=True)
-    completed = subprocess.run([*installer, tag], env=env, check=False)
+    # The scratch tool directory is never on PATH, so the installer's warning that `debate-research`
+    # on PATH is another build would only be noise here (v1-e01-t14 ac6).
+    completed = subprocess.run([*installer, "--no-path-warning", tag], env=env, check=False)
     if completed.returncode != 0:
         raise ValidationProblem(f"scripts/install_channel.sh {tag} failed (exit {completed.returncode})")
     binary = bin_dir / "debate-research"

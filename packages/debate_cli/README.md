@@ -109,7 +109,7 @@ rather than writing an integer.
 | Code | Name | Means |
 |---|---|---|
 | 0 | `OK` | The command did what it was asked to do. |
-| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check. Running it again gives the same answer. |
+| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, `doctor` found the interpreter's Unicode database is not the normalizer's pin. Running it again gives the same answer. |
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | An external provider — search, fetch, a model — failed or rate-limited the call. The same command may well succeed later. |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`. |
@@ -118,6 +118,25 @@ Exceptions are mapped by `exit_code_for`: `ProviderError` → 3, any other `Doma
 usage error → 2, anything else → 70. A failure that is an *outcome* rather than an exception —
 `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
 `raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`.
+
+## `debate-research doctor`
+
+`doctor` reports what this installation is: both package versions, the interpreter and platform,
+whether settings are wired, the services the container can build, and the running Python's Unicode
+database beside the version the evidence normalizer is pinned to (`v1-e01-t14`). It fails on that
+one check only, because it is the one it can state precisely: under any other database `normalize`
+refuses to run, so every command that touches evidence text would fail on first use.
+
+| Exit | Means |
+|---|---|
+| 0 | The report was produced, and the interpreter's Unicode database is the normalizer's pin. |
+| 1 | The two databases differ. The error (`UNICODE_DATABASE_MISMATCH`) names both versions and `docs/evidence/normalization.md`; `--json` carries the whole report in `error.details`. |
+| 70 | The normalizer's pinned version could not be determined. That is a bug in the build, reported through the root handler like any unmodelled exception, never as 1. |
+
+Every other fact is description and never changes the exit status. `scripts/install_channel.sh`
+runs `doctor` in its rehearsal install, so a build on the wrong interpreter is refused before it
+replaces anything. Which interpreter is right is not written here: it is the `debate_core` wheel's
+`Requires-Python`, which the installer reads from the wheel itself.
 
 ## `--json` output
 

@@ -5,7 +5,7 @@ name = "debate-intelligence"
 version = "0.1.0"
 description = "Workspace root for the Debate Intelligence Platform."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = []
 
 [tool.uv]
@@ -67,7 +67,6 @@ dev = [
 # ---------------------------------------------------------------------------------------------
 [tool.ruff]
 line-length = 110
-target-version = "py312"
 # Nothing in scripts/ is excluded any more: v1-e01-t05-spec-tooling removed the temporary list
 # v1-e01-t03 added and fixed what ruff reported, so every script is linted and formatted like the
 # rest of the repository.
@@ -99,7 +98,6 @@ known-first-party = ["debate_core", "debate_cli", "debate_api", "debate_workers"
 [tool.pyright]
 include = ["packages"]
 exclude = ["**/__pycache__", "**/.*"]
-pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "standard"

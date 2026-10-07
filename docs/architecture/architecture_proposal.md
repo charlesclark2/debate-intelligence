@@ -108,7 +108,7 @@ style="width:7.1in;height:3.02684in" />
 
 | **Layer**              | **Technology**               | **Rationale**                                                                                                                                           |
 |------------------------|------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Primary language       | Python 3.12+                 | Best fit for retrieval, document processing, LLM orchestration, data parsing, and the existing CLI concept. Shared Pydantic domain models reduce drift. |
+| Primary language       | Python, the versions `debate_core`'s `requires-python` admits (one decision, tied to the evidence normalizer's Unicode pin) | Best fit for retrieval, document processing, LLM orchestration, data parsing, and the existing CLI concept. Shared Pydantic domain models reduce drift. |
 | CLI                    | Typer + Rich                 | Typed commands, good help text, tables/progress display, and straightforward packaging through uv.                                                      |
 | Web frontend           | Next.js + TypeScript + React | Mature authenticated web UX, strong component ecosystem, and clean separation from the Python backend.                                                  |
 | UI                     | Tailwind CSS + shadcn/ui     | Fast, accessible, consistent product UI without a large proprietary design system.                                                                      |

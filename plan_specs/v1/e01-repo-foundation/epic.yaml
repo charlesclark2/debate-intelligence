@@ -547,5 +547,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t21-installed-smoke-stand-ins
+    - id: t22
+      kind: Task
+      name: 'The real install is the build the rehearsal checked, and doctor answers for all of it'
+      description: >-
+        Pin the real install's resolution to the rehearsal's; doctor fails on an integration that does
+        not import.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t22-install-resolves-once.yaml
+        goalRef: v1-e01-t22-install-resolves-once
+      dependsOn:
+      - t14
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t22-install-resolves-once reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t22-install-resolves-once
 status:
   phase: Pending

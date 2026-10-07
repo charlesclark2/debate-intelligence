@@ -57,6 +57,8 @@ spec:
       - docs/evidence/normalization.md
       - docs/architecture
       - debate_core.application
+      # added by the PM at review, 2026-10-07: doctor's smoke assertion (Deviation 4)
+      - tests/smoke
     forbidden:
       - A fourth statement of the supported interpreter anywhere, including documentation that names
         a version rather than pointing at the metadata

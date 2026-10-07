@@ -380,9 +380,55 @@ agent is still on its previous build and nothing needs rolling back.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-07
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with no code changes requested.
+
+What makes this one trustworthy:
+
+* **The real install was fingerprinted before and after,** read-only, and was unchanged.
+* **ac3 was proved on a real build whose bound admitted 3.13,** which is the exact failure this task
+  guards against.
+* **The specifier is passed as written,** confirmed against a real uv.
+* **Each mutant that was caught only through its message is explained** (Decision 3). The two
+  checks that stand on their own ("stated twice", "not a specifier") are the ones that matter, and
+  you said so.
+
+Deviations and decisions:
+
+* **Deviations 1 to 3 and 5:** accepted. They are what the PM's addendum authorised.
+* **Deviation 4** (doctor's smoke assertion): accepted. Working agreement 5 is the right reason.
+  I added `tests/smoke` to `constraints.packages` in this branch.
+* **Decision 4 (the window between the rehearsal and the real install): accepted for now, and
+  filed.** The real install's repeated checks mean the exit status is truthful. But a real install
+  that fails those checks has already replaced the agent's build, which is what ac5 is meant to
+  prevent. Filed as **v1-e01-t22-install-resolves-once**: pin the second resolution to the first
+  (`--exclude-newer` from a timestamp taken before the rehearsal, or constraints from the rehearsal's
+  resolution).
+* **"One command for is this installation sound": decided yes, in t22.** "An integration the CLI
+  wires does not import" is a fact doctor can state precisely, so it becomes exit 1 alongside the
+  Unicode check.
+* **Decision 7 (the scanner and its exemptions):** accepted. A changed exempt line counts as a new
+  line, and an exemption that matches nothing fails the test. That keeps the list honest.
+* **Decision 8** (`packaging` comes in through pytest): accepted.
+
+**Not filed:**
+
+* **ADR-0001's "3.12+".** It records the choice of Python, not a version bound, and it is exempt by
+  name. The bound lives in the metadata now.
+* **Refusing at import time on a hand-run uv install.** The normalizer already refuses at first use,
+  and doctor names the mismatch.
+* **uv's own PATH warning,** which is harmless noise.
+
+`python3 scripts/validate_specs.py` on this branch, with t22 and its epic entry, reports
+`OK: 308 files, 38 epics, 250 tasks, 20 releases`.
+
+**Operator follow-ups:**
+
+* **1** stands as written. It is the first time the script runs on the runner's uv.
+* **2** is optional, and the next agent run is Wednesday 2026-10-14.

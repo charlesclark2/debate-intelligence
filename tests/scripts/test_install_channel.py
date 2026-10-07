@@ -31,6 +31,11 @@ v1-e01-t14 adds three things, each tested here:
   first, and a build that fails one leaves the previous install byte-for-byte as it was.
 * **`--no-path-warning`** silences the PATH warning and nothing else.
 
+v1-e01-t22 holds the real install to the rehearsal's resolution. The shim publishes a newer release
+of the third-party dependency to the index the moment the rehearsal ends, and the real install must
+still get the version the rehearsal checked. A control test shows that an unpinned second install
+takes the newer one, so the publish is live.
+
 Offline: every URL is `file://`, the uv cache is a temporary directory, and uv may not download a
 Python (it needs one that debate_core's `requires-python` admits and that it can already find, as
 CI's `uv python install` provides).
@@ -298,15 +303,16 @@ def uv_shim(tmp_path: Path) -> Path:
     directory = tmp_path / "uv-shim"
     directory.mkdir(exist_ok=True)
     shim = directory / "uv"
+    seen = tmp_path / "uv-shim-rehearsal-seen"
+    ran = tmp_path / "uv-shim-after-rehearsal-ran"
     shim.write_text(
         "#!/bin/sh\n"
         f"printf '%s\\t%s\\n' \"${{UV_TOOL_DIR:-}}\" \"$*\" >> '{tmp_path / 'uv-calls.log'}'\n"
         'case "${UV_TOOL_DIR:-}" in\n'
-        f"    *debate-research-rehearsal.*) : > '{tmp_path / 'uv-shim-rehearsal-seen'}' ;;\n"
+        f"    *debate-research-rehearsal.*) : > '{seen}' ;;\n"
         "    *)\n"
-        f"        if [ -n \"${{UV_SHIM_AFTER_REHEARSAL:-}}\" ] && [ -e '{tmp_path / 'uv-shim-rehearsal-seen'}' ] \\\n"
-        f"            && [ ! -e '{tmp_path / 'uv-shim-after-rehearsal-ran'}' ]; then\n"
-        f"            : > '{tmp_path / 'uv-shim-after-rehearsal-ran'}'\n"
+        f"        if [ -n \"${{UV_SHIM_AFTER_REHEARSAL:-}}\" ] && [ -e '{seen}' ] && [ ! -e '{ran}' ]; then\n"
+        f"            : > '{ran}'\n"
         '            sh "${UV_SHIM_AFTER_REHEARSAL}"\n'
         "        fi ;;\n"
         "esac\n"
@@ -776,9 +782,9 @@ def test_a_release_published_between_the_rehearsal_and_the_real_install_is_not_i
     assert result.returncode == 0, result.stdout + result.stderr
     # The newer release really was on the index before the real install resolved.
     assert (tmp_path / "uv-shim-after-rehearsal-ran").exists()
-    assert NEWER_THIRD_PARTY in (tmp_path / "decoy-index" / "simple" / "thirdparty-dep" / "index.html").read_text(
-        encoding="utf-8"
-    )
+    assert NEWER_THIRD_PARTY in (
+        tmp_path / "decoy-index" / "simple" / "thirdparty-dep" / "index.html"
+    ).read_text(encoding="utf-8")
     assert installed_third_party_version(fixture.tools / "environments") == "1.0"
     assert run_installed(fixture)["core"] == "release"
 
@@ -821,7 +827,9 @@ def test_only_the_real_install_is_pinned_and_to_what_the_rehearsal_installed(tmp
     assert "--constraints" in real
     # uv records the pins it was given in the tool's receipt; the first-party wheels are not among
     # them, because their verified file URLs already decide them.
-    receipt = tomllib.loads((fixture.tools / "environments" / "debate-cli" / "uv-receipt.toml").read_text("utf-8"))
+    receipt = tomllib.loads(
+        (fixture.tools / "environments" / "debate-cli" / "uv-receipt.toml").read_text("utf-8")
+    )
     assert receipt["tool"]["constraints"] == [{"name": "thirdparty-dep", "specifier": "==1.0"}]
     assert "Pinning the real install to the 1 third-party distribution the rehearsal checked" in result.stdout
 

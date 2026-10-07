@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e01-repo-foundation/t14-install-interpreter-bound.yaml`](../../plan_specs/v1/e01-repo-foundation/t14-install-interpreter-bound.yaml) |
 | Epic / release | `v1-e01-repo-foundation` / `v1.0` |
 | Branch | `task/v1-e01-t14-install-interpreter-bound` |
-| Session status | COMPLETE. Every criterion passed; the Goal is `Succeeded`. The full suite is operator follow-up 0 |
+| Session status | COMPLETE. Every criterion passed; the Goal is `Succeeded`. The operator's full-suite run passed (follow-up 0) |
 
 ## Summary
 
@@ -166,7 +166,7 @@ never, always, wrong field) → each caught in 3–5 s.
 * **Recorded smoke tier against the installed dev916 build** (validate-dev's way): `DEBATE_SMOKE_BIN=<scratch>/bin/debate-research DEBATE_SMOKE_EXPECT_SHA=971e8dd… DEBATE_SMOKE_EXPECT_TAG=v0.1.0-dev.916 uv run --frozen pytest tests/smoke -m "not live and not in_process" -q` → `27 passed in 5.47s`, including doctor's smoke check and its new Unicode assertion.
 * `ruff check .` → `All checks passed!`; `ruff format --check .` → `502 files already formatted`. `pyright` → `0 errors` (it now reports `Assuming Python version 3.12.7`, from the `.venv`). `lint-imports` → `Contracts: 11 kept, 0 broken.` `check_thin_handlers.py` → `OK: 19 … within 25 statements`. `uv lock --check` → clean, and `uv lock` changed nothing. `shellcheck scripts/install_channel.sh` → clean. `uvx --from actionlint-py actionlint` → clean. `check_links.py` → `OK: 1238 relative links and anchors in 166 Markdown files`.
 * `uv run scripts/validate_specs.py` → `OK: 307 files, 38 epics, 249 tasks, 20 releases`.
-* Full suite: operator follow-up 0.
+* **Full suite, run by the operator** (reported 2026-10-07, this worktree at `c50b3a5`): `uv run pytest -q` → `4151 passed, 1 skipped, 1 warning in 70.96s`. The skip is the parser eval (`tests/evals/parser/test_parser_eval.py:279`, "4 of 6 pr-subset files are not yet corrected by a person"), not this task's. The warning is pytest-socket's note in `test_smoke_harness.py`, as before. Total coverage 96%; `commands/doctor.py` 100%, `evidence/normalization.py` 100%.
 
 ## Files changed
 
@@ -289,7 +289,7 @@ never, always, wrong field) → each caught in 3–5 s.
 
 ## Operator follow-ups
 
-**0. Full suite** (~1–2 min; the last two runs took 64 s and 69 s).
+**0. Full suite** — DONE by the operator: `4151 passed, 1 skipped in 70.96s` (see Whole-repo checks).
 
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t14-install-interpreter-bound
@@ -323,7 +323,7 @@ If the step failed, nothing was published; paste its log. validate-dev then runs
 its smoke job's log should end `validate-dev smoke: passed`.
 
 **2. Optional: move the launchd agent's build to the first pre-release containing this task.**
-Run it any time after step 1, ideally before Wednesday 06:00. The rehearsal guards it: if the build
+Run it any time after step 1, ideally before the agent's next Wednesday 06:00 run. The rehearsal guards it: if the build
 fails any check, the script says `the installed debate-research was not touched` and the agent
 keeps the build it has. Run it in one terminal.
 

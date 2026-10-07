@@ -20,16 +20,22 @@
 #      both installed distributions record those wheel files as their source, the installed
 #      `debate-research --version --json` reports this version and channel, the build can import
 #      every integration the CLI's composition root wires (`python -m debate_cli.installation`,
-#      v1-e01-t17), and `debate-research doctor` passes (v1-e01-t14: it fails when the running
-#      Python's Unicode database is not the one the normalizer is pinned to). A build that fails
-#      any of them stops here, and the install it would have replaced is not touched;
+#      v1-e01-t17; it also refuses a build missing a distribution of a declared extra), and
+#      `debate-research doctor` passes (v1-e01-t14, v1-e01-t22: it fails when the running Python's
+#      Unicode database is not the one the normalizer is pinned to, or when a wired integration
+#      does not import). A build that fails any of them stops here, and the install it would have
+#      replaced is not touched;
 #   5. only then installs debate-cli and debate-core **by the file URLs of those two verified
 #      wheels** into the real tool directory (`uv tool dir`, or the caller's UV_TOOL_DIR), which
 #      puts `debate-research` in uv's tool bin directory (`uv tool dir --bin`, normally
 #      ~/.local/bin), in its own environment, outside every checkout and every project .venv, and
 #      runs the same checks against it. Third-party dependencies (typer, pydantic, httpx, boto3,
-#      lxml…) still come from the default index, including those of the debate-core extras
-#      debate-cli declares (aws, docx, opencaselist).
+#      lxml…) come from the default index, including those of the debate-core extras debate-cli
+#      declares (aws, docx, opencaselist). The rehearsal resolves them; the real install is held to
+#      exactly the versions the rehearsal installed (`uv pip freeze` of the rehearsal, passed as
+#      `--constraints`, v1-e01-t22), so a release published in between cannot make the real install
+#      differ from the one that was checked. Afterwards the two environments must list the same
+#      distributions at the same versions, or the script fails.
 #
 # Why direct URLs, not `--find-links <dir> debate-cli==<version>` (ac2b of the task spec): neither
 # `debate-core` nor `debate-cli` is registered on PyPI, and a find-links install keeps PyPI in the
@@ -182,9 +188,13 @@ printf '%s\n' "${REQUIRES_PYTHON}" | grep -Eq '^[0-9A-Za-z.*,<>=!~ ]+$' \
 
 # Install the build into whatever UV_TOOL_DIR and UV_TOOL_BIN_DIR say now, and check it there. The
 # rehearsal runs this inside `( … ) ||`, where `set -e` does not apply, so every step that can fail
-# says so with its own `|| fail`.
+# says so with its own `|| fail`. An argument, when given, is a constraints file the resolution must
+# keep to.
 install_and_check() {
-    uv tool install --force --python "${REQUIRES_PYTHON}" \
+    if [ $# -gt 0 ]; then
+        set -- --constraints "$1"
+    fi
+    uv tool install --force --python "${REQUIRES_PYTHON}" "$@" \
         "debate-cli @ ${ASSETS_URL}/${CLI_WHEEL}" \
         --with "debate-core @ ${ASSETS_URL}/${CORE_WHEEL}" \
         || fail "uv could not install debate-cli ${VERSION} on a Python matching '${REQUIRES_PYTHON}'"
@@ -247,8 +257,43 @@ REHEARSAL=$(mktemp -d "${TEMPORARY}/debate-research-rehearsal.XXXXXX")
     install_and_check
 ) || fail "the build from ${TAG} failed a check in the rehearsal install (see above); the installed debate-research was not touched"
 
+# The real install resolves the third-party dependencies again, and a release published since the
+# rehearsal would win (v1-e01-t22). So it is pinned to exactly what the rehearsal installed, read
+# from the rehearsal's environment: every third-party distribution as `name==version`. The two
+# first-party lines are left out, because the verified file URLs already decide them. Anything else
+# cannot be pinned, and the script refuses rather than install something the rehearsal did not check.
+REHEARSED_PYTHON="${REHEARSAL}/tools/debate-cli/bin/python"
+REHEARSED="${REHEARSAL}/rehearsed.txt"
+CONSTRAINTS="${REHEARSAL}/constraints.txt"
+uv pip freeze --quiet --python "${REHEARSED_PYTHON}" > "${REHEARSED}" \
+    || fail "could not list what the rehearsal installed; the installed debate-research was not touched"
+UNPINNABLE=$(awk '
+    /^debate-(cli|core) @ / { next }
+    /^debate-(cli|core)[^A-Za-z0-9._-]/ { print; next }
+    /^[A-Za-z0-9][A-Za-z0-9._-]*==[A-Za-z0-9.!+_-]+$/ { next }
+    { print }
+' "${REHEARSED}")
+[ -z "${UNPINNABLE}" ] \
+    || fail "the rehearsal installed $(printf '%s' "${UNPINNABLE}" | head -n 1), which cannot be pinned for the real install; the installed debate-research was not touched"
+grep -Ev '^debate-(cli|core) @ ' "${REHEARSED}" > "${CONSTRAINTS}" || true
+PINNED=$(wc -l < "${CONSTRAINTS}" | tr -d ' ')
+if [ "${PINNED}" = 1 ]; then NOUN=distribution; else NOUN=distributions; fi
+
 echo "The rehearsal passed. Installing debate-cli ${VERSION} (${CHANNEL} channel) as a uv tool..."
-install_and_check
+echo "Pinning the real install to the ${PINNED} third-party ${NOUN} the rehearsal checked."
+install_and_check "${CONSTRAINTS}"
+
+# What uv was asked for is not proof of what it did. The real environment must hold exactly what the
+# rehearsal's did, so a uv that ignored the pins is caught here rather than trusted. By now the real
+# install has replaced the previous one, so this makes the exit status true; the pins are what kept
+# the two the same.
+INSTALLED_LIST="${REHEARSAL}/installed.txt"
+uv pip freeze --quiet --python "${TOOL_ENVIRONMENT}/bin/python" > "${INSTALLED_LIST}" \
+    || fail "could not list what the real install holds, so it cannot be shown to be the build the rehearsal checked"
+if ! diff "${REHEARSED}" "${INSTALLED_LIST}" > "${REHEARSAL}/difference.txt"; then
+    sed -n -e 's/^< /-/p' -e 's/^> /+/p' "${REHEARSAL}/difference.txt" >&2
+    fail "the real install is not the build the rehearsal checked (- rehearsal, + real install, above). It has already replaced the previous install. Run this script again; if it fails the same way, this uv is not keeping to --constraints"
+fi
 
 if [ "${PATH_WARNING}" = yes ]; then
     ON_PATH=$(command -v debate-research || true)

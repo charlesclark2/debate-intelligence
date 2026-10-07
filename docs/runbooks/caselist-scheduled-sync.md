@@ -85,9 +85,19 @@ Python whose Unicode database the evidence normalizer is not pinned to
 **What the installer checks before it replaces anything.** `install_channel.sh` first installs the
 build into a temporary tool directory and checks it there: the wheels' provenance,
 `debate-research --version --json`, `python -m debate_cli.installation` (every wired integration
-imports) and `debate-research doctor`. Only if all of them pass does it install into the real tool
-directory, the one the agent runs, and repeat the checks. A build that fails in the rehearsal ends
-with `the installed debate-research was not touched`, and the agent keeps running the build it had.
+imports, and every package the build declares is installed) and `debate-research doctor`. Only if
+all of them pass does it install into the real tool directory, the one the agent runs, and repeat
+the checks. A build that fails in the rehearsal ends with `the installed debate-research was not
+touched`, and the agent keeps running the build it had.
+
+**The real install is the build the rehearsal checked.** The real install does not resolve the
+third-party packages afresh. It is pinned to exactly the versions the rehearsal installed, and the
+log says `Pinning the real install to the N third-party distributions the rehearsal checked.` A
+release published to PyPI in the seconds between the two installs therefore cannot change what the
+agent runs. Afterwards the script compares the two environments. If they differ it fails with
+`the real install is not the build the rehearsal checked`, lists the differences, and says the
+previous install has already been replaced. Run the script again; if it fails the same way, the
+installed uv is not keeping to `--constraints`, and that needs reporting rather than working around.
 
 **Checking the build the agent runs now**, at any time, as the agent runs it:
 
@@ -96,18 +106,20 @@ AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgent
 env -i HOME="${HOME}" PATH="${AGENT_PATH}" sh -c 'command -v debate-research; debate-research doctor; echo "doctor exit=$?"'
 ```
 
-`doctor` reports the build's versions, its interpreter, its wiring, and its Unicode database beside
-the normalizer's pin. Its exit status:
+`doctor` reports the build's versions, its interpreter, its wiring, its Unicode database beside
+the normalizer's pin, and whether every integration the CLI wires imports. Its exit status:
 
 | Exit | Means | What to do |
 |---|---|---|
-| 0 | The report was produced and the interpreter's Unicode database is the one the normalizer is pinned to. | Nothing. |
-| 1 | The two Unicode databases differ (`UNICODE_DATABASE_MISMATCH`, naming both versions and the policy page). Every command that normalizes evidence text would refuse to run. | Reinstall a tag with `install_channel.sh`, which picks a Python the wheel admits. |
-| 70 | `doctor` could not determine the normalizer's pinned version at all. That is a bug in the build, not a verdict on the interpreter. | Install a different tag and report the build. |
+| 0 | The report was produced, the interpreter's Unicode database is the one the normalizer is pinned to, and every wired integration imports. | Nothing. |
+| 1 | A check failed. The two Unicode databases differ (`UNICODE_DATABASE_MISMATCH`, naming both versions and the policy page), so every command that normalizes evidence text would refuse to run. Or wired integrations do not import (`INTEGRATIONS_DO_NOT_IMPORT`, naming each one and why), so every command that uses them would fail. Both at once are `INSTALLATION_CHECKS_FAILED`. | Reinstall a tag with `install_channel.sh`, which picks a Python the wheel admits and refuses an incomplete build. Never add a package to the tool environment by hand. |
+| 70 | `doctor` could not make a check at all: the normalizer's pinned version is unknown, or the CLI wires an integration in a way it cannot follow. That is a bug in the build, not a verdict on the installation. | Install a different tag and report the build. |
 
 Nothing else `doctor` reports changes its exit status. Settings not loaded, an unknown package
-version or an unexpected platform are described, never failed: none of them is a failure it can
-state precisely.
+version, an unexpected platform, or a declared extra's package missing (`Extras' packages missing`)
+are described, never failed: none of them is a failure it can state precisely. A missing package
+that a wired integration needs makes that integration fail to import, and that is exit 1. The
+installer refuses a build with any declared package missing.
 
 ## Step 1 — rehearse, in dev
 

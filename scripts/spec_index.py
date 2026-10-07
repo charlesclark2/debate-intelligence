@@ -177,7 +177,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check:
         if new != roadmap.read_text():
-            print("ROADMAP.md is stale; run `uv run scripts/spec_index.py`", file=sys.stderr)
+            print(
+                "ROADMAP.md is stale. On dev, merge the open 'Refresh generated files' pull request; "
+                "outside a task, `uv run scripts/spec_index.py` rewrites it",
+                file=sys.stderr,
+            )
             return 1
         print("ROADMAP.md is up to date")
         return 0

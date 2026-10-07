@@ -311,9 +311,78 @@ are no longer needed once this merges and Charlie has run the setup block (`git 
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-07
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with no code changes requested. One read-only check is asked for
+before the PR (below).
+
+* **The mark-alignment bug is real, and it is mine.** In my stopgap's `position_map`, a position at
+  an insertion maps past the inserted characters. A mark ending exactly where Numbers had dropped a
+  character therefore takes that character back inside the mark. Your two-map rule (a mark ends at
+  the earliest place and starts at the latest) is right. The mutant that only the property catches
+  shows the property earns its place.
+* **The real-file run is the strongest evidence in the report.** On `9d0a74b9…`'s own `.numbers`
+  file, repair-then-import reproduced the committed labels exactly. It printed counts only.
+* **Deviations 1 to 3:** accepted.
+  * Deviation 1 (`check` and `import` now enforce the card rules `write_label_file` applies) closes
+    a crash and keeps "exit 0 exactly when import would succeed" true.
+  * Deviation 2: the table-name line is spreadsheet furniture.
+  * Deviation 3 (unsampled span cells are a note): `import` has always ignored them.
+* **Decisions:** accepted:
+  * numbers-parser in the existing `dev` group, imported lazily;
+  * the letters-and-digits refusal rule;
+  * messages that never quote a whole cell;
+  * older-file detection after a repair.
+
+**Before the PR: a read-only check of `a888a5db…`'s spans.** Its import used my stopgap. The
+stopgap carried marks on rows 18, 22 and 31, the rows where Numbers had changed the text. The bug
+can only have put whitespace at the edge of a span. So load the committed `a888a5db…` label file
+and the document's text the way the tool does, and list every span range, underline or highlight,
+whose first or last character is whitespace. Report only the row number as the worksheet showed
+it, the column, which edge, and the kind of whitespace (space, non-breaking space, line break).
+Print no text. Append the result to this report under "PM-requested check".
+
+* If the list is empty, say so and open the PR.
+* If it is not, open the PR anyway and stop there. Charlie will look at those rows in Word, and the
+  PM will decide whether a label correction is needed.
+
+**Charlie's local guide:** the PM updates it after this merges, following your list.
+
+## PM-requested check
+
+Run on 2026-10-07 from the task worktree. This was a read-only, in-process load of the committed
+`a888a5db…` label file (`CORRECTED`) and of the document's text, loaded the way the tool loads it.
+The paragraph texts still match the label file's digests. It printed row numbers, columns, edges
+and whitespace kinds only, and took 0.45 s.
+
+The file has 8 sampled rows, numbered as the worksheet showed them: 3, 4, 7, 9, 13, 18, 22 and 31.
+They hold 32 span ranges. **7 of those ranges have whitespace at an edge:**
+
+| Row | Column | Edge | Whitespace |
+|---|---|---|---|
+| 13 | underline | end | space |
+| 13 | highlight | start | space |
+| 13 | highlight | start | space (a second range) |
+| 18 | underline | end | space |
+| 18 | highlight | end | space |
+| 22 | underline | end | space |
+| 22 | highlight | end | space |
+
+What this does and does not show:
+
+- **Rows 18 and 22** are two of the three rows where the stopgap carried marks. Every edge flagged
+  there is an *end* edge holding a space, which is the shape the bug leaves: a mark ending where
+  Numbers had dropped a character takes that character back inside.
+- **Row 31**, the third carried row, has no whitespace at any span edge.
+- **Row 13** was not a carried row, so its whitespace edges came from the marks as they were
+  written. The guide allows that: a space is marked when Word shows it underlined.
+- A space at an edge is also correct wherever Word really underlines or highlights it. So this
+  list says where to look, not what is wrong.
+
+Per the review, the PR is opened anyway. Charlie checks rows 13, 18 and 22 in Word, and the PM
+decides whether a label correction is needed.

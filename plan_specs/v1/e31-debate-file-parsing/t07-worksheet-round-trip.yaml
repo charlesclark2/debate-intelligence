@@ -92,7 +92,7 @@ spec:
         report says so for the PM to update that copy. Each worksheet, and the `.numbers` file
         beside it, is deleted after a successful import.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

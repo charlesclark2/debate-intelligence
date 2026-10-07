@@ -59,7 +59,7 @@ spec:
       description: >-
         validate-dev's smoke check of `doctor` asserts the new fact on the installed build, and passes.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -274,9 +274,22 @@ Paste the prompt together with the PM's instructions for that session.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted. Merge with `scripts/task pr` (not partial); the Goal is `Succeeded`.
+
+- **Checked against the branch** (`445db19`, tree clean). `report_verdict` takes the last `**Verdict:**` line and reads anything outside the four verdicts as PENDING. The trap is armed only after the existence checks and disarmed before the launcher. Both failures were shown before the fix. The 68-report walk compares against the old rule copied by hand, with its non-vacuous guard. All five requested mutants were caught, plus the finish mutant.
+- **Deviation 1 is accepted.** The brief was wrong about v1-e31-t07: its appended "PM-requested check" carries no verdict line, so it is harmless under the new rule.
+- **Deviations 2 and 3 are accepted, and both are the right call.** Under the new rule, a `finish --partial` that confirmed a merge from an earlier ACCEPTED, and so deleted the branch of an open second PR, is the same fault as `pr` reading the first verdict. The same goes for a PR body that quotes the old review. If `dev`'s copy of a report changes after the merge, `finish` refuses on the blob comparison, and `--force` is the documented way past. That is acceptable.
+- **Decisions 1–8 are accepted.** In particular, resume never adopts a stray local branch, refuses while `origin/task/<task>` exists, and `start` never overwrites a report.
+- **Operator follow-up 1 is not wanted.** t16's only open item is its follow-up 3, an operator check after the next promotion, which the PM closes out. No session is needed, so t16 is not resumed. The first real use of `resume` will be v1-e31-t05 once the labeling is done.
+- **Follow-up work.**
+  - Item 1: the PM files it as a small E01 task (priority 3). `pr --partial`'s open-items check should read only the current session's sections.
+  - Item 2 is declined. The literal rule stands, and a line-start verdict label inside a fenced block after the PM review is not something a report should contain.
+  - Item 3 belongs to `v1-e01-t19`.
+  - Item 4 is pre-existing and out of CI's scope; no action.

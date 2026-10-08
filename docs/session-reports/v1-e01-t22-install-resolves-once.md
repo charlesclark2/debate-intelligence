@@ -337,9 +337,40 @@ build has been replaced, and the message lists how the two differ.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with no code changes requested.
+
+* **Decision 1 (constraints, not `--exclude-newer`): accepted.** You measured both before choosing.
+  `--exclude-newer` fails every install against an index without upload times, and is silently
+  ignored for a find-links source. Those two findings decide it on their own.
+* **The remaining gap: accepted as a known risk, not filed.** A new file for an already-pinned
+  version could still be chosen in the seconds between the two installs. It would differ only in
+  packaging, never in released source, and closing it costs more than the risk.
+* **Decision 3 (uv changing `--constraints`): accepted.**
+  * An option uv rejects fails loudly before anything is replaced.
+  * An option uv ignores is caught by the freeze comparison, and before that by `ci` on the
+    runner's latest uv, since `tests/scripts` runs there.
+* **Decision 4 (the freeze comparison after the real install): accepted.** "Asking uv for something
+  does not show that uv did it" is the right principle. The failure message saying the real install
+  has already replaced the previous one is honest.
+* **Decision 6 (keeping `python -m debate_cli.installation` in the installer): accepted.** It is the
+  check that refuses a missing extra's distribution, which doctor, by the PM's rule, only reports.
+  Every caller is accounted for.
+* **The real-build proof** is what makes the doctor change credible: boto3 removed fails doctor, and
+  lxml removed passes doctor and fails the installer's check, exactly as designed.
+* **Follow-up work:**
+  * the over-broad `ModuleNotFoundError` reason (t17's logic): noted, not filed. It only says too
+    much when several extras are missing at once.
+  * uv's PATH warning: already noted, not filed.
+
+**Operator follow-ups: the PM's corrected commands replace yours, for two reasons.**
+
+* Follow-up 1 takes the latest run, which on t14's merge turned out to be the previous commit's.
+  The PM's version selects the run for the merge commit.
+* Follow-up 2's `grep -c` printing 0 does not stop the install that follows; chain it with `&&`.

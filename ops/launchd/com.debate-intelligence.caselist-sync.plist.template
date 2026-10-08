@@ -21,6 +21,12 @@
 
   The agent runs the wrapper and nothing else. All the logic is in `debate-research caselist
   pull`; the wrapper sets DEBATE_ENV and the AWS profile and execs it.
+
+  Nothing this plist names is inside a git working tree or under a folder macOS protects from
+  background processes (~/Documents, ~/Desktop, ~/Downloads, iCloud Drive, /Volumes). The
+  wrapper is the installer's copy in ~/.local/share/debate-research/launchd/, not the checkout's:
+  the first scheduled run, on 2026-10-07, exited 126 with "Operation not permitted" because
+  launchd may not open a file under ~/Documents (v1-e34-t10).
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -58,8 +64,13 @@
         <string>@AWS_PROFILE@</string>
         <key>HOME</key>
         <string>@HOME_DIRECTORY@</string>
-        <!-- launchd gives an agent a minimal PATH, which would not find the console script or
-             the AWS CLI. The installer writes the PATH of the shell it was run from. -->
+        <!-- The console script by its full path, so that nothing earlier on PATH can stand in
+             for the installed build. -->
+        <key>DEBATE_RESEARCH_BIN</key>
+        <string>@DEBATE_RESEARCH_BIN@</string>
+        <!-- The console script's directory and the system's, and nothing of the installing
+             shell's: that PATH carried anaconda, pyenv and directories under ~/Documents. What
+             the command runs besides itself (osascript for notifications) is in /usr/bin. -->
         <key>PATH</key>
         <string>@PATH_VALUE@</string>
     </dict>

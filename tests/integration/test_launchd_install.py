@@ -616,7 +616,8 @@ def test_the_launchd_check_refuses_an_agent_installed_before_the_wrapper_was_cop
 
     assert refused.returncode == 2
     assert "reinstall" in refused.stderr
-    assert not any(line.startswith("bootstrap") for line in calls.read_text(encoding="utf-8").splitlines())
+    called = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+    assert not any(line.startswith("bootstrap") for line in called)
 
 
 # --- Unchanged from v1-e34-t02 -------------------------------------------------------------------

@@ -13,7 +13,8 @@
 # first scheduled run, on 2026-10-07, exited 126 with "Operation not permitted"). Running this
 # script again replaces the copy. Every path the agent will use is refused if it lies inside a git
 # working tree or a project .venv, or under ~/Documents, ~/Desktop, ~/Downloads, iCloud Drive
-# (~/Library/Mobile Documents) or /Volumes.
+# (~/Library/Mobile Documents), ~/Library/CloudStorage (Dropbox, Google Drive and other File
+# Provider folders) or /Volumes.
 #
 #   ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --dry-run
 #   ops/launchd/install.sh --caselist hsld26 --env prod --aws-profile debate-prod-evidence
@@ -114,7 +115,8 @@ physical_path() {
 protected_folder_of() {
     candidate="$(lower "$1")/"
     for home in "${HOME}" "${PHYSICAL_HOME}"; do
-        for folder in "${home}/Documents" "${home}/Desktop" "${home}/Downloads" "${home}/Library/Mobile Documents"; do
+        for folder in "${home}/Documents" "${home}/Desktop" "${home}/Downloads" \
+            "${home}/Library/Mobile Documents" "${home}/Library/CloudStorage"; do
             case "${candidate}" in
                 "$(lower "${folder}")"/*) printf '%s\n' "${folder}"; return 0 ;;
             esac
@@ -444,15 +446,29 @@ echo "Copied the wrapper to ${WRAPPER}"
 echo "The agent runs ${DEBATE_RESEARCH_PATH} and keeps its data in ${DATA_DIRECTORY}"
 echo "Logs will be written to ${LOG_DIRECTORY}"
 echo
-echo "Nothing is scheduled yet. Validate the pipeline first, then enable the agent:"
-echo
-echo "  DEBATE_ENV=dev debate-research caselist pull${CASELISTS} --dry-run"
-echo "  DEBATE_ENV=dev debate-research caselist pull${CASELISTS}"
-echo "  launchctl bootstrap gui/\$UID ${DESTINATION}"
-echo "  launchctl print gui/\$UID/${LABEL}"
-echo "  $0 --check-launchd"
-echo
-echo "If the agent was already loaded, the new wrapper is used from its next run, but launchd keeps"
-echo "the old plist until it is booted out and bootstrapped again."
+
+# A reinstall over a loaded agent needs a reload and a check, never a pull: the validation pull is
+# for a first install, and suggesting it again would spend the day's downloads for nothing.
+CASELIST_FLAGS=""
+for slug in ${CASELISTS}; do
+    CASELIST_FLAGS="${CASELIST_FLAGS} --caselist ${slug}"
+done
+if command -v launchctl >/dev/null 2>&1 && launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1; then
+    echo "${LABEL} is already loaded, and launchd keeps the plist it loaded. Reload it, then check"
+    echo "that launchd can run the new wrapper (no sync, no download):"
+    echo
+    echo "  launchctl bootout gui/\$UID/${LABEL}"
+    echo "  launchctl bootstrap gui/\$UID ${DESTINATION}"
+    echo "  launchctl print gui/\$UID/${LABEL}"
+    echo "  $0 --check-launchd"
+else
+    echo "Nothing is scheduled yet. Validate the pipeline first, then enable the agent:"
+    echo
+    echo "  DEBATE_ENV=dev debate-research caselist pull${CASELIST_FLAGS} --dry-run"
+    echo "  DEBATE_ENV=dev debate-research caselist pull${CASELIST_FLAGS}"
+    echo "  launchctl bootstrap gui/\$UID ${DESTINATION}"
+    echo "  launchctl print gui/\$UID/${LABEL}"
+    echo "  $0 --check-launchd"
+fi
 echo
 echo "docs/runbooks/caselist-scheduled-sync.md has the whole procedure, including how to disable it."

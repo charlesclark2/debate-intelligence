@@ -364,6 +364,7 @@ PROTECTED_LOCATIONS: dict[str, Callable[[Path], Path]] = {
     "Desktop": lambda home: home / "Desktop",
     "Downloads": lambda home: home / "Downloads",
     "iCloud Drive": lambda home: home / "Library" / "Mobile Documents" / "com~apple~CloudDocs",
+    "a File Provider folder": lambda home: home / "Library" / "CloudStorage" / "Dropbox",
     "a removable volume": lambda _home: Path("/Volumes/External Drive"),
 }
 PROTECTED_FOLDER_NAMES = {
@@ -371,6 +372,7 @@ PROTECTED_FOLDER_NAMES = {
     "Desktop": "Desktop",
     "Downloads": "Downloads",
     "iCloud Drive": "Library/Mobile Documents",
+    "a File Provider folder": "Library/CloudStorage",
     "a removable volume": "/Volumes",
 }
 
@@ -686,6 +688,47 @@ def test_the_launchd_check_refuses_an_agent_installed_before_the_wrapper_was_cop
     assert "reinstall" in refused.stderr
     called = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
     assert not any(line.startswith("bootstrap") for line in called)
+
+
+# --- What the installer says to do next -----------------------------------------------------------
+
+
+def test_after_a_first_install_the_next_steps_give_each_caselist_its_flag(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
+) -> None:
+    """The validation pull it prints has to be one the command accepts, `--caselist` per slug."""
+    launchctl_directory, _state, _calls = fake_launchctl
+    installed = install(
+        "--caselist", "testcl26", "--caselist", "othercl26", "--debate-research", str(console_script),
+        home=home, path_prefix=(launchctl_directory,),
+    )  # fmt: skip
+
+    assert installed.returncode == 0, installed.stderr
+    assert "Nothing is scheduled yet" in installed.stdout
+    assert "caselist pull --caselist testcl26 --caselist othercl26 --dry-run" in installed.stdout
+    assert "caselist pull testcl26" not in installed.stdout
+
+
+def test_a_reinstall_over_a_loaded_agent_suggests_a_reload_and_the_check_never_a_pull(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
+) -> None:
+    """A real pull on a reinstall would spend the day's downloads to prove nothing new."""
+    launchctl_directory, state, calls = fake_launchctl
+    state.write_text(json.dumps({LABEL: {"runs": 1, "last_exit_code": 0}}), encoding="utf-8")
+
+    installed = install(
+        "--caselist", "testcl26", "--debate-research", str(console_script),
+        home=home, path_prefix=(launchctl_directory,),
+    )  # fmt: skip
+
+    assert installed.returncode == 0, installed.stderr
+    assert "caselist pull" not in installed.stdout
+    assert "Nothing is scheduled yet" not in installed.stdout
+    assert f"launchctl bootout gui/$UID/{LABEL}" in installed.stdout
+    assert f"launchctl bootstrap gui/$UID {home}/Library/LaunchAgents/{LABEL}.plist" in installed.stdout
+    assert "--check-launchd" in installed.stdout
+    called = calls.read_text(encoding="utf-8").splitlines()
+    assert called and all(line.startswith("print ") for line in called), "the installer changed launchd"
 
 
 # --- Unchanged from v1-e34-t02 -------------------------------------------------------------------

@@ -23,10 +23,10 @@
   pull`; the wrapper sets DEBATE_ENV and the AWS profile and execs it.
 
   Nothing this plist names is inside a git working tree or under a folder macOS protects from
-  background processes (~/Documents, ~/Desktop, ~/Downloads, iCloud Drive, /Volumes). The
-  wrapper is the installer's copy in ~/.local/share/debate-research/launchd/, not the checkout's:
-  the first scheduled run, on 2026-10-07, exited 126 with "Operation not permitted" because
-  launchd may not open a file under ~/Documents (v1-e34-t10).
+  background processes (~/Documents, ~/Desktop, ~/Downloads, iCloud Drive, ~/Library/CloudStorage,
+  /Volumes). The wrapper is the installer's copy in ~/.local/share/debate-research/launchd/, not
+  the checkout's: the first scheduled run, on 2026-10-07, exited 126 with "Operation not
+  permitted" because launchd may not open a file under ~/Documents (v1-e34-t10).
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">

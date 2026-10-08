@@ -174,11 +174,11 @@ The agent runs nothing from a git checkout (`v1-e34-t10`):
 | Console script | `DEBATE_RESEARCH_BIN` in the plist: the path given with `--debate-research`, or the `debate-research` this shell finds, written as found | So that no other `debate-research` earlier on a PATH can stand in for the installed build |
 | `PATH` | The console script's directory, then `/usr/bin:/bin:/usr/sbin:/sbin` | The command runs nothing else but `osascript`, for notifications, which is in `/usr/bin`. The installing shell's PATH is not copied |
 | Data | Whatever the installed build reports for `storage.data_dir`; the installer asks it with `config show` | The bundled profile decides it, not the checkout |
+| Refused | Any of the above, the log directory or HOME under `~/Documents`, `~/Desktop`, `~/Downloads`, `~/Library/Mobile Documents` (iCloud Drive), `~/Library/CloudStorage` (Dropbox, Google Drive and other File Provider folders) or `/Volumes`; or inside a git working tree or a project `.venv` | macOS privacy protection keeps launchd agents out of those folders, and a checkout or `.venv` changes under the agent |
 
 The wrapper is copied out for two reasons. A checkout's copy is whatever branch is checked out at
 06:00 on Wednesday. And macOS privacy protection does not let a launchd agent open anything under
-`~/Documents`, `~/Desktop`, `~/Downloads`, iCloud Drive (`~/Library/Mobile Documents`) or
-`/Volumes`. The first scheduled run, on 2026-10-07, ran the checkout's wrapper under `~/Documents`
+the folders in the table's last row. The first scheduled run, on 2026-10-07, ran the checkout's wrapper under `~/Documents`
 and exited 126 with `Operation not permitted`. The installer refuses a wrapper destination
 (`--wrapper-dir`), log directory, data directory or console script under any of those folders, or
 inside a git working tree or a project `.venv`, naming the path and the reason. Nothing is written

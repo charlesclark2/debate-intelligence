@@ -31,6 +31,11 @@ v1-e01-t14 adds three things, each tested here:
   first, and a build that fails one leaves the previous install byte-for-byte as it was.
 * **`--no-path-warning`** silences the PATH warning and nothing else.
 
+v1-e01-t22 holds the real install to the rehearsal's resolution. The shim publishes a newer release
+of the third-party dependency to the index the moment the rehearsal ends, and the real install must
+still get the version the rehearsal checked. A control test shows that an unpinned second install
+takes the newer one, so the publish is live.
+
 Offline: every URL is `file://`, the uv cache is a temporary directory, and uv may not download a
 Python (it needs one that debate_core's `requires-python` admits and that it can already find, as
 CI's `uv python install` provides).
@@ -218,10 +223,17 @@ def write_release(
     return directory
 
 
+def third_party_wheel(directory: Path, version: str) -> Path:
+    """`thirdparty-dep` at `version`; the module says which version it is."""
+    return write_wheel(
+        directory, "thirdparty-dep", version, files={"thirdparty_dep/__init__.py": f"VERSION = {version!r}\n"}
+    )
+
+
 def write_decoy_index(root: Path, *, squat_versions: tuple[str, ...]) -> str:
     """A PEP 503 index holding the third-party dependency and squatted first-party wheels."""
     files = root / "files"
-    write_wheel(files, "thirdparty-dep", "1.0", files={"thirdparty_dep/__init__.py": ""})
+    third_party_wheel(files, "1.0")
     for version in squat_versions:
         for tag in ("py3-none-any", RUNNING_PYTHON_TAG):
             write_wheel(
@@ -236,12 +248,17 @@ def write_decoy_index(root: Path, *, squat_versions: tuple[str, ...]) -> str:
             cli_wheel(files, f"decoy {version} {tag}", version, tag=tag)
     simple = root / "simple"
     for wheel in sorted(files.glob("*.whl")):
-        project = wheel.name.split("-", 1)[0].replace("_", "-")
-        page = simple / project / "index.html"
-        page.parent.mkdir(parents=True, exist_ok=True)
-        existing = page.read_text(encoding="utf-8") if page.exists() else ""
-        page.write_text(existing + f'<a href="{wheel.as_uri()}">{wheel.name}</a>\n', encoding="utf-8")
+        add_to_index(simple, wheel)
     return simple.as_uri()
+
+
+def add_to_index(simple: Path, wheel: Path) -> None:
+    """List `wheel` on its project's page of the PEP 503 index at `simple`."""
+    project = wheel.name.split("-", 1)[0].replace("_", "-")
+    page = simple / project / "index.html"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    existing = page.read_text(encoding="utf-8") if page.exists() else ""
+    page.write_text(existing + f'<a href="{wheel.as_uri()}">{wheel.name}</a>\n', encoding="utf-8")
 
 
 def uv_environment(fixture: Fixture, tmp_path: Path) -> dict[str, str]:
@@ -271,14 +288,48 @@ def uv_environment(fixture: Fixture, tmp_path: Path) -> dict[str, str]:
 
 
 def uv_shim(tmp_path: Path) -> Path:
-    """A directory holding a `uv` that appends `UV_TOOL_DIR<TAB>arguments` to a log, then runs uv."""
+    """A directory holding a `uv` that appends `UV_TOOL_DIR<TAB>arguments` to a log, then runs uv.
+
+    Three settings in the script's environment change what happens around the real uv (v1-e01-t22):
+
+    * `UV_SHIM_AFTER_REHEARSAL`: a shell script run once, at the first uv call made outside the
+      rehearsal's tool directory after one made inside it, i.e. the moment the rehearsal ends and
+      before anything that follows it. A test uses it to publish a newer release to the index.
+    * `UV_SHIM_IGNORE_CONSTRAINTS`: drop `--constraints FILE` before running uv, as a uv that
+      ignored the option would.
+    * `UV_SHIM_FREEZE_EXTRA`: a line added to what `uv pip freeze` prints.
+    """
     assert UV is not None
     directory = tmp_path / "uv-shim"
     directory.mkdir(exist_ok=True)
     shim = directory / "uv"
+    seen = tmp_path / "uv-shim-rehearsal-seen"
+    ran = tmp_path / "uv-shim-after-rehearsal-ran"
     shim.write_text(
         "#!/bin/sh\n"
         f"printf '%s\\t%s\\n' \"${{UV_TOOL_DIR:-}}\" \"$*\" >> '{tmp_path / 'uv-calls.log'}'\n"
+        'case "${UV_TOOL_DIR:-}" in\n'
+        f"    *debate-research-rehearsal.*) : > '{seen}' ;;\n"
+        "    *)\n"
+        f"        if [ -n \"${{UV_SHIM_AFTER_REHEARSAL:-}}\" ] && [ -e '{seen}' ] && [ ! -e '{ran}' ]; then\n"
+        f"            : > '{ran}'\n"
+        '            sh "${UV_SHIM_AFTER_REHEARSAL}"\n'
+        "        fi ;;\n"
+        "esac\n"
+        'if [ -n "${UV_SHIM_IGNORE_CONSTRAINTS:-}" ]; then\n'
+        "    skip=\n"
+        "    for argument do\n"
+        "        shift\n"
+        '        if [ -n "${skip}" ]; then skip=; continue; fi\n'
+        '        if [ "${argument}" = --constraints ]; then skip=yes; continue; fi\n'
+        '        set -- "$@" "${argument}"\n'
+        "    done\n"
+        "fi\n"
+        'if [ -n "${UV_SHIM_FREEZE_EXTRA:-}" ] && [ "$1" = pip ] && [ "$2" = freeze ]; then\n'
+        f"    '{UV}' \"$@\" || exit\n"
+        "    printf '%s\\n' \"${UV_SHIM_FREEZE_EXTRA}\"\n"
+        "    exit 0\n"
+        "fi\n"
         f"exec '{UV}' \"$@\"\n",
         encoding="utf-8",
     )
@@ -317,6 +368,17 @@ def install(
 def run_installed(fixture: Fixture) -> dict[str, str]:
     output = subprocess.run([str(fixture.installed)], capture_output=True, text=True, check=True).stdout
     return json.loads(output.strip().splitlines()[-1])
+
+
+def installed_third_party_version(tool_directory: Path) -> str:
+    """The `thirdparty-dep` version the tool environment under `tool_directory` actually imports."""
+    python = tool_directory / "debate-cli" / "bin" / "python"
+    return subprocess.run(
+        [str(python), "-c", "import thirdparty_dep; print(thirdparty_dep.VERSION)"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
 
 
 pytestmark = pytest.mark.skipif(UV is None, reason="uv is not on PATH")
@@ -681,3 +743,129 @@ def test_the_workflows_that_install_into_scratch_directories_pass_the_option() -
 
     assert runs, "no workflow runs scripts/install_channel.sh"
     assert all("--no-path-warning" in run for run in runs), runs
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e01-t22 ac1: the real install resolves exactly what the rehearsal resolved
+# ------------------------------------------------------------------------------------------------
+
+NEWER_THIRD_PARTY = "2.0"
+
+
+def publish_newer_third_party_release(tmp_path: Path) -> Path:
+    """A shell script that publishes `thirdparty-dep` 2.0 to the fixture's index when it runs.
+
+    The wheel is built now, outside the index, and the script only moves it in and lists it, so
+    publishing takes no Python and no time.
+    """
+    index = tmp_path / "decoy-index"
+    staged = third_party_wheel(tmp_path / "unpublished", NEWER_THIRD_PARTY)
+    published = index / "files" / staged.name
+    page = index / "simple" / "thirdparty-dep" / "index.html"
+    script = tmp_path / "publish-newer-release.sh"
+    script.write_text(
+        f"cp '{staged}' '{published}'\n"
+        f"printf '%s\\n' '<a href=\"{published.as_uri()}\">{published.name}</a>' >> '{page}'\n",
+        encoding="utf-8",
+    )
+    return script
+
+
+def test_a_release_published_between_the_rehearsal_and_the_real_install_is_not_installed(
+    tmp_path: Path,
+) -> None:
+    fixture = no_squats(tmp_path)
+    publish = publish_newer_third_party_release(tmp_path)
+
+    result = install(fixture, tmp_path, UV_SHIM_AFTER_REHEARSAL=str(publish))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    # The newer release really was on the index before the real install resolved.
+    assert (tmp_path / "uv-shim-after-rehearsal-ran").exists()
+    assert NEWER_THIRD_PARTY in (
+        tmp_path / "decoy-index" / "simple" / "thirdparty-dep" / "index.html"
+    ).read_text(encoding="utf-8")
+    assert installed_third_party_version(fixture.tools / "environments") == "1.0"
+    assert run_installed(fixture)["core"] == "release"
+
+
+def test_control_an_unpinned_install_after_that_publish_takes_the_newer_release(tmp_path: Path) -> None:
+    """Why the pins are needed: the same two installs without them resolve differently."""
+    assert UV is not None
+    fixture = no_squats(tmp_path)
+    publish = publish_newer_third_party_release(tmp_path)
+    command = [
+        UV,
+        "tool",
+        "install",
+        "--force",
+        "--python",
+        REQUIRES_PYTHON,
+        f"debate-cli @ {(fixture.release / f'debate_cli-{VERSION}-py3-none-any.whl').as_uri()}",
+        "--with",
+        f"debate-core @ {(fixture.release / CORE_WHEEL).as_uri()}",
+    ]
+    environment = uv_environment(fixture, tmp_path)
+
+    subprocess.run(command, capture_output=True, text=True, env=environment, check=True)
+    first = installed_third_party_version(fixture.tools / "environments")
+    subprocess.run(["sh", str(publish)], check=True)
+    subprocess.run(command, capture_output=True, text=True, env=environment, check=True)
+    second = installed_third_party_version(fixture.tools / "environments")
+
+    assert (first, second) == ("1.0", NEWER_THIRD_PARTY)
+
+
+def test_only_the_real_install_is_pinned_and_to_what_the_rehearsal_installed(tmp_path: Path) -> None:
+    fixture = no_squats(tmp_path)
+
+    result = install(fixture, tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    (_, rehearsal), (_, real) = tool_installs(tmp_path)
+    assert "--constraints" not in rehearsal
+    assert "--constraints" in real
+    # uv records the pins it was given in the tool's receipt; the first-party wheels are not among
+    # them, because their verified file URLs already decide them.
+    receipt = tomllib.loads(
+        (fixture.tools / "environments" / "debate-cli" / "uv-receipt.toml").read_text("utf-8")
+    )
+    assert receipt["tool"]["constraints"] == [{"name": "thirdparty-dep", "specifier": "==1.0"}]
+    assert "Pinning the real install to the 1 third-party distribution the rehearsal checked" in result.stdout
+
+
+def test_a_uv_that_ignores_the_pins_is_caught_by_comparing_the_two_installs(tmp_path: Path) -> None:
+    """A future uv that accepted `--constraints` and ignored it must not pass unnoticed."""
+    fixture = no_squats(tmp_path)
+    publish = publish_newer_third_party_release(tmp_path)
+
+    result = install(fixture, tmp_path, UV_SHIM_AFTER_REHEARSAL=str(publish), UV_SHIM_IGNORE_CONSTRAINTS="1")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "the real install is not the build the rehearsal checked" in result.stderr
+    assert "-thirdparty-dep==1.0" in result.stderr
+    assert f"+thirdparty-dep=={NEWER_THIRD_PARTY}" in result.stderr
+    assert "Installed debate-research" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        pytest.param("someone-elses-package @ https://example.invalid/package.whl", id="a third-party URL"),
+        pytest.param("-e file:///somewhere/else", id="an editable install"),
+        pytest.param("debate-core==0.1.0.dev7", id="first-party from an index"),
+    ],
+)
+def test_a_rehearsal_holding_something_that_cannot_be_pinned_is_refused_before_the_real_install(
+    tmp_path: Path, line: str
+) -> None:
+    fixture = no_squats(tmp_path)
+
+    result = install(fixture, tmp_path, UV_SHIM_FREEZE_EXTRA=line)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "cannot be pinned" in result.stderr
+    assert line in result.stderr
+    assert "the installed debate-research was not touched" in result.stderr
+    assert len(tool_installs(tmp_path)) == 1, "the real install ran anyway"
+    assert not fixture.installed.exists()

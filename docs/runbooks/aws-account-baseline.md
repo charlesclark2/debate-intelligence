@@ -1,3 +1,4 @@
+<!-- docs-index: Building and verifying the AWS account baseline: identity, audit, budgets -->
 # Runbook: AWS account baseline
 
 How the AWS baseline for the Debate Intelligence Platform is built and verified. Spec:

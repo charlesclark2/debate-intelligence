@@ -1,3 +1,4 @@
+<!-- docs-index: Project rules: light CI, operator hand-off for long commands, doc locations, naming -->
 # Working agreements
 
 Rules every contributor and every Claude session follows on this project. Task specs, CI and
@@ -67,8 +68,18 @@ session may run it and say so in Deviations. When in doubt, hand it over.
 | `plan_specs/` | PlanSpecs only: releases, epics, tasks |
 | `packages/<pkg>/README.md` | Package-level developer notes |
 
-[`docs/README.md`](../README.md) indexes these. New documentation goes in the matching directory
-and gets a line in the index; don't create new top-level doc folders without updating this table.
+[`docs/README.md`](../README.md) indexes these. New documentation goes in the matching directory;
+don't create new top-level doc folders without updating this table.
+
+The index's table is generated, so nobody writes a line in it. A new document's **first line** is
+its one-line description, `<!-- docs-index: What this document is for -->`, which is invisible
+when rendered and is copied into the index as written; a directory with its own `README.md` is
+indexed by that README alone, so its other files need none. CI fails a pull request whose document
+has no such line, naming the file. Don't edit or regenerate `docs/README.md` in a task:
+`.github/workflows/refresh-generated-files.yml` regenerates it, with `ROADMAP.md`, after each merge
+into `dev`, so two tasks that each add a document never conflict over the index. Until
+[`v1-e01-t16`](../../plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml) this
+paragraph asked for the line by hand, and concurrent tasks collided on the index four times.
 
 ## 4. Descriptive names, not opaque labels
 

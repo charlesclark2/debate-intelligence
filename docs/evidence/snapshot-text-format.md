@@ -1,3 +1,4 @@
+<!-- docs-index: `debate-snapshot-text/1`: how a snapshot's normalized text and paragraph map are stored, the canonical encoding, the key check every read makes, and what `SnapshotService.load` verifies -->
 # Snapshot text format: `debate-snapshot-text/1`
 
 Owner task: `v1-e03-t02-hashing-provenance`. Implementation:

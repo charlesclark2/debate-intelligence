@@ -1,3 +1,4 @@
+<!-- docs-index: Which Word styles real team, caselist and camp `.docx` files use, and the share of files per template family -->
 # Debate file style survey
 
 What Word styles real debate files actually use, measured rather than assumed. The style

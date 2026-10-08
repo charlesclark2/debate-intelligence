@@ -1,3 +1,4 @@
+<!-- docs-index: The team Google account that owns the website's calendar and announcements sheet: owners, coach access, recovery, secrets -->
 # Runbook: website content accounts
 
 > **Not in use.** ADR-0015 was revised before acceptance on 2026-10-01: events and announcements are

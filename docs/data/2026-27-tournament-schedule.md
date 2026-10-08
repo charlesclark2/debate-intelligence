@@ -1,3 +1,4 @@
+<!-- docs-index: The 2026-27 season's tournaments as given on 2026-09-30: the seed for `site/content/tournaments.yaml`, which is now the source of record -->
 # 2026-27 tournament schedule
 
 The season as Charlie gave it on 2026-09-30. It is the seed for `site/content/tournaments.yaml`

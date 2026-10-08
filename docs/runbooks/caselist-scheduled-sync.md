@@ -1,3 +1,4 @@
+<!-- docs-index: Installing, enabling, watching and disabling the weekly `caselist pull` launchd agent -->
 # Runbook: the weekly caselist sync
 
 How the weekly OpenCaselist pull is installed, enabled, watched and turned off on the operator's

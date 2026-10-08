@@ -1,3 +1,4 @@
+<!-- docs-index: V1–V3 system architecture proposal -->
 **DEBATE RESEARCH & ARGUMENT INTELLIGENCE PLATFORM**
 
 **V1–V3 System Architecture Proposal**

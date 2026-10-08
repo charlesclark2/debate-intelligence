@@ -1,3 +1,4 @@
+<!-- docs-index: Template for session reports -->
 # Session report template
 
 `scripts/task start` copies everything below the marker into

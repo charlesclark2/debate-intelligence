@@ -1,3 +1,4 @@
+<!-- docs-index: Creating the Terraform state buckets and the dev/prod environment roots -->
 # Runbook: Terraform bootstrap and environments
 
 How the Terraform state buckets and the two environment roots are created and verified. Spec:

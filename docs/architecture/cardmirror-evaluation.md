@@ -1,3 +1,4 @@
+<!-- docs-index: CardMirror schema, API, license and round-trip evidence behind ADR-0014 -->
 # CardMirror evaluation
 
 Evidence for [ADR-0014](../adr/0014-debate-file-editor.md): what CardMirror is, how its document

@@ -1,3 +1,4 @@
+<!-- docs-index: Candidate claims and sources for the website home page's academic case, and why some kinds of finding are not used -->
 # Academic case: candidate claims and sources
 
 Status: **awaiting Charlie's approval.** Nothing here goes on the site until he strikes what he

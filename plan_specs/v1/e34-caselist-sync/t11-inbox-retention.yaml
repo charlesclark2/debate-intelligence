@@ -33,7 +33,15 @@ spec:
     the store and the bucket, and hand-made copies outside the inbox.
   priority: 2
   constraints:
-    packages: [debate_core.application, docs]
+    packages:
+      - debate_core.application
+      - docs
+      # added on the PM's instruction, 2026-10-08: the dry run's listing and the summary's display,
+      # and the tests for both packages
+      - debate_cli.commands
+      - packages/debate_core/tests
+      - packages/debate_cli/tests
+      - docs/runbooks
     forbidden:
       - Deleting a download that is not yet imported, or whose publish has not been confirmed
       - Deleting a camp download the delivery record does not yet cover

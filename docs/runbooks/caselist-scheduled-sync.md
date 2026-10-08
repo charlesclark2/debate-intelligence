@@ -271,11 +271,80 @@ One JSON object per run on stdout. The fields to read first:
 | `files_imported`, `blobs_stored` | What the importers filed, and how much of it was new |
 | `objects_published` | What reached the bucket |
 | `pending_publish` | Snapshots waiting for an AWS session |
+| `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
 | `stages[]` | One entry per stage, each with the sentence saying why it ended that way |
 
 Nothing in that object is a school, a team code, a debater's initials, a disclosure path or the
 `caselist_token` — the policy forbids all of them in a log, and the summary is built to the same
 rule, so these logs can be pasted into an issue as they are.
+
+## The download inbox
+
+`<data_dir>/inbox` (or `caselist.inbox_dir`) is where a pull downloads to and what it imports from.
+Between two runs it holds:
+
+* **Weekly archives** waiting to be imported or published (`<slug>-weekly-<date>.zip`): a week whose
+  import failed, a newer week waiting behind it, or a week whose publish is pending an AWS login.
+* **Camp downloads** in the same state (`openev-<id>-<name>`), and any camp download the OpenEv
+  delivery record does not cover.
+* `.partial/`, downloads in progress, which a run sweeps.
+* Anything put there by hand. The pull never touches a file whose name it did not give it.
+
+Everything else leaves at the end of the run that confirms it, in the **retention** stage, which
+runs after the report stage while the run still holds its lock (`v1-e34-t11`). A file is removed
+only when all of these are true:
+
+1. **It is imported.** A manifest on this machine came from these exact bytes: the week's own
+   manifest names the zip's sha256, or an OpenEv release manifest row names the camp download's.
+   That is what keeps a download waiting for an import retry, since the retry imports precisely the
+   inbox files no manifest came from.
+2. **Its snapshot is confirmed in the bucket, by this run.** For a week this run published, that is
+   the report stage's comparison. For a week an earlier run imported, the retention stage compares
+   it with the bucket itself (the same comparison `caselist status` makes) rather than trusting
+   what an earlier run said. An expired SSO session therefore confirms nothing, and the files wait
+   for a run that can check.
+3. **For a camp download, the delivery record holds its digests**
+   (`<data_dir>/caselist-sync-openev-deliveries.json`). Once the copy is gone, the record is how the
+   next run knows a camp release was already imported, or was removed. A camp file imported before
+   `v1-e34-t07` has no record entry, so its copy stays, named in every summary. That is harmless,
+   and it is never fetched again while the copy is there.
+
+**Nothing is kept longer, the newest week included.** The usual reason to keep a zip is that
+re-importing after a failed publish costs nothing. Here a zip is removed only after its publish is
+confirmed, and a publish (or a re-publish, after drift) reads the local store, never the inbox, so
+that case cannot arise. The newest weekly is also the largest, because the weeklies are cumulative.
+A removed week is never fetched again: a week on or before the newest imported one is
+`already_imported` whether or not its zip is here. The site keeps the weekly back-catalogue
+(ADR-0017), so a zip can be fetched again by hand if one is ever needed.
+
+**A run that downloads nothing still runs retention.** The first run after `v1-e34-t11` therefore
+clears the backlog that earlier builds left: every weekly they imported and published. A **dry run**
+removes nothing. Its retention row lists what a real run would remove now (`would_remove`, with the
+bytes), what it would keep and why, and the weeks it would also remove once it had imported them
+and the bucket confirmed them. `--publish-pending` removes nothing; the next pull does. An
+environment with no bucket can confirm no publish, so nothing ever leaves its inbox.
+
+**What the summary says.** The `retention` stage's reason, which the run log and the bucket's run
+report keep as written, lists every removed and kept file and the total bytes freed. Weeklies are
+named by caselist and date (`hsld26 2026-09-15`), and camp downloads and anything else by count and
+the first twelve hex digits of the sha256, never by file name: a camp file's name is its title, and a
+name given by hand can say anything. The JSON summary carries the same lists under `inbox_retention`.
+A kept file's reason is one of:
+
+| Reason | What it means | What to do |
+|---|---|---|
+| `not_imported` | No manifest came from these bytes. Usually the import failed, or the week waits behind an older one; the next run imports it. | Fix what the import stage's reason names (see "An import failed"). A week that no run will import, whose week is held from other bytes, can be deleted by hand |
+| `not_confirmed` | Imported, but the bucket does not hold the snapshot in sync, or could not be read | `aws sso login` and `caselist pull --publish-pending`; if it persists, `caselist status` names the drift |
+| `no_delivery_record` | A camp download imported before the delivery record existed | Nothing. It stays and costs nothing |
+| `unclassified` | A file whose name the pull does not give a download | Yours to keep or delete |
+
+**Removal and retention both delete inbox files, and never the same ones twice.** `caselist remove`
+(`v1-e30-t09`) deletes or rewrites the inbox files holding something a removal took out, whether or
+not they are imported. Retention deletes imported, confirmed downloads, whatever they hold. Both take
+the sync's run lock, so they cannot run at once, and each counts only what it deleted: retention
+judges the inbox as a removal left it.
+
+Measure the inbox before and after with `du -sh <data_dir>/inbox`.
 
 ## When something goes wrong
 
@@ -296,8 +365,8 @@ If it happens immediately after a fresh login, **stop** and do not retry: access
 suspended, which is the site's right (policy clause 10), and the next step is to contact the
 maintainer, not to work around it.
 
-**A download failed.** What did download is in the inbox and imported, up to the first week that
-did not arrive; a newer week of the same caselist waits in the inbox behind it rather than being
+**A download failed.** What did download is imported, up to the first week that did not arrive,
+and leaves the inbox once the bucket confirms it; a newer week of the same caselist waits in the inbox behind it rather than being
 imported out of order. Nothing needs doing: the next scheduled run fetches the missing week and
 imports it and everything behind it, oldest first, and it does not fetch again anything already
 in the inbox — each fetch spends one of the five.

@@ -396,9 +396,28 @@ row and the follow-up 3 output are what ac6 asks for.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted as a partial merge: `scripts/task pr --partial`. ac1–ac5 pass; ac6 waits for the operator's applies, and the Goal stays `InProgress` until the PM records them.
+
+- **Checked against the branch** (`feae041`, tree clean). `operator_access.tf` gains exactly one statement, `ListEvidenceObjectVersionsForRemovalPlans`: `s3:ListBucketVersions` on the bucket ARN under `local.removable_list_prefix_conditions`. Nothing else in either policy changes. Both coverage assertions iterate over every rendered statement. They classify each statement by `resource_shape_of_action` and fail on the count when a statement is unclassified. They check the bucket ARN plus the exact `s3:prefix` set for listing actions, object ARNs in this bucket, and this key. The test changed in no other way, apart from the exact action set going from seven to eight.
+- **The baseline is what makes this credible.** It shows three mutants green at `5b5e1b4` before anything changed. The count is shown to be load-bearing by removing it. The mutator now refuses to test a mutation that did not apply, and the discarded first attempt is reported as such. Both are right under working agreement 8.
+- **Decisions 1–6 are accepted.**
+  - Decision 1: classifying by action is the right reading of "no hand-listed statements". The table of actions is where a person has to act on purpose.
+  - Decision 4: if an object statement ever needs a condition (an SSE condition on `PutObject`, say), this test will fail loudly. That is intended. Whoever adds it changes the rule and the table in the same commit.
+  - Decision 5: dev plans and applies from `dev-preview` after this merges. Prod plans and applies from `prod-deploy` only after the promotion that carries this change.
+  - Decision 6: read-only calls under the everyday profile were within the instruction.
+- **Follow-up work.**
+  - Item 1, the two stale `debate_core` docstrings: the PM files them at close-out, together with v1-e30-t07 follow-up 6 (the noncurrent-residue report).
+  - Item 3, the `#` comments in `evidence-store.md`: already in scope for `v1-e01-t19-paste-safe-command-blocks`, which fixes every instance. Nothing changes here.
+  - Item 4: `v1-e29-t03` already carries the "superseded by v1-e29-t06" comment above ac3, so no amendment is needed.
+- **The PM's close-out after the operator's follow-ups 1–5:**
+  - record the dev and prod dates in *Later applies*;
+  - record follow-up 3's output against ac6;
+  - add `unset AWS_PROFILE` to the end of the new step-5 version-listing block, which leaves the everyday profile exported;
+  - set the Goal to `Succeeded`.

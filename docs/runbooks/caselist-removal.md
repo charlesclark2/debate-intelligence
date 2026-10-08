@@ -108,9 +108,12 @@ without it; see step 8), the **SUPPRESSION ENTRIES** exactly as they will be wri
 CONFIRMATION TO THE REQUESTER** (the facts for step 10: how many files, which weekly archives,
 which tournament rounds, what was kept and what was not done), and **TO CARRY IT OUT**, the exact
 `--execute` command. Add `--json` for the same plan as one
-JSON object. With only the everyday profile signed in, the plan says *Versions not counted*: that
-profile may not list object versions (session report v1-e30-t07, Operator follow-ups). `--execute`
-lists and deletes every version with the takedown profile and reports how many.
+JSON object. The everyday profile may list object versions under the prefixes a takedown removes
+from (`v1-e29-t06`), so the plan shows each object's version count. In an environment where that
+grant has not been applied yet ([evidence-store.md, Later applies](evidence-store.md#later-applies)
+records when it was), the plan says *Versions not counted* instead; everything else in it is still
+right. Either way, `--execute` lists and deletes every version with the takedown profile and
+reports how many.
 
 Read the plan before going further. Confirm:
 

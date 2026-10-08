@@ -49,7 +49,9 @@ request that is not over TLS. **No lifecycle rule expires a current object versi
 ## The two credentials, and why
 
 `DebateEvidenceOperator` is everyday work: list the documented prefixes, read, publish, use the
-key. It has **no `s3:DeleteObject` at all**. `DebateEvidenceRemoval` is the only credential in the
+key, and list object versions under the prefixes a takedown removes from, so that a removal's dry
+run can count what it will delete (`v1-e29-t06`). Listing versions is read-only. It has **no
+`s3:DeleteObject` at all**. `DebateEvidenceRemoval` is the only credential in the
 account that can delete evidence; it is scoped to `raw/`, `parsed/`, `files/`, `manifests/` and
 `quarantine/`, may write only the suppression list under `manifests/_suppression/`, and is
 assigned to one person. A removal purges noncurrent versions too, so there is nothing to restore
@@ -264,6 +266,22 @@ Success looks like: a version id, `round trip ok`, `ServerSideEncryption: aws:km
 `SSEKMSKeyId` ending in the key behind `alias/debate-dev-evidence`, a listing of
 `quarantine/_probe/`, and an `AccessDenied` on the bare bucket listing.
 
+**Version listing** with the everyday profile, read-only: allowed under a prefix a takedown
+removes from, refused anywhere else. The refusals are the `s3:prefix` condition working; a
+version listing that succeeds under `reports/` or at the bucket root means the condition is gone.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+BUCKET=debate-dev-evidence-a7508de8
+export AWS_PROFILE=debate-dev-evidence
+aws s3api list-object-versions --bucket "$BUCKET" --prefix quarantine/ --max-items 1 --query 'Versions[0].Key' --output text
+aws s3api list-object-versions --bucket "$BUCKET" --prefix reports/ --max-items 1
+aws s3api list-object-versions --bucket "$BUCKET" --max-items 1
+```
+Success looks like: the first prints a key under `quarantine/`, or `None` if nothing has been
+there; the second and third fail with `AccessDenied` naming `s3:ListBucketVersions`.
+
 **Operator command** (expected runtime ~3 min)
 ```bash
 export AWS_PROFILE=debate-admin
@@ -472,6 +490,15 @@ ids** (this repository is public).
 The two environments hold **different** customer-managed keys, which is what ADR-0010 rule 4 rests
 on: a dev-scoped credential cannot decrypt prod evidence even if it somehow reached the object.
 
+### Later applies
+
+Each later change to these roots, with the date it reached each environment. The checks are the
+ones step 5 lists for that change.
+
+| Change | dev | prod |
+|---|---|---|
+| `v1-e29-t06`: `DebateEvidenceOperator` may list object versions under `raw/`, `parsed/`, `files/`, `manifests/` and `quarantine/` (one statement added to one inline policy) | Not yet applied | Not yet applied |
+
 ## If something is wrong
 
 * **The plan wants to replace the bucket or the key.** Stop. Both carry `prevent_destroy`, so the
@@ -482,6 +509,29 @@ on: a dev-scoped credential cannot decrypt prod evidence even if it somehow reac
 * **`AccessDenied` on a put with the everyday profile.** Check the object is not being uploaded
   with `--sse` naming another algorithm or another key: the bucket policy denies an upload that
   asks for encryption other than this key, and nothing else in it denies a put.
+* **`AccessDenied` on `s3:ListBucketVersions` with the everyday profile.** Check the call named a
+  prefix under `raw/`, `parsed/`, `files/`, `manifests/` or `quarantine/`: anywhere else, the
+  bucket root included, the refusal is correct. Just after an apply that changed the permission
+  set, it can also be propagation. Terraform waits for Identity Center to provision the changed
+  set into the account. IAM then usually applies it within seconds, occasionally a few minutes,
+  and sessions already signed in pick it up without signing in again, because a role's policies
+  are evaluated on every request. Wait two minutes and retry. If it is still refused, look at what
+  reached the account, read-only:
+
+  ```bash
+  export AWS_PROFILE=debate-admin
+  INSTANCE_ARN=$(aws sso-admin list-instances --query 'Instances[0].InstanceArn' --output text)
+  aws sso-admin list-permission-set-provisioning-status --instance-arn "$INSTANCE_ARN" --max-results 5 --output table
+  ROLE=$(aws iam list-roles --query 'Roles[?starts_with(RoleName, `AWSReservedSSO_DebateDevEvidenceOperator`)].RoleName' --output text)
+  aws iam get-role-policy --role-name "$ROLE" --policy-name AwsSSOInlinePolicy --query 'PolicyDocument.Statement[].Sid' --output json
+  unset AWS_PROFILE
+  ```
+
+  The latest provisioning status should be `SUCCEEDED`, and the Sid list should include
+  `ListEvidenceObjectVersionsForRemovalPlans`. If the Sid is missing, provisioning did not reach
+  the account: stop and send the output rather than provisioning by hand. If it is there and the
+  call is still refused ten minutes after the apply, run `aws sso login --sso-session debate`,
+  retry once, and then stop and send the error. Use `DebateProdEvidenceOperator` for prod.
 * **An `allowed` where a deny was expected.** Do not carry on to prod. The inline policies are in
   `infrastructure/modules/evidence_bucket/operator_access.tf` and their assertions are in
   `tests/evidence_bucket.tftest.hcl`; add the case that was missed to the tests first, then fix

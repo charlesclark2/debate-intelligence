@@ -108,7 +108,6 @@ import contextlib
 import hashlib
 import json
 import os
-import re
 import uuid
 from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -119,19 +118,19 @@ from typing import Final
 
 from debate_core.application.caselist.pipeline import withheld_skipped_paths
 from debate_core.application.caselist_sync import (
-    INBOX_PARTIAL_DIRECTORY,
     LOCK_FILENAME,
     OPENEV_DELIVERIES_FILENAME,
     OpenEvDeliveries,
     OpenEvDelivery,
     RunLock,
     SyncRunInProgress,
+    inbox_files,
     openev_id_of_inbox_name,
+    weekly_archive_of_inbox_name,
 )
 from debate_core.application.errors import ArchiveTooLarge, DomainError, UnreadableArchive
 from debate_core.application.ports.archive import ArchiveRewriter, InventoriedEntry
 from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
-from debate_core.domain.caselist import CASELIST_SLUG_PATTERN
 
 __all__ = [
     "CaselistInbox",
@@ -150,12 +149,6 @@ __all__ = [
     "purge_inbox",
 ]
 
-_WEEKLY_NAME: Final = re.compile(
-    r"^(?P<caselist>[a-z]+[0-9]{2})-weekly-(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})\.zip$"
-)
-"""`<slug>-weekly-<date>.zip`, as `caselist pull` names a weekly archive (the site's own name)."""
-
-_CASELIST_SLUG: Final = re.compile(CASELIST_SLUG_PATTERN)
 _REWRITE_SUFFIX: Final = ".removal-rewrite"
 _CHUNK: Final = 1024 * 1024
 
@@ -353,7 +346,7 @@ def plan_inbox(
     remembered = inbox.deliveries.read()
     planned: list[InboxFilePlan] = []
     left: list[InboxTeamFilesLeft] = []
-    for path in _inbox_files(inbox.directory):
+    for path in inbox_files(inbox.directory):
         name = path.relative_to(inbox.directory).as_posix()
         one, team_files = _plan_file(
             inbox,
@@ -370,23 +363,6 @@ def plan_inbox(
         if team_files:
             left.append(InboxTeamFilesLeft(name=name, files=team_files))
     return tuple(planned), tuple(left)
-
-
-def _inbox_files(directory: Path) -> list[Path]:
-    """Every regular file under the inbox, by name: not `.partial/`, not dot files, not links."""
-    if not directory.is_dir():
-        return []
-    found: list[Path] = []
-    for current, directories, filenames in os.walk(directory, followlinks=False):
-        here = Path(current)
-        directories[:] = sorted(
-            one for one in directories if not one.startswith(".") and one != INBOX_PARTIAL_DIRECTORY
-        )
-        for filename in sorted(filenames):
-            path = here / filename
-            if not filename.startswith(".") and path.is_file() and not path.is_symlink():
-                found.append(path)
-    return found
 
 
 def _plan_file(
@@ -553,17 +529,9 @@ def _team_files_left(
 
 def _kind_of(name: str) -> tuple[InboxFileKind, str | None, date | None, int | None]:
     if "/" not in name:
-        weekly = _WEEKLY_NAME.match(name)
-        if weekly is not None and _CASELIST_SLUG.match(weekly["caselist"]):
-            try:
-                return (
-                    InboxFileKind.WEEKLY_ARCHIVE,
-                    weekly["caselist"],
-                    date.fromisoformat(weekly["date"]),
-                    None,
-                )
-            except ValueError:
-                pass
+        weekly = weekly_archive_of_inbox_name(name)
+        if weekly is not None:
+            return InboxFileKind.WEEKLY_ARCHIVE, weekly[0], weekly[1], None
         openev_id = openev_id_of_inbox_name(name)
         if openev_id is not None:
             return InboxFileKind.OPENEV, None, None, openev_id

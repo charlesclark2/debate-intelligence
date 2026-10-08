@@ -24,7 +24,7 @@ otherwise *skipped with a recorded reason*. Neither exists yet, so the skip is t
 an edge case, and neither a missing stage nor a failing one can fail a run whose bytes are already
 safe.
 
-The order is download, import, publish, parse, landscape, report. Goal criterion ac1 lists parsing
+The order is download, import, publish, parse, landscape, report, retention. Goal criterion ac1 lists parsing
 before publishing; the spec's own description ("the run still completes download, import and
 publish before anything optional") is what is implemented, and the session report records the
 difference.
@@ -81,6 +81,42 @@ Downloads land in one directory, which is what the importer reads. Two rules com
 * **An archive whose name is already in the inbox is not downloaded again.** The client reports an
   identical file as `already_present`, but it streams the whole thing first, and every archive
   fetched spends one of the day's five.
+
+## What leaves the inbox
+
+Nothing used to: every weekly and camp download stayed after it was imported, and the weeklies are
+cumulative, so the inbox grew by the season's whole caselist every week (`v1-e34-t11`). The last
+stage of a run, **retention**, removes a download once nothing can need it again. It runs after the
+report stage, under the run lock, on every real run — one that downloaded nothing too, which is how
+the first run after it shipped cleared the backlog — and a dry run lists what it would remove and
+removes nothing. A file goes only when all of these hold:
+
+* **Imported: a manifest on this machine came from these bytes.** A weekly archive's own week has a
+  manifest whose `archive_sha256` is the file's digest; a camp download's digest is the
+  `archive_sha256` of a row in an OpenEv release manifest. That is also what holds a download
+  waiting for `v1-e34-t06`'s import retry: the retry imports exactly the inbox files no manifest
+  came from, so no separate hold is needed, and none is kept.
+* **Confirmed: that snapshot is in sync in the bucket, as this run checked it.** The report stage's
+  comparison for the snapshots this run published; for a snapshot an earlier run imported, a fresh
+  comparison by the retention stage itself (:class:`CaselistStatusService`, the same one), never an
+  earlier run's word. An environment with no bucket confirms nothing and removes nothing.
+* **A camp download: the delivery record holds its digests.** Once its copy is gone the record is
+  what lets the next run recognise a camp release as imported or removed (`v1-e34-t07`); without
+  it the next run would download the file again.
+
+Anything else stays, and the summary names it with the reason: a download not imported, a snapshot
+not confirmed, a camp download the record does not cover, and any file whose name the pull does
+not give a download. Nothing is kept longer, the newest week included. The usual reason to keep a
+zip is a free re-import after a failed publish, but a zip is removed only after its publish is
+confirmed, and a publish reads the local store, never the inbox. The newest weekly is also the
+largest, because the weeklies are cumulative. An imported week is `ALREADY_IMPORTED` whether or not
+its zip is here (:func:`_decide_archive`, `v1-e30-t09`), and the site keeps the weekly
+back-catalogue (ADR-0017), so a removed zip is never fetched again by a pull and can be fetched by
+hand if ever needed.
+
+A removal (`caselist remove`, `v1-e30-t09`) also deletes inbox files, the ones holding removed
+bytes, under the same lock. The two cannot interleave, and each counts only the files it deleted:
+retention judges the inbox as it finds it, after whatever a removal left.
 
 ## What is imported
 
@@ -197,6 +233,7 @@ from debate_core.application.caselist.openev_import_service import (
 )
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
+from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
 from debate_core.application.caselist.publish_service import (
     CaselistPublishService,
     NothingToPublish,
@@ -221,7 +258,7 @@ from debate_core.application.ports.caselist_source import (
     openev_inbox_name,
 )
 from debate_core.application.ports.suppression import SuppressionAction, SuppressionList, SuppressionState
-from debate_core.domain.caselist import Acquisition, Event
+from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, Acquisition, Event
 
 if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its types are named only
     from debate_core.application.sync_runs import SyncRunMonitor, SyncRunRecord
@@ -241,6 +278,8 @@ __all__ = [
     "CaselistParseStage",
     "CaselistSyncService",
     "DownloadLedger",
+    "InboxFileVerdict",
+    "InboxRetention",
     "LandscapeStage",
     "LandscapeStageResult",
     "NoCaselistsConfigured",
@@ -250,6 +289,7 @@ __all__ = [
     "ParseStageResult",
     "PendingWork",
     "PulledRun",
+    "RetentionDecision",
     "RunSummary",
     "SelectionDecision",
     "StageOutcome",
@@ -259,8 +299,10 @@ __all__ = [
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "inbox_files",
     "openev_id_of_inbox_name",
     "run_pull",
+    "weekly_archive_of_inbox_name",
     "within_daily_budget",
 ]
 
@@ -339,6 +381,9 @@ class SyncStage(StrEnum):
 
     REPORT = "report"
     """Confirm the published snapshots against the bucket. Needs an AWS session, so it can pend."""
+
+    RETENTION = "retention"
+    """Remove imported downloads whose snapshot the bucket confirms from the inbox (`v1-e34-t11`)."""
 
 
 #: The stages that put bytes somewhere durable. A run is a failure only if one of these is.
@@ -541,6 +586,158 @@ class SyncPlan:
             and not self.openev_to_download
             and not any(one.deferred_by_cap for one in self.archives)
         )
+
+
+# ------------------------------------------------------------------------------------------------
+# What leaves the inbox
+# ------------------------------------------------------------------------------------------------
+
+
+class RetentionDecision(StrEnum):
+    """What the retention stage decided about one inbox file. See "What leaves the inbox"."""
+
+    REMOVE = "remove"
+    """Imported, its snapshot confirmed in the bucket, and for a camp download, recorded."""
+
+    NOT_IMPORTED = "not_imported"
+    """No manifest on this machine came from these bytes: the next pull imports it, or none will."""
+
+    NOT_CONFIRMED = "not_confirmed"
+    """Imported, and its snapshot is not in sync in the bucket, or the bucket could not be checked."""
+
+    NO_DELIVERY_RECORD = "no_delivery_record"
+    """A camp download the OpenEv delivery record does not hold the digests of."""
+
+    UNCLASSIFIED = "unclassified"
+    """A file whose name the pull does not give a download, or one that cannot be read."""
+
+
+_KEPT_BECAUSE: Final = {
+    RetentionDecision.NOT_IMPORTED: "not imported",
+    RetentionDecision.NOT_CONFIRMED: "publish not confirmed in the bucket",
+    RetentionDecision.NO_DELIVERY_RECORD: "the delivery record does not hold its digests",
+    RetentionDecision.UNCLASSIFIED: "not a download the pull names",
+}
+
+
+class InboxFileKind(StrEnum):
+    """What an inbox file is, by the name `caselist pull` gave it."""
+
+    WEEKLY_ARCHIVE = "weekly_archive"
+    CAMP_DOWNLOAD = "camp_download"
+    OTHER = "other"
+
+
+@dataclass(frozen=True, slots=True)
+class InboxFileVerdict:
+    """One inbox file, as the run summary names it, and what retention decided about it.
+
+    `name` is a weekly archive's caselist and date (`hsld26 2026-09-15`), or for anything else the
+    first twelve hex digits of its SHA-256: a camp download's file name is a camp's title, and a
+    name somebody gave a file by hand can say anything (`docs/policies/caselist-data-use.md` rule 4).
+    """
+
+    name: str
+    kind: InboxFileKind
+    decision: RetentionDecision
+    byte_size: int
+    path: Path
+    """Where it is. Never in the summary: the inbox's own path is the operator's home directory."""
+
+    def as_json(self) -> dict[str, object]:
+        body: dict[str, object] = {"name": self.name, "kind": str(self.kind), "bytes": self.byte_size}
+        if self.decision is not RetentionDecision.REMOVE:
+            body["reason"] = str(self.decision)
+        return body
+
+
+@dataclass(frozen=True, slots=True)
+class InboxRetention:
+    """What the retention stage removed and kept, or for a dry run would remove and would keep."""
+
+    dry_run: bool
+    removed: tuple[InboxFileVerdict, ...] = ()
+    """Removed; for a dry run, what a real run would remove now."""
+    kept: tuple[InboxFileVerdict, ...] = ()
+    failed: tuple[tuple[InboxFileVerdict, str], ...] = ()
+    """Decided removable, and the removal raised: the file and the error's class."""
+    once_imported: tuple[str, ...] = ()
+    """A dry run only: weeklies this run would import, and so remove once the bucket confirms them."""
+    camp_downloads_once_imported: int = 0
+
+    @property
+    def bytes_freed(self) -> int:
+        return sum(one.byte_size for one in self.removed)
+
+    def as_json(self) -> dict[str, object]:
+        gone = [one.as_json() for one in self.removed]
+        return {
+            "dry_run": self.dry_run,
+            "removed": [] if self.dry_run else gone,
+            "bytes_freed": 0 if self.dry_run else self.bytes_freed,
+            "would_remove": gone if self.dry_run else [],
+            "bytes_would_free": self.bytes_freed if self.dry_run else 0,
+            "kept": [one.as_json() for one in self.kept],
+            "not_removed_after_an_error": [{**one.as_json(), "error": error} for one, error in self.failed],
+            "would_remove_once_imported": list(self.once_imported),
+            "camp_downloads_would_remove_once_imported": self.camp_downloads_once_imported,
+        }
+
+    def sentence(self) -> str:
+        """The stage's reason: every file by name, the bytes, and why each kept file stays."""
+        if self.dry_run:
+            head = f"would remove {len(self.removed)} file(s), {self.bytes_freed} bytes"
+        else:
+            head = f"{len(self.removed)} file(s) removed, {self.bytes_freed} bytes freed"
+        parts = [head + (f": {_named(self.removed)}" if self.removed else "")]
+        if self.kept:
+            by_reason: dict[RetentionDecision, list[InboxFileVerdict]] = {}
+            for one in self.kept:
+                by_reason.setdefault(one.decision, []).append(one)
+            parts.append(
+                f"{len(self.kept)} kept: "
+                + "; ".join(
+                    f"{_named(group)} ({_KEPT_BECAUSE[reason]})" for reason, group in by_reason.items()
+                )
+            )
+        if self.failed:
+            parts.append(
+                f"{len(self.failed)} could not be removed: "
+                + "; ".join(f"{_named([one])} ({error})" for one, error in self.failed)
+            )
+        if self.once_imported or self.camp_downloads_once_imported:
+            later = list(self.once_imported)
+            if self.camp_downloads_once_imported:
+                later.append(f"{self.camp_downloads_once_imported} camp download(s)")
+            parts.append(
+                "once this run has imported them and the bucket confirms their publish, also "
+                + ", ".join(later)
+            )
+        return "; ".join(parts)
+
+
+_MAX_NAMED: Final = 250
+"""Names one retention sentence lists before it says how many more; a whole season is about 120."""
+
+
+def _named(files: Sequence[InboxFileVerdict]) -> str:
+    """Weeklies by caselist and date, camp downloads and other files by count and SHA-256 prefix."""
+    weeklies = [one.name for one in files if one.kind is InboxFileKind.WEEKLY_ARCHIVE]
+    camp = [one.name for one in files if one.kind is InboxFileKind.CAMP_DOWNLOAD]
+    other = [one.name for one in files if one.kind is InboxFileKind.OTHER]
+    parts: list[str] = []
+    if weeklies:
+        parts.append(_listed(weeklies))
+    if camp:
+        parts.append(f"{len(camp)} camp download(s), {_listed(camp)}")
+    if other:
+        parts.append(f"{len(other)} other file(s), {_listed(other)}")
+    return ", ".join(parts)
+
+
+def _listed(names: Sequence[str]) -> str:
+    shown = ", ".join(names[:_MAX_NAMED])
+    return shown if len(names) <= _MAX_NAMED else f"{shown} and {len(names) - _MAX_NAMED} more"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1065,6 +1262,9 @@ class RunSummary:
     that come back later" in the module docstring.
     """
 
+    inbox_retention: InboxRetention | None = None
+    """What the retention stage removed and kept, or `None` when it judged nothing (`v1-e34-t11`)."""
+
     @property
     def archives_seen(self) -> int:
         return len(self.archives)
@@ -1161,6 +1361,7 @@ class RunSummary:
                 self.bulk_download_window_start.isoformat() if self.bulk_download_window_start else None
             ),
             "suppression_list_local_copy_only": self.suppression_list_local_copy_only,
+            "inbox_retention": self.inbox_retention.as_json() if self.inbox_retention is not None else None,
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -1200,6 +1401,9 @@ class _RunTally:
     bulk_downloads_spent_in_window: int = 0
     bulk_download_window_start: datetime | None = None
     suppression_list_local_copy_only: str | None = None
+    confirmed: set[PendingSnapshot] = field(default_factory=lambda: set[PendingSnapshot]())
+    """Snapshots the report stage found in sync in the bucket this run."""
+    inbox_retention: InboxRetention | None = None
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
@@ -1212,6 +1416,20 @@ class _RunTally:
                 reason = f"{record.reason}; {sentence}" if record.reason else sentence
                 self.stages[index] = StageRecord(stage=stage, outcome=record.outcome, reason=reason)
                 return
+
+
+@dataclass(frozen=True, slots=True)
+class _JudgedLocally:
+    """One inbox file after the retention checks that need no bucket. Private to the stage."""
+
+    name: str
+    kind: InboxFileKind
+    byte_size: int
+    path: Path
+    kept_because: RetentionDecision | None
+    """The first local check it failed, or `None` when only the bucket's confirmation is left."""
+    snapshots: frozenset[PendingSnapshot] = frozenset()
+    """The snapshots its bytes were imported into, which the bucket must hold in sync."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1370,6 +1588,7 @@ class CaselistSyncService:
                 self._plan_remaining_stages(plan, tally)
             else:
                 await self._execute(plan, tally)
+            await self._retention_stage(tally, plan=plan, dry_run=dry_run)
             summary = self._summarise(started, caselists, tally, dry_run=dry_run)
         if not dry_run:
             self._write_summary(summary)
@@ -1395,6 +1614,11 @@ class CaselistSyncService:
             for stage in (SyncStage.PARSE, SyncStage.LANDSCAPE):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending runs no derived stages")
             await self._report_stage(tally)
+            tally.record(
+                SyncStage.RETENTION,
+                StageOutcome.SKIPPED,
+                "publish-pending removes nothing from the inbox; the next pull does",
+            )
             summary = self._summarise(started, (), tally, dry_run=False)
         self._write_summary(summary)
         _log_summary(summary)
@@ -1643,10 +1867,14 @@ class CaselistSyncService:
         was removed keeps its `.DS_Store` row, and that row alone must not make it "already
         imported".
         """
+        return self._recorded_openev_at(openev_manifest_key(year, event))
+
+    def _recorded_openev_at(self, key: str) -> _RecordedOpenEv:
+        """:meth:`_recorded_openev` for the release manifest at `key`."""
         paths: set[str] = set()
         stored: set[str] = set()
         digests: set[str] = set()
-        for line in read_manifest_lines(self._manifest_path(openev_manifest_key(year, event))):
+        for line in read_manifest_lines(self._manifest_path(key)):
             try:
                 row: object = json.loads(line)
             except ValueError:
@@ -2143,7 +2371,9 @@ class CaselistSyncService:
             except (NoCaselistEvidence, DomainError) as failed:
                 drifted.append(f"{target.caselist} {target.snapshot}: {failed}")
                 continue
-            confirmed += sum(1 for snapshot in report.snapshots if snapshot.in_sync)
+            in_sync = [snapshot for snapshot in report.snapshots if snapshot.in_sync]
+            confirmed += len(in_sync)
+            tally.confirmed.update(PendingSnapshot(one.caselist, one.snapshot) for one in in_sync)
             drifted.extend(f"{one.caselist} {one.snapshot}" for one in report.drifted)
         if drifted:
             tally.record(
@@ -2155,6 +2385,184 @@ class CaselistSyncService:
         tally.record(
             SyncStage.REPORT, StageOutcome.COMPLETED, f"{confirmed} snapshot(s) confirmed in the bucket"
         )
+
+    async def _retention_stage(self, tally: _RunTally, *, plan: SyncPlan, dry_run: bool) -> None:
+        """Remove what nothing can need again from the inbox; a dry run lists it and removes nothing.
+
+        See "What leaves the inbox" in this module's docstring. Called inside the run lock, after
+        the report stage, whatever the stages before it did: a run that fetched nothing still
+        clears what earlier runs left.
+        """
+        if self._status is None:
+            tally.record(SyncStage.RETENTION, StageOutcome.SKIPPED, _NOTHING_TO_CONFIRM_AGAINST)
+            return
+        files = inbox_files(self._inbox)
+        if not files:
+            tally.record(SyncStage.RETENTION, StageOutcome.SKIPPED, "the inbox holds nothing")
+            return
+        verdicts = await self._judge_inbox(files, confirmed=frozenset(tally.confirmed))
+        removable = tuple(one for one in verdicts if one.decision is RetentionDecision.REMOVE)
+        kept = tuple(one for one in verdicts if one.decision is not RetentionDecision.REMOVE)
+        if dry_run:
+            once_imported, camp_once_imported = _imported_by(plan)
+            tally.inbox_retention = InboxRetention(
+                dry_run=True,
+                removed=removable,
+                kept=kept,
+                once_imported=once_imported,
+                camp_downloads_once_imported=camp_once_imported,
+            )
+            tally.record(SyncStage.RETENTION, StageOutcome.PLANNED, tally.inbox_retention.sentence())
+            return
+        removed: list[InboxFileVerdict] = []
+        failed: list[tuple[InboxFileVerdict, str]] = []
+        for one in removable:
+            try:
+                one.path.unlink()
+            except OSError as refused:
+                failed.append((one, type(refused).__name__))
+                continue
+            removed.append(one)
+        tally.inbox_retention = InboxRetention(
+            dry_run=False, removed=tuple(removed), kept=kept, failed=tuple(failed)
+        )
+        tally.record(
+            SyncStage.RETENTION,
+            StageOutcome.FAILED if failed else StageOutcome.COMPLETED,
+            tally.inbox_retention.sentence(),
+        )
+
+    async def _judge_inbox(
+        self, files: Sequence[Path], *, confirmed: frozenset[PendingSnapshot]
+    ) -> list[InboxFileVerdict]:
+        """Decide about every inbox file: the local checks first, then one bucket check per caselist."""
+        releases = await self._openev_releases_by_download()
+        remembered = self._deliveries.read()
+        judged = [self._judge_locally(path, releases, remembered) for path in files]
+        # Only what passed every local check costs a bucket request, and only what this run's report
+        # stage did not already confirm.
+        wanted = {snapshot for one in judged if one.kept_because is None for snapshot in one.snapshots}
+        in_sync = confirmed | await self._confirm_in_bucket(wanted - confirmed)
+        return [
+            InboxFileVerdict(
+                name=one.name,
+                kind=one.kind,
+                decision=one.kept_because
+                or (
+                    RetentionDecision.REMOVE if one.snapshots <= in_sync else RetentionDecision.NOT_CONFIRMED
+                ),
+                byte_size=one.byte_size,
+                path=one.path,
+            )
+            for one in judged
+        ]
+
+    def _judge_locally(
+        self, path: Path, releases: Mapping[str, frozenset[str]], remembered: Mapping[int, OpenEvDelivery]
+    ) -> _JudgedLocally:
+        """The checks that need no bucket: what the file is, and whether it is imported and recorded."""
+        name = path.relative_to(self._inbox).as_posix()
+        size = _size_of(path)
+        digest = _digest_of(path)
+        if digest is None:
+            return _JudgedLocally(
+                "a file that could not be read",
+                InboxFileKind.OTHER,
+                size,
+                path,
+                RetentionDecision.UNCLASSIFIED,
+            )
+        weekly = weekly_archive_of_inbox_name(name)
+        if weekly is not None:
+            caselist, week = weekly
+            imported = self._imported_archive_digest(caselist, week) == digest
+            return _JudgedLocally(
+                f"{caselist} {week.isoformat()}",
+                InboxFileKind.WEEKLY_ARCHIVE,
+                size,
+                path,
+                None if imported else RetentionDecision.NOT_IMPORTED,
+                frozenset({PendingSnapshot(caselist, week.isoformat())}),
+            )
+        openev_id = openev_id_of_inbox_name(name)
+        if openev_id is None:
+            return _JudgedLocally(
+                f"sha256 {digest[:12]}", InboxFileKind.OTHER, size, path, RetentionDecision.UNCLASSIFIED
+            )
+        in_releases = releases.get(digest, frozenset())
+        delivery = remembered.get(openev_id)
+        recorded = (
+            delivery is not None and delivery.download_sha256 == digest and bool(delivery.member_sha256)
+        )
+        if not in_releases:
+            kept_because: RetentionDecision | None = RetentionDecision.NOT_IMPORTED
+        elif not recorded:
+            kept_because = RetentionDecision.NO_DELIVERY_RECORD
+        else:
+            kept_because = None
+        return _JudgedLocally(
+            f"sha256 {digest[:12]}",
+            InboxFileKind.CAMP_DOWNLOAD,
+            size,
+            path,
+            kept_because,
+            frozenset(PendingSnapshot(OPENEV_PUBLISH_TARGET, one) for one in in_releases),
+        )
+
+    async def _confirm_in_bucket(self, snapshots: Iterable[PendingSnapshot]) -> frozenset[PendingSnapshot]:
+        """Which of `snapshots` the bucket holds in sync now: the status comparison, run afresh.
+
+        One comparison per caselist, of the one snapshot asked about or of the whole caselist when
+        more are, because a caselist's weeklies share most of their sources and the comparison
+        heads each source once. A bucket that cannot be read confirms nothing; the files wait for
+        a run that can read it.
+        """
+        if self._status is None:  # pragma: no cover - the stage returns before asking
+            return frozenset()
+        by_caselist: dict[str, set[str]] = {}
+        for one in snapshots:
+            by_caselist.setdefault(one.caselist, set()).add(one.snapshot)
+        found: set[PendingSnapshot] = set()
+        for caselist, asked in sorted(by_caselist.items()):
+            try:
+                report = await self._status.status(caselist, next(iter(asked)) if len(asked) == 1 else None)
+            except (DomainError, OSError) as unreadable:
+                logger.warning(
+                    "caselist sync: the bucket could not be compared for %s (%s), so nothing of it "
+                    "leaves the inbox this run",
+                    caselist,
+                    type(unreadable).__name__,
+                )
+                continue
+            found.update(
+                PendingSnapshot(one.caselist, one.snapshot)
+                for one in report.snapshots
+                if one.in_sync and one.snapshot in asked
+            )
+        return frozenset(found)
+
+    def _imported_archive_digest(self, caselist: str, week: date) -> str | None:
+        """The `archive_sha256` this machine's manifest for a week records: the bytes imported."""
+        for line in read_manifest_lines(self._manifest_path(manifest_key(caselist, week))):
+            try:
+                row: object = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict) and cast("dict[str, object]", row).get("kind") == "summary":
+                digest = cast("dict[str, object]", row).get("archive_sha256")
+                return digest if isinstance(digest, str) else None
+        return None
+
+    async def _openev_releases_by_download(self) -> dict[str, frozenset[str]]:
+        """For every camp download digest a release manifest row came from, the releases it is in."""
+        found: dict[str, set[str]] = {}
+        for info in await self._local.objects.list_objects(manifest_prefix(OPENEV_PUBLISH_TARGET)):
+            release = snapshot_of_manifest_key(OPENEV_PUBLISH_TARGET, info.key)
+            if release is None:
+                continue
+            for digest in self._recorded_openev_at(info.key).download_digests:
+                found.setdefault(digest, set()).add(release)
+        return {digest: frozenset(releases) for digest, releases in found.items()}
 
     # --------------------------------------------------------------------------------------
     # Counting, summarising, writing
@@ -2239,6 +2647,7 @@ class CaselistSyncService:
             bulk_downloads_spent_in_window=tally.bulk_downloads_spent_in_window,
             bulk_download_window_start=tally.bulk_download_window_start,
             suppression_list_local_copy_only=tally.suppression_list_local_copy_only,
+            inbox_retention=tally.inbox_retention,
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:
@@ -2340,6 +2749,9 @@ _NEWER_THAN_HELD: Final = frozenset(
 """The decisions a weekly newer than the caselist's latest manifest can get: the import candidates."""
 
 _NO_BUCKET: Final = "this environment names no evidence bucket, so nothing is published from here"
+_NOTHING_TO_CONFIRM_AGAINST: Final = (
+    "this environment names no evidence bucket, so no publish can be confirmed and nothing leaves the inbox"
+)
 _NO_PARSE_PIPELINE: Final = "no parse pipeline is installed (v1-e31-t06 has not shipped)"
 _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not shipped)"
 
@@ -2433,6 +2845,21 @@ def _removal_sentence(openev: Sequence[OpenEvSelection]) -> str:
     return "; " + "; ".join(parts) if parts else ""
 
 
+def _imported_by(plan: SyncPlan) -> tuple[tuple[str, ...], int]:
+    """What a run of `plan` would import: weeklies by caselist and date, and how many camp downloads.
+
+    A dry run says these would leave the inbox too, once imported and confirmed; it cannot say
+    whether the import and the publish would succeed, so it does not count them as removed.
+    """
+    would_import = (SelectionDecision.DOWNLOAD, SelectionDecision.ALREADY_IN_INBOX)
+    weeklies = tuple(
+        f"{one.caselist} {one.archive_date.isoformat()}"
+        for one in sorted(plan.archives, key=lambda one: (one.caselist, one.archive_date or date.min))
+        if one.decision in would_import and one.archive_date is not None
+    )
+    return weeklies, sum(1 for one in plan.openev if one.decision in would_import)
+
+
 def _is_daily_limiter(limited: ProviderRateLimited) -> bool:
     """Whether a rate limit means "not today" rather than "in a moment"."""
     wait = limited.retry_after_seconds
@@ -2507,6 +2934,47 @@ def openev_id_of_inbox_name(name: str) -> int | None:
     """The OpenEv id an inbox file was downloaded as (`openev-<id>-…`), or `None` for any other name."""
     prefixed = _OPENEV_INBOX_PREFIX.match(name)
     return int(prefixed.group(1)) if prefixed is not None else None
+
+
+_WEEKLY_INBOX_NAME: Final = re.compile(
+    r"^(?P<caselist>[a-z]+[0-9]{2})-weekly-(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})\.zip$"
+)
+"""`<slug>-weekly-<date>.zip`, as `caselist pull` names a weekly archive (the site's own name)."""
+
+_CASELIST_SLUG: Final = re.compile(CASELIST_SLUG_PATTERN)
+
+
+def weekly_archive_of_inbox_name(name: str) -> tuple[str, date] | None:
+    """The caselist and week an inbox file was downloaded as (`<slug>-weekly-<date>.zip`), or `None`."""
+    weekly = _WEEKLY_INBOX_NAME.match(name)
+    if weekly is None or _CASELIST_SLUG.match(weekly["caselist"]) is None:
+        return None
+    try:
+        return weekly["caselist"], date.fromisoformat(weekly["date"])
+    except ValueError:
+        return None
+
+
+def inbox_files(directory: Path) -> list[Path]:
+    """Every regular file under the inbox, by name: not `.partial/`, not dot files, not links.
+
+    What a removal purges (`v1-e30-t09`) and what the retention stage judges, so the two see the
+    same files. `.partial/` holds downloads in progress and a dot directory a removal's staged
+    rewrite; neither is a download.
+    """
+    if not directory.is_dir():
+        return []
+    found: list[Path] = []
+    for current, directories, filenames in os.walk(directory, followlinks=False):
+        here = Path(current)
+        directories[:] = sorted(
+            one for one in directories if not one.startswith(".") and one != INBOX_PARTIAL_DIRECTORY
+        )
+        for filename in sorted(filenames):
+            path = here / filename
+            if not filename.startswith(".") and path.is_file() and not path.is_symlink():
+                found.append(path)
+    return found
 
 
 _PATH_SEPARATORS: Final = re.compile(r"[\\/]+")
@@ -2595,6 +3063,13 @@ def _digest_of(path: Path) -> str | None:
     return digest.hexdigest()
 
 
+def _size_of(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
 def _inbox_file(path: Path) -> DownloadedFile:
     """A file an earlier run left in the inbox, described the way its download was."""
     try:
@@ -2641,6 +3116,7 @@ class UndatedArchive(DomainError):
 
 def _log_summary(summary: RunSummary) -> None:
     """Counts, slugs and dates. No path, no school, no team code, no token (policy rule 4)."""
+    retention = summary.inbox_retention if not summary.dry_run else None
     logger.info(
         "caselist sync run",
         extra={
@@ -2655,6 +3131,8 @@ def _log_summary(summary: RunSummary) -> None:
             "blobs_stored": summary.blobs_stored,
             "objects_published": summary.objects_published,
             "pending_publish": len(summary.pending_publish),
+            "inbox_files_removed": len(retention.removed) if retention is not None else 0,
+            "inbox_bytes_freed": retention.bytes_freed if retention is not None else 0,
             "duration_seconds": round(summary.duration_seconds, 3),
             "stages": {str(record.stage): str(record.outcome) for record in summary.stages},
         },

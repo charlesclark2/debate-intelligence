@@ -89,7 +89,11 @@ class FakeSource:
     """
 
     def __init__(
-        self, archives: dict[date, Path], *, weeks: Sequence[date], openev: Sequence[tuple[OpenEvFile, bytes]] = ()
+        self,
+        archives: dict[date, Path],
+        *,
+        weeks: Sequence[date],
+        openev: Sequence[tuple[OpenEvFile, bytes]] = (),
     ) -> None:
         self.archives = archives
         self.weeks = list(weeks)
@@ -189,7 +193,9 @@ class Installation:
             ),
             status=(
                 CaselistStatusService(
-                    local=local, remote=self.status_remote or self.bucket, suppression=empty_suppression_list()
+                    local=local,
+                    remote=self.status_remote or self.bucket,
+                    suppression=empty_suppression_list(),
                 )
                 if bucket
                 else None
@@ -262,7 +268,9 @@ async def test_retention_removes_the_weeks_a_run_imported_and_confirmed_and_name
 
     again = await installation.sync(source).run([CASELIST])
 
-    assert source.archive_fetches == [weekly_name(WEEK_1), weekly_name(WEEK_2)], "a removed week was fetched again"
+    assert source.archive_fetches == [weekly_name(WEEK_1), weekly_name(WEEK_2)], (
+        "a removed week was fetched again"
+    )
     assert {one.name: str(one.decision) for one in again.archives} == {
         weekly_name(WEEK_1): "already_imported",
         weekly_name(WEEK_2): "already_imported",

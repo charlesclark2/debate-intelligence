@@ -278,6 +278,7 @@ __all__ = [
     "CaselistParseStage",
     "CaselistSyncService",
     "DownloadLedger",
+    "InboxFileKind",
     "InboxFileVerdict",
     "InboxRetention",
     "LandscapeStage",

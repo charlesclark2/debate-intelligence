@@ -17,7 +17,7 @@ import json
 import os
 import secrets
 from collections.abc import Iterator
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +31,18 @@ from tests.fixtures.caselist.build_synthetic_archives import (
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
+from debate_cli.commands.caselist_pull import _caption  # pyright: ignore[reportPrivateUsage]
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist_sync import (
+    InboxFileKind,
+    InboxFileVerdict,
+    InboxRetention,
+    RetentionDecision,
+    RunSummary,
+    StageOutcome,
+    StageRecord,
+    SyncStage,
+)
 
 API = "https://api.opencaselist.example.invalid/v1"
 FILE_HOST = "https://files.opencaselist.example.invalid"
@@ -323,3 +334,74 @@ def test_a_run_summary_reaches_the_data_directory_where_the_run_log_will_read_it
     text = written.read_text(encoding="utf-8")
     for forbidden in ("Maple Grove", "Cedar Hollow", "Riverbend Academy", "ZaLu", "MnPr"):
         assert forbidden not in text
+
+
+# ------------------------------------------------------------------------------------------------
+# The inbox's retention stage (v1-e34-t11)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_retention_without_a_bucket_removes_nothing_and_says_why(
+    installation: Path, site: respx.MockRouter
+) -> None:
+    """`test` names no bucket, so no publish can be confirmed: the three weeks stay in the inbox."""
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    stages = {one["stage"]: one for one in envelope["data"]["stages"]}
+    assert stages["retention"]["outcome"] == "skipped"
+    assert "nothing leaves the inbox" in stages["retention"]["reason"]
+    assert envelope["data"]["inbox_retention"] is None
+    assert sorted(path.name for path in (installation / "inbox").iterdir() if path.is_file()) == [
+        weekly_name(snapshot.snapshot) for snapshot in SNAPSHOTS
+    ]
+
+
+def _week(day: str, decision: RetentionDecision, size: int) -> InboxFileVerdict:
+    return InboxFileVerdict(
+        name=f"{SYNTHETIC_CASELIST} {day}",
+        kind=InboxFileKind.WEEKLY_ARCHIVE,
+        decision=decision,
+        byte_size=size,
+        path=Path("/nowhere") / weekly_name(date.fromisoformat(day)),
+    )
+
+
+def _retention_summary(*, dry_run: bool) -> RunSummary:
+    """A run whose retention stage judged three files: two weeks removable, one week not imported."""
+    retention = InboxRetention(
+        dry_run=dry_run,
+        removed=(
+            _week("2026-09-01", RetentionDecision.REMOVE, 1000),
+            _week("2026-09-08", RetentionDecision.REMOVE, 234),
+        ),
+        kept=(_week("2026-09-15", RetentionDecision.NOT_IMPORTED, 99),),
+        once_imported=(f"{SYNTHETIC_CASELIST} 2026-09-22",) if dry_run else (),
+    )
+    started = datetime(2026, 9, 16, 6, 0, tzinfo=UTC)
+    return RunSummary(
+        run_id="20260916T060000Z",
+        started_at=started,
+        finished_at=started,
+        dry_run=dry_run,
+        caselists=(SYNTHETIC_CASELIST,),
+        stages=(
+            StageRecord(SyncStage.RETENTION, StageOutcome.PLANNED if dry_run else StageOutcome.COMPLETED),
+        ),
+        inbox_retention=retention,
+    )
+
+
+def test_retention_the_caption_counts_what_left_the_inbox_and_what_stayed() -> None:
+    caption = _caption(_retention_summary(dry_run=False))  # pyright: ignore[reportPrivateUsage]
+
+    assert "Inbox: 2 file(s) removed (1234 bytes freed), 1 kept." in caption
+
+
+def test_retention_a_dry_runs_caption_says_what_would_leave_and_removes_nothing() -> None:
+    caption = _caption(_retention_summary(dry_run=True))  # pyright: ignore[reportPrivateUsage]
+
+    assert (
+        "Inbox: would remove 2 file(s) (1234 bytes), 1 kept, and 1 more once this run has imported them "
+        "and the bucket confirms them."
+    ) in caption
+    assert "Nothing was written." in caption

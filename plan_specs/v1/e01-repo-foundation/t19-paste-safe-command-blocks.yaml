@@ -62,7 +62,7 @@ spec:
         command blocks must contain no `#` comments because the operator's shell is zsh, and working
         agreement 9 is linked from it.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -70,7 +70,9 @@ def fake_console_script(directory: Path, *, data_directory: str | None = None) -
 
     `--json config show` reports a data directory the way the real build does: `data_directory`
     when given, otherwise the profile default `$HOME/.debate-research/$DEBATE_ENV`, so that the
-    installer's check of the agent's data directory can be driven from a test.
+    installer's check of the agent's data directory can be driven from a test. The real output is
+    one line holding `settings` and then `sources`, which names `storage.data_dir` again with the
+    file it came from; an installer that read the second one would refuse every real build.
     """
     directory.mkdir(parents=True, exist_ok=True)
     script = directory / "debate-research"
@@ -81,7 +83,9 @@ def fake_console_script(directory: Path, *, data_directory: str | None = None) -
         f"printf '%s\\n' \"$*\" >> '{record}'\n"
         'case "$*" in\n'
         "    '--json config show')\n"
-        f'        printf \'{{"status": "ok", "data": {{"settings": {{"storage.data_dir": "%s"}}}}}}\\n\' "{reported}" ;;\n'
+        f'        printf \'{{"status": "ok", "data": {{"environment": "dev", "settings": {{"storage.data_dir": "%s", '
+        f'"caselist.api_enabled": true}}, "sources": {{"storage.data_dir": "profile:/bundled/config/profiles/dev.toml"}}}}}}\\n\' '
+        f'"{reported}" ;;\n'
         "    '--version') echo 'debate-research 0.0.0+fake' ;;\n"
         "esac\n"
         "exit 0\n",

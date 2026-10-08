@@ -347,7 +347,12 @@ REPORTED_SETTINGS=$(cd -- "${HOME}" && env -i HOME="${HOME}" PATH="${AGENT_PATH}
     DEBATE_ENV="${DEBATE_ENVIRONMENT}" AWS_PROFILE="${AWS_PROFILE_NAME}" \
     "${DEBATE_RESEARCH_PATH}" --json config show) \
     || fail "${DEBATE_RESEARCH_PATH} --json config show failed, so the agent's data directory is unknown; nothing was installed"
-DATA_DIRECTORY=$(printf '%s\n' "${REPORTED_SETTINGS}" | sed -n 's/.*"storage\.data_dir": *"\([^"\\]*\)".*/\1/p' | head -n 1)
+# The value under `settings`, not the one under `sources`, which names the same key with the file
+# it came from. The settings object holds no braces, so a value that ever did would make this
+# find nothing and refuse, rather than read the wrong thing.
+DATA_DIRECTORY=$(printf '%s\n' "${REPORTED_SETTINGS}" \
+    | sed -n 's/.*"settings": *{\([^{}]*\)}.*/\1/p' \
+    | sed -n 's/.*"storage\.data_dir": *"\([^"\\]*\)".*/\1/p' | head -n 1)
 [ -n "${DATA_DIRECTORY}" ] \
     || fail "${DEBATE_RESEARCH_PATH} --json config show did not report storage.data_dir, so the agent's data directory is unknown; nothing was installed"
 refuse_unsafe_path "data directory" "${DATA_DIRECTORY}"

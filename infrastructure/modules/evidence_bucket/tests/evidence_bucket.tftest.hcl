@@ -440,6 +440,7 @@ run "operator_permission_set_reads_and_publishes_but_cannot_delete" {
       statement.Action
       ])) == toset([
       "s3:ListBucket",
+      "s3:ListBucketVersions",
       "s3:GetObject",
       "s3:GetObjectVersion",
       "s3:PutObject",
@@ -447,7 +448,7 @@ run "operator_permission_set_reads_and_publishes_but_cannot_delete" {
       "kms:Decrypt",
       "kms:GenerateDataKey",
     ])
-    error_message = "The everyday evidence credential may do exactly seven things. s3:DeleteObject, s3:PutBucketPolicy and kms:* are forbidden by the task spec; a delete is a takedown, and takedowns use the other permission set."
+    error_message = "The everyday evidence credential may do exactly eight things. s3:ListBucketVersions is read-only, so a removal's dry run can count versions (v1-e29-t06). s3:DeleteObject, s3:DeleteObjectVersion, s3:PutBucketPolicy and kms:* are forbidden by the task spec; a delete is a takedown, and takedowns use the other permission set."
   }
 
   assert {

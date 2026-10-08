@@ -56,7 +56,7 @@ one that is left signed in.
 | SSO profile | `debate-dev-evidence`, `debate-prod-evidence` | `debate-dev-evidence-removal`, `debate-prod-evidence-removal` |
 | Session | 8 hours | 1 hour |
 | Who | Adult maintainers | One accountable person |
-| S3 | `ListBucket` (scoped to the documented prefixes), `GetObject`, `GetObjectVersion`, `PutObject` | `ListBucketVersions`, `GetObjectVersion`, `DeleteObject`, `DeleteObjectVersion` under `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`; `GetObject`/`PutObject` under `manifests/_suppression/` only |
+| S3 | `ListBucket` (scoped to the documented prefixes), `ListBucketVersions` (read-only, scoped to the takedown's prefixes, so a removal's dry run can count versions), `GetObject`, `GetObjectVersion`, `PutObject` | `ListBucketVersions`, `GetObjectVersion`, `DeleteObject`, `DeleteObjectVersion` under `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`; `GetObject`/`PutObject` under `manifests/_suppression/` only |
 | KMS | `Encrypt`, `Decrypt`, `GenerateDataKey` on this key | `Decrypt`, `GenerateDataKey` on this key |
 | Cannot | Delete anything. Change a bucket policy, a lifecycle rule or a key policy | Delete under `reports/`. Delete the bucket. Change a bucket policy, a lifecycle rule or a key policy |
 
@@ -85,6 +85,14 @@ terraform -chdir=infrastructure/modules/evidence_bucket test
 The bucket policy, the key policy and both inline policies are built with `jsonencode` rather than
 `aws_iam_policy_document` data sources, because a data source's rendered JSON is opaque under a
 mocked provider and those four policies are exactly what the tests need to read back.
+
+Every statement of both inline policies is checked, not a chosen few (`v1-e29-t06`). The test
+file's `resource_shape_of_action` table says which resource each action needs: `ListBucket` and
+`ListBucketVersions` the bucket ARN, since on an object ARN they match nothing and fail with
+`AccessDenied` only when used. `list_prefixes_of_action` gives the exact `s3:prefix` condition each
+listing action must carry. A statement with an action that is not in the table, or one that mixes a
+bucket action with an object action, is uncovered, and the test fails on the count. To grant a new
+action, add it to the table on purpose; to grant two shapes, write two statements.
 
 No real caselist data and no student names appear in the fixtures (task spec: forbidden); the
 bucket names, account id and user names in the tests are invented.

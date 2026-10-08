@@ -280,9 +280,46 @@ Succeeded.
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted. Before the PR, two things: one small addition, and Charlie's operator results recorded in
+this report. When both are in, set the phase to `Succeeded` and open a full PR, not `--partial`.
+
+* **The real dry run that caught `config show`'s second `storage.data_dir` is the best evidence in
+  the report.** Every fake had passed it. Making the fake print the real shape, and adding the
+  mutant that restores the old extraction, is the right response.
+* **Deviations 1 to 3: accepted.**
+  * Asking the build for its data directory is the only honest way to check a path the installer
+    does not choose.
+  * `--wrapper-dir`, the HOME check and the absolute-path rule follow from the forbidden list.
+  * `--check-launchd` refusing a wrapper that differs from the checkout's makes the check prove the
+    install it was run after.
+* **Decisions: accepted.** In particular: the wrapper is copied before the plist; the
+  protected-folder checks are case-insensitive and follow symlinks; and the session states plainly
+  that a reload resets `runs`.
+* **The run-time PATH audit (osascript, git, keyring, botocore, the shebang)** is what makes the
+  minimal PATH safe to ship.
+
+**Before the PR:**
+
+1. **Add `~/Library/CloudStorage` to the protected locations** (Dropbox, Google Drive and other
+   File Provider folders). That means the four cases for it, the runbook table, and one mutant
+   showing it caught. It changes neither the wrapper nor the plist Charlie installs, so it does not
+   affect his operator steps.
+2. **Record Charlie's results from operator follow-ups 1 to 4** in this report, as ac3's operator
+   half and ac5. Then set the Goal to `Succeeded`. If any step does not match its success
+   description, stop and send it to the PM.
+
+**Follow-up work:**
+
+* **The installed build runs on anaconda's Python:** filed as **v1-e01-t23-managed-python** (in this
+  branch, with its epic entry). A conda update would otherwise break the agent's build in place,
+  with nothing to catch it before a Wednesday run.
+* **`~/Library/CloudStorage`:** done here, as item 1 above.
+* **XML-special characters in plist paths:** not filed. `plutil -lint` refuses the result, so it
+  fails safe.

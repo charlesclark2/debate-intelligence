@@ -246,6 +246,11 @@ How to work:
    `<!-- docs-index: What this document is for -->` (working agreement 3). Do NOT edit or
    regenerate docs/README.md (no scripts/docs_index.py): it is generated, and a workflow refreshes
    it on dev after merge (v1-e01-t16).
+8. Operator command blocks contain no `#` comments, because the operator's shell is zsh: pasted
+   interactively, zsh passes `#` and the words after it to the command as arguments. Put the
+   explanation in the prose around the block (working agreement 9,
+   docs/process/working-agreements.md#9-command-blocks-are-safe-to-paste-into-zsh). This holds in
+   runbooks, guides, READMEs and your session report; scripts/check_command_blocks.py fails CI on one.
 
 When the work is complete:
 - Set the task Goal status.phase to Succeeded ONLY if every acceptance criterion actually passed

@@ -189,7 +189,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - *checkout
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # check_command_blocks.py diffs the session reports against the base branch, which needs
+          # the history back to where the pull request branched, and origin/<base> itself.
+          fetch-depth: 0
       - *setup-uv
       - *install-python
       - *uv-sync
@@ -199,6 +204,19 @@ jobs:
       # compares with the committed docs/README.md, so it cannot ask a task to regenerate it.
       - name: docs_index.py --check-descriptions
         run: uv run --frozen python scripts/docs_index.py --check-descriptions
+      # Every trigger: no `#` comment in a shell code block someone pastes into zsh (working
+      # agreement 9, v1-e01-t19). On a pull request it also reads the session reports the pull
+      # request adds or changes; historical reports are records and are never scanned. A push or
+      # dispatch has no base branch, so it scans everything but the session reports.
+      - name: check_command_blocks.py
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            uv run --frozen python scripts/check_command_blocks.py --base "origin/${BASE_REF}"
+          else
+            uv run --frozen python scripts/check_command_blocks.py
+          fi
       - name: spec_index.py --check and docs_index.py --check (pull requests into main only)
         # github.base_ref is the pull request's target branch, and is empty on push and dispatch
         # events. Task PRs into dev change a spec phase or add a document, and so leave ROADMAP.md

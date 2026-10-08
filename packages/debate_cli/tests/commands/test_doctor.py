@@ -276,11 +276,11 @@ def python_installed_at(monkeypatch: pytest.MonkeyPatch, base_prefix: Path, uv_p
     ("installation", "managed", "shown"),
     [
         pytest.param(
-            "uv-pythons/cpython-3.12.13-macos-aarch64-none", True, "yes", id="inside uv's directory"
+            "uv-pythons/cpython-patch-release-macos-aarch64-none", True, "yes", id="inside uv's directory"
         ),
         pytest.param("anaconda3", False, "no", id="anaconda"),
         pytest.param(
-            "homebrew/Cellar/python@3.12/3.12.7/Frameworks/Python.framework/Versions/3.12",
+            "homebrew/Cellar/python/Frameworks/Python.framework/Versions/Current",
             False,
             "no",
             id="homebrew",
@@ -308,24 +308,28 @@ def test_the_managed_fact_follows_links_and_compares_whole_path_components(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     uv_pythons = tmp_path / "data" / "uv" / "python"
-    installed = uv_pythons / "cpython-3.12.13-macos-aarch64-none"
+    installed = uv_pythons / "cpython-patch-release-macos-aarch64-none"
     installed.mkdir(parents=True)
     # uv's own minor-version link, which a tool environment's base prefix can name.
-    (uv_pythons / "cpython-3.12-macos-aarch64-none").symlink_to(installed)
+    (uv_pythons / "cpython-minor-version-link-macos-aarch64-none").symlink_to(installed)
     (tmp_path / "linked-uv-pythons").symlink_to(uv_pythons)
-    sibling = tmp_path / "data" / "uv" / "python-elsewhere" / "cpython-3.12.13-macos-aarch64-none"
+    sibling = tmp_path / "data" / "uv" / "python-elsewhere" / "cpython-patch-release-macos-aarch64-none"
     sibling.mkdir(parents=True)
     # An entry in uv's directory that is really anaconda is anaconda's, whatever its name says; a
     # path elsewhere that is really uv's installation is uv's.
     anaconda = tmp_path / "anaconda3"
     anaconda.mkdir()
-    (uv_pythons / "cpython-3.12.7-macos-aarch64-none").symlink_to(anaconda)
+    (uv_pythons / "cpython-really-anaconda-macos-aarch64-none").symlink_to(anaconda)
     (tmp_path / "python-linked-into-uv").symlink_to(installed)
 
     assert doctor_module.is_uv_managed(str(installed), uv_pythons)
-    assert doctor_module.is_uv_managed(str(uv_pythons / "cpython-3.12-macos-aarch64-none"), uv_pythons)
+    assert doctor_module.is_uv_managed(
+        str(uv_pythons / "cpython-minor-version-link-macos-aarch64-none"), uv_pythons
+    )
     assert doctor_module.is_uv_managed(str(installed), tmp_path / "linked-uv-pythons")
-    assert not doctor_module.is_uv_managed(str(uv_pythons / "cpython-3.12.7-macos-aarch64-none"), uv_pythons)
+    assert not doctor_module.is_uv_managed(
+        str(uv_pythons / "cpython-really-anaconda-macos-aarch64-none"), uv_pythons
+    )
     assert doctor_module.is_uv_managed(str(tmp_path / "python-linked-into-uv"), uv_pythons)
     assert not doctor_module.is_uv_managed(str(sibling), uv_pythons)
     assert not doctor_module.is_uv_managed(str(uv_pythons), uv_pythons)
@@ -417,7 +421,7 @@ def _unmanaged_python(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _managed_python(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        sys, "base_prefix", "/Users/coach/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none"
+        sys, "base_prefix", "/Users/coach/.local/share/uv/python/cpython-patch-release-macos-aarch64-none"
     )
     monkeypatch.setenv("UV_PYTHON_INSTALL_DIR", "/Users/coach/.local/share/uv/python")
 

@@ -91,7 +91,7 @@ spec:
         `runs` count did not change. The scheduled run on 2026-10-14 is then v1-e34-t05's ac3, not this
         task's.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

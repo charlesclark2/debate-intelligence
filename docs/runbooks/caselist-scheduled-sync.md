@@ -148,22 +148,47 @@ Record the counts in [`docs/data/caselist-sync-runs.md`](../data/caselist-sync-r
 ## Step 2 — install the agent
 
 ```bash
-ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --dry-run
+ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --debate-research "$HOME/.local/bin/debate-research" --dry-run
 ```
 
 `--dry-run` prints the plist and writes nothing; read it before you install it. Then:
 
 ```bash
-ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod
+ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --debate-research "$HOME/.local/bin/debate-research"
 ```
 
-That writes `~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist`, creates the log
-directory and lints the plist with `plutil`. **It starts nothing**, and `RunAtLoad` is false, so
-even loading the agent does not trigger a pull.
+That writes `~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist`, copies the
+wrapper out of the checkout, creates the log directory and lints the plist with `plutil`. **It
+starts nothing**, and `RunAtLoad` is false, so even loading the agent does not trigger a pull.
 
 `--weekday`, `--hour` and `--minute` move the schedule; the default is Wednesday 06:00, the day
-after the site publishes the week's archives. `--debate-research` gives the full path to the
-console script when it is not on the PATH of the shell you install from.
+after the site publishes the week's archives.
+
+### What the agent runs, and where it is
+
+The agent runs nothing from a git checkout (`v1-e34-t10`):
+
+| | Where | Why there |
+|---|---|---|
+| Wrapper | `~/.local/share/debate-research/launchd/run-caselist-sync.sh`, the installer's copy of `ops/launchd/run-caselist-sync.sh` | Beside uv's tool directory, outside every working tree and every protected folder, with no spaces in the path |
+| Console script | `DEBATE_RESEARCH_BIN` in the plist: the path given with `--debate-research`, or the `debate-research` this shell finds, written as found | So that no other `debate-research` earlier on a PATH can stand in for the installed build |
+| `PATH` | The console script's directory, then `/usr/bin:/bin:/usr/sbin:/sbin` | The command runs nothing else but `osascript`, for notifications, which is in `/usr/bin`. The installing shell's PATH is not copied |
+| Data | Whatever the installed build reports for `storage.data_dir`; the installer asks it with `config show` | The bundled profile decides it, not the checkout |
+| Refused | Any of the above, the log directory or HOME under `~/Documents`, `~/Desktop`, `~/Downloads`, `~/Library/Mobile Documents` (iCloud Drive), `~/Library/CloudStorage` (Dropbox, Google Drive and other File Provider folders) or `/Volumes`; or inside a git working tree or a project `.venv` | macOS privacy protection keeps launchd agents out of those folders, and a checkout or `.venv` changes under the agent |
+
+The wrapper is copied out for two reasons. A checkout's copy is whatever branch is checked out at
+06:00 on Wednesday. And macOS privacy protection does not let a launchd agent open anything under
+the folders in the table's last row. The first scheduled run, on 2026-10-07, ran the checkout's wrapper under `~/Documents`
+and exited 126 with `Operation not permitted`. The installer refuses a wrapper destination
+(`--wrapper-dir`), log directory, data directory or console script under any of those folders, or
+inside a git working tree or a project `.venv`, naming the path and the reason. Nothing is written
+when it refuses.
+
+**Reinstall to update the wrapper.** Editing `ops/launchd/run-caselist-sync.sh`, or pulling a
+change to it, does not reach the agent. Running `install.sh` again replaces the copy in one rename,
+with mode 0755. launchd keeps the plist it loaded, so when the plist changes too (a new wrapper
+path, console script or schedule), boot the agent out and bootstrap it again (Step 3). That resets
+the `runs` count `launchctl print` shows to 0.
 
 ## Step 3 — enable it
 
@@ -172,7 +197,19 @@ launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.debate-intelligence.case
 launchctl print gui/$UID/com.debate-intelligence.caselist-sync
 ```
 
-`print` should show the job, its program arguments and its calendar interval. To run it once,
+After a reinstall, when the agent is already loaded, boot it out and bootstrap the new plist:
+
+```bash
+launchctl bootout gui/$UID/com.debate-intelligence.caselist-sync
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
+launchctl print gui/$UID/com.debate-intelligence.caselist-sync
+```
+
+If `bootstrap` says `Bootstrap failed: 5: Input/output error`, the bootout had not finished; run
+the bootstrap line again.
+
+`print` should show the job, its program arguments (the copied wrapper under
+`~/.local/share/debate-research/launchd/`, never a checkout) and its calendar interval. To run it once,
 immediately, without waiting for Wednesday:
 
 ```bash
@@ -181,6 +218,22 @@ launchctl kickstart -p gui/$UID/com.debate-intelligence.caselist-sync
 
 A missed run is not skipped: launchd runs a `StartCalendarInterval` job when the machine next
 wakes, so a laptop that was shut at 06:00 on Wednesday runs it that evening.
+
+**Proving launchd can run it, without a sync.** After every install or reinstall:
+
+```bash
+ops/launchd/install.sh --check-launchd
+```
+
+It loads a one-off copy of the installed plist as `com.debate-intelligence.caselist-sync.check`,
+with no schedule, running the copied wrapper's `--check`. That prints the path
+`DEBATE_RESEARCH_BIN` resolves to and the build's `debate-research --version`, and nothing else: no
+`caselist pull`, no listing call, no download. The installer kickstarts it, waits for it, prints
+its log (`~/Library/Logs/debate-research/caselist-sync-check.log`) and exit code, and boots it out.
+It reads the agent's `runs` count before and after and fails if it changed. It refuses to run
+against an agent whose wrapper is not this checkout's copied out, so reinstall first. Success is
+`exit code 0`, the version you installed, and the same `runs` before and after. An exit code of
+126 is the privacy-protection failure above.
 
 ## Watching it
 
@@ -299,10 +352,11 @@ ceiling.
 launchctl bootout gui/$UID/com.debate-intelligence.caselist-sync
 ```
 
-The agent stops; the plist stays. To remove it entirely:
+The agent stops; the plist and the copied wrapper stay. To remove both:
 
 ```bash
 rm ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
+rm ~/.local/share/debate-research/launchd/run-caselist-sync.sh
 ```
 
 Nothing already captured is affected: the archives, the manifests and the bucket are all

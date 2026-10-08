@@ -567,5 +567,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t22-install-resolves-once
+    - id: t23
+      kind: Task
+      name: 'The installed build runs on a Python that uv manages'
+      description: >-
+        The installer requests a uv-managed interpreter, so a conda or Homebrew update cannot break the
+        agent's build in place.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t23-managed-python.yaml
+        goalRef: v1-e01-t23-managed-python
+      dependsOn:
+      - t22
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t23-managed-python reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t23-managed-python
 status:
   phase: Pending

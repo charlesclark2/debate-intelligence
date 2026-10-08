@@ -15,6 +15,12 @@ the exit status stays 0. That includes a declared extra whose distributions are 
 installer refuses such a build, but a running build without them only fails if a wired integration
 then does not import, which is the second check.
 
+Whether the running Python is one uv manages (`v1-e01-t23`) is one of those facts. It is decided by
+place, as uv decides it: the interpreter's base prefix, links followed, lies inside the directory
+`uv python dir` names. The tests point `sys.base_prefix` and `UV_PYTHON_INSTALL_DIR` at temporary
+directories, and the directory rules are written by hand from what uv 0.11.7's `uv python dir`
+printed.
+
 The mismatch is faked by patching `unicodedata.unidata_version`, which both `doctor` and the
 normalizer read at call time. An integration that does not import is made by putting `None` in
 `sys.modules` for it, so the real import machinery raises the `ModuleNotFoundError`.
@@ -25,6 +31,7 @@ from __future__ import annotations
 import json
 import sys
 import unicodedata
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -253,6 +260,128 @@ def test_a_missing_extra_distribution_is_informational_here_and_refused_by_the_i
 
 
 # ---------------------------------------------------------------------------------------------
+# Whether the running Python is one uv manages (v1-e01-t23): reported, never failed
+# ---------------------------------------------------------------------------------------------
+
+
+def python_installed_at(monkeypatch: pytest.MonkeyPatch, base_prefix: Path, uv_pythons: Path) -> None:
+    """doctor now runs on the Python installed at `base_prefix`, and uv keeps its own in `uv_pythons`."""
+    base_prefix.mkdir(parents=True, exist_ok=True)
+    uv_pythons.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(sys, "base_prefix", str(base_prefix))
+    monkeypatch.setenv("UV_PYTHON_INSTALL_DIR", str(uv_pythons))
+
+
+@pytest.mark.parametrize(
+    ("installation", "managed", "shown"),
+    [
+        pytest.param(
+            "uv-pythons/cpython-patch-release-macos-aarch64-none", True, "yes", id="inside uv's directory"
+        ),
+        pytest.param("anaconda3", False, "no", id="anaconda"),
+        pytest.param(
+            "homebrew/Cellar/python/Frameworks/Python.framework/Versions/Current",
+            False,
+            "no",
+            id="homebrew",
+        ),
+    ],
+)
+def test_doctor_reports_whether_its_python_is_one_uv_manages_and_exits_0_either_way(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, installation: str, managed: bool, shown: str
+) -> None:
+    python_installed_at(monkeypatch, tmp_path / installation, tmp_path / "uv-pythons")
+
+    as_json = runner.invoke(create_app(), ["--json", "doctor"])
+    for_a_person = runner.invoke(create_app(), ["doctor"])
+
+    assert as_json.exit_code == for_a_person.exit_code == ExitCode.OK, as_json.output + for_a_person.output
+    data = envelope_of(as_json)["data"]
+    assert data["python_base_prefix"] == str(tmp_path / installation)
+    assert data["uv_python_directory"] == str(tmp_path / "uv-pythons")
+    assert data["python_uv_managed"] is managed
+    rows = {" ".join(line.split()) for line in for_a_person.stdout.splitlines()}
+    assert any(f"Managed by uv │ {shown} │" in row for row in rows), for_a_person.stdout
+
+
+def test_the_managed_fact_follows_links_and_compares_whole_path_components(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    uv_pythons = tmp_path / "data" / "uv" / "python"
+    installed = uv_pythons / "cpython-patch-release-macos-aarch64-none"
+    installed.mkdir(parents=True)
+    # uv's own minor-version link, which a tool environment's base prefix can name.
+    (uv_pythons / "cpython-minor-version-link-macos-aarch64-none").symlink_to(installed)
+    (tmp_path / "linked-uv-pythons").symlink_to(uv_pythons)
+    sibling = tmp_path / "data" / "uv" / "python-elsewhere" / "cpython-patch-release-macos-aarch64-none"
+    sibling.mkdir(parents=True)
+    # An entry in uv's directory that is really anaconda is anaconda's, whatever its name says; a
+    # path elsewhere that is really uv's installation is uv's.
+    anaconda = tmp_path / "anaconda3"
+    anaconda.mkdir()
+    (uv_pythons / "cpython-really-anaconda-macos-aarch64-none").symlink_to(anaconda)
+    (tmp_path / "python-linked-into-uv").symlink_to(installed)
+
+    assert doctor_module.is_uv_managed(str(installed), uv_pythons)
+    assert doctor_module.is_uv_managed(
+        str(uv_pythons / "cpython-minor-version-link-macos-aarch64-none"), uv_pythons
+    )
+    assert doctor_module.is_uv_managed(str(installed), tmp_path / "linked-uv-pythons")
+    assert not doctor_module.is_uv_managed(
+        str(uv_pythons / "cpython-really-anaconda-macos-aarch64-none"), uv_pythons
+    )
+    assert doctor_module.is_uv_managed(str(tmp_path / "python-linked-into-uv"), uv_pythons)
+    assert not doctor_module.is_uv_managed(str(sibling), uv_pythons)
+    assert not doctor_module.is_uv_managed(str(uv_pythons), uv_pythons)
+    assert not doctor_module.is_uv_managed(str(tmp_path / "missing"), tmp_path / "also-missing")
+
+
+# Written by hand from `uv python dir` under uv 0.11.7 with each environment (session report).
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [
+        pytest.param(
+            {"UV_PYTHON_INSTALL_DIR": "/x/y", "XDG_DATA_HOME": "/xdg"},
+            "/x/y",
+            id="UV_PYTHON_INSTALL_DIR wins",
+        ),
+        pytest.param(
+            {"UV_PYTHON_INSTALL_DIR": ""}, "/h/.local/share/uv/python", id="an empty one is ignored"
+        ),
+        pytest.param({"XDG_DATA_HOME": "/xdg"}, "/xdg/uv/python", id="an absolute XDG_DATA_HOME"),
+        pytest.param(
+            {"XDG_DATA_HOME": "relxdg"}, "/h/.local/share/uv/python", id="a relative XDG_DATA_HOME is ignored"
+        ),
+        pytest.param({}, "/h/.local/share/uv/python", id="the default under HOME"),
+    ],
+)
+def test_uvs_python_directory_is_found_as_uv_finds_it(environment: dict[str, str], expected: str) -> None:
+    found = doctor_module.uv_python_directory({"HOME": "/h", **environment}, windows=False)
+
+    assert found == Path(expected)
+
+
+def test_a_relative_uv_python_install_dir_is_taken_from_the_working_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # uv printed `rel` as given, a path it resolves against the working directory.
+    monkeypatch.chdir(tmp_path)
+
+    found = doctor_module.uv_python_directory({"UV_PYTHON_INSTALL_DIR": "rel", "HOME": "/h"}, windows=False)
+
+    assert found == Path.cwd() / "rel"
+
+
+def test_on_windows_the_directory_is_the_one_uvs_documentation_gives() -> None:
+    # Not measured, for want of a Windows machine; `uv help python dir` gives %APPDATA%/uv/data/python.
+    environment = {"APPDATA": "C:/Users/coach/AppData/Roaming", "XDG_DATA_HOME": "/xdg"}
+
+    found = doctor_module.uv_python_directory(environment, windows=True)
+
+    assert found == Path("C:/Users/coach/AppData/Roaming") / "uv" / "data" / "python"
+
+
+# ---------------------------------------------------------------------------------------------
 # Every other fact stays informational
 # ---------------------------------------------------------------------------------------------
 
@@ -284,6 +413,19 @@ def _missing_extra_distributions(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _unmanaged_python(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The coach's case before v1-e01-t23: the build's base Python was anaconda's.
+    monkeypatch.setattr(sys, "base_prefix", "/Users/coach/anaconda3")
+    monkeypatch.setenv("UV_PYTHON_INSTALL_DIR", "/Users/coach/.local/share/uv/python")
+
+
+def _managed_python(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys, "base_prefix", "/Users/coach/.local/share/uv/python/cpython-patch-release-macos-aarch64-none"
+    )
+    monkeypatch.setenv("UV_PYTHON_INSTALL_DIR", "/Users/coach/.local/share/uv/python")
+
+
 def _nothing_wired(monkeypatch: pytest.MonkeyPatch) -> None:
     # A container that imports no integration has nothing that can fail to import. The installer's
     # check refuses it (nothing was covered); doctor states only what does not import.
@@ -299,6 +441,8 @@ def _nothing_wired(monkeypatch: pytest.MonkeyPatch) -> None:
         _unexpected_platform,
         _no_services,
         _missing_extra_distributions,
+        _unmanaged_python,
+        _managed_python,
         _nothing_wired,
     ],
     ids=lambda change: change.__name__.lstrip("_"),
@@ -350,6 +494,9 @@ def _integrations(draw: st.DrawFn) -> tuple[list[str], dict[str, str]]:
                 "core_version",
                 "python_version",
                 "python_executable",
+                "python_base_prefix",
+                "uv_python_directory",
+                "python_uv_managed",
                 "platform",
                 "settings_configured",
                 "services",
@@ -389,6 +536,9 @@ def test_doctor_fails_exactly_when_the_database_differs_or_an_integration_does_n
     event("an integration fails" if failed else "every integration imports")
     event("distributions missing" if missing_distributions else "no distribution missing")
     event("settings not configured" if other_facts.get("settings_configured") is False else "settings other")
+    event(
+        "python not uv-managed" if other_facts.get("python_uv_managed") is False else "python managed other"
+    )
 
     failure = doctor_module.doctor_failure(report)
 

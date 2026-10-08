@@ -83,6 +83,29 @@ ignores the upper bound of a dependency's `Requires-Python`, so a hand-run insta
 Python whose Unicode database the evidence normalizer is not pinned to
 ([`docs/evidence/normalization.md`](../evidence/normalization.md)).
 
+**A Python uv manages, and why the agent needs one.** The installer also asks uv for a Python that
+uv itself manages (`--managed-python`, in the rehearsal and the real install), one kept in the
+directory `uv python dir` prints (`~/.local/share/uv/python` by default). Without that, uv takes the
+first Python that matches, and an activated conda base environment, which `conda init` puts in
+every shell, comes before uv's own. Builds installed before `v1-e01-t23` therefore ran on
+anaconda's `python3`, and a `conda update python`, a Homebrew upgrade of a Python on PATH, or
+removing anaconda would change or delete the agent's interpreter in place: no install runs, no
+rehearsal catches it, and the next Wednesday run fails. A Python uv manages is changed only by uv:
+by reinstalling the build, or by a `uv python` command you run on purpose (`uv python uninstall`,
+or `uv python upgrade`, which moves a build to a newer patch release of the same minor version).
+After each install the installer checks that the build's base Python really is under
+`uv python dir`, prints `The build runs on the Python at …, which uv manages.`, and refuses the
+build otherwise.
+
+If no Python that uv manages matches yet, the installer says `No Python that uv manages matches
+'…' yet, so uv will download one into …`, and uv downloads it during the install (17 MB on this
+Mac, 33 MB on the Linux runners; one to two seconds each, measured). The agent never runs the
+installer, so this only happens while you are watching. `doctor` decides `Managed by uv` from its
+own environment, so a build installed with `UV_PYTHON_INSTALL_DIR` set shows `no` wherever that
+variable is not set; the agent's build uses the default directory. With `UV_PYTHON_DOWNLOADS=never` set, uv refuses instead, and
+`uv python install '<the specifier>'` installs one. The installer needs uv 0.6.8 or newer, the
+first with `--managed-python`; it refuses an older uv by name before installing anything.
+
 **What the installer checks before it replaces anything.** `install_channel.sh` first installs the
 build into a temporary tool directory and checks it there: the wheels' provenance,
 `debate-research --version --json`, `python -m debate_cli.installation` (every wired integration
@@ -108,7 +131,13 @@ env -i HOME="${HOME}" PATH="${AGENT_PATH}" sh -c 'command -v debate-research; de
 ```
 
 `doctor` reports the build's versions, its interpreter, its wiring, its Unicode database beside
-the normalizer's pin, and whether every integration the CLI wires imports. Its exit status:
+the normalizer's pin, and whether every integration the CLI wires imports. It also reports the
+`Base interpreter` (the Python installation behind the build's environment), `uv's Pythons` (the
+directory `uv python dir` would print in that environment) and `Managed by uv`, which is `yes` when
+the first lies inside the second, links followed. For the agent's build it should say `yes`; `no`
+means the build is on a Python that conda, Homebrew or anything else on the Mac can change, and
+reinstalling a tag with `install_channel.sh` moves it to one uv manages. `Managed by uv` never
+changes doctor's exit status. Its exit status:
 
 | Exit | Means | What to do |
 |---|---|---|
@@ -117,7 +146,7 @@ the normalizer's pin, and whether every integration the CLI wires imports. Its e
 | 70 | `doctor` could not make a check at all: the normalizer's pinned version is unknown, or the CLI wires an integration in a way it cannot follow. That is a bug in the build, not a verdict on the installation. | Install a different tag and report the build. |
 
 Nothing else `doctor` reports changes its exit status. Settings not loaded, an unknown package
-version, an unexpected platform, or a declared extra's package missing (`Extras' packages missing`)
+version, an unexpected platform, a Python uv does not manage, or a declared extra's package missing (`Extras' packages missing`)
 are described, never failed: none of them is a failure it can state precisely. A missing package
 that a wired integration needs makes that integration fail to import, and that is exit 1. The
 installer refuses a build with any declared package missing.

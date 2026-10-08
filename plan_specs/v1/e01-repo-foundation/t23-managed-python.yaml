@@ -60,7 +60,7 @@ spec:
         Operator follow-up: reinstall the agent's build in a week the agent is not due to run, and
         record doctor showing a managed interpreter and the agent-environment check passing.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

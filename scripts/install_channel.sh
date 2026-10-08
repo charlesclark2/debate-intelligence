@@ -16,6 +16,19 @@
 #      dependency's Requires-Python, so without `--python` a uv install can land on a Python whose
 #      Unicode database the evidence normalizer is not pinned to. Unreadable or missing metadata
 #      makes the script refuse; it never falls back to a guess;
+#   3a. asks uv for a Python that uv itself manages, with uv's own option `--managed-python`, on
+#      both installs (v1-e01-t23). Without it uv takes the first Python that matches, and an
+#      activated conda base environment comes before uv's own: on the coach's Mac the agent's build
+#      ran on anaconda's python3, which a `conda update` can move to another version, or a removal
+#      delete, with no install run and nothing to notice until the next scheduled run fails. A
+#      Python uv manages lives in `uv python dir` and changes only through uv. If none that matches
+#      is installed yet, uv downloads one (it says so, and so does this script); nothing here turns
+#      downloads off, but a caller's UV_PYTHON_DOWNLOADS=never still does, and then uv refuses.
+#      `--managed-python` needs uv 0.6.8 or newer. An older uv rejects it ("unexpected argument
+#      '--managed-python'", exit 2) before installing anything, and this script asks first and
+#      refuses such a uv by name, with nothing installed. Each install's checks include that its
+#      interpreter really is under `uv python dir`, so a uv that accepted the option and ignored it
+#      is caught too;
 #   4. rehearses the install in a temporary uv tool directory and runs every check there:
 #      both installed distributions record those wheel files as their source, the installed
 #      `debate-research --version --json` reports this version and channel, the build can import
@@ -72,8 +85,8 @@
 #   UV_TOOL_DIR, UV_TOOL_BIN_DIR   honoured by uv as usual for the real install, e.g. to install
 #                         somewhere disposable. The rehearsal always goes to a temporary directory.
 #
-# Needs: uv, unzip, and gh (authenticated) unless --dir is given. No Python is needed beforehand; uv
-# provides one that the wheel's Requires-Python admits.
+# Needs: uv 0.6.8 or newer, unzip, and gh (authenticated) unless --dir is given. No Python is needed
+# beforehand; uv provides one that it manages and that the wheel's Requires-Python admits.
 set -eu
 
 REPOSITORY=${DEBATE_RELEASE_REPO:-charlesclark2/debate-intelligence}
@@ -115,6 +128,10 @@ else
 fi
 
 command -v uv >/dev/null 2>&1 || fail "uv is not installed: https://docs.astral.sh/uv/getting-started/installation/"
+# The option this script relies on for a Python uv manages (step 3a). A uv that does not know it
+# rejects it as an unexpected argument, here, before anything is downloaded or installed.
+uv --managed-python --version >/dev/null 2>&1 \
+    || fail "this uv ($(uv --version 2>/dev/null || echo 'version unknown')) has no --managed-python option, which uv 0.6.8 added; without it uv cannot be held to a Python it manages. Upgrade uv and run this again; nothing was installed"
 
 TEMPORARY=${TMPDIR:-/tmp}
 TEMPORARY=${TEMPORARY%/}
@@ -194,10 +211,10 @@ install_and_check() {
     if [ $# -gt 0 ]; then
         set -- --constraints "$1"
     fi
-    uv tool install --force --python "${REQUIRES_PYTHON}" "$@" \
+    uv tool install --force --managed-python --python "${REQUIRES_PYTHON}" "$@" \
         "debate-cli @ ${ASSETS_URL}/${CLI_WHEEL}" \
         --with "debate-core @ ${ASSETS_URL}/${CORE_WHEEL}" \
-        || fail "uv could not install debate-cli ${VERSION} on a Python matching '${REQUIRES_PYTHON}'"
+        || fail "uv could not install debate-cli ${VERSION} on a Python matching '${REQUIRES_PYTHON}' that uv manages (if downloads are off, \`uv python install '${REQUIRES_PYTHON}'\` installs one)"
 
     # Belt and braces: each first-party distribution must say it came from the wheel verified above.
     # PEP 610's direct_url.json is written only for a URL install; one resolved from an index has none.
@@ -213,6 +230,22 @@ install_and_check() {
         done
         [ -n "${found}" ] || fail "the installed ${distribution} did not come from ${ASSETS_ABSOLUTE}/${wheel}; refusing to trust this install"
     done
+
+    # Asking uv for a Python it manages is not proof that it gave one (v1-e01-t23). uv decides by
+    # place, and so does this: the tool environment's base Python, every link followed, must lie
+    # inside `uv python dir`, every link followed too.
+    TOOL_PYTHON="${TOOL_ENVIRONMENT}/bin/python"
+    [ -x "${TOOL_PYTHON}" ] || fail "uv reported success but ${TOOL_PYTHON} does not exist"
+    BASE_PYTHON=$("${TOOL_PYTHON}" -I -c 'import sys; print(sys.base_prefix)') \
+        || fail "could not ask ${TOOL_PYTHON} which Python it runs on"
+    MANAGED_DIRECTORY=$(uv python dir) || fail "uv python dir failed"
+    BASE_PHYSICAL=$(CDPATH='' cd -P -- "${BASE_PYTHON}" 2>/dev/null && pwd -P) || BASE_PHYSICAL=""
+    MANAGED_PHYSICAL=$(CDPATH='' cd -P -- "${MANAGED_DIRECTORY}" 2>/dev/null && pwd -P) || MANAGED_PHYSICAL=""
+    case "${BASE_PHYSICAL}" in
+        "${MANAGED_PHYSICAL}"/*) [ -n "${MANAGED_PHYSICAL}" ] ;;
+        *) false ;;
+    esac || fail "the build installed into ${TOOL_DIRECTORY} runs on the Python at ${BASE_PYTHON}, which is not a Python uv manages (those are in ${MANAGED_DIRECTORY}); refusing it, because a conda or Homebrew update could change or remove that Python under the installed build"
+    echo "The build runs on the Python at ${BASE_PYTHON}, which uv manages."
 
     BIN_DIRECTORY=$(uv tool dir --bin) || fail "uv tool dir --bin failed"
     INSTALLED="${BIN_DIRECTORY}/debate-research"
@@ -233,8 +266,6 @@ install_and_check() {
     # behind each debate-core extra the CLI declares were installed. It runs with the tool
     # environment's own interpreter, so it sees exactly what `debate-research` will. Builds published
     # before this check existed do not contain it and are refused; every one of them lacks boto3.
-    TOOL_PYTHON="${TOOL_ENVIRONMENT}/bin/python"
-    [ -x "${TOOL_PYTHON}" ] || fail "uv reported success but ${TOOL_PYTHON} does not exist"
     echo "Checking that the build can import every integration debate-research wires..."
     "${TOOL_PYTHON}" -m debate_cli.installation \
         || fail "the build installed from ${TAG} is incomplete (see above), so commands that need those integrations will fail; install a different tag"
@@ -248,7 +279,11 @@ install_and_check() {
 }
 
 echo "Rehearsing the install of debate-cli ${VERSION} (${CHANNEL} channel) from ${ASSETS_ABSOLUTE},"
-echo "on a Python matching '${REQUIRES_PYTHON}' (debate_core's Requires-Python), in a temporary tool directory..."
+echo "on a Python matching '${REQUIRES_PYTHON}' (debate_core's Requires-Python) that uv manages, in a temporary tool directory..."
+# Only to say what is about to happen: uv makes the download itself, during the install (step 3a).
+if ! uv python find --system --managed-python --no-python-downloads "${REQUIRES_PYTHON}" >/dev/null 2>&1; then
+    echo "No Python that uv manages matches '${REQUIRES_PYTHON}' yet, so uv will download one into $(uv python dir)."
+fi
 REHEARSAL=$(mktemp -d "${TEMPORARY}/debate-research-rehearsal.XXXXXX")
 (
     UV_TOOL_DIR="${REHEARSAL}/tools"

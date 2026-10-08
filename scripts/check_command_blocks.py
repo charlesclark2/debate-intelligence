@@ -1,6 +1,3 @@
-# /// script
-# requires-python = ">=3.11"
-# ///
 """Fail on a `#` comment inside a shell code block that a person pastes into zsh (v1-e01-t19).
 
 The operator's shell is zsh, which does not treat `#` as a comment when commands are pasted

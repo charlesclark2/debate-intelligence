@@ -33,7 +33,17 @@ spec:
     the store and the bucket, and hand-made copies outside the inbox.
   priority: 2
   constraints:
-    packages: [debate_core.application, docs]
+    packages:
+      - debate_core.application
+      - docs
+      # added on the PM's instruction, 2026-10-08: the dry run's listing and the summary's display,
+      # and the tests for both packages
+      - debate_cli.commands
+      - packages/debate_core/tests
+      - packages/debate_cli/tests
+      - docs/runbooks
+      # added by the PM at review, 2026-10-08: the smoke assertion (Follow-up work 3)
+      - tests/smoke
     forbidden:
       - Deleting a download that is not yet imported, or whose publish has not been confirmed
       - Deleting a camp download the delivery record does not yet cover
@@ -61,7 +71,7 @@ spec:
         shown caught, every run with a fresh Hypothesis database (working agreement 8). The scheduled-
         sync runbook says what the inbox holds and when things leave it.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

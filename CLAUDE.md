@@ -24,4 +24,6 @@ Rules:
   ModelRouter only.
 * Finish by setting the task Goal to `Succeeded`, running `uv run scripts/validate_specs.py`, and
   completing `docs/session-reports/<task-name>.md` (leave its PM review section alone).
-  Don't regenerate `ROADMAP.md` in a task; the PM refreshes it separately to avoid merge conflicts.
+  Don't regenerate `ROADMAP.md` or the table in `docs/README.md` in a task: a workflow refreshes
+  both after every merge into `dev`, so parallel task PRs never conflict on them (`v1-e01-t16`). A
+  new document under `docs/` starts with its one-line `<!-- docs-index: ... -->` comment.

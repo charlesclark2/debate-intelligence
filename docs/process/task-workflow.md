@@ -189,8 +189,11 @@ Two rules learned the hard way:
 
 ## Changes that are not a task
 
-The PM also refreshes `ROADMAP.md` this way (`specs/roadmap-refresh`) after a batch of merges.
-Task sessions never regenerate it, so parallel task PRs don't conflict on it.
+`ROADMAP.md` and the table in `docs/README.md` are generated, and task sessions never regenerate
+them. After every merge into `dev`, `.github/workflows/refresh-generated-files.yml` regenerates both
+and keeps one pull request, **Refresh generated files**, open while either is stale. It dispatches
+`ci` on its own branch, because a pull request the workflow opens starts no checks. Merge it like any
+other change into `dev`, and always before a promotion (`v1-e01-t16`).
 
 Process, documentation, or spec-only changes that no task spec covers follow the same path by
 hand: a branch off `dev` (`docs/<slug>`, `specs/<slug>` or `tooling/<slug>`), a PR into `dev`, merge, delete the

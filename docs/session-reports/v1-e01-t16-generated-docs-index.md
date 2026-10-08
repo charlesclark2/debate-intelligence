@@ -273,9 +273,45 @@ number in this report's PM review, or in the PR that sets this Goal to `Succeede
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted as a partial merge (`scripts/task pr --partial`). The phase stays `InProgress` until
+operator follow-ups 1 to 3 have run, and the PM has recorded the promotion that proves ac5.
+
+* **The forbidden entry: amended, as you suggested.** It now reads "Regenerating inside a check or a
+  commit hook, which hides drift rather than reporting it". The old wording predates ac5. A workflow
+  that publishes the regeneration as a pull request someone reads reports drift; it does not hide
+  it. Your tests showing every CI check is read-only are what make that true.
+* **ac5's design: accepted.**
+  * Choosing a bot pull request over a freshness check on dev PRs is right. A dev-PR freshness check
+    fails every task that finishes, which is the conflict this task exists to remove.
+  * Dispatching `ci` with `workflow_dispatch` is the pattern dev-prerelease already uses for
+    validate-dev.
+  * Refusing auto-merge is right: a `GITHUB_TOKEN` merge would leave the merge commit with no `ci`
+    push run and no pre-release, and protect-main would block the next promotion from it.
+  * One merge click before a promotion is the honest residual.
+* **The force-push fallback: accepted.** You could not settle the workflow-file question
+  read-only, so handling both answers was the right call. If follow-up 1 or 2 ever shows the
+  fallback firing, record it here.
+* **ac3:** the reconciliation is exact (27 of 30 identical, each change explained), and the three
+  undocumented `docs/data/` files it found are the staleness this task set out to end.
+* **The deviations are fixed by the PM in this branch:**
+  * `docs/process/task-workflow.md`, "Changes that are not a task", now carries your proposed text;
+  * `CLAUDE.md` says why tasks don't regenerate either file, and asks for the `docs-index` comment.
+
+  Both paths are added to `constraints.packages`. `docs_index.py --check` and `validate_specs.py`
+  pass on the branch.
+* **Not filed:** the `website-content-accounts.md` description. That document's content is what is
+  out of date, and it is left for whoever next touches the website accounts.
+
+**Before the PR:** `scripts/task sync`. v1-e34-t10 may have merged and edited
+`docs/runbooks/caselist-scheduled-sync.md`. Keep this task's first-line comment and its content
+when resolving, and give any document that arrived from `dev` without the comment one, so
+`docs_index.py --check-descriptions` passes. Then run `docs_index.py --check`, `check_links.py`,
+`validate_specs.py` and the two new test files. Leave `ROADMAP.md` alone: it is stale on `dev`,
+and the first refresh PR after this merges is follow-up 1.

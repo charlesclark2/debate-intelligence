@@ -36,9 +36,17 @@ of the third-party dependency to the index the moment the rehearsal ends, and th
 still get the version the rehearsal checked. A control test shows that an unpinned second install
 takes the newer one, so the publish is live.
 
-Offline: every URL is `file://`, the uv cache is a temporary directory, and uv may not download a
-Python (it needs one that debate_core's `requires-python` admits and that it can already find, as
-CI's `uv python install` provides).
+v1-e01-t23 has both installs run on a Python uv manages (`--managed-python`). The stand-in for the
+coach's anaconda is a copy of a uv-managed Python made outside uv's directory, which uv therefore
+treats as one it does not manage. Put first on PATH with conda's base environment activated, as
+`conda init` leaves a shell, it is the interpreter a plain `uv tool install` takes (a control test
+shows it), and the build must not run on it. With no managed Python installed, uv must be left free
+to download one: the shim records what the script allowed and then turns downloads off itself.
+
+Offline: every URL is `file://`, the uv cache is a temporary directory, and the shim sets
+`UV_PYTHON_DOWNLOADS=never` on every uv call, so uv never downloads a Python. The installs need a
+Python that uv manages, that debate_core's `requires-python` admits and that uv can already find,
+as CI's `uv python install` provides.
 """
 
 from __future__ import annotations
@@ -79,6 +87,19 @@ UNSATISFIABLE_BOUND = ">=9.1,<9.2"
 RUNNING_PYTHON_TAG = f"cp{sys.version_info.major}{sys.version_info.minor}-none-any"
 
 PATH_WARNING = "warning — `debate-research` on this PATH is"
+
+# Settings in the caller's environment that change which Python uv picks; the tests choose their own.
+# An activated conda environment is one of them (`CONDA_PREFIX`, `CONDA_DEFAULT_ENV`).
+PYTHON_SELECTION_PREFIXES = ("CONDA", "_CONDA")
+PYTHON_SELECTION = {"UV_PYTHON", "UV_MANAGED_PYTHON", "UV_NO_MANAGED_PYTHON", "UV_PYTHON_PREFERENCE"}
+
+
+def without_python_selection(environment: dict[str, str]) -> dict[str, str]:
+    return {
+        name: value
+        for name, value in environment.items()
+        if not name.startswith(PYTHON_SELECTION_PREFIXES) and name not in PYTHON_SELECTION
+    }
 
 
 def write_wheel(
@@ -268,7 +289,7 @@ def uv_environment(fixture: Fixture, tmp_path: Path) -> dict[str, str]:
     """
     environment = {
         name: value
-        for name, value in os.environ.items()
+        for name, value in without_python_selection(dict(os.environ)).items()
         if name != "VIRTUAL_ENV"
         and not name.startswith(("UV_INDEX", "UV_EXTRA_INDEX", "UV_FIND_LINKS", "UV_DEFAULT_INDEX"))
         and name not in {"UV_PRERELEASE", "UV_OFFLINE", "UV_NO_INDEX", "PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL"}
@@ -298,6 +319,14 @@ def uv_shim(tmp_path: Path) -> Path:
     * `UV_SHIM_IGNORE_CONSTRAINTS`: drop `--constraints FILE` before running uv, as a uv that
       ignored the option would.
     * `UV_SHIM_FREEZE_EXTRA`: a line added to what `uv pip freeze` prints.
+
+    And three more (v1-e01-t23):
+
+    * Every call's `UV_PYTHON_DOWNLOADS`, as the script left it (`unset` when it is not set), is
+      logged beside its arguments (see :func:`uv_downloads`). Then the shim sets it to `never`, so
+      whatever the script allowed, the real uv never downloads a Python in a test.
+    * `UV_SHIM_WITHOUT_MANAGED_PYTHON`: reject `--managed-python` exactly as uv 0.6.7 and older do.
+    * `UV_SHIM_IGNORE_MANAGED_PYTHON`: drop `--managed-python`, as a uv that ignored it would.
     """
     assert UV is not None
     directory = tmp_path / "uv-shim"
@@ -305,9 +334,28 @@ def uv_shim(tmp_path: Path) -> Path:
     shim = directory / "uv"
     seen = tmp_path / "uv-shim-rehearsal-seen"
     ran = tmp_path / "uv-shim-after-rehearsal-ran"
+    downloads = tmp_path / "uv-downloads.log"
     shim.write_text(
         "#!/bin/sh\n"
         f"printf '%s\\t%s\\n' \"${{UV_TOOL_DIR:-}}\" \"$*\" >> '{tmp_path / 'uv-calls.log'}'\n"
+        f"printf '%s\\t%s\\n' \"${{UV_PYTHON_DOWNLOADS-unset}}\" \"$*\" >> '{downloads}'\n"
+        "UV_PYTHON_DOWNLOADS=never\n"
+        "export UV_PYTHON_DOWNLOADS\n"
+        'if [ -n "${UV_SHIM_WITHOUT_MANAGED_PYTHON:-}" ]; then\n'
+        "    for argument do\n"
+        '        if [ "${argument}" = --managed-python ]; then\n'
+        "            echo \"error: unexpected argument '--managed-python' found\" >&2\n"
+        "            exit 2\n"
+        "        fi\n"
+        "    done\n"
+        "fi\n"
+        'if [ -n "${UV_SHIM_IGNORE_MANAGED_PYTHON:-}" ]; then\n'
+        "    for argument do\n"
+        "        shift\n"
+        '        if [ "${argument}" = --managed-python ]; then continue; fi\n'
+        '        set -- "$@" "${argument}"\n'
+        "    done\n"
+        "fi\n"
         'case "${UV_TOOL_DIR:-}" in\n'
         f"    *debate-research-rehearsal.*) : > '{seen}' ;;\n"
         "    *)\n"
@@ -340,6 +388,14 @@ def uv_shim(tmp_path: Path) -> Path:
 def uv_calls(tmp_path: Path) -> list[tuple[str, str]]:
     """Every uv call the script made, as `(UV_TOOL_DIR, arguments)`."""
     log = tmp_path / "uv-calls.log"
+    if not log.exists():
+        return []
+    return [tuple(line.split("\t", 1)) for line in log.read_text(encoding="utf-8").splitlines()]  # type: ignore[misc]
+
+
+def uv_downloads(tmp_path: Path) -> list[tuple[str, str]]:
+    """Every uv call the script made, as `(UV_PYTHON_DOWNLOADS as the script left it, arguments)`."""
+    log = tmp_path / "uv-downloads.log"
     if not log.exists():
         return []
     return [tuple(line.split("\t", 1)) for line in log.read_text(encoding="utf-8").splitlines()]  # type: ignore[misc]
@@ -866,6 +922,216 @@ def test_a_rehearsal_holding_something_that_cannot_be_pinned_is_refused_before_t
     assert result.returncode == 1, result.stdout + result.stderr
     assert "cannot be pinned" in result.stderr
     assert line in result.stderr
+    assert "the installed debate-research was not touched" in result.stderr
+    assert len(tool_installs(tmp_path)) == 1, "the real install ran anyway"
+    assert not fixture.installed.exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e01-t23: the installed build runs on a Python that uv manages
+# ------------------------------------------------------------------------------------------------
+
+MANAGED_PYTHON_OPTION = "--managed-python"
+WILL_DOWNLOAD = "uv will download one"
+
+
+@pytest.fixture(scope="module")
+def managed_python() -> Path:
+    """A Python uv manages that debate_core's bound admits and that uv can find without a download."""
+    assert UV is not None
+    found = subprocess.run(
+        [UV, "python", "find", "--system", MANAGED_PYTHON_OPTION, REQUIRES_PYTHON],
+        capture_output=True,
+        text=True,
+        env=without_python_selection(dict(os.environ)) | {"UV_PYTHON_DOWNLOADS": "never"},
+        check=False,
+    )
+    if found.returncode != 0:
+        pytest.fail(
+            f"uv manages no Python matching {REQUIRES_PYTHON!r}, so the installer cannot be tested "
+            f"offline; `uv python install` installs one, as CI does. uv said: {found.stderr.strip()}"
+        )
+    return Path(found.stdout.strip())
+
+
+def installation_root(executable: Path) -> Path:
+    """The installation an interpreter belongs to: `<root>/bin/python3.X`, every link followed."""
+    return executable.resolve().parent.parent
+
+
+def unmanaged_copy(managed: Path, destination: Path) -> Path:
+    """A copy of the `managed` Python at `destination`, outside uv's directory; returns its root.
+
+    uv decides whether it manages an interpreter by where it is, so to uv this is a Python it does
+    not manage, as anaconda's is: the same CPython, a different place. Only what an interpreter
+    needs to run and to have a virtual environment made from it is copied: the executable, its
+    libpython and the standard library, without site-packages.
+    """
+    executable = managed.resolve()
+    source = installation_root(managed)
+    (destination / "bin").mkdir(parents=True)
+    shutil.copy2(executable, destination / "bin" / executable.name)
+    for name in ("python3", "python"):
+        (destination / "bin" / name).symlink_to(executable.name)
+    (destination / "lib").mkdir()
+    for library in (source / "lib").glob("libpython*"):
+        shutil.copy2(library, destination / "lib" / library.name, follow_symlinks=False)
+    shutil.copytree(
+        source / "lib" / executable.name,
+        destination / "lib" / executable.name,
+        symlinks=True,
+        ignore=shutil.ignore_patterns("site-packages", "__pycache__", "config-*", "test"),
+    )
+    (destination / "lib" / executable.name / "site-packages").mkdir()
+    return destination
+
+
+@pytest.fixture
+def anaconda(tmp_path: Path, managed_python: Path) -> Path:
+    """The stand-in for the coach's anaconda: a satisfying Python that uv does not manage."""
+    return unmanaged_copy(managed_python, tmp_path / "anaconda3")
+
+
+def first_on_path(tmp_path: Path, root: Path) -> str:
+    """PATH with the uv shim, then `root`'s bin directory, then the rest."""
+    return os.pathsep.join([str(uv_shim(tmp_path)), str(root / "bin"), os.environ.get("PATH", "")])
+
+
+def conda_base_activated(tmp_path: Path, root: Path) -> dict[str, str]:
+    """What `conda init` leaves in every shell: the base environment active and first on PATH."""
+    return {"CONDA_PREFIX": str(root), "CONDA_DEFAULT_ENV": "base", "PATH": first_on_path(tmp_path, root)}
+
+
+def tool_interpreter(tool_directory: Path) -> Path:
+    """What the tool environment's `bin/python` resolves to."""
+    return (tool_directory / "debate-cli" / "bin" / "python").resolve()
+
+
+def test_both_installs_ask_uv_for_a_python_it_manages(tmp_path: Path) -> None:
+    fixture = no_squats(tmp_path)
+
+    result = install(fixture, tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    installs = tool_installs(tmp_path)
+    assert len(installs) == 2, installs
+    for _tool_dir, arguments in installs:
+        # Beside debate_core's own bound, which still decides the version (v1-e01-t14).
+        assert MANAGED_PYTHON_OPTION in arguments.split(), arguments
+        assert f"--python {REQUIRES_PYTHON} " in arguments, arguments
+
+
+def test_a_conda_python_first_on_path_is_not_the_python_the_build_runs_on(
+    tmp_path: Path, managed_python: Path, anaconda: Path
+) -> None:
+    fixture = no_squats(tmp_path)
+
+    result = install(fixture, tmp_path, **conda_base_activated(tmp_path, anaconda))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    interpreter = tool_interpreter(fixture.tools / "environments")
+    assert not interpreter.is_relative_to(anaconda.resolve()), interpreter
+    assert interpreter.is_relative_to(installation_root(managed_python)), interpreter
+    assert WILL_DOWNLOAD not in result.stdout
+    assert run_installed(fixture)["core"] == "release"
+
+
+def test_control_without_the_option_uv_installs_on_that_conda_python(tmp_path: Path, anaconda: Path) -> None:
+    """Why the option is needed: the same install without it lands on the stand-in."""
+    assert UV is not None
+    fixture = no_squats(tmp_path)
+
+    subprocess.run(
+        [
+            UV,
+            "tool",
+            "install",
+            "--force",
+            "--python",
+            REQUIRES_PYTHON,
+            f"debate-cli @ {(fixture.release / f'debate_cli-{VERSION}-py3-none-any.whl').as_uri()}",
+            "--with",
+            f"debate-core @ {(fixture.release / CORE_WHEEL).as_uri()}",
+        ],
+        capture_output=True,
+        text=True,
+        env=uv_environment(fixture, tmp_path) | conda_base_activated(tmp_path, anaconda),
+        check=True,
+    )
+
+    assert tool_interpreter(fixture.tools / "environments").is_relative_to(anaconda.resolve())
+
+
+def test_with_no_managed_python_uv_is_left_free_to_download_one_and_the_installer_says_so(
+    tmp_path: Path, anaconda: Path
+) -> None:
+    """ac2. uv is allowed to download; the shim then refuses the download, to keep the test offline.
+
+    The stand-in is first on PATH. Without the option uv would install on it (the PATH half of the
+    control above), so the install failing here, offline, is the build refusing to run on it.
+    """
+    fixture = no_squats(tmp_path)
+    environment = {
+        name: value
+        for name, value in uv_environment(fixture, tmp_path).items()
+        if name != "UV_PYTHON_DOWNLOADS"
+    } | {
+        "UV_PYTHON_INSTALL_DIR": str(tmp_path / "no-managed-pythons"),
+        "PATH": first_on_path(tmp_path, anaconda),
+    }
+
+    result = subprocess.run(
+        ["sh", str(SCRIPT), "--dir", str(fixture.release), TAG],
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=False,
+    )
+
+    assert f"No Python that uv manages matches '{REQUIRES_PYTHON}' yet" in result.stdout
+    assert f"{WILL_DOWNLOAD} into {tmp_path / 'no-managed-pythons'}" in result.stdout
+    installs = [
+        (downloads, arguments)
+        for downloads, arguments in uv_downloads(tmp_path)
+        if arguments.startswith("tool install")
+    ]
+    assert installs, "uv was never asked to install"
+    for downloads, arguments in installs:
+        assert downloads != "never", "the script turned uv's Python downloads off"
+        assert MANAGED_PYTHON_OPTION in arguments.split(), arguments
+        assert "--no-python-downloads" not in arguments.split(), arguments
+    # uv looked only among the Pythons it manages, found none, and was refused the download by the
+    # shim; it did not fall back to the stand-in on PATH.
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "in managed installations" in result.stderr
+    assert not fixture.installed.exists()
+    assert not (fixture.tools / "environments" / "debate-cli").exists()
+
+
+def test_a_uv_without_the_option_is_refused_before_anything_is_installed(tmp_path: Path) -> None:
+    fixture = no_squats(tmp_path)
+
+    result = install(fixture, tmp_path, UV_SHIM_WITHOUT_MANAGED_PYTHON="1")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert MANAGED_PYTHON_OPTION in result.stderr
+    assert "uv 0.6.8" in result.stderr
+    assert "nothing was installed" in result.stderr
+    assert tool_installs(tmp_path) == []
+    assert not fixture.installed.exists()
+
+
+def test_a_uv_that_ignores_the_option_is_caught_in_the_rehearsal(tmp_path: Path, anaconda: Path) -> None:
+    """Asking uv for a managed Python is not proof of one: the installer checks what it got."""
+    fixture = no_squats(tmp_path)
+
+    result = install(
+        fixture, tmp_path, UV_SHIM_IGNORE_MANAGED_PYTHON="1", **conda_base_activated(tmp_path, anaconda)
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "which is not a Python uv manages" in result.stderr
+    assert str(anaconda) in result.stderr
     assert "the installed debate-research was not touched" in result.stderr
     assert len(tool_installs(tmp_path)) == 1, "the real install ran anyway"
     assert not fixture.installed.exists()

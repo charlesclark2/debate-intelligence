@@ -36,20 +36,20 @@ cannot contain expressions, so the name has to be knowable before the apply.
 ## Before you start
 
 **Terraform ≥ 1.10.** The `use_lockfile` backend argument does not exist before it, and every
-root in this repository now pins `>= 1.10.0, < 2.0.0`. Check and upgrade:
+root in this repository now pins `>= 1.10.0, < 2.0.0`. Check and upgrade. Only if brew refuses the
+formula as untrusted, run `brew trust hashicorp/tap` and then the upgrade again.
 
 ```bash
 terraform version
-brew trust hashicorp/tap          # only if brew refuses the formula as untrusted
 brew upgrade hashicorp/tap/terraform
 ```
 
 **tflint**, for `scripts/terraform_checks.sh`. It is not in homebrew-core — the formula was
-removed — so it comes from the project's own tap:
+removed — so it comes from the project's own tap. Only if brew refuses the tap as untrusted, run
+`brew trust terraform-linters/tap` and then the install again.
 
 ```bash
 brew tap terraform-linters/tap
-brew trust terraform-linters/tap        # only if brew refuses the tap as untrusted
 brew install terraform-linters/tap/tflint
 tflint --version
 ```
@@ -141,10 +141,10 @@ terraform init -migrate-state -backend-config=dev.s3.tfbackend
 ```
 
 Answer `yes` when Terraform offers to copy the existing state to the new backend. Confirm the
-migration landed and left nothing behind:
+migration landed and left nothing behind. The plan says `No changes.`
 
 ```bash
-terraform plan -var-file=dev.tfvars          # "No changes."
+terraform plan -var-file=dev.tfvars
 aws s3api list-objects-v2 --profile debate-dev \
   --bucket debate-dev-tfstate-a7508de8 --query 'Contents[].Key'
 ```
@@ -193,10 +193,13 @@ The plan must create `debate-prod-tfstate-a7508de8` and **must not** show any ch
 bucket. If it proposes renaming a bucket, the local state from step 1 is still present: stop,
 check that `bootstrap-dev.tfstate` is gone, and start step 2 again.
 
+Then migrate the prod state and keep a dated copy of the local file. Answer `yes` to the copy as
+before; the plan after it says `No changes.`
+
 ```bash
 rm backend_override.tf
 terraform init -migrate-state -backend-config=prod.s3.tfbackend
-terraform plan -var-file=prod.tfvars          # "No changes."
+terraform plan -var-file=prod.tfvars
 
 cp bootstrap-prod.tfstate ~/aws-backups/debate-terraform-state/bootstrap-state-prod-$(date +%Y%m%d).tfstate
 rm -f bootstrap-prod.tfstate bootstrap-prod.tfstate.backup
@@ -383,7 +386,7 @@ permission sets or the trail again means the state did not come across — stop,
 over `terraform.tfstate`, and do not apply.
 
 With a clean plan confirmed, remove the local state from the clone and check the object is in the
-bucket:
+bucket. The final plan still says `No changes.`
 
 ```bash
 cd "$MAIN"
@@ -391,7 +394,7 @@ rm -f infrastructure/bootstrap/organization/terraform.tfstate \
       infrastructure/bootstrap/organization/terraform.tfstate.backup
 aws s3api list-objects-v2 --profile debate-admin \
   --bucket debate-prod-tfstate-a7508de8 --query 'Contents[].Key'
-terraform -chdir=infrastructure/bootstrap/organization plan   # still "No changes."
+terraform -chdir=infrastructure/bootstrap/organization plan
 ```
 
 The dated backup stays. It is the only copy if the bucket is ever lost, and it costs nothing.

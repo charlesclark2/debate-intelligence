@@ -177,12 +177,13 @@ outside the season, which is what catches a typed year left over from last seaso
 
 ### Check a change
 
-From the repository root:
+From the repository root. The last command starts the site locally; then open
+<http://localhost:3000/schedule/>.
 
 ```bash
 pnpm --dir site test
 SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build
-pnpm --dir site dev        # then open http://localhost:3000/schedule/
+pnpm --dir site dev
 ```
 
 The build fails, naming the tournament and the field, on a mistake in the file: a misspelt field,

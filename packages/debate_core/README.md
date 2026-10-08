@@ -271,11 +271,12 @@ Things worth knowing before you use or extend this:
 
 ### `schemas/` — published JSON Schemas
 
-One file per entity, generated and checked in:
+One file per entity, generated and checked in. Regenerate them after changing a model with the
+first command; the second exits 1 if a committed schema is stale.
 
 ```bash
-uv run scripts/export_schemas.py          # regenerate after changing a model
-uv run scripts/export_schemas.py --check  # exit 1 if a committed schema is stale
+uv run scripts/export_schemas.py
+uv run scripts/export_schemas.py --check
 ```
 
 `tests/domain/test_schemas.py` fails when they drift, so a model change and its schema change

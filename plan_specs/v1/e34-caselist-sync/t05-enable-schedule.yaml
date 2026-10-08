@@ -60,6 +60,13 @@ spec:
     - kind: TaskRef
       name: v1-e01-t09-dev-prerelease-channel
       relation: dependsOn
+    # Added by the PM, 2026-10-07. The first scheduled run (2026-10-07 06:00) exited 126: launchd may
+    # not execute the wrapper inside the checkout under ~/Documents ("Operation not permitted").
+    # v1-e34-t10 moves it out; until it lands, ac3 cannot pass. ac1, ac1b, ac2 and ac5 were done by the
+    # operator's install; ac3 and ac4 wait for the first scheduled run after t10's reinstall.
+    - kind: TaskRef
+      name: v1-e34-t10-agent-outside-checkout
+      relation: dependsOn
     # Added by the PM, 2026-10-01, for the same reason as the t06 edge above. v1-e30-t07 builds the
     # suppression list that the archive and OpenEv importers consult, and its own description says
     # why: "so a cumulative weekly archive can never re-import a removed file". The archives are

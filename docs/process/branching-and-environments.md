@@ -1,3 +1,4 @@
+<!-- docs-index: `main` = prod, `dev` = development; promotion rules -->
 # Branching, environments and promotion
 
 Decided 2026-09-17 ([ADR-0013](../adr/0013-two-environments-and-dev-main-promotion.md)). This is the authoritative workflow; task

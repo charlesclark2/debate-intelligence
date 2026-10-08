@@ -100,9 +100,8 @@ The other files follow in any order. Their digests are in [`../MANIFEST.md`](../
 
 ### 3. Each file
 
-Set the file's digest, then open its `.docx` and its worksheet side by side. Use Numbers, or
-LibreOffice with `open -a LibreOffice` in place of `open -a Numbers`, and never Excel, which
-rewrites some text and gets the import refused.
+Each file goes round the same loop: open it, label it in the spreadsheet and save, repair and check,
+then import. Set the file's digest, then open its `.docx` and its worksheet side by side:
 
 ```bash
 f=PASTE_DIGEST_PREFIX_HERE
@@ -110,15 +109,50 @@ uv run python scripts/prelabel_docx.py open "${f}"
 open -a Numbers ~/parser-eval-worksheets/${f}.csv
 ```
 
-Fill in `unit`, `card`, `completeness` and, on sampled rows, the span markup, following the guide
-below; put `y` in `checked` on every row; never edit `text`. Save it back as CSV under the same
-name (in Numbers, File, Export To, CSV). Then import it, delete the worksheet, and send the label
-file as its own small pull request. If the operator corrected it rather than the coach, write
-`--corrected-by operator`.
+**Label it and save.** Fill in `unit`, `card`, `completeness` and, on sampled rows, the span
+markup, following the guide below; put `y` in `checked` on every row; never edit `text`. Save with
+Cmd+S. Numbers never writes the CSV: it saves your work as `${f}.numbers` beside it (the first
+time, keep the name it offers, in `~/parser-eval-worksheets`). That `.numbers` file is the one you
+go on working in: reopen it with `open ~/parser-eval-worksheets/${f}.numbers`, not the CSV. There
+is no need for File, Export To. Turn off Numbers' auto-correction (smart quotes and dashes,
+spelling, capitalisation) before your first file; it would change words the repair below will not
+touch. Never use Excel, which rewrites numbers and dates.
+
+**Repair and check.** This reads the `.numbers` file directly and writes the CSV the import reads:
+
+```bash
+uv run python scripts/prelabel_docx.py check "${f}" --worksheet ~/parser-eval-worksheets/${f}.numbers --repair --out ~/parser-eval-worksheets/${f}.csv
+```
+
+The repair puts back what the spreadsheet changed, and never a label. Numbers does change text
+nobody edited: whitespace, non-breaking spaces and line breaks, and with auto-correction on, quotes
+and dashes. The repair restores every row's `text` from the document and carries your `⟦` `⟧` marks
+onto it. It fills an emptied `underline` or `highlight` cell of a sampled row with its text and no
+marks, which says nothing there is marked. It empties those cells on rows that are not sampled. It
+prints one line per change, naming the column and the row by the number Numbers shows (the header
+is row 1). If one says a cell "was empty; filled with the row's text and no marks" and Word shows marks
+there, add them in Numbers, save, and run the block again.
+
+Then it runs every check `import` runs and lists every problem in every row: an empty `checked`, a
+unit that is not one of the nine, a card with no cite or no completeness. Fix each one in Numbers,
+save, and run the block again. It ends with `ready to import` when the import will succeed.
+
+It stops and writes nothing in two cases. **REFUSED** means letters or digits in a row differ from
+the document, which only a person can sort out: it names each row and shows a few characters
+around the difference. Put the words back in Numbers (Edit, Undo, or retype them), save, and run it
+again. **STOPPED** means the file you named is older than the other one beside it, so it is not
+your latest save: it says which is newer.
+
+If you labeled in LibreOffice, save as CSV under the same name, and give
+`--worksheet ~/parser-eval-worksheets/${f}.csv` instead; the repair writes over it.
+
+**Import, clean up and send it as its own small pull request.** If the operator corrected it rather
+than the coach, write `--corrected-by operator`.
 
 ```bash
 uv run python scripts/prelabel_docx.py import "${f}" --worksheet ~/parser-eval-worksheets/${f}.csv --corrected-by coach &&
 rm ~/parser-eval-worksheets/${f}.csv &&
+rm -f -r ~/parser-eval-worksheets/${f}.numbers &&
 git switch -c "labels/${f}" &&
 git add tests/fixtures/debate_files/eval/labels &&
 git commit -m "Parser evaluation labels: ${f}" &&
@@ -127,8 +161,11 @@ gh pr create --base dev --fill &&
 git switch dev
 ```
 
-Import prints `CORRECTED by coach; N of M labeled rows changed from the pre-labels`. If it refuses
-the worksheet, it says which row and why; fix the worksheet and import again.
+Import prints `CORRECTED by coach; N of M labeled rows changed from the pre-labels`. It compares the
+text exactly, so a worksheet goes through `check --repair` first; if it refuses, it lists the same
+problems `check` does. The chain stops at the first command that fails, so nothing is deleted or
+committed until the import succeeds. After it succeeds, the worksheet and its `.numbers` file are
+both deleted: they hold other programs' cards. Only the `.jsonl` is committed.
 
 ### 4. The finish
 
@@ -226,13 +263,17 @@ A file of analytics with no cards *is* debate material, and is labeled.
 ## Workflow
 
 The [working reference](#working-reference) is the order to run things in, with blocks to paste.
-Behind it are four `scripts/prelabel_docx.py` commands:
+Behind it are five `scripts/prelabel_docx.py` commands:
 
 * `prelabel` seeds pre-labels over the plan's rows. They hold no text and are kept in the
   repository while they are corrected; `prelabel --all` also removes a rejected file's pre-label.
 * `worksheet` writes a file's worksheet **outside** the repository, because it holds paragraph
   text; `worksheet --all` writes every one that is missing and never overwrites one already there.
-* `import` reads a corrected worksheet back, and refuses one with an unchecked row or edited text.
+* `check` runs every check `import` runs and lists every problem, writing nothing; with `--repair`
+  it first writes a worksheet with the document's text restored, never touching a label. It reads
+  a `.csv` or the `.numbers` file Numbers saves.
+* `import` reads a corrected worksheet back, `.csv` or `.numbers`, and refuses one with an
+  unchecked row or text that differs from the document.
 * `mark-reviewed` records the coach's end-to-end spot-check of a corrected file.
 
 `open` opens a file's `.docx` by its digest without printing where it is.
@@ -247,8 +288,10 @@ underlining and highlighting are only visible in Word.
 
 **Worksheets hold other programs' cards and sometimes names.** Keep them in one folder outside the
 repository, never attach or upload them, and delete each one once its import succeeds. Only the
-`.jsonl` it produces is committed. Excel rewrites some text when it opens a CSV (leading `=` or
-`+`, long numbers, dates), which import will then refuse. Numbers and LibreOffice do not.
+`.jsonl` it produces is committed. Every spreadsheet rewrites some text. Excel changes leading `=`
+or `+`, long numbers and dates, which is more than a repair should guess at. Numbers changes
+spacing: on 2026-10-02 it changed whitespace, a non-breaking space or line breaks in six rows nobody
+had edited. `check --repair` puts that back from the document. LibreOffice is untested.
 
 ## Units
 

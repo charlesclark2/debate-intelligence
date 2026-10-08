@@ -88,7 +88,15 @@ install with `python -m debate_cli.installation`. That check reads the list of
 `debate_core.integrations` modules from the installed container's own import statements, imports
 each one, and fails unless it tried and imported them all. It also confirms that every distribution
 behind the declared extras is installed. An adapter wired with an ordinary import is checked from the
-day it is wired; a dynamic import makes the check refuse rather than skip it (v1-e01-t17).
+day it is wired; a dynamic import makes the check refuse rather than skip it (v1-e01-t17). `doctor`
+runs the same import check on any installed build, at any time (below).
+
+**What an installed build resolved.** The installer resolves the third-party dependencies once, in
+a rehearsal install that every check runs against. The real install is held to exactly what the
+rehearsal installed: the rehearsal's `uv pip freeze` is passed to it as `--constraints`, and
+afterwards the two environments must list the same distributions at the same versions
+(v1-e01-t22). A release published to PyPI between the two installs therefore cannot reach the
+build the launchd agent runs. uv records those pins in the tool's `uv-receipt.toml`.
 
 If a command still meets a missing optional dependency, the failure says how to fix *this* kind
 of installation, judged from the build's channel. An installed build is told to reinstall with
@@ -109,7 +117,7 @@ rather than writing an integer.
 | Code | Name | Means |
 |---|---|---|
 | 0 | `OK` | The command did what it was asked to do. |
-| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check. Running it again gives the same answer. |
+| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, or a wired integration does not import). Running it again gives the same answer. |
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | An external provider — search, fetch, a model — failed or rate-limited the call. The same command may well succeed later. |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`. |
@@ -118,6 +126,47 @@ Exceptions are mapped by `exit_code_for`: `ProviderError` → 3, any other `Doma
 usage error → 2, anything else → 70. A failure that is an *outcome* rather than an exception —
 `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
 `raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`.
+
+## `debate-research doctor`
+
+`doctor` reports what this installation is: both package versions, the interpreter and platform,
+whether settings are wired, the services the container can build, the running Python's Unicode
+database beside the version the evidence normalizer is pinned to (`v1-e01-t14`), and every
+`debate_core.integrations` module the composition root wires with whether it imports (`v1-e01-t22`).
+It fails on two checks only, the ones it can state precisely:
+
+* **The Unicode database.** Under any database but the pin, `normalize` refuses to run, so every
+  command that touches evidence text would fail on first use.
+* **The wired integrations.** Each one that does not import is named, with why, and every command
+  that uses it would fail. The list and the imports are `debate_cli.installation`'s, the same logic
+  as the installer's post-install check, so the list is still read from the container's own imports.
+
+| Exit | Means |
+|---|---|
+| 0 | The report was produced, the interpreter's Unicode database is the normalizer's pin, and every wired integration imports. |
+| 1 | A check failed. The databases differ (`UNICODE_DATABASE_MISMATCH`, naming both versions and `docs/evidence/normalization.md`), or wired integrations do not import (`INTEGRATIONS_DO_NOT_IMPORT`, naming each module and why), or both (`INSTALLATION_CHECKS_FAILED`, with both messages). `--json` carries the whole report in `error.details`. |
+| 70 | A check could not be made at all: the normalizer's pinned version is unknown, or the container wires an integration in a way an import statement does not show. That is a bug in the build, reported through the root handler like any unmodelled exception, never as 1. |
+
+**Whether uv manages the interpreter** (`v1-e01-t23`). `python_uv_managed` says whether the running
+Python is one uv manages, which only uv changes: a `conda update` or `brew upgrade` cannot move it
+under the installed build. It is decided by place, as uv decides it: the base prefix
+(`python_base_prefix`, from `sys.base_prefix`), links followed, lies strictly inside
+`uv_python_directory`, the directory `uv python dir` would name. That directory is worked out from
+doctor's own environment: `UV_PYTHON_INSTALL_DIR` when it is set and not empty, otherwise
+`$XDG_DATA_HOME/uv/python` when `XDG_DATA_HOME` is absolute, otherwise
+`$HOME/.local/share/uv/python` (on Windows, `%APPDATA%\uv\data\python`). A checkout's `.venv` can
+report `no`; that is expected, and never a failure.
+
+Every other fact is description and never changes the exit status. That includes whether uv
+manages the interpreter, and a declared `debate-core` extra whose distributions are not installed
+(`extras_missing_distributions`): nothing fails until a wired integration needs one, and then the
+integration check names it. The installer is stricter. Its own check, `python -m debate_cli.installation`, holds a build to everything it
+declares and refuses one with a distribution missing, so it stays a separate step beside `doctor`.
+
+`scripts/install_channel.sh` runs both in its rehearsal install, so a build that fails either is
+refused before it replaces anything. Which interpreter is right is not written here: it is the
+`debate_core` wheel's `Requires-Python`, which the installer reads from the wheel itself, and one
+that uv manages (`--managed-python`), which the installer checks after each install.
 
 ## `--json` output
 

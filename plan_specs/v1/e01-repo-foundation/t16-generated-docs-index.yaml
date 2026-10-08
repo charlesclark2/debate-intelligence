@@ -31,12 +31,25 @@ spec:
     any document, the shape of docs/ itself, and ROADMAP.md, which already works this way.
   priority: 3
   constraints:
-    packages: [scripts, docs, .github/workflows]
+    packages:
+      - scripts
+      - docs
+      - .github/workflows
+      # added on the PM's instruction, 2026-10-07
+      - docs/runbooks
+      - tests/scripts
+      # added by the PM at review, 2026-10-08: the PM's own edits to these two, which described the
+      # hand refresh this task replaces
+      - docs/process
+      - CLAUDE.md
     forbidden:
       - A generated index whose descriptions are written in the generator rather than in the documents
       - A check that catches an added document but not a renamed, moved or deleted one
       - Leaving working agreement 3 telling sessions to hand-edit an index that is now generated
-      - Regenerating in a commit hook or in CI, which hides drift rather than reporting it
+      # Reworded by the PM, 2026-10-08, at review. The entry predates ac5, which names a workflow that
+      # regenerates on dev and publishes the result as a pull request. That reports drift; what the
+      # entry forbids is a check that fixes what it was meant to report.
+      - Regenerating inside a check or a commit hook, which hides drift rather than reporting it
   context:
     - kind: TaskRef
       name: v1-e01-t05-spec-tooling
@@ -79,7 +92,7 @@ spec:
         or the check runs on dev pull requests in a form that cannot make concurrent task PRs
         conflict. Choose, justify it, and show a promotion PR no longer failing for this reason.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

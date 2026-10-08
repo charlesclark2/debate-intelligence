@@ -1,3 +1,4 @@
+<!-- docs-index: Evidence bucket naming, the `raw/`…`quarantine/` key layout, and which task writes each prefix -->
 # Evidence store layout
 
 What the evidence buckets are called, how keys inside them are built, which prefix each task

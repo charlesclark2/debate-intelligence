@@ -70,6 +70,57 @@ variables {
   environment                       = "dev"
   bucket_suffix                     = "a7508de8"
   noncurrent_version_retention_days = 30
+
+  # The two tables below are not module inputs. They are the hand-written expectations the
+  # statement-coverage assertions of both permission sets read (v1-e29-t06), kept here once so
+  # the two assertions cannot drift apart.
+  #
+  # Every action either permission set may hold, and the resource it has to be granted on. S3
+  # authorises ListBucket and ListBucketVersions against the bucket ARN; granted on an object ARN
+  # they match nothing, and the first anyone hears of it is an AccessDenied, during a takedown if
+  # it is the removal statement. Object actions are authorised against object ARNs, key actions
+  # against the key. An action missing from this table leaves its statement uncovered, and the
+  # coverage assertion fails on the count: add the action here, with its shape, on purpose.
+  resource_shape_of_action = {
+    "s3:ListBucket"          = "bucket"
+    "s3:ListBucketVersions"  = "bucket"
+    "s3:GetObject"           = "object"
+    "s3:GetObjectVersion"    = "object"
+    "s3:PutObject"           = "object"
+    "s3:DeleteObject"        = "object"
+    "s3:DeleteObjectVersion" = "object"
+    "kms:Encrypt"            = "key"
+    "kms:Decrypt"            = "key"
+    "kms:GenerateDataKey"    = "key"
+  }
+
+  # The s3:prefix condition each bucket-level action must carry, exactly. Without one, a listing
+  # grant covers the whole bucket while the action set stays the same.
+  #
+  # ListBucket: the documented prefixes of docs/architecture/evidence-store-layout.md, all of them.
+  # A prefix missing here is a prefix the CLI cannot see.
+  #
+  # ListBucketVersions: the prefixes a takedown may delete from, and no others. reports/ is not
+  # one of them (operator_access.tf).
+  list_prefixes_of_action = {
+    "s3:ListBucket" = [
+      "raw/", "raw/*",
+      "parsed/", "parsed/*",
+      "files/", "files/*",
+      "manifests/", "manifests/*",
+      "reports/", "reports/*",
+      "uploads/", "uploads/*",
+      "exports/", "exports/*",
+      "quarantine/", "quarantine/*",
+    ]
+    "s3:ListBucketVersions" = [
+      "raw/", "raw/*",
+      "parsed/", "parsed/*",
+      "files/", "files/*",
+      "manifests/", "manifests/*",
+      "quarantine/", "quarantine/*",
+    ]
+  }
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -389,6 +440,7 @@ run "operator_permission_set_reads_and_publishes_but_cannot_delete" {
       statement.Action
       ])) == toset([
       "s3:ListBucket",
+      "s3:ListBucketVersions",
       "s3:GetObject",
       "s3:GetObjectVersion",
       "s3:PutObject",
@@ -396,7 +448,7 @@ run "operator_permission_set_reads_and_publishes_but_cannot_delete" {
       "kms:Decrypt",
       "kms:GenerateDataKey",
     ])
-    error_message = "The everyday evidence credential may do exactly seven things. s3:DeleteObject, s3:PutBucketPolicy and kms:* are forbidden by the task spec; a delete is a takedown, and takedowns use the other permission set."
+    error_message = "The everyday evidence credential may do exactly eight things. s3:ListBucketVersions is read-only, so a removal's dry run can count versions (v1-e29-t06). s3:DeleteObject, s3:DeleteObjectVersion, s3:PutBucketPolicy and kms:* are forbidden by the task spec; a delete is a takedown, and takedowns use the other permission set."
   }
 
   assert {
@@ -418,21 +470,48 @@ run "operator_permission_set_reads_and_publishes_but_cannot_delete" {
     error_message = "Every resource in the operator policy must be this environment's own bucket or its own key."
   }
 
+  # Every statement, not a chosen few (v1-e29-t06). Each is classified by the resource shape its
+  # actions need (var.resource_shape_of_action) and checked against that shape: bucket-level
+  # actions on the bucket ARN and under exactly the s3:prefix condition var.list_prefixes_of_action
+  # gives them; object-level actions on object ARNs in this bucket; key actions on this key; and no
+  # condition anywhere else. A statement whose actions are unknown, or need different shapes, is
+  # not covered, and the count makes that a failure rather than a statement nobody checks.
   assert {
-    condition = toset(one([
-      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_operator[0].inline_policy).Statement :
-      statement if try(statement.Sid, "") == "ListDocumentedEvidencePrefixes"
-      ]).Condition.StringLike["s3:prefix"]) == toset([
-      "raw/", "raw/*",
-      "parsed/", "parsed/*",
-      "files/", "files/*",
-      "manifests/", "manifests/*",
-      "reports/", "reports/*",
-      "uploads/", "uploads/*",
-      "exports/", "exports/*",
-      "quarantine/", "quarantine/*",
+    condition = alltrue([
+      for statements in [[
+        for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_operator[0].inline_policy).Statement : {
+          statement = statement
+          actions   = flatten([try(statement.Action, "no Action")])
+          resources = flatten([try(statement.Resource, "no Resource")])
+          shape = try(one(distinct([
+            for action in flatten([try(statement.Action, "no Action")]) :
+            lookup(var.resource_shape_of_action, action, "unknown")
+          ])), "mixed")
+        }
+      ]] :
+      length([
+        for covered in statements : covered if contains(["bucket", "object", "key"], covered.shape)
+      ]) == length(statements)
+      && alltrue([
+        for covered in statements :
+        covered.shape == "bucket" ? (
+          alltrue([for resource in covered.resources : resource == aws_s3_bucket.evidence.arn])
+          && alltrue([
+            for action in covered.actions :
+            toset(try(covered.statement.Condition.StringLike["s3:prefix"], []))
+            == toset(lookup(var.list_prefixes_of_action, action, ["no expected prefixes"]))
+          ])
+          ) : covered.shape == "object" ? (
+          alltrue([for resource in covered.resources : startswith(resource, "${aws_s3_bucket.evidence.arn}/")])
+          && try(covered.statement.Condition, null) == null
+          ) : (
+          alltrue([for resource in covered.resources : resource == aws_kms_key.evidence.arn])
+          && try(covered.statement.Condition, null) == null
+        )
+        if contains(["bucket", "object", "key"], covered.shape)
+      ])
     ])
-    error_message = "ListBucket must be scoped to the documented prefixes of docs/architecture/evidence-store-layout.md, and to all of them: a prefix missing here is a prefix the CLI cannot see."
+    error_message = "Every operator statement must be covered and scoped to its shape: ListBucket and ListBucketVersions on the bucket ARN under exactly their s3:prefix condition, object actions on object ARNs, key actions on the key, no other conditions. A statement with an action not in resource_shape_of_action, or mixing shapes, is uncovered: give it a shape here or split it."
   }
 
   assert {
@@ -511,6 +590,48 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
       ])
     ])
     error_message = "Every resource in the takedown policy must be this environment's own bucket or its own key."
+  }
+
+  # The same coverage as the operator policy's, over every takedown statement. The two
+  # delete-scoping assertions above narrow which object ARNs a delete or a write may name; this one
+  # is what holds ListBucketVersions to the bucket ARN and the removable prefixes. Before
+  # v1-e29-t06 nothing did, and pointing it at an object ARN left every assertion green.
+  assert {
+    condition = alltrue([
+      for statements in [[
+        for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_removal[0].inline_policy).Statement : {
+          statement = statement
+          actions   = flatten([try(statement.Action, "no Action")])
+          resources = flatten([try(statement.Resource, "no Resource")])
+          shape = try(one(distinct([
+            for action in flatten([try(statement.Action, "no Action")]) :
+            lookup(var.resource_shape_of_action, action, "unknown")
+          ])), "mixed")
+        }
+      ]] :
+      length([
+        for covered in statements : covered if contains(["bucket", "object", "key"], covered.shape)
+      ]) == length(statements)
+      && alltrue([
+        for covered in statements :
+        covered.shape == "bucket" ? (
+          alltrue([for resource in covered.resources : resource == aws_s3_bucket.evidence.arn])
+          && alltrue([
+            for action in covered.actions :
+            toset(try(covered.statement.Condition.StringLike["s3:prefix"], []))
+            == toset(lookup(var.list_prefixes_of_action, action, ["no expected prefixes"]))
+          ])
+          ) : covered.shape == "object" ? (
+          alltrue([for resource in covered.resources : startswith(resource, "${aws_s3_bucket.evidence.arn}/")])
+          && try(covered.statement.Condition, null) == null
+          ) : (
+          alltrue([for resource in covered.resources : resource == aws_kms_key.evidence.arn])
+          && try(covered.statement.Condition, null) == null
+        )
+        if contains(["bucket", "object", "key"], covered.shape)
+      ])
+    ])
+    error_message = "Every takedown statement must be covered and scoped to its shape: ListBucketVersions on the bucket ARN under exactly the removable-prefix condition (an object ARN matches nothing, and the takedown fails with AccessDenied), object actions on object ARNs, key actions on the key, no other conditions. A statement with an action not in resource_shape_of_action, or mixing shapes, is uncovered: give it a shape here or split it."
   }
 
   assert {

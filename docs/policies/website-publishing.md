@@ -1,3 +1,4 @@
+<!-- docs-index: What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request -->
 # Website publishing and student-privacy policy
 
 | | |

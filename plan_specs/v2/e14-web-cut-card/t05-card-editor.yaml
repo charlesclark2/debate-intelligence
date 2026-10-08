@@ -66,6 +66,11 @@ spec:
       description: >-
         After each save the verification badge reflects the server result; if re-verification fails the
         card is shown as UNVERIFIED with export/copy disabled.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-02, from v1-e03-t05. A save whose result carries a negation flag shows
+        it beside the cut it names. The editor keys spans on offsets, never on span ids, which change
+        on every save.
 status:
   phase: Pending
 ---

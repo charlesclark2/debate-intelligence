@@ -1,3 +1,4 @@
+<!-- docs-index: Evidence text normalization policy: the frozen, versioned rules every snapshot offset, hash and verification depends on -->
 # Evidence text normalization policy
 
 Owner task: `v1-e03-t01-text-normalization`. Implementation:
@@ -199,11 +200,14 @@ The one external dependency is the Unicode character database behind `unicodedat
 **v1 is pinned to Unicode 15.0.0**, the database of every Python 3.12 release. The pin is
 enforced in two places, which are one decision:
 
-* `debate_core` declares `requires-python = ">=3.12,<3.13"`, so the package says in its metadata
-  that it does not work on a Python with a different database. `pip` refuses to install it on
-  3.13, and uv locks the workspace to 3.12 only. uv does **not** refuse a 3.13 install of the
-  wheel: it deliberately ignores upper bounds on a dependency's `Requires-Python`, so installs
-  must still name the interpreter (`scripts/install_channel.sh` passes `--python 3.12`).
+* `debate_core`'s `requires-python` admits only the Pythons that ship the pinned database, so the
+  package says in its metadata that it does not work on one with a different database. `pip`
+  refuses to install it elsewhere, and uv locks the workspace to the admitted versions only. uv
+  does **not** refuse such an install of the wheel: it deliberately ignores upper bounds on a
+  dependency's `Requires-Python`, so installs must still name the interpreter.
+  `scripts/install_channel.sh` reads the specifier from the wheel's own metadata and passes it to
+  uv, and `debate-research doctor`, which the script runs before it replaces an install, exits 1
+  when the running database is not the pin (`v1-e01-t14`).
 * `normalize` checks `unicodedata.unidata_version` on every call and raises
   `UnicodeDatabaseMismatchError` rather than run v1 under a different database. This check
   catches any install the metadata did not stop.

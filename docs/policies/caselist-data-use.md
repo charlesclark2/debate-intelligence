@@ -1,3 +1,4 @@
+<!-- docs-index: Data-use policy for OpenCaselist disclosures and OpenEv camp files -->
 # Caselist and OpenEv data-use policy
 
 | | |

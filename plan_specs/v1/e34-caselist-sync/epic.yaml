@@ -250,6 +250,7 @@ spec:
       - t06
       - t07
       - ext-v1-e01-t09-dev-prerelease-channel
+      - t10
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e34-t05-enable-schedule reports phase Succeeded
@@ -351,7 +352,7 @@ spec:
         specRef: plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml
         goalRef: v1-e34-t10-agent-outside-checkout
       dependsOn:
-      - t05
+      - t02
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e34-t10-agent-outside-checkout reports phase Succeeded
@@ -381,5 +382,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t11-inbox-retention
+    - id: t12
+      kind: Task
+      name: 'The pull summary names a camp download by id, never by title'
+      description: >-
+        Camp downloads are identified by OpenEv id in the JSON summary, the run-summary files and the
+        agent's stdout log, so the log is safe to paste as the runbook says.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t12-summary-names-no-camp-file.yaml
+        goalRef: v1-e34-t12-summary-names-no-camp-file
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t12-summary-names-no-camp-file reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t12-summary-names-no-camp-file
 status:
   phase: Pending

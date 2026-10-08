@@ -1,3 +1,4 @@
+<!-- docs-index: Architecture decision records -->
 # Architecture Decision Records
 
 Each ADR captures one architectural decision as a standalone record: its status, the

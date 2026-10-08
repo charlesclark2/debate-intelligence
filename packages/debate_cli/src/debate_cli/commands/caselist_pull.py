@@ -171,23 +171,24 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
     """
     deferred = summary.archives_deferred
     backlog = _backlog_sentence(record)
+    inbox = _inbox_sentence(summary)
     if summary.dry_run:
         wanted = sum(1 for one in summary.archives if one.wanted)
         camp = sum(1 for one in summary.openev if one.wanted)
         over_cap = f" ({deferred} more wanted, over the 24-hour download cap)" if deferred else ""
         return (
             f"{summary.archives_seen} archive(s) listed; would download {wanted} archive(s){over_cap} "
-            f"and {camp} OpenEv file(s). Nothing was written. Re-run without --dry-run to do it."
+            f"and {camp} OpenEv file(s).{inbox} Nothing was written. Re-run without --dry-run to do it."
         )
     if summary.nothing_new:
         return (
             f"Nothing new: {summary.archives_seen} archive(s) listed, none newer than what this "
-            f"machine already holds. {summary.duration_seconds:.1f}s."
+            f"machine already holds.{inbox} {summary.duration_seconds:.1f}s."
         )
     if deferred and summary.archives_downloaded == 0 and summary.openev_downloaded == 0:
         return (
             f"Nothing fetched: {summary.archives_wanted} archive(s) wanted and all {deferred} deferred "
-            f"by the daily download cap; a later run fetches them.{backlog} "
+            f"by the daily download cap; a later run fetches them.{backlog}{inbox} "
             f"{summary.duration_seconds:.1f}s."
         )
     pending = (
@@ -204,8 +205,34 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
     return (
         f"{archives} and {summary.openev_downloaded} OpenEv file(s) "
         f"downloaded; {summary.files_imported} file(s) imported, {summary.blobs_stored} new; "
-        f"{summary.objects_published} object(s) published{pending}.{waiting}{backlog} "
+        f"{summary.objects_published} object(s) published{pending}.{waiting}{backlog}{inbox} "
         f"{summary.duration_seconds:.1f}s."
+    )
+
+
+def _inbox_sentence(summary: RunSummary) -> str:
+    """What the retention stage did to the inbox, as a leading-space sentence (`v1-e34-t11`).
+
+    Counts and bytes only; the retention row of the table names every file and why each kept one
+    stays.
+    """
+    retention = summary.inbox_retention
+    if retention is None:
+        return ""
+    kept = f", {len(retention.kept)} kept" if retention.kept else ""
+    if retention.dry_run:
+        later = len(retention.once_imported) + retention.camp_downloads_once_imported
+        also = (
+            f", and {later} more once this run has imported them and the bucket confirms them"
+            if later
+            else ""
+        )
+        would = f"would remove {len(retention.removed)} file(s) ({retention.bytes_freed} bytes)"
+        return f" Inbox: {would}{kept}{also}."
+    failed = f", {len(retention.failed)} could not be removed" if retention.failed else ""
+    return (
+        f" Inbox: {len(retention.removed)} file(s) removed ({retention.bytes_freed} bytes freed)"
+        f"{kept}{failed}."
     )
 
 

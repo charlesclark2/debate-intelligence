@@ -1,0 +1,97 @@
+# TASK v1-e01-t22-install-resolves-once - The real install is the build the rehearsal checked
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t22-install-resolves-once
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The real install is the build the rehearsal checked, and doctor answers for all of it"
+spec:
+  # Filed by the PM, 2026-10-07, from v1-e01-t14's Decision 4 and Follow-up work.
+  description: >-
+    v1-e01-t14 made `install_channel.sh` rehearse an install in a temporary tool directory, run every
+    check there, and replace the real install only when all of them pass. uv cannot move a tool
+    environment, so the real install is a second `uv tool install` from the same verified wheels.
+    The second install resolves the third-party dependencies again. If a new release lands on PyPI
+    between the two, seconds apart, the real install can differ from the one that was checked. Its
+    repeated checks would then catch the difference only after the real install had been replaced.
+    That would leave the weekly launchd agent on a build that fails, which is what t14 ac5 exists to
+    prevent. Pin the second resolution to the first. One way is a timestamp captured before the
+    rehearsal and passed to both installs as `--exclude-newer`; another is the rehearsal
+    environment's resolved versions passed as constraints. Choose one and say why. Separately,
+    `doctor` and `python -m debate_cli.installation` together answer "is this installation sound",
+    and a person checking by hand runs only `doctor`. "An integration the CLI wires does not import"
+    is a fact `doctor` can state precisely, so it joins `doctor`'s failing checks.
+  priority: 2
+  constraints:
+    packages: [scripts, tests/scripts, debate_cli.commands, debate_cli.installation, packages/debate_cli/tests, packages/debate_cli/README.md, docs/runbooks, tests/smoke]
+    forbidden:
+      - Touching the operator's real install in a session; scratch tool and bin directories only, as t14 did
+      - A second resolution that can differ from the one the rehearsal checked
+      - doctor failing on anything it cannot state precisely
+      - Network access in the tests for this task
+  context:
+    - kind: TaskRef
+      name: v1-e01-t14-install-interpreter-bound
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The real install resolves exactly what the rehearsal resolved. A test uses a local index or
+        find-links directory and publishes a newer version of a third-party dependency between the
+        two installs. The real install still gets the rehearsal's version, and the test shows that
+        it would not without the change.
+    - id: ac2
+      description: >-
+        `doctor` reports whether every integration the CLI's composition root wires imports, and exits
+        1 naming each one that does not, alongside the Unicode check. Its docstring, the README's exit
+        table and the runbook say so. Every other fact stays informational. The installer still
+        refuses an incomplete build. If `python -m debate_cli.installation` becomes redundant, say what
+        happens to it and to anything that calls it.
+    - id: ac3
+      description: >-
+        validate-dev's smoke check of `doctor` asserts the new fact on the installed build, and passes.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t22-install-resolves-once-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Pin the second resolution to the first, then fold the integration check into doctor.
+  goalRef:
+    name: v1-e01-t22-install-resolves-once
+  graph:
+    nodes:
+      - id: resolve-once
+        kind: Task
+        name: One resolution for both installs, and a fuller doctor
+        description: >-
+          The pinning, its test against a local index, and the integration check in doctor.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Install script tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_install_channel.py]
+          - type: test_passes
+            name: doctor tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_doctor.py]
+status:
+  phase: Pending

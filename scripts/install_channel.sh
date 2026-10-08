@@ -4,27 +4,57 @@
 #     scripts/install_channel.sh v0.1.0-dev.3          # a dev pre-release
 #     scripts/install_channel.sh v0.1.0                # a stable release (v1-e09-t06)
 #     scripts/install_channel.sh --dir ./assets v0.1.0-dev.3   # assets already downloaded
+#     scripts/install_channel.sh --no-path-warning --dir ./assets v0.1.0-dev.3   # automated installs
 #
 # What it does:
 #   1. downloads the release's wheels, SHA256SUMS and build-info.json with `gh release download`
 #      (skipped with --dir, e.g. when validate-dev has downloaded them already);
 #   2. refuses to go on unless every wheel is listed in SHA256SUMS and every listed file matches;
-#   3. installs debate-cli and debate-core **by the file URLs of those two verified wheels**, which
+#   3. reads the `Requires-Python` of the verified debate_core wheel and passes that specifier to
+#      uv as `--python` (v1-e01-t14). The wheel's metadata is the one statement of which Python
+#      this tool supports, and it is not optional: uv deliberately ignores the upper bound of a
+#      dependency's Requires-Python, so without `--python` a uv install can land on a Python whose
+#      Unicode database the evidence normalizer is not pinned to. Unreadable or missing metadata
+#      makes the script refuse; it never falls back to a guess;
+#   3a. asks uv for a Python that uv itself manages, with uv's own option `--managed-python`, on
+#      both installs (v1-e01-t23). Without it uv takes the first Python that matches, and an
+#      activated conda base environment comes before uv's own: on the coach's Mac the agent's build
+#      ran on anaconda's python3, which a `conda update` can move to another version, or a removal
+#      delete, with no install run and nothing to notice until the next scheduled run fails. A
+#      Python uv manages lives in `uv python dir` and changes only through uv. If none that matches
+#      is installed yet, uv downloads one (it says so, and so does this script); nothing here turns
+#      downloads off, but a caller's UV_PYTHON_DOWNLOADS=never still does, and then uv refuses.
+#      `--managed-python` needs uv 0.6.8 or newer. An older uv rejects it ("unexpected argument
+#      '--managed-python'", exit 2) before installing anything, and this script asks first and
+#      refuses such a uv by name, with nothing installed. Each install's checks include that its
+#      interpreter really is under `uv python dir`, so a uv that accepted the option and ignored it
+#      is caught too;
+#   4. rehearses the install in a temporary uv tool directory and runs every check there:
+#      both installed distributions record those wheel files as their source, the installed
+#      `debate-research --version --json` reports this version and channel, the build can import
+#      every integration the CLI's composition root wires (`python -m debate_cli.installation`,
+#      v1-e01-t17; it also refuses a build missing a distribution of a declared extra), and
+#      `debate-research doctor` passes (v1-e01-t14, v1-e01-t22: it fails when the running Python's
+#      Unicode database is not the one the normalizer is pinned to, or when a wired integration
+#      does not import). A build that fails any of them stops here, and the install it would have
+#      replaced is not touched;
+#   5. only then installs debate-cli and debate-core **by the file URLs of those two verified
+#      wheels** into the real tool directory (`uv tool dir`, or the caller's UV_TOOL_DIR), which
 #      puts `debate-research` in uv's tool bin directory (`uv tool dir --bin`, normally
-#      ~/.local/bin), in its own environment, outside every checkout and every project .venv.
-#      Third-party dependencies (typer, pydantic, httpx, boto3, lxml…) still come from the default
-#      index, including those of the debate-core extras debate-cli declares (aws, docx,
-#      opencaselist);
-#   4. checks that both installed distributions record those wheel files as their source, that
-#      the installed `debate-research --version --json` reports this version and channel, and that
-#      the build can import every integration the CLI's composition root wires
-#      (`python -m debate_cli.installation`, v1-e01-t17).
+#      ~/.local/bin), in its own environment, outside every checkout and every project .venv, and
+#      runs the same checks against it. Third-party dependencies (typer, pydantic, httpx, boto3,
+#      lxml…) come from the default index, including those of the debate-core extras debate-cli
+#      declares (aws, docx, opencaselist). The rehearsal resolves them; the real install is held to
+#      exactly the versions the rehearsal installed (`uv pip freeze` of the rehearsal, passed as
+#      `--constraints`, v1-e01-t22), so a release published in between cannot make the real install
+#      differ from the one that was checked. Afterwards the two environments must list the same
+#      distributions at the same versions, or the script fails.
 #
 # Why direct URLs, not `--find-links <dir> debate-cli==<version>` (ac2b of the task spec): neither
 # `debate-core` nor `debate-cli` is registered on PyPI, and a find-links install keeps PyPI in the
 # resolution set for them. Pinning does not help. Dev versions are predictable from the public
 # tags, and a squatter who publishes `debate-core==0.1.0.devN` with a more specific wheel tag
-# (`cp312-none-any`) is preferred over our `py3-none-any` wheel at the very same version.
+# (a CPython one, `cpXY-none-any`) is preferred over our `py3-none-any` wheel at the very same version.
 # tests/scripts/test_install_channel.py shows the old command taking such a decoy and this script
 # refusing it. A requirement given as a URL is never looked up on any index, and uv uses it for every
 # reference to that name, including debate-cli's own `debate-core==<version>` dependency.
@@ -43,16 +73,23 @@
 # The environment the build runs as: a dev pre-release defaults to DEBATE_ENV=dev and a stable build
 # to prod; an explicit DEBATE_ENV always wins (packages/debate_cli/README.md).
 #
+# Options:
+#   --dir DIRECTORY     use release assets already downloaded there instead of `gh release download`.
+#   --no-path-warning   do not warn that `debate-research` on this PATH is another build. For automated
+#                       installs into tool directories that are never on the PATH (validate-dev,
+#                       dev-prerelease); it silences that one warning and nothing else. A person
+#                       running this by hand should leave it off.
+#
 # Environment:
 #   DEBATE_RELEASE_REPO   owner/name to download from (default charlesclark2/debate-intelligence).
-#   UV_TOOL_DIR, UV_TOOL_BIN_DIR   honoured by uv as usual, e.g. to install somewhere disposable.
+#   UV_TOOL_DIR, UV_TOOL_BIN_DIR   honoured by uv as usual for the real install, e.g. to install
+#                         somewhere disposable. The rehearsal always goes to a temporary directory.
 #
-# Needs: uv, and gh (authenticated) unless --dir is given. No Python is needed beforehand; uv
-# provides 3.12 for the tool.
+# Needs: uv 0.6.8 or newer, unzip, and gh (authenticated) unless --dir is given. No Python is needed
+# beforehand; uv provides one that it manages and that the wheel's Requires-Python admits.
 set -eu
 
 REPOSITORY=${DEBATE_RELEASE_REPO:-charlesclark2/debate-intelligence}
-PYTHON_VERSION=3.12
 
 fail() {
     echo "install_channel: $*" >&2
@@ -60,16 +97,18 @@ fail() {
 }
 
 usage() {
-    echo "usage: scripts/install_channel.sh [--dir DIRECTORY] TAG" >&2
+    echo "usage: scripts/install_channel.sh [--dir DIRECTORY] [--no-path-warning] TAG" >&2
     echo "  TAG is vX.Y.Z-dev.N (dev pre-release) or vX.Y.Z (stable release)" >&2
     exit 2
 }
 
 ASSETS=""
 TAG=""
+PATH_WARNING=yes
 while [ $# -gt 0 ]; do
     case "$1" in
         --dir) [ $# -ge 2 ] || usage; ASSETS="$2"; shift 2 ;;
+        --no-path-warning) PATH_WARNING=no; shift ;;
         -h|--help) usage ;;
         -*) echo "install_channel: unknown option $1" >&2; usage ;;
         *) [ -z "${TAG}" ] || usage; TAG="$1"; shift ;;
@@ -89,18 +128,28 @@ else
 fi
 
 command -v uv >/dev/null 2>&1 || fail "uv is not installed: https://docs.astral.sh/uv/getting-started/installation/"
+# The option this script relies on for a Python uv manages (step 3a). A uv that does not know it
+# rejects it as an unexpected argument, here, before anything is downloaded or installed.
+uv --managed-python --version >/dev/null 2>&1 \
+    || fail "this uv ($(uv --version 2>/dev/null || echo 'version unknown')) has no --managed-python option, which uv 0.6.8 added; without it uv cannot be held to a Python it manages. Upgrade uv and run this again; nothing was installed"
 
+TEMPORARY=${TMPDIR:-/tmp}
+TEMPORARY=${TEMPORARY%/}
 CLEANUP=""
+REHEARSAL=""
 cleanup() {
     if [ -n "${CLEANUP}" ]; then
         rm -rf -- "${CLEANUP}"
+    fi
+    if [ -n "${REHEARSAL}" ]; then
+        rm -rf -- "${REHEARSAL}"
     fi
 }
 trap cleanup EXIT INT TERM
 
 if [ -z "${ASSETS}" ]; then
     command -v gh >/dev/null 2>&1 || fail "gh is not installed (or pass --dir with the assets already downloaded)"
-    ASSETS=$(mktemp -d "${TMPDIR:-/tmp}/debate-research-${TAG}.XXXXXX")
+    ASSETS=$(mktemp -d "${TEMPORARY}/debate-research-${TAG}.XXXXXX")
     CLEANUP=${ASSETS}
     echo "Downloading ${TAG} from ${REPOSITORY}..."
     gh release download "${TAG}" --repo "${REPOSITORY}" --dir "${ASSETS}" \
@@ -140,57 +189,156 @@ ASSETS_URL="file://$(printf '%s' "${ASSETS_ABSOLUTE}" | sed -e 's/%/%25/g' -e 's
 CLI_WHEEL="debate_cli-${VERSION}-py3-none-any.whl"
 CORE_WHEEL="debate_core-${VERSION}-py3-none-any.whl"
 
-echo "Installing debate-cli ${VERSION} (${CHANNEL} channel) as a uv tool, from ${ASSETS_ABSOLUTE}..."
-uv tool install --force --python "${PYTHON_VERSION}" \
-    "debate-cli @ ${ASSETS_URL}/${CLI_WHEEL}" \
-    --with "debate-core @ ${ASSETS_URL}/${CORE_WHEEL}"
+# The interpreter, from the wheel's own metadata. The header ends at the first blank line; the long
+# description after it may say anything.
+command -v unzip >/dev/null 2>&1 || fail "unzip is needed to read the Requires-Python of ${CORE_WHEEL}"
+CORE_METADATA="debate_core-${VERSION}.dist-info/METADATA"
+METADATA=$(unzip -p "${ASSETS}/${CORE_WHEEL}" "${CORE_METADATA}" 2>/dev/null) \
+    || fail "could not read ${CORE_METADATA} from ${CORE_WHEEL}; refusing to guess which Python to install it on"
+REQUIRES_PYTHON=$(printf '%s\n' "${METADATA}" | tr -d '\r' | sed -n -e '/^$/q' -e 's/^Requires-Python:[[:space:]]*//p')
+[ -n "${REQUIRES_PYTHON}" ] \
+    || fail "${CORE_WHEEL} states no Requires-Python in ${CORE_METADATA}; refusing to guess which Python to install it on"
+[ "$(printf '%s\n' "${REQUIRES_PYTHON}" | wc -l | tr -d ' ')" = 1 ] \
+    || fail "${CORE_WHEEL} states Requires-Python more than once in ${CORE_METADATA}; refusing to guess which one holds"
+printf '%s\n' "${REQUIRES_PYTHON}" | grep -Eq '^[0-9A-Za-z.*,<>=!~ ]+$' \
+    || fail "${CORE_WHEEL}'s Requires-Python '${REQUIRES_PYTHON}' is not a version specifier; refusing to guess which Python to install it on"
 
-# Belt and braces: each first-party distribution must say it came from the wheel verified above.
-# PEP 610's direct_url.json is written only for a URL install; one resolved from an index has none.
-TOOL_ENVIRONMENT="$(uv tool dir)/debate-cli"
-for wheel in "${CLI_WHEEL}" "${CORE_WHEEL}"; do
-    distribution=${wheel%%-*}
-    found=""
-    for record in "${TOOL_ENVIRONMENT}"/lib/python*/site-packages/"${distribution}-${VERSION}".dist-info/direct_url.json; do
-        if [ -f "${record}" ] && grep -Fq "${ASSETS_URL}/${wheel}" "${record}"; then
-            found=yes
-        fi
+# Install the build into whatever UV_TOOL_DIR and UV_TOOL_BIN_DIR say now, and check it there. The
+# rehearsal runs this inside `( … ) ||`, where `set -e` does not apply, so every step that can fail
+# says so with its own `|| fail`. An argument, when given, is a constraints file the resolution must
+# keep to.
+install_and_check() {
+    if [ $# -gt 0 ]; then
+        set -- --constraints "$1"
+    fi
+    uv tool install --force --managed-python --python "${REQUIRES_PYTHON}" "$@" \
+        "debate-cli @ ${ASSETS_URL}/${CLI_WHEEL}" \
+        --with "debate-core @ ${ASSETS_URL}/${CORE_WHEEL}" \
+        || fail "uv could not install debate-cli ${VERSION} on a Python matching '${REQUIRES_PYTHON}' that uv manages (if downloads are off, \`uv python install '${REQUIRES_PYTHON}'\` installs one)"
+
+    # Belt and braces: each first-party distribution must say it came from the wheel verified above.
+    # PEP 610's direct_url.json is written only for a URL install; one resolved from an index has none.
+    TOOL_DIRECTORY=$(uv tool dir) || fail "uv tool dir failed"
+    TOOL_ENVIRONMENT="${TOOL_DIRECTORY}/debate-cli"
+    for wheel in "${CLI_WHEEL}" "${CORE_WHEEL}"; do
+        distribution=${wheel%%-*}
+        found=""
+        for record in "${TOOL_ENVIRONMENT}"/lib/python*/site-packages/"${distribution}-${VERSION}".dist-info/direct_url.json; do
+            if [ -f "${record}" ] && grep -Fq "${ASSETS_URL}/${wheel}" "${record}"; then
+                found=yes
+            fi
+        done
+        [ -n "${found}" ] || fail "the installed ${distribution} did not come from ${ASSETS_ABSOLUTE}/${wheel}; refusing to trust this install"
     done
-    [ -n "${found}" ] || fail "the installed ${distribution} did not come from ${ASSETS_ABSOLUTE}/${wheel}; refusing to trust this install"
-done
 
-BIN_DIRECTORY=$(uv tool dir --bin)
-INSTALLED="${BIN_DIRECTORY}/debate-research"
-[ -x "${INSTALLED}" ] || fail "uv reported success but ${INSTALLED} does not exist"
+    # Asking uv for a Python it manages is not proof that it gave one (v1-e01-t23). uv decides by
+    # place, and so does this: the tool environment's base Python, every link followed, must lie
+    # inside `uv python dir`, every link followed too.
+    TOOL_PYTHON="${TOOL_ENVIRONMENT}/bin/python"
+    [ -x "${TOOL_PYTHON}" ] || fail "uv reported success but ${TOOL_PYTHON} does not exist"
+    BASE_PYTHON=$("${TOOL_PYTHON}" -I -c 'import sys; print(sys.base_prefix)') \
+        || fail "could not ask ${TOOL_PYTHON} which Python it runs on"
+    MANAGED_DIRECTORY=$(uv python dir) || fail "uv python dir failed"
+    BASE_PHYSICAL=$(CDPATH='' cd -P -- "${BASE_PYTHON}" 2>/dev/null && pwd -P) || BASE_PHYSICAL=""
+    MANAGED_PHYSICAL=$(CDPATH='' cd -P -- "${MANAGED_DIRECTORY}" 2>/dev/null && pwd -P) || MANAGED_PHYSICAL=""
+    case "${BASE_PHYSICAL}" in
+        "${MANAGED_PHYSICAL}"/*) [ -n "${MANAGED_PHYSICAL}" ] ;;
+        *) false ;;
+    esac || fail "the build installed into ${TOOL_DIRECTORY} runs on the Python at ${BASE_PYTHON}, which is not a Python uv manages (those are in ${MANAGED_DIRECTORY}); refusing it, because a conda or Homebrew update could change or remove that Python under the installed build"
+    echo "The build runs on the Python at ${BASE_PYTHON}, which uv manages."
 
-REPORT=$("${INSTALLED}" --version --json) || fail "${INSTALLED} --version --json failed"
-printf '%s\n' "${REPORT}"
-printf '%s\n' "${REPORT}" | grep -Eq "\"version\": ?\"${VERSION}\"" \
-    || fail "the installed debate-research does not report version ${VERSION}"
-printf '%s\n' "${REPORT}" | grep -Eq "\"channel\": ?\"${CHANNEL}\"" \
-    || fail "the installed debate-research does not report channel ${CHANNEL}"
+    BIN_DIRECTORY=$(uv tool dir --bin) || fail "uv tool dir --bin failed"
+    INSTALLED="${BIN_DIRECTORY}/debate-research"
+    [ -x "${INSTALLED}" ] || fail "uv reported success but ${INSTALLED} does not exist"
 
-# The build must hold everything its commands are wired to use (v1-e01-t17). `--version` imports
-# none of the integrations, so on its own it passed v0.1.0-dev.33, a build in which every
-# `caselist pull` failed on a missing boto3. This imports every debate_core.integrations module the
-# CLI's composition root imports, read from the installed container's own source, and fails unless
-# it tried every one of them and all imported. It also checks that the distributions behind each
-# debate-core extra the CLI declares were installed. It runs with the tool environment's own
-# interpreter, so it sees exactly what `debate-research` will. Builds published before this check
-# existed do not contain it and are refused; every one of them lacks boto3.
-TOOL_PYTHON="${TOOL_ENVIRONMENT}/bin/python"
-[ -x "${TOOL_PYTHON}" ] || fail "uv reported success but ${TOOL_PYTHON} does not exist"
-echo "Checking that the build can import every integration debate-research wires..."
-"${TOOL_PYTHON}" -m debate_cli.installation \
-    || fail "the build installed from ${TAG} is incomplete (see above), so commands that need those integrations will fail; install a different tag"
+    REPORT=$("${INSTALLED}" --version --json) || fail "${INSTALLED} --version --json failed"
+    printf '%s\n' "${REPORT}"
+    printf '%s\n' "${REPORT}" | grep -Eq "\"version\": ?\"${VERSION}\"" \
+        || fail "the installed debate-research does not report version ${VERSION}"
+    printf '%s\n' "${REPORT}" | grep -Eq "\"channel\": ?\"${CHANNEL}\"" \
+        || fail "the installed debate-research does not report channel ${CHANNEL}"
 
-ON_PATH=$(command -v debate-research || true)
-if [ "${ON_PATH}" != "${INSTALLED}" ]; then
-    echo "" >&2
-    echo "install_channel: warning — \`debate-research\` on this PATH is ${ON_PATH:-nothing}," >&2
-    echo "install_channel: not the build just installed at ${INSTALLED}." >&2
-    echo "install_channel: put ${BIN_DIRECTORY} before any project .venv/bin on PATH" >&2
-    echo "install_channel: (\`uv tool update-shell\` adds it), or call ${INSTALLED} by its full path." >&2
+    # The build must hold everything its commands are wired to use (v1-e01-t17). `--version` imports
+    # none of the integrations, so on its own it passed v0.1.0-dev.33, a build in which every
+    # `caselist pull` failed on a missing boto3. This imports every debate_core.integrations module
+    # the CLI's composition root imports, read from the installed container's own source, and fails
+    # unless it tried every one of them and all imported. It also checks that the distributions
+    # behind each debate-core extra the CLI declares were installed. It runs with the tool
+    # environment's own interpreter, so it sees exactly what `debate-research` will. Builds published
+    # before this check existed do not contain it and are refused; every one of them lacks boto3.
+    echo "Checking that the build can import every integration debate-research wires..."
+    "${TOOL_PYTHON}" -m debate_cli.installation \
+        || fail "the build installed from ${TAG} is incomplete (see above), so commands that need those integrations will fail; install a different tag"
+
+    # The installation as a whole (v1-e01-t14). doctor exits non-zero on one check, the one it can
+    # state precisely: this Python's Unicode database is not the one the evidence normalizer is
+    # pinned to, so every command that normalizes evidence text would refuse to run.
+    echo "Checking the installation with debate-research doctor..."
+    "${INSTALLED}" doctor \
+        || fail "debate-research doctor failed for the build installed from ${TAG} (see above)"
+}
+
+echo "Rehearsing the install of debate-cli ${VERSION} (${CHANNEL} channel) from ${ASSETS_ABSOLUTE},"
+echo "on a Python matching '${REQUIRES_PYTHON}' (debate_core's Requires-Python) that uv manages, in a temporary tool directory..."
+# Only to say what is about to happen: uv makes the download itself, during the install (step 3a).
+if ! uv python find --system --managed-python --no-python-downloads "${REQUIRES_PYTHON}" >/dev/null 2>&1; then
+    echo "No Python that uv manages matches '${REQUIRES_PYTHON}' yet, so uv will download one into $(uv python dir)."
+fi
+REHEARSAL=$(mktemp -d "${TEMPORARY}/debate-research-rehearsal.XXXXXX")
+(
+    UV_TOOL_DIR="${REHEARSAL}/tools"
+    UV_TOOL_BIN_DIR="${REHEARSAL}/bin"
+    export UV_TOOL_DIR UV_TOOL_BIN_DIR
+    install_and_check
+) || fail "the build from ${TAG} failed a check in the rehearsal install (see above); the installed debate-research was not touched"
+
+# The real install resolves the third-party dependencies again, and a release published since the
+# rehearsal would win (v1-e01-t22). So it is pinned to exactly what the rehearsal installed, read
+# from the rehearsal's environment: every third-party distribution as `name==version`. The two
+# first-party lines are left out, because the verified file URLs already decide them. Anything else
+# cannot be pinned, and the script refuses rather than install something the rehearsal did not check.
+REHEARSED_PYTHON="${REHEARSAL}/tools/debate-cli/bin/python"
+REHEARSED="${REHEARSAL}/rehearsed.txt"
+CONSTRAINTS="${REHEARSAL}/constraints.txt"
+uv pip freeze --quiet --python "${REHEARSED_PYTHON}" > "${REHEARSED}" \
+    || fail "could not list what the rehearsal installed; the installed debate-research was not touched"
+UNPINNABLE=$(awk '
+    /^debate-(cli|core) @ / { next }
+    /^debate-(cli|core)[^A-Za-z0-9._-]/ { print; next }
+    /^[A-Za-z0-9][A-Za-z0-9._-]*==[A-Za-z0-9.!+_-]+$/ { next }
+    { print }
+' "${REHEARSED}")
+[ -z "${UNPINNABLE}" ] \
+    || fail "the rehearsal installed $(printf '%s' "${UNPINNABLE}" | head -n 1), which cannot be pinned for the real install; the installed debate-research was not touched"
+grep -Ev '^debate-(cli|core) @ ' "${REHEARSED}" > "${CONSTRAINTS}" || true
+PINNED=$(wc -l < "${CONSTRAINTS}" | tr -d ' ')
+if [ "${PINNED}" = 1 ]; then NOUN=distribution; else NOUN=distributions; fi
+
+echo "The rehearsal passed. Installing debate-cli ${VERSION} (${CHANNEL} channel) as a uv tool..."
+echo "Pinning the real install to the ${PINNED} third-party ${NOUN} the rehearsal checked."
+install_and_check "${CONSTRAINTS}"
+
+# What uv was asked for is not proof of what it did. The real environment must hold exactly what the
+# rehearsal's did, so a uv that ignored the pins is caught here rather than trusted. By now the real
+# install has replaced the previous one, so this makes the exit status true; the pins are what kept
+# the two the same.
+INSTALLED_LIST="${REHEARSAL}/installed.txt"
+uv pip freeze --quiet --python "${TOOL_ENVIRONMENT}/bin/python" > "${INSTALLED_LIST}" \
+    || fail "could not list what the real install holds, so it cannot be shown to be the build the rehearsal checked"
+if ! diff "${REHEARSED}" "${INSTALLED_LIST}" > "${REHEARSAL}/difference.txt"; then
+    sed -n -e 's/^< /-/p' -e 's/^> /+/p' "${REHEARSAL}/difference.txt" >&2
+    fail "the real install is not the build the rehearsal checked (- rehearsal, + real install, above). It has already replaced the previous install. Run this script again; if it fails the same way, this uv is not keeping to --constraints"
+fi
+
+if [ "${PATH_WARNING}" = yes ]; then
+    ON_PATH=$(command -v debate-research || true)
+    if [ "${ON_PATH}" != "${INSTALLED}" ]; then
+        echo "" >&2
+        echo "install_channel: warning — \`debate-research\` on this PATH is ${ON_PATH:-nothing}," >&2
+        echo "install_channel: not the build just installed at ${INSTALLED}." >&2
+        echo "install_channel: put ${BIN_DIRECTORY} before any project .venv/bin on PATH" >&2
+        echo "install_channel: (\`uv tool update-shell\` adds it), or call ${INSTALLED} by its full path." >&2
+    fi
 fi
 
 echo "Installed debate-research ${VERSION} from ${TAG} at ${INSTALLED}."

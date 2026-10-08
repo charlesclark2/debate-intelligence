@@ -69,6 +69,7 @@ __all__ = [
     "normalize",
     "normalize_chars",
     "paragraph_map",
+    "pinned_unicode_version",
 ]
 
 NORMALIZER_VERSION: Final = "evidence-normalizer-v1"
@@ -510,12 +511,17 @@ SUPPORTED_NORMALIZER_VERSIONS: Final[tuple[str, ...]] = tuple(_DEFINITIONS)
 """Every version ever released, oldest first. Versions are added here, never removed."""
 
 
-def _definition(version: str) -> _NormalizerDefinition:
+def _registered(version: str) -> _NormalizerDefinition:
     definition = _DEFINITIONS.get(version)
     if definition is None:
         raise UnknownNormalizerVersionError(
             f"unknown normalizer version {version!r}; supported: " + ", ".join(SUPPORTED_NORMALIZER_VERSIONS)
         )
+    return definition
+
+
+def _definition(version: str) -> _NormalizerDefinition:
+    definition = _registered(version)
     if unicodedata.unidata_version != definition.rules.unicode_version:
         raise UnicodeDatabaseMismatchError(
             f"{version} is pinned to Unicode {definition.rules.unicode_version}, but this Python's "
@@ -527,6 +533,17 @@ def _definition(version: str) -> _NormalizerDefinition:
 def character_rules(version: str) -> CharacterRules:
     """The character tables of ``version``."""
     return _definition(version).rules
+
+
+def pinned_unicode_version(version: str) -> str:
+    """The Unicode database ``version`` is pinned to, read without checking the running one.
+
+    Every other entry point refuses to run under a different database, so this is the only way to
+    learn the pin on the interpreter that most needs to report it: ``debate-research doctor``
+    names both versions when they disagree (``v1-e01-t14``). An unknown ``version`` is still
+    :class:`UnknownNormalizerVersionError`.
+    """
+    return _registered(version).rules.unicode_version
 
 
 @dataclass(frozen=True, slots=True)

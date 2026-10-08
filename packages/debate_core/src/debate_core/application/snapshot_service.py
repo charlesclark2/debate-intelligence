@@ -132,7 +132,8 @@ class SnapshotService:
         # version and the Unicode database NFC is computed from. "Identical inputs give identical
         # hashes" (v1-e03-t02 ac3) holds across machines and Python upgrades only because
         # `normalize` refuses to run against any Unicode database but the one its version pins
-        # (UnicodeDatabaseMismatchError; `debate_core` requires Python <3.13 for that reason). The
+        # (UnicodeDatabaseMismatchError; `debate_core`'s requires-python admits only Pythons that
+        # ship that database, for that reason). The
         # version recorded below is the one `normalize` reports it used, never a constant kept
         # beside it, so the record cannot claim rules other than the ones that produced the text.
         normalized_text_hash = sha256_text(normalized.text)

@@ -1,3 +1,4 @@
+<!-- docs-index: One report per completed task -->
 # Session reports
 
 One report per task, named `<task-name>.md`, created by `scripts/task start` from

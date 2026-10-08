@@ -1,3 +1,4 @@
+<!-- docs-index: The ten ports, the constructor-injection pattern, and how to add an adapter -->
 # Ports and adapters in `debate_core`
 
 How the domain core reaches storage, the web and a model — and why it is arranged this way.

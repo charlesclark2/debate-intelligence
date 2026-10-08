@@ -7,8 +7,12 @@
 #                                           worktree + task/<task> branch off origin/dev, mark InProgress,
 #                                           create the session report, open the Claude session with the
 #                                           kickoff prompt (VS Code window by default)
-#   scripts/task resume <task> [--launch vscode|terminal]
-#                                           reopen the task's worktree / Claude session
+#   scripts/task resume <task> [--launch vscode|terminal|none] [--no-launch] [--dry-run]
+#                                           reopen the task's worktree / Claude session; for a task merged
+#                                           with --partial (InProgress on origin/dev, report there, no
+#                                           worktree or branch), recreate both from origin/dev, sync the
+#                                           venv and write a resumed-task prompt, committing nothing.
+#                                           --dry-run: check and say what it would do, create nothing
 #   scripts/task prompt <task>              print the kickoff prompt again (and copy it to the clipboard)
 #   scripts/task list                       active task worktrees with phase, PM verdict and PR state
 #   scripts/task report <task>              print the session report (and copy it to the clipboard)
@@ -138,11 +142,66 @@ spec_phase_on_dev() { # <spec path> -> phase recorded on origin/dev (empty if ab
   git_root show "origin/dev:$1" 2>/dev/null | awk '/^status:$/ { getline; print $2; exit }'
 }
 
+spec_path_on_dev() { # <task> -> path of the task's spec on origin/dev (empty if absent)
+  { git_root grep -l -E "^  name: $1\$" origin/dev -- plan_specs 2>/dev/null || true; } \
+    | sed -n 's#^origin/dev:\(plan_specs/.*/t[0-9][0-9]-[^/]*\.yaml\)$#\1#p' | head -n 1
+}
+
+report_on_dev() { # <task> -> 0 if origin/dev carries the task's session report
+  git_root cat-file -e "origin/dev:docs/session-reports/$1.md" 2>/dev/null
+}
+
 pr_state() { # <task> -> MERGED|OPEN|CLOSED|NONE|UNKNOWN
   if has gh; then
     (cd "$REPO_ROOT" && gh pr view "$(branch "$1")" --json state -q .state 2>/dev/null) || printf 'NONE'
   else
     printf 'UNKNOWN'
+  fi
+}
+
+# A failure part-way through start or resume removes what that run created - the worktree (with
+# its .task/ and .venv) and the branch - so a retry starts clean. Both commands refuse before
+# arming this if the worktree or branch already exists, so it never touches one it did not
+# create, and a session report is only ever created inside the worktree it removes (v1-e01-t18).
+ROLLBACK_WT=""
+ROLLBACK_BR=""
+
+rollback() {
+  local status=$?
+  trap - EXIT INT TERM
+  if [ -n "$ROLLBACK_WT$ROLLBACK_BR" ]; then
+    warn "stopped part-way; removing what this run created so a retry starts clean"
+    if [ -n "$ROLLBACK_WT" ] && [ -e "$ROLLBACK_WT" ]; then
+      git_root worktree remove --force "$ROLLBACK_WT" 2>/dev/null || rm -rf "$ROLLBACK_WT"
+    fi
+    git_root worktree prune || true
+    if [ -n "$ROLLBACK_BR" ] && git_root show-ref --verify --quiet "refs/heads/$ROLLBACK_BR"; then
+      git_root branch -D "$ROLLBACK_BR" >/dev/null || true
+    fi
+    rmdir "$WT_BASE" 2>/dev/null || true
+  fi
+  exit "$status"
+}
+
+disarm_rollback() { ROLLBACK_WT=""; ROLLBACK_BR=""; trap - EXIT INT TERM; }
+
+create_task_worktree() { # <worktree> <branch>: both checked absent by the caller
+  mkdir -p "$WT_BASE"
+  ensure_local_excludes
+  ROLLBACK_WT="$1"; ROLLBACK_BR="$2"
+  trap rollback EXIT
+  trap 'exit 130' INT TERM
+  info "Creating worktree $1 on $2 (from origin/dev)"
+  git_root worktree add --quiet -b "$2" "$1" origin/dev
+}
+
+sync_workspace_venv() { # <worktree>
+  # A fresh worktree gets its own .venv, and uv does not install the workspace packages into it
+  # until asked, so `import debate_core` fails until this runs. v1-e30-t03 lost time to it before
+  # working out that the venv, not the code, was the problem. It is seconds from a warm uv cache.
+  info "Syncing the workspace venv (uv sync --all-packages)"
+  if ! (cd "$1" && uv sync --quiet --all-packages); then
+    warn "uv sync failed; run 'uv sync --all-packages' in $1 before the session starts"
   fi
 }
 
@@ -205,23 +264,29 @@ cmd_start() {
   git_root fetch --quiet origin dev
   git_root ls-remote --exit-code --heads origin "$br" >/dev/null 2>&1 \
     && die "branch $br already exists on origin; finish or delete it first"
+  if report_on_dev "$task"; then
+    # A task merged with --partial: its phase is already InProgress and its report already exists,
+    # so start would have nothing to commit. On 2026-10-02 it died there, after creating the
+    # worktree and branch. resume is the command for this (v1-e01-t18).
+    local dev_spec dev_phase=""
+    dev_spec="$(spec_path_on_dev "$task")"
+    [ -z "$dev_spec" ] || dev_phase="$(spec_phase_on_dev "$dev_spec")"
+    [ "$dev_phase" = "InProgress" ] \
+      && die "$task was merged with --partial: it is InProgress on origin/dev and its session report is there. Restart it with: scripts/task resume $task"
+    die "$task already has a session report on origin/dev (phase ${dev_phase:-unknown}); start never overwrites one"
+  fi
 
-  mkdir -p "$WT_BASE"
-  ensure_local_excludes
-  info "Creating worktree $wt on $br (from origin/dev)"
-  git_root worktree add --quiet -b "$br" "$wt" origin/dev
+  create_task_worktree "$wt" "$br"
 
-  local spec title
-  IFS=$'\t' read -r spec title _ _ _ < <(helper "$wt" info "$task") \
-    || { git_root worktree remove --force "$wt"; git_root branch -D "$br" >/dev/null; exit 1; }
+  local info_line spec title
+  info_line="$(helper "$wt" info "$task")"
+  IFS=$'\t' read -r spec title _ <<< "$info_line"
 
   info "Prerequisites"
   if ! helper "$wt" prereqs "$task"; then
     if [ "$force" -eq 1 ]; then
       warn "starting despite unmet prerequisites (--force)"
     else
-      git_root worktree remove --force "$wt"
-      git_root branch -D "$br" >/dev/null
       die "prerequisites are not Succeeded on origin/dev; nothing was created (override with --force)"
     fi
   fi
@@ -233,14 +298,8 @@ cmd_start() {
 
   mkdir -p "$wt/.task"
   helper "$wt" prompt "$task" "$wt" > "$wt/.task/prompt.md"
-
-  # A fresh worktree gets its own .venv, and uv does not install the workspace packages into it
-  # until asked, so `import debate_core` fails until this runs. v1-e30-t03 lost time to it before
-  # working out that the venv, not the code, was the problem. It is seconds from a warm uv cache.
-  info "Syncing the workspace venv (uv sync --all-packages)"
-  if ! (cd "$wt" && uv sync --quiet --all-packages); then
-    warn "uv sync failed; run 'uv sync --all-packages' in $wt before the session starts"
-  fi
+  sync_workspace_venv "$wt"
+  disarm_rollback
 
   cat <<EOF
 
@@ -267,17 +326,92 @@ EOF
 }
 
 cmd_resume() {
-  local task="" launcher="$LAUNCHER_DEFAULT"
+  local task="" launcher="$LAUNCHER_DEFAULT" dry_run=0
   while [ $# -gt 0 ]; do
     case "$1" in
-      --launch) [ $# -gt 1 ] || die "--launch needs vscode or terminal"; launcher="$2"; shift ;;
+      --no-launch) launcher=none ;;
+      --launch) [ $# -gt 1 ] || die "--launch needs vscode, terminal or none"; launcher="$2"; shift ;;
       --launch=*) launcher="${1#--launch=}" ;;
+      --dry-run) dry_run=1 ;;
       -*) die "unknown option $1" ;;
       *) task="$1" ;;
     esac; shift
   done
-  validate_name "$task"; need_wt "$task"; check_launcher "$launcher"
-  launch_session "$launcher" "$(wt_path "$task")" resume
+  validate_name "$task"; check_launcher "$launcher"
+  local wt; wt="$(wt_path "$task")"
+  if [ -d "$wt" ]; then
+    if [ "$dry_run" -eq 1 ]; then
+      printf 'Dry run: %s has a worktree at %s, so resume would reopen it. Nothing was changed.\n' "$task" "$wt"
+      return 0
+    fi
+    launch_session "$launcher" "$wt" resume
+    return 0
+  fi
+  resume_partly_merged "$task" "$launcher" "$dry_run"
+}
+
+resume_partly_merged() { # <task> <launcher> <dry_run>: recreate a task merged with --partial
+  local task="$1" launcher="$2" dry_run="$3" wt br
+  wt="$(wt_path "$task")"; br="$(branch "$task")"
+
+  [ -e "$wt" ] && die "$wt exists but is not a directory; move it aside first"
+  git_root show-ref --verify --quiet "refs/heads/$br" \
+    && die "branch $br exists but has no worktree; resume recreates a task only when both are gone. Look at it (git log $br) and attach it with: git worktree add $wt $br"
+
+  info "Fetching origin/dev"
+  git_root fetch --quiet origin dev
+  git_root ls-remote --exit-code --heads origin "$br" >/dev/null 2>&1 \
+    && die "branch $br exists on origin (is a pull request open?); finish or delete it before resuming"
+
+  local dev_spec phase
+  dev_spec="$(spec_path_on_dev "$task")"
+  [ -n "$dev_spec" ] || die "no task spec named $task on origin/dev"
+  phase="$(spec_phase_on_dev "$dev_spec")"
+  case "$phase" in
+    InProgress) ;;
+    Pending|Ready) die "$task is $phase on origin/dev, so there is nothing to resume; use: scripts/task start $task" ;;
+    *) die "$task is ${phase:-of unknown phase} on origin/dev; resume restarts only a task merged with --partial, which stays InProgress" ;;
+  esac
+  report_on_dev "$task" \
+    || die "$task is InProgress on origin/dev but docs/session-reports/$task.md is not there; resume restarts only a task merged with --partial"
+
+  if [ "$dry_run" -eq 1 ]; then
+    local verdict
+    verdict="$(git_root show "origin/dev:docs/session-reports/$task.md" | helper "$REPO_ROOT" verdict-of -)"
+    cat <<EOF
+Dry run: $task was merged with --partial and can be resumed. Nothing was created.
+  origin/dev:   $(git_root rev-parse --short origin/dev); $dev_spec says InProgress
+  report:       docs/session-reports/$task.md is on origin/dev; its last PM verdict is $verdict
+  would create: worktree $wt on a new branch $br from origin/dev
+  would sync:   uv sync --all-packages in the worktree
+  would write:  $wt/.task/prompt.md, the resumed-task prompt
+  would commit: nothing
+EOF
+    return 0
+  fi
+
+  create_task_worktree "$wt" "$br"
+  local title
+  title="$(helper "$wt" info "$task" | cut -f2)"
+  mkdir -p "$wt/.task"
+  helper "$wt" prompt-resumed "$task" "$wt" > "$wt/.task/prompt.md"
+  sync_workspace_venv "$wt"
+  disarm_rollback
+
+  cat <<EOF
+
+Task:      $task — $title (resumed after a --partial merge)
+Worktree:  $wt
+Branch:    $br, at origin/dev; nothing committed
+Spec:      $dev_spec
+Report:    docs/session-reports/$task.md (the session appends to it)
+Prompt:    $wt/.task/prompt.md
+
+Next: give the session the prompt and the PM's instructions for what this session is for.
+The report's last PM review is the one scripts/task pr reads, so the session ends the report
+with a new, empty one.
+EOF
+  launch_session "$launcher" "$wt" start
 }
 
 cmd_prompt() {
@@ -432,13 +566,20 @@ cmd_finish() {
       elif [ "$partial" -eq 1 ] && [ "$phase" = "InProgress" ]; then
         # A partially merged task stays InProgress on dev, so the phase cannot confirm the merge.
         # The squash commit also breaks ancestry, so the branch tip is no ancestor of dev either.
-        # What does land on dev is the reviewed report, so that is what is checked.
-        if git_root cat-file -e "origin/dev:docs/session-reports/$task.md" 2>/dev/null \
-           && git_root show "origin/dev:docs/session-reports/$task.md" | grep -q '^\*\*Verdict:\*\* ACCEPTED'; then
-          info "origin/dev carries the accepted report for $task; partial merge confirmed, operator criteria remain"
-        else
-          die "--partial could not confirm the merge: origin/dev has no accepted report at docs/session-reports/$task.md"
+        # What does land on dev is the reviewed report, so that is what is checked: its last verdict
+        # is ACCEPTED and, while the branch exists, it is the branch's report. A resumed task's
+        # earlier accepted report is on dev before its second PR merges, so ACCEPTED alone would
+        # confirm a merge that has not happened and delete the branch it is waiting on (v1-e01-t18).
+        local dev_report="origin/dev:docs/session-reports/$task.md"
+        report_on_dev "$task" \
+          || die "--partial could not confirm the merge: origin/dev has no report at docs/session-reports/$task.md"
+        [ "$(git_root show "$dev_report" | helper "$REPO_ROOT" verdict-of -)" = "ACCEPTED" ] \
+          || die "--partial could not confirm the merge: the last PM verdict in origin/dev's docs/session-reports/$task.md is not ACCEPTED"
+        if git_root show-ref --verify --quiet "refs/heads/$br" \
+           && [ "$(git_root rev-parse "$dev_report")" != "$(git_root rev-parse --verify --quiet "$br:docs/session-reports/$task.md" || true)" ]; then
+          die "--partial could not confirm the merge: origin/dev's docs/session-reports/$task.md is not the one on $br, so the reviewed work has not reached dev"
         fi
+        info "origin/dev carries the accepted report for $task; partial merge confirmed, operator criteria remain"
       elif [ "$force" -eq 1 ]; then
         warn "could not confirm the merge (PR state $state, dev phase ${phase:-unknown}); continuing (--force)"
       else
@@ -484,7 +625,7 @@ Refusing to delete them; commit/discard or pass --force."
   info "Done: $task closed out"
 }
 
-usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-help}"; [ $# -gt 0 ] && shift
 case "$cmd" in

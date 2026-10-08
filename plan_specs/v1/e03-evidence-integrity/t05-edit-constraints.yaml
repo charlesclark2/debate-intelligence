@@ -24,18 +24,38 @@ spec:
   # introduce a segment list that would make it expressible again. And an ellipsis is never written
   # into evidence_text; a deletion produces an omitted range, and the rendering of it belongs to
   # the exporter.
+  #
+  # PM note, 2026-10-02, at review. The save rule is "re-verify and save with the verdict". The PM's
+  # kickoff instruction "nothing is saved unless VERIFIED" contradicted "tag and cite remain freely
+  # editable" and v2-e12-t05 ac4, and is withdrawn. Integrity comes from the policy (every quotation
+  # edit is re-cut from the snapshot and must leave exactly the text shown less what was deleted),
+  # and the status stays truthful because only verify_and_record sets it. Also recorded:
+  # RemoveInterpolation joins the vocabulary, the audit entry names its card and the statuses before
+  # and after, and the negation flag reads the text the deletion removed.
   description: >-
     Encode §8 step 7 as domain rules in CardEditService: student edits to quoted evidence may only
     (a) delete ranges (shrink or split selections, adding omitted ranges), (b) change markup
     (underline/highlight spans and their purposes), or (c) add explicitly bracketed interpolations
     ("[the U.S.]") stored as separate Interpolation records that are never part of the verified
-    quote and are rendered in brackets. Tag and cite remain freely editable. Every accepted edit
-    re-runs EvidenceVerifier, increments the card revision with expected_revision checking, and
+    quote and are rendered in brackets. Tag and cite remain freely editable: they never re-cut the quotation and need no snapshot. Every accepted edit
+    re-runs EvidenceVerifier and is saved with its verdict, whatever it is, increments the card revision with expected_revision checking, and
     records an edit log entry. Insertions, substitutions or reordering of quoted text are rejected
     with a typed error. The V2 rich-text editor enforces this same service; its UI is out of scope.
   priority: 2
   constraints:
-    packages: [debate_core.evidence, debate_core.application]
+    packages:
+      - debate_core.evidence
+      - debate_core.application
+      # The five entries below were added on the PM's instruction, 2026-10-02: the interpolation
+      # field on Card, the CardEditLog port, its in-memory fake, the regenerated card schema, and
+      # the format doc that records the edit policy and the negation heuristic.
+      - debate_core.domain
+      - debate_core.application.ports
+      - debate_core.testing
+      - packages/debate_core/schemas
+      - docs/evidence
+      # Added by the PM, 2026-10-02, at review: v1-e03-t06's committed manifests gain the new field.
+      - tests/fixtures/verify
     forbidden:
       - Any code path that writes evidence text directly rather than via offsets
       - Unbracketed interpolations or interpolations merged into verified evidence text
@@ -68,20 +88,22 @@ spec:
         An edit submitted with a stale expected_revision raises RevisionMismatch.
     - id: ac5
       description: >-
-        Each accepted edit appends an audit entry (actor id, edit kind, before/after revision,
-        timestamp) without storing student-identifying data beyond the actor id.
+        Each accepted edit appends an audit entry (card id, actor id, edit kind, before/after revision,
+        verification status before and after, timestamp) without storing student-identifying data beyond
+        the actor id.
     - id: ac6
       description: >-
         Added by the PM, 2026-10-01, from ADR-0018 and v1-e03-t07's follow-up work: ADR-0018 says the
         envelope makes it possible to flag an omission that deletes a negation, and nothing does yet. A
-        deletion whose omitted text contains a negation from a short, documented word list (for example
+        deletion whose removed text (amended by the PM, 2026-10-02: the text the deletion removed, not the
+        whole omission it lands in) contains a negation from a short, documented word list (for example
         not, no, never, n't, without, neither, nor, cannot) is accepted but flagged: the edit result
         carries the flag and the edit log entry records which omission carries it, so the CLI and the
         exporter can show it. Tests show a dropped "not" flagged and an ordinary deletion not. It is a
         heuristic, documented as one: it draws a reader's attention, it does not judge whether a cut is
         fair, and it never refuses an edit.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

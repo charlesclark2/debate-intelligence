@@ -20,6 +20,15 @@ inside a single segment, so its start and end are each inside, or at the edge of
 never inside an omission. An end equal to a segment's end counts only the omissions before that
 segment, because the omission after it starts there and has not ended.
 
+## The inverse: from evidence_text back to the snapshot
+
+An edit (`v1-e03-t05`) arrives in evidence-text offsets, the coordinates an editor shows a student.
+:func:`snapshot_ranges_of` says which snapshot characters a range of ``evidence_text`` was cut from:
+walk the card's quoted ranges in order, keeping a running count of the evidence-text characters
+before each, and take the part of the range that falls in each one. A range that runs across a cut
+comes back as one snapshot range per kept piece it touches, never across the omitted text between
+them. It is the only code that maps that way, for the same reason as the forward calculation.
+
 ## Touching spans on either side of a cut are not merged
 
 An underline that ends where a segment ends and another that starts where the next one begins
@@ -49,7 +58,7 @@ from debate_core.evidence.extractor import ExtractedEvidence
 from debate_core.evidence.markup import CardMarkup
 from debate_core.evidence.verifier import evidence_text_of
 
-__all__ = ["place_evidence_on_card"]
+__all__ = ["place_evidence_on_card", "snapshot_ranges_of"]
 
 
 def place_evidence_on_card(card: Card, markup: CardMarkup) -> Card:
@@ -60,7 +69,9 @@ def place_evidence_on_card(card: Card, markup: CardMarkup) -> Card:
     ``markup.evidence``. Provenance is the snapshot's to say: it "travels from the snapshot onto every
     card cut from it" (:class:`~debate_core.domain.ProvenanceMode`), so whatever the card claimed
     before is replaced. The card's identity, tag and citation are kept. Its verification status is
-    reset to ``UNVERIFIED``: new evidence has not been verified, whatever the card held before.
+    reset to ``UNVERIFIED``: new evidence has not been verified, whatever the card held before. Its
+    interpolations are dropped, because their anchors index the evidence being replaced; an edit
+    that keeps them moves them itself (:mod:`debate_core.evidence.edit_policy`).
 
     Raises :class:`ValueError` if the card cites a different article from the one the snapshot was
     taken of, rather than producing a misattributed card.
@@ -92,8 +103,33 @@ def place_evidence_on_card(card: Card, markup: CardMarkup) -> Card:
             )
             for span in markup.spans
         ),
+        interpolations=(),
         verification_status=VerificationStatus.UNVERIFIED,
     )
+
+
+def snapshot_ranges_of(card: Card, start: int, end: int) -> tuple[tuple[int, int], ...]:
+    """The snapshot ranges ``card.evidence_text[start:end]`` was cut from, in order.
+
+    Half-open ``(start, end)`` pairs into the snapshot's normalized text. A range that crosses a cut
+    comes back as one pair per kept piece it touches, so no pair ever covers omitted text. An empty
+    range gives no pairs. Raises :class:`ValueError` unless ``0 <= start <= end <=
+    len(card.evidence_text)``.
+    """
+    if not 0 <= start <= end <= len(card.evidence_text):
+        raise ValueError(
+            f"[{start}, {end}) is not a range of the card's {len(card.evidence_text)}-character evidence_text"
+        )
+    pieces: list[tuple[int, int]] = []
+    quoted_before = 0
+    for quoted_start, quoted_end in card.quoted_ranges:
+        quoted_length = quoted_end - quoted_start
+        low = max(start, quoted_before)
+        high = min(end, quoted_before + quoted_length)
+        if low < high:
+            pieces.append((quoted_start + (low - quoted_before), quoted_start + (high - quoted_before)))
+        quoted_before += quoted_length
+    return tuple(pieces)
 
 
 def _evidence_offset(evidence: ExtractedEvidence, snapshot_offset: int) -> int:

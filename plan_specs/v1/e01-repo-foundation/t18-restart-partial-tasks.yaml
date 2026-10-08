@@ -30,7 +30,13 @@ spec:
     the review of the work being merged.
   priority: 2
   constraints:
-    packages: [scripts, docs/process]
+    packages:
+      - scripts
+      - docs/process
+      # added on the PM's instruction, 2026-10-08: the session-report template's location (already
+      # under docs/process) and the tests for scripts/task.
+      - docs/process/session-report-template.md
+      - tests/scripts
     forbidden:
       - Overwriting an existing session report or PM review
       - A verdict check that can pass on a review of earlier work
@@ -59,7 +65,7 @@ spec:
         resumed task's report (how the earlier review is labelled) is written into
         docs/process/task-workflow.md and the report template.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

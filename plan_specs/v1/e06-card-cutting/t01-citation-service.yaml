@@ -55,6 +55,13 @@ spec:
       description: >-
         format_cite produces the short cite (e.g. "Smith 26") and the full cite line with accessed date, and
         any unverified field is flagged in the returned Citation so exports can mark it.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-02, from v1-e03-t05. A student may change a cite field through
+        CardEditService, which stores the changed field unverified. Re-resolving that card's cite
+        marks a changed field verified only when it equals the value this service derives from the
+        source, and otherwise keeps the student's value, unverified and marked, rather than
+        overwriting it.
 status:
   phase: Pending
 ---

@@ -123,6 +123,12 @@ _RUN_ID_FORMAT: Final = "%Y%m%dT%H%M%SZ"
 
 _MAX_MESSAGE_CHARACTERS: Final = 500
 
+_MAX_RETENTION_REASON_CHARACTERS: Final = 8000
+"""The retention stage's reason names every file it removed and kept (`v1-e34-t11`), by caselist and
+date or by SHA-256 prefix, and a first run clearing a backlog names a season's weeklies. It goes
+through :func:`redact` like every reason; only the length allowed is longer. `StageEntry.reason`
+has no length limit, so a record carrying one is still a record every earlier build reads."""
+
 RunMode = Literal["run", "publish_pending"]
 
 
@@ -233,7 +239,7 @@ _QUOTED_PATH = re.compile(r"""(['"])[^'"\n]*[/\\][^'"\n]*\1""")
 _PATH_TOKEN = re.compile(r"[^\s'\"]*[/\\][^\s'\"]*")
 
 
-def redact(message: str, *, secrets: Iterable[str] = ()) -> str:
+def redact(message: str, *, secrets: Iterable[str] = (), limit: int = _MAX_MESSAGE_CHARACTERS) -> str:
     """`message` with secrets, URL queries and anything path-shaped removed, on one short line.
 
     A path goes whole, including a quoted one with spaces in it, because a disclosure path names a
@@ -248,8 +254,8 @@ def redact(message: str, *, secrets: Iterable[str] = ()) -> str:
     text = _QUOTED_PATH.sub(REDACTED, text)
     text = _PATH_TOKEN.sub(REDACTED, text)
     text = " ".join(text.split())
-    if len(text) > _MAX_MESSAGE_CHARACTERS:
-        text = text[: _MAX_MESSAGE_CHARACTERS - 1] + "…"
+    if len(text) > limit:
+        text = text[: limit - 1] + "…"
     return text
 
 
@@ -300,11 +306,19 @@ def record_for_summary(
             StageEntry(
                 stage=str(record.stage),
                 outcome=str(record.outcome),
-                reason=redact(record.reason, secrets=secrets) if record.reason is not None else None,
+                reason=redact(record.reason, secrets=secrets, limit=_reason_limit(record.stage))
+                if record.reason is not None
+                else None,
             )
             for record in summary.stages
         ),
     )
+
+
+def _reason_limit(stage: SyncStage) -> int:
+    if stage is SyncStage.RETENTION:
+        return _MAX_RETENTION_REASON_CHARACTERS
+    return _MAX_MESSAGE_CHARACTERS
 
 
 def record_for_failure(

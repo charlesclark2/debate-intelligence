@@ -25,9 +25,24 @@ removing words from the middle of a passage, so this is the ordinary case, not a
 `debate_core.evidence.card_mapping.place_evidence_on_card` is the one function that turns an
 extracted selection and its markup into these fields; nothing else does that offset arithmetic.
 
+## Interpolations are beside the quotation, never in it (`v1-e03-t05`)
+
+A debater may add a word of their own to make a cut card read, in square brackets: "[the U.S.]
+will not ratify". `interpolations` records each one as an **anchor** and its text, and nothing
+else:
+
+* the anchor is an offset into `evidence_text`, meaning "before this character" (an anchor equal to
+  `len(evidence_text)` is after the last one), so it moves with the quotation, not with the snapshot;
+* the text is stored **without** its brackets. :attr:`Interpolation.rendered` adds them, and is the
+  one place they are added. Text that itself holds a bracket is refused, because "x] will [y"
+  rendered in brackets reads as unbracketed words the source never wrote.
+
+An interpolation is never part of `evidence_text`. The verifier and the length invariant do not
+look at it, so a card's quotation verifies exactly as it would without one.
+
 ## Construction rules
 
-Four rules are enforced here, at construction:
+Five rules are enforced here, at construction:
 
 1. A card that holds evidence text must say where the text came from: a `snapshot_id` and the
    envelope of the quotation inside that snapshot's normalized text.
@@ -36,6 +51,9 @@ Four rules are enforced here, at construction:
 3. A card can only be `VERIFIED` if it has everything re-verification needs: the snapshot, the
    `normalizer_version` the offsets were taken under, and at least one marked span.
 4. Spans must fall inside the evidence text, and two spans of the same style may not overlap.
+5. Interpolations need evidence to sit in: each anchor lies inside `evidence_text` or at its end,
+   and anchors strictly increase, so one card has one representation and two interpolations never
+   share a place.
 
 The domain deliberately does *not* check that `evidence_text` equals the snapshot's text at those
 offsets. That comparison is the evidence verifier's job (E03): a tampered or edited card has to be
@@ -47,9 +65,9 @@ card whose text was altered without changing its length is still constructible a
 from __future__ import annotations
 
 import itertools
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, model_validator
 
 from debate_core.domain.base import (
     ORGANIZATION_ID_FIELD,
@@ -64,7 +82,7 @@ from debate_core.domain.base import (
 from debate_core.domain.citation import Citation
 from debate_core.domain.enums import ProvenanceMode, SpanPurpose, SpanStyle, VerificationStatus
 
-__all__ = ["Card", "CardOmission", "CardSpan"]
+__all__ = ["Card", "CardOmission", "CardSpan", "Interpolation", "InterpolatedText"]
 
 #: Format profile applied when a card does not name one. The profiles themselves are declarative
 #: config loaded by the renderer (E06), not code.
@@ -135,6 +153,39 @@ class CardOmission(DomainModel):
         return self.end_offset - self.start_offset
 
 
+InterpolatedText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, pattern=r"^[^\[\]]+$")
+]
+"""A debater's own words for an interpolation: not empty, stored without brackets, holding none."""
+
+
+class Interpolation(DomainModel):
+    """Words a debater added to a quotation, shown in square brackets and never part of it.
+
+    `anchor` is an offset **into the card's `evidence_text`**: the interpolation is read before the
+    character at that offset, or after the last character when it equals the text's length. `text`
+    is stored without brackets; :attr:`rendered` is the only place they are added.
+    """
+
+    anchor: int = Field(
+        ge=0,
+        description=(
+            "Offset into evidence_text the interpolation is read before; len(evidence_text) means after "
+            "the last character."
+        ),
+    )
+    text: InterpolatedText = Field(
+        description=(
+            "The interpolated words, without brackets. The renderer adds them; a bracket inside is refused."
+        )
+    )
+
+    @property
+    def rendered(self) -> str:
+        """The interpolation as a reader sees it: its text in square brackets."""
+        return f"[{self.text}]"
+
+
 class Card(DomainEntity):
     """A piece of evidence cut from a source snapshot.
 
@@ -178,6 +229,13 @@ class Card(DomainEntity):
         description=(
             "Snapshot ranges left out from inside the envelope, in canonical form: sorted, separated by "
             "at least one kept character, and touching neither end of the envelope."
+        ),
+    )
+    interpolations: tuple[Interpolation, ...] = Field(
+        default=(),
+        description=(
+            "Bracketed words a debater added, each anchored to an evidence_text offset, in strictly "
+            "increasing anchor order. Never part of evidence_text, and not verified."
         ),
     )
     normalized_text_hash: Sha256Hex | None = Field(
@@ -286,6 +344,28 @@ class Card(DomainEntity):
                         f"two {span.style} spans overlap ({span.start_offset}-{span.end_offset} and "
                         f"{other.start_offset}-{other.end_offset}); merge them instead"
                     )
+        return self
+
+    @model_validator(mode="after")
+    def _check_interpolations(self) -> Self:
+        """Interpolations sit inside the quotation or at its end, one to a place, in order."""
+        if not self.interpolations:
+            return self
+        if not self.evidence_text:
+            raise ValueError("a card with no evidence_text has nowhere to put an interpolation")
+        length = len(self.evidence_text)
+        for interpolation in self.interpolations:
+            if interpolation.anchor > length:
+                raise ValueError(
+                    f"interpolation anchored at {interpolation.anchor} is past the end of evidence_text "
+                    f"({length} characters)"
+                )
+        for previous, interpolation in itertools.pairwise(self.interpolations):
+            if interpolation.anchor <= previous.anchor:
+                raise ValueError(
+                    f"interpolations anchored at {previous.anchor} and {interpolation.anchor} are not in "
+                    "strictly increasing order; two interpolations at one place are one interpolation"
+                )
         return self
 
     @model_validator(mode="after")

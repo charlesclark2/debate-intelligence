@@ -71,6 +71,13 @@ spec:
       description: >-
         Requests for another user's or another organization's resources return 404, covered by tests for
         each route.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-02, from v1-e03-t05. PATCH goes through CardEditService. A production
+        CardEditLog adapter writes the card and its edit-log entry in one transaction, so neither exists
+        without the other. The route checks that the caller may edit the card before calling the
+        service, which records the actor but does not authorise. Refusals map to 422 with their kind
+        and problem code, and never echo the refused payload.
 status:
   phase: Pending
 ---

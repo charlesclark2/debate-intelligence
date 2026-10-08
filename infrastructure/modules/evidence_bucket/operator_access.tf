@@ -1,8 +1,9 @@
 # The two credentials the evidence store is reached with, as Identity Center permission sets.
 #
-#   EvidenceOperator - everyday work: list the documented prefixes, read, write, use the key.
-#                      No DeleteObject at all. This is what the operator and
-#                      `debate-research store sync|ls|get` (v1-e29-t05) run as.
+#   EvidenceOperator - everyday work: list the documented prefixes, read, write, use the key,
+#                      and list (never delete) the versions a takedown would remove, so a
+#                      removal's dry run can count them. No DeleteObject at all. This is what the
+#                      operator and `debate-research store sync|ls|get` (v1-e29-t05) run as.
 #   EvidenceRemoval  - takedowns only: delete objects and their noncurrent versions under the five
 #                      prefixes that hold disclosed material, and append to the suppression list.
 #                      Assigned to one accountable person.
@@ -76,6 +77,20 @@ locals {
         Resource = aws_s3_bucket.evidence.arn
         Condition = {
           StringLike = { "s3:prefix" = local.list_prefix_conditions }
+        }
+      },
+      {
+        # Read-only: lets a removal's dry run count the noncurrent versions it would delete
+        # (v1-e30-t07, v1-e29-t06). Listing versions deletes nothing. On the bucket ARN, because
+        # ListBucketVersions is a bucket-level action, and under the same removable prefixes as
+        # the takedown's own listing, so it shows the everyday profile no more than a takedown
+        # would remove.
+        Sid      = "ListEvidenceObjectVersionsForRemovalPlans"
+        Effect   = "Allow"
+        Action   = "s3:ListBucketVersions"
+        Resource = aws_s3_bucket.evidence.arn
+        Condition = {
+          StringLike = { "s3:prefix" = local.removable_list_prefix_conditions }
         }
       },
       {

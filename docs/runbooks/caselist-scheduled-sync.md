@@ -1,3 +1,4 @@
+<!-- docs-index: Installing, enabling, watching and disabling the weekly `caselist pull` launchd agent -->
 # Runbook: the weekly caselist sync
 
 How the weekly OpenCaselist pull is installed, enabled, watched and turned off on the operator's
@@ -63,6 +64,8 @@ Two more ceilings the site sets, both handled in code rather than here:
    a build that cannot import the S3 adapter or the OpenCaselist client (v1-e01-t17). Builds
    published before that change lack boto3, so every `caselist pull` they run fails with exit 70.
    Never add a package to the tool environment by hand to get past that; install a later tag.
+   How to check an install, and what the installer does before it replaces the agent's build, is
+   under [Checking an installed build](#checking-an-installed-build).
 2. **A token.** `debate-research caselist auth login`, once, for that environment
    (`v1-e34-t01`). `caselist auth status --check` confirms it.
 3. **An AWS session**, if you want the run to publish: `aws sso login --profile
@@ -70,16 +73,97 @@ Two more ceilings the site sets, both handled in code rather than here:
    publish as pending.
 4. **A validation run in dev**, below. The schedule is enabled only after that has passed.
 
+## Checking an installed build
+
+**Which Python.** You never choose one. The supported interpreter is whatever the `debate_core`
+wheel's `Requires-Python` metadata admits (from `debate_core`'s `requires-python`), and
+`install_channel.sh` reads it from the wheel it is about to install and passes it to uv. It refuses,
+naming the wheel, if it cannot read it. Do not install the tool by hand with `uv tool install`: uv
+ignores the upper bound of a dependency's `Requires-Python`, so a hand-run install can land on a
+Python whose Unicode database the evidence normalizer is not pinned to
+([`docs/evidence/normalization.md`](../evidence/normalization.md)).
+
+**A Python uv manages, and why the agent needs one.** The installer also asks uv for a Python that
+uv itself manages (`--managed-python`, in the rehearsal and the real install), one kept in the
+directory `uv python dir` prints (`~/.local/share/uv/python` by default). Without that, uv takes the
+first Python that matches, and an activated conda base environment, which `conda init` puts in
+every shell, comes before uv's own. Builds installed before `v1-e01-t23` therefore ran on
+anaconda's `python3`, and a `conda update python`, a Homebrew upgrade of a Python on PATH, or
+removing anaconda would change or delete the agent's interpreter in place: no install runs, no
+rehearsal catches it, and the next Wednesday run fails. A Python uv manages is changed only by uv:
+by reinstalling the build, or by a `uv python` command you run on purpose (`uv python uninstall`,
+or `uv python upgrade`, which moves a build to a newer patch release of the same minor version).
+After each install the installer checks that the build's base Python really is under
+`uv python dir`, prints `The build runs on the Python at …, which uv manages.`, and refuses the
+build otherwise.
+
+If no Python that uv manages matches yet, the installer says `No Python that uv manages matches
+'…' yet, so uv will download one into …`, and uv downloads it during the install (17 MB on this
+Mac, 33 MB on the Linux runners; one to two seconds each, measured). The agent never runs the
+installer, so this only happens while you are watching. `doctor` decides `Managed by uv` from its
+own environment, so a build installed with `UV_PYTHON_INSTALL_DIR` set shows `no` wherever that
+variable is not set; the agent's build uses the default directory. With `UV_PYTHON_DOWNLOADS=never` set, uv refuses instead, and
+`uv python install '<the specifier>'` installs one. The installer needs uv 0.6.8 or newer, the
+first with `--managed-python`; it refuses an older uv by name before installing anything.
+
+**What the installer checks before it replaces anything.** `install_channel.sh` first installs the
+build into a temporary tool directory and checks it there: the wheels' provenance,
+`debate-research --version --json`, `python -m debate_cli.installation` (every wired integration
+imports, and every package the build declares is installed) and `debate-research doctor`. Only if
+all of them pass does it install into the real tool directory, the one the agent runs, and repeat
+the checks. A build that fails in the rehearsal ends with `the installed debate-research was not
+touched`, and the agent keeps running the build it had.
+
+**The real install is the build the rehearsal checked.** The real install does not resolve the
+third-party packages afresh. It is pinned to exactly the versions the rehearsal installed, and the
+log says `Pinning the real install to the N third-party distributions the rehearsal checked.` A
+release published to PyPI in the seconds between the two installs therefore cannot change what the
+agent runs. Afterwards the script compares the two environments. If they differ it fails with
+`the real install is not the build the rehearsal checked`, lists the differences, and says the
+previous install has already been replaced. Run the script again; if it fails the same way, the
+installed uv is not keeping to `--constraints`, and that needs reporting rather than working around.
+
+**Checking the build the agent runs now**, at any time, as the agent runs it:
+
+```bash
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" sh -c 'command -v debate-research; debate-research doctor; echo "doctor exit=$?"'
+```
+
+`doctor` reports the build's versions, its interpreter, its wiring, its Unicode database beside
+the normalizer's pin, and whether every integration the CLI wires imports. It also reports the
+`Base interpreter` (the Python installation behind the build's environment), `uv's Pythons` (the
+directory `uv python dir` would print in that environment) and `Managed by uv`, which is `yes` when
+the first lies inside the second, links followed. For the agent's build it should say `yes`; `no`
+means the build is on a Python that conda, Homebrew or anything else on the Mac can change, and
+reinstalling a tag with `install_channel.sh` moves it to one uv manages. `Managed by uv` never
+changes doctor's exit status. Its exit status:
+
+| Exit | Means | What to do |
+|---|---|---|
+| 0 | The report was produced, the interpreter's Unicode database is the one the normalizer is pinned to, and every wired integration imports. | Nothing. |
+| 1 | A check failed. The two Unicode databases differ (`UNICODE_DATABASE_MISMATCH`, naming both versions and the policy page), so every command that normalizes evidence text would refuse to run. Or wired integrations do not import (`INTEGRATIONS_DO_NOT_IMPORT`, naming each one and why), so every command that uses them would fail. Both at once are `INSTALLATION_CHECKS_FAILED`. | Reinstall a tag with `install_channel.sh`, which picks a Python the wheel admits and refuses an incomplete build. Never add a package to the tool environment by hand. |
+| 70 | `doctor` could not make a check at all: the normalizer's pinned version is unknown, or the CLI wires an integration in a way it cannot follow. That is a bug in the build, not a verdict on the installation. | Install a different tag and report the build. |
+
+Nothing else `doctor` reports changes its exit status. Settings not loaded, an unknown package
+version, an unexpected platform, a Python uv does not manage, or a declared extra's package missing (`Extras' packages missing`)
+are described, never failed: none of them is a failure it can state precisely. A missing package
+that a wired integration needs makes that integration fail to import, and that is exit 1. The
+installer refuses a build with any declared package missing.
+
 ## Step 1 — rehearse, in dev
 
 ```bash
 DEBATE_ENV=dev debate-research caselist pull --caselist hsld26 --dry-run
 ```
 
-It makes listing calls only and writes nothing. Read the table: every archive the site lists, and
-what the run decided about each. `already_imported`, `full_archive_not_pulled_weekly` and
-`unrecognised_name` are all normal. `over_daily_budget` means there is more back-catalogue than
-one day's allowance, which is `v1-e30-t06`'s job rather than this schedule's.
+It makes listing calls to OpenCaselist, reads the bucket to compare what the inbox holds with it,
+and writes nothing. Read the table: every archive the site lists, and what the run decided about
+each. `already_imported`, `full_archive_not_pulled_weekly` and `unrecognised_name` are all normal.
+`over_daily_budget` means there is more back-catalogue than one day's allowance, which is
+`v1-e30-t06`'s job rather than this schedule's. The `retention` row lists what a real run would
+remove from the inbox ([The download inbox](#the-download-inbox)); without an AWS session it can
+confirm nothing, and lists every imported download as kept.
 
 Then the real thing, still in dev:
 
@@ -96,22 +180,47 @@ Record the counts in [`docs/data/caselist-sync-runs.md`](../data/caselist-sync-r
 ## Step 2 — install the agent
 
 ```bash
-ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --dry-run
+ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --debate-research "$HOME/.local/bin/debate-research" --dry-run
 ```
 
 `--dry-run` prints the plist and writes nothing; read it before you install it. Then:
 
 ```bash
-ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod
+ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --debate-research "$HOME/.local/bin/debate-research"
 ```
 
-That writes `~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist`, creates the log
-directory and lints the plist with `plutil`. **It starts nothing**, and `RunAtLoad` is false, so
-even loading the agent does not trigger a pull.
+That writes `~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist`, copies the
+wrapper out of the checkout, creates the log directory and lints the plist with `plutil`. **It
+starts nothing**, and `RunAtLoad` is false, so even loading the agent does not trigger a pull.
 
 `--weekday`, `--hour` and `--minute` move the schedule; the default is Wednesday 06:00, the day
-after the site publishes the week's archives. `--debate-research` gives the full path to the
-console script when it is not on the PATH of the shell you install from.
+after the site publishes the week's archives.
+
+### What the agent runs, and where it is
+
+The agent runs nothing from a git checkout (`v1-e34-t10`):
+
+| | Where | Why there |
+|---|---|---|
+| Wrapper | `~/.local/share/debate-research/launchd/run-caselist-sync.sh`, the installer's copy of `ops/launchd/run-caselist-sync.sh` | Beside uv's tool directory, outside every working tree and every protected folder, with no spaces in the path |
+| Console script | `DEBATE_RESEARCH_BIN` in the plist: the path given with `--debate-research`, or the `debate-research` this shell finds, written as found | So that no other `debate-research` earlier on a PATH can stand in for the installed build |
+| `PATH` | The console script's directory, then `/usr/bin:/bin:/usr/sbin:/sbin` | The command runs nothing else but `osascript`, for notifications, which is in `/usr/bin`. The installing shell's PATH is not copied |
+| Data | Whatever the installed build reports for `storage.data_dir`; the installer asks it with `config show` | The bundled profile decides it, not the checkout |
+| Refused | Any of the above, the log directory or HOME under `~/Documents`, `~/Desktop`, `~/Downloads`, `~/Library/Mobile Documents` (iCloud Drive), `~/Library/CloudStorage` (Dropbox, Google Drive and other File Provider folders) or `/Volumes`; or inside a git working tree or a project `.venv` | macOS privacy protection keeps launchd agents out of those folders, and a checkout or `.venv` changes under the agent |
+
+The wrapper is copied out for two reasons. A checkout's copy is whatever branch is checked out at
+06:00 on Wednesday. And macOS privacy protection does not let a launchd agent open anything under
+the folders in the table's last row. The first scheduled run, on 2026-10-07, ran the checkout's wrapper under `~/Documents`
+and exited 126 with `Operation not permitted`. The installer refuses a wrapper destination
+(`--wrapper-dir`), log directory, data directory or console script under any of those folders, or
+inside a git working tree or a project `.venv`, naming the path and the reason. Nothing is written
+when it refuses.
+
+**Reinstall to update the wrapper.** Editing `ops/launchd/run-caselist-sync.sh`, or pulling a
+change to it, does not reach the agent. Running `install.sh` again replaces the copy in one rename,
+with mode 0755. launchd keeps the plist it loaded, so when the plist changes too (a new wrapper
+path, console script or schedule), boot the agent out and bootstrap it again (Step 3). That resets
+the `runs` count `launchctl print` shows to 0.
 
 ## Step 3 — enable it
 
@@ -120,7 +229,19 @@ launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.debate-intelligence.case
 launchctl print gui/$UID/com.debate-intelligence.caselist-sync
 ```
 
-`print` should show the job, its program arguments and its calendar interval. To run it once,
+After a reinstall, when the agent is already loaded, boot it out and bootstrap the new plist:
+
+```bash
+launchctl bootout gui/$UID/com.debate-intelligence.caselist-sync
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
+launchctl print gui/$UID/com.debate-intelligence.caselist-sync
+```
+
+If `bootstrap` says `Bootstrap failed: 5: Input/output error`, the bootout had not finished; run
+the bootstrap line again.
+
+`print` should show the job, its program arguments (the copied wrapper under
+`~/.local/share/debate-research/launchd/`, never a checkout) and its calendar interval. To run it once,
 immediately, without waiting for Wednesday:
 
 ```bash
@@ -130,17 +251,34 @@ launchctl kickstart -p gui/$UID/com.debate-intelligence.caselist-sync
 A missed run is not skipped: launchd runs a `StartCalendarInterval` job when the machine next
 wakes, so a laptop that was shut at 06:00 on Wednesday runs it that evening.
 
+**Proving launchd can run it, without a sync.** After every install or reinstall:
+
+```bash
+ops/launchd/install.sh --check-launchd
+```
+
+It loads a one-off copy of the installed plist as `com.debate-intelligence.caselist-sync.check`,
+with no schedule, running the copied wrapper's `--check`. That prints the path
+`DEBATE_RESEARCH_BIN` resolves to and the build's `debate-research --version`, and nothing else: no
+`caselist pull`, no listing call, no download. The installer kickstarts it, waits for it, prints
+its log (`~/Library/Logs/debate-research/caselist-sync-check.log`) and exit code, and boots it out.
+It reads the agent's `runs` count before and after and fails if it changed. It refuses to run
+against an agent whose wrapper is not this checkout's copied out, so reinstall first. Success is
+`exit code 0`, the version you installed, and the same `runs` before and after. An exit code of
+126 is the privacy-protection failure above.
+
 ## Watching it
 
 You should not have to go looking. A failed stage, an expired `caselist_token`, an expired SSO
 session, and a cap backlog that has grown for two runs in a row each post a macOS notification
 naming the command that fixes it (`caselist.notifier`, `auto` by default). Every run also appends
 one record to the run log, `<data_dir>/caselist-sync-runs.jsonl`, and publishes it to
-`reports/sync-runs/<yyyy>/<run-id>.json` in the bucket (`v1-e34-t03`):
+`reports/sync-runs/<yyyy>/<run-id>.json` in the bucket (`v1-e34-t03`). The first command reads this
+machine's log, the second the bucket's copy:
 
 ```bash
-debate-research caselist runs --last 5            # this machine's log
-debate-research caselist runs --last 5 --remote   # the bucket's copy
+debate-research caselist runs --last 5
+debate-research caselist runs --last 5 --remote
 ```
 
 Its caption says how long ago the newest run started, and says the schedule may have stopped when
@@ -165,11 +303,80 @@ One JSON object per run on stdout. The fields to read first:
 | `files_imported`, `blobs_stored` | What the importers filed, and how much of it was new |
 | `objects_published` | What reached the bucket |
 | `pending_publish` | Snapshots waiting for an AWS session |
+| `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
 | `stages[]` | One entry per stage, each with the sentence saying why it ended that way |
 
 Nothing in that object is a school, a team code, a debater's initials, a disclosure path or the
 `caselist_token` — the policy forbids all of them in a log, and the summary is built to the same
 rule, so these logs can be pasted into an issue as they are.
+
+## The download inbox
+
+`<data_dir>/inbox` (or `caselist.inbox_dir`) is where a pull downloads to and what it imports from.
+Between two runs it holds:
+
+* **Weekly archives** waiting to be imported or published (`<slug>-weekly-<date>.zip`): a week whose
+  import failed, a newer week waiting behind it, or a week whose publish is pending an AWS login.
+* **Camp downloads** in the same state (`openev-<id>-<name>`), and any camp download the OpenEv
+  delivery record does not cover.
+* `.partial/`, downloads in progress, which a run sweeps.
+* Anything put there by hand. The pull never touches a file whose name it did not give it.
+
+Everything else leaves at the end of the run that confirms it, in the **retention** stage, which
+runs after the report stage while the run still holds its lock (`v1-e34-t11`). A file is removed
+only when all of these are true:
+
+1. **It is imported.** A manifest on this machine came from these exact bytes: the week's own
+   manifest names the zip's sha256, or an OpenEv release manifest row names the camp download's.
+   That is what keeps a download waiting for an import retry, since the retry imports precisely the
+   inbox files no manifest came from.
+2. **Its snapshot is confirmed in the bucket, by this run.** For a week this run published, that is
+   the report stage's comparison. For a week an earlier run imported, the retention stage compares
+   it with the bucket itself (the same comparison `caselist status` makes) rather than trusting
+   what an earlier run said. An expired SSO session therefore confirms nothing, and the files wait
+   for a run that can check.
+3. **For a camp download, the delivery record holds its digests**
+   (`<data_dir>/caselist-sync-openev-deliveries.json`). Once the copy is gone, the record is how the
+   next run knows a camp release was already imported, or was removed. A camp file imported before
+   `v1-e34-t07` has no record entry, so its copy stays, named in every summary. That is harmless,
+   and it is never fetched again while the copy is there.
+
+**Nothing is kept longer, the newest week included.** The usual reason to keep a zip is that
+re-importing after a failed publish costs nothing. Here a zip is removed only after its publish is
+confirmed, and a publish (or a re-publish, after drift) reads the local store, never the inbox, so
+that case cannot arise. The newest weekly is also the largest, because the weeklies are cumulative.
+A removed week is never fetched again: a week on or before the newest imported one is
+`already_imported` whether or not its zip is here. The site keeps the weekly back-catalogue
+(ADR-0017), so a zip can be fetched again by hand if one is ever needed.
+
+**A run that downloads nothing still runs retention.** The first run after `v1-e34-t11` therefore
+clears the backlog that earlier builds left: every weekly they imported and published. A **dry run**
+removes nothing. Its retention row lists what a real run would remove now (`would_remove`, with the
+bytes), what it would keep and why, and the weeks it would also remove once it had imported them
+and the bucket confirmed them. `--publish-pending` removes nothing; the next pull does. An
+environment with no bucket can confirm no publish, so nothing ever leaves its inbox.
+
+**What the summary says.** The `retention` stage's reason, which the run log and the bucket's run
+report keep as written, lists every removed and kept file and the total bytes freed. Weeklies are
+named by caselist and date (`hsld26 2026-09-15`), and camp downloads and anything else by count and
+the first twelve hex digits of the sha256, never by file name: a camp file's name is its title, and a
+name given by hand can say anything. The JSON summary carries the same lists under `inbox_retention`.
+A kept file's reason is one of:
+
+| Reason | What it means | What to do |
+|---|---|---|
+| `not_imported` | No manifest came from these bytes. Usually the import failed, or the week waits behind an older one; the next run imports it. | Fix what the import stage's reason names (see "An import failed"). A week that no run will import, whose week is held from other bytes, can be deleted by hand |
+| `not_confirmed` | Imported, but the bucket does not hold the snapshot in sync, or could not be read | `aws sso login` and `caselist pull --publish-pending`; if it persists, `caselist status` names the drift |
+| `no_delivery_record` | A camp download imported before the delivery record existed | Nothing. It stays and costs nothing |
+| `unclassified` | A file whose name the pull does not give a download | Yours to keep or delete |
+
+**Removal and retention both delete inbox files, and never the same ones twice.** `caselist remove`
+(`v1-e30-t09`) deletes or rewrites the inbox files holding something a removal took out, whether or
+not they are imported. Retention deletes imported, confirmed downloads, whatever they hold. Both take
+the sync's run lock, so they cannot run at once, and each counts only what it deleted: retention
+judges the inbox as a removal left it.
+
+Measure the inbox before and after with `du -sh <data_dir>/inbox`.
 
 ## When something goes wrong
 
@@ -190,8 +397,8 @@ If it happens immediately after a fresh login, **stop** and do not retry: access
 suspended, which is the site's right (policy clause 10), and the next step is to contact the
 maintainer, not to work around it.
 
-**A download failed.** What did download is in the inbox and imported, up to the first week that
-did not arrive; a newer week of the same caselist waits in the inbox behind it rather than being
+**A download failed.** What did download is imported, up to the first week that did not arrive,
+and leaves the inbox once the bucket confirms it; a newer week of the same caselist waits in the inbox behind it rather than being
 imported out of order. Nothing needs doing: the next scheduled run fetches the missing week and
 imports it and everything behind it, oldest first, and it does not fetch again anything already
 in the inbox — each fetch spends one of the five.
@@ -246,10 +453,11 @@ ceiling.
 launchctl bootout gui/$UID/com.debate-intelligence.caselist-sync
 ```
 
-The agent stops; the plist stays. To remove it entirely:
+The agent stops; the plist and the copied wrapper stay. To remove both:
 
 ```bash
 rm ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
+rm ~/.local/share/debate-research/launchd/run-caselist-sync.sh
 ```
 
 Nothing already captured is affected: the archives, the manifests and the bucket are all

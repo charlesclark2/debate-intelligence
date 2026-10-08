@@ -9,6 +9,7 @@ what is being tested is the skeleton every one of them will run inside.
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import sys
 from collections.abc import Callable
@@ -17,6 +18,8 @@ from typing import Any
 
 import pytest
 import typer
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 from typer.testing import CliRunner, Result
 
 from debate_cli import UNKNOWN_VERSION, __version__, package_version
@@ -130,7 +133,10 @@ def test_doctor_reports_the_environment_as_json() -> None:
     assert envelope["command"] == "doctor"
     data = envelope["data"]
     assert data["cli_version"] == __version__
-    assert data["python_version"].startswith("3.12")
+    # The supported interpreter is debate_core's Requires-Python, stated nowhere else (v1-e01-t14).
+    assert Version(data["python_version"]) in SpecifierSet(
+        importlib.metadata.metadata("debate-core")["Requires-Python"]
+    )
     # Every real run has a settings loader (v1-e02-t05); `doctor` reports that it is wired, not
     # that it has been run — loading is lazy and `doctor` does not need settings.
     assert data["settings_configured"] is True

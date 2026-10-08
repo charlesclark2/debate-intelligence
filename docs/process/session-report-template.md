@@ -1,3 +1,4 @@
+<!-- docs-index: Template for session reports -->
 # Session report template
 
 `scripts/task start` copies everything below the marker into
@@ -14,6 +15,13 @@ Rules for the session:
   longer than 2 minutes) and put the command under **Operator follow-ups**.
 * Anything that differs from the spec goes under **Deviations**, with the reason. Do not edit the
   spec to match the code without saying so here.
+* **A later review is appended; no earlier review is ever renamed or edited.** When work comes back
+  for a second review, after `CHANGES_REQUESTED` or in a task restarted with `scripts/task resume`
+  after a `--partial` merge, the session leaves everything already in the report as it is, adds its
+  own dated section after it (for example `## Resumed 2026-10-08: <what this session did>`), and
+  ends the report with a new, empty **PM review** section copied from below. `scripts/task` reads
+  the last verdict line in the report, so that new review decides and the earlier ones are history
+  ([task-workflow.md](task-workflow.md#4-pm-review)).
 
 <!-- TEMPLATE START -->
 # Session report: {{TASK}}
@@ -74,7 +82,8 @@ None.
 
 ## PM review
 
-<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
 **Verdict:** PENDING
 <!-- ACCEPTED / CHANGES_REQUESTED -->

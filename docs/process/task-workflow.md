@@ -1,3 +1,4 @@
+<!-- docs-index: `scripts/task`: start → session → PM review → PR → finish -->
 # Task workflow: from spec to merged PR
 
 Every piece of implementation work is one PlanSpec task, done by one Claude session in its own
@@ -50,7 +51,10 @@ scripts/task start v1-e01-t03-uv-workspace-tooling
 This:
 
 1. fetches `origin/dev` and creates a worktree at
-   `../debate-intelligence-worktrees/<task>` on a new branch `task/<task>`;
+   `../debate-intelligence-worktrees/<task>` on a new branch `task/<task>`. It refuses, creating
+   nothing, if `origin/dev` already carries the task's session report: a task merged with
+   `--partial` is restarted with `scripts/task resume` instead (see
+   [Coming back to a partly merged task](#coming-back-to-a-partly-merged-task));
 2. refuses (and cleans up) if any prerequisite is not `Succeeded` on `origin/dev` (`--force`
    overrides);
 3. sets the task Goal's `status.phase` to `InProgress`, creates
@@ -68,6 +72,10 @@ This:
 The VS Code launcher uses the `code` command if it's installed (VS Code Command Palette →
 *Shell Command: Install 'code' command in PATH*); otherwise it falls back to `open -a`.
 
+If any step fails after the worktree is created, `start` removes the worktree (with its `.task/`)
+and the branch that run created, so running it again starts clean. It never removes a worktree or
+branch that existed before it ran: it refuses before creating anything if either is already there.
+
 Several tasks can run at once, one worktree each, as long as their prerequisites allow it.
 
 ### 3. The session works
@@ -78,6 +86,8 @@ and to finish by setting the phase to `Succeeded` and completing the session rep
 
 `scripts/task resume <task>` reopens the worktree in VS Code; continue the task's conversation
 from Claude Code's past-conversations list. With `--launch terminal` it runs `claude --continue`.
+For a task merged with `--partial` whose worktree is gone, the same command recreates it (see
+[Coming back to a partly merged task](#coming-back-to-a-partly-merged-task)).
 
 ### 4. PM review
 
@@ -101,6 +111,17 @@ it (the PM's shell can't run git against your worktrees). With `CHANGES_REQUESTE
 session commits the report along with its fixes. With `ACCEPTED`, `scripts/task pr` commits
 the report for you (`PM review: ACCEPTED`) when it is the only uncommitted change.
 
+**A later review is appended; no earlier review is ever renamed or edited.** `scripts/task` reads
+the **last** `**Verdict:**` line in the report; earlier ones are history. So when work comes back
+for review a second time, after `CHANGES_REQUESTED` or in a resumed task, the session adds its new
+sections after everything already in the report and ends it with a new, empty **PM review** section
+copied from the [template](session-report-template.md). The PM writes the new verdict there. Until
+then that empty review's `PENDING` is what `scripts/task pr` reads, so an earlier `ACCEPTED` can never
+open a pull request for work nobody has reviewed. (Before `v1-e01-t18` the check read the first
+verdict, and two reports renamed an earlier label, to `**Verdict (first review):**` and
+`**Verdict (first session):**`, to get past it. Those reports stay as they are; nobody renames a
+label any more.)
+
 If you move or rename the folder that holds the repo and worktrees, run `git worktree repair`
 from the main clone, passing each worktree's new path. Worktrees store absolute paths.
 
@@ -110,7 +131,7 @@ from the main clone, passing each worktree's new path. Worktrees store absolute 
 scripts/task pr <task>
 ```
 
-Refuses unless the worktree is clean, the verdict is `ACCEPTED`, the spec phase is `Succeeded`,
+Refuses unless the worktree is clean, the report's last verdict is `ACCEPTED`, the spec phase is `Succeeded`,
 and the branch contains the latest `origin/dev` (otherwise run `scripts/task sync <task>`). It
 runs spec validation, pushes `task/<task>`, and opens a PR into `dev` whose body is built from
 the report. With the GitHub CLI (`brew install gh`, then `gh auth login`) the PR is created
@@ -151,12 +172,55 @@ merged task whose report does not say which criteria remain is indistinguishable
 one six weeks later.
 
 Because a partially merged task stays `InProgress` on `dev`, the phase cannot confirm the merge and
-the squash commit breaks ancestry, so `finish --partial` confirms it by checking that `origin/dev`
-carries the accepted session report instead.
+the squash commit breaks ancestry, so `finish --partial` confirms it by checking the session report
+on `origin/dev` instead: its last verdict must be `ACCEPTED` and, while the task branch exists, it
+must be the branch's report. A resumed task's earlier accepted report is on `dev` before its second
+pull request merges, so `ACCEPTED` alone would confirm a merge that has not happened.
 
 The verdict and the phase answer different questions, which is why they can disagree: the verdict
 is the PM's review of the session's work, the phase is the Goal's completion. When the remaining
 criteria are closed, set the phase to `Succeeded` in a small spec PR of its own.
+
+## Coming back to a partly merged task
+
+When a task merged with `--partial` needs another session, not just an operator run, restart it
+with `resume`. After `finish --partial` the task has no worktree and no branch; it is still
+`InProgress` on `origin/dev`, and its session report is there. Check first, which creates nothing:
+
+```bash
+scripts/task resume <task> --dry-run
+```
+
+Then restart it:
+
+```bash
+scripts/task resume <task>
+```
+
+It:
+
+1. refuses, creating nothing, unless the task is `InProgress` on `origin/dev` with its report
+   there and has no worktree, no local branch and no `origin/task/<task>` branch. A task that was
+   never started is pointed at `start`; a branch left without a worktree is named, with the
+   `git worktree add` that attaches it, and is not touched;
+2. creates the worktree and a new branch `task/<task>` from `origin/dev`;
+3. syncs the workspace venv (`uv sync --all-packages`);
+4. writes `<worktree>/.task/prompt.md`, the kickoff prompt with a note that this is a resumed task:
+   the session appends to the existing report and keeps every earlier PM review;
+5. commits nothing: the phase is already `InProgress` and the report already exists, so the
+   branch starts exactly at `origin/dev`;
+6. opens the session the way `start` does. Give it the prompt and the PM's instructions for what
+   this session is for.
+
+As with `start`, a step that fails after the worktree is created removes the worktree and branch
+that run created, so running it again starts clean.
+
+The resumed session follows the rule in [PM review](#4-pm-review): it appends its own dated section,
+for example `## Resumed 2026-10-08: <what this session did>`, after everything already in the
+report, and ends the report with a new, empty **PM review**. Nothing already in the report is
+overwritten, and no earlier review is renamed or edited. From there it is the ordinary path:
+`scripts/task pr <task>` (with `--partial` again if criteria are still open), merge, and
+`scripts/task finish <task>` (or `finish --partial`).
 
 ## Keep your main checkout on `dev`
 
@@ -188,8 +252,11 @@ Two rules learned the hard way:
 
 ## Changes that are not a task
 
-The PM also refreshes `ROADMAP.md` this way (`specs/roadmap-refresh`) after a batch of merges.
-Task sessions never regenerate it, so parallel task PRs don't conflict on it.
+`ROADMAP.md` and the table in `docs/README.md` are generated, and task sessions never regenerate
+them. After every merge into `dev`, `.github/workflows/refresh-generated-files.yml` regenerates both
+and keeps one pull request, **Refresh generated files**, open while either is stale. It dispatches
+`ci` on its own branch, because a pull request the workflow opens starts no checks. Merge it like any
+other change into `dev`, and always before a promotion (`v1-e01-t16`).
 
 Process, documentation, or spec-only changes that no task spec covers follow the same path by
 hand: a branch off `dev` (`docs/<slug>`, `specs/<slug>` or `tooling/<slug>`), a PR into `dev`, merge, delete the

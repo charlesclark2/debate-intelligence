@@ -3,7 +3,7 @@ name = "debate-cli"
 version = "0.1.0"
 description = "debate-research command-line interface (thin surface over debate_core)."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     # The CLI is the delivery surface that wires debate-core's adapters (debate_cli.container), so it
     # depends on the extras those adapters need; debate-core's own install stays free of them

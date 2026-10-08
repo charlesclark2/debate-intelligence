@@ -156,12 +156,15 @@ jobs:
         # imports every integration the CLI's composition root wires, so a build that cannot do what
         # its commands are wired to do (v0.1.0-dev.33 had no boto3) fails here and is never
         # published. Its tag stays claimed and its number is skipped, as for any failed build.
+        # The script also runs `doctor` (v1-e01-t14), so a build on a Python whose Unicode database
+        # the normalizer is not pinned to fails here too. --no-path-warning: the tool directory is
+        # never on this runner's PATH, so the warning that says so is noise (v1-e01-t14 ac6).
         if: steps.existing.outputs.published == 'false'
         env:
           TAG: ${{ steps.claim.outputs.tag }}
         run: |
           export UV_TOOL_DIR="$RUNNER_TEMP/verify-tools" UV_TOOL_BIN_DIR="$RUNNER_TEMP/verify-bin"
-          sh scripts/install_channel.sh --dir dist "$TAG"
+          sh scripts/install_channel.sh --no-path-warning --dir dist "$TAG"
 
       - name: Publish the GitHub pre-release
         if: steps.existing.outputs.published == 'false'

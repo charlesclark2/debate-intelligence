@@ -11,6 +11,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `SnapshotStore` | `persistence` | Immutable, content-addressed blobs |
 | `EvidenceObjectStore` | `evidence_store` | Evidence objects stored under a name: manifests, reports |
 | `CardRepository` | `persistence` | Card records and their revision checks |
+| `CardEditLog` | `card_edit_log` | The audit trail of accepted student edits to cards (`v1-e03-t05`) |
 | `SearchRepository` | `persistence` | Searches and their ranked results |
 | `CaselistRepository` | `caselist` | Imported caselist and camp-file records (E30) |
 | `ArchiveMember` / `SkippedMember` | `archive` | What reading a weekly archive yields (E30) |
@@ -42,6 +43,7 @@ from debate_core.application.ports.archive import (
     SkippedMember,
     SkipReason,
 )
+from debate_core.application.ports.card_edit_log import CardEditEntry, CardEditLog
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.caselist_source import (
     ArchiveKind,
@@ -101,6 +103,8 @@ __all__ = [
     "ArticleRepository",
     "BlobKey",
     "CandidateResult",
+    "CardEditEntry",
+    "CardEditLog",
     "CardRepository",
     "CaselistArchiveSource",
     "CaselistInfo",

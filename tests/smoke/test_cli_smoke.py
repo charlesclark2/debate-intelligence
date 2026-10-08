@@ -80,6 +80,16 @@ def test_doctor_reports_the_builds_own_interpreter_and_every_service(installed_c
     assert report["cli_version"] == report["core_version"] == version
     assert report["settings_configured"] is True
     assert "verify_manifest" in report["services"]
+    # doctor exits 1 on a mismatch, so data_of would already have failed; this names the check.
+    assert report["unicode_database_matches"] is True
+    assert report["python_unicode_version"] == report["normalizer_unicode_version"]
+    # The same for the wired integrations (v1-e01-t22): every one the build's composition root
+    # imports was found and imported by the build itself. The S3 adapter is the one v0.1.0-dev.33
+    # shipped without.
+    assert report["integrations_import"] is True
+    assert report["integrations_failed"] == {}
+    assert "debate_core.integrations.s3" in report["integrations_wired"]
+    assert "debate_core.integrations.opencaselist" in report["integrations_wired"]
     interpreter = Path(report["python_executable"])
     assert interpreter.resolve() == installed_cli.build.interpreter.resolve()
     if installed_cli.build.installed:

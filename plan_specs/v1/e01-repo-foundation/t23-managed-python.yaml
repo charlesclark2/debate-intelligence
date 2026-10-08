@@ -1,0 +1,94 @@
+# TASK v1-e01-t23-managed-python - The installed build runs on a Python that uv manages
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t23-managed-python
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The installed build runs on a Python that uv manages"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e34-t10's Follow-up work.
+  description: >-
+    `install_channel.sh` passes debate_core's Requires-Python specifier to `uv tool install`
+    (v1-e01-t14), and uv takes the first interpreter that satisfies it. On the coach's Mac that is
+    anaconda's: `~/.local/share/uv/tools/debate-cli/bin/python` links to
+    `~/anaconda3/bin/python3` (3.12.7). The weekly launchd agent's build therefore depends on a
+    conda installation that conda itself updates. A `conda update python` that moves the base
+    environment to 3.13, or removing anaconda, breaks the agent's build in place: no install runs,
+    no rehearsal catches it, and the next scheduled run fails. doctor would only notice when the
+    Unicode database changes. Have the installer request an interpreter that uv manages itself, so
+    only reinstalling the build ever changes the agent's interpreter. Out of scope: the specifier
+    itself (t14), the pinning (t22), and the Unicode pin.
+  priority: 2
+  constraints:
+    packages: [scripts, tests/scripts, debate_cli.commands, packages/debate_cli/tests, packages/debate_cli/README.md, docs/runbooks]
+    forbidden:
+      - An installed build whose interpreter lies outside uv's own managed-Python directory
+      - Network access in the tests for this task
+      - doctor failing on where its interpreter came from; that fact is informational
+      - Touching the operator's real install in a session
+  context:
+    - kind: TaskRef
+      name: v1-e01-t22-install-resolves-once
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Both of `install_channel.sh`'s installs, the rehearsal and the real one, use an interpreter
+        uv manages, requested through uv's own option, and still matching debate_core's
+        Requires-Python. A test puts a satisfying unmanaged interpreter first on PATH and shows the
+        installed tool's interpreter is not it. The script states which uv option it relies on, and
+        what happens with a uv that lacks it. Shown failing first.
+    - id: ac2
+      description: >-
+        When no managed interpreter is installed yet, the installer obtains one through uv and says
+        so, or refuses with the command that installs one. Choose which, and say why, given that the
+        weekly agent never runs the installer.
+    - id: ac3
+      description: >-
+        doctor reports whether the running interpreter is uv-managed, as an informational fact. The
+        runbook's "Checking an installed build" section says why it matters for the agent.
+    - id: ac4
+      description: >-
+        Operator follow-up: reinstall the agent's build in a week the agent is not due to run, and
+        record doctor showing a managed interpreter and the agent-environment check passing.
+status:
+  phase: InProgress
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t23-managed-python-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Request a managed interpreter in both installs, decide the bootstrap, report provenance in doctor.
+  goalRef:
+    name: v1-e01-t23-managed-python
+  graph:
+    nodes:
+      - id: managed-python
+        kind: Task
+        name: A uv-managed interpreter for the installed build
+        description: >-
+          The installer option, its test against an unmanaged interpreter on PATH, and doctor's fact.
+        estimatedEffort: 2.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Install script tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_install_channel.py]
+status:
+  phase: Pending

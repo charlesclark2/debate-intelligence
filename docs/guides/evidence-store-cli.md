@@ -1,3 +1,4 @@
+<!-- docs-index: Using `debate-research store sync\|ls\|get`: environments, the dry-run default, the production guard, verification and resume -->
 # Moving evidence with `debate-research store`
 
 How to get evidence from your machine into the team's evidence bucket, and back. Three commands:

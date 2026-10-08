@@ -1,3 +1,4 @@
+<!-- docs-index: Counts from each weekly `caselist pull`, recorded by the operator; aggregates only -->
 # Recorded caselist sync runs
 
 Counts from the weekly `debate-research caselist pull` (`v1-e34-t02-scheduled-sync`), recorded by

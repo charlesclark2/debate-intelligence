@@ -60,8 +60,8 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 35 | 29 | 207 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 33 | 22 | 284 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 36 | 29 | 210 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 33 | 23 | 284 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -113,6 +113,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [A failure that may succeed on retry never shares an exit code with a verdict](plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml) `v1-e01-t20-retryable-failures-exit-3` | Pending | 1 | 3.0 |
 | [The storage and OpenCaselist smoke checks run against the installed build](plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml) `v1-e01-t21-installed-smoke-stand-ins` | Pending | 1 | 4.0 |
 | [The real install is the build the rehearsal checked, and doctor answers for all of it](plan_specs/v1/e01-repo-foundation/t22-install-resolves-once.yaml) `v1-e01-t22-install-resolves-once` | Succeeded | 1 | 3.0 |
+| [The installed build runs on a Python that uv manages](plan_specs/v1/e01-repo-foundation/t23-managed-python.yaml) `v1-e01-t23-managed-python` | Pending | 1 | 2.5 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -192,7 +193,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The sync does not re-download a file it has been told to remove](plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml) `v1-e34-t07-suppressed-downloads` | Succeeded | 2 | 7.0 |
 | [A camp file uploaded again upstream is fetched](plan_specs/v1/e34-caselist-sync/t08-revised-camp-files.yaml) `v1-e34-t08-revised-camp-files` | Pending | 1 | 4.0 |
 | [Retire the legacy download ledger](plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml) `v1-e34-t09-retire-legacy-ledger` | Pending | 1 | 2.0 |
-| [The weekly agent runs nothing from a git checkout](plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) `v1-e34-t10-agent-outside-checkout` | Pending | 1 | 2.0 |
+| [The weekly agent runs nothing from a git checkout](plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) `v1-e34-t10-agent-outside-checkout` | Succeeded | 1 | 2.0 |
 | [Imported downloads leave the inbox](plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml) `v1-e34-t11-inbox-retention` | Pending | 1 | 4.0 |
 
 

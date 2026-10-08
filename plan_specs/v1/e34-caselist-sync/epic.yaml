@@ -250,6 +250,7 @@ spec:
       - t06
       - t07
       - ext-v1-e01-t09-dev-prerelease-channel
+      - t10
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e34-t05-enable-schedule reports phase Succeeded
@@ -351,7 +352,7 @@ spec:
         specRef: plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml
         goalRef: v1-e34-t10-agent-outside-checkout
       dependsOn:
-      - t05
+      - t02
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e34-t10-agent-outside-checkout reports phase Succeeded

@@ -15,6 +15,17 @@ metadata:
     debate/title: The weekly agent runs nothing from a git checkout
 spec:
   # Filed by the PM, 2026-10-01, from the operator's install of the weekly agent (v1-e34-t05).
+  #
+  # Amended by the PM, 2026-10-07. The first scheduled run proved the first defect is not only a
+  # versioning hazard: it stops the agent from running at all. launchd started the job at 06:00 on
+  # Wednesday 2026-10-07 (`runs = 1`), and it exited 126 at once. caselist-sync.err.log reads
+  # "/bin/sh: /Users/charlesclark/Documents/debate/.../ops/launchd/run-caselist-sync.sh: Operation not
+  # permitted". That is macOS privacy protection (TCC): a launchd agent may not open files under
+  # ~/Documents, and the checkout lives there. The wrapper's mode is -rwxr-xr-x, so this is not the
+  # executable bit. Two consequences for the plan. This task no longer depends on v1-e34-t05; t05
+  # depends on it, because t05's ac3 needs a scheduled run that succeeds, and none can until this
+  # lands. And copying the wrapper "outside every git working tree" is not enough: it must also be
+  # outside every folder macOS protects (ac4).
   description: >-
     Two defects in `ops/launchd/install.sh`, found when the agent was installed on the coach's Mac.
     First, the plist's ProgramArguments point at `ops/launchd/run-caselist-sync.sh` inside the working
@@ -28,18 +39,25 @@ spec:
     anaconda and pyenv directories come before `~/.local/bin` and could shadow the installed build. Copy
     the wrapper to a location outside every git working tree at install time (and say where in the
     runbook), and write the resolved console-script path into the plist as `DEBATE_RESEARCH_BIN`, which
-    the wrapper already honours. Out of scope: the sync service, the schedule, and the installed-build
+    the wrapper already honours. The copy must also sit outside every folder macOS protects from
+    background processes (Documents, Desktop, Downloads, iCloud Drive, removable volumes): the first
+    scheduled run, on 2026-10-07, exited 126 with "Operation not permitted" because the wrapper was
+    under ~/Documents. Out of scope: the sync service, the schedule, and the installed-build
     extras (v1-e01-t17).
   priority: 2
   constraints:
-    packages: [ops/launchd, docs/runbooks]
+    # tests/integration added by the PM, 2026-10-07: the installer's tests live there.
+    packages: [ops/launchd, docs/runbooks, tests/integration]
     forbidden:
       - A plist that references any path inside a git working tree
       - Resolving the console script through PATH when the installer knew its full path
       - Changing the weekly cadence or RunAtLoad
+      - Any path in the plist, or any file the wrapper reads, under a folder macOS protects from background processes
+      - Proving the fix by spending the download cap, or with a run that would count as v1-e34-t05's first scheduled run
   context:
+    # Was v1-e34-t05 until 2026-10-07 (see the PM note above): t05 cannot finish until this lands.
     - kind: TaskRef
-      name: v1-e34-t05-enable-schedule
+      name: v1-e34-t02-scheduled-sync
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -57,6 +75,21 @@ spec:
         Re-running the installer replaces the copied wrapper, so an updated wrapper reaches the agent by
         reinstalling, and the scheduled-sync runbook says so. The operator reinstalls the agent and the
         report records `launchctl print` showing the new program path.
+    - id: ac4
+      description: >-
+        Added by the PM, 2026-10-07. The installer refuses a wrapper destination, data directory, log
+        directory or console-script path under ~/Documents, ~/Desktop, ~/Downloads, ~/Library/Mobile
+        Documents or /Volumes, naming the path and the reason, and a test shows each refused. The
+        default destination is outside all of them, and the runbook says where it is and why.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-07. Before Wednesday 2026-10-14 the operator proves that launchd can
+        execute the reinstalled agent's wrapper, without a sync run and without spending the download
+        cap: for example a one-off check label the installer bootstraps, kickstarts and boots out,
+        running the copied wrapper with an argument that only resolves `DEBATE_RESEARCH_BIN` and prints
+        its version. The report records the check's output and exit code 0, and that the real agent's
+        `runs` count did not change. The scheduled run on 2026-10-14 is then v1-e34-t05's ac3, not this
+        task's.
 status:
   phase: Pending
 ---

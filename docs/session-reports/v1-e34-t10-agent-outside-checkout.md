@@ -7,7 +7,7 @@
 | Spec | [`plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml`](../../plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) |
 | Epic / release | `v1-e34-caselist-sync` / `v1.1` |
 | Branch | `task/v1-e34-t10-agent-outside-checkout` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -16,18 +16,19 @@
 0755 on every install, and the plist names that copy. The plist also pins the console script as
 `DEBATE_RESEARCH_BIN`, with a PATH of only its directory plus `/usr/bin:/bin:/usr/sbin:/sbin`. Every
 path the agent will use is refused if it is under `~/Documents`, `~/Desktop`, `~/Downloads`,
-`~/Library/Mobile Documents` or `/Volumes`, or inside a git working tree or a project `.venv`. The
+`~/Library/Mobile Documents`, `~/Library/CloudStorage` or `/Volumes`, or inside a git working tree or a project `.venv`. The
 refusal names the path and the reason, and nothing is written. That covers the wrapper destination,
 the log directory, the console script, the data directory (asked of the build itself) and HOME. For
 ac5, the wrapper has a `--check` mode that only runs `--version`. The installer has
 `--check-launchd`, which loads a one-off `<label>.check` copy of the installed plist, kickstarts it,
 prints its log and exit code, boots it out, and fails if the real agent's `runs` changed.
 
-**The phase stays InProgress.** ac1, ac2 and ac4 pass, and the code side of ac3 and ac5 is done and
-tested. But ac3 asks for the operator's reinstall with `launchctl print` recorded, and ac5 asks for a
-real launchd check on Charlie's Mac. Both are operator steps the session must not take (the PM:
-never bootstrap, boot out or replace the real agent). They are Operator follow-ups 1–4, in the
-order the PM asked for, and must run **before Wednesday 2026-10-14 06:00**.
+**Every criterion passes and the phase is Succeeded.** ac3's operator half and ac5 were operator
+steps the session must not take (never bootstrap, boot out or replace the real agent). Charlie ran
+them on 2026-10-08, before the 2026-10-14 06:00 run: Operator follow-ups 1–4, recorded under ac3
+and ac5. After the PM's review the installer also refuses `~/Library/CloudStorage`, and its closing
+message gives each caselist its `--caselist` flag. Over an already-loaded agent it now prints the
+reload sequence and `--check-launchd` instead of a pull (see "After the PM review").
 
 **One thing for the PM to look at first.** A real dry run on this Mac caught a bug that every fake
 had passed: the real `config show` names `storage.data_dir` twice. The second time is under
@@ -40,7 +41,7 @@ asked of the build at all.
 
 | Node | Status | Notes |
 |---|---|---|
-| `installer` — Copy the wrapper out and pin the console script | Done | Tests written first and shown failing against the old installer (41 of 50), then the wrapper, template, installer and runbook changed. 50 tests pass, 17 mutants caught |
+| `installer` — Copy the wrapper out and pin the console script | Done | Tests written first and shown failing against the old installer (41 of 50), then the wrapper, template, installer and runbook changed. After the PM review: 56 tests pass, 20 mutants caught |
 
 ## Acceptance criteria
 
@@ -50,15 +51,15 @@ asked of the build at all.
 |---|---|---|
 | ac1 — `install.sh --dry-run` renders a plist whose ProgramArguments name a wrapper outside the checkout; a test fails if any rendered path lies inside the repository; shown failing first | **PASS** | `test_the_rendered_plist_names_nothing_inside_the_repository` walks every string in the parsed plist, with PATH split into entries, and fails on any path under `REPOSITORY_ROOT` or below a `.git`. **Before the change** (commit `a694f1c`, tests only): `AssertionError: the plist names paths inside a git working tree: [PosixPath('/Users/charlesclark/Documents/…/v1-e34-t10-agent-outside-checkout/ops/launchd/run-caselist-sync.sh'), …]`, 13 more items (the copied shell PATH's `.venv/bin` and others). **After:** passes, and asserts `ProgramArguments[0]` is `$HOME/.local/share/debate-research/launchd/run-caselist-sync.sh`. **Real dry run on this Mac**, with the installed agent's arguments: `ProgramArguments.0 => /Users/charlesclark/.local/share/debate-research/launchd/run-caselist-sync.sh`, `plutil -lint` → `OK`, exit 0 in 0.77 s, the installed plist's SHA-256 the same before and after, and `~/.local/share/debate-research` still absent |
 | ac2 — the plist sets DEBATE_RESEARCH_BIN to `--debate-research`'s path, or the one on the installer's PATH; a test shows a different `debate-research` earlier on PATH is not the one the wrapper execs | **PASS** | `test_the_plist_pins_the_console_script_it_was_given` (before: `KeyError: 'DEBATE_RESEARCH_BIN'`), `test_without_the_option_the_plist_pins_the_one_found_on_the_installers_path`, and `test_a_console_script_reached_through_a_symlink_is_pinned_as_found`, where `~/.local/bin/debate-research` is written as the link, not its target. `test_a_debate_research_earlier_on_path_is_not_the_one_the_wrapper_execs` does a real install into a temporary HOME and runs the plist's `ProgramArguments` with its `EnvironmentVariables`, with a recording `anaconda3/bin/debate-research` put first on PATH. The pinned script records `--json caselist pull --caselist testcl26` and the shadow records nothing. **Before:** `assert '--json caselist pull --caselist testcl26' in []`, because the old wrapper exec'd the shadow. `test_a_console_script_inside_a_checkout_or_a_venv_is_refused` covers 4 cases: given inside a working tree, given inside a `.venv`, found on PATH inside a working tree, and a symlink into one. **Real dry run:** `DEBATE_RESEARCH_BIN => /Users/charlesclark/.local/bin/debate-research`, `PATH => /Users/charlesclark/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin` |
-| ac3 — re-running the installer replaces the copied wrapper; the runbook says so; the operator reinstalls and the report records `launchctl print` showing the new program path | **Code and runbook PASS; operator half NOT RUN** | `test_an_install_copies_the_wrapper_and_a_reinstall_replaces_the_copy`: install, overwrite the copy with an "older build" wrapper at mode 0700, reinstall. The copy is then byte-equal to `ops/launchd/run-caselist-sync.sh`, mode `0o755`, not a symlink, and the only file in its directory (no `.incoming` left). Runbook: "What the agent runs, and where it is" and "Reinstall to update the wrapper" under Step 2, and the reload sequence in Step 3. **NOT RUN:** the reinstall on Charlie's Mac and `launchctl print` after it. The session may not replace the real agent. Operator follow-ups 2 and 4 |
-| ac4 — the installer refuses a wrapper destination, data directory, log directory or console script under ~/Documents, ~/Desktop, ~/Downloads, ~/Library/Mobile Documents or /Volumes, naming the path and the reason, with a test for each; the default is outside all of them; the runbook says where and why | **PASS** | `test_a_path_under_a_folder_macos_protects_is_refused` runs 20 cases (4 kinds × 5 locations). Each asserts exit 2, `the <kind> <path>` in stderr, the protected folder's name, `privacy protection`, no plist written and no wrapper copied. Before the change the log-directory and console-script cases failed because the old installer accepted them, and the wrapper and data-directory cases failed because the option or check did not exist. Also tested: `~/documents` in lower case, a symlink `~/logs → ~/Documents/logs`, and `test_the_defaults_are_outside_every_protected_folder`. Sample message: `refusing the log directory /…/home/Documents/debate/logs: it is under /…/home/Documents, and macOS privacy protection does not let a launchd agent open anything there (the agent would exit 126, "Operation not permitted")`. Runbook: the table and the paragraph after it |
-| ac5 — before 2026-10-14 the operator proves launchd can execute the reinstalled wrapper without a sync or the download cap; the report records the check's output, exit 0, and an unchanged `runs` | **Mechanism PASS; operator proof NOT RUN** | Wrapper: `test_the_wrapper_check_mode_prints_the_version_and_never_pulls` (the fake records only `--version`), `…_takes_no_other_arguments` (exit 2, nothing called), `…_fails_when_the_console_script_is_missing` (127). **Before:** the old wrapper exit-0'd on `--check --caselist testcl26` and exec'd `debate-research --json caselist pull --check --caselist testcl26`, a pull. Installer `--check-launchd`, against a fake `launchctl` that loads plists and runs jobs the way launchd does (macOS only): bootstrap, kickstart and bootout only `<label>.check`, never the real label except `print`; log printed; `exit code 0`; `runs: 7 before, 7 after`; the check plist removed. Plus: a failing wrapper is reported (exit code 127) and still booted out; the real agent's runs changing fails the check (`7 before, 8 after`); an old plist naming the checkout's wrapper is refused before any bootstrap. **Real, read-only:** the copied wrapper's `--check` under the agent's minimal environment → `run-caselist-sync: check: DEBATE_RESEARCH_BIN is /Users/charlesclark/.local/bin/debate-research`, `debate-research 0.1.0.dev60 (dev channel, prod environment, ec7b95ee9533)`, exit 0. The installer's `sed` reading of a real `launchctl print` (the agent as it is now) → `not running`, `126`, `1`. **NOT RUN:** the launchd check itself. Operator follow-up 3 |
+| ac3 — re-running the installer replaces the copied wrapper; the runbook says so; the operator reinstalls and the report records `launchctl print` showing the new program path | **PASS** | `test_an_install_copies_the_wrapper_and_a_reinstall_replaces_the_copy`: install, overwrite the copy with an "older build" wrapper at mode 0700, reinstall. The copy is then byte-equal to `ops/launchd/run-caselist-sync.sh`, mode `0o755`, not a symlink, and the only file in its directory (no `.incoming` left). Runbook: "What the agent runs, and where it is" and "Reinstall to update the wrapper" under Step 2, and the reload sequence in Step 3. **Operator, 2026-10-08** (follow-ups 2 and 4, as the PM relayed Charlie's results): before, `program` was the checkout's wrapper with `runs = 1` and `last exit code = 126`. The reinstall reported the copied wrapper. After, `program = /Users/charlesclark/.local/share/debate-research/launchd/run-caselist-sync.sh`, `runs = 0`, `"Weekday" => 3`, `"Hour" => 6`, `"Minute" => 0`, and the `.check` label gone |
+| ac4 — the installer refuses a wrapper destination, data directory, log directory or console script under ~/Documents, ~/Desktop, ~/Downloads, ~/Library/Mobile Documents or /Volumes, naming the path and the reason, with a test for each; the default is outside all of them; the runbook says where and why | **PASS** | `test_a_path_under_a_folder_macos_protects_is_refused` runs 24 cases (4 kinds × 6 locations; `~/Library/CloudStorage` added after the PM review, and its 4 cases failed against the previous installer, which installed under it). Each asserts exit 2, `the <kind> <path>` in stderr, the protected folder's name, `privacy protection`, no plist written and no wrapper copied. Before the change the log-directory and console-script cases failed because the old installer accepted them, and the wrapper and data-directory cases failed because the option or check did not exist. Also tested: `~/documents` in lower case, a symlink `~/logs → ~/Documents/logs`, and `test_the_defaults_are_outside_every_protected_folder`. Sample message: `refusing the log directory /…/home/Documents/debate/logs: it is under /…/home/Documents, and macOS privacy protection does not let a launchd agent open anything there (the agent would exit 126, "Operation not permitted")`. Runbook: the table and the paragraph after it |
+| ac5 — before 2026-10-14 the operator proves launchd can execute the reinstalled wrapper without a sync or the download cap; the report records the check's output, exit 0, and an unchanged `runs` | **PASS** | Wrapper: `test_the_wrapper_check_mode_prints_the_version_and_never_pulls` (the fake records only `--version`), `…_takes_no_other_arguments` (exit 2, nothing called), `…_fails_when_the_console_script_is_missing` (127). **Before:** the old wrapper exit-0'd on `--check --caselist testcl26` and exec'd `debate-research --json caselist pull --check --caselist testcl26`, a pull. Installer `--check-launchd`, against a fake `launchctl` that loads plists and runs jobs the way launchd does (macOS only): bootstrap, kickstart and bootout only `<label>.check`, never the real label except `print`; log printed; `exit code 0`; `runs: 7 before, 7 after`; the check plist removed. Plus: a failing wrapper is reported (exit code 127) and still booted out; the real agent's runs changing fails the check (`7 before, 8 after`); an old plist naming the checkout's wrapper is refused before any bootstrap. **Real, read-only:** the copied wrapper's `--check` under the agent's minimal environment → `run-caselist-sync: check: DEBATE_RESEARCH_BIN is /Users/charlesclark/.local/bin/debate-research`, `debate-research 0.1.0.dev60 (dev channel, prod environment, ec7b95ee9533)`, exit 0. The installer's `sed` reading of a real `launchctl print` (the agent as it is now) → `not running`, `126`, `1`. **Operator, 2026-10-08** (follow-ups 1 and 3, as the PM relayed Charlie's results): the build was `0.1.0.dev60` with `doctor exit=0`. `install.sh --check-launchd` gave `com.debate-intelligence.caselist-sync.check exit code 0`, `com.debate-intelligence.caselist-sync runs: 0 before, 0 after`, and `check exit=0`. The PM confirmed every step matched its success description, including the check's `--version` matching step 1's build |
 
 ### Node criterion
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| `installer` — the rendered plist references nothing inside the repository (a dry-run plist names a wrapper outside the checkout and sets DEBATE_RESEARCH_BIN; the test fails against the current installer and passes after) | **PASS** | ac1 and ac2 above. Against `a694f1c` the tests are 41 failed, 9 passed. After: `uv run --frozen pytest tests/integration/test_launchd_install.py -q` → `50 passed in 6.70s` on macOS, so the `plutil` and launchd-check cases ran |
+| `installer` — the rendered plist references nothing inside the repository (a dry-run plist names a wrapper outside the checkout and sets DEBATE_RESEARCH_BIN; the test fails against the current installer and passes after) | **PASS** | ac1 and ac2 above. Against `a694f1c` the tests are 41 failed, 9 passed. After the PM review: `uv run --frozen pytest tests/integration/test_launchd_install.py -q` → `56 passed` on macOS, so the `plutil` and launchd-check cases ran |
 
 ### Mutation
 
@@ -80,6 +81,9 @@ the final code, in two batches of 58 s and 78 s. An earlier pass over 16 of them
 | No git working tree check | Caught, 5 |
 | Symlinks not resolved | Caught, 2 |
 | Data directory read from `config show`'s `sources` | Caught, 18 |
+| No refusal of ~/Library/CloudStorage (after the PM review) | Caught, 4 (its four kinds), in 9.4 s |
+| Next steps without a `--caselist` per slug (after the PM review) | Caught, 1 |
+| A loaded agent not detected, so a reinstall suggests a pull (after the PM review) | Caught, 1 |
 
 ### Whole-repository checks
 
@@ -93,7 +97,7 @@ the final code, in two batches of 58 s and 78 s. An earlier pass over 16 of them
 | Links and doc descriptions | PASS | `check_links.py` → `OK: 1254 relative links and anchors in 170 Markdown files`; `docs_index.py --check-descriptions` → `All 30 indexed documents under docs/ have a description` |
 | Paste safety | PASS | No line containing `#` inside a shell block of the runbook, or in this report's Operator follow-ups |
 | Spec validation | PASS | `uv run scripts/validate_specs.py` → `OK: 308 files, 38 epics, 250 tasks, 20 releases` |
-| CI budget | Within | The installer file runs in about 7 s. Its 50 tests replace 8, and the launchd-check ones skip on the Linux runners |
+| CI budget | Within | The installer file runs in about 7 s. Its 56 tests replace 8, and the launchd-check ones skip on the Linux runners |
 
 ## What the CLI runs at run time, checked for the minimal PATH
 
@@ -130,7 +134,7 @@ The PM asked for this before the shell PATH was dropped. Checked against the ins
   covers reinstalling to update the wrapper, the reload sequence and `--check-launchd` in Step 3,
   and removing the copy in "Disabling it". t22's "Checking an installed build" and t16's
   `docs-index` comment are kept as merged. Both syncs rebased cleanly.
-* **`tests/integration/test_launchd_install.py`**: 50 tests, up from 8 (the 8 kept, the dry-run one
+* **`tests/integration/test_launchd_install.py`**: 56 tests, up from 8 (the 8 kept, the dry-run one
   updated to the copied wrapper); a fake console script, a fake `launchctl`.
 * **This report.**
 
@@ -185,7 +189,33 @@ the installed wrapper passes the same path checks and is byte-identical (`cmp`) 
 * **Cadence and `RunAtLoad` are unchanged.** The real dry run renders `Weekday 3, Hour 6, Minute 0`
   and `RunAtLoad false`, as installed.
 
+## After the PM review
+
+The PM accepted the review and asked for three changes before the PR. Each was shown failing against
+the installer as reviewed (`038a8c6`): 6 failed. Each is also guarded by a mutant, all caught, in
+27 s on a fresh `HYPOTHESIS_STORAGE_DIRECTORY`.
+
+* **`~/Library/CloudStorage` is refused**: the installer's list, its header, the template comment, a
+  new "Refused" row in the runbook table, and four test cases, `a File Provider folder`.
+* **The next steps give each caselist its flag.** They printed `caselist pull hsld26 hspolicy26
+  hspf26`, which the command rejects; now `caselist pull --caselist hsld26 --caselist hspolicy26
+  --caselist hspf26`. Test: `test_after_a_first_install_the_next_steps_give_each_caselist_its_flag`.
+* **A reinstall over a loaded agent says reload and check, never pull.** When `launchctl print
+  gui/<uid>/<label>` succeeds, the installer prints `bootout`, `bootstrap`, `print` and
+  `--check-launchd`, and neither "Nothing is scheduled yet" nor a `caselist pull`, which would spend
+  the download cap. It only reads launchd to decide. Test:
+  `test_a_reinstall_over_a_loaded_agent_suggests_a_reload_and_the_check_never_a_pull`, against the
+  fake `launchctl`, which also asserts the installer only ever ran `print`. Where there is no
+  `launchctl` (Linux CI), the first-install message is shown.
+
+None of the three changes the wrapper or the plist Charlie installed, so his results below stand.
+One note on how they were recorded: the PM's message summarised Charlie's output and did not include
+it verbatim. The ac3 and ac5 rows record that summary.
+
 ## Operator follow-ups
+
+**Done**, by Charlie on 2026-10-08, every step matching its success description (recorded under ac3
+and ac5). Kept as written, because the runbook's reinstall follows the same sequence.
 
 All four on Charlie's Mac, in this order, **before Wednesday 2026-10-14 06:00**, after the agent's
 build has been moved to the first `v1-e01-t22` pre-release. Each takes seconds. Paste the output of
@@ -258,8 +288,6 @@ Success: `program = /Users/charlesclark/.local/share/debate-research/launchd/run
 The second command should fail with `Could not find service`, because the check label is gone.
 The scheduled run on 2026-10-14 is then v1-e34-t05's ac3, not this task's.
 
-When these are pasted back, ac3's operator half and ac5 can be marked PASS and the phase set to
-Succeeded.
 
 ## Follow-up work
 
@@ -267,11 +295,8 @@ Succeeded.
   `~/.local/share/uv/tools/debate-cli/bin/python → /Users/charlesclark/anaconda3/bin/python3`
   (3.12.7). It is outside every protected folder, so it does not affect this task. But a conda
   update or removal would break the agent's build in place, and doctor would only notice the
-  Unicode pin. Belongs with the install channel (E01, after `v1-e01-t14`/`t22`): whether
-  `install_channel.sh` should prefer a uv-managed Python.
-* **`~/Library/CloudStorage`** (Dropbox, Google Drive and other File Provider folders) is also
-  something macOS asks permission for. It is not in the spec's list, so it is not refused. The PM
-  may want it added to ac4's list.
+  Unicode pin. Filed by the PM as `v1-e01-t23-managed-python`.
+* **`~/Library/CloudStorage`**: done in this task after the PM review.
 * **XML-special characters in paths** (`&`, `<`) are still written unescaped into the plist, as
   before this task. `plutil -lint` refuses the result at install, so this fails safe, but with a
   poor message. Small; E34.

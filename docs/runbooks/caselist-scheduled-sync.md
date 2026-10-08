@@ -205,6 +205,9 @@ launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.debate-intelligence.case
 launchctl print gui/$UID/com.debate-intelligence.caselist-sync
 ```
 
+If `bootstrap` says `Bootstrap failed: 5: Input/output error`, the bootout had not finished; run
+the bootstrap line again.
+
 `print` should show the job, its program arguments (the copied wrapper under
 `~/.local/share/debate-research/launchd/`, never a checkout) and its calendar interval. To run it once,
 immediately, without waiting for Wednesday:

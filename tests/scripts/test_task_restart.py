@@ -452,6 +452,20 @@ def test_pr_opens_once_the_current_review_is_accepted(repo: TaskRepo) -> None:
     assert result.returncode == 0, result.stderr
     assert repo.has_remote_branch(PARTLY_MERGED)
     assert "gh pr create --base dev" in repo.log.read_text()
+    # The pull request quotes the review it was opened on, not the first session's.
+    pr_review = (
+        (repo.worktree(PARTLY_MERGED) / ".task" / "pr-body.md").read_text().split("## PM review", 1)[1]
+    )
+    assert "**Verdict:** ACCEPTED" in pr_review
+    assert "PM, 2026-09-23" not in pr_review
+
+
+def test_the_pr_body_quotes_the_last_pm_review() -> None:
+    quoted = helper.section(resumed_report("ACCEPTED"), "PM review")
+
+    assert quoted.startswith("**Verdict:** ACCEPTED")
+    assert "2026-09-23" not in quoted
+    assert "Accepted for a --partial merge." not in quoted
 
 
 def test_the_last_verdict_line_decides() -> None:

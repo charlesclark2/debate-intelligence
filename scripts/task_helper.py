@@ -178,8 +178,9 @@ def cmd_verdict_of(file: str) -> None:
 
 
 def section(text: str, heading: str) -> str:
-    m = re.search(rf"^## {re.escape(heading)}\n(.*?)(?=^## |\Z)", text, re.M | re.S)
-    return re.sub(r"<!--.*?-->\n?", "", m.group(1), flags=re.S).strip() if m else ""
+    """The body of the LAST section with this heading: a later review is appended, never edited in."""
+    found = re.findall(rf"^## {re.escape(heading)}\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    return re.sub(r"<!--.*?-->\n?", "", found[-1], flags=re.S).strip() if found else ""
 
 
 def cmd_pr_body(task: str) -> None:

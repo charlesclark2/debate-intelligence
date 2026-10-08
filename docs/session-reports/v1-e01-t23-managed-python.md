@@ -400,9 +400,41 @@ same, so there is no reload and no `--check-launchd`. The next scheduled run use
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted as a partial merge (`scripts/task pr --partial`). The phase stays `InProgress` until
+Charlie runs operator follow-up 2 after the agent's 2026-10-14 run, and the PM records it.
+
+* **The finding that it was conda's activated base environment, not PATH order:** that measurement
+  is what makes the ac1 test honest. A PATH-only stand-in would have passed against the old script.
+  Setting `CONDA_PREFIX` and `CONDA_DEFAULT_ENV` the way `conda init` does, with the control test
+  showing the stand-in is live, is the right construction.
+* **Decision 1 (check what uv gave, not only what was asked for): accepted.** It is t22's principle
+  applied to the interpreter, and mutation shows it is the only check that catches a uv ignoring the
+  option.
+* **Decision 2 (download, and say so):** accepted, as decided.
+* **Decision 4 (how doctor decides):** accepted. It uses uv's own rule (location under
+  `uv python dir`), resolves links on both sides, and compares by path component. The surviving link
+  mutant, followed by the new test that catches it, is mutation testing doing its job.
+* **Decisions 5 and 7: accepted.** They are stated honestly. doctor answers from its own
+  environment, and "only a reinstall changes the interpreter" is true except for uv commands someone
+  runs on purpose.
+* **Decision 8 (the installer tests need a managed Python and fail rather than skip without one):**
+  accepted. CI installs one, and this Mac has one.
+
+**Not filed:**
+
+* **A smoke assertion on `python_uv_managed`.** It is informational, and it depends on the runner's
+  `UV_PYTHON_INSTALL_DIR` reaching the smoke environment.
+* **uv's PATH warning:** as before.
+
+**Noted:** the default suite is now about 100 s on this Mac. A session that runs the whole suite
+uses `-n auto`, or hands it to the operator if it passes two minutes (working agreement 1).
+
+**Operator follow-up 2:** the PM will give Charlie the tag from follow-up 1's log, rather than
+relying on the release body naming the commit.

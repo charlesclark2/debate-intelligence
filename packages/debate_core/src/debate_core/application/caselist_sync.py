@@ -2444,14 +2444,17 @@ class CaselistSyncService:
         # stage did not already confirm.
         wanted = {snapshot for one in judged if one.kept_because is None for snapshot in one.snapshots}
         in_sync = confirmed | await self._confirm_in_bucket(wanted - confirmed)
+
+        def confirmed_now(one: _JudgedLocally) -> bool:
+            # Never vacuously: a file with no snapshot has nothing the bucket could confirm.
+            return bool(one.snapshots) and one.snapshots <= in_sync
+
         return [
             InboxFileVerdict(
                 name=one.name,
                 kind=one.kind,
                 decision=one.kept_because
-                or (
-                    RetentionDecision.REMOVE if one.snapshots <= in_sync else RetentionDecision.NOT_CONFIRMED
-                ),
+                or (RetentionDecision.REMOVE if confirmed_now(one) else RetentionDecision.NOT_CONFIRMED),
                 byte_size=one.byte_size,
                 path=one.path,
             )
@@ -2491,13 +2494,11 @@ class CaselistSyncService:
                 f"sha256 {digest[:12]}", InboxFileKind.OTHER, size, path, RetentionDecision.UNCLASSIFIED
             )
         in_releases = releases.get(digest, frozenset())
-        delivery = remembered.get(openev_id)
-        recorded = (
-            delivery is not None and delivery.download_sha256 == digest and bool(delivery.member_sha256)
-        )
         if not in_releases:
             kept_because: RetentionDecision | None = RetentionDecision.NOT_IMPORTED
-        elif not recorded:
+        # The next run looks the record up by id (`_judge_unrecorded`), so an entry for the id is
+        # what lets it recognise the file once the copy is gone.
+        elif openev_id not in remembered:
             kept_because = RetentionDecision.NO_DELIVERY_RECORD
         else:
             kept_because = None

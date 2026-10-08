@@ -98,9 +98,11 @@ After each install the installer checks that the build's base Python really is u
 build otherwise.
 
 If no Python that uv manages matches yet, the installer says `No Python that uv manages matches
-'…' yet, so uv will download one into …`, and uv downloads it during the install (about 33 MB,
-around a second on a fast connection). The agent never runs the installer, so this only happens
-while you are watching. With `UV_PYTHON_DOWNLOADS=never` set, uv refuses instead, and
+'…' yet, so uv will download one into …`, and uv downloads it during the install (17 MB on this
+Mac, 33 MB on the Linux runners; one to two seconds each, measured). The agent never runs the
+installer, so this only happens while you are watching. `doctor` decides `Managed by uv` from its
+own environment, so a build installed with `UV_PYTHON_INSTALL_DIR` set shows `no` wherever that
+variable is not set; the agent's build uses the default directory. With `UV_PYTHON_DOWNLOADS=never` set, uv refuses instead, and
 `uv python install '<the specifier>'` installs one. The installer needs uv 0.6.8 or newer, the
 first with `--managed-python`; it refuses an older uv by name before installing anything.
 

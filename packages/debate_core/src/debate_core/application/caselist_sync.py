@@ -1430,7 +1430,10 @@ class _JudgedLocally:
     kept_because: RetentionDecision | None
     """The first local check it failed, or `None` when only the bucket's confirmation is left."""
     snapshots: frozenset[PendingSnapshot] = frozenset()
-    """The snapshots its bytes were imported into, which the bucket must hold in sync."""
+    """The snapshots its bytes were imported into, which the bucket must hold in sync.
+
+    Never empty when :attr:`kept_because` is `None`: a file is imported only by being in one.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -2444,17 +2447,14 @@ class CaselistSyncService:
         # stage did not already confirm.
         wanted = {snapshot for one in judged if one.kept_because is None for snapshot in one.snapshots}
         in_sync = confirmed | await self._confirm_in_bucket(wanted - confirmed)
-
-        def confirmed_now(one: _JudgedLocally) -> bool:
-            # Never vacuously: a file with no snapshot has nothing the bucket could confirm.
-            return bool(one.snapshots) and one.snapshots <= in_sync
-
         return [
             InboxFileVerdict(
                 name=one.name,
                 kind=one.kind,
                 decision=one.kept_because
-                or (RetentionDecision.REMOVE if confirmed_now(one) else RetentionDecision.NOT_CONFIRMED),
+                or (
+                    RetentionDecision.REMOVE if one.snapshots <= in_sync else RetentionDecision.NOT_CONFIRMED
+                ),
                 byte_size=one.byte_size,
                 path=one.path,
             )

@@ -315,10 +315,18 @@ def test_the_managed_fact_follows_links_and_compares_whole_path_components(
     (tmp_path / "linked-uv-pythons").symlink_to(uv_pythons)
     sibling = tmp_path / "data" / "uv" / "python-elsewhere" / "cpython-3.12.13-macos-aarch64-none"
     sibling.mkdir(parents=True)
+    # An entry in uv's directory that is really anaconda is anaconda's, whatever its name says; a
+    # path elsewhere that is really uv's installation is uv's.
+    anaconda = tmp_path / "anaconda3"
+    anaconda.mkdir()
+    (uv_pythons / "cpython-3.12.7-macos-aarch64-none").symlink_to(anaconda)
+    (tmp_path / "python-linked-into-uv").symlink_to(installed)
 
     assert doctor_module.is_uv_managed(str(installed), uv_pythons)
     assert doctor_module.is_uv_managed(str(uv_pythons / "cpython-3.12-macos-aarch64-none"), uv_pythons)
     assert doctor_module.is_uv_managed(str(installed), tmp_path / "linked-uv-pythons")
+    assert not doctor_module.is_uv_managed(str(uv_pythons / "cpython-3.12.7-macos-aarch64-none"), uv_pythons)
+    assert doctor_module.is_uv_managed(str(tmp_path / "python-linked-into-uv"), uv_pythons)
     assert not doctor_module.is_uv_managed(str(sibling), uv_pythons)
     assert not doctor_module.is_uv_managed(str(uv_pythons), uv_pythons)
     assert not doctor_module.is_uv_managed(str(tmp_path / "missing"), tmp_path / "also-missing")

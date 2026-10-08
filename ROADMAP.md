@@ -152,7 +152,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Evidence buckets and operator access](plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml) `v1-e29-t03-evidence-buckets` | Succeeded | 1 | 9.0 |
 | [S3 blob-store adapter](plan_specs/v1/e29-cloud-evidence-store/t04-s3-blob-store.yaml) `v1-e29-t04-s3-blob-store` | Succeeded | 2 | 11.0 |
 | [`debate-research store` sync commands](plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml) `v1-e29-t05-evidence-sync-cli` | Succeeded | 3 | 11.5 |
-| [Removal grants: the scope is tested, and a plan can count versions](plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml) `v1-e29-t06-removal-grant-scope-test` | Pending | 1 | 8.0 |
+| [Removal grants: the scope is tested, and a plan can count versions](plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml) `v1-e29-t06-removal-grant-scope-test` | InProgress | 1 | 8.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 

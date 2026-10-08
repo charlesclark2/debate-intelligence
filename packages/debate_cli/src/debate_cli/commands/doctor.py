@@ -34,21 +34,37 @@ their tasks land, starting with v1-e02-t05 (settings) and v1-e01-t09 (environmen
   other unmodelled exception, with its "This is a bug" hint.
 
 Every other fact is description and never changes the exit status: an unloaded settings file, an
-unknown package version, an unexpected Python version or platform, and a declared `debate-core`
-extra whose distributions are not installed. That last one is not a failure `doctor` can state
-precisely: nothing breaks until a wired integration needs the distribution, and then the
-integration check names it. The installer's own check (`python -m debate_cli.installation`) holds a
-build to everything it declares and refuses it at install. A `doctor` that guessed would be worse
-than one that only describes.
+unknown package version, an unexpected Python version or platform, a Python that uv does not
+manage, and a declared `debate-core` extra whose distributions are not installed. That last one is
+not a failure `doctor` can state precisely: nothing breaks until a wired integration needs the
+distribution, and then the integration check names it. The installer's own check
+(`python -m debate_cli.installation`) holds a build to everything it declares and refuses it at
+install. A `doctor` that guessed would be worse than one that only describes.
+
+## Whether uv manages this Python
+
+`python_uv_managed` (`v1-e01-t23`) says whether the running interpreter is one uv manages. Such a
+Python changes only through uv, when the build is reinstalled or a `uv python` command is run on
+purpose; a `conda update` or a `brew upgrade` cannot change it under the installed build.
+`scripts/install_channel.sh` asks uv for such a Python and refuses a build that is not on one; a
+checkout's `.venv` or a hand-run install can be on any Python. It is decided by place, as uv
+decides it. :func:`uv_python_directory` works out the directory `uv python dir` would name, from
+this process's environment; the interpreter is uv's when its base prefix (`sys.base_prefix`, the
+installation behind a virtual environment), every link followed, lies strictly inside that
+directory, every link followed too (:func:`is_uv_managed`). The report carries all three. An
+installation made with a `UV_PYTHON_INSTALL_DIR` that `doctor`'s environment does not set is
+reported as not managed. Either answer leaves the exit status alone.
 """
 
 from __future__ import annotations
 
+import os
 import platform
 import sys
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import replace
+from pathlib import Path
 
 import typer
 
@@ -107,11 +123,15 @@ def environment_report(services: ServiceContainer) -> dict[str, JsonValue]:
     pinned = pinned_unicode_version(NORMALIZER_VERSION)
     running = unicodedata.unidata_version
     integrations = installation.check_installation()
+    uv_pythons = uv_python_directory(os.environ)
     return {
         "cli_version": package_version("debate-cli"),
         "core_version": package_version("debate-core"),
         "python_version": platform.python_version(),
         "python_executable": sys.executable,
+        "python_base_prefix": sys.base_prefix,
+        "uv_python_directory": str(uv_pythons),
+        "python_uv_managed": is_uv_managed(sys.base_prefix, uv_pythons),
         "platform": platform.platform(),
         "settings_configured": services.settings_configured,
         "services": list(SERVICE_NAMES),
@@ -124,6 +144,32 @@ def environment_report(services: ServiceContainer) -> dict[str, JsonValue]:
         "integrations_import": not integrations.failed,
         "extras_missing_distributions": dict(integrations.missing_distributions),
     }
+
+
+def uv_python_directory(environ: Mapping[str, str], *, windows: bool = os.name == "nt") -> Path:
+    """The directory where uv keeps the Pythons it manages, found the way `uv python dir` finds it.
+
+    `UV_PYTHON_INSTALL_DIR` when it is set and not empty, against the working directory if it is
+    relative. Otherwise, on macOS and Linux, `$XDG_DATA_HOME/uv/python` when `XDG_DATA_HOME` is an
+    absolute path, and `$HOME/.local/share/uv/python` when it is not. Measured against uv 0.11.7.
+    On Windows, `%APPDATA%\\uv\\data\\python`, from uv's documentation and not measured.
+    """
+    configured = environ.get("UV_PYTHON_INSTALL_DIR", "")
+    if configured:
+        return Path(os.path.abspath(configured))
+    if windows:
+        return Path(environ.get("APPDATA", "")) / "uv" / "data" / "python"
+    data_home = environ.get("XDG_DATA_HOME", "")
+    if os.path.isabs(data_home):
+        return Path(data_home) / "uv" / "python"
+    return Path(environ.get("HOME") or Path.home()) / ".local" / "share" / "uv" / "python"
+
+
+def is_uv_managed(base_prefix: str, uv_pythons: Path) -> bool:
+    """Whether the Python installed at `base_prefix` lies inside `uv_pythons`, every link followed."""
+    installed = Path(os.path.realpath(base_prefix))
+    directory = Path(os.path.realpath(uv_pythons))
+    return installed != directory and installed.is_relative_to(directory)
 
 
 def doctor_failure(report: Mapping[str, JsonValue]) -> CommandFailure | None:
@@ -160,8 +206,9 @@ def unicode_database_failure(report: Mapping[str, JsonValue]) -> CommandFailure 
         exit_code=ExitCode.DOMAIN_FAILURE,
         details=dict(report),
         hint=(
-            "Install debate-research with scripts/install_channel.sh, which runs it on a Python that "
-            "debate_core's Requires-Python admits. In a checkout, `uv sync` uses .python-version."
+            "Install debate-research with scripts/install_channel.sh, which runs it on a Python uv "
+            "manages that debate_core's Requires-Python admits. In a checkout, `uv sync` uses "
+            ".python-version."
         ),
     )
 
@@ -213,6 +260,9 @@ def _rows(report: dict[str, JsonValue]) -> list[list[str]]:
         "core_version": "debate-core",
         "python_version": "Python",
         "python_executable": "Interpreter",
+        "python_base_prefix": "Base interpreter",
+        "uv_python_directory": "uv's Pythons",
+        "python_uv_managed": "Managed by uv",
         "platform": "Platform",
         "settings_configured": "Settings loaded",
         "services": "Services wired",

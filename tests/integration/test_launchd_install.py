@@ -65,14 +65,25 @@ def install(
     )
 
 
+# `debate-research --json config show` as the real build prints it, cut down: one line holding
+# `settings` and then `sources`, which names `storage.data_dir` again with the file it came from.
+# An installer that read the second one would refuse every real build (it did, once).
+CONFIG_SHOW = json.dumps({
+    "status": "ok",
+    "data": {
+        "environment": "dev",
+        "settings": {"storage.data_dir": "%s", "caselist.api_enabled": True},
+        "sources": {"storage.data_dir": "profile:/bundled/config/profiles/dev.toml"},
+    },
+})  # fmt: skip
+
+
 def fake_console_script(directory: Path, *, data_directory: str | None = None) -> Path:
     """A `debate-research` that records each call beside itself and answers what is asked of it.
 
     `--json config show` reports a data directory the way the real build does: `data_directory`
     when given, otherwise the profile default `$HOME/.debate-research/$DEBATE_ENV`, so that the
-    installer's check of the agent's data directory can be driven from a test. The real output is
-    one line holding `settings` and then `sources`, which names `storage.data_dir` again with the
-    file it came from; an installer that read the second one would refuse every real build.
+    installer's check of the agent's data directory can be driven from a test.
     """
     directory.mkdir(parents=True, exist_ok=True)
     script = directory / "debate-research"
@@ -83,9 +94,7 @@ def fake_console_script(directory: Path, *, data_directory: str | None = None) -
         f"printf '%s\\n' \"$*\" >> '{record}'\n"
         'case "$*" in\n'
         "    '--json config show')\n"
-        f'        printf \'{{"status": "ok", "data": {{"environment": "dev", "settings": {{"storage.data_dir": "%s", '
-        f'"caselist.api_enabled": true}}, "sources": {{"storage.data_dir": "profile:/bundled/config/profiles/dev.toml"}}}}}}\\n\' '
-        f'"{reported}" ;;\n'
+        f"        printf '{CONFIG_SHOW}\\n' \"{reported}\" ;;\n"
         "    '--version') echo 'debate-research 0.0.0+fake' ;;\n"
         "esac\n"
         "exit 0\n",
@@ -179,10 +188,19 @@ def test_a_dry_run_renders_every_placeholder_and_writes_nothing(home: Path, cons
 
 
 @on_macos
-def test_the_rendered_plist_is_one_launchctl_will_load(home: Path, tmp_path: Path, console_script: Path) -> None:
+def test_the_rendered_plist_is_one_launchctl_will_load(
+    home: Path, tmp_path: Path, console_script: Path
+) -> None:
     """The criterion the whole schedule rests on: `plutil -lint` is what `launchctl` runs too."""
     rendered = install(
-        "--caselist", "testcl26", "--env", "dev", "--debate-research", str(console_script), "--dry-run", home=home
+        "--caselist",
+        "testcl26",
+        "--env",
+        "dev",
+        "--debate-research",
+        str(console_script),
+        "--dry-run",
+        home=home,
     )
     assert rendered.returncode == 0, rendered.stderr
 
@@ -210,7 +228,9 @@ def test_the_rendered_plist_names_nothing_inside_the_repository(home: Path, cons
 
     assert named, "the plist names no paths at all"
     assert inside == [], f"the plist names paths inside a git working tree: {inside}"
-    assert program_of(plist)[0] == str(home / ".local" / "share" / "debate-research" / "launchd" / "run-caselist-sync.sh")
+    assert program_of(plist)[0] == str(
+        home / ".local" / "share" / "debate-research" / "launchd" / "run-caselist-sync.sh"
+    )
 
 
 # --- The console script is pinned (ac2) ---------------------------------------------------------
@@ -220,7 +240,9 @@ def test_the_plist_pins_the_console_script_it_was_given(home: Path, console_scri
     """ac2. `--debate-research` used to decide only whether to print a warning."""
     environment = environment_of(
         rendered_plist(
-            install("--caselist", "testcl26", "--debate-research", str(console_script), "--dry-run", home=home)
+            install(
+                "--caselist", "testcl26", "--debate-research", str(console_script), "--dry-run", home=home
+            )
         )
     )
 
@@ -232,13 +254,17 @@ def test_without_the_option_the_plist_pins_the_one_found_on_the_installers_path(
     home: Path, console_script: Path
 ) -> None:
     environment = environment_of(
-        rendered_plist(install("--caselist", "testcl26", "--dry-run", home=home, path_prefix=(console_script.parent,)))
+        rendered_plist(
+            install("--caselist", "testcl26", "--dry-run", home=home, path_prefix=(console_script.parent,))
+        )
     )
 
     assert environment["DEBATE_RESEARCH_BIN"] == str(console_script)
 
 
-def test_a_console_script_reached_through_a_symlink_is_pinned_as_found(home: Path, console_script: Path) -> None:
+def test_a_console_script_reached_through_a_symlink_is_pinned_as_found(
+    home: Path, console_script: Path
+) -> None:
     """`~/.local/bin/debate-research` is a link into uv's tool directory, and stays one: a
     reinstall replaces what it points at, so the link is the stable name."""
     bin_directory = home / ".local" / "bin"
@@ -246,7 +272,9 @@ def test_a_console_script_reached_through_a_symlink_is_pinned_as_found(home: Pat
     (bin_directory / "debate-research").symlink_to(console_script)
 
     environment = environment_of(
-        rendered_plist(install("--caselist", "testcl26", "--dry-run", home=home, path_prefix=(bin_directory,)))
+        rendered_plist(
+            install("--caselist", "testcl26", "--dry-run", home=home, path_prefix=(bin_directory,))
+        )
     )
 
     assert environment["DEBATE_RESEARCH_BIN"] == str(bin_directory / "debate-research")
@@ -280,7 +308,9 @@ def test_a_debate_research_earlier_on_path_is_not_the_one_the_wrapper_execs(
     ["given inside a working tree", "given inside a project .venv", "found on PATH inside a working tree",
      "a symlink into a working tree"],
 )  # fmt: skip
-def test_a_console_script_inside_a_checkout_or_a_venv_is_refused(home: Path, tmp_path: Path, where: str) -> None:
+def test_a_console_script_inside_a_checkout_or_a_venv_is_refused(
+    home: Path, tmp_path: Path, where: str
+) -> None:
     """t05 forbids pointing the agent at a console script that moves with a working checkout."""
     checkout = tmp_path / "checkout"
     (checkout / ".git").mkdir(parents=True)
@@ -306,7 +336,9 @@ def test_a_console_script_inside_a_checkout_or_a_venv_is_refused(home: Path, tmp
 # --- Reinstalling replaces the copy (ac3) -------------------------------------------------------
 
 
-def test_an_install_copies_the_wrapper_and_a_reinstall_replaces_the_copy(home: Path, console_script: Path) -> None:
+def test_an_install_copies_the_wrapper_and_a_reinstall_replaces_the_copy(
+    home: Path, console_script: Path
+) -> None:
     """ac3. An updated wrapper reaches the agent by reinstalling, and only by reinstalling."""
     copy = home / ".local" / "share" / "debate-research" / "launchd" / "run-caselist-sync.sh"
     first = install("--caselist", "testcl26", "--debate-research", str(console_script), home=home)
@@ -351,7 +383,9 @@ def test_a_path_under_a_folder_macos_protects_is_refused(
     """ac4. launchd may not open anything under these, and the agent exits 126 at once."""
     protected = PROTECTED_LOCATIONS[location](home) / "debate"
     if what == "data directory":
-        console_script = fake_console_script(tmp_path / "reporting" / "bin", data_directory=str(protected / "data"))
+        console_script = fake_console_script(
+            tmp_path / "reporting" / "bin", data_directory=str(protected / "data")
+        )
     if what == "console script":
         if location != "a removable volume":
             console_script = fake_console_script(protected / "bin")
@@ -370,7 +404,9 @@ def test_a_path_under_a_folder_macos_protects_is_refused(
         "console script": console_script,
     }[what]
 
-    refused = install("--caselist", "testcl26", "--debate-research", str(console_script), *arguments, home=home)
+    refused = install(
+        "--caselist", "testcl26", "--debate-research", str(console_script), *arguments, home=home
+    )
 
     assert refused.returncode == 2, refused.stdout
     assert f"the {what} {refused_path}" in refused.stderr
@@ -396,7 +432,13 @@ def test_a_protected_folder_reached_through_a_symlink_is_refused(home: Path, con
     (home / "logs").symlink_to(home / "Documents" / "logs")
 
     refused = install(
-        "--caselist", "testcl26", "--debate-research", str(console_script), "--log-dir", str(home / "logs"), home=home
+        "--caselist",
+        "testcl26",
+        "--debate-research",
+        str(console_script),
+        "--log-dir",
+        str(home / "logs"),
+        home=home,
     )
 
     assert refused.returncode == 2
@@ -421,7 +463,16 @@ def test_the_installer_asks_the_build_for_its_data_directory_as_the_agent_runs_i
 ) -> None:
     """The data directory comes from the profile bundled into the installed build, so the build is
     what is asked, with the agent's environment and nothing of this shell's."""
-    install("--caselist", "testcl26", "--env", "dev", "--debate-research", str(console_script), "--dry-run", home=home)
+    install(
+        "--caselist",
+        "testcl26",
+        "--env",
+        "dev",
+        "--debate-research",
+        str(console_script),
+        "--dry-run",
+        home=home,
+    )
 
     assert calls_to(console_script) == ["--json config show"]
 
@@ -494,13 +545,16 @@ if command == "print":
         print(f"Could not find service \\"{{label}}\\" in domain", file=sys.stderr)
         sys.exit(113)
     exit_code = job["last_exit_code"]
-    print(f"{{target}} = {{{{\\n\\tstate = not running\\n\\truns = {{job['runs']}}\\n\\tlast exit code = {{exit_code}}\\n}}}}")
+    print(f"{{target}} = {{{{")
+    print(f"\\tstate = not running\\n\\truns = {{job['runs']}}\\n\\tlast exit code = {{exit_code}}\\n}}}}")
 elif command == "bootstrap":
     plist = plistlib.loads(Path(target).read_bytes())
-    state[plist["Label"]] = {{"plist": target, "runs": 0, "last_exit_code": "(never exited)",
-                              "program": plist["ProgramArguments"], "environment": plist["EnvironmentVariables"],
-                              "cwd": plist["WorkingDirectory"], "stdout": plist["StandardOutPath"],
-                              "stderr": plist["StandardErrorPath"]}}
+    state[plist["Label"]] = {{
+        "plist": target, "runs": 0, "last_exit_code": "(never exited)",
+        "program": plist["ProgramArguments"], "environment": plist["EnvironmentVariables"],
+        "cwd": plist["WorkingDirectory"],
+        "stdout": plist["StandardOutPath"], "stderr": plist["StandardErrorPath"],
+    }}
 elif command == "kickstart":
     job = state[label]
     with open(job["stdout"], "a") as out, open(job["stderr"], "a") as err:
@@ -522,7 +576,9 @@ def fake_launchctl(tmp_path: Path) -> tuple[Path, Path, Path]:
     directory.mkdir()
     state, calls = directory / "state.json", directory / "calls.log"
     script = directory / "launchctl"
-    script.write_text(FAKE_LAUNCHCTL.format(python=sys.executable, state=str(state), calls=str(calls)), encoding="utf-8")
+    script.write_text(
+        FAKE_LAUNCHCTL.format(python=sys.executable, state=str(state), calls=str(calls)), encoding="utf-8"
+    )
     script.chmod(0o755)
     return directory, state, calls
 
@@ -535,7 +591,9 @@ def install_and_load(home: Path, console_script: Path, state: Path) -> None:
     console_script.parent.joinpath("calls.log").unlink()
 
 
-def check_launchd(home: Path, launchctl_directory: Path, **environment: str) -> subprocess.CompletedProcess[str]:
+def check_launchd(
+    home: Path, launchctl_directory: Path, **environment: str
+) -> subprocess.CompletedProcess[str]:
     search_path = os.pathsep.join([str(launchctl_directory), os.environ["PATH"]])
     assert shutil.which("launchctl", path=search_path) == str(launchctl_directory / "launchctl"), (
         "the fake launchctl is not the one the installer would run"
@@ -566,12 +624,18 @@ def test_the_launchd_check_runs_the_installed_wrapper_under_its_own_label_and_ne
     assert f"{LABEL} runs: 7 before, 7 after" in checked.stdout
     assert calls_to(console_script) == ["--version"], "the check ran something other than --version"
     commands = calls.read_text(encoding="utf-8").splitlines()
-    touched = {line.split()[0] for line in commands if line.endswith(f"/{LABEL}.check") or f"{LABEL}.check.plist" in line}
+    touched = {
+        line.split()[0]
+        for line in commands
+        if line.endswith(f"/{LABEL}.check") or f"{LABEL}.check.plist" in line
+    }
     assert {"bootstrap", "kickstart", "bootout"} <= touched
     assert [line for line in commands if line.endswith(f"/{LABEL}") and not line.startswith("print")] == [], (
         "the check touched the real agent"
     )
-    assert LABEL + ".check" not in json.loads(state.read_text(encoding="utf-8")), "the check label was left loaded"
+    assert LABEL + ".check" not in json.loads(state.read_text(encoding="utf-8")), (
+        "the check label was left loaded"
+    )
     check_plist = next(line.split()[-1] for line in commands if line.startswith("bootstrap"))
     assert not Path(check_plist).exists(), "the check's plist was left behind"
 

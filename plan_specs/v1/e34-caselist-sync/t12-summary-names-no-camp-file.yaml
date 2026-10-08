@@ -1,0 +1,82 @@
+# TASK v1-e34-t12-summary-names-no-camp-file - The pull summary names a camp download by id, never by title
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t12-summary-names-no-camp-file
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "The pull summary names a camp download by id, never by title"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e34-t11's Follow-up work 1.
+  description: >-
+    The sync's module docstring says a run summary never carries a camp file's title, and the
+    scheduled-sync runbook says the run log can be pasted into an issue as it is. Both are untrue
+    today. `OpenEvSelection.as_json()` carries `inbox_name`, which is `openev-<id>-<file name>`, so
+    each selected camp file's title reaches `<data_dir>/caselist-sync-runs/*.json`, `caselist pull
+    --json`, and the launchd agent's stdout log. The run record and the bucket's copy do not carry
+    it. Name a selection by its OpenEv id (and, where useful, its sha256 prefix) in every summary a
+    person might paste, and keep the inbox name only where the code needs it to find the file.
+    Decide whether the JSON summary's shape change needs a version bump under v1-e34-t07's rule for
+    additive keys, and say what reads `inbox_name` today. Out of scope: the run record schema,
+    which already omits it, and the delivery record.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli.commands, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A camp file's title, or its inbox file name, in any run summary, run log line or JSON output a person is told they may paste
+      - Removing a field some reader depends on without saying so and updating that reader
+  context:
+    - kind: TaskRef
+      name: v1-e34-t11-inbox-retention
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A pull that selects camp downloads produces a JSON summary, a run-summary file and a stdout log
+        line that hold no camp title and no inbox file name, shown failing first with a fixture whose
+        title is a distinctive probe string. Each selection is identified by its OpenEv id.
+    - id: ac2
+      description: >-
+        Every reader of the summary's selections (the CLI table, `caselist runs`, tests, docs) is
+        listed in the report and still works, and the runbook's statement about pasting the log is
+        true again.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t12-summary-names-no-camp-file-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Find every place the inbox name leaves the process, then name by id.
+  goalRef:
+    name: v1-e34-t12-summary-names-no-camp-file
+  graph:
+    nodes:
+      - id: name-by-id
+        kind: Task
+        name: Camp downloads named by id in summaries
+        description: >-
+          The probe-string test, the change to the selection's JSON, and every reader.
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist]
+status:
+  phase: Pending

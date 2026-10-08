@@ -42,6 +42,8 @@ spec:
       - packages/debate_core/tests
       - packages/debate_cli/tests
       - docs/runbooks
+      # added by the PM at review, 2026-10-08: the smoke assertion (Follow-up work 3)
+      - tests/smoke
     forbidden:
       - Deleting a download that is not yet imported, or whose publish has not been confirmed
       - Deleting a camp download the delivery record does not yet cover

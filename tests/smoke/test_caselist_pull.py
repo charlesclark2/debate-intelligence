@@ -228,7 +228,16 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
         "openev 2026-policy",
     ]
 
+    # The report confirmed every week in the bucket, so retention took them out of the inbox
+    # (v1-e34-t11), and the summary names each by caselist and date.
+    weeks = [f"{SYNTHETIC_CASELIST} {week.snapshot.isoformat()}" for week in SNAPSHOTS]
+    inbox = installation / "data" / "inbox"
+    assert sorted(path.name for path in inbox.glob("*-weekly-*.zip")) == [], "a confirmed week stayed"
     stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["retention"]["outcome"] == "completed", stages.get("retention")
+    removed = [one["name"] for one in data["inbox_retention"]["removed"] if one["kind"] == "weekly_archive"]
+    assert removed == weeks
+
     assert stages["publish"]["outcome"] == "completed"
     assert stages["report"]["outcome"] == "completed"
     assert stages["parse"]["outcome"] == "skipped", "v1-e31-t06 has not shipped; it must skip, not fail"

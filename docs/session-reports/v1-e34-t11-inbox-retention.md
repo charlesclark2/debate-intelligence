@@ -297,13 +297,81 @@ Paste both `du` lines and the caption back.
    it. If that changes, retention could write the entry from the inbox copy first, as a removal
    does (`remember_if_unknown`).
 
+## Changes after PM review
+
+**Follow-up 3, the smoke assertion** (authorised; `tests/smoke` is now in `constraints.packages`).
+After the confirmed pull in `test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new`,
+through the installed command, respx and moto, it asserts that:
+- no `*-weekly-*.zip` is left in the inbox;
+- the `retention` stage is `completed`;
+- `inbox_retention.removed`'s weekly entries are exactly `testcl26 2026-09-01`, `testcl26 2026-09-08`
+  and `testcl26 2026-09-15`, written by hand from the fixture's three weeks.
+
+`uv run pytest tests/smoke/test_caselist_pull.py` gives `6 passed in 7.82s`.
+
+**Shown failing with the stage switched off.** The call to `_retention_stage` was removed from
+`CaselistSyncService.run`, and the test was run with a new, empty `HYPOTHESIS_STORAGE_DIRECTORY`
+(0 entries at start), then the file was restored and checked equal to `HEAD`:
+
+```
+E   AssertionError: a confirmed week stayed
+E   assert ['testcl26-we...26-09-15.zip'] == []
+E     Left contains 3 more items, first extra item: 'testcl26-weekly-2026-09-01.zip'
+1 failed in 4.95s
+```
+
+Committed with the PM's edits: this section's PM review, the spec's package list, and
+`t12-summary-names-no-camp-file.yaml` with its `epic.yaml` entry.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless Verdict is ACCEPTED. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted, phase `Succeeded`, with one small addition before the PR (below).
+
+* **Decisions 1 and 2, the stricter rules: accepted. They are better than what I specified.**
+  * A weekly goes only when its manifest names its bytes.
+  * A camp download needs a manifest row from its bytes, and its release confirmed, as well as the
+    delivery record.
+
+  R1 shows my record-only rule would have deleted a camp file waiting for its retry after an
+  `unsuppress`.
+* **The retry hold as the import guard, not a separate check: accepted.** The explanation of why
+  M2 alone changes only the reason (a weekly is held twice) is exactly what the mutation table
+  should say.
+* **Deleting check V, which mutation could not tell from its absence:** that is working agreement 8
+  applied properly.
+* **Decision 5 (the run record schema unchanged so the installed build still reads the run log):
+  accepted.** Retention reaches the agent with its next reinstall, after the 2026-10-14 run.
+* **Decisions 3, 6, 7, 8 and 9: accepted.**
+
+**Before the PR: Follow-up work 3, the smoke assertion, is authorised** (`tests/smoke` added to
+`constraints.packages` in this branch). After the confirmed pull in
+`test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new`, assert that:
+* the inbox holds no weekly;
+* the `retention` stage is `completed`;
+* the summary's `inbox_retention.removed` names the weeks.
+
+Show it failing with the stage switched off.
+
+**Follow-up work:**
+
+1. **A camp file's name in the JSON summary:** filed as **v1-e34-t12-summary-names-no-camp-file**
+   (in this branch, with its epic entry). Thank you for checking the condition rather than assuming
+   it.
+2. **The backfill runbook's recovery table:** the PM fixes it on the `v1-e30-t06` branch when that
+   task closes.
+3. **The smoke assertion:** done here, as above.
+4. **Camp downloads from before t07, with no record entry:** waits for the operator's dry run. If
+   its `kept` list shows any as `no_delivery_record`, the PM decides then.
+
+**Operator follow-ups:** Charlie will run them together with the backfill's last pull (two hspf26
+weeks waiting on the cap) on Thursday 2026-10-08 after 21:00 Central, from the main checkout once
+this has merged. One pull then fetches the last weeks and clears the inbox.

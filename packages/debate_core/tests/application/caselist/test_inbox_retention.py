@@ -761,10 +761,11 @@ async def test_retention_keeps_a_camp_download_waiting_for_its_import_although_t
 ) -> None:
     """The retry hold: a camp file fetched again after an `unsuppress`, whose import then failed.
 
-    Its first import left the delivery record holding these digests, and the release it belongs to
-    is published and in sync; but the removal took its manifest rows out, so no manifest came from
-    these bytes. It is waiting for `v1-e34-t06`'s retry and stays. The next run imports it from the
-    inbox without fetching it again, and only then removes it.
+    Its first import left the delivery record holding its digests, and the release it belongs to is
+    published and in sync, kept there by the camp release zip beside it. But the removal took the
+    file's own manifest rows out, so no manifest came from these bytes: it is waiting for
+    `v1-e34-t06`'s retry, and stays. The next run imports it from the inbox without fetching it
+    again, and only then removes it.
     """
     world = RemovalWorld(data_dir=tmp_path / "evidence", bucket_name=evidence_bucket, client=s3_client)
     installation = Installation(
@@ -773,9 +774,9 @@ async def test_retention_keeps_a_camp_download_waiting_for_its_import_although_t
         archives=build_snapshot_zips(tmp_path / "published"),
         suppression=world.suppression(),
     )
-    source = FakeSource(installation.archives, openev=[(ESTUARY, ESTUARY_BODY)])
+    source = FakeSource(installation.archives, openev=[(ESTUARY, ESTUARY_BODY), (RELEASE, RELEASE_BODY)])
     first = await installation.sync(source).run([CASELIST])
-    assert removed(first) == [sha256_label(ESTUARY_BODY)]
+    assert removed(first) == [sha256_label(ESTUARY_BODY), sha256_label(RELEASE_BODY)]
     removal = world.service()
     estuary_sha256 = hashlib.sha256(ESTUARY_BODY).hexdigest()
     plan = await removal.plan(
@@ -788,8 +789,9 @@ async def test_retention_keeps_a_camp_download_waiting_for_its_import_although_t
 
     failed = await installation.sync(source, openev_fails=True).run([CASELIST])
 
-    assert source.openev_fetches == [ESTUARY.openev_id, ESTUARY.openev_id], (
-        "fetched again after the unsuppress"
+    fetched = [ESTUARY.openev_id, RELEASE.openev_id, ESTUARY.openev_id]
+    assert source.openev_fetches == fetched, (
+        "the camp file is fetched again after the unsuppress, and only it"
     )
     assert outcome(failed, SyncStage.IMPORT) is StageOutcome.FAILED
     assert kept(failed) == {sha256_label(ESTUARY_BODY): "not_imported"}
@@ -797,9 +799,7 @@ async def test_retention_keeps_a_camp_download_waiting_for_its_import_although_t
 
     retried = await installation.sync(source).run([CASELIST])
 
-    assert source.openev_fetches == [ESTUARY.openev_id, ESTUARY.openev_id], (
-        "the waiting copy was fetched again"
-    )
+    assert source.openev_fetches == fetched, "the waiting copy was fetched again"
     assert retried.snapshots_imported == ("openev 2026-policy",)
     assert removed(retried) == [sha256_label(ESTUARY_BODY)]
     assert installation.inbox_names() == set()

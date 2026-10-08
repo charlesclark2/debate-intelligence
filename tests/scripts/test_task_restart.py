@@ -33,7 +33,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from hypothesis import given
+from hypothesis import event, given
 from hypothesis import strategies as st
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -119,11 +119,8 @@ exit 0
 
 GH_STUB = """#!/usr/bin/env bash
 {log}if [ "${{1:-}} ${{2:-}}" = "pr view" ]; then
-  if [ -z "${{TASK_TEST_PR_STATE:-}}" ]; then
-    printf 'no pull requests found\\n' >&2
-    exit 1
-  fi
-  printf '%s\\n' "$TASK_TEST_PR_STATE"
+  printf 'no pull requests found\\n' >&2
+  exit 1
 fi
 exit 0
 """
@@ -144,14 +141,10 @@ class TaskRepo:
     log: Path
     env: dict[str, str]
 
-    def run(
-        self, *args: str, fail_helper: str | None = None, pr_state: str | None = None
-    ) -> subprocess.CompletedProcess[str]:
+    def run(self, *args: str, fail_helper: str | None = None) -> subprocess.CompletedProcess[str]:
         env = dict(self.env)
         if fail_helper:
             env["TASK_TEST_FAIL_HELPER"] = fail_helper
-        if pr_state:
-            env["TASK_TEST_PR_STATE"] = pr_state
         return subprocess.run(
             [str(self.main / "scripts" / "task"), *args],
             cwd=self.main,
@@ -186,7 +179,11 @@ class TaskRepo:
 
     def registered_worktrees(self) -> list[Path]:
         listing = self.git("worktree", "list", "--porcelain")
-        return [Path(line.removeprefix("worktree ")) for line in listing.splitlines() if line.startswith("worktree ")]
+        return [
+            Path(line.removeprefix("worktree "))
+            for line in listing.splitlines()
+            if line.startswith("worktree ")
+        ]
 
     def report(self, task: str, where: Path | None = None) -> Path:
         return (where or self.main) / "docs" / "session-reports" / f"{task}.md"
@@ -234,7 +231,9 @@ def repo(tmp_path: Path) -> TaskRepo:
     shutil.copy2(REPORT_TEMPLATE, main / "docs" / "process" / "session-report-template.md")
     specs = main / "plan_specs" / "v1" / "e99-fixture"
     specs.mkdir(parents=True)
-    (specs / "t01-partly-merged.yaml").write_text(spec_text(PARTLY_MERGED, "A task merged with --partial", "InProgress"))
+    (specs / "t01-partly-merged.yaml").write_text(
+        spec_text(PARTLY_MERGED, "A task merged with --partial", "InProgress")
+    )
     (specs / "t02-fresh-task.yaml").write_text(spec_text(FRESH, "A task nobody has started", "Pending"))
     (specs / "t03-finished-task.yaml").write_text(spec_text(FINISHED, "A task that is done", "Succeeded"))
     reports = main / "docs" / "session-reports"
@@ -258,6 +257,12 @@ def commit_report(repo: TaskRepo, task: str, text: str, message: str) -> None:
     wt = repo.worktree(task)
     repo.report(task, wt).write_text(text)
     repo.git("commit", "--quiet", "-am", message, cwd=wt)
+
+
+def rebuild_worktree_by_hand(repo: TaskRepo, task: str) -> Path:
+    wt = repo.worktree(task)
+    repo.git("worktree", "add", "--quiet", "-b", f"task/{task}", str(wt), "origin/dev")
+    return wt
 
 
 def resumed_report(verdict: str) -> str:
@@ -426,9 +431,8 @@ def test_a_refused_run_leaves_an_existing_branch_alone(repo: TaskRepo, command: 
 
 
 def test_pr_refuses_a_report_whose_current_review_is_pending(repo: TaskRepo) -> None:
-    # The worktree the operator rebuilt by hand on 2026-10-02, holding the resumed report.
-    wt = repo.worktree(PARTLY_MERGED)
-    repo.git("worktree", "add", "--quiet", "-b", f"task/{PARTLY_MERGED}", str(wt), "origin/dev")
+    # Built the way the operator rebuilt v1-e31-t05 by hand on 2026-10-02, so this runs without resume.
+    rebuild_worktree_by_hand(repo, PARTLY_MERGED)
     commit_report(repo, PARTLY_MERGED, (FIXTURES / "resumed_review_pending.md").read_text(), "Second session")
 
     result = repo.run("pr", PARTLY_MERGED, "--partial")
@@ -440,8 +444,7 @@ def test_pr_refuses_a_report_whose_current_review_is_pending(repo: TaskRepo) -> 
 
 
 def test_pr_opens_once_the_current_review_is_accepted(repo: TaskRepo) -> None:
-    wt = repo.worktree(PARTLY_MERGED)
-    repo.git("worktree", "add", "--quiet", "-b", f"task/{PARTLY_MERGED}", str(wt), "origin/dev")
+    rebuild_worktree_by_hand(repo, PARTLY_MERGED)
     commit_report(repo, PARTLY_MERGED, resumed_report("ACCEPTED"), "Second session, reviewed")
 
     result = repo.run("pr", PARTLY_MERGED, "--partial")
@@ -480,6 +483,7 @@ def review(verdict: str, notes: str) -> str:
 def test_the_last_review_decides_whatever_the_earlier_ones_say(reviews: list[tuple[str, str]]) -> None:
     text = "# Session report\n\n" + "\n## Resumed\n\nMore work.\n\n".join(review(v, n) for v, n in reviews)
     last = reviews[-1][0]
+    event("first and last verdicts differ" if reviews[0][0] != last else "first and last verdicts agree")
 
     assert helper.report_verdict(text) == (last if last in VERDICTS else "PENDING")
 
@@ -513,13 +517,12 @@ def test_an_existing_accepted_report_still_reads_accepted(report: Path) -> None:
 
 
 def test_finish_partial_refuses_until_the_resumed_report_reaches_dev(repo: TaskRepo) -> None:
-    assert repo.run("resume", PARTLY_MERGED).returncode == 0
-    wt = repo.worktree(PARTLY_MERGED)
+    wt = rebuild_worktree_by_hand(repo, PARTLY_MERGED)
     commit_report(repo, PARTLY_MERGED, resumed_report("ACCEPTED"), "Second session, reviewed")
     repo.git("push", "--quiet", "origin", f"task/{PARTLY_MERGED}")
 
     # The pull request is open: origin/dev still carries only the first session's ACCEPTED report.
-    early = repo.run("finish", PARTLY_MERGED, "--partial", pr_state="OPEN")
+    early = repo.run("finish", PARTLY_MERGED, "--partial")
 
     assert early.returncode != 0
     assert wt.is_dir()
@@ -530,7 +533,7 @@ def test_finish_partial_refuses_until_the_resumed_report_reaches_dev(repo: TaskR
     repo.git("commit", "--quiet", "-m", "Squash-merge the second session")
     repo.git("push", "--quiet", "origin", "dev")
 
-    merged = repo.run("finish", PARTLY_MERGED, "--partial", pr_state="OPEN")
+    merged = repo.run("finish", PARTLY_MERGED, "--partial")
 
     assert merged.returncode == 0, merged.stderr
     assert not wt.exists()

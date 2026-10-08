@@ -61,7 +61,7 @@ spec:
         shown caught, every run with a fresh Hypothesis database (working agreement 8). The scheduled-
         sync runbook says what the inbox holds and when things leave it.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

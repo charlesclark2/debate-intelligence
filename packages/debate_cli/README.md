@@ -147,15 +147,26 @@ It fails on two checks only, the ones it can state precisely:
 | 1 | A check failed. The databases differ (`UNICODE_DATABASE_MISMATCH`, naming both versions and `docs/evidence/normalization.md`), or wired integrations do not import (`INTEGRATIONS_DO_NOT_IMPORT`, naming each module and why), or both (`INSTALLATION_CHECKS_FAILED`, with both messages). `--json` carries the whole report in `error.details`. |
 | 70 | A check could not be made at all: the normalizer's pinned version is unknown, or the container wires an integration in a way an import statement does not show. That is a bug in the build, reported through the root handler like any unmodelled exception, never as 1. |
 
-Every other fact is description and never changes the exit status. That includes a declared
-`debate-core` extra whose distributions are not installed (`extras_missing_distributions`): nothing
-fails until a wired integration needs one, and then the integration check names it. The installer
-is stricter. Its own check, `python -m debate_cli.installation`, holds a build to everything it
+**Whether uv manages the interpreter** (`v1-e01-t23`). `python_uv_managed` says whether the running
+Python is one uv manages, which only uv changes: a `conda update` or `brew upgrade` cannot move it
+under the installed build. It is decided by place, as uv decides it: the base prefix
+(`python_base_prefix`, from `sys.base_prefix`), links followed, lies strictly inside
+`uv_python_directory`, the directory `uv python dir` would name. That directory is worked out from
+doctor's own environment: `UV_PYTHON_INSTALL_DIR` when it is set and not empty, otherwise
+`$XDG_DATA_HOME/uv/python` when `XDG_DATA_HOME` is absolute, otherwise
+`$HOME/.local/share/uv/python` (on Windows, `%APPDATA%\uv\data\python`). A checkout's `.venv` can
+report `no`; that is expected, and never a failure.
+
+Every other fact is description and never changes the exit status. That includes whether uv
+manages the interpreter, and a declared `debate-core` extra whose distributions are not installed
+(`extras_missing_distributions`): nothing fails until a wired integration needs one, and then the
+integration check names it. The installer is stricter. Its own check, `python -m debate_cli.installation`, holds a build to everything it
 declares and refuses one with a distribution missing, so it stays a separate step beside `doctor`.
 
 `scripts/install_channel.sh` runs both in its rehearsal install, so a build that fails either is
 refused before it replaces anything. Which interpreter is right is not written here: it is the
-`debate_core` wheel's `Requires-Python`, which the installer reads from the wheel itself.
+`debate_core` wheel's `Requires-Python`, which the installer reads from the wheel itself, and one
+that uv manages (`--managed-python`), which the installer checks after each install.
 
 ## `--json` output
 

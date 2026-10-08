@@ -128,10 +128,13 @@ installer refuses a build with any declared package missing.
 DEBATE_ENV=dev debate-research caselist pull --caselist hsld26 --dry-run
 ```
 
-It makes listing calls only and writes nothing. Read the table: every archive the site lists, and
-what the run decided about each. `already_imported`, `full_archive_not_pulled_weekly` and
-`unrecognised_name` are all normal. `over_daily_budget` means there is more back-catalogue than
-one day's allowance, which is `v1-e30-t06`'s job rather than this schedule's.
+It makes listing calls to OpenCaselist, reads the bucket to compare what the inbox holds with it,
+and writes nothing. Read the table: every archive the site lists, and what the run decided about
+each. `already_imported`, `full_archive_not_pulled_weekly` and `unrecognised_name` are all normal.
+`over_daily_budget` means there is more back-catalogue than one day's allowance, which is
+`v1-e30-t06`'s job rather than this schedule's. The `retention` row lists what a real run would
+remove from the inbox ([The download inbox](#the-download-inbox)); without an AWS session it can
+confirm nothing, and lists every imported download as kept.
 
 Then the real thing, still in dev:
 

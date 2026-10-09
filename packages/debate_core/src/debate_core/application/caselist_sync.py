@@ -3090,7 +3090,11 @@ class _ReleaseMatch:
     """Recorded already, however they were imported: not fetched again."""
 
     revisions: Mapping[int, frozenset[int]]
-    """Listed files no row holds, each with the ids no longer listed whose rows are at its path."""
+    """Listed files at the path of rows naming an id listed nowhere, each with those ids.
+
+    A file in :attr:`held` may be here too, when another row holds it; the selection asks `held`
+    first, so it is held.
+    """
 
 
 def _match_listed_openev(
@@ -3114,8 +3118,8 @@ def _match_listed_openev(
     this release's part of it). OpenEv changes a file only by deleting it and uploading it again,
     so that row is an old version, and the listed file at its path is its **revision**: not held.
     A row that names no id, a hand import, cannot say which upload it came from, and still holds
-    the file at its path; so does a row whose id is still listed. A file any row holds is never a
-    revision.
+    the file at its path; so does a row whose id is still listed. A file any row holds is held,
+    whatever else is at its path: the selection asks :attr:`_ReleaseMatch.held` first.
     """
     ids = {file.openev_id for file in listed}
     by_name: dict[str, list[tuple[int, tuple[str, ...]]]] = {}
@@ -3152,7 +3156,7 @@ def _match_listed_openev(
             held.add(winners[0])
     return _ReleaseMatch(
         held=frozenset(held),
-        revisions={new: frozenset(old) for new, old in revised.items() if new not in held},
+        revisions={new: frozenset(old) for new, old in revised.items()},
     )
 
 

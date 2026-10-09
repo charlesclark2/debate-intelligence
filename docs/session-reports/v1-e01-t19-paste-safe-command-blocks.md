@@ -320,9 +320,16 @@ which zsh and the check agree.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted. Merge with `scripts/task pr`; the Goal is `Succeeded`.
+
+- **Checked against the branch** (`c6dbf70`). The commit after review adds only to this report, so the first review and everything above it are unchanged. That is v1-e01-t18's convention, followed correctly the first time.
+- **The `#!` allowance is gone** from the scanner and the docstring. The case is refused, the quoted-heredoc pattern is pinned as allowed, and zsh agrees with all 39 cases. The `debate_cli` README block is tagged `bash`.
+- **The spec matches what was built:** `ac1` names the tracked-file scope, the `shell` tag and the shebang, and the three extra packages carry the instruction comment.
+- **Merge order.** v1-e01-t20 is changing `packages/debate_cli/README.md` and the runbooks in parallel. This merges first, and t20 runs `scripts/task sync` before its report.

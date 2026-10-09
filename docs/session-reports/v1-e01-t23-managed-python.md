@@ -438,3 +438,18 @@ uses `-n auto`, or hands it to the operator if it passes two minutes (working ag
 
 **Operator follow-up 2:** the PM will give Charlie the tag from follow-up 1's log, rather than
 relying on the release body naming the commit.
+
+### Operator follow-up 1, recorded (PM, 2026-10-08)
+
+**Follow-up 1: PASS.** The dev pre-release for `cee3587` (`v0.1.0-dev.71`, run 37745434211, the
+build promotion #184 carried) logged, in "Install the build as its users will and check it can
+import everything it wires":
+
+* `The build runs on the Python at /home/runner/work/_temp/uv-python-dir/cpython-3.12.15-linux-x86_64-gnu, which uv manages.`
+* doctor's row `Managed by uv │ yes`.
+
+`validate-dev` posted `success` on `cee3587` for `v0.1.0-dev.71`.
+
+**Follow-up 2** is still open, so the Goal stays `InProgress`. The agent is reinstalled with
+`v0.1.0-dev.71`, or a newer validated tag, only after the scheduled run of Wednesday 2026-10-14
+06:00 CDT has been checked for v1-e34-t05.

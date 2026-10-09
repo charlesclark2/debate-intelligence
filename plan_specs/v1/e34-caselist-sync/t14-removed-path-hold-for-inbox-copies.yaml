@@ -1,0 +1,82 @@
+# TASK v1-e34-t14-removed-path-hold-for-inbox-copies - A camp file already in the inbox is held if its path was removed
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t14-removed-path-hold-for-inbox-copies
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A camp file already in the inbox is held if its path was removed"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e34-t08's Follow-up work 2.
+  description: >-
+    In `_judge_unrecorded`, a listed camp id that has a copy in the inbox and no delivery entry
+    returns before the removed-path hold (`same_path_as_a_removed_file`, v1-e34-t07) is asked,
+    so it is imported. The copy can only be there if it was downloaded before this machine knew
+    of the removal, but the PM's rule recorded in v1-e34-t07's review is that a removal covers a
+    later upload at the same path, so importing it breaks a takedown. Ask the hold first for
+    inbox copies too, keep the copy out of the store, and let `unsuppress` release it. Out of
+    scope: the suppression list's format and removals by digest, which the importer already
+    refuses.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, docs/runbooks]
+    forbidden:
+      - Importing a new id at a removed file's path, whether downloaded this run or already in the inbox
+      - Deleting the inbox copy as part of the hold; retention and removal own deletion
+  context:
+    - kind: TaskRef
+      name: v1-e34-t08-revised-camp-files
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A new id at a removed file's path whose copy is already in the inbox is held as
+        `same_path_as_a_removed_file` and not imported, shown failing first; after
+        `unsuppress` it is imported from the inbox without a download.
+    - id: ac2
+      description: >-
+        An inbox copy at a path nothing removed is still imported as before, and
+        v1-e34-t07's and t08's tests pass unchanged.
+    - id: ac3
+      description: >-
+        The hold's position is mutated (asked after the inbox return) and shown caught.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t14-removed-path-hold-for-inbox-copies-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Move the removed-path hold ahead of the inbox shortcut and prove the takedown holds.
+  goalRef:
+    name: v1-e34-t14-removed-path-hold-for-inbox-copies
+  graph:
+    nodes:
+      - id: inbox-copy-hold
+        kind: Task
+        name: The hold before the inbox shortcut
+        description: >-
+          The reorder, the failing-first test, the unsuppress case and the mutation.
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist, -k, removed or inbox]
+status:
+  phase: Pending

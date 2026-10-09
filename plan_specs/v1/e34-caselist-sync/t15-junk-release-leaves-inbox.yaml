@@ -1,0 +1,83 @@
+# TASK v1-e34-t15-junk-release-leaves-inbox - A camp release of junk alone leaves the inbox once it is handled
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t15-junk-release-leaves-inbox
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A camp release of junk alone leaves the inbox once it is handled"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e34-t08's Follow-up work 1.
+  description: >-
+    Since v1-e34-t08 a camp release holding only junk is imported once and not again, but inbox
+    retention (v1-e34-t11) keeps it as `not_imported` on every run, because no row with a
+    classification came from its bytes. It therefore stays in the inbox for good, every summary
+    reads as though a later run might import it, and it may hold a Word `~$` lock file, which
+    stores the name of whoever had a document open. Add the one retention condition: a camp
+    download whose delivery entry exists and names no member is removed, reported by id and
+    digest, with its own reason. Out of scope: weekly archives and every other retention
+    condition.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, docs/runbooks]
+    forbidden:
+      - Removing a camp download with no delivery entry, or one whose entry names members not confirmed in the bucket
+      - A camp title, inbox file name or a lock file's contents in any output
+  context:
+    - kind: TaskRef
+      name: v1-e34-t08-revised-camp-files
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        After the run that imports a junk-only release, retention removes it and names it
+        `sha256 <prefix>` with a reason distinct from `not_imported`; the next run neither
+        downloads nor imports it. Shown failing first.
+    - id: ac2
+      description: >-
+        A camp download with no delivery entry, and a weekly archive, are kept exactly as
+        before; v1-e34-t11's tests pass unchanged.
+    - id: ac3
+      description: >-
+        The new condition is mutated (any camp download with an entry removed, members
+        ignored) and shown caught, and the runbook's inbox section says what leaves when.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t15-junk-release-leaves-inbox-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Add the junk-only retention condition, prove nothing else loosens.
+  goalRef:
+    name: v1-e34-t15-junk-release-leaves-inbox
+  graph:
+    nodes:
+      - id: junk-release-retention
+        kind: Task
+        name: Junk-only camp releases leave the inbox
+        description: >-
+          The condition, its reason, the tests and the runbook line.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Retention tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist, -k, retention]
+status:
+  phase: Pending

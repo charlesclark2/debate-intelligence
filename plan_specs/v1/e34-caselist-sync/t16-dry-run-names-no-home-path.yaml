@@ -1,0 +1,75 @@
+# TASK v1-e34-t16-dry-run-names-no-home-path - The dry run's download plan names no path on the operator's machine
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t16-dry-run-names-no-home-path
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "The dry run's download plan names no path on the operator's machine"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e34-t12's Follow-up work 1.
+  description: >-
+    `caselist pull --dry-run` plans the download stage as `would download N file(s) into
+    /Users/…/inbox` (`_plan_remaining_stages`, since v1-e34-t02), so the operator's home
+    directory reaches the JSON summary and the summary file, which the runbook says may be
+    pasted as they are. v1-e34-t11 already keeps the inbox path out of the run summary for that
+    reason. Name the inbox by role ("into the inbox") everywhere a pull's output says where
+    files go. Out of scope: `config show`, which exists to print paths.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli.commands, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - An absolute path, or the home directory, in any pull output a person is told they may paste
+  context:
+    - kind: TaskRef
+      name: v1-e34-t12-summary-names-no-camp-file
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A dry run with a data directory under a distinctive probe path produces a JSON
+        summary, a summary file and a rendered table without the probe, shown failing first.
+    - id: ac2
+      description: >-
+        Every other pull stage reason is checked for the probe the same way, and the
+        runbook's pasting statement stays true.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t16-dry-run-names-no-home-path-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Name the inbox by role in the dry-run plan and prove no path leaves.
+  goalRef:
+    name: v1-e34-t16-dry-run-names-no-home-path
+  graph:
+    nodes:
+      - id: no-home-path
+        kind: Task
+        name: The inbox named by role
+        description: >-
+          The reason text, the probe test across outputs.
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist]
+status:
+  phase: Pending

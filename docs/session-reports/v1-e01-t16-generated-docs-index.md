@@ -315,3 +315,19 @@ when resolving, and give any document that arrived from `dev` without the commen
 `docs_index.py --check-descriptions` passes. Then run `docs_index.py --check`, `check_links.py`,
 `validate_specs.py` and the two new test files. Leave `ROADMAP.md` alone: it is stale on `dev`,
 and the first refresh PR after this merges is follow-up 1.
+
+### Close-out (PM, 2026-10-08)
+
+All three operator follow-ups have run. ac5 and the remaining node pass, and the Goal is
+`Succeeded`.
+
+* **Follow-up 1:** the first push after this merged opened the bot's "Refresh generated files" pull
+  request (#174). Its `ci` ran from the `workflow_dispatch`, and it was merged by hand.
+* **Follow-up 2:** the next merge into `dev` (#175) made the workflow open the next refresh pull
+  request (#176), which was merged the same way. Every refresh since (#179, #181, #183, #188,
+  #190, #192) has followed the same path. The force-push fallback has not been seen firing.
+* **Follow-up 3:** promotion #184 (2026-10-08, `dev` at `cee3587`) was the first promotion with the
+  new step. Its `spec-validate` job's step "spec_index.py --check and docs_index.py --check (pull
+  requests into main only)" printed `ROADMAP.md is up to date` and `docs/README.md is up to date`
+  at 07:50:14Z, and the promotion merged as `4948961` with no ROADMAP-only pull request before it.
+  That is the first of five promotions not to need one.

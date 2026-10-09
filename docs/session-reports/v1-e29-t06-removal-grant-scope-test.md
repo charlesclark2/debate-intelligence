@@ -421,3 +421,39 @@ Accepted as a partial merge: `scripts/task pr --partial`. ac1–ac5 pass; ac6 wa
   - record follow-up 3's output against ac6;
   - add `unset AWS_PROFILE` to the end of the new step-5 version-listing block, which leaves the everyday profile exported;
   - set the Goal to `Succeeded`.
+
+### Close-out (PM, 2026-10-08)
+
+Charlie ran operator follow-ups 1 to 5 on 2026-10-08. ac6 and the `apply` node pass, and the Goal is
+`Succeeded`. Account ids, SSO session and user names and permission-set ids are left out (this
+repository is public).
+
+* **Dev, applied 2026-10-08 at about 02:24 CDT** from the `dev-preview` worktree at `origin/dev`.
+  The plan was exactly one statement added to `DebateDevEvidenceOperator`'s inline policy:
+  `Plan: 0 to add, 1 to change, 0 to destroy.` The apply reported
+  `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.`
+* **ac6, follow-up 3 (dev, everyday profile only, 2026-10-08):** the caller was the
+  `DebateDevEvidenceOperator` role. `caselist remove --source 000…0 --request RM-2026-99 --reason
+  POLICY` printed `DRY RUN: nothing was changed. dev, bucket debate-dev-evidence-a7508de8.`, the
+  digest as held nowhere and only suppressed, and **no "Versions not counted" paragraph**. With
+  `--json`, `"versions_counted": true`. Before the apply, the session measured
+  `"versions_counted": false` and the paragraph (see "The before state of ac6").
+* **Follow-up 4 (dev):** listing versions under `raw/caselist/testcl26/` returned `11`. Under
+  `reports/`, and at the bucket root, the listing was refused with `AccessDenied` on
+  `s3:ListBucketVersions`. So the prefix condition holds in the real account.
+* **Prod, applied 2026-10-08 at 03:07:29 CDT (08:07 UTC)** from the `prod-deploy` worktree on
+  `main` at `4948961`, after promotion #184 carried this change. The plan was the same single
+  statement on `arn:aws:s3:::debate-prod-evidence-a7508de8`, `0 to add, 1 to change, 0 to destroy`,
+  and nothing else in the root changed. The apply reported `0 added, 1 changed, 0 destroyed`.
+  * The checkout had no `infrastructure/envs/prod/owner.auto.tfvars`. The guarded plan stopped
+    before computing anything (`-input=false`). The file was recreated from the dev root's copy,
+    which the runbook's *Before you start* writes with the same four values for both roots.
+  * The first `raw/` listing, run seconds after the apply, was refused. Two minutes later it
+    returned `None`: allowed, and prod had no versions under `raw/` yet. The `reports/` listing was
+    refused, as it should be. This is the propagation delay the runbook describes.
+  * This session separately confirmed, read-only: a CloudTrail `PutInlinePolicyToPermissionSet` on
+    the prod operator set at 08:07 UTC by the operator's own user, permission-set provisioning
+    `SUCCEEDED` at the same moment, and the Sid `ListEvidenceObjectVersionsForRemovalPlans` on the
+    role. Its own plan, run after the apply, was empty for that reason.
+* **The runbook:** *Later applies* records both dates, and the step-5 version-listing block now
+  ends with `unset AWS_PROFILE`.

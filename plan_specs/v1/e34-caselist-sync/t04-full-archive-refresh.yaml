@@ -93,7 +93,7 @@ spec:
         the same daily ledger and refusing when the allowance is gone; `--dry-run` reports what the
         rotation would do without fetching anything.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

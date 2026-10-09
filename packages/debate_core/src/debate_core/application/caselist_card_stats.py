@@ -100,8 +100,10 @@ class UnreadableParsedCards(DomainError):
 def read_parsed_cards(directory: Path) -> list[ParsedCard]:
     """Every card in the `*.jsonl` files under `directory`, files in sorted path order.
 
-    A line may be one `ParsedCard` or one `ParsedDocument` (the per-source record `v1-e31-t06`
-    writes), whose cards are taken in document order. Blank lines are skipped.
+    A line may be one `ParsedCard` or one `ParsedDocument`, whose cards are taken in document
+    order. Blank lines are skipped. The parsed card store `caselist parse` writes (`v1-e31-t06`) is
+    not read this way: its records leave out disclosure paths, and are read through
+    :class:`~debate_core.application.ports.parsed_store.ParsedStore`.
     """
     root = Path(directory)
     cards: list[ParsedCard] = []
@@ -173,7 +175,8 @@ class CaselistCardReport:
     top_clusters: tuple[ClusterSummary, ...]
     occurrences: tuple[CardOccurrence, ...]
     """Every occurrence, ordered by cluster, source and element. Carries team codes and cutter
-    marks: for the parsed store (`v1-e31-t06`), never for printing."""
+    marks, so it is never printed. The parsed store (`v1-e31-t06`) does not persist it either: it
+    writes one row per card per disclosure, keyed by the disclosure's digest, from :meth:`place`."""
 
 
 # ------------------------------------------------------------------------------------------------

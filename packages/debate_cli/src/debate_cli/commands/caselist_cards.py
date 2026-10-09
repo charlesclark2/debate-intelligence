@@ -7,8 +7,8 @@
     debate-research caselist cards --caselist hsld26 --parsed <dir> --json
     debate-research caselist cards --caselist hsld26 --parsed <dir> --by-team
 
-Reads parsed-card JSONL (the `ParsedCard` schema of `v1-e31-t03`, or the per-source
-`ParsedDocument` records `v1-e31-t06` writes) from `--parsed`, and the disclosures this machine's
+Reads parsed-card JSONL (`ParsedCard` or `ParsedDocument` lines, the schemas of `v1-e31-t03`)
+from `--parsed`, and the disclosures this machine's
 caselist imports recorded. Prints the totals — cards, exact unique cards, clusters, the duplicate
 rate — and the top clusters by the number of distinct teams that read them, each with a short cite
 and a tag.

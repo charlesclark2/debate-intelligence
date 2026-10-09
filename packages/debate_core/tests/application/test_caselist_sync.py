@@ -86,7 +86,7 @@ from debate_core.application.caselist_sync import (
     StageOutcome,
     SyncRunInProgress,
     SyncStage,
-    _held_openev_ids,  # pyright: ignore[reportPrivateUsage]
+    _match_listed_openev,  # pyright: ignore[reportPrivateUsage]
     within_daily_budget,
 )
 from debate_core.application.errors import (
@@ -991,7 +991,9 @@ def test_openev_matching_never_holds_a_listed_file_nobody_imported(
     """
     listed, imported, recorded = case
 
-    held = _held_openev_ids(listed, recorded)
+    held = _match_listed_openev(
+        listed, recorded, listed_anywhere=frozenset(one.openev_id for one in listed)
+    ).held
 
     assert held <= imported, f"held {sorted(held - imported)} that nobody imported"
 

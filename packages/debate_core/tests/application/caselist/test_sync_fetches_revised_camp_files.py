@@ -121,7 +121,9 @@ async def removed_on_another_machine(world: RemovalWorld, sha: str) -> None:
 async def import_by_hand(world: RemovalWorld, download: Path) -> None:
     """`caselist import-openev <download> --year 2026 --event policy`, into the world's store."""
     service = OpenEvImportService(
-        caselists=world.repository, blobs=FsSnapshotStore(world.data_dir), suppression=empty_suppression_list()
+        caselists=world.repository,
+        blobs=FsSnapshotStore(world.data_dir),
+        suppression=empty_suppression_list(),
     )
     manifest = world.local.object_path_for(openev_manifest_key(YEAR, Event.POLICY))  # type: ignore[misc]
     report = await service.import_release(
@@ -172,7 +174,7 @@ async def test_a_revision_leaves_the_old_versions_row_and_delivery_entry_as_they
     await pull(world, source)
 
     assert old_row in read_manifest_lines(manifest)
-    assert world.local.blob_path_for(ESTUARY_SHA256).exists()  # type: ignore[misc]
+    assert FsSnapshotStore(world.data_dir).path_for(ESTUARY_SHA256).exists()
     deliveries = json.loads(record.read_text(encoding="utf-8"))["deliveries"]
     assert deliveries["512"] == old_entry
     assert sorted(deliveries) == ["512", "640"]

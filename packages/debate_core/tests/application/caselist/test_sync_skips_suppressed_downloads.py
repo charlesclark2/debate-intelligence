@@ -419,7 +419,7 @@ async def test_with_the_skip_blind_the_importer_still_refuses_the_removed_file(w
     assert decisions(again) == {ESTUARY.openev_id: SelectionDecision.DOWNLOAD}
     assert again.blobs_stored == 0 and again.files_imported == 0
     assert release_classifications(world) == {"SUPPRESSED": 1}
-    assert not world.local.blob_path_for(ESTUARY_SHA256).exists()  # type: ignore[misc]
+    assert not FsSnapshotStore(world.data_dir).path_for(ESTUARY_SHA256).exists()
 
 
 # ------------------------------------------------------------------------------------------------
@@ -562,7 +562,9 @@ async def test_a_file_uploaded_again_where_nothing_was_removed_is_fetched_as_a_r
     (selection,) = again.openev
     assert selection.revision_of == ESTUARY.openev_id
     assert again.blobs_stored == 1
-    assert "1 taken as a revision of an id no longer listed (openev-512 -> openev-640)" in select_reason(again)
+    assert "1 taken as a revision of an id no longer listed (openev-512 -> openev-640)" in (
+        select_reason(again)
+    )
     assert [one["revision_of"] for one in again.as_json()["openev_selections"]] == [512]  # type: ignore[union-attr]
     assert release_member_paths(world) == [
         "openev-512-TSF-Estuary_Solvency_Advocate.docx",

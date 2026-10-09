@@ -70,6 +70,7 @@ from debate_core.application.caselist_sync import (
     decide_full_archives,
 )
 from debate_core.application.ports.caselist_source import ArchiveKind, ArchiveListing
+from debate_core.application.sync_runs import record_for_summary
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore, SqliteDatabase
 from debate_core.integrations.local.archive_reader import read_archive
@@ -577,6 +578,34 @@ async def test_one_download_left_after_the_weeklies_buys_the_complete_archive(tm
         full_name(CASELIST, W3),
     ]
     assert summary.full_archive is not None and summary.full_archive.allowance_after_weeklies == 1
+
+
+async def test_the_run_log_keeps_the_whole_rotation_reason(tmp_path: Path) -> None:
+    """The select reason passes the run log's ordinary 500 characters; the run log keeps all of it.
+
+    Four caselists with long invented slugs, so that it does here; three real ones with their
+    "last refreshed" dates come close (`v1-e34-t04` session report).
+    """
+    data_dir = tmp_path / "evidence"
+    site = Site(tmp_path / "site")
+    caselists = [
+        "testclnorthernregion26",
+        "testclsouthernregion26",
+        "testclcentralregion26",
+        "testclwesternregion26",
+    ]
+    for caselist in caselists:
+        site.weekly(W1, caselist=caselist)
+        site.full(W2, caselist=caselist)
+
+    summary = await build_service(site, data_dir).run(caselists)
+    third = caselists[-1]
+    record = record_for_summary(summary, environment="dev", mode="run")
+
+    (select,) = [one for one in record.stages if one.stage == "select"]
+    assert select.reason is not None and len(select.reason) > 500
+    assert select.reason == summary.stage(SyncStage.SELECT).reason  # type: ignore[union-attr]
+    assert f"{third}: due, waits its turn (never refreshed)" in select.reason
 
 
 # ------------------------------------------------------------------------------------------------

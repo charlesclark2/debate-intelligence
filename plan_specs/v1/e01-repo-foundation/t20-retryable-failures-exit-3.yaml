@@ -56,7 +56,7 @@ spec:
         scripts, run summaries, runbooks, tests) and what each now sees; nothing that treats exit 1
         as a verdict is left reading an outage as one.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

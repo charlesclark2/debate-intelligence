@@ -112,10 +112,13 @@ IAM Identity Center → Settings → Authentication → Multi-factor authenticat
 
 ## Step 4 — Apply the baseline Terraform (operator)
 
+The editor step fills in `terraform.tfvars`, which is gitignored: it holds your emails and Identity
+Center user names.
+
 ```bash
 cd infrastructure/bootstrap/organization
 cp terraform.tfvars.example terraform.tfvars
-$EDITOR terraform.tfvars        # gitignored; holds your emails and Identity Center user names
+$EDITOR terraform.tfvars
 terraform init
 terraform plan -out=baseline.tfplan
 terraform apply baseline.tfplan

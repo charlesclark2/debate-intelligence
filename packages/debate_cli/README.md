@@ -245,7 +245,7 @@ Three rules worth knowing:
 
 ## Tests
 
-```console
+```bash
 uv run pytest packages/debate_cli/tests
 ```
 

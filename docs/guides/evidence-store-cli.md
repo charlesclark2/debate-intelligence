@@ -13,11 +13,16 @@ buckets and the credentials: [runbooks/evidence-store.md](../runbooks/evidence-s
 **`store sync` does not write anything unless you say `--apply`.** On its own it lists both sides,
 prints what it *would* do, and stops. That is the opposite of most sync tools and it is
 deliberate: this command writes to the team's system of record, and the cheapest moment to notice
-that your local store is not what you thought is before the upload.
+that your local store is not what you thought is before the upload. First see what would change:
 
 ```bash
-debate-research store sync            # what would change
-debate-research store sync --apply    # do it
+debate-research store sync
+```
+
+Then do it:
+
+```bash
+debate-research store sync --apply
 ```
 
 ## Before the first run
@@ -48,10 +53,11 @@ skipped — see [Resuming](#resuming).
 ## Which environment, and therefore which bucket
 
 `DEBATE_ENV` decides, and nothing else does. There is no `--bucket` flag, because a command that
-could be pointed at production by a typo in an argument is a command that eventually is.
+could be pointed at production by a typo in an argument is a command that eventually is. `dev` is
+the default in a source checkout.
 
 ```bash
-DEBATE_ENV=dev  debate-research store sync     # the default in a source checkout
+DEBATE_ENV=dev  debate-research store sync
 DEBATE_ENV=prod debate-research store sync
 ```
 
@@ -63,10 +69,15 @@ each value came from.
 
 ## Publishing to production
 
-A push to prod needs `--confirm-prod` on top of `--apply`:
+A push to prod needs `--confirm-prod` on top of `--apply`. Run the dry run and read it first:
 
 ```bash
-DEBATE_ENV=prod debate-research store sync            # read this first
+DEBATE_ENV=prod debate-research store sync
+```
+
+Then publish:
+
+```bash
 DEBATE_ENV=prod debate-research store sync --apply --confirm-prod
 ```
 
@@ -163,9 +174,11 @@ calls.
 
 ## Reading the store
 
+`store ls` on its own lists every documented prefix; given a prefix, it lists that one.
+
 ```bash
-debate-research store ls                       # every documented prefix
-debate-research store ls manifests/hsld26/     # one prefix
+debate-research store ls
+debate-research store ls manifests/hsld26/
 debate-research store get manifests/hsld26/2026-09-15.jsonl
 debate-research store get manifests/hsld26/2026-09-15.jsonl -o /tmp/manifest.jsonl
 ```

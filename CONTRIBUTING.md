@@ -27,12 +27,17 @@ policy. Requests to remove something from the evidence corpus go by email as des
 Nobody pushes directly to `dev` or `main`, and neither is force-pushed or rebased; the
 `protect-dev` and `protect-main` rulesets enforce that.
 
+`scripts/task` runs each step. `ready` lists the tasks whose prerequisites are done. `start`
+creates a worktree and branch off `dev` and launches the Claude session. `report` hands the session
+report to the PM. After the PM's verdict is `ACCEPTED`, `pr` pushes the branch and opens the pull
+request into `dev`, and after the pull request is merged `finish` removes the worktree and branches.
+
 ```bash
-scripts/task ready                 # tasks whose prerequisites are done
-scripts/task start <task>          # worktree + branch off dev, launches the Claude session
-scripts/task report <task>         # hand the session report to the PM
-scripts/task pr <task>             # after PM verdict ACCEPTED: push + PR into dev
-scripts/task finish <task>         # after the PR is merged: remove worktree and branches
+scripts/task ready
+scripts/task start <task>
+scripts/task report <task>
+scripts/task pr <task>
+scripts/task finish <task>
 ```
 
 ## Issues

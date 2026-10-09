@@ -75,10 +75,11 @@ dev from prod. `DebateMaintainer` is also denied every `debate-prod-*` resource 
 
 **Shell variables**, used by every block below. `WT` is the checkout that holds this task's
 Terraform: the task worktree while the task is in flight, the main clone once it has merged. A
-stale `WT` is the failure this block exists to catch.
+stale `WT` is the failure this block exists to catch. Replace `/path/to/your/checkout` with that
+checkout's absolute path, for example `.../debate-intelligence-worktrees/v1-e29-t03-evidence-buckets`.
 
 ```bash
-WT=/path/to/your/checkout          # e.g. .../debate-intelligence-worktrees/v1-e29-t03-evidence-buckets
+WT=/path/to/your/checkout
 OWNER_EMAIL='you@example.com'
 SSO_USER_NAME='your-identity-center-user-name'
 
@@ -91,7 +92,10 @@ Success looks like: `ok: <the worktree path> on branch task/v1-e29-t03-evidence-
 
 **The operator-local tfvars**, which are gitignored. They carry the maintainer's email and the
 Identity Center user names the permission sets are assigned to. If you have already run
-[team-website.md](team-website.md), these files exist and you are appending to them.
+[team-website.md](team-website.md), these files exist and you are appending to them. The block
+ends with `terraform fmt`, because `scripts/terraform_checks.sh` runs `terraform fmt -check
+-recursive` over the working tree, which includes gitignored `.tfvars`. Unaligned `=` here fails
+pre-commit on every later commit from this checkout, which is a confusing thing to debug later.
 
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`
@@ -108,9 +112,6 @@ evidence_removal_user_names  = ["$SSO_USER_NAME"]
 TFVARS
 done
 
-# scripts/terraform_checks.sh runs `terraform fmt -check -recursive` over the working tree, which
-# includes gitignored .tfvars. Unaligned `=` here fails pre-commit on every later commit from this
-# checkout, which is a confusing thing to debug later.
 terraform fmt infrastructure/envs/dev infrastructure/envs/prod
 cat infrastructure/envs/dev/owner.auto.tfvars
 ```
@@ -351,12 +352,15 @@ requires. Delete the probe from any local copy too.
 
 **The bucket's own configuration**, read back from the account rather than from the plan. This is
 the live half of what `tests/evidence_bucket.tftest.hcl` asserts offline, and it is cheaper to
-catch a wrong lifecycle rule in dev than to create it in prod first.
+catch a wrong lifecycle rule in dev than to create it in prod first. `AWS_PAGER` is set empty
+because the lifecycle output is long enough to trigger the pager otherwise. The key check resolves
+the alias to `KEY_ID` first because `get-key-rotation-status` does not accept an alias, unlike most
+KMS calls.
 
 **Operator command** (expected runtime ~2 min)
 ```bash
 export AWS_PROFILE=debate-admin
-export AWS_PAGER=""          # the lifecycle output is long enough to trigger the pager otherwise
+export AWS_PAGER=""
 BUCKET=debate-dev-evidence-a7508de8
 ALIAS=alias/debate-dev-evidence
 
@@ -374,7 +378,6 @@ echo "== lifecycle (expect 3 rules, and exactly one Expiration block, under expo
 aws s3api get-bucket-lifecycle-configuration --bucket "$BUCKET" --output json
 
 echo "== the key is customer-managed and rotating"
-# get-key-rotation-status does not accept an alias, unlike most KMS calls, so resolve it first.
 KEY_ID=$(aws kms describe-key --key-id "$ALIAS" --query 'KeyMetadata.KeyId' --output text)
 aws kms describe-key --key-id "$ALIAS" \
   --query 'KeyMetadata.{KeyId:KeyId,Manager:KeyManager,State:KeyState}' --output table

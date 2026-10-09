@@ -537,9 +537,22 @@ the Goal set to `Succeeded`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-09
 
 **Notes:**
+
+Accepted. Both requested changes are made, and the earlier review and everything above it are unchanged, as v1-e01-t18 requires.
+
+- **The camps.** Nine institutes are added with the spelling the files use and their full names. The one high school is left out and counted, as ruled. `UNKNOWN` goes from 105 to 1, and 104 titles change, with no ties, no folder disagreements, and no year left in any resolved title. The fixtures use table camp names with invented titles, and the report names no file.
+  - **One caution, noted rather than changed.** Matching anywhere in the name means a spelling that is also an ordinary word (`Wake`) or a proper noun a title might use (`Harvard`, `Emory`) could attribute a camp-less file to that camp. The tie rule covers a file that names another camp too. That doesn't happen in this release, as measured. Future additions to the table should avoid short common-word spellings. If a false attribution ever shows up, the fix is to prefer the camp block's position (after ` - `, before the year), not to widen anything.
+- **Dev status** is now scoped to `openev` plus the per-caselist loop, and says why. Prod stays unscoped.
+- **The re-run checks pass**, and the three camp mutants were caught again on fresh databases.
+
+**How to finish: run the operator steps before the pull request**, as the backfill did. The procedure works from this worktree, and the steps take about 10 minutes.
+- When the operator sends the results, append the dated section to `docs/data/caselist-backfill-2026-09.md`, mark ac2 and ac4 PASS with that evidence, set the Goal to `Succeeded`, and end the report with a new, empty PM review. The PM then accepts it for a normal `scripts/task pr`.
+- If the operator would rather merge first, `scripts/task pr --partial` is authorised on this review.
+
+Follow-up work: the PM files the `caselist status` hint (a manifest mismatch needs a publish, not a person) as an E30 task (priority 3).

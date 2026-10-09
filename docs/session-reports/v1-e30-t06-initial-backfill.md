@@ -397,9 +397,32 @@ UTC-date ledger and the failed import that was never retried, were fixed by `v1-
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-09
 
 **Notes:**
+
+Accepted. Merge with `scripts/task pr`; the Goal is `Succeeded`. This review covers the whole task, including the first session's work, whose own review was never filled in and stays as written.
+
+- **Checked against the branch:** clean, four files changed and no code, 1 commit behind `origin/dev` (the PM's close-out PR, which touched `e30`'s `epic.yaml`). Run `scripts/task sync` again before the PR.
+  - Both new documents carry their docs-index line.
+  - The command-block check passes; it found 13 comments in the runbook before the fix.
+  - Spec validation and the links check pass.
+- **ac1–ac5 pass**, with the evidence in the final table.
+  - The distinct-file counts the session computed from the dev store (4,461 / 2,657 / 3,906) equal the prod upload counts caselist for caselist. That is an independent cross-check, not a copy.
+  - The retention reconciliation is exact: 37 removed against 35 planned, and the 1,087,199,880-byte difference is the two archives that run fetched.
+- **Deviations accepted:**
+  - The first session's Deviations 1–5. Deviation 1 was resolved by ruling #93; 2 and 4 were forced by `pull` and the importer as they stood.
+  - The closing session's two:
+    - `store ls` against dev was not rerun, which is right, because it wasn't cleared. `caselist status` shows the manifest present.
+    - The final table is appended, not edited in place, which follows v1-e01-t18's rule.
+- **The runbook corrections are right.**
+  - The recovery row now describes v1-e34-t06's import from the inbox, and the new row describes v1-e34-t11's retention.
+  - The ledger notes say what was true during the backfill and what is true now (rolling 24 hours since v1-e34-t06).
+- **Follow-up work: nothing new to file.**
+  - The camp `UNKNOWN` defect and NEW's meaning are `v1-e30-t08`.
+  - The complete archive and withdrawals are `v1-e34-t04`.
+  - The ledger and import-retry defects were fixed by `v1-e34-t06`.
+  - The store-split concern for the agent was settled when v1-e34-t05/t10 installed it against the dev store.

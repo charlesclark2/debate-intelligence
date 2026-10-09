@@ -261,3 +261,145 @@ operator's machine, each finishing in seconds (working agreements §2):
 **Reviewed by / date:**
 
 **Notes:**
+
+## Closing session, 2026-10-08/09
+
+This section is the closing session's: the operator's work was finished, and what remained was the
+record and the branch. Everything above it is unchanged. The criteria table below supersedes the
+earlier one, which shows the state after backfill day 1.
+
+## Summary
+
+**The backfill is complete, and the Goal is `Succeeded`.** Every weekly the site lists for
+`hsld26`, `hspolicy26` and `hspf26`, from 07-07 to 10-06, is imported: 14, 13 and 13 snapshots,
+plus the one OpenEv release (`2026-policy`), 41 snapshots in all. It was published to dev and
+checked in sync there. The coach spot-checked 20 disclosures (20 correct). It was then published to
+prod from the same local store: 11,126 sources, 0 failed, all 41 snapshots in sync.
+
+| Caselist | Weeklies | Stored members | Distinct files | Saving | Prod sources |
+|---|---|---|---|---|---|
+| hsld26 | 14 | 5,647 | 4,461 | 21.0% | 4,461 |
+| hspolicy26 | 13 | 3,465 | 2,657 | 23.3% | 2,657 |
+| hspf26 | 13 | 5,347 | 3,906 | 26.9% | 3,906 |
+| openev `2026-policy` | 1 | — | 102 | — | 102 |
+
+The distinct-file counts, computed by this session from the dev store, equal the prod upload
+counts the PM recorded, caselist for caselist. The local store holds 3,083,588 KiB, and the inbox
+is at 0 B after the final run's retention.
+
+This session also did four things:
+
+* Rebased the branch onto `origin/dev`, which was 211 commits ahead (`scripts/task sync`). The
+  only conflict was `docs/README.md`, resolved to dev's generated version.
+* Brought the two new documents up to the rules that landed meanwhile: the docs-index line, and no
+  `#` comments in shell blocks.
+* Recorded the missing rows and runs, using read-only commands against the operator's dev store.
+* Corrected the runbook where `v1-e34-t06` and `v1-e34-t11` had made it stale.
+
+## Acceptance criteria (final)
+
+Session commands ran from the task worktree, after the final pull (2026-10-09 UTC). Rows marked
+*PM* are facts the PM supplied, recorded as given.
+
+| Criterion | Status | Evidence (command → result) |
+|---|---|---|
+| **ac1** — the runbook gives the exact operator commands (import order 0901 → 0908 → 0915, OpenEv import, dev publish, status, prod publish with `--confirm-prod`) and expected durations | PASS, with Deviation 2 | `docs/runbooks/caselist-backfill.md` has every item. The hand imports are day 1 step 3, after the pulls the importer's ordering forced first (Deviation 2). Day 1 was run from it as written. The runbook now also says what `v1-e34-t06` and `v1-e34-t11` changed. |
+| **ac2** — per-snapshot counts, dedupe rate, PDF/.doc and unparsed counts, bytes stored; path-level REMOVED labelled; withdrawal figure named as deferred to `v1-e34-t04`; the measured 11% stated (as amended by #93) | PASS | `docs/data/caselist-backfill-2026-09.md` has all 40 weekly rows, each with every column, from `snapshot_rows` against `~/.debate-research/dev`, plus the OpenEv row. It gives per-caselist dedupe rates (21.0% / 23.3% / 26.9%) from `dedupe_row`, and bytes on disk of 3,083,588 KiB from `du -sk`. REMOVED is headed **Paths no longer present**, and the withdrawal section says "Deferred to `v1-e34-t04-full-archive-refresh`; … The blank here is not a zero." The 11% measurement is stated. The rows cross-check against every run summary's members, duplicates and blobs. |
+| **ac3** — hsld26 09-01/09-08/09-15 and OpenEv manifests in the dev bucket; dev `caselist status` reports no drift | PASS | `DEBATE_ENV=dev uv run debate-research --json caselist status --caselist <slug>`, for each of hsld26, hspolicy26, hspf26 and openev → exit 0, `in_sync: true`. Per caselist: 14 snapshots 5,247/5,247, 13 3,156/3,156, 13 4,564/4,564, 1 102/102; 0 missing; 0 mismatches. `manifest_present: true` for hsld26 2026-09-01, 2026-09-08, 2026-09-15 and openev 2026-policy. *PM*: the dry run `20261009T023844Z` after the final pull wanted nothing, and all four caselists were in sync. Recorded as `dev status: in sync`. |
+| **ac4** — the coach spot-checked at least 20 random disclosures in dev, with the results in the summary | PASS (*PM*) | 2026-10-08: 20 compared, 20 correct, 0 flagged, 0 wrong. Recorded in the summary's spot-check table with the coach's acceptance. |
+| **ac5** — the same manifests in prod, prod `caselist status` reports no drift, with the date of the prod publish | PASS (*PM*) | Published 2026-10-09 UTC (the evening of 8 October Central), from the dev data directory with `--confirm-prod`: hsld26 14 / 4,461, hspolicy26 13 / 2,657, hspf26 13 / 3,906, openev 2026-policy 1 / 102; 11,126 sources, 0 failed, 0 blocked. The dry runs planned the same counts. Prod `caselist status` → all 41 in sync ("Every snapshot agrees"). Recorded as `prod status: in sync`. |
+| Node: Backfill runbook exists (`--confirm-prod`) | PASS | `grep -c -- "--confirm-prod" docs/runbooks/caselist-backfill.md` → 4 |
+| Node: Summary template exists (`Dedupe rate`) | PASS | `grep -c "Dedupe rate" docs/data/caselist-backfill-2026-09.md` → 1 |
+| Node: Local import counts recorded (`2026-09-15`) | PASS | The 09-15 row is recorded from the operator's hand import of 2026-09-26. |
+| Node: Dev publish recorded (`dev status: in sync`) | PASS | Present in the summary, written after the final check above. |
+| Node: Latest LD manifest in the dev bucket (`store ls manifests/hsld26/2026-09-15.jsonl`) | PASS | Run by the session on 2026-09-26 → exit 0, 930.7 KB (earlier table). This session did not run `store ls`, which was not among the reads it was cleared for. `caselist status` shows the manifest still present (ac3). |
+| Node: Coach accepts the dev spot check | PASS (*PM*) | ac4. |
+| Node: Prod publish recorded (`prod status: in sync`) | PASS | Present in the summary. |
+| Node: Latest LD manifest in the prod bucket (`DEBATE_ENV=prod … store ls manifests/hsld26/2026-09-15.jsonl`) | PASS (*PM*) | Returned 930.7 KB. The session ran no prod command. |
+| Node: Session report committed | PASS | This file. |
+
+Checks this session ran, all from the task worktree:
+
+| Check | Result |
+|---|---|
+| `uv run scripts/validate_specs.py` | `OK: 310 files, 38 epics, 252 tasks, 20 releases` |
+| `uv run scripts/validate_specs.py --require-succeeded v1-e30-t06-initial-backfill` | `Succeeded` |
+| `uv run scripts/check_links.py` | `OK: 1292 relative links and anchors in 183 Markdown files` |
+| `uv run scripts/docs_index.py --check-descriptions` | `All 32 indexed documents under docs/ have a description`. It failed for both new documents before their first lines were added. |
+| `uv run scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 202 shell code blocks in 109 Markdown files (1 session reports changed since origin/dev)`. Before the fix it reported 13 comments, all in the runbook. |
+| Package tests | None run: the branch changes only documents and the spec's phase (`git diff origin/dev --stat`: four files, no code), so no package test exercises this task's work. |
+
+## What this session changed
+
+* **Sync.** `scripts/task sync v1-e30-t06-initial-backfill` stopped on `docs/README.md`. The
+  branch's first commit had added two index lines by hand, and the index is now generated
+  (`v1-e01-t16`). Resolved to dev's version, and `docs/README.md` is otherwise untouched. The
+  branch is 0 behind `origin/dev` and has not been pushed.
+* **Docs-index lines.** `docs/runbooks/caselist-backfill.md` and
+  `docs/data/caselist-backfill-2026-09.md` now start with `<!-- docs-index: … -->`, worded as their
+  old index lines were. The session report needs none: `docs/session-reports/` is indexed by its
+  README.
+* **Command blocks.** Every `#` comment in the runbook's shell blocks moved into the prose. The
+  count-function block is split: one block defines `snapshot_rows`, `dedupe_row` and
+  `first_seen_rows`, described in a list before it, and a second block runs them. The functions
+  used for this session's counts were extracted from those two blocks as committed, so the
+  documented commands are the ones that produced the numbers.
+* **Recovery table.** The row "A re-run will **not** import it" was stale since `v1-e34-t06`. It
+  now says the next run imports the archive from the inbox (`already_in_inbox`) without a download,
+  oldest first, stopping at the first gap. A new row, "The inbox is empty after a run", explains
+  `v1-e34-t11`'s retention: when it removes a download, what it keeps and why, and why a removed
+  weekly is never fetched again. The opening passage that said `pull` never imports an inbox
+  archive now says what was true when the backfill ran and what is true now.
+* **Ledger notes.** The runbook's UTC-date warnings describe how the backfill ran. Each is
+  followed by what is true now: `pull`'s ledger has counted starts over a rolling 24 hours since
+  `v1-e34-t06`. The runs show it: `20261008T030658Z`, 80 minutes after five downloads, was granted
+  none.
+* **Summary.** Added the rows for hsld26 10-06, hspolicy26 10-06 and hspf26 09-08 to 10-06, both
+  per-snapshot and first-seen. Added the four pull runs from 2 October, the final dedupe rates,
+  bytes on disk, the final dev status table, the spot check, and the prod publish. Moved back a
+  sentence ("The withdrawal figure is deferred…") that an earlier edit had attached to the
+  cap-measurement paragraph.
+
+## Deviations (closing session)
+
+* **`store ls` against dev was not rerun.** The node's evidence is the 2026-09-26 run, plus
+  `caselist status` now. The brief cleared `caselist runs`, `caselist status` and the count
+  functions, and `store ls` was not among them.
+* **The completed criteria table is here, not in place.** The brief asked for the table to be
+  completed and for nothing above the earlier PM review to be edited. The earlier table stays as
+  the record of day 1.
+
+## Decisions and assumptions (closing session)
+
+* **The two retention figures reconcile exactly**, and the summary says so. The pre-pull dry run
+  listed 35 files, 2,439,954,953 bytes. The run removed 37 files, 3,527,154,833 bytes. The
+  difference, 1,087,199,880 bytes, is the combined size of the two archives that run fetched (the
+  run summary's `inbox_retention`).
+* **Times are given in both UTC and Central.** Run ids and the ledger are UTC; the operator's
+  evenings are Central. The final pull ran on 8 October Central and 9 October UTC, and both
+  dates are stated wherever it is cited.
+* **One unplanned run is listed.** `20261002T012228Z`, five minutes after run 5 and for hsld26
+  only, is in the pull-runs table. It found nothing to fetch and changed nothing.
+
+## Operator follow-ups (closing session)
+
+None. The backfill, the spot check and the prod publish are done. Pushing the branch and opening
+the pull request are the operator's, after the PM's review (`scripts/task pr`).
+
+## Follow-up work (closing session)
+
+No new items. Those listed earlier stand: the importer metadata defects are filed as
+`v1-e30-t08`, and the full archive is `v1-e34-t04`. The two `pull` defects listed earlier, the
+UTC-date ledger and the failed import that was never retried, were fixed by `v1-e34-t06`.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

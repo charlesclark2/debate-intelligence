@@ -367,9 +367,36 @@ warning in 92.10s`, total coverage 96%.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted, and **closed rather than partial**. Merge with `scripts/task pr` (no `--partial`).
+
+- **Scope decision for Deviations 1 and 2.** Both remaining parts need `caselist_sync` to classify what a stage recorded and to tell a local refusal from a remote one. That is design work in the E34 sync lineage, and `v1-e34-t12` is about to change the same module. It does not belong in a resumed t20.
+  - The PM has narrowed `ac1` (stage-recorded pull failures out of scope) and `ac2` (`FsSnapshotStore` only), with comments in the spec, and set the Goal to `Succeeded`.
+  - The remaining work is one E34 task the PM files at close-out, depending on this one:
+    - a failed `StageRecord` carries an error class, and pull exits 3 when a required stage failed only on a retryable cause (store, and OpenCaselist download 5xx or non-daily 429);
+    - publish and report stop reading every `StoreAccessDenied` as an expired login;
+    - then the other three filesystem stores are translated, with `list_objects` raising instead of listing nothing;
+    - `caselist publish`'s `manifest_error` code prefix becomes a structured field instead of a string the CLI parses.
+  - So this report's PARTIAL and FAIL rows describe the criteria as first written; the amended spec is what the task closes on.
+- **Checked:**
+  - The three errors are named one by one, not the base class.
+  - `RemovalCompletedUnlogged` stays 1, which is the right call: the removal finished.
+  - Per-item failures are all-or-nothing, and a mismatch keeps the run at 1.
+  - Nothing deterministic was moved to 3.
+  - The `PermissionError` translation names a role, never a path.
+  - Every change was shown failing on the start commit's source, and all nine mutants were caught.
+  - The operator's full run: 4544 passed.
+- **The consumer inventory (ac3) is complete and correct.**
+  - The wrapper `exec`s and never interprets codes.
+  - The plist has no `KeepAlive` or `StartInterval`, and the new test pins that.
+  - Run records and notifications read outcomes, not codes.
+  - Pull's partial run (publish pending) stays 0.
+  - Nothing changes for the installed agent until its reinstall after 2026-10-14.
+- **Decisions are accepted.** A typo'd profile exiting 3 is acceptable for now. The PM files an E29 follow-up (priority 3) to give `ProfileNotFound` its own non-retryable error.
+- **Deviation 3** (tests beside the code they test, outside the listed packages) is accepted.

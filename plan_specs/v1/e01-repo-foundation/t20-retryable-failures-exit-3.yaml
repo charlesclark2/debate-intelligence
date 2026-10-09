@@ -40,23 +40,31 @@ spec:
       name: v1-e03-t06-verify-command
       relation: dependsOn
   acceptanceCriteria:
+    # Narrowed by the PM, 2026-10-08, from the session's Deviation 1: a store failure that a
+    # `caselist pull` stage records itself (import, publish execute) cannot be classified without
+    # recording an error class in `debate_core.application.caselist_sync`, outside this task. That
+    # work, with Deviation 2's remaining filesystem stores, is filed as an E34 task by the PM.
     - id: ac1
       description: >-
         Every command maps StoreUnavailable, StoreCredentialsExpired and StoreAccessDenied to exit
-        3, and the README's exit-code table says so; a test per command family shows it. `verify`'s
-        own mapping is unchanged.
+        3 when the failure reaches the CLI, including per-item runs whose every failure is one of
+        the three and the removal wrappers caused by one of them, and the README's exit-code table
+        says so; a test per command family shows it. `caselist pull`'s stage-recorded failures are
+        out of scope here. `verify`'s own mapping is unchanged.
+    # Narrowed by the PM, 2026-10-08, from the session's Deviation 2: translating the other
+    # filesystem stores now would turn a local refusal into pull's "waiting for an AWS login".
     - id: ac2
       description: >-
-        `FsSnapshotStore` (and any other filesystem store with the same gap) turns a PermissionError
-        into StoreAccessDenied naming the path's role, not its location; `verify` against an
-        unreadable blob directory exits 3, not 70. Shown failing first.
+        `FsSnapshotStore` turns a PermissionError into StoreAccessDenied naming the path's role, not
+        its location; `verify` against an unreadable blob directory exits 3, not 70. Shown failing
+        first. The other filesystem stores wait for pull to tell a local refusal from a remote one.
     - id: ac3
       description: >-
         The report lists every consumer of these exit codes found in the repository (wrapper
         scripts, run summaries, runbooks, tests) and what each now sees; nothing that treats exit 1
         as a verdict is left reading an outage as one.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

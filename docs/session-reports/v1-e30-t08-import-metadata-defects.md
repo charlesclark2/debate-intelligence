@@ -363,3 +363,183 @@ Changes requested:
    - Prod has no `testcl26`, so prod's unscoped status stays as written.
 
 Follow-up work: the PM files the `caselist status` hint (a manifest mismatch needs a publish, not a person) as an E30 task (priority 3). `first_seen` after a removal is noted but not filed until a report relies on it.
+
+## Changes after PM review (2026-10-09)
+
+Both requested changes are made. The review and everything above it are unchanged. Where this
+section and the earlier ones differ, this section supersedes them: the expected counts, the
+Operator follow-ups, and Deviation 1, which is resolved. The branch was rebased with
+`scripts/task sync` (it was 1 behind `origin/dev`; it is now 0 behind).
+
+### 1. The missing camps are in the alias table
+
+Of the 10 names at the camp position that the table lacked, **9 are camps or institutes** and are
+added with their spellings. **1 is a high school's own name** and is left out. Its one file stays
+`UNKNOWN` with the warning, as ac1 requires. I checked the two I was unsure of: one is the
+University of Wyoming's summer camp, the Wyoming Forensics Institute; the other is a high school,
+whose only camp-like program is a free speaking camp its students ran for middle schoolers. The
+additions, as the table's diff shows them:
+
+```yaml
+  CNDI:
+    - California National Debate Institute
+  Emory:
+    - Emory National Debate Institute
+  Georgetown:
+    - Georgetown Debate Seminar
+  Harvard:
+    - Harvard Debate Council Summer Workshops
+  JDI:
+    - Jayhawk Debate Institute
+  Mean Green:
+    - Mean Green Workshops
+  MSDI:
+    - Missouri State Debate Institute
+  Wake Forest:
+    - Wake
+  Wyoming:
+    - Wyoming Forensics Institute
+```
+
+Each gets the spelling the files use and the institute's full name. I added no extra short forms,
+and left out an acronym that is also a school's initials.
+
+**Fixtures.** Nine rows were added to
+`packages/debate_core/tests/integrations/opencaselist/test_camp_names_in_openev_files.py`, one per
+added camp. They use table camp names with invented titles and initials. They include the two-word
+camp name and a title with its own ` - ` before the camp block, both shapes the real release has.
+Each row also runs through the sync's inbox name. `test_camp_metadata.py` asserts the nine are in
+the packaged table.
+
+**Re-measured, read-only, in memory, counts only** (2026-10-09, about 0.01 s each):
+
+| Camp | Files before | Files after |
+|---|---|---|
+| CNDI | 0 | 5 |
+| DDI | 0 | 27 |
+| Emory | 0 | 1 |
+| Georgetown | 0 | 2 |
+| Gonzaga | 0 | 2 |
+| Harvard | 0 | 8 |
+| JDI | 0 | 4 |
+| Mean Green | 0 | 1 |
+| Michigan | 0 | 40 |
+| MSDI | 0 | 6 |
+| NHSI | 0 | 2 |
+| UTNIF | 0 | 3 |
+| Wake Forest | 0 | 2 |
+| Wyoming | 0 | 1 |
+| **UNKNOWN** | **105** | **1** |
+
+* **Titles changed: 104** (was 74). **Rows changed: 105**: the one still `UNKNOWN` gets the reworded
+  warning. **Camp-file records updated: 102**, 0 missing, 0 blobs missing. The summary's
+  `warnings` goes from 105 to 1.
+* Same key, same 107 lines, and no member row has a non-derived field changed.
+* No two-camp ties and no folder disagreements: none of the added names appears in any title
+  outside the camp position.
+* Title checks over the 104 resolved titles:
+  * none still holds a year;
+  * six end in capitals, all argument abbreviations before the camp (`CP` 3, `K` 2, `DA` 1);
+  * one keeps a ` - `: the title has its own dash before the camp block (`<title> - <subtitle> -
+    <camp> <year>`), so the title is `<title> - <subtitle>`.
+
+### 2. Dev's status is scoped, and why
+
+In the runbook's camp-metadata section, its recovery row, and the follow-ups below, dev's check is
+now two parts. `caselist status --caselist openev` is the check the re-import affects. A
+per-caselist loop over `hsld26`, `hspolicy26` and `hspf26` covers the rest. An unscoped
+`caselist status` in dev exits `1` whatever this task does, because the dev bucket also holds
+`testcl26`, the takedown exercise of RM-2026-90, kept there by PM decision. Prod holds no
+`testcl26`, so prod's status stays unscoped.
+
+### Checks re-run after the changes
+
+| Check | Result |
+|---|---|
+| `uv run pytest packages/debate_core/tests/integrations/opencaselist/ -k camp` | `45 passed in 5.17s` (27 before, plus 9 shapes × 2) |
+| `uv run pytest packages/debate_core/tests/application/ -k reimport` | `20 passed in 8.69s` |
+| `uv run pytest packages/debate_core/tests/application/ -k "first_seen or new_count"` | `11 passed in 8.09s` |
+| Camp unit tests, CLI tests, import smoke checks | `441 passed in 16.85s` |
+| Mutant: position-based detection restored (fresh `HYPOTHESIS_STORAGE_DIRECTORY`) | caught: 54 failed, 55 passed, 4 s |
+| Mutant: substring instead of whole-word matching (fresh database) | caught: 10 failed, 99 passed, 3 s |
+| Mutant: the tie returns a guess (fresh database) | caught: 2 failed, 107 passed, 3 s |
+| `uv run python scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 210 shell code blocks in 109 Markdown files (1 session reports changed since origin/dev)` |
+| `uv run scripts/validate_specs.py` | `OK: 319 files, 38 epics, 261 tasks, 20 releases` |
+
+The table change touches only the three camp mutants. The re-import tests use the OpenEv
+fixture's own table, and the first-seen tests use no camp table, so their mutants are unaffected
+and were not re-run. The Goal stays `InProgress`: ac2 and ac4 are still the operator's.
+
+### Operator follow-ups (supersede the section above)
+
+Use the dev store, `~/.debate-research/dev`, for every step. Run from this task worktree before the
+merge, or from the repository root of any checkout of `dev` that includes `v1-e30-t08`. Expect the
+table above, 104 titles changed, 102 records updated, 0 missing and 0 not held locally.
+
+**1. Dry run** (seconds). Read the table it prints against the one above.
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e30-t08-import-metadata-defects
+export DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev"
+uv run debate-research caselist reimport-openev-metadata --year 2026 --event policy --dry-run
+```
+
+Success looks like the table above and `105 file(s), 104 title(s) changed, 0 not held locally.
+Planned only; nothing was written.`
+
+**2. Re-import, dev publish, dev status** (seconds, about a minute, then a few minutes).
+
+```bash
+aws sso login --profile debate-dev-evidence
+uv run debate-research --json caselist reimport-openev-metadata --year 2026 --event policy
+uv run debate-research caselist publish --caselist openev --snapshot 2026-policy
+uv run debate-research caselist status --caselist openev
+for cl in hsld26 hspolicy26 hspf26; do uv run debate-research caselist status --caselist "$cl"; done
+unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
+```
+
+Success looks like this:
+
+* the JSON shows `"camps_after"` as in the table, `"titles_changed": 104`,
+  `"camp_files_updated": 102` and `"blobs_missing": 0`;
+* the publish shows 0 uploaded, 102 skipped and the manifest `uploaded`;
+* `status --caselist openev` exits `0`, **Every snapshot agrees** (1 snapshot);
+* each loop run exits `0`, **Every snapshot agrees** (14, 13 and 13 snapshots).
+
+Don't run an unscoped dev status: it exits `1` because of `testcl26`. Paste the JSON's counts and
+the four status captions back.
+
+**3. Prod publish and prod status** (about a minute, then a few minutes). Only after step 2 is
+clean.
+
+```bash
+aws sso login --profile debate-prod-evidence
+export DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev"
+uv run debate-research caselist publish --caselist openev --snapshot 2026-policy --dry-run
+uv run debate-research caselist publish --caselist openev --snapshot 2026-policy --confirm-prod
+uv run debate-research caselist status
+unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
+```
+
+Success looks like this:
+
+* the dry run plans 0 uploads;
+* the real run uploads the manifest and no source;
+* `status` exits `0` with all 41 snapshots in sync.
+
+**4. Record it.** Send the results back to this session. It will append the dated section to
+`docs/data/caselist-backfill-2026-09.md`: before and after camp counts, titles changed, the dev
+status results (openev and the three caselists) and prod's. Then ac2 and ac4 can be marked PASS and
+the Goal set to `Succeeded`.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

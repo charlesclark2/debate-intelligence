@@ -447,25 +447,35 @@ release manifest already records. It downloads nothing, writes no blob, and chan
 no manifest key: it corrects the 102 camp-file records and rewrites
 `manifests/openev/2026-policy.jsonl` at the same key.
 
-What to expect, measured by a read-only run over the release manifest on 2026-10-08 (counts only):
+What to expect, measured by a read-only run over the release manifest on 2026-10-09, with the
+alias table as `v1-e30-t08` leaves it (counts only):
 
 | Camp | Files before | Files after |
 |---|---|---|
+| CNDI | 0 | 5 |
 | DDI | 0 | 27 |
+| Emory | 0 | 1 |
+| Georgetown | 0 | 2 |
 | Gonzaga | 0 | 2 |
+| Harvard | 0 | 8 |
+| JDI | 0 | 4 |
+| Mean Green | 0 | 1 |
 | Michigan | 0 | 40 |
+| MSDI | 0 | 6 |
 | NHSI | 0 | 2 |
 | UTNIF | 0 | 3 |
-| UNKNOWN | 105 | 31 |
+| Wake Forest | 0 | 2 |
+| Wyoming | 0 | 1 |
+| UNKNOWN | 105 | 1 |
 
-74 titles change. All 105 rows change, because the 31 that stay `UNKNOWN` get a reworded warning.
-Expect 102 camp-file records updated, 0 missing, and 0 files not held locally. The 31 that stay
-`UNKNOWN` name one of 10 camps the alias table does not list. Adding those camps to
-`camp_aliases.yaml` and running the same commands again corrects them too.
+104 titles change. All 105 rows change, because the one that stays `UNKNOWN` gets a reworded
+warning. Expect 102 camp-file records updated, 0 missing, and 0 files not held locally. The one
+file that stays `UNKNOWN` names a high school at the camp position, not a camp, and is left out of
+the alias table on purpose.
 
 The manifest's bytes change, so the bucket's copy differs until the release is published again.
-Between the re-import and the publish, `caselist status` exits `1` with one checksum mismatch, on
-`manifests/openev/2026-policy.jsonl` itself, and every source present. That is expected, not the
+Between the re-import and the publish, `caselist status --caselist openev` exits `1` with one
+checksum mismatch, on `manifests/openev/2026-policy.jsonl` itself, and every source present. That is expected, not the
 mismatch that needs a person. `caselist publish` re-uploads a manifest whose bucket digest
 differs. It uploads no source, because all 102 are already there. The bucket keeps the old
 manifest as a noncurrent version for its retention window (30 days in dev, 365 in prod).
@@ -479,20 +489,28 @@ uv run debate-research caselist reimport-openev-metadata --year 2026 --event pol
 ```
 
 The second block applies it, publishes the corrected manifest to dev and checks dev. Seconds for
-the re-import, about a minute for the publish, a few minutes for the status of every caselist.
+the re-import, about a minute for the publish, a few minutes for the status of the three
+caselists.
 
 ```bash
 aws sso login --profile debate-dev-evidence
 uv run debate-research --json caselist reimport-openev-metadata --year 2026 --event policy
 uv run debate-research caselist publish --caselist openev --snapshot 2026-policy
-uv run debate-research caselist status
+uv run debate-research caselist status --caselist openev
+for cl in hsld26 hspolicy26 hspf26; do uv run debate-research caselist status --caselist "$cl"; done
 unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
 ```
 
-Success: the re-import's JSON shows `"camps_after"` as in the table, `"titles_changed": 74`,
+Dev's status is checked one caselist at a time. An unscoped `caselist status` in dev exits `1`
+whatever this re-import does, because the dev bucket also holds `testcl26`, the takedown exercise of
+RM-2026-90, which is kept there by PM decision. `--caselist openev` is the check this re-import
+affects; the loop shows the other three are untouched.
+
+Success: the re-import's JSON shows `"camps_after"` as in the table, `"titles_changed": 104`,
 `"camp_files_updated": 102` and `"blobs_missing": 0`. The publish shows 0 uploaded, 102 skipped and
-the manifest `uploaded`. `status` exits `0` with **Every snapshot agrees**, all 41 snapshots. Only
-then publish the same manifest to prod, from the same data directory:
+the manifest `uploaded`. `status --caselist openev` exits `0` with **Every snapshot agrees** (1
+snapshot), and each run of the loop exits `0` with **Every snapshot agrees** (14, 13 and 13
+snapshots). Only then publish the same manifest to prod, from the same data directory:
 
 ```bash
 aws sso login --profile debate-prod-evidence
@@ -504,7 +522,7 @@ unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
 ```
 
 The prod dry run plans 0 uploads. The real run uploads the manifest and no source, and `status`
-exits `0` with all 41 snapshots in sync. Record the before and after camp counts, the titles
+exits `0` with all 41 snapshots in sync. Prod holds no `testcl26`, so its status stays unscoped. Record the before and after camp counts, the titles
 changed and both status results in a dated section of
 `docs/data/caselist-backfill-2026-09.md`.
 
@@ -519,7 +537,7 @@ changed and both status results in a dated section of
 | `another caselist sync is already running` | Another `pull` holds the lock; wait for it. See the scheduled-sync runbook if none is running |
 | `SnapshotOutOfOrder` on a manual import | Stop. Something newer is already held. Never pass `--allow-out-of-order` in this backfill |
 | `caselist status` shows drift | Re-run the `caselist publish` for that caselist. A checksum mismatch needs a person |
-| `caselist status` shows one mismatch, on `manifests/openev/2026-policy.jsonl`, after `reimport-openev-metadata` | Expected: publish the release (`caselist publish --caselist openev --snapshot 2026-policy`). See the camp-metadata section above |
+| `caselist status --caselist openev` shows one mismatch, on `manifests/openev/2026-policy.jsonl`, after `reimport-openev-metadata` | Expected: publish the release (`caselist publish --caselist openev --snapshot 2026-policy`), then check `--caselist openev` again. In dev, check one caselist at a time: an unscoped dev status exits `1` because of `testcl26`, kept by PM decision. See the camp-metadata section above |
 | A day was missed | Carry on the next day. Nothing is lost; the plan just ends a day later |
 
 ## Related

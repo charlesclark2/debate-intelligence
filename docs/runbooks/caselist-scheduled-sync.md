@@ -311,11 +311,15 @@ One JSON object per run on stdout. The fields to read first:
 | `objects_published` | What reached the bucket |
 | `pending_publish` | Snapshots waiting for an AWS session |
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
+| `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
 | `stages[]` | One entry per stage, each with the sentence saying why it ended that way |
 
-Nothing in that object is a school, a team code, a debater's initials, a disclosure path or the
-`caselist_token` — the policy forbids all of them in a log, and the summary is built to the same
-rule, so these logs can be pasted into an issue as they are.
+Nothing in that object is a school, a team code, a debater's initials, a disclosure path, a camp
+file's title or the `caselist_token` — the policy forbids all of them in a log, and the summary is
+built to the same rule, so these logs can be pasted into an issue as they are. A camp download is
+named by its OpenEv id, `openev-777`, with `(sha256 2b912c191a8a)` once the run has its bytes, and
+never by its file name, which is its title (`v1-e34-t12`). Summaries and logs written before that
+change may still name camp files, so check older ones before pasting them.
 
 ## The download inbox
 
@@ -419,7 +423,9 @@ newer weeks of that caselist that waited behind it. What the operator has to do 
 cause the reason names — an archive over `caselist.max_archive_bytes`, a caselist slug this build
 does not know the event of, an unreadable zip — because a run meets the same archive again and,
 with the cause still there, fails the same way. An unreadable zip is the one case to delete by
-hand: remove it from the inbox, and the next run downloads it again.
+hand: remove it from the inbox, and the next run downloads it again. A camp download is named in the
+reason by its id, `openev-777 (sha256 2b912c191a8a)`; its file in the inbox is the one whose name
+starts `openev-777-`.
 
 **A camp file shows `skipped_as_removed`** (and the select stage says *N OpenEv file(s) skipped as
 removed*). Nothing is wrong: it was taken out with `caselist remove`, and the run did not fetch it

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -36,12 +37,14 @@ from debate_core.application.caselist_sync import (
     SyncStage,
     run_pull,
 )
-from debate_core.application.ports.caselist_source import OpenEvFile, openev_inbox_name
+from debate_core.application.ports.archive import ArchiveEntry
+from debate_core.application.ports.caselist_source import DownloadedFile, OpenEvFile, openev_inbox_name
 from debate_core.application.ports.notifier import RecordingNotifier
 from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, SyncRunMonitor
 from debate_core.integrations.local.macos_notifier import MacOsNotifier
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
+from . import test_inbox_retention as inbox_retention
 from .test_inbox_retention import (
     CASELIST,
     FakeSource,
@@ -297,3 +300,50 @@ async def test_a_camp_download_whose_import_is_refused_is_named_by_id_and_digest
 def test_the_summary_schema_is_version_3_because_a_key_was_removed() -> None:
     """`inbox_name` left the summary: not an additive change under `v1-e34-t07`'s rule."""
     assert RUN_SUMMARY_SCHEMA_VERSION == 3
+
+
+# ------------------------------------------------------------------------------------------------
+# An error this project did not write quotes the path it failed on: its class only
+# ------------------------------------------------------------------------------------------------
+
+
+class InboxRefusingSource(FakeSource):
+    """OpenCaselist answering, and the inbox refusing the write, as a full or locked disk does."""
+
+    async def download_openev(self, file: OpenEvFile, inbox: Path) -> DownloadedFile:
+        self.openev_fetches.append(file.openev_id)
+        raise PermissionError(13, "Permission denied", str(inbox / openev_inbox_name(file)))
+
+
+async def test_a_camp_download_the_inbox_cannot_take_is_a_failed_download_named_by_id_alone(
+    installation: Installation, logged: pytest.LogCaptureFixture
+) -> None:
+    """An `OSError` names the path it failed on. It used to end the run, and `caselist pull --json`
+    printed its message, the inbox path and the camp's title with it, as the command's error."""
+    source = InboxRefusingSource(installation.archives, openev=[(BROKEN, BROKEN_BODY)])
+
+    failed = await pull(installation, source)
+
+    assert_no_probe(await pasteable(installation, failed, logged))
+    download = failed.pulled.summary.stage(SyncStage.DOWNLOAD)
+    assert download is not None and download.outcome is StageOutcome.FAILED
+    assert download.reason == "0 fetched, then: openev-777: PermissionError"
+
+
+async def test_a_camp_download_that_cannot_be_read_is_a_refused_import_named_by_id_and_digest_alone(
+    installation: Installation, logged: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reader meets an `OSError` opening the camp release, whose message quotes its path."""
+
+    def locked(path: Path, **_: object) -> Iterable[ArchiveEntry]:
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(inbox_retention, "read_archive", locked)
+    source = FakeSource(installation.archives, openev=[(BROKEN, BROKEN_BODY)])
+
+    failed = await pull(installation, source)
+
+    assert_no_probe(await pasteable(installation, failed, logged))
+    assert reason(failed, SyncStage.IMPORT) == (
+        f"0 imported; 1 refused: openev-777 ({sha256_label(BROKEN_BODY)}): PermissionError"
+    )

@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 36 | 31 | 210 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 34 | 24 | 286 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 34 | 25 | 286 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -191,7 +191,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Install and enable the weekly agent](plan_specs/v1/e34-caselist-sync/t05-enable-schedule.yaml) `v1-e34-t05-enable-schedule` | Pending | 6 | 1.5 |
 | [Defects found by operating the sync](plan_specs/v1/e34-caselist-sync/t06-sync-defects.yaml) `v1-e34-t06-sync-defects` | Succeeded | 1 | 7.0 |
 | [The sync does not re-download a file it has been told to remove](plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml) `v1-e34-t07-suppressed-downloads` | Succeeded | 2 | 7.0 |
-| [A camp file uploaded again upstream is fetched](plan_specs/v1/e34-caselist-sync/t08-revised-camp-files.yaml) `v1-e34-t08-revised-camp-files` | Pending | 1 | 4.0 |
+| [A camp file uploaded again upstream is fetched](plan_specs/v1/e34-caselist-sync/t08-revised-camp-files.yaml) `v1-e34-t08-revised-camp-files` | Succeeded | 1 | 4.0 |
 | [Retire the legacy download ledger](plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml) `v1-e34-t09-retire-legacy-ledger` | Pending | 1 | 2.0 |
 | [The weekly agent runs nothing from a git checkout](plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) `v1-e34-t10-agent-outside-checkout` | Succeeded | 1 | 2.0 |
 | [Imported downloads leave the inbox](plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml) `v1-e34-t11-inbox-retention` | Succeeded | 1 | 4.0 |

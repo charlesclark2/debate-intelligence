@@ -36,6 +36,11 @@ a download, an import or a publish failed, or when a guard refused to start: an 
 OpenCaselist token, an API this installation has not turned on, no caselist to pull, or another
 run already holding the lock. A parse or landscape stage that failed is reported in the table and
 does not change the exit code — the captured bytes are safe and the derivation can be recomputed.
+
+A stage records its failure as a sentence, so a stage that failed because the bucket did not
+answer is a `1` like any other failed stage. A store failure that ends the run before a stage can
+record it — the bucket refusing the publish stage's listing, say — is a `3`, as in every other
+command (`v1-e01-t20`).
 """
 
 from __future__ import annotations

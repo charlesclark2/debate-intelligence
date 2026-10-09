@@ -18,8 +18,9 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from tests.fixtures.permissions import needs_permissions, refused
 
-from debate_core.application.errors import BlobIntegrityError, NotFound
+from debate_core.application.errors import BlobIntegrityError, NotFound, StoreAccessDenied
 from debate_core.integrations.local import BLOB_DIRECTORY, BLOB_FILE_MODE, FsSnapshotStore
 from debate_core.integrations.local.fs_blob_store import TEMPORARY_FILE_PREFIX
 
@@ -238,6 +239,45 @@ def test_a_truncated_blob_is_reported(store: FsSnapshotStore) -> None:
 
     with pytest.raises(BlobIntegrityError):
         run(store.get(key))
+
+
+# --------------------------------------------------------------------------------------------
+# The operating system refusing the directory (v1-e01-t20)
+# --------------------------------------------------------------------------------------------
+
+
+@needs_permissions
+def test_an_unreadable_blob_directory_is_access_denied_naming_its_role(store: FsSnapshotStore) -> None:
+    key = run(store.put(RAW_HTML))
+
+    with refused(store.root):
+        with pytest.raises(StoreAccessDenied) as read:
+            run(store.get(key))
+        with pytest.raises(StoreAccessDenied) as checked:
+            run(store.exists(key))
+
+    for caught in (read, checked):
+        assert caught.value.resource == "the blob directory"
+        assert str(store.root.parent.parent) not in str(caught.value)
+        assert isinstance(caught.value.__cause__, PermissionError)
+
+
+@needs_permissions
+def test_an_unwritable_blob_directory_is_access_denied_naming_its_role(store: FsSnapshotStore) -> None:
+    run(store.put(RAW_HTML))
+
+    with refused(store.root), pytest.raises(StoreAccessDenied) as caught:
+        run(store.put(OTHER_HTML))
+
+    assert (caught.value.operation, caught.value.resource) == ("write", "the blob directory")
+    assert str(store.root.parent.parent) not in str(caught.value)
+
+
+def test_a_missing_blob_is_still_not_found_and_not_a_refusal(store: FsSnapshotStore) -> None:
+    run(store.put(RAW_HTML))
+
+    with pytest.raises(NotFound):
+        run(store.get(digest_of(b"never stored")))
 
 
 # --------------------------------------------------------------------------------------------

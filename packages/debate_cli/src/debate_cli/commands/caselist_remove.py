@@ -45,8 +45,12 @@ suppression`).
 ## Exit codes
 
 `0` for a dry run and for a completed execution. `1` for a refusal (a malformed selector, a missing
-`--execute` guard, an unset or refused takedown profile — all before anything changes) and for a run
-that stopped part-way, whose message says to re-run the same command.
+`--execute` guard, `DEBATE_REMOVAL_PROFILE` unset — all before anything changes) and for a run that
+stopped part-way for a reason re-running cannot cure. `3` when the bucket did not answer —
+unavailable, an expired takedown session (the S3 adapter reports a profile missing from the AWS
+config that way too), or a refused request — whether that stopped the preflight or a run part-way,
+whose message says to re-run the same command (`v1-e01-t20`). A removal that completed and could not
+be logged stays `1`: running it again would log zero counts.
 """
 
 from __future__ import annotations

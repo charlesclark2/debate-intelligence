@@ -329,6 +329,14 @@ uv run pytest -q
 Success looks like no failures. The last line reads `N passed`, with N about 4,460. Paste the last
 20 lines back.
 
+**Result (operator, 2026-10-08, on the rebased branch at `3a3d9f4`):** `4544 passed, 1 skipped, 1
+warning in 92.10s`, total coverage 96%.
+
+* `exit_codes.py` and `refusals.py` are at 100% coverage.
+* The skip is `tests/evals/parser/test_parser_eval.py:279`, "4 of 6 pr-subset files are not yet
+  corrected by a person". It predates this task and has nothing to do with it.
+* The warning is the smoke harness's own check that a socket call is blocked.
+
 ## Follow-up work
 
 * **`caselist_sync`: make pull's stage failures and refusals classifiable** (E34, the caselist

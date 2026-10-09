@@ -230,9 +230,22 @@ logs written before then.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted. Merge with `scripts/task pr`; the Goal is `Succeeded`.
+
+- **Checked against the branch:** `9c4a634`, tree clean, 0 commits behind `origin/dev`.
+  - `as_json` drops `inbox_name` for `inbox_file` (`sha256 <12 hex>`, the string retention already uses). The schema goes to 3.
+  - Every camp-download reason goes through `_camp_download_refused`, which scrubs every name the file goes by.
+  - The probe was shown red in the core and in the CLI, and is checked case-insensitively across every output, log extras and the bucket's raw copy included. All four mutants were caught.
+- **The sweep is the right result.** Row 2 found what the spec said was not there: a refused camp zip put its inbox name into the run record, the run log and the bucket's copy, because `redact` only removes path-shaped words. Deviation 1 is accepted. The scope did not change, and the record's schema is unchanged.
+- **Deviation 2 is accepted.** An `OSError` on a camp download now fails that stage, named by id and error class, with exit 1 instead of the title on stdout with exit 70. A refused import writes no delivery entry, so the next run tries again from the inbox, and a transient cause does not stick. The broader catch also covers a full disk during the import, reported by class name only. That suits a stage failure, and the E34 task the PM is filing from v1-e01-t20 (stage failures carry an error class) builds on it rather than undoing it.
+- **Follow-up work: the PM files both.**
+  - Item 1 joins the E34 list (priority 3): the dry run's download reason prints the inbox path, which is the home directory.
+  - Item 2 is an E01 task (priority 3): the CLI's generic handler stops printing the text of an exception it did not model, in any command.
+- **For the agent:** the installed build keeps writing `inbox_name` until the reinstall after 2026-10-14. The runbook's new sentence covers what was written before then.

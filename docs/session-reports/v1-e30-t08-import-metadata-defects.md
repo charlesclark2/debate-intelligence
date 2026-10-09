@@ -585,9 +585,19 @@ camp block's position, not to widen detection.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-09
 
 **Notes:**
+
+Accepted and closed. Merge with `scripts/task pr`; the Goal is `Succeeded`.
+
+- **ac2 and ac4 pass on the operator's runs of 2026-10-09**, and every count matches the read-only prediction.
+  - The re-import: 105 rows changed, 104 titles, 102 records updated, 0 missing, 0 blobs missing.
+  - Both publishes uploaded 0 sources and the manifest only.
+  - Dev status agrees for openev (1 snapshot) and the three caselists (14, 13 and 13), and prod status agrees across all 41.
+  - The PM checked those outputs as they came in.
+- **The dated section is in `docs/data/caselist-backfill-2026-09.md`,** and the earlier reviews and everything above them are unchanged.
+- **The camp-matching caution is noted in the report, as asked.**

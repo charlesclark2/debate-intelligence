@@ -159,7 +159,9 @@ DEBATE_ENV=dev debate-research caselist pull --caselist hsld26 --dry-run
 
 It makes listing calls to OpenCaselist, reads the bucket to compare what the inbox holds with it,
 and writes nothing. Read the table: every archive the site lists, and what the run decided about
-each. `already_imported`, `full_archive_not_pulled_weekly` and `unrecognised_name` are all normal.
+each. `already_imported`, `unrecognised_name` and the complete archive's `full_archive_not_due`,
+`full_archive_waits_its_turn` and `full_archive_deferred_for_weeklies` are all normal (see
+[The complete archive](#the-complete-archive)).
 `over_daily_budget` means there is more back-catalogue than one day's allowance, which is
 `v1-e30-t06`'s job rather than this schedule's. The `retention` row lists what a real run would
 remove from the inbox ([The download inbox](#the-download-inbox)); without an AWS session it can
@@ -311,6 +313,7 @@ One JSON object per run on stdout. The fields to read first:
 | `objects_published` | What reached the bucket |
 | `pending_publish` | Snapshots waiting for an AWS session |
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
+| `full_archive` | What the complete-archive rotation decided and why (`reason`), what the weeklies left of the day's allowance, and for a complete archive imported, its `bytes` and its `withdrawn` and `superseded` counts. See [The complete archive](#the-complete-archive) |
 | `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
 | `stages[]` | One entry per stage, each with the sentence saying why it ended that way |
 
@@ -320,6 +323,91 @@ built to the same rule, so these logs can be pasted into an issue as they are. A
 named by its OpenEv id, `openev-777`, with `(sha256 2b912c191a8a)` once the run has its bytes, and
 never by its file name, which is its title (`v1-e34-t12`). Summaries and logs written before that
 change may still name camp files, so check older ones before pasting them.
+
+## The complete archive
+
+Besides the week's weeklies, a run may fetch **one** caselist's complete archive,
+`<slug>-all-<date>.zip` (`v1-e34-t04`). It is the only way to see that a disclosure was taken down
+upstream: a file an earlier snapshot held and the complete archive does not. A weekly's `REMOVED`
+cannot say that, because a weekly is a window of edits and its file names carry a per-team
+sequence number.
+
+The rules, every run:
+
+* **After the weeklies.** The weeklies are planned first, against the same five-a-day ledger. A
+  complete archive is fetched only from what they leave, and is fetched last.
+* **One per run**, whatever is due.
+* **Due** when the newest complete archive this machine holds is more than
+  `caselist.full_archive_interval_days` old (30 by default; at least 7), or when it holds none.
+* **Least recently refreshed first**: a caselist with none yet, then the oldest. The others wait
+  for the next run, so the rotation catches up by itself after a missed week.
+
+With three caselists and weekly runs, each caselist's complete archive is refreshed about every
+five weeks: due after 30 days, fetched by the next run that has a download left over. The policy's
+E34 gate 4 ("weekly cadence at most") is kept: nothing runs more often than the weekly agent, and
+there is no second schedule.
+
+`caselist.full_archive_rotation = false` in the profile turns the rotation off. The run then says so
+and fetches none, and `--full-archive` still works.
+
+**Reading what it did.** The `select` row of the table ends with a `complete archive:` sentence: what
+was fetched or why nothing was, what the weeklies left of the allowance, and each caselist's state
+and when it was last refreshed. The summary's `full_archive` holds the same, and for an imported one:
+
+| Field | What it says |
+|---|---|
+| `bytes` | The complete archive's size. A complete archive is the largest file the site serves; the pull accepts up to `caselist.max_full_archive_bytes` (8 GiB), and a weekly is still held to `caselist.max_archive_bytes` (2 GiB) |
+| `withdrawn` | Files an earlier snapshot of the caselist held (weekly or complete) that are gone from the complete archive, together with every path they were held at |
+| `superseded` | Files gone from the complete archive whose path is still there, holding other bytes: re-uploaded |
+| `earlier_snapshots` | How many earlier snapshots it was compared with |
+
+Counts only, never a path or a name. A file re-uploaded under a new name counts as withdrawn,
+because its sequence number changed its path. Neither count suppresses anything: whether a
+withdrawal upstream should is a question for the data-use policy, not for the sync. The complete
+archive's manifest is `manifests/<slug>/full/<date>.jsonl`, beside the weekly series and never in
+it, and its snapshot is named `full/<date>` by `caselist status` and `caselist publish`. It leaves
+the inbox on the same conditions as a weekly. `caselist remove` reaches it like any other manifest.
+Never pass one to `caselist import`, which refuses it: that command files into the weekly series.
+
+**When to reach for `--full-archive`.** To refresh one caselist now rather than wait for the
+rotation: the first time after installing a build with the rotation, to see a withdrawal count
+for a caselist you are about to report on, or after its complete archive has been deferred for
+the weeklies several runs in a row. It takes the run's one slot for that caselist, still after the
+weeklies, and the run refuses, exit `1` with nothing fetched, when the day's allowance cannot cover
+it. Always dry-run first: the caption says what would be fetched and how many bulk downloads the
+weeklies leave.
+
+```bash
+DEBATE_ENV=dev debate-research caselist pull --caselist hsld26 --full-archive hsld26 --dry-run
+```
+
+Then, if the caption says it would be fetched:
+
+```bash
+DEBATE_ENV=dev debate-research --json caselist pull --caselist hsld26 --full-archive hsld26 | jq '{succeeded: .data.succeeded, stages: [.data.stages[] | {stage, outcome}], full_archive: .data.full_archive}'
+DEBATE_ENV=dev debate-research caselist status --caselist hsld26
+```
+
+Check one caselist at a time in dev: an unscoped dev `caselist status` exits `1` because of
+`testcl26`, kept there by PM decision.
+
+To put the complete archive in prod, publish the caselist from the dev store, as the backfill did.
+A whole-caselist publish includes its complete archives:
+
+```bash
+aws sso login --profile debate-prod-evidence
+export DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev"
+debate-research caselist publish --caselist hsld26 --dry-run
+debate-research caselist publish --caselist hsld26 --confirm-prod
+debate-research caselist status --caselist hsld26
+unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
+```
+
+**An agent installed before this build** does none of this: it runs the build it was installed
+with, whose weekly run lists the complete archive and never fetches it. After a reinstall with a
+build containing `v1-e34-t04` (Step 2), its next run fetches one complete archive if the weeklies
+leave a download, because no caselist has one yet, and the run after that the next caselist.
+`debate-research caselist pull --help` lists `--full-archive` on a build that has it.
 
 ## The download inbox
 

@@ -267,8 +267,12 @@ class CaselistPublishService:
         """Work out what publishing would do, reading both sides and writing nothing.
 
         Raises :class:`NothingToPublish` when this machine holds no manifest for the request.
+
+        A whole caselist is its weeklies **and its complete archives** (`full/<date>`,
+        `v1-e34-t04`), so a prod publish of a caselist carries the corpus's own snapshot with it;
+        `snapshot` may name either kind.
         """
-        snapshots = await read_local_snapshots(self._local, caselist, snapshot)
+        snapshots = await read_local_snapshots(self._local, caselist, snapshot, full_archives=True)
         if not snapshots:
             raise NothingToPublish(caselist, snapshot)
         local_blobs = await local_blob_sizes(self._local)

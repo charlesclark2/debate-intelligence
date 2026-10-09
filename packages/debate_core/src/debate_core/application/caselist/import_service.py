@@ -221,7 +221,8 @@ class ImportReport:
     """
 
     full_archive: bool = False
-    """True for a complete archive (`<slug>-all-<date>.zip`, :meth:`CaselistImportService.import_full_archive`)."""
+    """True for a complete archive (`<slug>-all-<date>.zip`), imported by
+    :meth:`CaselistImportService.import_full_archive`."""
 
     withdrawals: WithdrawalCount | None = None
     """For a complete archive: what earlier snapshots held and it does not. `None` for a weekly."""

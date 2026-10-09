@@ -11,11 +11,13 @@ Each document is a few bytes this module writes; nothing is real caselist conten
 
 | Archive | Date | Members (path: bytes) |
 |---|---|---|
-| weekly W1 | 2026-09-08 | `ALDER_ONE`: `a-one`, `BIRCH_ONE`: `b-one` |
-| weekly W2 | 2026-09-15 | `ALDER_ONE`: `a-one`, `BIRCH_ONE`: `b-one`, `CEDAR_ONE`: `c-one` |
-| weekly W3 | 2026-09-22 | `ALDER_ONE`: `a-one`, `CEDAR_ONE`: `c-one`, `DOGWOOD_ONE`: `d-one` |
-| complete F | 2026-09-15 | `ALDER_ONE`: `a-one`, `BIRCH_ONE`: `b-one`, `CEDAR_ONE`: `c-one`, `ELM_OLD`: `e-old` |
-| complete F2 | 2026-09-22 | `ALDER_ONE`: `a-two`, `CEDAR_ONE`: `c-one`, `DOGWOOD_ONE`: `d-one`, `ELM_OLD`: `e-old` |
+| weekly W1 | 09-08 | `ALDER_ONE`: `a-one`, `BIRCH_ONE`: `b-one` |
+| weekly W2 | 09-15 | `ALDER_ONE`: `a-one`, `BIRCH_ONE`: `b-one`, `CEDAR_ONE`: `c-one` |
+| weekly W3 | 09-22 | `ALDER_ONE`: `a-one`, `CEDAR_ONE`: `c-one`, `DOGWOOD_ONE`: `d-one` |
+| complete F | 09-15 | `ALDER_ONE`: `a-one`, `BIRCH_ONE`: `b-one`, `CEDAR_ONE`: `c-one`, `ELM_OLD`: `e-old` |
+| complete F2 | 09-22 | `ALDER_ONE`: `a-two`, `CEDAR_ONE`: `c-one`, `DOGWOOD_ONE`: `d-one`, `ELM_OLD`: same |
+
+All dated 2026.
 
 What each weekly is against the one before it, worked out from the table:
 
@@ -42,6 +44,7 @@ import zipfile
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -53,6 +56,8 @@ from debate_core.application.caselist.manifest import (
     read_manifest_lines,
 )
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
+from debate_core.application.caselist.publish_service import CaselistPublishService
+from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist_sync import (
     DOWNLOAD_LEDGER_FILENAME,
     CaselistSyncService,
@@ -69,9 +74,13 @@ from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore, SqliteDatabase
 from debate_core.integrations.local.archive_reader import read_archive
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.testing.fakes import empty_suppression_list
 
 from .test_caselist_sync import FakeCaselistSource
+
+if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only
+    from mypy_boto3_s3.client import S3Client
 
 pytestmark = pytest.mark.anyio
 
@@ -157,7 +166,11 @@ class Site:
 
     def _list(self, caselist: str, name: str, kind: ArchiveKind, day: date, path: Path) -> None:
         listing = ArchiveListing(
-            caselist=caselist, name=name, kind=kind, archive_date=day, url=f"https://files.example.invalid/{name}"
+            caselist=caselist,
+            name=name,
+            kind=kind,
+            archive_date=day,
+            url=f"https://files.example.invalid/{name}",
         )
         listed = [one for one in self.source.archives.get(caselist, []) if one[0].name != name]
         self.source.archives[caselist] = [*listed, (listing, path)]
@@ -166,7 +179,9 @@ class Site:
 def local_evidence(data_dir: Path) -> LocalEvidence:
     objects = FsEvidenceObjectStore(data_dir)
     blobs = FsEvidenceObjectStore(data_dir, subdirectory=Path("blobs"))
-    return LocalEvidence(objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for)
+    return LocalEvidence(
+        objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
+    )
 
 
 def importer(data_dir: Path) -> CaselistImportService:
@@ -185,6 +200,7 @@ def build_service(
     *,
     rotation: FullArchiveRotation | None = FullArchiveRotation(),  # noqa: B008 - frozen, shared safely
     clock: datetime = RUN_CLOCK,
+    bucket: S3EvidenceObjectStore | None = None,
 ) -> CaselistSyncService:
     database = SqliteDatabase.open(data_dir)
     repository = SqliteCaselistRepository(database)
@@ -203,6 +219,16 @@ def build_service(
         suppression=empty_suppression_list(),
         clock=lambda: clock,
         full_archive_rotation=rotation,
+        publisher=CaselistPublishService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=bucket
+        )
+        if bucket is not None
+        else None,
+        status=CaselistStatusService(
+            suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=bucket
+        )
+        if bucket is not None
+        else None,
     )
 
 
@@ -413,7 +439,10 @@ def test_a_caselist_refreshed_more_than_the_interval_ago_is_due_and_one_inside_i
 def test_the_interval_is_a_setting() -> None:
     today = date(2026, 9, 24)
     held = {CASELIST: today - timedelta(days=12)}
-    assert decide([listing(CASELIST, W3)], held, interval_days=30)[CASELIST] is SelectionDecision.FULL_ARCHIVE_NOT_DUE
+    assert (
+        decide([listing(CASELIST, W3)], held, interval_days=30)[CASELIST]
+        is SelectionDecision.FULL_ARCHIVE_NOT_DUE
+    )
     assert decide([listing(CASELIST, W3)], held, interval_days=10)[CASELIST] is SelectionDecision.DOWNLOAD
 
 
@@ -425,13 +454,13 @@ async def test_the_reason_is_in_the_run_summary_whether_or_not_one_is_fetched(tm
     site.full(W3)
     not_due = await build_service(site, data_dir).run([CASELIST])
 
-    fetched_json, not_due_json = fetched.as_json()["full_archive"], not_due.as_json()["full_archive"]
-    assert isinstance(fetched_json, dict) and isinstance(not_due_json, dict)
+    fetched_json = json.loads(json.dumps(fetched.as_json()))["full_archive"]
+    not_due_json = json.loads(json.dumps(not_due.as_json()))["full_archive"]
     assert fetched_json["fetch"] == CASELIST
-    assert "testcl26's is fetched this run" in str(fetched_json["reason"])
-    assert "testcl26: fetched this run (never refreshed)" in str(fetched_json["reason"])
+    assert "testcl26's is fetched this run" in fetched_json["reason"]
+    assert "testcl26: fetched this run (never refreshed)" in fetched_json["reason"]
     assert not_due_json["fetch"] is None
-    assert "testcl26: not due (last refreshed 2026-09-15, 9 days ago)" in str(not_due_json["reason"])
+    assert "testcl26: not due (last refreshed 2026-09-15, 9 days ago)" in not_due_json["reason"]
     for summary in (fetched, not_due):
         select = summary.stage(SyncStage.SELECT)
         assert select is not None and "complete archive:" in (select.reason or "")
@@ -478,7 +507,9 @@ async def test_two_caselists_due_at_once_fetch_only_the_least_recently_refreshed
 
 def test_of_two_never_refreshed_the_first_configured_goes_first_and_never_refreshed_beats_old() -> None:
     today = date(2026, 10, 31)
-    both_new = decide([listing(CASELIST, W3), listing(SECOND, W3)], {SECOND: None, CASELIST: None}, today=today)
+    both_new = decide(
+        [listing(CASELIST, W3), listing(SECOND, W3)], {SECOND: None, CASELIST: None}, today=today
+    )
     assert both_new == {
         SECOND: SelectionDecision.DOWNLOAD,
         CASELIST: SelectionDecision.FULL_ARCHIVE_WAITS_ITS_TURN,
@@ -517,7 +548,9 @@ async def test_weeklies_that_use_up_the_allowance_exactly_defer_the_complete_arc
     summary = await build_service(site, data_dir).run([CASELIST])
 
     assert site.source.archive_fetches[1:] == [weekly_name(CASELIST, W2), weekly_name(CASELIST, W3)]
-    assert decision_of(summary, full_name(CASELIST, W3)) is SelectionDecision.FULL_ARCHIVE_DEFERRED_FOR_WEEKLIES
+    assert (
+        decision_of(summary, full_name(CASELIST, W3)) is SelectionDecision.FULL_ARCHIVE_DEFERRED_FOR_WEEKLIES
+    )
     assert summary.full_archive is not None
     assert summary.full_archive.fetch is None
     assert summary.full_archive.allowance_after_weeklies == 0
@@ -544,6 +577,90 @@ async def test_one_download_left_after_the_weeklies_buys_the_complete_archive(tm
         full_name(CASELIST, W3),
     ]
     assert summary.full_archive is not None and summary.full_archive.allowance_after_weeklies == 1
+
+
+# ------------------------------------------------------------------------------------------------
+# The readers that opt in: publish, status and retention, against moto
+# ------------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def bucket(evidence_bucket: str, s3_client: S3Client) -> S3EvidenceObjectStore:
+    return S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client)
+
+
+def inbox_names(data_dir: Path) -> set[str]:
+    inbox = data_dir / "inbox"
+    return {one.name for one in inbox.iterdir()} if inbox.is_dir() else set()
+
+
+async def test_a_complete_archive_is_published_confirmed_and_then_leaves_the_inbox(
+    tmp_path: Path, bucket: S3EvidenceObjectStore
+) -> None:
+    """Imported and confirmed, on t11's conditions: then, and only then, its zip goes."""
+    data_dir = tmp_path / "evidence"
+    site = Site(tmp_path / "site")
+    site.weekly(W1)
+    site.full(W2)
+
+    summary = await build_service(site, data_dir, bucket=bucket).run([CASELIST])
+
+    assert summary.succeeded, summary.stages
+    report = summary.stage(SyncStage.REPORT)
+    assert report is not None and report.reason == "2 snapshot(s) confirmed in the bucket"
+    keys = {info.key for info in await bucket.list_objects("manifests/")}
+    assert full_archive_manifest_key(CASELIST, W2) in keys
+    assert summary.inbox_retention is not None
+    assert {one.name for one in summary.inbox_retention.removed} == {
+        f"{CASELIST} 2026-09-08",
+        f"{CASELIST} full/2026-09-15",
+    }
+    assert inbox_names(data_dir) == set()
+    status = await CaselistStatusService(
+        suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=bucket
+    ).status(CASELIST)
+    assert {(one.snapshot, one.in_sync) for one in status.snapshots} == {
+        ("2026-09-08", True),
+        ("full/2026-09-15", True),
+    }
+
+
+async def test_a_complete_archive_not_imported_stays_in_the_inbox(
+    tmp_path: Path, bucket: S3EvidenceObjectStore
+) -> None:
+    """In the inbox, and no `manifests/<slug>/full/<date>.jsonl` names its bytes: kept, not_imported."""
+    data_dir = tmp_path / "evidence"
+    site = Site(tmp_path / "site")
+    site.weekly(W1)
+    stray = write_zip(data_dir / "inbox" / full_name(CASELIST, W2), FULL[W2])
+
+    summary = await build_service(site, data_dir, bucket=bucket).run([CASELIST])
+
+    assert stray.exists()
+    assert summary.inbox_retention is not None
+    kept = {one.name: one.decision for one in summary.inbox_retention.kept}
+    assert str(kept[f"{CASELIST} full/2026-09-15"]) == "not_imported"
+
+
+async def test_a_complete_archive_whose_publish_is_not_confirmed_stays_in_the_inbox(
+    tmp_path: Path, bucket: S3EvidenceObjectStore, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """Imported, but its manifest is gone from the bucket: not confirmed, so kept."""
+    data_dir = tmp_path / "evidence"
+    site = Site(tmp_path / "site")
+    site.full(W2)
+    first = await build_service(site, data_dir, bucket=bucket).run([CASELIST])
+    assert first.succeeded and inbox_names(data_dir) == set()
+    s3_client.delete_object(Bucket=evidence_bucket, Key=full_archive_manifest_key(CASELIST, W2))
+    copy = (tmp_path / "site" / CASELIST / full_name(CASELIST, W2)).read_bytes()
+    (data_dir / "inbox" / full_name(CASELIST, W2)).write_bytes(copy)
+
+    second = await build_service(site, data_dir, bucket=bucket).run([CASELIST])
+
+    assert (data_dir / "inbox" / full_name(CASELIST, W2)).exists()
+    assert second.inbox_retention is not None
+    kept = {one.name: one.decision for one in second.inbox_retention.kept}
+    assert str(kept[f"{CASELIST} full/2026-09-15"]) == "not_confirmed"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -661,5 +778,7 @@ async def test_full_archive_on_demand_dry_run_reports_and_fetches_nothing(tmp_pa
 
     assert site.source.archive_fetches == []
     assert summary.dry_run
-    assert decision_of(summary, full_name(CASELIST, W3)) is SelectionDecision.FULL_ARCHIVE_DEFERRED_FOR_WEEKLIES
+    assert (
+        decision_of(summary, full_name(CASELIST, W3)) is SelectionDecision.FULL_ARCHIVE_DEFERRED_FOR_WEEKLIES
+    )
     assert summary.full_archive is not None and summary.full_archive.allowance_after_weeklies == 0

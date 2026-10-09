@@ -22,7 +22,7 @@ is imported before the run, so it is the baseline the run has already. The fake 
 | `testcl26-weekly-2026-09-01.zip` | WEEKLY | already imported — not newer than the latest manifest |
 | `testcl26-weekly-2026-09-08.zip` | WEEKLY | download, first |
 | `testcl26-weekly-2026-09-15.zip` | WEEKLY | download, second |
-| `testcl26-all-2026-09-15.zip` | FULL | not fetched: this suite's service has the complete-archive rotation off |
+| `testcl26-all-2026-09-15.zip` | FULL | not fetched: this suite's service has the rotation off |
 | `testcl26-archive-notes.txt` | UNRECOGNISED | no date, so never downloaded |
 
 and one OpenEv camp file that is new (`openev-512-…`), tagged `policy`.

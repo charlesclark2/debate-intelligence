@@ -138,10 +138,11 @@ the first run after it shipped cleared the backlog — and a dry run lists what 
 removes nothing. A file goes only when all of these hold:
 
 * **Imported: a manifest on this machine came from these bytes.** A weekly archive's own week has a
-  manifest whose `archive_sha256` is the file's digest; a camp download's digest is the
-  `archive_sha256` of a row in an OpenEv release manifest. That is also what holds a download
-  waiting for `v1-e34-t06`'s import retry: the retry imports exactly the inbox files no manifest
-  came from, so no separate hold is needed, and none is kept.
+  manifest whose `archive_sha256` is the file's digest, and a complete archive's own
+  `manifests/<slug>/full/<date>.jsonl` likewise (`v1-e34-t04`, on the same conditions); a camp
+  download's digest is the `archive_sha256` of a row in an OpenEv release manifest. That is also
+  what holds a download waiting for `v1-e34-t06`'s import retry: the retry imports exactly the inbox
+  files no manifest came from, so no separate hold is needed, and none is kept.
 * **Confirmed: that snapshot is in sync in the bucket, as this run checked it.** The report stage's
   comparison for the snapshots this run published; for a snapshot an earlier run imported, a fresh
   comparison by the retention stage itself (:class:`CaselistStatusService`, the same one), never an
@@ -880,6 +881,8 @@ class InboxFileKind(StrEnum):
     """What an inbox file is, by the name `caselist pull` gave it."""
 
     WEEKLY_ARCHIVE = "weekly_archive"
+    FULL_ARCHIVE = "full_archive"
+    """`<slug>-all-<date>.zip` (`v1-e34-t04`)."""
     CAMP_DOWNLOAD = "camp_download"
     OTHER = "other"
 
@@ -888,7 +891,8 @@ class InboxFileKind(StrEnum):
 class InboxFileVerdict:
     """One inbox file, as the run summary names it, and what retention decided about it.
 
-    `name` is a weekly archive's caselist and date (`hsld26 2026-09-15`), or for anything else the
+    `name` is a weekly archive's caselist and date (`hsld26 2026-09-15`), a complete archive's
+    caselist and snapshot (`hsld26 full/2026-10-06`), or for anything else the
     first twelve hex digits of its SHA-256: a camp download's file name is a camp's title, and a
     name somebody gave a file by hand can say anything (`docs/policies/caselist-data-use.md` rule 4).
     """
@@ -978,7 +982,9 @@ _MAX_NAMED: Final = 250
 
 def _named(files: Sequence[InboxFileVerdict]) -> str:
     """Weeklies by caselist and date, camp downloads and other files by count and SHA-256 prefix."""
-    weeklies = [one.name for one in files if one.kind is InboxFileKind.WEEKLY_ARCHIVE]
+    weeklies = [
+        one.name for one in files if one.kind in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE)
+    ]
     camp = [one.name for one in files if one.kind is InboxFileKind.CAMP_DOWNLOAD]
     other = [one.name for one in files if one.kind is InboxFileKind.OTHER]
     parts: list[str] = []
@@ -2996,6 +3002,21 @@ class CaselistSyncService:
                 None if imported else RetentionDecision.NOT_IMPORTED,
                 frozenset({PendingSnapshot(caselist, week.isoformat())}),
             )
+        full = full_archive_of_inbox_name(name)
+        if full is not None:
+            # On the weekly's conditions, nothing loosened (`v1-e34-t11`): its own manifest names
+            # these bytes, and that snapshot is confirmed in the bucket.
+            caselist, archive_date = full
+            snapshot = full_archive_snapshot(archive_date)
+            imported = self._imported_full_archive_digest(caselist, archive_date) == digest
+            return _JudgedLocally(
+                f"{caselist} {snapshot}",
+                InboxFileKind.FULL_ARCHIVE,
+                size,
+                path,
+                None if imported else RetentionDecision.NOT_IMPORTED,
+                frozenset({PendingSnapshot(caselist, snapshot)}),
+            )
         openev_id = openev_id_of_inbox_name(name)
         if openev_id is None:
             return _JudgedLocally(
@@ -3053,7 +3074,14 @@ class CaselistSyncService:
 
     def _imported_archive_digest(self, caselist: str, week: date) -> str | None:
         """The `archive_sha256` this machine's manifest for a week records: the bytes imported."""
-        for line in read_manifest_lines(self._manifest_path(manifest_key(caselist, week))):
+        return self._summary_digest(manifest_key(caselist, week))
+
+    def _imported_full_archive_digest(self, caselist: str, archive_date: date) -> str | None:
+        """The `archive_sha256` this machine's manifest for a complete archive records."""
+        return self._summary_digest(full_archive_manifest_key(caselist, archive_date))
+
+    def _summary_digest(self, key: str) -> str | None:
+        for line in read_manifest_lines(self._manifest_path(key)):
             try:
                 row: object = json.loads(line)
             except ValueError:
@@ -3368,9 +3396,7 @@ def decide_full_archives(
         )
         for listing in listings
     ]
-    fetch = next(
-        (one.caselist for one in selections if one.decision is SelectionDecision.DOWNLOAD), None
-    )
+    fetch = next((one.caselist for one in selections if one.decision is SelectionDecision.DOWNLOAD), None)
     plan = FullArchivePlan(
         rotation=rotation is not None,
         interval_days=rotation.interval.days if rotation is not None else None,
@@ -3593,8 +3619,13 @@ def _imported_by(plan: SyncPlan) -> tuple[tuple[str, ...], int]:
     """
     would_import = (SelectionDecision.DOWNLOAD, SelectionDecision.ALREADY_IN_INBOX)
     weeklies = tuple(
-        f"{one.caselist} {one.archive_date.isoformat()}"
-        for one in sorted(plan.archives, key=lambda one: (one.caselist, one.archive_date or date.min))
+        f"{one.caselist} {full_archive_snapshot(one.archive_date)}"
+        if one.kind is ArchiveKind.FULL
+        else f"{one.caselist} {one.archive_date.isoformat()}"
+        for one in sorted(
+            plan.archives,
+            key=lambda one: (one.caselist, one.kind is ArchiveKind.FULL, one.archive_date or date.min),
+        )
         if one.decision in would_import and one.archive_date is not None
     )
     return weeklies, sum(1 for one in plan.openev if one.decision in would_import)

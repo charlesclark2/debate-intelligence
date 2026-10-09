@@ -47,6 +47,11 @@ without the removed entries, and which depends on whether anything in it is stil
 `REWRITE`, not a sync download
     Any other zip: nothing says it was imported, so nothing in it is thrown away.
 
+A complete archive (`<slug>-all-<date>.zip`, `v1-e34-t04`) is handled as a weekly is — its members
+are its caselist's disclosures, so a team's withdrawn copy of a shared file is taken out of it too
+— and is *imported* when this machine holds its manifest, `manifests/<slug>/full/<date>.jsonl`,
+not when it holds the weekly of the same date.
+
 **Why a waiting archive is never deleted.** `_decide_archive` calls a weekly dated after the newest
 imported snapshot `ALREADY_IN_INBOX` when it is in the inbox and `DOWNLOAD` when it is not. Deleting
 one would make the next pull fetch it again — a bulk download from the maintainer's five a day —
@@ -124,6 +129,7 @@ from debate_core.application.caselist_sync import (
     OpenEvDelivery,
     RunLock,
     SyncRunInProgress,
+    full_archive_of_inbox_name,
     inbox_files,
     openev_id_of_inbox_name,
     weekly_archive_of_inbox_name,
@@ -184,6 +190,9 @@ class InboxFileKind(StrEnum):
 
     WEEKLY_ARCHIVE = "weekly_archive"
     """`<slug>-weekly-<date>.zip`."""
+    FULL_ARCHIVE = "full_archive"
+    """`<slug>-all-<date>.zip`, a caselist's complete archive (`v1-e34-t04`). Judged as a weekly is,
+    against the complete archives this machine has imported rather than the weeks."""
     OPENEV = "openev"
     """`openev-<id>-<file name>`: a single camp document, or a camp release as a zip."""
     OTHER = "other"
@@ -238,7 +247,7 @@ class InboxFilePlan:
     def label(self) -> str:
         """How an error names this file: a weekly archive's own name (a caselist and a date), an
         OpenEv download's id, never a camp file's title or a name somebody gave a file by hand."""
-        if self.kind is InboxFileKind.WEEKLY_ARCHIVE:
+        if self.kind in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE):
             return self.name
         if self.openev_id is not None:
             return f"openev-{self.openev_id}"
@@ -330,6 +339,7 @@ def plan_inbox(
     *,
     suppression: SuppressionState,
     imported_weeks: Collection[tuple[str, date]],
+    imported_full_archives: Collection[tuple[str, date]],
     imported_openev_downloads: Collection[str],
     team: tuple[str, str, str] | None = None,
 ) -> tuple[tuple[InboxFilePlan, ...], tuple[InboxTeamFilesLeft, ...]]:
@@ -339,6 +349,7 @@ def plan_inbox(
         inbox: The inbox and where the sync keeps its state.
         suppression: The list as it will read once this removal's entries are appended.
         imported_weeks: `(caselist, snapshot)` for every weekly manifest this machine holds.
+        imported_full_archives: `(caselist, date)` for every complete-archive manifest it holds.
         imported_openev_downloads: The download digests this machine's OpenEv manifest rows name.
         team: `(caselist, school, team code)` for a `--team` removal, to report the team's files
             in a waiting archive that the list does not stop; `None` otherwise.
@@ -354,6 +365,7 @@ def plan_inbox(
             name,
             suppression=suppression,
             imported_weeks=imported_weeks,
+            imported_full_archives=imported_full_archives,
             imported_openev_downloads=imported_openev_downloads,
             remembered={key: value.download_sha256 for key, value in remembered.items()},
             team=team,
@@ -372,6 +384,7 @@ def _plan_file(
     *,
     suppression: SuppressionState,
     imported_weeks: Collection[tuple[str, date]],
+    imported_full_archives: Collection[tuple[str, date]],
     imported_openev_downloads: Collection[str],
     remembered: dict[int, str],
     team: tuple[str, str, str] | None,
@@ -415,10 +428,12 @@ def _plan_file(
             0,
         )
 
-    scope = caselist if kind is InboxFileKind.WEEKLY_ARCHIVE else None
+    archive = kind in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE)
+    scope = caselist if archive else None
     dropped, removed = entries_to_drop(entries, suppression=suppression, disclosure_scope=scope)
     real = [entry for entry in entries if entry.skip_reason is None and entry.sha256 is not None]
-    waiting = kind is InboxFileKind.WEEKLY_ARCHIVE and (caselist, snapshot) not in imported_weeks
+    imported = imported_full_archives if kind is InboxFileKind.FULL_ARCHIVE else imported_weeks
+    waiting = archive and (caselist, snapshot) not in imported
     team_files = (
         _team_files_left(entries, dropped, team)
         if team is not None and waiting and caselist == team[0]
@@ -431,7 +446,7 @@ def _plan_file(
     kept_real = [entry for entry in real if entry.name not in dropped]
     if whole:
         action, reason = InboxAction.DELETE, InboxReason.THE_FILE_IS_REMOVED
-    elif kind is InboxFileKind.WEEKLY_ARCHIVE:
+    elif archive:
         action, reason = (
             (InboxAction.REWRITE, InboxReason.WAITING_TO_BE_IMPORTED)
             if waiting
@@ -532,6 +547,9 @@ def _kind_of(name: str) -> tuple[InboxFileKind, str | None, date | None, int | N
         weekly = weekly_archive_of_inbox_name(name)
         if weekly is not None:
             return InboxFileKind.WEEKLY_ARCHIVE, weekly[0], weekly[1], None
+        full = full_archive_of_inbox_name(name)
+        if full is not None:
+            return InboxFileKind.FULL_ARCHIVE, full[0], full[1], None
         openev_id = openev_id_of_inbox_name(name)
         if openev_id is not None:
             return InboxFileKind.OPENEV, None, None, openev_id

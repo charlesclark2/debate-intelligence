@@ -15,6 +15,11 @@ For each snapshot, all of:
 A snapshot the bucket holds a manifest for and this machine does not is drift too: it is a snapshot
 this machine cannot vouch for.
 
+A caselist's snapshots include its complete archives, `full/<date>` (`v1-e34-t04`), compared the
+same way: the sync's retention stage asks this whether a complete archive's publish is confirmed
+before its zip leaves the inbox, and a complete archive's manifest the bucket holds unaccounted for
+would be drift like any other.
+
 ## Suppressed sources
 
 The suppression list (`v1-e30-t07`) is a required argument. A suppressed source is expected to be
@@ -212,7 +217,7 @@ class CaselistStatusService:
         semaphore: asyncio.Semaphore,
         suppression: SuppressionState,
     ) -> tuple[list[SnapshotStatus], list[ObjectKey]]:
-        local_snapshots = await read_local_snapshots(self._local, caselist, snapshot)
+        local_snapshots = await read_local_snapshots(self._local, caselist, snapshot, full_archives=True)
         remote = await list_remote_evidence(self._remote, caselist)
         residue = [key for key in remote if _suppressed_source_key(caselist, key, suppression)]
         heads: dict[ObjectKey, asyncio.Task[ObjectInfo | None]] = {}
@@ -234,7 +239,7 @@ class CaselistStatusService:
 
         held = {local.snapshot for local in local_snapshots}
         for key in sorted(remote):
-            named = snapshot_of_manifest_key(caselist, key)
+            named = snapshot_of_manifest_key(caselist, key, full_archives=True)
             if named is None or named in held or (snapshot is not None and named != snapshot):
                 continue
             statuses.append(

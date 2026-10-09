@@ -329,9 +329,37 @@ Then ac2 and ac4 can be marked PASS and the Goal set to `Succeeded`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-09
 
 **Notes:**
+
+The work is right. Two changes before the operator runs anything, so the operator runs the re-import once rather than twice. Under v1-e01-t18's rule, leave this review as it is, append your changes in a new section after it, and end with a new, empty PM review.
+
+Checked against the branch (`8c2e491`, tree clean, 1 commit behind `origin/dev`, so run `scripts/task sync`).
+- Detection is by whole word against the table: the folder wins, and a tie is `UNKNOWN`.
+- The re-import's writes sit in the OpenEv importer behind the suppression check (Deviation 5).
+- Publish is not loosened: a manifest isn't content-addressed, and `caselist status` is the drift check.
+- First-seen is computed from the caselist's own earlier manifests. The cross-caselist and camp-file tests are what catch the store-based mutant, and the report says so honestly.
+- All six mutants were caught.
+
+Accepted as they stand:
+- **Deviations 2–7.**
+- **The decisions:** the title rule, folders, the reworded warnings, the re-import's per-digest record, first-seen as an additive key with `schema_version` unchanged, and the two side effects named.
+- **How the real files were read:** shapes and counts only, nothing named.
+
+Changes requested:
+1. **Deviation 1: add the missing camps now, in this task.** Adding a camp to `camp_aliases.yaml` is the route the forbidden list leaves open: detection still matches only the table.
+   - A camp institute's name, as the alias table spells it, is the name of the camp that published the file. It is not a debater's school in the sense of the spec's forbidden list or policy rule 5. The table already holds `Michigan`, `Gonzaga` and `UTNIF` on that basis.
+   - So: for each of the 10 names at the camp position, add it, with its spellings, **if it is a camp or institute**. If one is a high school's own name rather than a camp, leave it out and count it.
+   - Fixtures may use table camp names, with invented titles and initials as now.
+   - The report names no file, and lists the additions only as the table's diff shows them.
+   - Re-measure read-only, and give the new expected table (camps before and after, `UNKNOWN` remaining, titles changed), so the operator runs one re-import.
+2. **Fix the dev status step.** The dev bucket also holds `testcl26`, the takedown exercise from RM-2026-90, kept by PM decision. So an unscoped `caselist status` in dev exits `1` whatever this task does.
+   - In the runbook section, the operator follow-ups and the recovery row, use `caselist status --caselist openev` for the check this re-import affects, plus the per-caselist loop for the other three.
+   - Say plainly that an unscoped dev status exits `1` because of `testcl26`.
+   - Prod has no `testcl26`, so prod's unscoped status stays as written.
+
+Follow-up work: the PM files the `caselist status` hint (a manifest mismatch needs a publish, not a person) as an E30 task (priority 3). `first_seen` after a removal is noted but not filed until a report relies on it.

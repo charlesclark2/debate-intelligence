@@ -105,7 +105,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [Re-run the promotion guards when main moves](plan_specs/v1/e01-repo-foundation/t12-promotion-guard-rerun.yaml) `v1-e01-t12-promotion-guard-rerun` | Succeeded | 1 | 3.5 |
 | [Empty the import-boundary exception lists](plan_specs/v1/e01-repo-foundation/t13-composition-root-cleanup.yaml) `v1-e01-t13-composition-root-cleanup` | Succeeded | 1 | 4.0 |
 | [One source for the supported interpreter, enforced at install](plan_specs/v1/e01-repo-foundation/t14-install-interpreter-bound.yaml) `v1-e01-t14-install-interpreter-bound` | Succeeded | 2 | 6.0 |
-| [Re-run the promotion guards without waiting for an event](plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml) `v1-e01-t15-promotion-guard-sweep` | Pending | 1 | 7.0 |
+| [Re-run the promotion guards without waiting for an event](plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml) `v1-e01-t15-promotion-guard-sweep` | InProgress | 1 | 7.0 |
 | [Generate the docs index instead of hand-editing it](plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml) `v1-e01-t16-generated-docs-index` | Succeeded | 1 | 6.5 |
 | [The installed build carries what its commands need](plan_specs/v1/e01-repo-foundation/t17-installed-build-extras.yaml) `v1-e01-t17-installed-build-extras` | Succeeded | 1 | 4.0 |
 | [scripts/task restarts a task that merged partially](plan_specs/v1/e01-repo-foundation/t18-restart-partial-tasks.yaml) `v1-e01-t18-restart-partial-tasks` | Succeeded | 1 | 3.0 |

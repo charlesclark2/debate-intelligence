@@ -387,7 +387,11 @@ def test_every_row_has_the_caselist_row_layout_plus_the_camp_fields(tmp_path: Pa
     assert {row["schema_version"] for row in rows} == {caselist_rows[0]["schema_version"]}
     for row in rows[:-1]:
         assert set(row) == caselist_member_keys | camp_fields, row["path"]
-    assert set(rows[-1]) >= {key for key in caselist_rows[-1] if key != "kind"} | {"kind"}
+    # `first_seen` (v1-e30-t08) counts a week against the caselist's earlier weeks; a release has
+    # none, and the key is additive, so a reader of both kinds already handles its absence.
+    weekly_only = {"first_seen"}
+    assert set(rows[-1]) >= {key for key in caselist_rows[-1] if key not in weekly_only | {"kind"}} | {"kind"}
+    assert "first_seen" not in rows[-1]
 
 
 def test_the_manifest_summary_matches_the_expectations(after_caselist: Harness) -> None:

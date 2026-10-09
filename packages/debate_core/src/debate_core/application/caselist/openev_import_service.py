@@ -34,6 +34,13 @@ fetched.
 **An `UNCHANGED` file writes nothing at all**, not even a widened seen range, so re-importing a
 release on a later day leaves every record and the manifest exactly as they were (ac3).
 
+**A release's camp and title can be derived again** without importing it again
+(:meth:`OpenEvImportService.reimport_metadata`, `v1-e30-t08`): an `UNCHANGED` re-import keeps every
+row as it was, so a correction to the alias table or to
+:mod:`~debate_core.application.caselist.camp_metadata` reaches files already held only that way.
+It is here, not in a service of its own, because the importers are the only modules that write
+camp-file records.
+
 A camp file is recorded once per (digest, year, event), the repository's key for it. Two files
 with identical bytes in one release are two manifest rows — each with its own path and title —
 and one `CampFile`, the first in path order.
@@ -65,12 +72,20 @@ from debate_core.application.caselist.openev_manifest import (
     openev_release_name,
     read_recorded_release,
 )
+from debate_core.application.caselist.openev_metadata_reimport import (
+    OpenEvMetadataReimport,
+    corrected_camp_file,
+    log_reimport,
+    rederive_release,
+)
 from debate_core.application.caselist.pipeline import (
     Classification,
     ImportedEntry,
     SourceImportPipeline,
+    SuppressedWriteRefused,
     file_source,
 )
+from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
 from debate_core.application.ports.caselist import CaselistRepository
@@ -173,6 +188,8 @@ class OpenEvImportService:
         self, *, caselists: CaselistRepository, blobs: SnapshotStore, suppression: SuppressionList
     ) -> None:
         self._caselists = caselists
+        self._blobs = blobs
+        self._suppression = suppression
         self._pipeline = SourceImportPipeline(blobs=blobs, suppression=suppression)
 
     async def import_release(
@@ -252,6 +269,60 @@ class OpenEvImportService:
             newly_stored_blobs=run.newly_stored_blobs,
         )
         _log_counts(report)
+        return report
+
+    async def reimport_metadata(
+        self,
+        *,
+        year: int,
+        event: Event,
+        recorded_manifest: Iterable[str],
+        aliases: CampAliases | None = None,
+        dry_run: bool = False,
+    ) -> OpenEvMetadataReimport:
+        """Re-derive camp and title for a release already imported, and correct its camp-file records.
+
+        `recorded_manifest` is the release manifest's lines as the caller read them; the caller
+        writes the report's `manifest_lines` back to the same key unless `dry_run`
+        (:mod:`~debate_core.application.caselist.openev_metadata_reimport`, `v1-e30-t08`). No
+        file is read and no blob written: the blob store is only asked whether each digest is held.
+        A record is corrected, never created, and keeps its digest, year, event and import date.
+        Writes no record when `dry_run`.
+        """
+        suppression = await load_suppression_state(self._suppression)
+        release = rederive_release(
+            year=year,
+            event=event,
+            recorded_manifest=recorded_manifest,
+            aliases=aliases if aliases is not None else load_camp_aliases(),
+            suppression=suppression,
+        )
+        updated = missing = 0
+        for digest, row in release.camp_file_rows.items():
+            # Re-derivation has already refused a manifest naming a suppressed file; checked again
+            # at the write, as the pipeline does, so that guarantee does not rest on that alone.
+            if suppression.suppresses_source(digest):
+                raise SuppressedWriteRefused(digest)
+            page = await self._caselists.list_camp_files(
+                source_sha256=digest, year=year, event=event, limit=1
+            )
+            if not page.items:
+                missing += 1
+                continue
+            corrected = corrected_camp_file(page.items[0], row)
+            if corrected == page.items[0]:
+                continue
+            updated += 1
+            if not dry_run:
+                await self._caselists.record_camp_file(corrected)
+        held = [await self._blobs.exists(digest) for digest in release.camp_file_rows]
+        report = release.report(
+            applied=not dry_run,
+            camp_files_updated=updated,
+            camp_files_missing=missing,
+            blobs_missing=held.count(False),
+        )
+        log_reimport(report)
         return report
 
     async def _store(

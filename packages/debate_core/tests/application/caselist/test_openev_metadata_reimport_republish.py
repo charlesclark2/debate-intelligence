@@ -29,7 +29,6 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.manifest import read_manifest_lines, write_manifest_lines
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
-from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimportService
 from debate_core.application.caselist.publish_plan import OPENEV
 from debate_core.application.caselist.publish_service import (
     CaselistPublishService,
@@ -99,12 +98,12 @@ class Store:
         write_manifest_lines(report.manifest_lines, self.manifest_path)
 
     async def reimport_metadata(self, aliases: CampAliases) -> None:
-        service = OpenEvMetadataReimportService(
+        service = OpenEvImportService(
             caselists=self.caselists,
             blobs=FsSnapshotStore(self.data_dir),
             suppression=empty_suppression_list(),
         )
-        report = await service.reimport(
+        report = await service.reimport_metadata(
             year=2026,
             event=Event.POLICY,
             recorded_manifest=read_manifest_lines(self.manifest_path),

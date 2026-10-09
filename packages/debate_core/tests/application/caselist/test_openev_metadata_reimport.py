@@ -32,7 +32,6 @@ from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.openev_metadata_reimport import (
     NoRecordedRelease,
     OpenEvMetadataReimport,
-    OpenEvMetadataReimportService,
 )
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkippedMember, SkipReason
@@ -144,13 +143,13 @@ class Harness:
         )
         self.recorded = imported.manifest_lines
         self.guarded_blobs = WritesNoBlob(self.blobs)
-        self.service = OpenEvMetadataReimportService(
+        self.service = OpenEvImportService(
             caselists=self.caselists, blobs=self.guarded_blobs, suppression=self.suppression
         )
 
     def reimport(self, lines: tuple[str, ...] | None = None, **options: Any) -> OpenEvMetadataReimport:
         return run(
-            self.service.reimport(
+            self.service.reimport_metadata(
                 year=YEAR,
                 event=EVENT,
                 recorded_manifest=self.recorded if lines is None else lines,

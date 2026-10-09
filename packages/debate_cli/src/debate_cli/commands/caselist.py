@@ -75,7 +75,7 @@ count is in the summary. Exit codes are `import`'s.
 
 Re-derives camp, lab, title and warnings for a release already imported, from the paths its
 manifest recorded, with the current alias table
-(:class:`~debate_core.application.caselist.openev_metadata_reimport.OpenEvMetadataReimportService`,
+(:meth:`~debate_core.application.caselist.openev_import_service.OpenEvImportService.reimport_metadata`,
 `v1-e30-t08`). It reads the local manifest, corrects the camp-file records, and writes the manifest
 back to the same key — only when it changed, and never under `--dry-run`. It downloads nothing and
 never writes a blob, a digest or a key. The manifest's bytes change, so `caselist status` reports
@@ -362,7 +362,7 @@ def reimport_openev_metadata(
     manifest_path = cli.services.evidence_object_path(openev_manifest_key(year, event))
 
     report = _run(
-        cli.services.openev_metadata_reimport().reimport(
+        cli.services.openev_import().reimport_metadata(
             year=year,
             event=event,
             recorded_manifest=read_manifest_lines(manifest_path),
@@ -802,6 +802,10 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
     Written for a program first, because the scheduled weekly import (`v1-e34-t02`) reads it:
     every classification has a count whether or not it occurred, `applied` says whether anything
     was written, and `manifest` is the path or `null` rather than a sentence to parse.
+
+    `counts["NEW"]` is week-over-week: not present in `previous_snapshot`. `first_seen` is what is
+    new to the caselist — distinct stored digests no earlier snapshot of it held — and is the
+    number to sum across weeks (`v1-e30-t08`).
     """
     return {
         "caselist": report.caselist,
@@ -818,6 +822,7 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
         "skipped_total": sum(report.skipped.values()),
         "distinct_sha256": report.distinct_digests,
         "newly_stored_blobs": report.newly_stored_blobs,
+        "first_seen": report.first_seen,
         "warnings": report.warning_count,
         "manifest": str(manifest) if manifest is not None else None,
     }
@@ -952,20 +957,29 @@ def _summary_table(report: ImportReport, manifest: Path | None) -> TableSpec:
 
 
 def _caption(report: ImportReport, manifest: Path | None) -> str:
-    """What the numbers mean, in the one line under the table."""
+    """What the numbers mean, in the lines under the table: NEW's baseline, and first-seen beside it."""
     against = (
         f"against {report.previous_snapshot.isoformat()}"
         if report.previous_snapshot is not None
         else "the first archive for this caselist"
     )
     warned = f", {report.warning_count} filename(s) not fully read" if report.warning_count else ""
+    new_means = (
+        f"NEW: not present in the {report.previous_snapshot.isoformat()} snapshot"
+        if report.previous_snapshot is not None
+        else "NEW: no earlier snapshot to compare with"
+    )
+    first_seen = (
+        f"; {report.first_seen} first seen in {report.caselist}" if report.first_seen is not None else ""
+    )
+    meaning = f"{new_means}{first_seen}."
     if not report.applied:
         return (
-            f"{report.member_count} member(s), {against}{warned}. Planned only; nothing was "
+            f"{report.member_count} member(s), {against}{warned}. {meaning} Planned only; nothing was "
             "written. Re-run without --dry-run to import it."
         )
     return (
-        f"{report.member_count} member(s), {against}{warned}. "
+        f"{report.member_count} member(s), {against}{warned}. {meaning} "
         f"{report.newly_stored_blobs} new file(s) stored; manifest at "
         f"{manifest.name if manifest else 'none'}."
     )

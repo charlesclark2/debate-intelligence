@@ -20,6 +20,7 @@ import tempfile
 from collections.abc import AsyncGenerator, Callable, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY
@@ -39,6 +40,7 @@ from debate_core.domain import Sha256Hex
 
 __all__ = [
     "LocalEvidence",
+    "digests_in_earlier_manifests",
     "list_local_caselists",
     "list_remote_caselists",
     "list_remote_evidence",
@@ -96,6 +98,28 @@ async def read_local_snapshots(
             )
         )
     return tuple(sorted(found, key=lambda local_snapshot: local_snapshot.snapshot))
+
+
+async def digests_in_earlier_manifests(
+    local: LocalEvidence, caselist: str, snapshot: date
+) -> frozenset[Sha256Hex]:
+    """Every digest a stored row names in `caselist`'s manifests for snapshots strictly before `snapshot`.
+
+    What a weekly import's first-seen count is measured against (`v1-e30-t08`): a digest is first
+    seen in a snapshot when no earlier snapshot *of the same caselist* held it. Read from this
+    caselist's manifests and nothing else — not the blob store, which also holds every other
+    caselist's files and every camp file, so a digest it holds may still be new to this caselist.
+    Strictly before, as the importer's previous snapshot is, so re-importing a week reports the same
+    count. Raises :class:`~debate_core.application.caselist.publish_plan.UnreadableManifest` for a
+    manifest it cannot read rather than counting around it.
+    """
+    before = snapshot.isoformat()
+    return frozenset(
+        source.sha256
+        for held in await read_local_snapshots(local, caselist)
+        if held.snapshot < before
+        for source in held.sources
+    )
 
 
 async def local_blob_sizes(local: LocalEvidence) -> dict[Sha256Hex, int]:

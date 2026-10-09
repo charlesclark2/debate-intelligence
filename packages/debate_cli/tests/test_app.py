@@ -144,7 +144,7 @@ def test_doctor_reports_the_environment_as_json() -> None:
     # `caselist_import` (v1-e30-t03) the second, the publisher and the status comparison
     # (v1-e30-t05) the next, the OpenCaselist token store and client (v1-e34-t01) after them, and
     # the OpenEv importer (v1-e30-t04), the sync run monitor and history (v1-e34-t03), and the
-    # manifest verifier (v1-e03-t06), and the OpenEv metadata re-import (v1-e30-t08) the last.
+    # manifest verifier (v1-e03-t06) the last.
     # A later epic adding one adds it here too: this is the list an operator reads to find out
     # what this installation is wired for.
     assert data["services"] == [
@@ -158,7 +158,6 @@ def test_doctor_reports_the_environment_as_json() -> None:
         "caselist_token_store",
         "evidence_sync",
         "openev_import",
-        "openev_metadata_reimport",
         "opencaselist_client",
         "verify_manifest",
     ]

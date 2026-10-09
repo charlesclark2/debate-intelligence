@@ -93,17 +93,17 @@ integration's module name in a string, makes the check refuse rather than skip i
 
 from __future__ import annotations
 
+import functools
 import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
-from debate_core.application.caselist.evidence_listing import LocalEvidence
-from debate_core.application.caselist.import_service import CaselistImportService
+from debate_core.application.caselist.evidence_listing import LocalEvidence, digests_in_earlier_manifests
+from debate_core.application.caselist.import_service import CaselistImportService, EarlierManifestDigests
 from debate_core.application.caselist.inbox_purge import CaselistInbox
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
-from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import RemovalPlanner
 from debate_core.application.caselist.removal_service import (
@@ -179,7 +179,6 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_token_store",
     "evidence_sync",
     "openev_import",
-    "openev_metadata_reimport",
     "opencaselist_client",
     "verify_manifest",
 )
@@ -400,7 +399,12 @@ class ServiceContainer:
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
             suppression=self.local_suppression_list(),
+            earlier_manifest_digests=self._earlier_manifest_digests(),
         )
+
+    def _earlier_manifest_digests(self) -> EarlierManifestDigests:
+        """What a weekly import counts first-seen against: this machine's manifests (`v1-e30-t08`)."""
+        return functools.partial(digests_in_earlier_manifests, self._local_evidence())
 
     def local_suppression_list(self) -> RecordedSuppressionList:
         """This environment's local copy of the suppression list, and nothing else.
@@ -445,21 +449,6 @@ class ServiceContainer:
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
             suppression=self.local_suppression_list(),
-        )
-
-    def openev_metadata_reimport(self) -> OpenEvMetadataReimportService:
-        """Build the camp-and-title re-derivation over the same local store as `openev_import`.
-
-        No S3, no network: it reads a local manifest and the local records, and only asks the blob
-        store whether each digest is held (`v1-e30-t08-import-metadata-defects`).
-        """
-        return self.singleton(
-            "openev_metadata_reimport",
-            lambda: OpenEvMetadataReimportService(
-                caselists=SqliteCaselistRepository(self.database),
-                blobs=FsSnapshotStore(self.settings.storage.data_dir),
-                suppression=self.local_suppression_list(),
-            ),
         )
 
     def evidence_sync(self, *, blob_prefix: str | None = None) -> EvidenceSyncService:
@@ -717,7 +706,10 @@ class ServiceContainer:
         return CaselistSyncService(
             source=self.opencaselist_client(),
             archive_importer=CaselistImportService(
-                caselists=repository, blobs=blobs, suppression=suppression
+                caselists=repository,
+                blobs=blobs,
+                suppression=suppression,
+                earlier_manifest_digests=self._earlier_manifest_digests(),
             ),
             openev_importer=OpenEvImportService(caselists=repository, blobs=blobs, suppression=suppression),
             local=self._local_evidence(),

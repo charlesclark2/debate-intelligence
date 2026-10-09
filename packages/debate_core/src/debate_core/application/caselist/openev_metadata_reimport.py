@@ -10,6 +10,13 @@ makes a re-import a no-op. So this is the other operation, `debate-research case
 reimport-openev-metadata`: read what the release manifest recorded, and re-derive only what the
 path determines.
 
+This module is the pure part: the manifest in, the re-derived manifest and the corrected rows out.
+The camp-file records are written by
+:meth:`~debate_core.application.caselist.openev_import_service.OpenEvImportService.reimport_metadata`,
+because the importers are the only modules that write caselist records and each consults the
+removal suppression list at the write
+(`packages/debate_core/tests/application/caselist/test_import_paths_consult_suppression.py`).
+
 ## What it changes, and what it cannot
 
 For every member row the importer derived metadata for (`NEW`, `UNCHANGED`, `CHANGED`,
@@ -21,10 +28,11 @@ release's :class:`~debate_core.domain.caselist.CampFile` records are corrected t
 digest, the one the importer recorded, from that digest's first row in path order; its digest,
 year, event and import date are left alone.
 
-What it never touches: the bytes (it has no way to write a blob, and only asks the blob store
-whether each digest is held), a `sha256`, a `byte_size`, a path, a classification, or the manifest's
-key, which is the release's key and is returned unchanged for the caller to write back to. It
-downloads nothing: it reads one local manifest and the local records, and has no network port.
+What it never touches: the bytes (no blob is read or written; the blob store is only asked
+whether each digest is held), a `sha256`, a `byte_size`, a path, a classification, or the
+manifest's key, which is the release's key and is returned unchanged for the caller to write back
+to. It downloads nothing: it reads one local manifest and the local records, and has no network
+port.
 
 The manifest's bytes do change, so the bucket's copy differs until it is published again, and
 `caselist status` reports the release as drifted until then: one checksum mismatch, on the
@@ -63,7 +71,11 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import cast
 
-from debate_core.application.caselist.camp_metadata import CampAliases, load_camp_aliases, parse_camp_path
+from debate_core.application.caselist.camp_metadata import (
+    UNKNOWN_CAMP,
+    CampAliases,
+    parse_camp_path,
+)
 from debate_core.application.caselist.manifest import render_rows
 from debate_core.application.caselist.openev_manifest import (
     openev_manifest_key,
@@ -72,20 +84,25 @@ from debate_core.application.caselist.openev_manifest import (
     summary_row,
 )
 from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
-from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError
-from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.evidence_store import ObjectKey
-from debate_core.application.ports.persistence import SnapshotStore
-from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.ports.suppression import SuppressionState
 from debate_core.domain.caselist import CampFile, Event
 
-__all__ = ["NoRecordedRelease", "OpenEvMetadataReimport", "OpenEvMetadataReimportService"]
+__all__ = [
+    "DERIVED_FIELDS",
+    "NoRecordedRelease",
+    "OpenEvMetadataReimport",
+    "RederivedRelease",
+    "corrected_camp_file",
+    "log_reimport",
+    "rederive_release",
+]
 
 logger = logging.getLogger(__name__)
 
-#: The fields a path determines, and so the only ones a metadata re-import rewrites.
 DERIVED_FIELDS = ("camp", "lab", "file_title", "warnings")
+"""The member-row fields a path determines, and so the only ones a metadata re-import rewrites."""
 
 _STORED = frozenset(str(classification) for classification in STORED_CLASSIFICATIONS)
 
@@ -141,145 +158,130 @@ class OpenEvMetadataReimport:
 
     @property
     def unknown_before(self) -> int:
-        return self.camps_before.get("UNKNOWN", 0)
+        return self.camps_before.get(UNKNOWN_CAMP, 0)
 
     @property
     def unknown_after(self) -> int:
-        return self.camps_after.get("UNKNOWN", 0)
+        return self.camps_after.get(UNKNOWN_CAMP, 0)
 
 
-class OpenEvMetadataReimportService:
-    """Re-derives camp, lab, title and warnings for one OpenEv release already in the local store.
+@dataclass(frozen=True, slots=True)
+class RederivedRelease:
+    """The release manifest with every row's metadata derived again, before any record is touched."""
 
-    Over the importer's own local ports::
+    year: int
+    event: Event
+    manifest_key: ObjectKey
+    manifest_lines: tuple[str, ...]
+    recorded_lines: tuple[str, ...]
+    camp_file_rows: Mapping[str, Mapping[str, object]]
+    """Each stored digest's first row in path order: the row its camp-file record was made from."""
 
-        service = OpenEvMetadataReimportService(
-            caselists=SqliteCaselistRepository(database),
-            blobs=FsSnapshotStore(settings.storage.data_dir),
-            suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
-        )
+    rows: int
+    camps_before: Mapping[str, int]
+    camps_after: Mapping[str, int]
+    rows_changed: int
+    titles_changed: int
+    warnings_changed: int
 
-    The blob store is only asked whether a digest is held.
-    """
-
-    def __init__(
-        self, *, caselists: CaselistRepository, blobs: SnapshotStore, suppression: SuppressionList
-    ) -> None:
-        self._caselists = caselists
-        self._blobs = blobs
-        self._suppression = suppression
-
-    async def reimport(
-        self,
-        *,
-        year: int,
-        event: Event,
-        recorded_manifest: Iterable[str],
-        aliases: CampAliases | None = None,
-        dry_run: bool = False,
+    def report(
+        self, *, applied: bool, camp_files_updated: int, camp_files_missing: int, blobs_missing: int
     ) -> OpenEvMetadataReimport:
-        """Re-derive every recorded row's metadata and correct the camp-file records to match.
-
-        `recorded_manifest` is the release manifest's lines as the caller read them from
-        `manifests/openev/<year>-<event>.jsonl`; the caller writes
-        :attr:`OpenEvMetadataReimport.manifest_lines` back to the same key unless `dry_run`.
-        `aliases` defaults to the packaged `camp_aliases.yaml`. Writes no record when `dry_run`.
-        """
-        key = openev_manifest_key(year, event)
-        recorded_lines = tuple(line for line in recorded_manifest if line.strip())
-        if not recorded_lines:
-            raise NoRecordedRelease(key)
-        recorded = read_recorded_release(key, recorded_lines)
-        table = aliases if aliases is not None else load_camp_aliases()
-        suppression = await load_suppression_state(self._suppression)
-
-        before: Counter[str] = Counter()
-        after: Counter[str] = Counter()
-        rows: list[dict[str, object]] = []
-        derived = rows_changed = titles_changed = warnings_changed = 0
-        for path in sorted(recorded.rows):
-            row = dict(recorded.rows[path])
-            if row.get("classification") in _STORED:
-                parsed = parse_camp_path(path, aliases=table)
-                fresh: dict[str, object] = {
-                    "camp": parsed.camp,
-                    "lab": parsed.lab,
-                    "file_title": parsed.file_title,
-                    "warnings": list(parsed.warnings),
-                }
-                derived += 1
-                before[str(row.get("camp"))] += 1
-                after[parsed.camp] += 1
-                rows_changed += any(row.get(name) != value for name, value in fresh.items())
-                titles_changed += row.get("file_title") != parsed.file_title
-                warnings_changed += row.get("warnings") != fresh["warnings"]
-                row.update(fresh)
-            rows.append(row)
-
-        summary = summary_row(rows, year=year, event=event, suppressed=_recorded_suppressed(recorded_lines))
-        lines = tuple(render_rows([*rows, summary], suppression=suppression, disclosure_scope=None))
-
-        updated, missing = await self._correct_camp_files(rows, year=year, event=event, dry_run=dry_run)
-        report = OpenEvMetadataReimport(
-            year=year,
-            event=event,
-            applied=not dry_run,
-            manifest_key=key,
-            manifest_lines=lines,
-            recorded_lines=recorded_lines,
-            rows=derived,
-            camps_before=dict(sorted(before.items())),
-            camps_after=dict(sorted(after.items())),
-            rows_changed=rows_changed,
-            titles_changed=titles_changed,
-            warnings_changed=warnings_changed,
-            camp_files_updated=updated,
-            camp_files_missing=missing,
-            blobs_missing=await self._blobs_missing(rows),
+        return OpenEvMetadataReimport(
+            year=self.year,
+            event=self.event,
+            applied=applied,
+            manifest_key=self.manifest_key,
+            manifest_lines=self.manifest_lines,
+            recorded_lines=self.recorded_lines,
+            rows=self.rows,
+            camps_before=self.camps_before,
+            camps_after=self.camps_after,
+            rows_changed=self.rows_changed,
+            titles_changed=self.titles_changed,
+            warnings_changed=self.warnings_changed,
+            camp_files_updated=camp_files_updated,
+            camp_files_missing=camp_files_missing,
+            blobs_missing=blobs_missing,
         )
-        _log_counts(report)
-        return report
 
-    async def _correct_camp_files(
-        self, rows: list[dict[str, object]], *, year: int, event: Event, dry_run: bool
-    ) -> tuple[int, int]:
-        """Rewrite each digest's camp-file record from its first row in path order, if it differs."""
-        firsts: dict[str, dict[str, object]] = {}
-        for row in rows:
+
+def rederive_release(
+    *,
+    year: int,
+    event: Event,
+    recorded_manifest: Iterable[str],
+    aliases: CampAliases,
+    suppression: SuppressionState,
+) -> RederivedRelease:
+    """Derive every stored row's camp, lab, title and warnings again from its path; keep the rest.
+
+    Raises :class:`NoRecordedRelease` for no lines,
+    :class:`~debate_core.application.caselist.publish_plan.UnreadableManifest` for a manifest the
+    importer did not write, and
+    :class:`~debate_core.application.caselist.manifest.SuppressedRowRefused` for a row naming a
+    file `suppression` stops — all before anything is written.
+    """
+    key = openev_manifest_key(year, event)
+    recorded_lines = tuple(line for line in recorded_manifest if line.strip())
+    if not recorded_lines:
+        raise NoRecordedRelease(key)
+    recorded = read_recorded_release(key, recorded_lines)
+
+    before: Counter[str] = Counter()
+    after: Counter[str] = Counter()
+    rows: list[dict[str, object]] = []
+    firsts: dict[str, dict[str, object]] = {}
+    derived = rows_changed = titles_changed = warnings_changed = 0
+    for path in sorted(recorded.rows):
+        row = dict(recorded.rows[path])
+        if row.get("classification") in _STORED:
+            parsed = parse_camp_path(path, aliases=aliases)
+            fresh: dict[str, object] = {
+                "camp": parsed.camp,
+                "lab": parsed.lab,
+                "file_title": parsed.file_title,
+                "warnings": list(parsed.warnings),
+            }
+            derived += 1
+            before[str(row.get("camp"))] += 1
+            after[parsed.camp] += 1
+            rows_changed += any(row.get(name) != value for name, value in fresh.items())
+            titles_changed += row.get("file_title") != parsed.file_title
+            warnings_changed += row.get("warnings") != fresh["warnings"]
+            row.update(fresh)
             digest = row.get("sha256")
-            if row.get("classification") in _STORED and isinstance(digest, str):
+            if isinstance(digest, str):
                 firsts.setdefault(digest, row)
-        updated = missing = 0
-        for digest, row in firsts.items():
-            page = await self._caselists.list_camp_files(
-                source_sha256=digest, year=year, event=event, limit=1
-            )
-            if not page.items:
-                missing += 1
-                continue
-            existing = page.items[0]
-            corrected = CampFile.model_validate(
-                {
-                    **existing.model_dump(),
-                    "camp": row["camp"],
-                    "file_title": row["file_title"],
-                    "parse_warnings": tuple(_texts(row["warnings"])),
-                }
-            )
-            if corrected == existing:
-                continue
-            updated += 1
-            if not dry_run:
-                await self._caselists.record_camp_file(corrected)
-        return updated, missing
+        rows.append(row)
 
-    async def _blobs_missing(self, rows: list[dict[str, object]]) -> int:
-        digests = {
-            row["sha256"]
-            for row in rows
-            if row.get("classification") in _STORED and isinstance(row.get("sha256"), str)
+    summary = summary_row(rows, year=year, event=event, suppressed=_recorded_suppressed(recorded_lines))
+    return RederivedRelease(
+        year=year,
+        event=event,
+        manifest_key=key,
+        manifest_lines=tuple(render_rows([*rows, summary], suppression=suppression, disclosure_scope=None)),
+        recorded_lines=recorded_lines,
+        camp_file_rows=firsts,
+        rows=derived,
+        camps_before=dict(sorted(before.items())),
+        camps_after=dict(sorted(after.items())),
+        rows_changed=rows_changed,
+        titles_changed=titles_changed,
+        warnings_changed=warnings_changed,
+    )
+
+
+def corrected_camp_file(existing: CampFile, row: Mapping[str, object]) -> CampFile:
+    """`existing` with the camp, title and warnings `row` now carries; its identity and date kept."""
+    return CampFile.model_validate(
+        {
+            **existing.model_dump(),
+            "camp": row["camp"],
+            "file_title": row["file_title"],
+            "parse_warnings": tuple(_texts(row["warnings"])),
         }
-        return sum([not await self._blobs.exists(str(digest)) for digest in sorted(digests, key=str)])
+    )
 
 
 def _recorded_suppressed(lines: Iterable[str]) -> int:
@@ -302,7 +304,7 @@ def _texts(value: object) -> list[str]:
     return [str(item) for item in cast("list[object]", value)] if isinstance(value, list) else []
 
 
-def _log_counts(report: OpenEvMetadataReimport) -> None:
+def log_reimport(report: OpenEvMetadataReimport) -> None:
     """Counts, the year and the event. Never a path, a title or a camp's file."""
     logger.info(
         "re-derived OpenEv release metadata",

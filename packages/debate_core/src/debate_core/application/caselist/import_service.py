@@ -5,11 +5,15 @@ of the 8 September archive, which contains almost all of the 1 September archive
 importer would therefore store the same file three times and report three times as much evidence
 as the circuit actually disclosed. Deduplication is not a refinement here; it is the job.
 
-So every member of an archive is classified against the archives already imported, and the answer
-is one of six things:
+So every member of an archive is classified against the archive imported for the week before, and
+the answer is one of six things:
 
 `NEW`
-    These bytes have not been seen before, under this path or any other. Stored.
+    These bytes are not present in the preceding snapshot, under this path or any other, nor
+    earlier in this archive. Stored. It is a week-over-week count and **not** "new to the
+    corpus": a file from an earlier, non-adjacent week that is back in this one is `NEW` again,
+    and so are bytes another caselist or a camp file already brought into the store. What is new
+    to the caselist is the first-seen count, below.
 `UNCHANGED`
     The previous archive had this same path holding these same bytes. Carried forward: the source
     document's `last_seen_snapshot` moves to this week and nothing else happens.
@@ -36,6 +40,22 @@ That is what makes re-importing an archive a no-op (ac3): importing 09-15 when 0
 the newest compares against 09-08 both times and therefore classifies every member identically,
 which is what "identical manifest bytes, zero NEW" means. Comparing against the latest would make
 the second run see its own first run and report everything UNCHANGED.
+
+## First seen: what is new to the caselist
+
+A weekly archive is a window of roughly a week's edits, not the whole caselist, so a file a team
+edits again weeks later is `NEW` against the window before it. Summed across weeks, `NEW` therefore
+overstates new evidence: the v1-e30-t06 backfill's three August windows reported 25 `NEW` and held
+16 files the caselist had never held before (`v1-e30-t08`).
+
+:attr:`ImportReport.first_seen` is that second number: the distinct digests this archive stores
+(`NEW`, `UNCHANGED`, `CHANGED`, `DUPLICATE`) that no earlier snapshot of the same caselist held,
+counted from that caselist's own earlier manifests
+(:func:`~debate_core.application.caselist.evidence_listing.digests_in_earlier_manifests`). It is
+not "a blob the store lacks" — that is :attr:`ImportReport.newly_stored_blobs` — because another
+caselist or a camp file can hold the same bytes. "Earlier" is strictly before, as the previous
+snapshot is, so re-importing an archive reports the same count. It is `None` when the service was
+built without a way to read the manifests, which the composition root always provides.
 
 ## Ordering
 
@@ -74,7 +94,7 @@ manifest under `manifests/`, both of which the policy names as somewhere they ma
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -94,6 +114,7 @@ from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, S
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
+from debate_core.domain import Sha256Hex
 from debate_core.domain.caselist import (
     Acquisition,
     ArchiveSnapshot,
@@ -109,12 +130,21 @@ __all__ = [
     "STORED_CLASSIFICATIONS",
     "CaselistImportService",
     "Classification",
+    "EarlierManifestDigests",
     "ImportReport",
     "ImportedEntry",
     "SnapshotOutOfOrder",
 ]
 
 logger = logging.getLogger(__name__)
+
+type EarlierManifestDigests = Callable[[CaselistSlug, SnapshotDate], Awaitable[frozenset[Sha256Hex]]]
+"""Every digest a stored row names in a caselist's manifests for snapshots strictly before a date.
+
+What the first-seen count is measured against;
+:func:`~debate_core.application.caselist.evidence_listing.digests_in_earlier_manifests` over the
+local evidence store is the one the composition root passes.
+"""
 
 
 class SnapshotOutOfOrder(DomainError):
@@ -170,6 +200,13 @@ class ImportReport:
     previous_snapshot: SnapshotDate | None = None
     """The archive this one was classified against, or `None` for the first import."""
 
+    first_seen: int | None = None
+    """Distinct digests this archive stores that no earlier snapshot of this caselist held.
+
+    New to the caselist, where `NEW` is only new against the week before (see the module
+    docstring). `None` when the service was built without :data:`EarlierManifestDigests`.
+    """
+
     suppression: SuppressionState = field(default_factory=SuppressionState)
     """The suppression list this import read, which the manifest writer checks every row against."""
 
@@ -196,7 +233,10 @@ class CaselistImportService:
             caselists=SqliteCaselistRepository(database),
             blobs=FsSnapshotStore(settings.storage.data_dir),
             suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
+            earlier_manifest_digests=functools.partial(digests_in_earlier_manifests, local),
         )
+
+    Without `earlier_manifest_digests` it imports exactly the same and reports no first-seen count.
 
     It never opens an archive. The members are read by an adapter
     (:func:`debate_core.integrations.local.archive_reader.read_archive`) and handed in, which is
@@ -204,10 +244,16 @@ class CaselistImportService:
     """
 
     def __init__(
-        self, *, caselists: CaselistRepository, blobs: SnapshotStore, suppression: SuppressionList
+        self,
+        *,
+        caselists: CaselistRepository,
+        blobs: SnapshotStore,
+        suppression: SuppressionList,
+        earlier_manifest_digests: EarlierManifestDigests | None = None,
     ) -> None:
         self._caselists = caselists
         self._pipeline = SourceImportPipeline(blobs=blobs, suppression=suppression)
+        self._earlier_manifest_digests = earlier_manifest_digests
 
     async def import_archive(
         self,
@@ -274,6 +320,7 @@ class CaselistImportService:
             newly_stored_blobs=run.newly_stored_blobs,
             previous_snapshot=previous,
             suppression=run.suppression,
+            first_seen=await self._first_seen(caselist, snapshot, run.entries),
         )
         _log_counts(report)
         return report
@@ -300,6 +347,22 @@ class CaselistImportService:
             if stored.snapshot < snapshot
         ]
         return max(earlier) if earlier else None
+
+    async def _first_seen(
+        self,
+        caselist: CaselistSlug,
+        snapshot: SnapshotDate,
+        entries: Iterable[ImportedEntry[ParsedDisclosurePath]],
+    ) -> int | None:
+        """How many of the digests this archive stores no earlier snapshot of `caselist` held."""
+        if self._earlier_manifest_digests is None:
+            return None
+        stored = {
+            entry.sha256
+            for entry in entries
+            if entry.classification in STORED_CLASSIFICATIONS and entry.sha256 is not None
+        }
+        return len(stored - await self._earlier_manifest_digests(caselist, snapshot))
 
     async def _disclosures_in(self, caselist: CaselistSlug, snapshot: SnapshotDate | None) -> dict[str, str]:
         """What the previous archive said, as `{source path: sha256}`.
@@ -389,6 +452,7 @@ def _log_counts(report: ImportReport) -> None:
             "members": report.member_count,
             "distinct_digests": report.distinct_digests,
             "newly_stored_blobs": report.newly_stored_blobs,
+            "first_seen": report.first_seen,
             "counts": {str(name): count for name, count in report.counts.items()},
             "skipped": {str(reason): count for reason, count in report.skipped.items()},
             "warnings": report.warning_count,

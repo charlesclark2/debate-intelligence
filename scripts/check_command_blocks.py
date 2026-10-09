@@ -8,9 +8,11 @@ explanation in the prose. This script enforces it.
 
 What counts as a comment: what interactive zsh without `interactivecomments` would pass on as an
 argument, which is an unquoted `#` at the start of a word, including after `;`, `&&`, `|`, `(` or
-a line continuation. These are not comments, and pass:
+a line continuation. A `#!` shebang is no exception, even on a block's first line: pasted, zsh
+runs it and fails with `event not found`. A block that shows a script's contents writes the file
+with a quoted heredoc (`cat > file <<'EOF'`), whose body is skipped. These are not comments, and
+pass:
 
-  * `#!` at the start of a block's first line
   * `#` inside single quotes, double quotes or `$'...'`
   * `\\#`
   * `$#`, `${#var}`, `${var#pattern}` and anything else inside `${...}` or `$((...))`
@@ -157,14 +159,12 @@ class ShellScanner:
         """Whether the command read so far is finished, so the next line starts a new one."""
         return not (self.contexts or self.continued or self.pending_heredocs or self.heredoc)
 
-    def feed(self, line: str, allow_shebang: bool = False) -> str | None:
+    def feed(self, line: str) -> str | None:
         """Scan one line; return the comment it holds, from its `#` to the end of the line, if any."""
         if self.heredoc is not None:
             terminator, strip_tabs = self.heredoc
             if (line.lstrip("\t") if strip_tabs else line) == terminator:
                 self.heredoc = self.pending_heredocs.pop(0) if self.pending_heredocs else None
-            return None
-        if allow_shebang and line.startswith("#!"):
             return None
         if self.continued:
             self.continued = False  # the backslash-newline is removed; word_start carries over
@@ -329,7 +329,7 @@ def comments_in(block: Block) -> list[tuple[int, str]]:
                 continue  # output, or a blank line
             line = line[prompt.end() :]
             scanner = ShellScanner()
-        comment = scanner.feed(line, allow_shebang=offset == 0 and block.tag != "console")
+        comment = scanner.feed(line)
         if comment is not None:
             found.append((block.first_line + offset, comment.rstrip()))
     return found

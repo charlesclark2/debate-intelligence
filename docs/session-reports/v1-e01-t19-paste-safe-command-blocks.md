@@ -240,6 +240,86 @@ uv run scripts/check_command_blocks.py --base origin/dev
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
+**Verdict:** CHANGES_REQUESTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-08
+
+**Notes:**
+
+The work is right and nearly done; three small changes before the pull request. This is also the first use of v1-e01-t18's rule: leave this review exactly as it is, append your changes in a new section after it, and end the report with a new, empty PM review.
+
+Checked against the branch (`2934754`, tree clean). The CI step passes `BASE_REF` through `env`, `fetch-depth: 0` is on `spec-validate` alone, and the vacuous-pass paths fail. The 47 measured before equals the 47 fixed. Running the rule against real zsh was the right proof, and it found the one wrong decision, which is mine.
+
+Accepted as they stand:
+- **Deviations 1–3.** The forbidden list governs, so every tracked Markdown file except historical reports is scanned. The extra files are the ones that rule requires.
+- **The decisions**, including skipping the rest of a line after a comment and treating a console command's continuation lines as command.
+- **A promotion pull request** (base `main`) scans every report merged since the last promotion. Each was already checked on its own pull request into `dev`, so that is redundant but correct.
+- **Follow-up 2:** records stay as written. Where a historical block is still in use, a runbook supersedes it; `branching-and-environments.md` already does for v1-e01-t12's rerun.
+- **Follow-up 3** is declined. Sessions run CI's checks before reporting, and CI is enough.
+
+Changes requested:
+1. **Drop the `#!` allowance.** The PM's decision was wrong: pasted, a shebang fails with `event not found`. A block that shows a script's contents should write it with a quoted heredoc (`cat > file <<'EOF'`), which the check already skips. Make a first-line `#!` a finding like any other. Move that case from `ALLOWED` to `REFUSED` and update the module docstring and anything else that describes the allowance. Re-run the zsh comparison and report 38 of 38.
+2. **Tag the prompt-less console block** at `packages/debate_cli/README.md` (`uv run pytest packages/debate_cli/tests`) as `bash` (Follow-up 4). Leave untagged fences unchecked; no new tag rule.
+3. **Amend the spec to match what was built.**
+   - `ac1`: every tracked Markdown file except historical session reports, and the `shell` tag.
+   - `constraints.packages`: add `.github/workflows/ci.yml`, `README.md` and `CONTRIBUTING.md`, with a YAML comment "added on the PM's instruction, 2026-10-08".
+   - Keep `uv run scripts/validate_specs.py` passing.
+
+Then re-run the module's tests, CI's check invocation, and `check_links.py`, and report the counts.
+
+## Changes after PM review (2026-10-08)
+
+This section answers the CHANGES_REQUESTED review above. That review, and everything before it,
+is unchanged.
+
+1. **The `#!` allowance is gone.** A first-line shebang is now a finding like any other `#`.
+   * `scripts/check_command_blocks.py`: `ShellScanner.feed` no longer takes `allow_shebang`. The
+     module docstring now says a shebang is no exception, because pasted it fails with
+     `event not found`, and that a block showing a script writes it with a quoted heredoc
+     (`cat > file <<'EOF'`), whose body is skipped.
+   * `tests/scripts/test_check_command_blocks.py`: `a shebang on the first line` moved from
+     `ALLOWED` to `REFUSED`, expecting line 1. The console test is now
+     `test_a_shebang_after_a_console_prompt_is_refused_and_one_in_output_is_not`. I added one
+     `ALLOWED` case, `a script written with a quoted heredoc`
+     (`cat > /dev/null <<'EOF'` / `#!/usr/bin/env bash` / `# step one` / `EOF`), so the pattern
+     the review recommends is pinned as passing.
+   * Working agreement 9 and the prompt's item 8 never mentioned the allowance, so they are
+     unchanged. The earlier sections of this report describe it as built at the time.
+2. **`packages/debate_cli/README.md:248` is tagged `bash`** instead of `console`, so its
+   `uv run pytest packages/debate_cli/tests` is checked as a command. Untagged fences are still
+   not checked, and there is no new tag rule.
+3. **The spec is amended.** `ac1` now reads "every tracked Markdown file except historical
+   session reports" and lists the `shell` tag. It also now names `#!` on a block's first line as
+   a finding and a heredoc's body as allowed, because its old text listed the `#!` allowance that
+   item 1 removes. `constraints.packages` is now a block list, with `.github/workflows/ci.yml`,
+   `README.md` and `CONTRIBUTING.md` under `# added on the PM's instruction, 2026-10-08`, in the
+   style of `t06-verify-command.yaml`.
+
+### Re-runs
+
+| What | Command | Result |
+|---|---|---|
+| The module's tests | `uv run pytest tests/scripts/test_check_command_blocks.py` | `83 passed in 2.68s` (82 before, plus the heredoc case) |
+| CI's invocation | `uv run --frozen python scripts/check_command_blocks.py --base "origin/${BASE_REF}"` with `BASE_REF=dev` | ``OK: no `#` comments in 186 shell code blocks in 107 Markdown files (1 session reports changed since origin/dev)``, exit 0. The retagged block is still one block, so the count is unchanged. |
+| Links | `uv run scripts/check_links.py` | `OK: 1274 relative links and anchors in 177 Markdown files` |
+| Tests that read the retagged README and the docs | `uv run pytest packages/debate_cli/tests/test_verify_command.py tests/docs tests/architecture` | `159 passed in 7.11s` |
+| Spec validation | `uv run scripts/validate_specs.py` | `OK: 310 files, 38 epics, 252 tasks, 20 releases` |
+
+### The rule against real zsh, again
+
+I ran the same comparison as before: each case body piped into `zsh -f -i` (zsh 5.9) after
+`setopt nointeractivecomments` and after `setopt interactivecomments`, with the outputs compared.
+**39 of 39 agree, 0 disagreements.** The review expected 38 of 38. The 39th is the heredoc case
+added in item 1, and zsh agrees on it: no `#` word is split out of a quoted heredoc's body. Of the
+39 cases, 20 are refused and 19 allowed. `a shebang on the first line` is now a refused case on
+which zsh and the check agree.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
 **Verdict:** PENDING
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 

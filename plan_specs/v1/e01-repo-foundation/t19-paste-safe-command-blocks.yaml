@@ -29,7 +29,17 @@ spec:
     tell implementation sessions about the rule in the prompt they are given.
   priority: 2
   constraints:
-    packages: [scripts, tests/scripts, docs, site/README.md, packages, tests/fixtures]
+    packages:
+      - scripts
+      - tests/scripts
+      - docs
+      - site/README.md
+      - packages
+      - tests/fixtures
+      # added on the PM's instruction, 2026-10-08
+      - .github/workflows/ci.yml
+      - README.md
+      - CONTRIBUTING.md
     forbidden:
       - Exempting a file a person is told to paste from
       - Rewriting historical session reports to pass the check (they are records)
@@ -41,10 +51,10 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        A check, run in CI, scans the shell code blocks (bash, sh, zsh, console) in docs/ (except
-        session reports), every README under the repository, and the evaluation labeling guide, and
-        fails naming the file and line of any `#` that zsh would pass as an argument: an unquoted
-        `#` at the start of a word. `#!` on a block's first line, `#` inside quotes and `${#var}`
+        A check, run in CI, scans the shell code blocks (bash, sh, zsh, shell, console) of every
+        tracked Markdown file except historical session reports, and fails naming the file and line
+        of any `#` that zsh would pass as an argument: an unquoted `#` at the start of a word,
+        including `#!` on a block's first line. `#` inside quotes, `${#var}` and a heredoc's body
         are allowed. It asserts it scanned at least the runbooks it exists for, so it cannot pass by
         finding nothing.
     - id: ac2

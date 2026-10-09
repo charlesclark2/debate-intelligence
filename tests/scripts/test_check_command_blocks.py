@@ -49,6 +49,7 @@ REFUSED: dict[str, tuple[str, list[int]]] = {
     "inside a command substitution": ('print -rl -- "$(print -rl -- a # in a substitution\n)"', [1]),
     "inside backticks": ("print -rl -- `print -rl -- a # in backticks\n`", [1]),
     "a shebang after the first line": ("print -rl -- a\n#!/bin/bash", [2]),
+    "a shebang on the first line": ("#!/usr/bin/env bash\nprint -rl -- a", [1]),
     "after a heredoc's terminator": ("cat <<'EOF'\nbody\nEOF\n# after the heredoc", [4]),
     "after a here-string, which has no body": ('cat <<< "a"\n# after a here-string', [2]),
     "after a closing quote": ("print -rl -- 'a' # after a quote", [1]),
@@ -57,7 +58,6 @@ REFUSED: dict[str, tuple[str, list[int]]] = {
 }
 
 ALLOWED: dict[str, str] = {
-    "a shebang on the first line": "#!/usr/bin/env bash\nprint -rl -- a",
     "inside single quotes": "print -rl -- 'a # b'",
     "inside double quotes": 'print -rl -- "a # b"',
     "inside ANSI-C quotes": "print -rl -- $'a # b'",
@@ -69,6 +69,7 @@ ALLOWED: dict[str, str] = {
     "inside a word": "print -rl -- https://example.com/page#anchor a#b",
     "inside a quoted substitution with its own quotes": 'print -rl -- "$(print -rl -- "a # b")"',
     "inside arithmetic": "print -rl -- $(( 1 + 2 ))",
+    "a script written with a quoted heredoc": "cat > /dev/null <<'EOF'\n#!/usr/bin/env bash\n# step one\nEOF",
     "inside a quoted heredoc": "cat <<'EOF'\n# a Python comment\nx = 1  # another\nEOF\nprint -rl -- done",
     "inside an unquoted heredoc": "cat <<EOF\n# a comment line\nEOF",
     "inside a tab-stripped heredoc": "cat <<-EOF\n\t# a comment line\n\tEOF\nprint -rl -- done",
@@ -161,10 +162,9 @@ def test_console_lines_that_continue_a_command_are_checked_as_part_of_it() -> No
     assert flagged(body, "console") == [2]
 
 
-def test_a_shebang_is_not_allowed_in_a_console_block() -> None:
-    assert flagged("$ print -rl -- a\n#!/bin/bash", "console") == []
-    assert flagged("#!/bin/bash", "console") == []
+def test_a_shebang_after_a_console_prompt_is_refused_and_one_in_output_is_not() -> None:
     assert flagged("$ #!/bin/bash", "console") == [1]
+    assert flagged("$ print -rl -- a\n#!/bin/bash", "console") == []
 
 
 # --------------------------------------------------------------------------------------------

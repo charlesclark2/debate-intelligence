@@ -173,10 +173,13 @@ has no 07-21 and hspf26 no 08-25, because the site lists neither.
 
 ### New to the caselist, per snapshot
 
-**NEW does not mean new evidence.** The weekly importer classifies each archive against the week
-before only, so a file stored in July, absent for a few windows, and back in August counts as NEW
-again. The column that means never stored before is *First seen here*: distinct files in the
-snapshot that no earlier snapshot of the same caselist held. It comes from the runbook's
+**NEW does not mean new evidence.** NEW means "not present in the preceding snapshot": the weekly
+importer classifies each archive against the week before only, so a file stored in July, absent
+for a few windows, and back in August counts as NEW again. The column that means new to the
+caselist is *First seen here*: distinct files in the snapshot that no earlier snapshot of the same
+caselist held. It is not "never stored before", because another caselist or a camp file can hold
+the same bytes (below). Since `v1-e30-t08`, a new import reports this number itself, as
+`first_seen`; the manifests below were written before that and do not carry it. It comes from the runbook's
 `first_seen_rows`. Per run it equals the run's `blobs_stored` (242 for the five July-August
 weeks, and 16 for 08-11 to 08-25, against 25 NEW), except where the bytes were already stored
 under another caselist or as a camp file. Run 5 is the one case so far: 1,723 first seen, 1,721
@@ -243,7 +246,8 @@ after the title and before the year, and sit in folders named for argument type.
 reads a camp only from the folder name or from the *start* of the filename, so it never looks
 where the camp is. The bytes are stored and published correctly; the camp label is what is
 missing. This is recorded as a follow-up for the OpenEv importer (session report) and not
-patched here. The three DUPLICATEs are identical files present under two names within the
+patched here. `v1-e30-t08` fixed the detection and added a metadata re-import; its results are
+recorded in their own dated section once the operator has run it. The three DUPLICATEs are identical files present under two names within the
 release; none duplicates a caselist disclosure.
 
 ## Dedupe rate

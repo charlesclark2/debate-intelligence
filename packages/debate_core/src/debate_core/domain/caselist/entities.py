@@ -280,7 +280,9 @@ class CampFile(DomainModel):
     )
     year: int = Field(ge=2000, description="Calendar year of the camp release, e.g. 2026.")
     event: Event = Field(description="Event the file was cut for.")
-    file_title: NonEmptyText = Field(description="File title: the filename without camp prefix or extension.")
+    file_title: NonEmptyText = Field(
+        description="File title: the filename without its extension and its camp, year and lab initials."
+    )
     snapshot: SnapshotDate = Field(description="The date this release was imported under.")
     parse_warnings: tuple[NonEmptyText, ...] = Field(
         default=(), description="What the filename parser could not read, e.g. an unresolved camp."

@@ -105,7 +105,7 @@ spec:
         they are rebuilt after a removal or the list is consulted on read. A test removes a source
         that contributed to each aggregate and shows each one clean, and is shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

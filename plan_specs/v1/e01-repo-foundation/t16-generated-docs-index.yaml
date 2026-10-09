@@ -92,7 +92,7 @@ spec:
         or the check runs on dev pull requests in a form that cannot make concurrent task PRs
         conflict. Choose, justify it, and show a promotion PR no longer failing for this reason.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

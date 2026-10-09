@@ -279,6 +279,7 @@ export AWS_PROFILE=debate-dev-evidence
 aws s3api list-object-versions --bucket "$BUCKET" --prefix quarantine/ --max-items 1 --query 'Versions[0].Key' --output text
 aws s3api list-object-versions --bucket "$BUCKET" --prefix reports/ --max-items 1
 aws s3api list-object-versions --bucket "$BUCKET" --max-items 1
+unset AWS_PROFILE
 ```
 Success looks like: the first prints a key under `quarantine/`, or `None` if nothing has been
 there; the second and third fail with `AccessDenied` naming `s3:ListBucketVersions`.
@@ -500,7 +501,7 @@ ones step 5 lists for that change.
 
 | Change | dev | prod |
 |---|---|---|
-| `v1-e29-t06`: `DebateEvidenceOperator` may list object versions under `raw/`, `parsed/`, `files/`, `manifests/` and `quarantine/` (one statement added to one inline policy) | Not yet applied | Not yet applied |
+| `v1-e29-t06`: `DebateEvidenceOperator` may list object versions under `raw/`, `parsed/`, `files/`, `manifests/` and `quarantine/` (one statement added to one inline policy) | 2026-10-08 | 2026-10-08 |
 
 ## If something is wrong
 

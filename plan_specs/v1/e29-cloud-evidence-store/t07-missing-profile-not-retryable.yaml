@@ -1,0 +1,81 @@
+# TASK v1-e29-t07-missing-profile-not-retryable - A profile missing from the AWS config is a configuration error, not an expired session
+# Epic: E29 Cloud Evidence Store | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t07-missing-profile-not-retryable
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: "A profile missing from the AWS config is a configuration error, not an expired session"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e01-t20's Decisions and Follow-up work.
+  description: >-
+    The S3 adapter reports a profile that the AWS config does not define (`ProfileNotFound`) as
+    `StoreCredentialsExpired`. Since v1-e01-t20 that exits 3, "a retry may succeed", and
+    suggests `aws sso login`, though no retry or login fixes a typo'd `DEBATE_REMOVAL_PROFILE`
+    or `--profile`. Give it its own error, mapped to exit 1 like other configuration errors,
+    whose message names the setting that holds the profile name, never the AWS config's path.
+    Out of scope: expired or refused sessions, which stay exit 3.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations.s3, debate_core.domain, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs]
+    forbidden:
+      - Mapping an expired, unavailable or refused store to anything but exit 3
+      - A path from the operator's machine in the message
+  context:
+    - kind: TaskRef
+      name: v1-e01-t20-retryable-failures-exit-3
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `store sync` with a profile the config lacks, and `caselist remove --execute` with
+        `DEBATE_REMOVAL_PROFILE` naming one, exit 1 with a message naming the setting, shown
+        failing first (they exit 3 today).
+    - id: ac2
+      description: >-
+        An expired SSO session still exits 3 with the `aws sso login` hint, by the existing
+        tests.
+    - id: ac3
+      description: >-
+        v1-e01-t20's consumer table is updated for the changed code, and the CLI README says
+        what the new error means.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t07-missing-profile-not-retryable-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Split ProfileNotFound from expiry in the adapter, map it, update the inventory.
+  goalRef:
+    name: v1-e29-t07-missing-profile-not-retryable
+  graph:
+    nodes:
+      - id: profile-not-found
+        kind: Task
+        name: Its own error and exit 1
+        description: >-
+          Adapter translation, mapping, tests and docs.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Store and CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations, packages/debate_cli/tests]
+status:
+  phase: Pending

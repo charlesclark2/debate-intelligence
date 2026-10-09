@@ -90,7 +90,7 @@ spec:
         nowhere, run with only the everyday profile, reports that versions were counted, where before
         it reported "Versions not counted". The output is recorded in the session report.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

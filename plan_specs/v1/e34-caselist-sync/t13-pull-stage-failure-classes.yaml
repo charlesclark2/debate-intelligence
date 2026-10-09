@@ -1,0 +1,104 @@
+# TASK v1-e34-t13-pull-stage-failure-classes - A pull stage that fails on a retryable cause ends the run with exit 3
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t13-pull-stage-failure-classes
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A pull stage that fails on a retryable cause ends the run with exit 3"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e01-t20's Deviations 1 and 2, its Follow-up work, and the PM's narrowing of its ac1 and ac2.
+  description: >-
+    `caselist pull` folds a failure inside a stage into `StageRecord(stage, FAILED, reason)`,
+    and a failed required stage exits 1. The record carries only a sentence, so the CLI cannot
+    tell a store that did not answer, or an OpenCaselist download that got a 5xx or a non-daily
+    429, from a refused archive. v1-e01-t20 therefore left those at exit 1. Separately, pull's
+    publish and report stages treat every `StoreAccessDenied` as an expired login (publish
+    pending, exit 0, an `aws sso login` notification), so a local permission refusal or a
+    missing grant is reported with the wrong fix; that is why v1-e01-t20 could not translate
+    `FsEvidenceObjectStore`, `FsEvidenceVersionStore` and `LocalAppendOnlyFile`'s
+    `PermissionError`, and why `FsEvidenceObjectStore.list_objects` still lists nothing under an
+    unreadable directory. Record an error class on a failed stage, exit 3 when every failed
+    required stage failed only on a retryable cause, tell a local refusal and a missing grant
+    from an expired session, then translate the remaining filesystem stores. Also replace the
+    `STORE_UNAVAILABLE: …` prefix `caselist publish` parses out of `manifest_error` with a
+    structured field. Build on v1-e34-t12's `_camp_download_refused`. Out of scope: the
+    OpenCaselist auth policy (a 401 is never retried) and the run record's outcome vocabulary.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs]
+    forbidden:
+      - Mapping a deterministic outcome (a refused archive, a mismatch, a removed file, UNVERIFIED) to exit 3
+      - Reporting a local permission refusal or a missing grant as waiting for an AWS login
+      - A path, camp title or inbox file name in a stage reason or error class
+  context:
+    - kind: TaskRef
+      name: v1-e01-t20-retryable-failures-exit-3
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t12-summary-names-no-camp-file
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A pull whose import or publish stage fails only because the store did not answer, or
+        whose download fails only on a 5xx or non-daily 429, exits 3; a pull with any
+        deterministic stage failure exits 1. Each shown failing first.
+    - id: ac2
+      description: >-
+        A local `PermissionError` and a missing grant in publish or report fail that stage
+        with exit 1 or 3 per the rule above and name the fix that applies, never `aws sso
+        login`; an expired session still marks publish pending with exit 0. Shown failing
+        first.
+    - id: ac3
+      description: >-
+        `FsEvidenceObjectStore` (including `list_objects`, which raises instead of listing
+        nothing), `FsEvidenceVersionStore` and `LocalAppendOnlyFile` turn a
+        `PermissionError` into `StoreAccessDenied` naming the directory's role, and
+        `caselist publish` reads a manifest failure's code from a structured field.
+    - id: ac4
+      description: >-
+        v1-e01-t20's consumer table is brought up to date for every changed code, and each
+        new guard is mutated and shown caught.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t13-pull-stage-failure-classes-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Classify stage failures, separate local and remote refusals, then translate the remaining
+    stores.
+  goalRef:
+    name: v1-e34-t13-pull-stage-failure-classes
+  graph:
+    nodes:
+      - id: stage-classes
+        kind: Task
+        name: Classified stage failures and the remaining stores
+        description: >-
+          The error class on StageRecord, the exit rule, the refusal split, the store
+          translations and the structured manifest code.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist and CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/caselist, packages/debate_cli/tests]
+status:
+  phase: Pending

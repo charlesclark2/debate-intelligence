@@ -1,0 +1,84 @@
+# TASK v1-e01-t24-partial-open-items-current-session - A partial merge's open items are read from the current session's sections
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t24-partial-open-items-current-session
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "A partial merge's open items are read from the current session's sections"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e01-t18's Follow-up work 1.
+  description: >-
+    `scripts/task pr --partial` refuses unless the report records which criteria are still open,
+    and it checks that with a `grep` for NOT RUN, NOT APPLICABLE, PARTIAL or FAIL anywhere in
+    the report. Since v1-e01-t18 a resumed task keeps its earlier sessions' sections and appends
+    its own, so a resumed report always contains the first session's NOT RUN and the check
+    passes even when the resumed session's own sections close everything, or record nothing open
+    at all. Read the open-items markers only from the text after the last-but-one PM review (the
+    current session's sections), the same boundary v1-e01-t18 drew for the verdict. Out of
+    scope: the verdict rule itself, and what a partial merge requires of the spec's phase.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, docs/process]
+    forbidden:
+      - Changing which verdict line `scripts/task pr` reads (v1-e01-t18's rule)
+      - Editing any existing session report to make the check pass
+  context:
+    - kind: TaskRef
+      name: v1-e01-t18-restart-partial-tasks
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A resumed report whose earlier session recorded NOT RUN, and whose current session's
+        sections record nothing open, is refused by `scripts/task pr --partial`, shown with
+        a hand-written fixture failing first against today's script.
+    - id: ac2
+      description: >-
+        A first-session report and a resumed report whose current sections do record an open
+        criterion are both accepted, and every existing report that `--partial` accepts
+        today is still accepted, by a test that walks them.
+    - id: ac3
+      description: >-
+        docs/process/task-workflow.md says which part of the report the check reads.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t24-partial-open-items-current-session-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Draw the current-session boundary once, use it for the open-items check, and prove it with
+    fixtures.
+  goalRef:
+    name: v1-e01-t24-partial-open-items-current-session
+  graph:
+    nodes:
+      - id: current-session-open-items
+        kind: Task
+        name: Open items from the current session only
+        description: >-
+          The boundary, the check, the fixtures and the walk over existing reports.
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Task tooling tests pass
+            command: uv
+            args: [run, pytest, tests/scripts]
+status:
+  phase: Pending

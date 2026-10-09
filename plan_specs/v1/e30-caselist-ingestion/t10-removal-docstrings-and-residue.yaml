@@ -1,0 +1,84 @@
+# TASK v1-e30-t10-removal-docstrings-and-residue - caselist status reports noncurrent versions a removal left behind
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t10-removal-docstrings-and-residue
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "caselist status reports noncurrent versions a removal left behind"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e29-t06's Follow-up work 1 and 2, and v1-e30-t07's Follow-up 6.
+  description: >-
+    v1-e29-t06 gave the everyday profile read-only `ListBucketVersions` under the removable
+    prefixes, applied in dev and prod on 2026-10-08. Two `debate_core` docstrings still describe
+    the state before it (`removal_plan.py`'s module docstring, "which the everyday profile does
+    not have today", and `integrations/s3/version_store.py`, "says 'not counted' until then").
+    And v1-e30-t07's Follow-up 6 is now possible: a read-only report, in `caselist status`, of
+    noncurrent object versions under a removable prefix whose current version a removal has
+    deleted, so residue a failed or partial takedown left is visible without the takedown
+    profile. Correct the docstrings and add the report. Out of scope: deleting anything, and the
+    takedown profile's grants.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.s3, debate_cli.commands, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Any delete, or any use of the takedown profile, from `caselist status`
+      - A school, team code, file name or name in the residue report; it names digests and counts
+  context:
+    - kind: TaskRef
+      name: v1-e29-t06-removal-grant-scope-test
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Both docstrings describe the grant as applied, and say what happens in an
+        environment where it is not.
+    - id: ac2
+      description: >-
+        `caselist status` reports, per caselist, the count and digest prefixes of noncurrent
+        versions left under a removable prefix after a removal, using the everyday profile
+        only, shown with moto failing first; with listing refused it says the residue was
+        not checked rather than reporting none.
+    - id: ac3
+      description: >-
+        docs/runbooks/caselist-removal.md says what to do when the report shows residue.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t10-removal-docstrings-and-residue-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Fix the two docstrings, then add the read-only residue report to caselist status.
+  goalRef:
+    name: v1-e30-t10-removal-docstrings-and-residue
+  graph:
+    nodes:
+      - id: residue-report
+        kind: Task
+        name: Docstrings and the residue report
+        description: >-
+          The docstring corrections, the report, its moto tests and the runbook.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal and status tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, removal or status]
+status:
+  phase: Pending

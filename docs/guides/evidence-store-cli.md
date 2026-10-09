@@ -202,7 +202,11 @@ debate-research --json store sync | jq '.data.counts'
 
 Exit codes: `0` success, `1` a failure you have to deal with (an object that would not verify, a
 mismatch, no bucket for this environment, a prod push with no `--confirm-prod`), `2` a bad command
-line, `3` a provider failure.
+line, `3` the bucket did not answer: it was unavailable, your SSO session expired, or it refused
+access. A `3` may succeed if you run the same command again later (after `aws sso login`, for an
+expired session); a `1` will not until you deal with what it names. An `--apply` run that carried
+on past failed objects is a `3` only when every one of them failed because the bucket did not
+answer.
 
 ## The first sync of a whole corpus
 

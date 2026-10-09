@@ -172,6 +172,13 @@ DEBATE_ENV=dev debate-research caselist pull --caselist hsld26
 ```
 
 Success is exit `0` with `publish: completed` and `report: completed` in the stage table.
+Exit `0` with `publish: pending` means the SSO session expired after the import: what was captured
+is safe, and [When something goes wrong](#when-something-goes-wrong) says how to finish it. Exit `1` means
+a stage did not complete; the stage table names it and why, and that includes a stage that failed
+because the bucket did not answer. Exit `3` means the bucket did not answer before any stage could
+record it, as `error.code` says (`STORE_CREDENTIALS_EXPIRED`, `STORE_ACCESS_DENIED` or
+`STORE_UNAVAILABLE`): log in again if it is the session, then run the same command. Exit `70` is a
+bug. The agent never retries any of them on its own; the next attempt is next week's run.
 `parse: skipped` and `landscape: skipped` are expected until E31 and E32 ship — those stages are
 optional by design and cannot fail a run whose bytes are already captured.
 

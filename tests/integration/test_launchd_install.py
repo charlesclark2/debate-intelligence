@@ -303,6 +303,39 @@ def test_a_debate_research_earlier_on_path_is_not_the_one_the_wrapper_execs(
     assert [call for call in calls_to(shadow) if "caselist" in call] == []
 
 
+@pytest.mark.parametrize("exit_code", [0, 1, 3, 70])
+def test_the_wrapper_hands_launchd_the_commands_exit_code_unchanged(
+    home: Path, console_script: Path, exit_code: int
+) -> None:
+    """v1-e01-t20. 3 (the bucket did not answer) reaches launchd as 3, distinct from 1 and 70; the
+    wrapper reads none of them, so it can never be the thing that turns one into another."""
+    installed = install("--caselist", "testcl26", "--debate-research", str(console_script), home=home)
+    assert installed.returncode == 0, installed.stderr
+    plist = installed_plist(home)
+    script = console_script.read_text(encoding="utf-8")
+    console_script.write_text(script.replace("exit 0\n", f"exit {exit_code}\n"), encoding="utf-8")
+
+    ran = subprocess.run(
+        program_of(plist), env=environment_of(plist), capture_output=True, text=True, check=False
+    )
+
+    assert ran.returncode == exit_code, ran.stderr
+    assert "--json caselist pull --caselist testcl26" in calls_to(console_script)
+
+
+def test_no_exit_code_makes_launchd_run_the_agent_again(home: Path, console_script: Path) -> None:
+    """The agent runs once a week by design. Without `KeepAlive` launchd records a non-zero exit as
+    the last exit code and waits for the next calendar slot; a `KeepAlive` (or its
+    `SuccessfulExit` and `Crashed` keys) would relaunch on an exit code, and a 3 that means "try
+    later" would become a loop against the bucket and the site."""
+    plist = rendered_plist(install("--caselist", "testcl26", "--debate-research", str(console_script),
+                                   "--dry-run", home=home))  # fmt: skip
+
+    assert "KeepAlive" not in plist
+    assert "StartInterval" not in plist
+    assert set(plist["StartCalendarInterval"]) == {"Weekday", "Hour", "Minute"}  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize(
     "where",
     ["given inside a working tree", "given inside a project .venv", "found on PATH inside a working tree",

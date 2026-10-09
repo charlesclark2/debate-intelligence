@@ -55,7 +55,10 @@ if [ "${1:-}" = "--check" ]; then
 fi
 
 # --json so that stdout is one object per run, which is what the plist's StandardOutPath collects
-# and what v1-e34-t03's run log will read. The exit code is the command's, unchanged: 0 for a run
-# that captured what there was (including one that found nothing new, and one whose publish is
-# pending), 1 for a download, import or publish that did not complete.
+# and what v1-e34-t03's run log will read. The exit code is the command's, unchanged, and this file
+# never reads it: 0 for a run that captured what there was (including one that found nothing new,
+# and one whose publish is pending), 1 for a download, import or publish that did not complete, 3
+# when the bucket did not answer before any stage could record the failure (v1-e01-t20), 70 for a
+# bug. launchd only records it as the agent's last exit code: the plist has no KeepAlive, so no
+# exit code, 3 included, makes launchd run the agent again before next week's slot.
 exec "${DEBATE_RESEARCH_BIN}" --json caselist pull "$@"

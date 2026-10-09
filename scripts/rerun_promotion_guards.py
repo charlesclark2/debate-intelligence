@@ -1,6 +1,3 @@
-# /// script
-# requires-python = ">=3.11"
-# ///
 """Re-run promotion-guard on each pull request into `main` whose guard has not seen `main`'s tip.
 
 GitHub has no "base branch moved" event and protect-main leaves "require branches to be up to date"

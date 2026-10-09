@@ -71,6 +71,7 @@ from debate_core.evidence.near_duplicates import (
 )
 
 __all__ = [
+    "CardPlacement",
     "CaselistCardReport",
     "CaselistCardStatsService",
     "CardTotals",
@@ -181,8 +182,12 @@ class CaselistCardReport:
 
 
 @dataclass(frozen=True, slots=True)
-class _Placed:
-    """One card with its fingerprint and the cluster it was placed in."""
+class CardPlacement:
+    """One card with its fingerprint and the cluster it was placed in.
+
+    What :meth:`CaselistCardStatsService.place` returns, and what the parse pipeline
+    (`v1-e31-t06`) writes its occurrence table from.
+    """
 
     card: ParsedCard
     fingerprint: str
@@ -227,7 +232,7 @@ class CaselistCardStatsService:
             ),
             key=_card_order,
         )
-        placed = self._place(chosen)
+        placed = self.place(chosen)
         disclosures = await self._disclosures(caselist, snapshot)
         occurrences = _occurrences(placed, disclosures)
         return CaselistCardReport(
@@ -239,7 +244,12 @@ class CaselistCardStatsService:
             occurrences=occurrences,
         )
 
-    def _place(self, cards: Sequence[ParsedCard]) -> list[_Placed]:
+    def place(self, cards: Sequence[ParsedCard]) -> list[CardPlacement]:
+        """Fingerprint `cards`, cluster the full ones and link the abbreviated ones, in input order.
+
+        Steps 1 to 3 of this module's docstring, without the join to disclosures. Cluster ids do
+        not depend on the order of `cards`.
+        """
         fingerprints = [card_fingerprint(card).exact_fingerprint for card in cards]
         bodies: dict[str, str] = {}
         for card, fingerprint in zip(cards, fingerprints, strict=True):
@@ -256,11 +266,11 @@ class CaselistCardStatsService:
                     FullCardWords(clusters[fingerprint], key, tuple(matching_words(card.evidence_text))),
                 )
 
-        placed: list[_Placed] = []
+        placed: list[CardPlacement] = []
         for card, fingerprint in zip(cards, fingerprints, strict=True):
             if card.completeness is CardCompleteness.FULL:
                 placed.append(
-                    _Placed(card, fingerprint, clusters[fingerprint], ClusterMembership.NEAR_DUPLICATE)
+                    CardPlacement(card, fingerprint, clusters[fingerprint], ClusterMembership.NEAR_DUPLICATE)
                 )
                 continue
             anchor = abbreviation_anchor(card, self._markers)
@@ -270,9 +280,9 @@ class CaselistCardStatsService:
                 else None
             )
             if linked is None:
-                placed.append(_Placed(card, fingerprint, fingerprint, ClusterMembership.UNLINKED))
+                placed.append(CardPlacement(card, fingerprint, fingerprint, ClusterMembership.UNLINKED))
             else:
-                placed.append(_Placed(card, fingerprint, linked, ClusterMembership.ABBREVIATED_LINK))
+                placed.append(CardPlacement(card, fingerprint, linked, ClusterMembership.ABBREVIATED_LINK))
         return placed
 
     async def _disclosures(self, caselist: str, snapshot: date | None) -> dict[str, list[Disclosure]]:
@@ -301,7 +311,7 @@ def _card_order(card: ParsedCard) -> tuple[str, int, date, str]:
 
 
 def _occurrences(
-    placed: Sequence[_Placed], disclosures: dict[str, list[Disclosure]]
+    placed: Sequence[CardPlacement], disclosures: dict[str, list[Disclosure]]
 ) -> tuple[CardOccurrence, ...]:
     """One occurrence per occurrence key; later sightings only widen its snapshot range."""
     table: dict[OccurrenceKey, CardOccurrence] = {}
@@ -363,7 +373,7 @@ def _occurrences(
 
 
 def _totals(
-    chosen: Sequence[ParsedCard], placed: Sequence[_Placed], occurrences: Sequence[CardOccurrence]
+    chosen: Sequence[ParsedCard], placed: Sequence[CardPlacement], occurrences: Sequence[CardOccurrence]
 ) -> CardTotals:
     abbreviated = [item for item in placed if item.card.completeness is not CardCompleteness.FULL]
     positions = {
@@ -385,12 +395,12 @@ def _totals(
     )
 
 
-def _position(item: _Placed) -> tuple[str, int]:
+def _position(item: CardPlacement) -> tuple[str, int]:
     return (item.card.provenance.source_sha256, item.card.provenance.first_element_index)
 
 
 def _top_clusters(
-    placed: Sequence[_Placed], occurrences: Sequence[CardOccurrence], *, top: int, include_teams: bool
+    placed: Sequence[CardPlacement], occurrences: Sequence[CardOccurrence], *, top: int, include_teams: bool
 ) -> tuple[ClusterSummary, ...]:
     members: defaultdict[str, list[CardOccurrence]] = defaultdict(list)
     for occurrence in occurrences:

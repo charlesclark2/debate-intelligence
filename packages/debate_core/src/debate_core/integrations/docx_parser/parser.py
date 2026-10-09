@@ -232,6 +232,10 @@ class DebateDocxParser:
         return DOCX_PARSER_VERSION
 
     @property
+    def profile_version(self) -> str:
+        return self._profile.profile_version
+
+    @property
     def profile(self) -> StyleProfile:
         """The style profile every unit and emphasis in the output was resolved through."""
         return self._profile

@@ -17,6 +17,8 @@ Nothing here touches the filesystem, the network or the clock. `FixedClock` and
 from __future__ import annotations
 
 import hashlib
+import os
+import time
 from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -64,6 +66,14 @@ from debate_core.application.ports import (
     SnapshotStore,
     SourceMetadataHints,
 )
+from debate_core.application.ports.parsed_store import (
+    DocumentRecord,
+    OccurrenceRecord,
+    ParsedStore,
+    ParsedStoreRefusal,
+    SourceEntry,
+    parse_version_directory,
+)
 from debate_core.domain import (
     CROCKFORD_BASE32_ALPHABET,
     AccessStatus,
@@ -98,13 +108,16 @@ __all__ = [
     "InMemoryCardEditLog",
     "InMemoryCardRepository",
     "InMemoryCaselistRepository",
+    "InMemoryParsedStore",
     "InMemorySearchRepository",
     "InMemorySnapshotStore",
+    "MisbehavingDebateFileParser",
     "RecordedModelCall",
     "SequentialIdGenerator",
     "build_fake_card_edit_log",
     "build_fake_caselist_repository",
     "build_fake_debate_file_parser",
+    "build_fake_parsed_store",
     "build_fake_ports",
     "empty_suppression_list",
 ]
@@ -802,6 +815,10 @@ class FakeDebateFileParser:
     def parser_version(self) -> str:
         return self._parser_version
 
+    @property
+    def profile_version(self) -> str:
+        return self._profile_version
+
     def add(self, sha256: str, result: ParsedDocument | ParseFailure) -> None:
         """Register what `parse` should return for one file's bytes."""
         self._results[sha256] = result
@@ -1105,3 +1122,138 @@ def build_fake_debate_file_parser() -> DebateFileParser:
     pipeline test months later.
     """
     return FakeDebateFileParser()
+
+
+class MisbehavingDebateFileParser:
+    """A parser that stalls, dies or raises on the digests it is told to, and otherwise defers.
+
+    What the parse pipeline's pool (`v1-e31-t06`) has to survive, made reproducible: a parse that
+    never returns (the per-file time limit), a worker process that dies mid-parse, and a parser
+    that raises instead of returning a failure. Picklable, so a spawned worker can run it.
+    """
+
+    def __init__(
+        self,
+        inner: DebateFileParser,
+        *,
+        stall: Iterable[str] = (),
+        crash: Iterable[str] = (),
+        raise_on: Iterable[str] = (),
+        stall_seconds: float = 3600.0,
+    ) -> None:
+        self._inner = inner
+        self._stall = frozenset(stall)
+        self._crash = frozenset(crash)
+        self._raise_on = frozenset(raise_on)
+        self._stall_seconds = stall_seconds
+
+    @property
+    def parser_version(self) -> str:
+        return self._inner.parser_version
+
+    @property
+    def profile_version(self) -> str:
+        return self._inner.profile_version
+
+    def parse(
+        self,
+        content: bytes,
+        source: SourceDocument,
+        *,
+        source_path: str,
+        snapshot: SnapshotDate | None = None,
+        camp: str | None = None,
+    ) -> ParsedDocument | ParseFailure:
+        if source.sha256 in self._stall:
+            time.sleep(self._stall_seconds)
+        if source.sha256 in self._crash:
+            os._exit(70)  # noqa: SLF001 - the point is a process that dies without unwinding
+        if source.sha256 in self._raise_on:
+            raise RuntimeError("synthetic parser bug")
+        return self._inner.parse(content, source, source_path=source_path, snapshot=snapshot, camp=camp)
+
+
+class InMemoryParsedStore:
+    """The parsed card store (`v1-e31-t06`) in dictionaries, with the local adapter's two refusals.
+
+    Records are kept as the objects written; a test that cares about bytes on disk uses
+    :class:`~debate_core.integrations.local.parsed_store.LocalParsedStore`.
+    """
+
+    def __init__(self) -> None:
+        self.sources: dict[tuple[str, str, str], tuple[SourceEntry, DocumentRecord | None]] = {}
+        """`(caselist, version, sha256)` to the source's entry and document."""
+        self.aggregates: dict[
+            tuple[str, str],
+            tuple[tuple[SourceEntry, ...], tuple[SourceEntry, ...], tuple[OccurrenceRecord, ...]],
+        ] = {}
+        """`(caselist, version)` to its index, failures and occurrences."""
+
+    async def version_directories(self, caselist: str) -> tuple[str, ...]:
+        names = {version for name, version, _ in self.sources if name == caselist}
+        names |= {version for name, version in self.aggregates if name == caselist}
+        return tuple(sorted(names, key=parse_version_directory))
+
+    async def read_entries(
+        self, caselist: str, version: str, *, snapshot: str | None = None
+    ) -> tuple[SourceEntry, ...]:
+        return tuple(
+            entry
+            for (name, held, _), (entry, _) in sorted(self.sources.items())
+            if name == caselist and held == version and (snapshot is None or entry.snapshot == snapshot)
+        )
+
+    async def read_document(self, caselist: str, version: str, sha256: str) -> DocumentRecord | None:
+        held = self.sources.get((caselist, version, sha256))
+        return held[1] if held is not None else None
+
+    async def put_source(
+        self, caselist: str, version: str, entry: SourceEntry, document: DocumentRecord | None
+    ) -> None:
+        named, generation = parse_version_directory(version)
+        newest = max(
+            (
+                parse_version_directory(name)[1]
+                for name in await self.version_directories(caselist)
+                if parse_version_directory(name)[0] == named
+            ),
+            default=generation,
+        )
+        if named != entry.parser_version or generation < newest:
+            raise ParsedStoreRefusal(
+                f"{caselist}/{version} is not the newest generation of {entry.parser_version}"
+            )
+        existing = self.sources.get((caselist, version, entry.source_sha256))
+        if existing is not None and not existing[0].retried_next_run:
+            raise ParsedStoreRefusal(
+                f"source {entry.source_sha256} is already recorded in {caselist}/{version}"
+            )
+        self.sources[(caselist, version, entry.source_sha256)] = (entry, document)
+
+    async def write_aggregates(
+        self,
+        caselist: str,
+        version: str,
+        *,
+        index: Sequence[SourceEntry],
+        failures: Sequence[SourceEntry],
+        occurrences: Sequence[OccurrenceRecord],
+    ) -> None:
+        self.aggregates[(caselist, version)] = (tuple(index), tuple(failures), tuple(occurrences))
+
+    async def read_index(self, caselist: str, version: str) -> tuple[SourceEntry, ...] | None:
+        held = self.aggregates.get((caselist, version))
+        return held[0] if held is not None else None
+
+    async def read_failures(self, caselist: str, version: str) -> tuple[SourceEntry, ...] | None:
+        held = self.aggregates.get((caselist, version))
+        return held[1] if held is not None else None
+
+    async def read_occurrences(self, caselist: str, version: str) -> tuple[OccurrenceRecord, ...] | None:
+        held = self.aggregates.get((caselist, version))
+        return held[2] if held is not None else None
+
+
+def build_fake_parsed_store() -> ParsedStore:
+    """Build the in-memory :class:`ParsedStore` (v1-e31-t06), typed as the port, for pyright's check."""
+    return InMemoryParsedStore()

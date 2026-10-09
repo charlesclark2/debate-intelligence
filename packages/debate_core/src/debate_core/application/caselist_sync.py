@@ -2130,7 +2130,7 @@ class CaselistSyncService:
                     continue
                 try:
                     downloaded = await self._source.download_openev(file, self._inbox)
-                except DomainError as refused:
+                except (DomainError, OSError) as refused:
                     failure = _camp_download_refused(openev_selection, refused)
                     break
                 tally.downloaded_openev.append((openev_selection, downloaded))
@@ -2188,7 +2188,7 @@ class CaselistSyncService:
                 await self._import_openev(
                     openev_selection, self._downloaded(tally, openev_selection.inbox_name, path), tally
                 )
-            except DomainError as refused:
+            except (DomainError, OSError) as refused:
                 failures.append(_camp_download_refused(openev_selection, refused))
         waiting = (
             f"; {held_back} archive(s) in the inbox held back for a later run, behind an older week"
@@ -2963,13 +2963,20 @@ def _revision_sentence(openev: Sequence[OpenEvSelection]) -> str:
     return f"; {len(revised)} taken as a revision of an id no longer listed ({listed})"
 
 
-def _camp_download_refused(selection: OpenEvSelection, refused: DomainError) -> str:
+def _camp_download_refused(selection: OpenEvSelection, refused: DomainError | OSError) -> str:
     """A camp download's failed fetch or import, for a stage's reason: by id and digest, never by name.
 
     The error's own message can name the file: the archive reader says which file it could not read,
     by its inbox name (`openev-<id>-<file name>`), and a camp file's name is its title. Every name the
     file goes by, here and upstream, is replaced by "the download" (`v1-e34-t12`).
+
+    An `OSError` — the inbox refusing the write, or the file the read — is given by its class alone,
+    as the run log gives any error this project did not write: its message quotes the path it failed
+    on. It used to end the run, and `caselist pull --json` printed that message as the command's
+    error; it is now the fetch or import failing, like any other refusal of that file.
     """
+    if not isinstance(refused, DomainError):
+        return f"{selection.label}: {type(refused).__name__}"
     message = str(refused)
     file = selection.file
     names = {selection.inbox_name}

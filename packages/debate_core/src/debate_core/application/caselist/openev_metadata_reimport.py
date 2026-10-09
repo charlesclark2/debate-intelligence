@@ -27,7 +27,8 @@ key, which is the release's key and is returned unchanged for the caller to writ
 downloads nothing: it reads one local manifest and the local records, and has no network port.
 
 The manifest's bytes do change, so the bucket's copy differs until it is published again, and
-`caselist status` reports the release as drifted until then. `caselist publish --caselist openev
+`caselist status` reports the release as drifted until then: one checksum mismatch, on the
+manifest's own key, with every source present and verified. `caselist publish --caselist openev
 --snapshot <year>-<event>` re-uploads a manifest whose bucket digest differs
 (:mod:`~debate_core.application.caselist.publish_service`: a manifest is not content-addressed, and
 a listed manifest is uploaded unless the bucket already holds the same bytes); the bucket's

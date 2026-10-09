@@ -476,6 +476,31 @@ class CaselistSettings(SettingsGroup):
             "the zip's directory before any member is extracted."
         ),
     )
+    # A complete archive (`<slug>-all-<date>.zip`, v1-e34-t04) is every file still attached to a
+    # round, so it is at least the caselist's distinct files. Measured after the backfill
+    # (docs/data/caselist-backfill-2026-09.md, dedupe table): hspf26's 3,906 distinct files are
+    # 1,755,226,582 bytes after 13 weeks, already 82% of the 2 GiB weekly ceiling, and PDFs and
+    # .docx files do not compress. At that rate a season of about 40 weeks is about 5.4 GB, so the
+    # file ceiling is 8 GiB. The unpacked ceiling is twice that: documents that do not compress
+    # unpack to about their zipped size, and the ceiling is there to stop an archive claiming far
+    # more. The weekly ceilings are unchanged.
+    max_full_archive_bytes: int = Field(
+        default=8 * 1024 * 1024 * 1024,
+        gt=0,
+        description=(
+            "Largest complete archive (`<slug>-all-<date>.zip`) the pull will download or open, in "
+            "bytes. 8 GiB: a whole season of the largest caselist measured so far, with room. A "
+            "weekly archive is still held to max_archive_bytes."
+        ),
+    )
+    max_full_archive_unpacked_bytes: int = Field(
+        default=16 * 1024 * 1024 * 1024,
+        gt=0,
+        description=(
+            "Largest total a complete archive's members may claim to unpack to, in bytes, read from "
+            "the zip's directory before any member is extracted."
+        ),
+    )
 
     # --- The OpenCaselist API client (v1-e34-t01-caselist-api-client) ---------------------------
     #
@@ -591,6 +616,31 @@ class CaselistSettings(SettingsGroup):
         ge=2000,
         le=9999,
         description="Topic year of the OpenEv release to pull. Unset means the API's current year.",
+    )
+
+    # --- The full-archive refresh (v1-e34-t04-full-archive-refresh) -----------------------------
+    #
+    # The weekly run also refreshes one caselist's complete archive when one is due, after its
+    # weeklies and only from what they leave of the day's bulk downloads. No second schedule:
+    # E34 gate 4 of the data-use policy allows the weekly run and nothing more often.
+
+    full_archive_rotation: bool = Field(
+        default=True,
+        description=(
+            "Whether the weekly run refreshes complete archives on a rotation: at most one per run, "
+            "the caselist refreshed least recently first, only when the run's weeklies leave a bulk "
+            "download over. Off, only `caselist pull --full-archive <slug>` fetches one."
+        ),
+    )
+    full_archive_interval_days: int = Field(
+        default=30,
+        ge=7,
+        le=366,
+        description=(
+            "A caselist's complete archive is due once the newest one this machine holds is more "
+            "than this many days old, or when it holds none. At least seven: complete archives are "
+            "regenerated weekly, and nothing here fetches more often than they are published."
+        ),
     )
 
     # --- Monitoring the weekly sync (v1-e34-t03-sync-monitoring) ------------------------------

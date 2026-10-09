@@ -28,6 +28,7 @@ from debate_core.application.caselist.publish_plan import (
     InvalidPublishTarget,
     LocalSnapshot,
     digest_of_local_blob_key,
+    full_archive_date,
     manifest_prefix,
     remote_source_prefix,
     snapshot_of_manifest_key,
@@ -73,17 +74,23 @@ class LocalEvidence:
 
 
 async def read_local_snapshots(
-    local: LocalEvidence, caselist: str, snapshot: str | None = None
+    local: LocalEvidence, caselist: str, snapshot: str | None = None, *, full_archives: bool = False
 ) -> tuple[LocalSnapshot, ...]:
     """Every snapshot of `caselist` this machine holds a manifest for, in snapshot order.
 
     With `snapshot`, only that one — or nothing, when there is no manifest for it; the caller
     decides whether that is an error.
+
+    The weekly series alone unless `full_archives` is set, or `snapshot` names a complete archive
+    (`full/<date>`, `v1-e34-t04`): see
+    :func:`~debate_core.application.caselist.publish_plan.snapshot_of_manifest_key`. A complete
+    archive sorts after every weekly, since `full/` sorts after a date.
     """
     validate_publish_target(caselist, snapshot)
+    with_full = full_archives or (snapshot is not None and full_archive_date(snapshot) is not None)
     found: list[LocalSnapshot] = []
     for info in await local.objects.list_objects(manifest_prefix(caselist)):
-        named = snapshot_of_manifest_key(caselist, info.key)
+        named = snapshot_of_manifest_key(caselist, info.key, full_archives=with_full)
         if named is None or (snapshot is not None and named != snapshot):
             continue
         async with local_file(local.objects, local.object_path_for, info.key) as path:
@@ -159,16 +166,18 @@ async def list_remote_caselists(remote: EvidenceObjectStore) -> tuple[str, ...]:
 def _caselists_in(keys: Iterable[ObjectKey]) -> tuple[str, ...]:
     """The caselists named by `manifests/<caselist>/<snapshot>.jsonl` keys among `keys`.
 
+    A complete archive's `manifests/<caselist>/full/<date>.jsonl` names its caselist too, so a
+    caselist this store knows only from a complete archive is still listed (`v1-e34-t04`).
     Anything else under `manifests/` — t07's `_suppression/` directory, a stray file — is not a
     caselist and is left out rather than refused.
     """
     found: set[str] = set()
     for key in keys:
         parts = key.split("/")
-        if len(parts) != 3:
+        if len(parts) not in (3, 4):
             continue
         try:
-            if snapshot_of_manifest_key(parts[1], key) is not None:
+            if snapshot_of_manifest_key(parts[1], key, full_archives=True) is not None:
                 found.add(parts[1])
         except InvalidPublishTarget:
             continue

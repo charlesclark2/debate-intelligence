@@ -13,7 +13,16 @@ layout and the manifest reading defined once here.
     raw/caselist/hsld26/sha256/ab/cd/abcd…ef01     one disclosed source, by the digest of its bytes
     raw/openev/2026/sha256/1f/9e/1f9e…c4a1          one OpenEv camp file, filed under its topic year
     manifests/hsld26/2026-09-15.jsonl               one weekly snapshot of one caselist
+    manifests/hsld26/full/2026-10-06.jsonl          one complete archive of one caselist
     manifests/openev/2026-ndi.jsonl                 one camp's files for one year
+
+A complete archive (`v1-e34-t04`) is a snapshot named `full/<date>` wherever a snapshot is named —
+`caselist publish --snapshot full/2026-10-06`, a pending publish, a status row — and its sources are
+filed under the caselist's own `raw/` prefix like any weekly's, by digest. Its manifest is nested
+so that it never shares a key with the weekly of the same date. Every reader of manifest keys gets
+the weekly series alone unless it asks for the complete archives as well
+(:func:`snapshot_of_manifest_key`'s `full_archives`), so a reader that was written for the weekly
+series cannot see one by accident.
 
 A source key is the digest and nothing else: no extension, no school, no team code, no original
 filename (`docs/policies/caselist-data-use.md`, personal-data rule 3; the task spec). An extension
@@ -75,7 +84,7 @@ from enum import StrEnum
 from typing import Final
 
 from debate_core.application.caselist.import_service import STORED_CLASSIFICATIONS
-from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY
+from debate_core.application.caselist.manifest import FULL_ARCHIVE_DIRECTORY, MANIFEST_DIRECTORY
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.evidence_store import ObjectKey, validate_object_key
 from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
@@ -98,6 +107,8 @@ __all__ = [
     "UnreadableManifest",
     "build_publish_plan",
     "digest_of_local_blob_key",
+    "full_archive_date",
+    "full_archive_snapshot",
     "local_blob_key",
     "manifest_prefix",
     "remote_source_prefix",
@@ -121,6 +132,9 @@ OPENEV: Final = "openev"
 """The name `--caselist` takes for camp files, and the manifest directory they are filed under."""
 
 MANIFEST_SUFFIX: Final = ".jsonl"
+
+FULL_ARCHIVE_SNAPSHOT_PREFIX: Final = f"{FULL_ARCHIVE_DIRECTORY}/"
+"""What a complete archive's snapshot name starts with: `full/2026-10-06`."""
 
 _BLOB_SEGMENT: Final = "sha256"
 _DIGEST = re.compile(SHA256_HEX_PATTERN)
@@ -157,11 +171,29 @@ class UnreadableManifest(DomainError):
 # ------------------------------------------------------------------------------------------------
 
 
+def full_archive_snapshot(archive_date: date) -> str:
+    """The snapshot name of a caselist's complete archive of `archive_date`: `full/2026-10-06`."""
+    return f"{FULL_ARCHIVE_SNAPSHOT_PREFIX}{archive_date.isoformat()}"
+
+
+def full_archive_date(snapshot: str) -> date | None:
+    """The date a complete archive's snapshot name states, or `None` for any other name."""
+    if not snapshot.startswith(FULL_ARCHIVE_SNAPSHOT_PREFIX):
+        return None
+    stated = snapshot[len(FULL_ARCHIVE_SNAPSHOT_PREFIX) :]
+    try:
+        parsed = date.fromisoformat(stated)
+    except ValueError:
+        return None
+    return parsed if parsed.isoformat() == stated else None
+
+
 def validate_publish_target(caselist: str, snapshot: str | None = None) -> None:
     """Refuse a caselist or snapshot name that has no place in the layout.
 
     A caselist is a slug (`hsld26`) or `openev`. A caselist's snapshot is the archive's date as
-    `YYYY-MM-DD`; a camp snapshot is `<year>-<event>`, as `manifests/openev/` names it.
+    `YYYY-MM-DD`, or `full/YYYY-MM-DD` for its complete archive of that date; a camp snapshot is
+    `<year>-<event>`, as `manifests/openev/` names it.
     """
     if caselist != OPENEV and _CASELIST_SLUG.match(caselist) is None:
         raise InvalidPublishTarget(
@@ -175,12 +207,17 @@ def validate_publish_target(caselist: str, snapshot: str | None = None) -> None:
                 f"an OpenEv snapshot is <year>-<event>, such as 2026-ndi; got {snapshot!r}"
             )
         return
+    if full_archive_date(snapshot) is not None:
+        return
     try:
         parsed = date.fromisoformat(snapshot)
     except ValueError:
         parsed = None
     if parsed is None or parsed.isoformat() != snapshot:
-        raise InvalidPublishTarget(f"a caselist snapshot is a date as YYYY-MM-DD; got {snapshot!r}")
+        raise InvalidPublishTarget(
+            "a caselist snapshot is a date as YYYY-MM-DD, or full/YYYY-MM-DD for its complete "
+            f"archive; got {snapshot!r}"
+        )
 
 
 def source_prefix(caselist: str, snapshot: str) -> str:
@@ -247,17 +284,24 @@ def snapshot_manifest_key(caselist: str, snapshot: str) -> ObjectKey:
     return validate_object_key(f"{manifest_prefix(caselist)}{snapshot}{MANIFEST_SUFFIX}")
 
 
-def snapshot_of_manifest_key(caselist: str, key: ObjectKey) -> str | None:
+def snapshot_of_manifest_key(caselist: str, key: ObjectKey, *, full_archives: bool = False) -> str | None:
     """The snapshot a manifest key names, or `None` when `key` is not one of `caselist`'s manifests.
 
     Keys that are not a manifest of this caselist — a nested path, another suffix, a name that is
     not a snapshot — are `None` rather than errors, because a listing is allowed to hold things
     this module does not own (`manifests/_suppression/` is t07's).
+
+    A complete archive's manifest (`manifests/<caselist>/full/<date>.jsonl`) is one of those nested
+    paths, and is `None` too unless `full_archives` is set, when it is `full/<date>`. The default is
+    the weekly series alone, so that the readers written for it — the sync's latest snapshot, the
+    staleness check, the first-seen count — never see a complete archive (`v1-e34-t04`).
     """
     prefix = manifest_prefix(caselist)
     if not key.startswith(prefix) or not key.endswith(MANIFEST_SUFFIX):
         return None
     snapshot = key[len(prefix) : -len(MANIFEST_SUFFIX)]
+    if caselist != OPENEV and full_archive_date(snapshot) is not None:
+        return snapshot if full_archives else None
     if "/" in snapshot:
         return None
     try:

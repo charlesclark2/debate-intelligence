@@ -16,6 +16,13 @@ bucket uses and therefore the key the local evidence object store uses — so
 `objects/` to keep them out of the content-addressed `blobs/` tree. The session report records
 the difference from ac4's literal path.
 
+A complete archive (`<slug>-all-<date>.zip`, `v1-e34-t04`) is filed one level down, under
+`manifests/<caselist>/full/<date>.jsonl` (:func:`full_archive_manifest_key`). It is dated with the
+week's weekly, so a sibling key would collide with that weekly's manifest, and every reader of the
+weekly series (`manifests/<caselist>/<date>.jsonl`, exactly one `/` after the caselist) skips a
+nested key without being told to. A reader that wants the complete archives too asks for them; see
+:func:`~debate_core.application.caselist.publish_plan.snapshot_of_manifest_key`.
+
 ## It describes the archive, never the run
 
 Every field in a manifest is a fact about the archive and the week before it, so two imports of
@@ -86,11 +93,13 @@ from debate_core.application.ports.suppression import SuppressionState, disclosu
 
 __all__ = [
     "DISCLOSURE_FIELDS",
+    "FULL_ARCHIVE_DIRECTORY",
     "MANIFEST_DIRECTORY",
     "MANIFEST_SCHEMA_VERSION",
     "SuppressedRowRefused",
     "common_member_fields",
     "counted",
+    "full_archive_manifest_key",
     "manifest_key",
     "manifest_lines",
     "name_of",
@@ -112,6 +121,9 @@ would not reach any of them.
 
 MANIFEST_DIRECTORY: Final = "manifests"
 """The object-key prefix manifests live under, in the bucket and in the local store alike."""
+
+FULL_ARCHIVE_DIRECTORY: Final = "full"
+"""Where a caselist's complete-archive manifests sit, under its own manifest directory (`v1-e34-t04`)."""
 
 #: Fixed separators, so two renderings of one report are byte-identical.
 _COMPACT_SEPARATORS: Final = (",", ":")
@@ -142,6 +154,18 @@ def manifest_key(caselist: str, snapshot: date) -> ObjectKey:
     outside the evidence directory.
     """
     return validate_object_key(f"{MANIFEST_DIRECTORY}/{caselist}/{snapshot.isoformat()}.jsonl")
+
+
+def full_archive_manifest_key(caselist: str, archive_date: date) -> ObjectKey:
+    """The object key a complete archive's manifest is filed under (`v1-e34-t04`).
+
+    `manifests/hsld26/full/2026-10-06.jsonl`: beside the caselist's weekly series rather than in
+    it, so the complete archive and the weekly of the same date are two keys. See the module
+    docstring for why it is nested.
+    """
+    return validate_object_key(
+        f"{MANIFEST_DIRECTORY}/{caselist}/{FULL_ARCHIVE_DIRECTORY}/{archive_date.isoformat()}.jsonl"
+    )
 
 
 def manifest_lines(report: ImportReport) -> list[str]:

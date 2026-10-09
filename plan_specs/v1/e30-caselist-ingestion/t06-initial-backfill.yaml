@@ -106,7 +106,7 @@ spec:
         The same manifests exist in the prod bucket and `caselist status` against prod reported no drift,
         recorded in the summary with the date of the prod publish.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

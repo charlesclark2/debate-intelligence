@@ -26,7 +26,12 @@ What each weekly is against the one before it, worked out from the table:
 * W3 against W2: `ALDER_ONE` and `CEDAR_ONE` UNCHANGED, `DOGWOOD_ONE` NEW, `BIRCH_ONE` REMOVED.
   first_seen 1 (`d-one`).
 
-F holds `c-one`, so a first-seen count that read F as an earlier snapshot would give W2 zero.
+The first-seen and weekly-diff tests import, between W1 and W2, a complete archive **dated 09-08**
+holding F's members: `c-one` and `e-old` as well as W1's two. A weekly is a window of edits, so a
+file disclosed long ago and touched again in W2's week is exactly this: in the complete archive
+before it, and not in any earlier weekly. Dated before W2 and holding `c-one`, it would give W2 a
+first_seen of 0 if first-seen read complete archives. Read against the weekly series alone, W2's is
+still 1.
 
 F2 against the snapshots dated before 09-22, which are W1, W2 and F (W3 is dated 09-22, not
 before): the digests they held are `a-one`, `b-one`, `c-one` and `e-old`. F2 lacks `a-one` and
@@ -343,17 +348,21 @@ async def test_neither_baseline_reader_ever_returns_a_complete_archive(tmp_path:
 
 
 async def _weekly_manifests(tmp_path: Path, *, with_full_archive: bool) -> dict[date, list[str]]:
-    """Import W1, then (optionally) F, then W2 and W3; return each weekly's manifest lines."""
+    """Import W1, then (optionally) a complete archive of 09-08 holding F's members, then W2 and W3.
+
+    Returns each weekly's manifest lines. See the module docstring for why the complete archive is
+    dated 09-08.
+    """
     data_dir = tmp_path / ("with" if with_full_archive else "without")
     site = Site(tmp_path / f"site-{with_full_archive}")
     site.weekly(W1)
     await build_service(site, data_dir, rotation=None).run([CASELIST])
     if with_full_archive:
         site.unlist()
-        site.full(W2)
+        site.full(W1, members=FULL[W2])
         between = await build_service(site, data_dir).run([CASELIST])
         assert between.succeeded, between.stages
-        assert site.source.archive_fetches[-1] == full_name(CASELIST, W2)
+        assert site.source.archive_fetches[-1] == full_name(CASELIST, W1)
         site.unlist()
         site.weekly(W1)
     site.weekly(W2)
@@ -382,7 +391,7 @@ async def test_importing_a_complete_archive_leaves_every_weekly_diff_unchanged(t
 async def test_first_seen_is_not_lowered_by_a_complete_archive_imported_before_the_weekly(
     tmp_path: Path,
 ) -> None:
-    """F holds `c-one`; W2's first_seen is still 1, and W3's still 1 (PM decision, t08)."""
+    """The 09-08 complete archive holds `c-one`; W2's first_seen is still 1 (PM decision, t08)."""
     with_full = await _weekly_manifests(tmp_path, with_full_archive=True)
 
     first_seen = {

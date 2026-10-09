@@ -1,3 +1,4 @@
+<!-- docs-index: Counts from the one-off caselist and camp-file backfill (`v1-e30-t06`), recorded by the operator; aggregates only -->
 # Caselist and camp-file backfill, September 2026
 
 The recorded results of `v1-e30-t06-initial-backfill`, run by the operator from

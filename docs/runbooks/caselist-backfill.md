@@ -1,3 +1,4 @@
+<!-- docs-index: The one-off caselist and camp-file backfill: what `pull` fetches, what is imported by hand, and the day-by-day download plan -->
 # Runbook: the initial caselist and camp-file backfill
 
 The one-off job that fills the evidence store with this season's caselist history and the Policy
@@ -90,12 +91,15 @@ import`.** The withdrawal count, which needs one, is `v1-e34-t04`'s.
 
 Run these from a checkout of `dev` that includes `v1-e34-t03` (any worktree made from `dev` since
 2026-09-25 will do). Every command here is `uv run debate-research …` from the repository root.
+The SSO login is for the publish stage; `auth status --check` makes one request to confirm the
+OpenCaselist token still works; the `env` line should print nothing (see below); and the
+`launchctl` line should print nothing either.
 
 ```bash
 export DEBATE_ENV=dev
-aws sso login --profile debate-dev-evidence                    # the publish stage needs it
-uv run debate-research caselist auth status --check            # one request; token still valid?
-env | grep '^DEBATE_CASELIST__'                                 # expect nothing (see below)
+aws sso login --profile debate-dev-evidence
+uv run debate-research caselist auth status --check
+env | grep '^DEBATE_CASELIST__'
 launchctl print gui/$UID/com.debate-intelligence.caselist-sync 2>/dev/null | head -1
 ```
 
@@ -110,12 +114,13 @@ launchctl print gui/$UID/com.debate-intelligence.caselist-sync 2>/dev/null | hea
 * **The launchd agent must not be installed** (`launchctl print` prints nothing). It is
   `v1-e34-t05`'s, it is set up for the prod profile, and a scheduled run in the middle of this
   would spend the day's downloads into a different data directory.
-* The on-hand downloads are where the spec says:
+* The on-hand downloads are where the spec says. The `ls` lists `hsld26-0901`, `hsld26-0908` and
+  `hsld26-0915`, and the `find` counts `105`:
 
   ```bash
   SRC="$HOME/Documents/debate/2026-2027"
-  ls "$SRC/LD Debate/Opencaselist"                 # hsld26-0901  hsld26-0908  hsld26-0915
-  find "$SRC/Policy Debate/Camp Files" -type f -name '*.docx' | wc -l    # 105
+  ls "$SRC/LD Debate/Opencaselist"
+  find "$SRC/Policy Debate/Camp Files" -type f -name '*.docx' | wc -l
   ```
 
 `caselist runs --last 5` should show the three 2026-09-24 runs and nothing newer. If it shows a
@@ -155,10 +160,11 @@ Lowering the allowance to 3 for this one run is what stops `pull` going on to 09
 which are already on this Mac. The setting can be lowered but never raised above 5. Expect about
 a minute: the 2026-09-24 run took 34 s for five weeklies and 255 files, including the publish.
 
-Success is exit `0`, `3 archive(s) downloaded`, and `publish: completed`. Then:
+Success is exit `0`, `3 archive(s) downloaded`, and `publish: completed`. Then list the
+manifests; the newest must be `2026-08-25.jsonl`:
 
 ```bash
-ls ~/.debate-research/dev/objects/manifests/hsld26/     # newest must be 2026-08-25.jsonl
+ls ~/.debate-research/dev/objects/manifests/hsld26/
 ```
 
 **Do not go on to step 3 unless the newest is `2026-08-25`.** If the site's limiter stopped the
@@ -234,11 +240,12 @@ date. A UTC date runs from 7:00 pm Central one evening to 6:59 pm the next, so t
 side of 7 pm in the same evening-to-evening span share one day's five. The site's own cap is per
 date, not a rolling 24 hours: measured 2026-09-29, a run 20 h 34 min after the previous day's five
 downloads was granted all five. If the site ever refuses part way anyway, `pull` records the rest
-as `deferred_by_rate_limit` and still exits `0`.
+as `deferred_by_rate_limit` and still exits `0`. The SSO login is needed only when the session
+has expired, but running it anyway does no harm.
 
 ```bash
 export DEBATE_ENV=dev
-aws sso login --profile debate-dev-evidence      # if the session has expired
+aws sso login --profile debate-dev-evidence
 uv run debate-research caselist pull --caselist hsld26 --caselist hspolicy26 --caselist hspf26
 uv run debate-research caselist runs --last 3
 ```
@@ -284,10 +291,19 @@ Aggregates only. The commands below print counts, caselist slugs and dates. Noth
 a school, team code, name, path or filename, so their output can go into
 `docs/data/caselist-backfill-2026-09.md` as it is. They read local files and write nothing.
 
+The first block defines three shell functions, once per shell:
+
+* `snapshot_rows <caselist>`: one summary-table row per snapshot, from each manifest's trailing
+  summary row and its member rows.
+* `dedupe_row <caselist>`: one dedupe row per caselist: stored members across all its weeklies,
+  distinct files, the saving, and the bytes those distinct files hold.
+* `first_seen_rows <caselist>`: one row per snapshot: the distinct files it holds, and how many of
+  them no earlier snapshot of the same caselist held. NEW cannot answer that question, because it
+  is measured against the week before only.
+
 ```bash
 DATA="$HOME/.debate-research/dev"
 
-# One summary-table row per snapshot, from each manifest's trailing summary row and member rows.
 snapshot_rows() {
   for f in "$DATA/objects/manifests/$1"/*.jsonl; do
     jq -rs --arg cl "$1" '
@@ -303,8 +319,6 @@ snapshot_rows() {
   done
 }
 
-# One dedupe row per caselist: stored members across all its weeklies, distinct files, the
-# saving, and the bytes those distinct files hold.
 dedupe_row() {
   jq -rs --arg cl "$1" '
     [.[] | select(.kind == "member" and (.classification | IN("NEW","UNCHANGED","CHANGED","DUPLICATE")))]
@@ -314,8 +328,6 @@ dedupe_row() {
     | "| " + (map(tostring) | join(" | ")) + " |"' "$DATA/objects/manifests/$1"/*.jsonl
 }
 
-# One row per snapshot: distinct files it holds, and how many of them no earlier snapshot of the
-# same caselist held. NEW cannot answer that question: it is measured against the week before only.
 first_seen_rows() {
   jq -rn --arg cl "$1" '
     reduce inputs as $r ({}; .[input_filename] += [$r])
@@ -329,11 +341,16 @@ first_seen_rows() {
         | .seen += ($fresh | map({(.): true}) | add // {}))
     | .rows[] | "| " + (map(tostring) | join(" | ")) + " |"' "$DATA/objects/manifests/$1"/*.jsonl
 }
+```
 
+The second block runs them for all three caselists. Its last line gives the bytes on disk, for
+every kind of source together:
+
+```bash
 for cl in hsld26 hspolicy26 hspf26; do snapshot_rows $cl; done
 for cl in hsld26 hspolicy26 hspf26; do first_seen_rows $cl; done
 for cl in hsld26 hspolicy26 hspf26; do dedupe_row $cl; done
-du -sk "$DATA/blobs"                                   # bytes on disk, every source kind together
+du -sk "$DATA/blobs"
 ```
 
 **NEW is not "new to the store".** The weekly importer classifies each archive against the week

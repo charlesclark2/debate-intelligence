@@ -179,8 +179,12 @@ was about the material, and a revised file normally still contains it. Such an i
 :attr:`SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE` and logged, and the hold is decided before the
 revision rule and wins over it. It asks the list about what the delivery record remembers at that
 path and, for a revision, about the old rows' own bytes too: a removal made on another machine
-leaves this machine's rows in place, and the record may not know the old id. If the data-use policy
-is read the other way, that decision becomes a download; after `caselist unsuppress` it is one.
+leaves this machine's rows in place, and the record may not know the old id. The hold is asked
+before a copy already in the inbox is read, so it holds that copy too (`v1-e34-t14`): an inbox copy
+changes only whether a download is needed, never whether the file may be imported. A held copy is
+left where it is, for retention and removal to decide about, and after `caselist unsuppress` the
+next run imports it from the inbox. If the data-use policy is read the other way, that decision
+becomes a download; after `caselist unsuppress` it is one.
 
 ## Credentials, and stages that come back later
 

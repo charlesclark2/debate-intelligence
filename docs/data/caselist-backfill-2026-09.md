@@ -64,6 +64,7 @@ junk: macOS metadata, `.DS_Store`, Word lock files, unsafe paths.
 | hsld26 | 2026-09-15 | 2026-09-08 | 1597 | 1387 | 58 | 2 | 148 | 685 | 0 | 2 | 1487 | 1565 | 0 | 18 | 12 | 74 |
 | hsld26 | 2026-09-22 | 2026-09-15 | 941 | 698 | 129 | 4 | 110 | 1462 | 0 | 0 | 883 | 925 | 0 | 12 | 4 | 14 |
 | hsld26 | 2026-09-29 | 2026-09-22 | 827 | 676 | 75 | 6 | 70 | 860 | 0 | 0 | 776 | 818 | 0 | 8 | 1 | 8 |
+| hsld26 | 2026-10-06 | 2026-09-29 | 1191 | 982 | 56 | 8 | 145 | 763 | 0 | 0 | 1094 | 1149 | 0 | 35 | 7 | 14 |
 | hspolicy26 | 2026-07-07 | none | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 2 | 0 | 0 | 0 | 0 |
 | hspolicy26 | 2026-07-14 | 2026-07-07 | 1 | 0 | 0 | 0 | 1 | 2 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 0 |
 | hspolicy26 | 2026-07-28 | 2026-07-14 | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 1 |
@@ -76,6 +77,7 @@ junk: macOS metadata, `.DS_Store`, Word lock files, unsafe paths.
 | hspolicy26 | 2026-09-15 | 2026-09-08 | 631 | 568 | 7 | 0 | 56 | 67 | 0 | 0 | 579 | 621 | 0 | 6 | 4 | 11 |
 | hspolicy26 | 2026-09-22 | 2026-09-15 | 1018 | 838 | 42 | 0 | 138 | 589 | 0 | 0 | 932 | 1010 | 0 | 6 | 2 | 20 |
 | hspolicy26 | 2026-09-29 | 2026-09-22 | 497 | 344 | 67 | 8 | 78 | 943 | 0 | 0 | 452 | 491 | 0 | 3 | 3 | 15 |
+| hspolicy26 | 2026-10-06 | 2026-09-29 | 1115 | 958 | 34 | 1 | 122 | 462 | 0 | 0 | 1013 | 1108 | 0 | 6 | 1 | 28 |
 | hspf26 | 2026-07-07 | none | 9 | 8 | 0 | 0 | 1 | 0 | 0 | 0 | 8 | 7 | 0 | 1 | 1 | 0 |
 | hspf26 | 2026-07-14 | 2026-07-07 | 42 | 34 | 0 | 0 | 8 | 9 | 0 | 0 | 34 | 18 | 0 | 23 | 1 | 0 |
 | hspf26 | 2026-07-21 | 2026-07-14 | 2 | 2 | 0 | 0 | 0 | 42 | 0 | 0 | 2 | 0 | 0 | 2 | 0 | 0 |
@@ -84,6 +86,11 @@ junk: macOS metadata, `.DS_Store`, Word lock files, unsafe paths.
 | hspf26 | 2026-08-11 | 2026-08-04 | 16 | 13 | 0 | 0 | 3 | 3 | 0 | 0 | 13 | 8 | 0 | 8 | 0 | 0 |
 | hspf26 | 2026-08-18 | 2026-08-11 | 3 | 3 | 0 | 0 | 0 | 16 | 0 | 0 | 3 | 2 | 0 | 0 | 1 | 1 |
 | hspf26 | 2026-09-01 | 2026-08-18 | 28 | 27 | 0 | 0 | 1 | 3 | 0 | 0 | 27 | 13 | 0 | 15 | 0 | 1 |
+| hspf26 | 2026-09-08 | 2026-09-01 | 270 | 204 | 0 | 0 | 66 | 28 | 0 | 0 | 208 | 175 | 0 | 93 | 2 | 4 |
+| hspf26 | 2026-09-15 | 2026-09-08 | 1650 | 1366 | 35 | 3 | 246 | 232 | 0 | 0 | 1436 | 1146 | 0 | 496 | 8 | 69 |
+| hspf26 | 2026-09-22 | 2026-09-15 | 226 | 52 | 76 | 10 | 88 | 1564 | 0 | 0 | 213 | 200 | 0 | 26 | 0 | 11 |
+| hspf26 | 2026-09-29 | 2026-09-22 | 1050 | 820 | 28 | 0 | 202 | 198 | 0 | 0 | 867 | 752 | 0 | 296 | 2 | 35 |
+| hspf26 | 2026-10-06 | 2026-09-29 | 1691 | 1325 | 57 | 6 | 303 | 987 | 0 | 0 | 1450 | 1160 | 0 | 528 | 3 | 51 |
 
 The five rows above are the weeklies the `v1-e34-t02` validation run pulled on 2026-09-24 (run
 `20260924T042300Z`, dev). A re-import would be a no-op that writes nothing new, so the counts were
@@ -106,7 +113,8 @@ hspolicy26 rows are day 1, step 5 (run `20260926T213709Z`): 943 imported (941 + 
 683 new blobs.
 
 The 09-15 row's 685 paths no longer present is the same figure `v1-e30-t03` measured, and 09-22's
-1,462 is larger still. Neither is a takedown count.
+1,462 is larger still. Neither is a takedown count. The withdrawal figure is deferred to
+`v1-e34-t04` (below).
 
 Day 2 of the backfill ran late, at 04:44 UTC on 2026-09-29 (run `20260929T044458Z`, 11:44 pm
 Central on the 28th). It imported hsld26 09-29, the week the site published that Tuesday, which
@@ -134,10 +142,34 @@ camp files already in the store: no new blob, but a new key under `raw/caselist/
 hspf26 has no 08-25 row because the site lists no 08-25 weekly for it.
 
 **The site's cap is per date, not a rolling 24 hours.** Run 3 started 20 h 34 min after day 2's
-five downloads and was granted all five. A rolling-24-hour limiter would have refused them. The withdrawal figure is deferred to `v1-e34-t04` (below).
+five downloads and was granted all five. A rolling-24-hour limiter would have refused them. That is
+the site's limiter. `pull`'s own ledger has counted a rolling 24 hours since `v1-e34-t06`, which is
+stricter than the site and is what the later runs below show.
 
-Rows for the remaining snapshots are appended in date order, per caselist, as the operator
-records them.
+Five minutes after run 5, run `20261002T012228Z` (hsld26 only, 8:22 pm Central on 1 October)
+found nothing to fetch: hsld26 was already complete. No run happened on 2–6 October, so the 10-06
+weeklies the site published on Tuesday 6 October joined the queue.
+
+Run 6 ran at 01:46 UTC on 2026-10-08 (run `20261008T014601Z`, 8:46 pm Central on 7 October), with
+43 archives listed and 7 weeklies wanted. It imported hsld26 10-06 and hspolicy26 10-06, which
+keep both complete through the newest listing, and hspf26 09-08, 09-15 and 09-22: 4,452 members
+(1,191 + 1,115 + 270 + 1,650 + 226), 667 duplicate, 3,279 new blobs and 3,279 objects published,
+in 270.6 s. The other two (hspf26 09-29 and 10-06) were deferred by the cap. Run
+`20261008T030658Z`, 80 minutes later (10:06 pm Central), was granted nothing and fetched nothing:
+`pull` counted the five starts of the previous 24 hours.
+
+The final run, `20261009T023420Z` (02:34 UTC on 2026-10-09, 9:34 pm Central on 8 October), fetched
+hspf26 09-29 and 10-06, which makes **PF complete through the newest listing**: 2,741 members
+imported (1,050 + 1,691), 505 duplicate, 1,901 new blobs, 1,901 objects published, 2 snapshots
+confirmed in the bucket, in 263.5 s. Its retention stage (`v1-e34-t11`) removed 37 inbox files,
+3,527,154,833 bytes, leaving the inbox at 0 B. The dry run before it had listed 35 files to remove
+(2,439,954,953 bytes) with none kept. The two extra files are the two archives the run itself
+fetched, and the difference in bytes, 1,087,199,880, is exactly their combined size. The dry run
+after it, `20261009T023844Z`, wanted nothing, and all four caselists were in sync in dev.
+
+**The backfill is complete.** Every weekly the site lists for the three caselists, 07-07 to 10-06,
+is imported: 14 hsld26, 13 hspolicy26 and 13 hspf26 snapshots, plus the one OpenEv release. hspolicy26
+has no 07-21 and hspf26 no 08-25, because the site lists neither.
 
 ### New to the caselist, per snapshot
 
@@ -148,8 +180,9 @@ snapshot that no earlier snapshot of the same caselist held. It comes from the r
 `first_seen_rows`. Per run it equals the run's `blobs_stored` (242 for the five July-August
 weeks, and 16 for 08-11 to 08-25, against 25 NEW), except where the bytes were already stored
 under another caselist or as a camp file. Run 5 is the one case so far: 1,723 first seen, 1,721
-new blobs, because 2 Policy disclosures are byte-identical to camp files. For the three hand imports it equals each
-import's own `newly_stored_blobs` (58, 659, 1,380).
+new blobs, because 2 Policy disclosures are byte-identical to camp files. For the three hand
+imports it equals each import's own `newly_stored_blobs` (58, 659, 1,380). The last two runs agree
+too: 849 + 814 + 204 + 1,363 + 49 = 3,279 for run 6, and 681 + 1,220 = 1,901 for the final run.
 
 | Caselist | Snapshot | Distinct files | First seen here |
 |---|---|---|---|
@@ -166,6 +199,7 @@ import's own `newly_stored_blobs` (58, 659, 1,380).
 | hsld26 | 2026-09-15 | 1487 | 1380 |
 | hsld26 | 2026-09-22 | 883 | 681 |
 | hsld26 | 2026-09-29 | 776 | 576 |
+| hsld26 | 2026-10-06 | 1094 | 849 |
 | hspolicy26 | 2026-07-07 | 2 | 2 |
 | hspolicy26 | 2026-07-14 | 1 | 0 |
 | hspolicy26 | 2026-07-28 | 1 | 1 |
@@ -178,6 +212,7 @@ import's own `newly_stored_blobs` (58, 659, 1,380).
 | hspolicy26 | 2026-09-15 | 579 | 567 |
 | hspolicy26 | 2026-09-22 | 932 | 823 |
 | hspolicy26 | 2026-09-29 | 452 | 303 |
+| hspolicy26 | 2026-10-06 | 1013 | 814 |
 | hspf26 | 2026-07-07 | 8 | 8 |
 | hspf26 | 2026-07-14 | 34 | 34 |
 | hspf26 | 2026-07-21 | 2 | 2 |
@@ -186,6 +221,11 @@ import's own `newly_stored_blobs` (58, 659, 1,380).
 | hspf26 | 2026-08-11 | 13 | 12 |
 | hspf26 | 2026-08-18 | 3 | 3 |
 | hspf26 | 2026-09-01 | 27 | 27 |
+| hspf26 | 2026-09-08 | 208 | 204 |
+| hspf26 | 2026-09-15 | 1436 | 1363 |
+| hspf26 | 2026-09-22 | 213 | 49 |
+| hspf26 | 2026-09-29 | 867 | 681 |
+| hspf26 | 2026-10-06 | 1450 | 1220 |
 
 ## OpenEv camp files
 
@@ -215,7 +255,9 @@ the distinct files they hold. The saving is `1 − distinct / members`. From the
 **The measured rate is small, and this document states it as measured rather than assuming a large
 one.** Weekly archives are adjacent windows, not cumulative copies, so they overlap little. The
 three HS LD weeklies on hand (09-01, 09-08, 09-15) collapsed 2,374 members to 2,107 distinct files
-when `v1-e30-t03` measured them (its session report): an **11% saving**. The five held weeks below save 5.1%.
+when `v1-e30-t03` measured them (its session report): an **11% saving**. The five held weeks below
+save 5.1%. The finished backfill saves between a fifth and a quarter per caselist (21.0% to 26.9%),
+which is still far from the near-total overlap that cumulative archives would show.
 
 | Caselist | Weeklies | Stored members | Distinct files | Saving | Bytes of distinct files |
 |---|---|---|---|---|---|
@@ -223,10 +265,17 @@ when `v1-e30-t03` measured them (its session report): an **11% saving**. The fiv
 | hsld26 (07-07 to 09-22, after day 1) | 12 | 3,629 | 3,036 | 16.3% | 408,918,566 |
 | hsld26 (all, 07-07 to 09-29, complete as of the 09-29 listing) | 13 | 4,456 | 3,612 | 18.9% | 486,608,876 |
 | hspolicy26 (all, 07-07 to 09-29, complete as of the 09-29 listing) | 11 | 2,350 | 1,843 | 21.6% | 479,442,733 |
-| hspf26 | _not yet run_ | | | | |
+| **hsld26, final** (07-07 to 10-06) | 14 | 5,647 | 4,461 | 21.0% | 587,349,315 |
+| **hspolicy26, final** (07-07 to 10-06; no 07-21 listed) | 13 | 3,465 | 2,657 | 23.3% | 736,102,006 |
+| **hspf26, final** (07-07 to 10-06; no 08-25 listed) | 13 | 5,347 | 3,906 | 26.9% | 1,755,226,582 |
 
-**Bytes stored**, all sources on disk (`du -sk` of the store's `blobs/`): _not yet run_ for the
-finished backfill. It was 48,428 KiB for the five held weeks before the backfill began, and
+The final rows were computed with `dedupe_row` against the dev store after the final run. Their
+distinct-file counts are exactly the prod upload counts per caselist (below): 4,461, 2,657 and
+3,906, which with the 102 camp files make the 11,126 sources published to prod.
+
+**Bytes stored**, all sources on disk (`du -sk` of the store's `blobs/`): **3,083,588 KiB** for the
+finished backfill, every caselist and the camp files together, read after the final run. It was
+48,428 KiB for the five held weeks before the backfill began, and
 460,988 KiB after day 1 (HS LD complete, one Policy week, the camp files), 554,628 KiB after
 day 2, 694,108 KiB after run 3, 736,460 KiB after run 4, and 1,186,508 KiB after run 5.
 
@@ -252,6 +301,10 @@ The 2026-09-24 validation runs are in `docs/data/caselist-sync-runs.md` and not 
 | 3 (Tue 29 Sep, 8:18 pm Central) | `20260930T011818Z` | all three | 5 | 5 (hspolicy26 08-04, 08-11, 08-18; hspf26 07-21, 07-28) | 14 | 366 | 306 | 306 | 123.6 s |
 | 4 (Wed 30 Sep, 8:07 pm Central) | `20261001T010726Z` | all three | 5 | 5 (hspolicy26 08-25, 09-01, 09-08; hspf26 08-04, 08-11) | 9 | 212 | 158 | 158 | 32.0 s |
 | 5 (Thu 1 Oct, 8:17 pm Central) | `20261002T011748Z` | all three | 5 | 5 (hspolicy26 09-15, 09-22, 09-29; hspf26 08-18, 09-01) | 4 | 2,177 | 1,721 | 1,723 | 161.5 s |
+| — (Thu 1 Oct, 8:22 pm Central) | `20261002T012228Z` | hsld26 | 0 left | 0 (nothing new) | 0 | 0 | 0 | 0 | 1.2 s |
+| 6 (Wed 7 Oct, 8:46 pm Central) | `20261008T014601Z` | all three | 5 | 5 (hsld26 10-06; hspolicy26 10-06; hspf26 09-08, 09-15, 09-22) | 2 | 4,452 | 3,279 | 3,279 | 270.6 s |
+| — (Wed 7 Oct, 10:06 pm Central) | `20261008T030658Z` | all three | 0 left | 0 | 2 | 0 | 0 | 0 | 3.3 s |
+| 7, final (Thu 8 Oct, 9:34 pm Central) | `20261009T023420Z` | all three | 5 | 2 (hspf26 09-29, 10-06) | 0 | 2,741 | 1,901 | 1,901 | 263.5 s |
 
 ## Dev publish
 
@@ -274,7 +327,21 @@ The pull runs published their own imports (the pull runs table: 16, then 683 obj
 files equal to published, 0 missing, 0 mismatches. This is a mid-backfill reading. The status
 line below is recorded when the backfill is finished.
 
-dev status: _not yet run_
+**Final check, after the final run.** The dry run `20261009T023844Z` wanted nothing, and all four
+caselists were in sync in dev (operator, 2026-10-09 UTC). Read again by the implementation session
+afterwards, `DEBATE_ENV=dev caselist status --caselist <slug>`, one caselist at a time:
+
+| Caselist | Snapshots | Sources | Published | Missing | Mismatches | In sync |
+|---|---|---|---|---|---|---|
+| hsld26 | 14 | 5,247 | 5,247 | 0 | 0 | yes |
+| hspolicy26 | 13 | 3,156 | 3,156 | 0 | 0 | yes |
+| hspf26 | 13 | 4,564 | 4,564 | 0 | 0 | yes |
+| openev | 1 | 102 | 102 | 0 | 0 | yes |
+
+*Sources* counts each snapshot's sources, summed over its snapshots, so a file held by two weeks is
+counted in both. The distinct counts are in the dedupe table.
+
+dev status: in sync
 
 ## Spot check in dev
 
@@ -283,17 +350,28 @@ their own filenames. Tallies only.
 
 | Date | Sampled | Parsed correctly | Flagged by a warning | Wrong | Issues filed |
 |---|---|---|---|---|---|
-| | | | | | |
+| 2026-10-08 | 20 | 20 | 0 | 0 | none |
 
-Coach's decision: _not yet run_
+Coach's decision: accepted. 20 of 20 disclosures had side, tournament and round parsed correctly,
+and the prod publish followed.
 
 ## Prod publish
 
 The same local store (`~/.debate-research/dev`), published with `DEBATE_ENV=prod` and
 `DEBATE_STORAGE__DATA_DIR` naming it, after dev was in sync and the spot check was accepted.
 
-| Date | Caselist | Snapshots | Uploaded | Skipped | Failed | Bytes |
-|---|---|---|---|---|---|---|
-| | | | | | | |
+Published 2026-10-09 UTC (the evening of 8 October Central), with `--confirm-prod`. The dry runs
+planned the same counts.
 
-prod status: _not yet run_
+| Date | Caselist | Snapshots | Uploaded | Failed | Blocked |
+|---|---|---|---|---|---|
+| 2026-10-09 UTC | hsld26 | 14 | 4,461 | 0 | 0 |
+| 2026-10-09 UTC | hspolicy26 | 13 | 2,657 | 0 | 0 |
+| 2026-10-09 UTC | hspf26 | 13 | 3,906 | 0 | 0 |
+| 2026-10-09 UTC | openev `2026-policy` | 1 | 102 | 0 | 0 |
+| | **Total** | **41** | **11,126** | **0** | **0** |
+
+`2026-policy` is the only OpenEv snapshot. Prod `caselist status` reported all 41 snapshots in
+sync ("Every snapshot agrees"), and `store ls manifests/hsld26/2026-09-15.jsonl` returned 930.7 KB.
+
+prod status: in sync

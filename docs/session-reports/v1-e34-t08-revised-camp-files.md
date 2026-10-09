@@ -207,9 +207,26 @@ None. No command here needs credentials or runs longer than about 2 minutes. The
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-08
 
 **Notes:**
+
+Accepted. Merge with `scripts/task pr`; the Goal is `Succeeded`.
+
+- **Checked against the branch.** It is `cabbce9`, tree clean, 0 commits behind `origin/dev` (`763bfc6`, so v1-e01-t19 is in, and its check passed here). `_match_listed_openev` implements the definition as given: a revision needs the row's own `openev-<id>` and that id absent from the whole listing; a hand-import row, or a row whose id is still listed, holds. The selection asks `held` first. Each red-first run is captured, and every guard was mutated and caught. The filter that survived mutation was deleted rather than kept.
+- **Deviations 1–3 are accepted.**
+  - Deviation 1: t06's sibling test asserted the exact case ac1 reverses, so inverting it in place, red first, is right. It is not a case ac2 protects.
+  - Deviation 2: correcting t07's assertion that could never fail is the kind of find working agreement 8 asks for.
+  - Deviation 3: the PM's "both download caps" was wrong. Camp downloads have never counted against the daily bulk ledger. A revision goes through the same pacing as any camp download, and that is correct.
+- **Decisions are accepted**, in particular:
+  - no new key in the release manifest or the delivery record, and both schema versions unchanged;
+  - `revision_of` as an additive run-summary key under t07's rule, with ids only;
+  - the removed-path hold also asking about the old row's own bytes. That closes a real gap the forbidden list covers;
+  - a revision waiting while the suppression list is unreadable.
+- **Follow-up work: the PM files both at close-out.**
+  - Item 1, as a small E34 task (priority 3): retention removes a camp download whose delivery entry exists and names no member (a junk-only release), and the summary stops reporting it as `not_imported`. This is a new removal condition, so it gets its own task, mutation and review, and it should also clear any `~$` lock file that carries a person's name.
+  - Item 2, as an E34 task (priority 2, removal integrity): a new id at a removed file's path whose copy is already in the inbox is asked the removed-path hold before it is imported.
+- **Merge order.** v1-e01-t20 is still running and may touch `docs/runbooks/caselist-scheduled-sync.md`. Whichever merges second runs `scripts/task sync` first. `v1-e34-t12` starts after this merges, because it rewrites the same selection code.

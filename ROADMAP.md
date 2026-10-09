@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 39 | 33 | 214 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 40 | 29 | 296 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 40 | 30 | 296 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -169,7 +169,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Publish sources and manifests to S3](plan_specs/v1/e30-caselist-ingestion/t05-caselist-publish.yaml) `v1-e30-t05-caselist-publish` | Succeeded | 2 | 9.0 |
 | [Initial caselist and camp-file backfill](plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml) `v1-e30-t06-initial-backfill` | Succeeded | 3 | 5.0 |
 | [Source removal and suppression list](plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml) `v1-e30-t07-source-removal` | Succeeded | 2 | 12.5 |
-| [Importer metadata defects found by the backfill](plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml) `v1-e30-t08-import-metadata-defects` | Pending | 3 | 7.0 |
+| [Importer metadata defects found by the backfill](plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml) `v1-e30-t08-import-metadata-defects` | Succeeded | 3 | 7.0 |
 | [A removal leaves no removed bytes in the inbox](plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml) `v1-e30-t09-removal-purges-inbox` | Succeeded | 2 | 6.0 |
 | [caselist status reports noncurrent versions a removal left behind](plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml) `v1-e30-t10-removal-docstrings-and-residue` | Pending | 1 | 2.0 |
 

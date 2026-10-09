@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 36 | 32 | 210 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 34 | 25 | 286 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 34 | 26 | 286 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -195,7 +195,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Retire the legacy download ledger](plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml) `v1-e34-t09-retire-legacy-ledger` | Pending | 1 | 2.0 |
 | [The weekly agent runs nothing from a git checkout](plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) `v1-e34-t10-agent-outside-checkout` | Succeeded | 1 | 2.0 |
 | [Imported downloads leave the inbox](plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml) `v1-e34-t11-inbox-retention` | Succeeded | 1 | 4.0 |
-| [The pull summary names a camp download by id, never by title](plan_specs/v1/e34-caselist-sync/t12-summary-names-no-camp-file.yaml) `v1-e34-t12-summary-names-no-camp-file` | Pending | 1 | 1.5 |
+| [The pull summary names a camp download by id, never by title](plan_specs/v1/e34-caselist-sync/t12-summary-names-no-camp-file.yaml) `v1-e34-t12-summary-names-no-camp-file` | Succeeded | 1 | 1.5 |
 
 
 ### v1.2 — Argument landscape & file building

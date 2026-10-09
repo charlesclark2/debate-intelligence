@@ -251,6 +251,28 @@ class TestPublishFamily:
 
         assert_expired_session(*run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST))
 
+    def test_publish_whose_only_failures_are_manifests_the_store_did_not_take_exits_three(
+        self, tmp_path: Path, bucket: S3Client, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every source uploads and verifies; each manifest upload answers 503. The manifest's own
+        failure is what decides the exit code here, since no source failed."""
+        assert import_the_first_week(tmp_path)[0] == ExitCode.OK
+        real_put = S3EvidenceObjectStore.put_file
+
+        async def put_file(self: S3EvidenceObjectStore, key: str, source: Path) -> ObjectInfo:
+            if key.startswith("manifests/"):
+                raise StoreUnavailable("PutObject", key, "simulated 503 SlowDown")
+            return await real_put(self, key, source)
+
+        monkeypatch.setattr(S3EvidenceObjectStore, "put_file", put_file)
+
+        exit_code, envelope = run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)
+
+        assert exit_code == ExitCode.RETRIEVAL_FAILURE, envelope
+        assert envelope["error"]["code"] == "PUBLISH_INCOMPLETE"
+        assert envelope["error"]["details"]["failed_sha256"] == []
+        assert {entry["manifest"] for entry in envelope["error"]["details"]["snapshots"]} == {"failed"}
+
     def test_status_with_an_expired_session_exits_three(self, monkeypatch: pytest.MonkeyPatch) -> None:
         expire_the_session(monkeypatch)
 

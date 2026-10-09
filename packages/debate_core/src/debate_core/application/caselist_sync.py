@@ -179,8 +179,12 @@ was about the material, and a revised file normally still contains it. Such an i
 :attr:`SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE` and logged, and the hold is decided before the
 revision rule and wins over it. It asks the list about what the delivery record remembers at that
 path and, for a revision, about the old rows' own bytes too: a removal made on another machine
-leaves this machine's rows in place, and the record may not know the old id. If the data-use policy
-is read the other way, that decision becomes a download; after `caselist unsuppress` it is one.
+leaves this machine's rows in place, and the record may not know the old id. The hold is asked
+before a copy already in the inbox is read, so it holds that copy too (`v1-e34-t14`): an inbox copy
+changes only whether a download is needed, never whether the file may be imported. A held copy is
+left where it is, for retention and removal to decide about, and after `caselist unsuppress` the
+next run imports it from the inbox. If the data-use policy is read the other way, that decision
+becomes a download; after `caselist unsuppress` it is one.
 
 ## Credentials, and stages that come back later
 
@@ -1870,27 +1874,38 @@ class CaselistSyncService:
         * A remembered id that delivered no member at all — a camp release of junk alone: it was
           imported, and holds nothing to import again or to remove, so `ALREADY_IMPORTED`
           (`v1-e30-t09` Follow-up 4, `v1-e34-t08`).
-        * Every member this id delivered is suppressed: `SKIPPED_AS_REMOVED`.
+        * An id the record does not know, at the upstream path of a remembered id whose members are
+          all suppressed, or a revision (`replaces`, the old ids whose rows are at its path) one of
+          whose old rows' bytes are all suppressed: `SAME_PATH_AS_A_REMOVED_FILE`, a policy default
+          (:meth:`_removed_path_hold`). The old rows are asked as well as the record because a
+          removal made on another machine leaves this machine's rows in place, and the record may
+          not know the old id. This is asked first, before a copy in the inbox is read, and decides
+          for the copy too (`v1-e34-t14`): the copy can be there only because it was downloaded
+          before this machine knew of the removal, and a held copy is left in the inbox untouched.
+        * Every member this id delivered — by the record, or by its copy in the inbox — is
+          suppressed: `SKIPPED_AS_REMOVED`.
         * Every member is recorded in the release manifest or suppressed — a camp release some of
           whose members were removed: `ALREADY_IMPORTED`.
         * A remembered id whose bytes are neither: fetched, with a note. The usual cause is an
           `unsuppress`, which is why it is fetched rather than skipped on the record's word.
-        * An id never seen, at the upstream path of a remembered id whose members are all
-          suppressed, or a revision (`replaces`, the old ids whose rows are at its path) one of whose
-          old rows' bytes are all suppressed: `SAME_PATH_AS_A_REMOVED_FILE`, a policy default. The
-          old rows are asked as well as the record because a removal made on another machine leaves
-          this machine's rows in place, and the record may not know the old id.
 
         With a list that cannot be read, nothing here can tell removed from not: a remembered id or
-        a re-upload is left for a later run, and a file in the inbox goes on to an import that will
+        a re-upload is left for a later run — a re-upload whose copy is in the inbox as well, rather
+        than imported on a guess — and any other file in the inbox goes on to an import that will
         meet the same unreadable list and fail with its own reason.
         """
         delivery = remembered.get(file.openev_id)
         from_record = delivery is not None
         if delivery is not None and not delivery.member_sha256:
             return SelectionDecision.ALREADY_IMPORTED, None
-        if delivery is None and in_inbox is not None:
-            delivery = self._delivery_in_inbox(*in_inbox)
+        if delivery is None:
+            # Before the inbox copy is read (`v1-e34-t14`): a copy changes whether a download is
+            # needed, never whether the file may be imported.
+            held = await self._removed_path_hold(file, release, remembered, suppression, replaces=replaces)
+            if held is not None:
+                return held
+            if in_inbox is not None:
+                delivery = self._delivery_in_inbox(*in_inbox)
         if delivery is not None and delivery.member_sha256:
             members = delivery.member_sha256
             state = await suppression.state()
@@ -1916,24 +1931,41 @@ class CaselistSyncService:
             )
             logger.warning("caselist sync: OpenEv file %d was %s; fetching it again", file.openev_id, note)
             return None, note
-        if delivery is None:
-            path = _path_digest(file.path)
-            earlier = [
-                one.member_sha256
-                for openev_id, one in remembered.items()
-                if openev_id != file.openev_id and one.path_sha256 == path and one.member_sha256
-            ]
-            earlier.extend(old for one in sorted(replaces) if (old := release.digests_named_by_id.get(one)))
-            if not earlier:
-                return None, None
-            state = await suppression.state()
-            if state is None:
-                return SelectionDecision.SUPPRESSION_LIST_UNREADABLE, None
-            if any(all(state.suppresses_source(member) for member in one) for one in earlier):
-                note = "a new id at the upstream path of a camp file that was removed; the removal covers it"
-                logger.warning("caselist sync: OpenEv file %d is %s", file.openev_id, note)
-                return SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE, note
         return None, None
+
+    async def _removed_path_hold(
+        self,
+        file: OpenEvFile,
+        release: _RecordedOpenEv,
+        remembered: Mapping[int, OpenEvDelivery],
+        suppression: _SuppressionReadOnce,
+        *,
+        replaces: frozenset[int],
+    ) -> tuple[SelectionDecision, str | None] | None:
+        """The removed-path hold (`v1-e34-t07`) for an id the delivery record does not know, or `None`.
+
+        Asks the list about every earlier id at `file`'s upstream path: what the delivery record
+        remembers there, and for a revision the old rows' own bytes (`v1-e34-t08`). It is asked
+        whether or not the inbox holds a copy of `file` (`v1-e34-t14`). With no earlier id it reads
+        nothing; with one and a list that cannot be read, the file waits.
+        """
+        path = _path_digest(file.path)
+        earlier = [
+            one.member_sha256
+            for openev_id, one in remembered.items()
+            if openev_id != file.openev_id and one.path_sha256 == path and one.member_sha256
+        ]
+        earlier.extend(old for one in sorted(replaces) if (old := release.digests_named_by_id.get(one)))
+        if not earlier:
+            return None
+        state = await suppression.state()
+        if state is None:
+            return SelectionDecision.SUPPRESSION_LIST_UNREADABLE, None
+        if any(all(state.suppresses_source(member) for member in one) for one in earlier):
+            note = "a new id at the upstream path of a camp file that was removed; the removal covers it"
+            logger.warning("caselist sync: OpenEv file %d is %s", file.openev_id, note)
+            return SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE, note
+        return None
 
     def _delivery_in_inbox(self, path: Path, digest: str) -> OpenEvDelivery | None:
         """What a download still in the inbox delivered, read from its bytes: a zip's members, or itself.
@@ -2937,8 +2969,9 @@ def _removal_sentence(openev: Sequence[OpenEvSelection]) -> str:
     parts: list[str] = []
     if skipped := ids(SelectionDecision.SKIPPED_AS_REMOVED):
         parts.append(f"{len(skipped)} OpenEv file(s) skipped as removed")
-    if same_path := ids(SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE):
-        listed = ", ".join(f"openev-{one}" for one in same_path)
+    if same_path := [one for one in openev if one.decision is SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE]:
+        # By `label`: a held copy already in the inbox is named by its digest too (`v1-e34-t14`).
+        listed = ", ".join(one.label for one in same_path)
         parts.append(f"{len(same_path)} held back as a new id at a removed file's path ({listed})")
     if unreadable := ids(SelectionDecision.SUPPRESSION_LIST_UNREADABLE):
         parts.append(f"{len(unreadable)} not fetched because the suppression list could not be read")

@@ -452,15 +452,21 @@ file that was removed; that is how a camp uploads a file again, since OpenEv can
 place. The run holds it back: a removal covers a camp's later upload of the same file, because the request
 was about the material and a revised file normally still contains it (PM decision, `v1-e34-t07`).
 This hold is decided before a revision is fetched, and it holds a revision whose old version was
-removed on another machine too, since the bucket's copy of the list is read. Nothing needs doing.
-After `caselist unsuppress` of the old file, the next run fetches the new id. If the data-use policy
-is ever read the other way, this becomes a download; until then, fetching such a file by hand
-through `caselist import-openev` is a decision to record in the register.
+removed on another machine too, since the bucket's copy of the list is read. It covers a copy
+already in the inbox as well (`v1-e34-t14`): a new id downloaded before this machine knew of the
+removal, whose import never ran, is held rather than imported from there. The select stage names it
+by id and digest, `openev-640 (sha256 1f2e3d4c5b6a)`, never by its title. A held copy stays in the
+inbox untouched; retention keeps it as `not_imported` (no manifest came from its bytes), and
+`caselist remove` leaves it alone, since the list names none of its bytes. Nothing needs doing.
+After `caselist unsuppress` of the old file, the next run fetches the new id, or imports the copy
+already in the inbox without downloading it. If the data-use policy is ever read the other way, this
+becomes a download; until then, fetching such a file by hand through `caselist import-openev` is a
+decision to record in the register.
 
 **A camp file shows `suppression_list_unreadable`.** The run could not read the suppression list:
 the bucket refused its copy (a missing grant, `access denied`) or a copy has a line nobody can read.
-It did not fetch any camp file it may have been told to remove, and the import stage fails for the
-same reason. Fix what the import stage's reason names; the next run decides it. An expired SSO
+It did not fetch any camp file it may have been told to remove, nor import a copy of one already in
+the inbox whose path a removal may cover, and the import stage fails for the same reason. Fix what the import stage's reason names; the next run decides it. An expired SSO
 session does not cause this (below).
 
 **The summary's `suppression_list_local_copy_only` is set** (and the select or import stage says

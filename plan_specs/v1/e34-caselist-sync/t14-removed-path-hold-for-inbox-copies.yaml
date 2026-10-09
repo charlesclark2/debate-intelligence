@@ -48,7 +48,7 @@ spec:
       description: >-
         The hold's position is mutated (asked after the inbox return) and shown caught.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -235,7 +235,10 @@ DEBATE_ENV=prod uv run debate-research caselist status
         records the rewritten file's digest; the removal log entry's `inbox_rewrites` pairs it with
         the digest of the archive as downloaded, and the zip's own comment names the request.
       - **Left alone:** everything holding nothing the list stops, and `<inbox>/.partial/` (downloads
-        in progress, which the pull sweeps itself).
+        in progress, which the pull sweeps itself). That includes a camp's later upload of a removed
+        file, a new OpenEv id at the same path, if it was downloaded before the removal: its bytes
+        are new, so the list does not name them, but the pull holds it back as
+        `same_path_as_a_removed_file` and does not import it (`v1-e34-t14`).
 - [ ] **A removal made before `v1-e30-t09`** left its files in the inbox. Run the same command again
       — same `--team` or `--source`, same `--request` and `--reason` — dry run first, then
       `--execute`: it finds nothing left in the store or the buckets, appends nothing, and purges

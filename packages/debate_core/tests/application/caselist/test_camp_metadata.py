@@ -320,6 +320,10 @@ def test_the_packaged_table_loads_and_lists_the_camps_the_spec_names() -> None:
     aliases = load_camp_aliases()
 
     assert set(aliases.camps) >= {"DDI", "Michigan", "Gonzaga", "SDI", "NHSI", "UTNIF"}
+    # Added by v1-e30-t08 after PM review: the camps the real release names that were missing.
+    assert set(aliases.camps) >= {
+        "CNDI", "Emory", "Georgetown", "Harvard", "JDI", "Mean Green", "MSDI", "Wake Forest", "Wyoming",
+    }  # fmt: skip
 
 
 def test_the_packaged_table_resolves_a_prefix_and_a_folder() -> None:

@@ -427,7 +427,7 @@ class ParsedStore(Protocol):
         """A parsed source's document record, or `None` when the source has none."""
         ...
 
-    async def put_source(
+    async def write_source(
         self, caselist: str, version: str, entry: SourceEntry, document: DocumentRecord | None
     ) -> None:
         """Write one source's file: its entry, then its document when it was parsed.

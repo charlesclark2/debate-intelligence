@@ -1207,7 +1207,7 @@ class InMemoryParsedStore:
         held = self.sources.get((caselist, version, sha256))
         return held[1] if held is not None else None
 
-    async def put_source(
+    async def write_source(
         self, caselist: str, version: str, entry: SourceEntry, document: DocumentRecord | None
     ) -> None:
         named, generation = parse_version_directory(version)

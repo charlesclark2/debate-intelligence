@@ -53,6 +53,15 @@ caselist's own `raw/` prefix, and the executor's sweep of superseded versions li
 `manifests/<slug>/`, which holds `full/` too. The repository holds no disclosure record for it, so
 what it says about a team is read from its manifest alone.
 
+## The parsed card store's aggregates
+
+A source parsed by `caselist parse` (`v1-e31-t06`) is in more than its own per-source file: the
+caselist's `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` hold rows derived from it, and
+from each of its disclosures. Every one of those files, in every version directory of every
+caselist the removal removes or withdraws anything from, is planned for deletion with its versions,
+here and in the bucket (:attr:`ObjectKind.PARSED_AGGREGATE`). They hold nothing that cannot be
+rebuilt, and the next `caselist parse` rebuilds the current directory's without what was removed.
+
 ## The sync's inbox
 
 The plan also lists every file in the download inbox (`caselist pull`'s, `v1-e30-t09`) that holds
@@ -111,6 +120,7 @@ from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
+from debate_core.application.ports.parsed_store import AGGREGATE_NAMES
 from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
@@ -246,6 +256,8 @@ class ObjectKind(StrEnum):
     """The bucket's copy: `raw/caselist/<slug>/…` or `raw/openev/<year>/…`."""
     PARSED = "parsed"
     """Cards derived from it, under `parsed/` locally and in the bucket (E31)."""
+    PARSED_AGGREGATE = "parsed_aggregate"
+    """An index, failures or occurrence file of a caselist the removal touches (`v1-e31-t06`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -868,6 +880,7 @@ class RemovalPlanner:
     ) -> tuple[list[ObjectRemoval], bool]:
         counted = True
         objects: list[ObjectRemoval] = []
+        aggregates_planned: set[tuple[Side, str]] = set()
         disclosing = [name for name in caselists if name != OPENEV]
         openev_years = sorted({copy.release[:4] for copy in copies if copy.caselist == OPENEV})
         for source in sources:
@@ -933,6 +946,40 @@ class RemovalPlanner:
                     for version in await self._local_parsed.list_versions(f"{caselist}/")
                     if _names_digest(version.key, digest)
                 )
+            # Every caselist with a row derived from this source or one of the withdrawn disclosures,
+            # including one where another team keeps the file: its occurrence rows still go.
+            touched = {*parsed_caselists, *(name for name, _ in source.requester_paths)}
+            for caselist in sorted(touched):
+                prefix = f"parsed/{caselist}/"
+                listed = await index.versions(prefix)
+                keys = {key for key in await index.current(prefix) if _is_parsed_aggregate(key, prefix)}
+                keys |= {key for key in (listed or {}) if _is_parsed_aggregate(key, prefix)}
+                for key in sorted(keys - {key for side, key in aggregates_planned if side is Side.BUCKET}):
+                    aggregates_planned.add((Side.BUCKET, key))
+                    objects.append(
+                        ObjectRemoval(
+                            key=key,
+                            side=Side.BUCKET,
+                            kind=ObjectKind.PARSED_AGGREGATE,
+                            sha256=digest,
+                            versions=None if listed is None else tuple(listed.get(key, [])),
+                        )
+                    )
+                for version in await self._local_parsed.list_versions(f"{caselist}/"):
+                    if (
+                        _is_parsed_aggregate(version.key, f"{caselist}/")
+                        and (Side.LOCAL, version.key) not in aggregates_planned
+                    ):
+                        aggregates_planned.add((Side.LOCAL, version.key))
+                        objects.append(
+                            ObjectRemoval(
+                                key=version.key,
+                                side=Side.LOCAL,
+                                kind=ObjectKind.PARSED_AGGREGATE,
+                                sha256=digest,
+                                versions=(version,),
+                            )
+                        )
         return objects, counted
 
 
@@ -1140,6 +1187,14 @@ def _imported_openev_downloads(copies: Sequence[_ManifestCopy]) -> frozenset[str
         for _, row in copy.rows
         if isinstance(row.get("archive_sha256"), str)
     )
+
+
+def _is_parsed_aggregate(key: str, caselist_prefix: str) -> bool:
+    """Whether `key` is `<caselist_prefix><version>/<aggregate>`: a parsed store aggregate file."""
+    if not key.startswith(caselist_prefix):
+        return False
+    rest = key[len(caselist_prefix) :].split("/")
+    return len(rest) == 2 and rest[1] in AGGREGATE_NAMES
 
 
 def _names_digest(key: str, digest: str) -> bool:

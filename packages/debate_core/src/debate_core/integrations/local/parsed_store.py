@@ -19,7 +19,7 @@ what lets a re-publish compare a file's checksum with the bucket's and upload no
 
 ## The two refusals
 
-:meth:`LocalParsedStore.put_source` will not write into a version directory that is not the newest
+:meth:`LocalParsedStore.write_source` will not write into a version directory that is not the newest
 generation of the entry's own parser version, and will not replace a source's file unless the entry
 already there is one the next run retries. Those are the task spec's forbidden overwrite of an
 earlier parser version, made a property of the adapter rather than of every caller.
@@ -125,7 +125,7 @@ class LocalParsedStore:
 
     # -- writing ------------------------------------------------------------------------------
 
-    async def put_source(
+    async def write_source(
         self, caselist: str, version: str, entry: SourceEntry, document: DocumentRecord | None
     ) -> None:
         await self._refuse_old_version(caselist, version, entry.parser_version)

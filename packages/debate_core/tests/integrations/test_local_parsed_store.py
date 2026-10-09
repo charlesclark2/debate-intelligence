@@ -148,7 +148,7 @@ async def test_a_source_reads_back_as_written_and_its_document_gets_its_path_bac
 ) -> None:
     store = STORES[kind](tmp_path)
     entry = _entry(parsed.source_sha256, cards=len(parsed.cards))
-    await store.put_source("testcl26", PARSER, entry, _document(parsed))
+    await store.write_source("testcl26", PARSER, entry, _document(parsed))
 
     assert await store.read_entries("testcl26", PARSER) == (entry,)
     record = await store.read_document("testcl26", PARSER, parsed.source_sha256)
@@ -166,7 +166,7 @@ async def test_entries_are_listed_by_digest_and_filtered_by_snapshot(kind: str, 
     )
     early = _entry("a" * 64, outcome=SourceOutcome.FAILED, reason="MALFORMED_XML")
     for entry in (late, early):
-        await store.put_source("testcl26", PARSER, entry, None)
+        await store.write_source("testcl26", PARSER, entry, None)
 
     assert await store.read_entries("testcl26", PARSER) == (early, late)
     assert await store.read_entries("testcl26", PARSER, snapshot="2026-09-08") == (late,)
@@ -182,7 +182,7 @@ async def test_aggregates_are_absent_until_written_and_then_read_back(kind: str,
     assert await store.read_occurrences("testcl26", PARSER) is None
 
     failed = _entry("a" * 64, outcome=SourceOutcome.FAILED, reason="TOO_LARGE")
-    await store.put_source("testcl26", PARSER, failed, None)
+    await store.write_source("testcl26", PARSER, failed, None)
     await store.write_aggregates(
         "testcl26", PARSER, index=[failed], failures=[failed], occurrences=[_occurrence("a" * 64)]
     )
@@ -197,16 +197,16 @@ async def test_aggregates_are_absent_until_written_and_then_read_back(kind: str,
 async def test_an_earlier_generation_is_never_written_to_again(kind: str, tmp_path: Path) -> None:
     """The task spec's forbidden overwrite: a re-parse writes a new version, the old one is left."""
     store = STORES[kind](tmp_path)
-    await store.put_source(
+    await store.write_source(
         "testcl26", PARSER, _entry("a" * 64, outcome=SourceOutcome.FAILED, reason="TOO_LARGE"), None
     )
     newer = version_directory_name(PARSER, 2)
-    await store.put_source(
+    await store.write_source(
         "testcl26", newer, _entry("a" * 64, outcome=SourceOutcome.FAILED, reason="TOO_LARGE"), None
     )
 
     with pytest.raises(ParsedStoreRefusal, match="earlier generation|not the newest"):
-        await store.put_source(
+        await store.write_source(
             "testcl26", PARSER, _entry("b" * 64, outcome=SourceOutcome.FAILED, reason="TOO_LARGE"), None
         )
 
@@ -216,7 +216,7 @@ async def test_an_earlier_generation_is_never_written_to_again(kind: str, tmp_pa
 async def test_an_entry_is_never_filed_under_another_parser_version(kind: str, tmp_path: Path) -> None:
     store = STORES[kind](tmp_path)
     with pytest.raises(ParsedStoreRefusal):
-        await store.put_source(
+        await store.write_source(
             "testcl26",
             "2026.01.01-docx-0",
             _entry("a" * 64, outcome=SourceOutcome.FAILED, reason="TOO_LARGE"),
@@ -231,13 +231,13 @@ async def test_a_recorded_source_is_not_replaced_unless_the_next_run_retries_it(
 ) -> None:
     store = STORES[kind](tmp_path)
     missing = _entry("a" * 64, outcome=SourceOutcome.FAILED, reason=str(PipelineFailureReason.SOURCE_MISSING))
-    await store.put_source("testcl26", PARSER, missing, None)
+    await store.write_source("testcl26", PARSER, missing, None)
     retried = _entry("a" * 64, outcome=SourceOutcome.FAILED, reason="TOO_LARGE")
-    await store.put_source("testcl26", PARSER, retried, None)
+    await store.write_source("testcl26", PARSER, retried, None)
     assert await store.read_entries("testcl26", PARSER) == (retried,)
 
     with pytest.raises(ParsedStoreRefusal, match="already recorded"):
-        await store.put_source("testcl26", PARSER, retried, None)
+        await store.write_source("testcl26", PARSER, retried, None)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -251,7 +251,7 @@ async def test_a_parsed_source_is_one_digest_named_file_of_two_lines(
 ) -> None:
     store = LocalParsedStore(tmp_path)
     sha = parsed.source_sha256
-    await store.put_source("testcl26", PARSER, _entry(sha, cards=len(parsed.cards)), _document(parsed))
+    await store.write_source("testcl26", PARSER, _entry(sha, cards=len(parsed.cards)), _document(parsed))
 
     path = tmp_path / "parsed" / "testcl26" / PARSER / "sha256" / sha[0:2] / sha[2:4] / f"{sha}.jsonl"
     assert path == store.root / source_object_key("testcl26", PARSER, sha)
@@ -272,8 +272,8 @@ async def test_every_record_in_every_file_carries_the_six_fields(
         reason="UNSUPPORTED_FORMAT",
         source_format=SourceFormat.PDF,
     )
-    await store.put_source("testcl26", PARSER, entry, _document(parsed))
-    await store.put_source("testcl26", PARSER, failed, None)
+    await store.write_source("testcl26", PARSER, entry, _document(parsed))
+    await store.write_source("testcl26", PARSER, failed, None)
     await store.write_aggregates(
         "testcl26",
         PARSER,
@@ -304,7 +304,7 @@ async def test_no_file_names_the_disclosure_path_or_anything_in_it(
 ) -> None:
     """The bucket's parsed/ prefix may hold no personal data, so neither may anything copied to it."""
     store = LocalParsedStore(tmp_path)
-    await store.put_source(
+    await store.write_source(
         "testcl26", PARSER, _entry(parsed.source_sha256, cards=len(parsed.cards)), _document(parsed)
     )
     await store.write_aggregates("testcl26", PARSER, index=[], failures=[], occurrences=[])
@@ -319,7 +319,7 @@ async def test_the_same_records_always_write_the_same_bytes(tmp_path: Path, pars
     """What lets a re-publish compare checksums and upload nothing."""
     first, second = LocalParsedStore(tmp_path / "one"), LocalParsedStore(tmp_path / "two")
     for store in (first, second):
-        await store.put_source(
+        await store.write_source(
             "testcl26", PARSER, _entry(parsed.source_sha256, cards=len(parsed.cards)), _document(parsed)
         )
         await store.write_aggregates(

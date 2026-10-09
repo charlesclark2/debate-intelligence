@@ -340,7 +340,7 @@ class CaselistParseService:
         for job, result in self._runner.run(self._parser, self._jobs(plan)):
             source = by_digest[job.source.sha256]
             entry, document = self._record(plan, source, result)
-            await self._store.put_source(plan.caselist, plan.version, entry, document)
+            await self._store.write_source(plan.caselist, plan.version, entry, document)
             if entry.outcome is SourceOutcome.PARSED:
                 parsed += 1
                 cards += entry.cards

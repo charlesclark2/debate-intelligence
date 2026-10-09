@@ -17,6 +17,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [architecture/ports-and-adapters.md](architecture/ports-and-adapters.md) | The ten ports, the constructor-injection pattern, and how to add an adapter |
 | [data/2026-27-tournament-schedule.md](data/2026-27-tournament-schedule.md) | The 2026-27 season's tournaments as given on 2026-09-30: the seed for `site/content/tournaments.yaml`, which is now the source of record |
 | [data/academic-case-sources.md](data/academic-case-sources.md) | Candidate claims and sources for the website home page's academic case, and why some kinds of finding are not used |
+| [data/caselist-backfill-2026-09.md](data/caselist-backfill-2026-09.md) | Counts from the one-off caselist and camp-file backfill (`v1-e30-t06`), recorded by the operator; aggregates only |
 | [data/caselist-removal-requests.md](data/caselist-removal-requests.md) | The register of caselist and OpenEv removal requests, one row per request id; no school, team code, filename or name |
 | [data/caselist-sync-runs.md](data/caselist-sync-runs.md) | Counts from each weekly `caselist pull`, recorded by the operator; aggregates only |
 | [data/debate-file-style-survey.md](data/debate-file-style-survey.md) | Which Word styles real team, caselist and camp `.docx` files use, and the share of files per template family |
@@ -32,6 +33,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → session → PM review → PR → finish |
 | [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off for long commands, doc locations, naming |
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
+| [runbooks/caselist-backfill.md](runbooks/caselist-backfill.md) | The one-off caselist and camp-file backfill: what `pull` fetches, what is imported by hand, and the day-by-day download plan |
 | [runbooks/caselist-removal.md](runbooks/caselist-removal.md) | Removing a caselist or OpenEv source on request |
 | [runbooks/caselist-scheduled-sync.md](runbooks/caselist-scheduled-sync.md) | Installing, enabling, watching and disabling the weekly `caselist pull` launchd agent |
 | [runbooks/evidence-store.md](runbooks/evidence-store.md) | Applying the dev and prod evidence buckets and checking the operator and takedown credentials |

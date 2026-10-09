@@ -24,6 +24,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP_BODIES
@@ -39,14 +40,17 @@ from debate_core.application.ports.caselist_source import OpenEvFile, openev_inb
 from debate_core.application.ports.notifier import RecordingNotifier
 from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, SyncRunMonitor
 from debate_core.integrations.local.macos_notifier import MacOsNotifier
+from debate_core.integrations.s3 import S3EvidenceObjectStore
 
 from .test_inbox_retention import (
     CASELIST,
     FakeSource,
     Installation,
-    installation,  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture, used by name
     sha256_label,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
+    from mypy_boto3_s3.client import S3Client
 
 pytestmark = pytest.mark.anyio
 
@@ -157,6 +161,16 @@ def reason(watched: Watched, stage: SyncStage) -> str:
     record = watched.pulled.summary.stage(stage)
     assert record is not None and record.reason is not None, watched.pulled.summary.stages
     return record.reason
+
+
+@pytest.fixture
+def installation(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> Installation:
+    """A data directory and the moto bucket it publishes to. No weekly archive is listed here."""
+    return Installation(
+        data_dir=tmp_path / "evidence",
+        bucket=S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client),
+        archives={},
+    )
 
 
 @pytest.fixture

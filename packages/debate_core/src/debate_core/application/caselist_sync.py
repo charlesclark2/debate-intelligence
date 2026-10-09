@@ -219,6 +219,12 @@ Counts, caselist slugs, snapshot dates, archive names and digests. Never the cas
 a school, a team code, a debater's initials, a disclosure path or a camp file's title
 (`docs/policies/caselist-data-use.md` rule 4). The per-run JSON summary obeys the same rule: it is
 written for an operator and for `v1-e34-t03`'s run log, and it carries no personal data at all.
+
+A camp download is named `openev-<id>`, with `sha256 <first 12 hex>` where the run has its bytes,
+the form the retention stage names it by. Its inbox name, `openev-<id>-<file name>`, carries the
+camp file's title, so it stays in memory where the run needs it to find the file and is never
+serialised; a failed fetch or import whose error quotes it has it taken out of the stage's reason
+(`v1-e34-t12`).
 """
 
 from __future__ import annotations
@@ -230,7 +236,7 @@ import logging
 import os
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
@@ -362,7 +368,7 @@ BULK_DOWNLOAD_WINDOW: Final = timedelta(hours=24)
 
 DOWNLOAD_LEDGER_SCHEMA_VERSION: Final = 1
 
-RUN_SUMMARY_SCHEMA_VERSION: Final = 2
+RUN_SUMMARY_SCHEMA_VERSION: Final = 3
 """The shape of :meth:`RunSummary.as_json`.
 
 Version 2 (`v1-e34-t06`) reports the download window as `bulk_download_window_start` and
@@ -371,8 +377,14 @@ Version 2 (`v1-e34-t06`) reports the download window as `bulk_download_window_st
 log (:mod:`debate_core.application.sync_runs`), whose records have neither field.
 
 A key added since leaves the version as it is (`v1-e34-t07`'s rule): it changes no existing key, and
-nothing reads a summary back. So far `note`, `openev_skipped_as_removed` (`v1-e34-t07`),
-`inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of` (`v1-e34-t08`).
+nothing reads a summary back. Under version 2 these were `note`, `openev_skipped_as_removed`
+(`v1-e34-t07`), `inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of`
+(`v1-e34-t08`).
+
+Version 3 (`v1-e34-t12`) removes an OpenEv selection's `inbox_name`, `openev-<id>-<file name>`,
+because a camp file's name is its title, and adds `inbox_file`, the start of the download's SHA-256
+when the run had its bytes. A key removed is not additive, so the version moves. No code reads the
+summary back; the operator reads it with `jq`, and a filter on `inbox_name` now finds nothing.
 """
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
@@ -543,12 +555,15 @@ class ArchiveSelection:
 class OpenEvSelection:
     """One listed OpenEv camp file, and what this run decided about it.
 
-    Named by its `openev_id` and the inbox name it downloads to. The file's own upstream path names
-    a camp's file and is never carried here (`docs/policies/caselist-data-use.md` rule 4).
+    Named by its `openev_id`, and by the start of its SHA-256 once the run has its bytes. Its inbox
+    name and its upstream path both carry the camp file's name, which is its title, so neither is
+    ever in the summary (`docs/policies/caselist-data-use.md` rule 4, `v1-e34-t12`).
     """
 
     openev_id: int
     inbox_name: str
+    """`openev-<id>-<file name>`, where the download lands. For finding the file; never serialised."""
+
     year: int
     event: Event | None
     decision: SelectionDecision
@@ -563,14 +578,29 @@ class OpenEvSelection:
     upstream" in the module docstring (`v1-e34-t08`). An id, never a path or a title.
     """
 
+    download_sha256: str | None = None
+    """The SHA-256 of its bytes, when this run has them: found in the inbox, or fetched by this run."""
+
     @property
     def wanted(self) -> bool:
         return self.decision is SelectionDecision.DOWNLOAD
 
+    @property
+    def label(self) -> str:
+        """How a stage's reason names it: `openev-<id>`, and `(sha256 <first 12 hex>)` when known."""
+        if self.download_sha256 is None:
+            return f"openev-{self.openev_id}"
+        return f"openev-{self.openev_id} ({_sha256_label(self.download_sha256)})"
+
+    def with_download(self, sha256: str) -> OpenEvSelection:
+        """The same selection, knowing the bytes this run fetched."""
+        return replace(self, download_sha256=sha256)
+
     def as_json(self) -> dict[str, object]:
         return {
             "openev_id": self.openev_id,
-            "inbox_name": self.inbox_name,
+            # Named as `inbox_retention` names the same file, so the two can be read together.
+            "inbox_file": _sha256_label(self.download_sha256) if self.download_sha256 else None,
             "year": self.year,
             "event": str(self.event) if self.event is not None else None,
             "decision": str(self.decision),
@@ -1769,6 +1799,7 @@ class CaselistSyncService:
             inbox_name = openev_inbox_name(file)
             note: str | None = None
             revision_of: int | None = None
+            inbox_digest: str | None = None
             if event is None:
                 decision = SelectionDecision.NO_EVENT_CONFIGURED
             elif file.openev_id in matched[(year, event)].held:
@@ -1814,6 +1845,7 @@ class CaselistSyncService:
                     file=file,
                     note=note,
                     revision_of=revision_of,
+                    download_sha256=inbox_digest,
                 )
             )
         return selections
@@ -2099,9 +2131,15 @@ class CaselistSyncService:
                 try:
                     downloaded = await self._source.download_openev(file, self._inbox)
                 except DomainError as refused:
-                    failure = f"openev-{openev_selection.openev_id}: {refused}"
+                    failure = _camp_download_refused(openev_selection, refused)
                     break
                 tally.downloaded_openev.append((openev_selection, downloaded))
+                tally.openev = tuple(
+                    one.with_download(downloaded.sha256)
+                    if one.openev_id == openev_selection.openev_id
+                    else one
+                    for one in tally.openev
+                )
 
         fetched = len(tally.downloaded_archives) + len(tally.downloaded_openev)
         if failure is not None and deferred_from is None:
@@ -2151,7 +2189,7 @@ class CaselistSyncService:
                     openev_selection, self._downloaded(tally, openev_selection.inbox_name, path), tally
                 )
             except DomainError as refused:
-                failures.append(f"openev-{openev_selection.openev_id}: {refused}")
+                failures.append(_camp_download_refused(openev_selection, refused))
         waiting = (
             f"; {held_back} archive(s) in the inbox held back for a later run, behind an older week"
             if held_back
@@ -2557,7 +2595,7 @@ class CaselistSyncService:
         openev_id = openev_id_of_inbox_name(name)
         if openev_id is None:
             return _JudgedLocally(
-                f"sha256 {digest[:12]}", InboxFileKind.OTHER, size, path, RetentionDecision.UNCLASSIFIED
+                _sha256_label(digest), InboxFileKind.OTHER, size, path, RetentionDecision.UNCLASSIFIED
             )
         in_releases = releases.get(digest, frozenset())
         if not in_releases:
@@ -2569,7 +2607,7 @@ class CaselistSyncService:
         else:
             kept_because = None
         return _JudgedLocally(
-            f"sha256 {digest[:12]}",
+            _sha256_label(digest),
             InboxFileKind.CAMP_DOWNLOAD,
             size,
             path,
@@ -2925,6 +2963,25 @@ def _revision_sentence(openev: Sequence[OpenEvSelection]) -> str:
     return f"; {len(revised)} taken as a revision of an id no longer listed ({listed})"
 
 
+def _camp_download_refused(selection: OpenEvSelection, refused: DomainError) -> str:
+    """A camp download's failed fetch or import, for a stage's reason: by id and digest, never by name.
+
+    The error's own message can name the file: the archive reader says which file it could not read,
+    by its inbox name (`openev-<id>-<file name>`), and a camp file's name is its title. Every name the
+    file goes by, here and upstream, is replaced by "the download" (`v1-e34-t12`).
+    """
+    message = str(refused)
+    file = selection.file
+    names = {selection.inbox_name}
+    if file is not None:
+        names.update((file.path, file.path.lstrip("/"), _PATH_SEPARATORS.split(file.path)[-1]))
+        if file.filename:
+            names.add(file.filename)
+    for name in sorted((one for one in names if one), key=len, reverse=True):
+        message = message.replace(name, "the download")
+    return f"{selection.label}: {message}"
+
+
 def _imported_by(plan: SyncPlan) -> tuple[tuple[str, ...], int]:
     """What a run of `plan` would import: weeklies by caselist and date, and how many camp downloads.
 
@@ -3006,6 +3063,11 @@ class _SuppressionReadOnce:
                     type(unreadable).__name__,
                 )
         return self._state
+
+
+def _sha256_label(digest: str) -> str:
+    """`sha256 <first 12 hex>`: how a summary names a file it may not name by its file name (`v1-e34-t11`)."""
+    return f"sha256 {digest[:12]}"
 
 
 def _path_digest(path: str) -> str:

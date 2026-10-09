@@ -164,7 +164,11 @@ def camp_files() -> dict[str, tuple[dict[str, Any], bytes]]:
 def site(
     installation: Path, camp_files: dict[str, tuple[dict[str, Any], bytes]]
 ) -> Iterator[respx.MockRouter]:
-    """OpenCaselist: three weekly archives, one full archive, and the OpenEv files in `camp_files`."""
+    """OpenCaselist: three weekly archives, one full archive, and the OpenEv files in `camp_files`.
+
+    The complete archive is served as the 09-15 weekly's bytes: the synthetic weeklies are
+    cumulative, so the newest one holds what a complete archive of that date would.
+    """
     zips = build_snapshot_zips(installation / "published")
     listing = [
         {"name": weekly_name(week.snapshot), "url": f"{FILE_HOST}/{weekly_name(week.snapshot)}"}
@@ -187,7 +191,7 @@ def site(
             router.get(f"{FILE_HOST}/{weekly_name(week.snapshot)}").respond(
                 200, content=zips[week.snapshot].read_bytes()
             )
-        router.get(f"{FILE_HOST}/{full}").respond(200, content=b"never pulled by a weekly run")
+        router.get(f"{FILE_HOST}/{full}").respond(200, content=zips[SNAPSHOTS[-1].snapshot].read_bytes())
         yield router
 
 
@@ -209,7 +213,9 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
 
     The publish count is the fixture's own hand-written total — `expected_publish.json` says the
     three synthetic weeks come to 14 distinct source objects — plus one for the camp file, whose
-    bytes no archive holds.
+    bytes no archive holds. The complete archive the rotation fetches after the weeklies
+    (`v1-e34-t04`, on by default) holds the 09-15 week's bytes, every one of which the weeklies
+    already uploaded, so it adds a manifest and no source.
     """
     expected = expected_publish()
 
@@ -222,12 +228,13 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     pulled = run("caselist", "pull")
     assert pulled["exit_code"] == ExitCode.OK, pulled
     data = pulled["data"]
-    assert data["archives_downloaded"] == 3
+    assert data["archives_downloaded"] == 3 + 1
     assert data["openev_downloaded"] == 1
     assert data["objects_published"] == expected["totals"]["source_objects"] + 1
     assert data["snapshots_imported"] == [
         *(f"{SYNTHETIC_CASELIST} {week.snapshot.isoformat()}" for week in SNAPSHOTS),
         "openev 2026-policy",
+        f"{SYNTHETIC_CASELIST} full/2026-09-15",
     ]
 
     # The report confirmed every week in the bucket, so retention took them out of the inbox
@@ -239,6 +246,9 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     assert stages["retention"]["outcome"] == "completed", stages.get("retention")
     removed = [one["name"] for one in data["inbox_retention"]["removed"] if one["kind"] == "weekly_archive"]
     assert removed == weeks
+    assert [one["name"] for one in data["inbox_retention"]["removed"] if one["kind"] == "full_archive"] == [
+        f"{SYNTHETIC_CASELIST} full/2026-09-15"
+    ]
 
     assert stages["publish"]["outcome"] == "completed"
     assert stages["report"]["outcome"] == "completed"
@@ -249,6 +259,7 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     for week in SNAPSHOTS:
         assert f"manifests/{SYNTHETIC_CASELIST}/{week.snapshot.isoformat()}.jsonl" in keys
     assert "manifests/openev/2026-policy.jsonl" in keys
+    assert f"manifests/{SYNTHETIC_CASELIST}/full/2026-09-15.jsonl" in keys
 
     status = run("caselist", "status")
     assert status["exit_code"] == ExitCode.OK, status
@@ -261,16 +272,37 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     assert again["data"]["openev_downloaded"] == 0
 
 
-def test_the_full_archive_is_listed_and_never_fetched_by_a_weekly_run(
+def test_a_weekly_run_fetches_one_complete_archive_after_its_weeklies_and_says_why(
     installation: Path, bucket: S3Client, site: respx.MockRouter
 ) -> None:
-    """The open question this task raises: today a weekly run pulls weeklies and nothing else."""
+    """v1-e34-t04: the rotation's decision, the fetch order, and its own manifest key."""
     pulled = run("caselist", "pull")
 
-    decisions = {one["archive"]: one["decision"] for one in pulled["data"]["selections"]}
+    assert pulled["exit_code"] == ExitCode.OK, pulled
+    data = pulled["data"]
     full = f"{SYNTHETIC_CASELIST}-all-{SNAPSHOTS[-1].snapshot.isoformat()}.zip"
-    assert decisions[full] == "full_archive_not_pulled_weekly"
-    assert not any(call.request.url.path.endswith(full) for call in site.calls)
+    decisions = {one["archive"]: one["decision"] for one in data["selections"]}
+    assert decisions[full] == "download"
+    fetched = [
+        call.request.url.path.rsplit("/", 1)[-1]
+        for call in site.calls
+        if call.request.url.host == FILE_HOST[8:]
+    ]
+    assert fetched == [*(weekly_name(week.snapshot) for week in SNAPSHOTS), full]
+    assert data["full_archive"]["fetch"] == SYNTHETIC_CASELIST
+    assert "complete archive:" in {one["stage"]: one for one in data["stages"]}["select"]["reason"]
+    # By hand, from the fixture's own tables: of what 09-01 and 09-08 held, the Harbor Classic
+    # octafinals negative is gone with its path (taken down before 09-15): withdrawn 1. The Round 2
+    # negative's first version is gone and its path holds the revision: superseded 1.
+    imported = data["full_archive"]["imported"]
+    assert [(one["snapshot"], one["withdrawn"], one["superseded"]) for one in imported] == [
+        ("full/2026-09-15", 1, 1)
+    ]
+
+    again = run("caselist", "pull", "--dry-run")
+    assert {one["archive"]: one["decision"] for one in again["data"]["selections"]}[
+        full
+    ] == "already_imported"
 
 
 def test_a_camp_file_removed_from_another_machine_is_not_requested_again(

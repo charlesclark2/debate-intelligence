@@ -76,6 +76,9 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         # test over four seconds for nothing: what is under test is the command, not the pacing.
         "DEBATE_CASELIST__MIN_REQUEST_INTERVAL_SECONDS": "0.5",
         "DEBATE_PROVIDERS__CASELIST_TOKEN": f"fixture-token-{secrets.token_hex(8)}",
+        # The counts in this module were written by hand for the weeklies alone. The complete-archive
+        # rotation, on by default (`v1-e34-t04`), is turned back on by the tests at the end of it.
+        "DEBATE_CASELIST__FULL_ARCHIVE_ROTATION": "false",
     }.items():
         monkeypatch.setenv(name, value)
     yield data
@@ -88,7 +91,11 @@ def archives(tmp_path: Path) -> dict[date, Path]:
 
 @pytest.fixture
 def site(archives: dict[date, Path]) -> Iterator[respx.MockRouter]:
-    """OpenCaselist: three weekly archives, one full archive, and no OpenEv files."""
+    """OpenCaselist: three weekly archives, one full archive, and no OpenEv files.
+
+    The complete archive is served as the 09-15 weekly's bytes: the synthetic weeklies are
+    cumulative, so the newest one holds what a complete archive of that date would.
+    """
     listing = [
         {"name": weekly_name(snapshot.snapshot), "url": f"{FILE_HOST}/{weekly_name(snapshot.snapshot)}"}
         for snapshot in SNAPSHOTS
@@ -103,7 +110,7 @@ def site(archives: dict[date, Path]) -> Iterator[respx.MockRouter]:
             router.get(f"{FILE_HOST}/{weekly_name(snapshot.snapshot)}").respond(
                 200, content=archives[snapshot.snapshot].read_bytes()
             )
-        router.get(f"{FILE_HOST}/{full}").respond(200, content=b"the full archive is not pulled weekly")
+        router.get(f"{FILE_HOST}/{full}").respond(200, content=archives[newest].read_bytes())
         yield router
 
 
@@ -506,3 +513,83 @@ def test_retention_a_dry_runs_caption_says_what_would_leave_and_removes_nothing(
         "and the bucket confirms them."
     ) in caption
     assert "Nothing was written." in caption
+
+
+# ------------------------------------------------------------------------------------------------
+# The complete archive (v1-e34-t04)
+# ------------------------------------------------------------------------------------------------
+
+FULL_NAME = f"{SYNTHETIC_CASELIST}-all-{SNAPSHOTS[-1].snapshot.isoformat()}.zip"
+
+
+def fetched_files(site: respx.MockRouter) -> list[str]:
+    return [
+        call.request.url.path.rsplit("/", 1)[-1]
+        for call in site.calls
+        if call.request.url.host == "files.opencaselist.example.invalid"
+    ]
+
+
+def test_full_archive_rotation_fetches_one_after_the_weeklies_by_default(
+    installation: Path, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The profile's default: three weeklies, then the complete archive, from the five a day."""
+    monkeypatch.delenv("DEBATE_CASELIST__FULL_ARCHIVE_ROTATION")
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.OK
+    assert fetched_files(site) == [*(weekly_name(one.snapshot) for one in SNAPSHOTS), FULL_NAME]
+    full = envelope["data"]["full_archive"]
+    assert full["fetch"] == SYNTHETIC_CASELIST
+    assert full["allowance_after_weeklies"] == 2
+    assert [one["snapshot"] for one in full["imported"]] == ["full/2026-09-15"]
+    assert (
+        installation / "objects" / "manifests" / SYNTHETIC_CASELIST / "full" / "2026-09-15.jsonl"
+    ).is_file()
+
+
+def test_full_archive_flag_dry_run_shows_the_decision_and_the_allowance_left(
+    installation: Path, site: respx.MockRouter
+) -> None:
+    """What the operator reads before the first real fetch: nothing fetched, the decision said."""
+    result = runner.invoke(
+        create_app(),
+        [
+            "caselist",
+            "pull",
+            "--caselist",
+            SYNTHETIC_CASELIST,
+            "--full-archive",
+            SYNTHETIC_CASELIST,
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert fetched_files(site) == []
+    flat = " ".join(result.output.split())
+    assert (
+        "Complete archive: testcl26's would be fetched; 2 bulk download(s) left after the weeklies." in flat
+    )
+
+
+def test_full_archive_flag_is_refused_when_the_weeklies_leave_no_allowance(
+    installation: Path, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Three a day, three weeklies new: the complete archive is refused, and nothing is fetched."""
+    monkeypatch.setenv("DEBATE_CASELIST__BULK_DOWNLOADS_PER_DAY", "3")
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST, "--full-archive", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.DOMAIN_FAILURE
+    assert "no complete archive of testcl26 is fetched this run" in envelope["error"]["message"]
+    assert fetched_files(site) == []
+
+
+def test_full_archive_flag_and_publish_pending_are_refused_together(installation: Path) -> None:
+    result = runner.invoke(
+        create_app(), ["caselist", "pull", "--publish-pending", "--full-archive", SYNTHETIC_CASELIST]
+    )
+
+    assert result.exit_code == ExitCode.USAGE_ERROR

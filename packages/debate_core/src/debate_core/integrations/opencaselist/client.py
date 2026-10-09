@@ -123,6 +123,7 @@ class OpenCaselistClient:
                 backoff_base_seconds=caselist.backoff_base_seconds,
                 max_retry_wait_seconds=caselist.max_retry_wait_seconds,
                 max_download_bytes=caselist.max_archive_bytes,
+                max_full_archive_download_bytes=caselist.max_full_archive_bytes,
             ),
             token_source=token_source,
             timeout=httpx.Timeout(

@@ -95,6 +95,9 @@ class TransportPolicy:
     backoff_base_seconds: float
     max_retry_wait_seconds: float
     max_download_bytes: int
+    max_full_archive_download_bytes: int | None = None
+    """The ceiling for a complete archive (`<slug>-all-<date>.zip`, `v1-e34-t04`), the largest file the
+    site serves; `None` holds it to `max_download_bytes` like everything else."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,12 +211,15 @@ class OpenCaselistTransport:
         inbox_name: str,
         params: Mapping[str, str] | None = None,
         expected_size: int | None = None,
+        max_bytes: int | None = None,
     ) -> DownloadedFile:
         """Stream a file into the inbox, counted against the download limit on every attempt.
 
         `url` may be the API's own `/download` route, which is authenticated, or the file host an
-        archive listing names, which is not and never receives the token.
+        archive listing names, which is not and never receives the token. `max_bytes` is the size
+        ceiling for this file, when it is not the policy's `max_download_bytes`.
         """
+        ceiling = max_bytes if max_bytes is not None else self._policy.max_download_bytes
         if urlsplit(url).scheme != "https":
             raise UnexpectedCaselistResponse(operation, "the file is not offered over https")
         authenticated = self._is_api_url(url)
@@ -229,11 +235,11 @@ class OpenCaselistTransport:
                         source_name, "the server encoded the body, so its length cannot be checked"
                     )
                 declared = _content_length(response)
-                if declared is not None and declared > self._policy.max_download_bytes:
+                if declared is not None and declared > ceiling:
                     raise ArchiveTooLarge(
                         measured="archive",
                         actual_bytes=declared,
-                        limit_bytes=self._policy.max_download_bytes,
+                        limit_bytes=ceiling,
                         source=source_name,
                     )
                 return await write_into_inbox(
@@ -249,6 +255,14 @@ class OpenCaselistTransport:
                 self._client.cookies.clear()
 
         return await self._with_retries(operation, attempt, download=True)
+
+    @property
+    def full_archive_download_bytes(self) -> int:
+        """The size ceiling a complete archive is downloaded under (`v1-e34-t04`)."""
+        policy = self._policy
+        if policy.max_full_archive_download_bytes is None:
+            return policy.max_download_bytes
+        return policy.max_full_archive_download_bytes
 
     # --------------------------------------------------------------------------------------------
     # The retry loop, shared by every request

@@ -174,11 +174,22 @@ class CaselistInbox:
         state_dir: The environment's data directory, where the sync keeps its run lock and the
             OpenEv delivery record.
         archives: Lists a zip's entries and rewrites one without some of them.
+        full_archives: The same, within a complete archive's own size ceilings
+            (`caselist.max_full_archive_bytes`, `v1-e34-t04`), for `<slug>-all-<date>.zip`; `None`
+            uses `archives`. Without it a complete archive over the weekly ceiling could not be
+            read, and a removal could not finish while it was in the inbox.
     """
 
     directory: Path
     state_dir: Path
     archives: ArchiveRewriter
+    full_archives: ArchiveRewriter | None = None
+
+    def archives_for(self, kind: InboxFileKind) -> ArchiveRewriter:
+        """The rewriter whose ceilings fit a file of `kind`."""
+        if kind is InboxFileKind.FULL_ARCHIVE and self.full_archives is not None:
+            return self.full_archives
+        return self.archives
 
     @property
     def deliveries(self) -> OpenEvDeliveries:
@@ -410,7 +421,7 @@ def _plan_file(
         )
 
     try:
-        entries = inbox.archives.inventory(path)
+        entries = inbox.archives_for(kind).inventory(path)
     except (UnreadableArchive, ArchiveTooLarge) as unreadable:
         reason = unreadable.reason if isinstance(unreadable, UnreadableArchive) else "over the size ceilings"
         return (
@@ -626,10 +637,11 @@ def _rewrite(inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, request_id
     ).encode("utf-8")
     try:
         staging.mkdir()
-        original = inbox.archives.inventory(path)
-        inbox.archives.rewrite_without(path, staged, drop=one.dropped, comment=comment)
+        archives = inbox.archives_for(one.kind)
+        original = archives.inventory(path)
+        archives.rewrite_without(path, staged, drop=one.dropped, comment=comment)
         expected = [_identity(entry) for entry in original if entry.name not in set(one.dropped)]
-        rewritten = inbox.archives.inventory(staged)
+        rewritten = archives.inventory(staged)
         if [_identity(entry) for entry in rewritten] != expected:
             raise InboxRewriteFailed(
                 one.label, "it did not read back as the original without the removed entries"

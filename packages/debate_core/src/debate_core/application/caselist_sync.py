@@ -3225,6 +3225,7 @@ async def run_pull(
     publish_pending: bool,
     monitor: Callable[[], SyncRunMonitor],
     progress: Callable[[str], None],
+    full_archive: str | None = None,
 ) -> PulledRun:
     """Run one `caselist pull`: a dry run, a whole run, or `--publish-pending`.
 
@@ -3237,17 +3238,20 @@ async def run_pull(
             `dry_run`; the command refuses that combination before calling this.
         monitor: Builds the run monitor. Not called for a dry run.
         progress: Where a one-line account of what is starting goes (the CLI's `--verbose`).
+        full_archive: `--full-archive <slug>`: that caselist's complete archive takes the run's one
+            slot (`v1-e34-t04`), and the caselist is pulled too. Never with `publish_pending`.
 
     Raises :class:`NoCaselistsConfigured` when asked to pull no caselist, and whatever the service
     or the monitor raise; the monitor has recorded and announced it first.
     """
     record: SyncRunRecord | None = None
+    caselists = _with_requested(caselists, full_archive)
     if dry_run:
         # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
         if not caselists:
             raise NoCaselistsConfigured
         progress(f"pulling {', '.join(caselists)} (dry run)")
-        summary = await sync_service().run(caselists, dry_run=True)
+        summary = await sync_service().run(caselists, dry_run=True, full_archive=full_archive)
     else:
 
         async def one_run() -> RunSummary:
@@ -3259,7 +3263,7 @@ async def run_pull(
             if not caselists:
                 raise NoCaselistsConfigured
             progress(f"pulling {', '.join(caselists)}")
-            return await sync_service().run(caselists)
+            return await sync_service().run(caselists, full_archive=full_archive)
 
         monitored = await monitor().watch(
             one_run, caselists=caselists, mode="publish_pending" if publish_pending else "run"

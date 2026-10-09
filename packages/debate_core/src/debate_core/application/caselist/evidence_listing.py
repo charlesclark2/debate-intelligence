@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from debate_core.application.caselist.import_service import FullArchiveBaseline
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY
 from debate_core.application.caselist.publish_plan import (
     InvalidPublishTarget,
@@ -36,6 +37,7 @@ from debate_core.application.caselist.publish_plan import (
     stored_rows_in_manifest,
     validate_publish_target,
 )
+from debate_core.application.caselist.withdrawals import EarlierSnapshots
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.domain import Sha256Hex
 
@@ -48,6 +50,7 @@ __all__ = [
     "local_blob_sizes",
     "local_file",
     "read_local_snapshots",
+    "snapshots_before_full_archive",
 ]
 
 
@@ -119,14 +122,57 @@ async def digests_in_earlier_manifests(
     Strictly before, as the importer's previous snapshot is, so re-importing a week reports the same
     count. Raises :class:`~debate_core.application.caselist.publish_plan.UnreadableManifest` for a
     manifest it cannot read rather than counting around it.
+
+    **The weekly series only** (PM decision, `v1-e34-t04`). First-seen means new evidence over
+    time, which is what the weeklies record; a complete archive is the whole caselist at once, so
+    counting it as "earlier" would make every weekly after it report almost nothing first seen. A
+    complete archive's manifest (`manifests/<slug>/full/<date>.jsonl`) is never read here. What a
+    complete archive is measured for is the opposite question, what is no longer there: its
+    withdrawn and superseded counts
+    (:func:`~debate_core.application.caselist.withdrawals.count_withdrawals`), which read every
+    earlier snapshot, weekly and complete alike.
     """
     before = snapshot.isoformat()
     return frozenset(
         source.sha256
-        for held in await read_local_snapshots(local, caselist)
+        for held in await read_local_snapshots(local, caselist, full_archives=False)
         if held.snapshot < before
         for source in held.sources
     )
+
+
+async def snapshots_before_full_archive(
+    local: LocalEvidence, caselist: str, archive_date: date
+) -> tuple[FullArchiveBaseline | None, EarlierSnapshots]:
+    """What a complete archive of `archive_date` is measured against, read from this machine's manifests.
+
+    The baseline is the newest complete archive dated before it, which it is classified against,
+    or `None` for the first. The earlier snapshots are every snapshot of `caselist` dated before it,
+    **weekly and complete alike**, which its withdrawals are counted against (`v1-e34-t04`): a
+    disclosure that a weekly carried and the complete archive does not is exactly a withdrawal.
+    Strictly before, as every baseline here is, so importing the same archive again counts the same.
+    """
+    previous: LocalSnapshot | None = None
+    previous_date: date | None = None
+    rows: list[tuple[str, str]] = []
+    count = 0
+    for held in await read_local_snapshots(local, caselist, full_archives=True):
+        full = full_archive_date(held.snapshot)
+        held_date = full if full is not None else date.fromisoformat(held.snapshot)
+        if held_date >= archive_date:
+            continue
+        count += 1
+        rows.extend(held.stored_rows)
+        if full is not None and (previous_date is None or full > previous_date):
+            previous, previous_date = held, full
+    baseline = (
+        FullArchiveBaseline(
+            snapshot=previous_date, paths={path: digest for digest, path in previous.stored_rows}
+        )
+        if previous is not None and previous_date is not None
+        else None
+    )
+    return baseline, EarlierSnapshots(rows=tuple(rows), count=count)
 
 
 async def local_blob_sizes(local: LocalEvidence) -> dict[Sha256Hex, int]:

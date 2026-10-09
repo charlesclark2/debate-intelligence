@@ -22,7 +22,7 @@ is imported before the run, so it is the baseline the run has already. The fake 
 | `testcl26-weekly-2026-09-01.zip` | WEEKLY | already imported — not newer than the latest manifest |
 | `testcl26-weekly-2026-09-08.zip` | WEEKLY | download, first |
 | `testcl26-weekly-2026-09-15.zip` | WEEKLY | download, second |
-| `testcl26-all-2026-09-15.zip` | FULL | a weekly run does not pull the full archive |
+| `testcl26-all-2026-09-15.zip` | FULL | not fetched: this suite's service has the complete-archive rotation off |
 | `testcl26-archive-notes.txt` | UNRECOGNISED | no date, so never downloaded |
 
 and one OpenEv camp file that is new (`openev-512-…`), tagged `policy`.
@@ -511,8 +511,10 @@ async def test_the_full_archive_and_an_undated_name_are_listed_and_never_downloa
 ) -> None:
     """Every row of the scenario table, decided.
 
-    The full archive is not a weekly run's business, and an UNRECOGNISED name has no date to file
-    a snapshot under. Both are counted and named so a change upstream is a number somebody sees.
+    This suite builds the service with the complete-archive rotation off, so the complete archive
+    is decided `full_archive_rotation_off` (`v1-e34-t04`, whose own tests cover the rotation). An
+    UNRECOGNISED name has no date to file a snapshot under. Both are counted and named so a change
+    upstream is a number somebody sees.
     """
     await import_first_week(data_dir, archives)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
@@ -523,7 +525,7 @@ async def test_the_full_archive_and_an_undated_name_are_listed_and_never_downloa
         weekly_name(date(2026, 9, 1)): str(SelectionDecision.ALREADY_IMPORTED),
         weekly_name(date(2026, 9, 8)): str(SelectionDecision.DOWNLOAD),
         weekly_name(date(2026, 9, 15)): str(SelectionDecision.DOWNLOAD),
-        full_name(date(2026, 9, 15)): str(SelectionDecision.FULL_ARCHIVE_NOT_PULLED_WEEKLY),
+        full_name(date(2026, 9, 15)): str(SelectionDecision.FULL_ARCHIVE_ROTATION_OFF),
         f"{SYNTHETIC_CASELIST}-archive-notes.txt": str(SelectionDecision.UNRECOGNISED_NAME),
     }
     assert full_name(date(2026, 9, 15)) not in source.archive_fetches
@@ -1250,8 +1252,10 @@ async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it
     assert written["bulk_downloads_allowed"] == 3
     assert "bulk_downloads_spent_today" not in written
     reason = summary.stage(SyncStage.SELECT).reason or ""  # type: ignore[union-attr]
-    assert reason.endswith(
-        "3 to fetch; 2 of 5 bulk download(s) spent in the 24 hours from 2026-09-15 06:00 UTC, 3 left"
+    # The complete-archive rotation's sentence follows the window's (`v1-e34-t04`).
+    assert (
+        "3 to fetch; 2 of 5 bulk download(s) spent in the 24 hours from 2026-09-15 06:00 UTC, 3 left; "
+        "complete archive: " in reason
     )
 
 

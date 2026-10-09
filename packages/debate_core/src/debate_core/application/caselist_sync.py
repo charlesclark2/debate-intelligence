@@ -293,9 +293,14 @@ from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Final, Protocol, Self, cast
 
-from debate_core.application.caselist.evidence_listing import LocalEvidence, read_local_snapshots
+from debate_core.application.caselist.evidence_listing import (
+    LocalEvidence,
+    read_local_snapshots,
+    snapshots_before_full_archive,
+)
 from debate_core.application.caselist.import_service import CaselistImportService, ImportReport
 from debate_core.application.caselist.manifest import (
+    full_archive_manifest_key,
     manifest_key,
     read_manifest_lines,
     write_manifest,
@@ -307,7 +312,12 @@ from debate_core.application.caselist.openev_import_service import (
 )
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
-from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
+from debate_core.application.caselist.publish_plan import (
+    full_archive_date,
+    full_archive_snapshot,
+    manifest_prefix,
+    snapshot_of_manifest_key,
+)
 from debate_core.application.caselist.publish_service import (
     CaselistPublishService,
     NothingToPublish,
@@ -2481,7 +2491,8 @@ class CaselistSyncService:
         """
         archive_queues = self._archive_import_queues(tally)
         openev_queue = self._openev_import_queue(tally)
-        if not any(queue.ready for queue in archive_queues) and not openev_queue:
+        full_queue = self._full_archive_import_queue(tally)
+        if not any(queue.ready for queue in archive_queues) and not openev_queue and not full_queue:
             waiting = sum(queue.waiting for queue in archive_queues)
             tally.record(
                 SyncStage.IMPORT,
@@ -2512,6 +2523,15 @@ class CaselistSyncService:
                 )
             except (DomainError, OSError) as refused:
                 failures.append(_camp_download_refused(openev_selection, refused))
+        # Last: after this run's weeklies, so that its withdrawals are counted against them too.
+        for full_selection, path in full_queue:
+            try:
+                await self._import_full_archive(
+                    full_selection, self._downloaded(tally, full_selection.name, path), tally
+                )
+            except DomainError as refused:
+                failures.append(f"{full_selection.name}: {refused}")
+        withdrawals = "".join(f"; {one.sentence()}" for one in tally.full_archive_imports)
         waiting = (
             f"; {held_back} archive(s) in the inbox held back for a later run, behind an older week"
             if held_back
@@ -2521,7 +2541,7 @@ class CaselistSyncService:
             tally.record(
                 SyncStage.IMPORT,
                 StageOutcome.FAILED,
-                f"{len(tally.snapshots_imported)} imported; {len(failures)} refused: "
+                f"{len(tally.snapshots_imported)} imported{withdrawals}; {len(failures)} refused: "
                 + "; ".join(failures)
                 + waiting,
             )
@@ -2530,6 +2550,7 @@ class CaselistSyncService:
             SyncStage.IMPORT,
             StageOutcome.COMPLETED,
             f"{len(tally.snapshots_imported)} snapshot(s) imported, {tally.blobs_stored} new file(s) stored"
+            + withdrawals
             + waiting,
         )
 
@@ -2544,6 +2565,9 @@ class CaselistSyncService:
         fetched = {selection.name for selection, _ in tally.downloaded_archives}
         by_caselist: dict[str, list[ArchiveSelection]] = {}
         for selection in tally.archives:
+            # The weekly series only: a complete archive is its own queue, never a gap in this one.
+            if selection.kind is not ArchiveKind.WEEKLY:
+                continue
             if selection.decision in _NEWER_THAN_HELD and selection.archive_date is not None:
                 by_caselist.setdefault(selection.caselist, []).append(selection)
         queues: list[_ImportQueue] = []
@@ -2563,6 +2587,64 @@ class CaselistSyncService:
                 waiting += 1 if in_inbox else 0
             queues.append(_ImportQueue(ready=tuple(ready), waiting=waiting))
         return queues
+
+    def _full_archive_import_queue(self, tally: _RunTally) -> list[tuple[ArchiveSelection, Path]]:
+        """The complete archives to import: fetched by this run, or in the inbox and not yet imported."""
+        fetched = {selection.name for selection, _ in tally.downloaded_archives}
+        return [
+            (selection, self._inbox / selection.name)
+            for selection in tally.archives
+            if selection.kind is ArchiveKind.FULL
+            and selection.archive_date is not None
+            and (selection.name in fetched or selection.decision is SelectionDecision.ALREADY_IN_INBOX)
+        ]
+
+    async def _import_full_archive(
+        self, selection: ArchiveSelection, downloaded: DownloadedFile, tally: _RunTally
+    ) -> None:
+        """Import one complete archive as its own snapshot, and count what it shows was withdrawn.
+
+        See "The complete archive" in the module docstring. Its baseline and the earlier snapshots
+        its withdrawals are counted against are read from this machine's manifests before its own
+        is written; its manifest goes to `manifests/<slug>/full/<date>.jsonl`, never to the weekly
+        key of the same date; and it is published as snapshot `full/<date>`.
+        """
+        event = self._event_for_caselist(selection.caselist)
+        if event is None:
+            raise UnknownSyncEvent(selection.caselist)
+        if selection.archive_date is None:  # pragma: no cover - never selected without a date
+            raise UndatedArchive(selection.name)
+        previous, earlier = await snapshots_before_full_archive(
+            self._local, selection.caselist, selection.archive_date
+        )
+        report = await self._archives.import_full_archive(
+            self._read_full_archive(downloaded.path),
+            caselist=selection.caselist,
+            archive_date=selection.archive_date,
+            event=event,
+            archive_sha256=downloaded.sha256,
+            previous=previous,
+            earlier=earlier,
+        )
+        write_manifest(
+            report, self._manifest_path(full_archive_manifest_key(selection.caselist, selection.archive_date))
+        )
+        self._count_archive(report, tally)
+        snapshot = full_archive_snapshot(selection.archive_date)
+        tally.snapshots_imported.append(f"{report.caselist} {snapshot}")
+        tally.publish_targets.append(PendingSnapshot(caselist=report.caselist, snapshot=snapshot))
+        withdrawals = report.withdrawals
+        assert withdrawals is not None  # import_full_archive always counts them
+        tally.full_archive_imports.append(
+            FullArchiveImport(
+                caselist=report.caselist,
+                snapshot=snapshot,
+                byte_size=downloaded.byte_size,
+                withdrawn=withdrawals.withdrawn,
+                superseded=withdrawals.superseded,
+                earlier_snapshots=withdrawals.earlier_snapshots,
+            )
+        )
 
     def _openev_import_queue(self, tally: _RunTally) -> list[tuple[OpenEvSelection, Path]]:
         """The camp files to import: fetched by this run, or already in the inbox and not recorded."""
@@ -3189,11 +3271,13 @@ _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not sh
 def _decide_archive(
     listing: ArchiveListing, *, latest: date | None, inbox_names: frozenset[str]
 ) -> SelectionDecision:
-    """What a weekly run does about one listed archive. See this module's docstring for why."""
-    if listing.kind is ArchiveKind.UNRECOGNISED or listing.archive_date is None:
+    """What a run does about one listed weekly or undated archive. See this module's docstring.
+
+    A dated complete archive never comes here: :func:`decide_full_archives` decides it, once the
+    weeklies are budgeted.
+    """
+    if listing.kind is not ArchiveKind.WEEKLY or listing.archive_date is None:
         return SelectionDecision.UNRECOGNISED_NAME
-    if listing.kind is ArchiveKind.FULL:
-        return SelectionDecision.FULL_ARCHIVE_NOT_PULLED_WEEKLY
     if latest is not None and listing.archive_date <= latest:
         return SelectionDecision.ALREADY_IMPORTED
     if listing.name in inbox_names:
@@ -3247,9 +3331,32 @@ def decide_full_archives(
             decided[listing.name] = SelectionDecision.FULL_ARCHIVE_NOT_DUE
         else:
             due.append(caselist)
-    first = due[0] if due else None
+    # Least recently refreshed first: none held before any held, then the oldest held, then the
+    # order the caselists were configured in. `--full-archive` takes the slot outright.
+    position = {caselist: index for index, caselist in enumerate(caselists)}
+    first = (
+        requested
+        if requested in due
+        else min(
+            due,
+            key=lambda caselist: (
+                last_refreshed.get(caselist) is not None,
+                last_refreshed.get(caselist) or date.min,
+                position.get(caselist, len(position)),
+                caselist,
+            ),
+            default=None,
+        )
+    )
     for caselist in due:
-        decided[newest[caselist].name] = SelectionDecision.DOWNLOAD
+        if caselist != first:
+            # At most one complete archive in a run, whatever is due (ac2).
+            decided[newest[caselist].name] = SelectionDecision.FULL_ARCHIVE_WAITS_ITS_TURN
+        elif allowance < 1:
+            # Never at the weeklies' expense (ac3): they were budgeted first and left nothing.
+            decided[newest[caselist].name] = SelectionDecision.FULL_ARCHIVE_DEFERRED_FOR_WEEKLIES
+        else:
+            decided[newest[caselist].name] = SelectionDecision.DOWNLOAD
     selections = [
         ArchiveSelection(
             caselist=listing.caselist,
@@ -3313,13 +3420,18 @@ def _full_archive_reason(
 ) -> str:
     """The rotation's reason: what happened, then each caselist's state. Slugs, dates and counts."""
     newest = {
-        one.caselist: one for one in selections if one.decision is not SelectionDecision.FULL_ARCHIVE_NOT_NEWEST
+        one.caselist: one
+        for one in selections
+        if one.decision is not SelectionDecision.FULL_ARCHIVE_NOT_NEWEST
     }
     fetched = next((one for one in newest.values() if one.decision is SelectionDecision.DOWNLOAD), None)
     if fetched is not None:
-        head = f"complete archive: {fetched.caselist}'s is fetched this run" + (
-            ", as --full-archive asked" if fetched.caselist == requested else ", least recently refreshed of those due"
+        why = (
+            "as --full-archive asked"
+            if fetched.caselist == requested
+            else "least recently refreshed of those due"
         )
+        head = f"complete archive: {fetched.caselist}'s is fetched this run, {why}"
     elif first is not None:
         head = f"complete archive: none fetched; {first} is first in turn"
     elif rotation is None and requested is None:
@@ -3591,6 +3703,23 @@ def weekly_archive_of_inbox_name(name: str) -> tuple[str, date] | None:
         return None
     try:
         return weekly["caselist"], date.fromisoformat(weekly["date"])
+    except ValueError:
+        return None
+
+
+_FULL_ARCHIVE_INBOX_NAME: Final = re.compile(
+    r"^(?P<caselist>[a-z]+[0-9]{2})-all-(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})\.zip$"
+)
+"""`<slug>-all-<date>.zip`, as `caselist pull` names a complete archive (the site's own name)."""
+
+
+def full_archive_of_inbox_name(name: str) -> tuple[str, date] | None:
+    """The caselist and date an inbox file was downloaded as a complete archive, or `None`."""
+    full = _FULL_ARCHIVE_INBOX_NAME.match(name)
+    if full is None or _CASELIST_SLUG.match(full["caselist"]) is None:
+        return None
+    try:
+        return full["caselist"], date.fromisoformat(full["date"])
     except ValueError:
         return None
 

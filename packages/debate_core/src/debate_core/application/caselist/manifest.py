@@ -53,6 +53,17 @@ so `schema_version` stays `1`: a reader that does not know it ignores it. Manife
 it have no `first_seen` key and are not rewritten to add one; a later removal's rewrite keeps the
 count as the import recorded it, as it keeps `members`.
 
+A complete archive's summary (`manifests/<slug>/full/<date>.jsonl`, `v1-e34-t04`) differs in three
+keys and nothing else. Its `snapshot` and `previous_snapshot` are snapshot names, `full/<date>`,
+because it is classified against the complete archive before it, so its `NEW` means "not present
+in the preceding complete archive". It has no `first_seen`: that count is new evidence over time,
+measured against the weekly series alone, and a complete archive is not a point in that series.
+It carries `withdrawn`, `superseded` and `earlier_snapshots` instead: of the digests the caselist's
+earlier snapshots held, weekly and complete, those absent from this archive whose every path is gone
+too, those one of whose paths now holds other bytes, and how many snapshots were compared
+(:mod:`~debate_core.application.caselist.withdrawals`). Counts only. A weekly's summary is
+unchanged by this, byte for byte. These are additive keys, so `schema_version` stays `1`.
+
 A member row is flat — `school`, `side`, `round`, `round_normalized` rather than nested objects —
 because the thing that reads it is usually `jq` or a dataframe, and a flat row is one column each.
 Fields that do not apply to a row are `null` rather than absent, so every row has the same keys
@@ -322,23 +333,31 @@ def _summary_row(report: ImportReport) -> dict[str, object]:
     Nothing here is a property of the run — see this module's docstring for why `applied` and
     `newly_stored_blobs` are deliberately absent.
     """
-    return {
+    named = f"{FULL_ARCHIVE_DIRECTORY}/" if report.full_archive else ""
+    row: dict[str, object] = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "kind": "summary",
         "caselist": report.caselist,
-        "snapshot": report.snapshot.isoformat(),
+        "snapshot": f"{named}{report.snapshot.isoformat()}",
         "event": str(report.event),
         "archive_sha256": report.archive_sha256,
         "previous_snapshot": (
-            report.previous_snapshot.isoformat() if report.previous_snapshot is not None else None
+            f"{named}{report.previous_snapshot.isoformat()}" if report.previous_snapshot is not None else None
         ),
         "members": report.member_count,
         "distinct_sha256": report.distinct_digests,
         "warnings": report.warning_count,
         "classifications": counted(report.counts),
         "skipped": counted(report.skipped),
-        "first_seen": report.first_seen,
     }
+    if report.withdrawals is None:
+        row["first_seen"] = report.first_seen
+        return row
+    # A complete archive's own measure in place of first-seen (`v1-e34-t04`): see the module docstring.
+    row["withdrawn"] = report.withdrawals.withdrawn
+    row["superseded"] = report.withdrawals.superseded
+    row["earlier_snapshots"] = report.withdrawals.earlier_snapshots
+    return row
 
 
 def counted[KeyT: StrEnum](counts: Mapping[KeyT, int]) -> dict[str, int]:

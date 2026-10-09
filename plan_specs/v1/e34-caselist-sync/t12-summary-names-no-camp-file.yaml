@@ -48,7 +48,7 @@ spec:
         listed in the report and still works, and the runbook's statement about pasting the log is
         true again.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

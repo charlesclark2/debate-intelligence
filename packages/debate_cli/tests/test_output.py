@@ -9,19 +9,35 @@ from __future__ import annotations
 
 import io
 import json
-from typing import Any
+from collections.abc import Callable
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 import typer
 
-from debate_cli.exit_codes import ExitCode, error_code_for, exit_code_for
+from debate_cli.exit_codes import ExitCode, error_code_for, exit_code_for, exit_code_for_failure_codes
 from debate_cli.output import SCHEMA_VERSION, CliOutput, CommandFailure, OutputMode, TableSpec
+from debate_core.application.caselist.removal_service import (
+    RemovalCompletedUnlogged,
+    RemovalIncomplete,
+    RemovalReport,
+    TakedownPreflightFailed,
+)
 from debate_core.application.errors import (
+    AlreadyExists,
+    ArchiveTooLarge,
     BlobIntegrityError,
+    DomainError,
     NotFound,
     ProviderRateLimited,
     ProviderUnavailable,
     RevisionMismatch,
+    SnapshotIntegrityCheck,
+    SnapshotIntegrityError,
+    StoreAccessDenied,
+    StoreCredentialsExpired,
+    StoreUnavailable,
 )
 
 ENVELOPE_KEYS = {"schema_version", "status", "command", "data", "error"}
@@ -313,6 +329,125 @@ def test_a_usage_error_keeps_clicks_own_exit_code() -> None:
 )
 def test_exit_code_for(exception: BaseException, expected: ExitCode) -> None:
     assert exit_code_for(exception) is expected
+
+
+#: The three store failures a retry may cure (v1-e01-t20): a store that did not answer, a session
+#: that expired, a store or directory that refused. None of them is an answer about the request.
+RETRYABLE_STORE_FAILURES = [
+    (StoreUnavailable("GetObject", "blobs/sha256", "connection refused"), "STORE_UNAVAILABLE"),
+    (
+        StoreCredentialsExpired(hint="aws sso login --profile debate-dev-evidence"),
+        "STORE_CREDENTIALS_EXPIRED",
+    ),
+    (StoreAccessDenied("read", "the blob directory"), "STORE_ACCESS_DENIED"),
+]
+
+#: Answers that a second run gives again, so they stay `1` however close to a store they arise.
+DETERMINISTIC_FAILURES = [
+    NotFound("snapshot blob", "0" * 64),
+    AlreadyExists("Card", "01J"),
+    RevisionMismatch("Card", "01J", expected_revision=1, actual_revision=2),
+    BlobIntegrityError("sha256/ab/cd/ef", "0" * 64),
+    SnapshotIntegrityError("01J", SnapshotIntegrityCheck.RAW_BYTES_HASH),
+    ArchiveTooLarge(measured="archive", actual_bytes=2, limit_bytes=1, source="hsld26.zip"),
+]
+
+
+@pytest.mark.parametrize(("exception", "code"), RETRYABLE_STORE_FAILURES, ids=lambda value: str(value)[:24])
+def test_a_store_failure_a_retry_may_cure_is_a_retrieval_failure(exception: Exception, code: str) -> None:
+    failure = CommandFailure.from_exception(exception)
+
+    assert exit_code_for(exception) is ExitCode.RETRIEVAL_FAILURE
+    assert (failure.code, failure.exit_code) == (code, ExitCode.RETRIEVAL_FAILURE)
+
+
+@pytest.mark.parametrize("exception", DETERMINISTIC_FAILURES, ids=lambda error: type(error).__name__)
+def test_a_deterministic_answer_stays_a_domain_failure(exception: Exception) -> None:
+    assert exit_code_for(exception) is ExitCode.DOMAIN_FAILURE
+
+
+def raised_from(wrapper: Callable[[BaseException], DomainError], cause: BaseException) -> DomainError:
+    """`wrapper(cause)` as a service raises it: `raise wrapper from cause`, so `__cause__` is set."""
+    try:
+        try:
+            raise cause
+        except BaseException as caught:
+            raise wrapper(caught) from caught
+    except DomainError as wrapped:
+        return wrapped
+
+
+def preflight_failed(cause: BaseException) -> DomainError:
+    return TakedownPreflightFailed("debate-dev-evidence-removal", "list object versions", cause)
+
+
+def stopped_part_way(cause: BaseException) -> DomainError:
+    return RemovalIncomplete(cast("RemovalReport", None), cause, suppressed=True)
+
+
+REMOVAL_WRAPPERS = [preflight_failed, stopped_part_way]
+
+
+def completed_unlogged(cause: BaseException) -> DomainError:
+    report = SimpleNamespace(
+        local_records_deleted=1, local_files_deleted=1, s3_versions_deleted=1, manifests_rewritten=0,
+        manifest_rows_dropped=0, inbox_files_deleted=0, inbox_files_rewritten=0,
+    )  # fmt: skip
+    return RemovalCompletedUnlogged(cast("RemovalReport", report), cause, holding=(), missing=("s3://b/k",))
+
+
+@pytest.mark.parametrize(
+    "wrapper", [preflight_failed, stopped_part_way], ids=lambda wrapper: wrapper.__name__
+)
+@pytest.mark.parametrize(("cause", "_code"), RETRYABLE_STORE_FAILURES, ids=lambda value: str(value)[:24])
+def test_a_removal_stopped_by_a_store_failure_is_a_retrieval_failure(
+    wrapper: Callable[[BaseException], DomainError], cause: Exception, _code: str
+) -> None:
+    assert exit_code_for(raised_from(wrapper, cause)) is ExitCode.RETRIEVAL_FAILURE
+
+
+@pytest.mark.parametrize(
+    "wrapper", [preflight_failed, stopped_part_way], ids=lambda wrapper: wrapper.__name__
+)
+def test_a_removal_stopped_by_anything_else_stays_a_domain_failure(
+    wrapper: Callable[[BaseException], DomainError],
+) -> None:
+    assert (
+        exit_code_for(raised_from(wrapper, BlobIntegrityError("sha256/ab/cd/ef"))) is ExitCode.DOMAIN_FAILURE
+    )
+    assert exit_code_for(raised_from(wrapper, NotFound("snapshot blob", "0" * 64))) is ExitCode.DOMAIN_FAILURE
+
+
+def test_a_removal_that_completed_unlogged_is_not_retried_whatever_refused_the_log() -> None:
+    """Running it again finds nothing left and logs zero counts, so it is never a 3."""
+    unlogged = raised_from(completed_unlogged, StoreUnavailable("PutObject", "s3://b/k", "503"))
+
+    assert exit_code_for(unlogged) is ExitCode.DOMAIN_FAILURE
+
+
+@pytest.mark.parametrize(
+    ("codes", "expected"),
+    [
+        (["STORE_UNAVAILABLE"], ExitCode.RETRIEVAL_FAILURE),
+        (
+            ["STORE_UNAVAILABLE", "STORE_ACCESS_DENIED", "STORE_CREDENTIALS_EXPIRED"],
+            ExitCode.RETRIEVAL_FAILURE,
+        ),
+        (["STORE_UNAVAILABLE", "CHECKSUM_MISMATCH"], ExitCode.DOMAIN_FAILURE),
+        (["BLOB_INTEGRITY_ERROR"], ExitCode.DOMAIN_FAILURE),
+        (["NOT_FOUND"], ExitCode.DOMAIN_FAILURE),
+        (["STORE_UNAVAILABLE", None], ExitCode.DOMAIN_FAILURE),
+    ],
+)
+def test_a_run_of_item_failures_is_a_three_only_when_every_one_is_a_store_failure(
+    codes: list[str | None], expected: ExitCode
+) -> None:
+    assert exit_code_for_failure_codes(codes) is expected
+
+
+def test_a_run_with_no_failures_has_no_failure_exit_code() -> None:
+    with pytest.raises(ValueError, match="no failures"):
+        exit_code_for_failure_codes([])
 
 
 def test_error_code_for_matches_the_exception_class_name() -> None:

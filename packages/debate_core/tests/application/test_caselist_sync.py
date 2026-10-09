@@ -86,7 +86,7 @@ from debate_core.application.caselist_sync import (
     StageOutcome,
     SyncRunInProgress,
     SyncStage,
-    _held_openev_ids,  # pyright: ignore[reportPrivateUsage]
+    _match_listed_openev,  # pyright: ignore[reportPrivateUsage]
     within_daily_budget,
 )
 from debate_core.application.errors import (
@@ -927,10 +927,16 @@ async def test_openev_macos_junk_that_reads_like_a_camp_file_does_not_hold_it(
     }
 
 
-async def test_openev_a_sync_named_file_whose_id_is_no_longer_listed_is_matched_by_its_path(
+async def test_openev_a_sync_named_file_whose_id_is_no_longer_listed_marks_a_revision_at_its_path(
     source: FakeCaselistSource, data_dir: Path, inbox: Path, tmp_path: Path
 ) -> None:
-    """`openev-417-TSF-Spillway Advantage.docx` with 417 gone from the listing is still that file."""
+    """`openev-417-TSF-Spillway Advantage.docx` with 417 gone from the listing: 999 is its revision.
+
+    `v1-e34-t06` held 999 here, as the same file. OpenEv changes a file only by deleting it and
+    uploading it again (`v1-e34-t07`'s reading of upstream), so a row naming an id that is no longer
+    listed is an old version, and the new id at its path is fetched (`v1-e34-t08`). A row that names
+    no id, a hand import, still holds the file at its path: see the tests above.
+    """
     await import_openev_by_hand(data_dir, build_download_zips(tmp_path / "camp")["openev-2026-policy"])
     source.archives = {}
     source.openev_files = [
@@ -940,7 +946,8 @@ async def test_openev_a_sync_named_file_whose_id_is_no_longer_listed_is_matched_
 
     plan = await service.plan([SYNTHETIC_CASELIST])
 
-    assert [one.decision for one in plan.openev] == [SelectionDecision.ALREADY_IMPORTED]
+    assert [one.decision for one in plan.openev] == [SelectionDecision.DOWNLOAD]
+    assert [one.revision_of for one in plan.openev] == [417]
 
 
 _SMALL_NAMES = st.sampled_from(
@@ -984,7 +991,9 @@ def test_openev_matching_never_holds_a_listed_file_nobody_imported(
     """
     listed, imported, recorded = case
 
-    held = _held_openev_ids(listed, recorded)
+    held = _match_listed_openev(
+        listed, recorded, listed_anywhere=frozenset(one.openev_id for one in listed)
+    ).held
 
     assert held <= imported, f"held {sorted(held - imported)} that nobody imported"
 
@@ -1235,7 +1244,7 @@ async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it
     summary = await service.run([SYNTHETIC_CASELIST])
     written = json.loads(service.summary_path(summary).read_text(encoding="utf-8"))
 
-    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 2
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 3
     assert written["bulk_download_window_start"] == "2026-09-15T06:00:00+00:00"
     assert written["bulk_downloads_spent_in_window"] == 2
     assert written["bulk_downloads_allowed"] == 3

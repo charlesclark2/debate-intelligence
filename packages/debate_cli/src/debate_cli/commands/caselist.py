@@ -1,4 +1,4 @@
-"""`debate-research caselist import | import-openev | publish | status`: archives in, the bucket out.
+"""`debate-research caselist import | import-openev | reimport-openev-metadata | publish | status`.
 
 `import` turns one downloaded archive into the local evidence store (`v1-e30-t03`), and
 `import-openev` does the same for OpenEv camp files (`v1-e30-t04`). `publish` puts what was
@@ -66,6 +66,22 @@ the import is recorded under, today by default; `--camp-aliases` replaces the pa
 table. A camp nobody listed is not a failure: the file is imported with camp `UNKNOWN` and the
 count is in the summary. Exit codes are `import`'s.
 
+## `caselist reimport-openev-metadata`
+
+::
+
+    debate-research caselist reimport-openev-metadata --year 2026 --event policy --dry-run
+    debate-research caselist reimport-openev-metadata --year 2026 --event policy
+
+Re-derives camp, lab, title and warnings for a release already imported, from the paths its
+manifest recorded, with the current alias table
+(:meth:`~debate_core.application.caselist.openev_import_service.OpenEvImportService.reimport_metadata`,
+`v1-e30-t08`). It reads the local manifest, corrects the camp-file records, and writes the manifest
+back to the same key — only when it changed, and never under `--dry-run`. It downloads nothing and
+never writes a blob, a digest or a key. The manifest's bytes change, so `caselist status` reports
+the release as drifted until `caselist publish --caselist openev --snapshot <year>-<event>`
+re-uploads it. Exit codes are `import`'s.
+
 ## `caselist publish`
 
 ::
@@ -86,15 +102,18 @@ bucket and is refused.
 
 Exit codes: `0` when every requested snapshot is complete in the bucket; `1` when any is not —
 with the failed sha256 values in the message and every count in `error.details` — or when a guard
-refused to start. An expired SSO session ends the run at once, before any further manifest, and is
-reported with the `aws sso login --profile …` line the adapter built.
+refused to start; `3` when the store did not answer: an expired SSO session or a refused request,
+which end the run at once, before any further manifest, or an applied run whose every failure was
+the store being unavailable (`v1-e01-t20`). An expired session is reported with the
+`aws sso login --profile …` line the adapter built.
 
 ## `caselist status`
 
 Compares this machine's snapshots with the bucket's
 (:class:`~debate_core.application.caselist.status_service.CaselistStatusService`) and writes
 nothing. `0` only when every snapshot agrees; `1` on any drift, with the per-snapshot report in
-`error.details`. With no `--caselist` it compares every caselist either side holds a manifest for.
+`error.details`; `3` when the bucket could not be read. With no `--caselist` it compares every
+caselist either side holds a manifest for.
 """
 
 from __future__ import annotations
@@ -109,7 +128,7 @@ import typer
 
 from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
-from debate_cli.exit_codes import ExitCode
+from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.caselist.import_service import Classification, ImportReport
@@ -121,8 +140,14 @@ from debate_core.application.caselist.manifest import (
 )
 from debate_core.application.caselist.openev_import_service import OpenEvImportReport
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
+from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimport
 from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
-from debate_core.application.caselist.publish_service import PublishReport, SourceResult
+from debate_core.application.caselist.publish_service import (
+    ManifestOutcome,
+    PublishReport,
+    SnapshotOutcome,
+    SourceResult,
+)
 from debate_core.application.caselist.status_service import CaselistStatusReport, SnapshotStatus
 from debate_core.application.settings import ConfigurationError, Environment, Settings
 from debate_core.domain.caselist import Event
@@ -136,7 +161,9 @@ __all__ = [
     "import_openev",
     "import_summary",
     "openev_import_summary",
+    "openev_metadata_reimport_summary",
     "publish",
+    "reimport_openev_metadata",
     "publish_summary",
     "status",
     "status_summary",
@@ -304,6 +331,58 @@ def import_openev(
     )
 
 
+def reimport_openev_metadata(
+    ctx: typer.Context,
+    year: Annotated[
+        int,
+        typer.Option("--year", min=2000, max=9999, help="Topic year of the camp release, e.g. 2026."),
+    ],
+    event: Annotated[
+        Event,
+        typer.Option("--event", case_sensitive=False, help="Event the files were cut for: ld, policy or pf."),
+    ],
+    camp_aliases: Annotated[
+        Path | None,
+        typer.Option(
+            "--camp-aliases",
+            exists=True,
+            dir_okay=False,
+            help="An alias table to use instead of the packaged camp_aliases.yaml.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Report what would change and write nothing at all."),
+    ] = False,
+) -> None:
+    """Re-derive camp and title for camp files already imported. Downloads nothing."""
+    cli = cli_context(ctx)
+    cli.services.settings  # noqa: B018 - loaded first, so a broken profile is reported before a bad flag
+    aliases = load_camp_aliases(camp_aliases)
+    manifest_path = cli.services.evidence_object_path(openev_manifest_key(year, event))
+
+    report = _run(
+        cli.services.openev_import().reimport_metadata(
+            year=year,
+            event=event,
+            recorded_manifest=read_manifest_lines(manifest_path),
+            aliases=aliases,
+            dry_run=dry_run,
+        )
+    )
+
+    manifest = None
+    if not dry_run and report.manifest_changed:
+        manifest = write_manifest_lines(report.manifest_lines, manifest_path)
+        cli.output.detail(f"wrote {manifest.name}")
+
+    cli.output.success(
+        command_name(ctx),
+        openev_metadata_reimport_summary(report, manifest),
+        display=_reimport_table(report, manifest),
+    )
+
+
 def publish(
     ctx: typer.Context,
     caselist: Annotated[
@@ -353,8 +432,9 @@ def publish(
         return
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
-    cli.output.failure(_publish_failure(report, payload), command=command_name(ctx))
-    raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)
+    failure = _publish_failure(report, payload)
+    cli.output.failure(failure, command=command_name(ctx))
+    raise typer.Exit(code=failure.exit_code)
 
 
 def status(
@@ -618,7 +698,12 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
 
 
 def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> CommandFailure:
-    """What an incomplete publish exits `1` with: the failed digests, and every count in details."""
+    """What an incomplete publish reports: the failed digests, and every count in details.
+
+    A plan that cannot be carried out (`PUBLISH_BLOCKED`) is `1`. An applied run that left a
+    snapshot incomplete is `3` when every failure behind it is the store not answering, and `1` as
+    soon as one is not (:func:`_failure_codes`, `v1-e01-t20`).
+    """
     failed = report.failed_sha256
     if not report.applied:
         return CommandFailure(
@@ -640,10 +725,28 @@ def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> Co
     return CommandFailure(
         code="PUBLISH_INCOMPLETE",
         message=f"{len(incomplete)} snapshot(s) not complete in the bucket, manifest {withheld}{named}",
-        exit_code=ExitCode.DOMAIN_FAILURE,
+        exit_code=exit_code_for_failure_codes(_failure_codes(incomplete)),
         details=payload,
         hint="Re-run the same command: every confirmed source is skipped and the manifests follow.",
     )
+
+
+def _failure_codes(incomplete: list[SnapshotOutcome]) -> list[str | None]:
+    """The error code behind every failure that left these snapshots incomplete.
+
+    A withheld manifest is the consequence of its failed sources, whose codes are counted. A manifest
+    that failed on its own carries its code at the front of `manifest_error`, as
+    `"STORE_UNAVAILABLE: …"`. A snapshot that is incomplete for neither reason contributes `None`,
+    which is never a retryable code, so a case nobody anticipated is reported as `1`, not `3`.
+    """
+    codes: list[str | None] = []
+    for outcome in incomplete:
+        codes.extend(source.error_code for source in outcome.failed)
+        if outcome.manifest is ManifestOutcome.FAILED:
+            codes.append((outcome.manifest_error or "").partition(": ")[0] or None)
+        elif not outcome.failed:
+            codes.append(None)
+    return codes
 
 
 def _snapshot_date(value: str) -> date:
@@ -699,6 +802,10 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
     Written for a program first, because the scheduled weekly import (`v1-e34-t02`) reads it:
     every classification has a count whether or not it occurred, `applied` says whether anything
     was written, and `manifest` is the path or `null` rather than a sentence to parse.
+
+    `counts["NEW"]` is week-over-week: not present in `previous_snapshot`. `first_seen` is what is
+    new to the caselist — distinct stored digests no earlier snapshot of it held — and is the
+    number to sum across weeks (`v1-e30-t08`).
     """
     return {
         "caselist": report.caselist,
@@ -715,6 +822,7 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
         "skipped_total": sum(report.skipped.values()),
         "distinct_sha256": report.distinct_digests,
         "newly_stored_blobs": report.newly_stored_blobs,
+        "first_seen": report.first_seen,
         "warnings": report.warning_count,
         "manifest": str(manifest) if manifest is not None else None,
     }
@@ -776,6 +884,63 @@ def _openev_summary_table(report: OpenEvImportReport, manifest: Path | None) -> 
     )
 
 
+def openev_metadata_reimport_summary(
+    report: OpenEvMetadataReimport, manifest: Path | None
+) -> dict[str, JsonValue]:
+    """The `--json` envelope's `data` for `caselist reimport-openev-metadata`.
+
+    Counts and camps only. `camps_before` and `camps_after` count member rows per camp; a camp is an
+    institution, and no path, title or file name appears here. `manifest` is the path written, or
+    `null` when nothing was (a dry run, or a manifest already right).
+    """
+    return {
+        "release": report.release,
+        "year": report.year,
+        "event": str(report.event),
+        "applied": report.applied,
+        "manifest_key": report.manifest_key,
+        "rows": report.rows,
+        "rows_changed": report.rows_changed,
+        "titles_changed": report.titles_changed,
+        "warnings_changed": report.warnings_changed,
+        "camps_before": dict(report.camps_before),
+        "camps_after": dict(report.camps_after),
+        "unknown_before": report.unknown_before,
+        "unknown_after": report.unknown_after,
+        "camp_files_updated": report.camp_files_updated,
+        "camp_files_missing": report.camp_files_missing,
+        "blobs_missing": report.blobs_missing,
+        "manifest_changed": report.manifest_changed,
+        "manifest": str(manifest) if manifest is not None else None,
+    }
+
+
+def _reimport_table(report: OpenEvMetadataReimport, manifest: Path | None) -> TableSpec:
+    """One row per camp, before and after, then what was written."""
+    camps = sorted(set(report.camps_before) | set(report.camps_after))
+    rows = [
+        [camp, str(report.camps_before.get(camp, 0)), str(report.camps_after.get(camp, 0))] for camp in camps
+    ]
+    if not report.applied:
+        outcome = "Planned only; nothing was written. Re-run without --dry-run to apply it."
+    elif manifest is None:
+        outcome = "The manifest was already right; nothing was written."
+    else:
+        outcome = (
+            f"{report.camp_files_updated} camp-file record(s) corrected; manifest at {manifest.name}. "
+            "Publish the release to bring the bucket's manifest in line."
+        )
+    return TableSpec(
+        columns=("Camp", "Files before", "Files after"),
+        rows=rows,
+        title=f"openev {report.release} metadata ({'dry run' if not report.applied else 're-derived'})",
+        caption=(
+            f"{report.rows} file(s), {report.titles_changed} title(s) changed, "
+            f"{report.blobs_missing} not held locally. {outcome}"
+        ),
+    )
+
+
 def _summary_table(report: ImportReport, manifest: Path | None) -> TableSpec:
     """One row per classification, then the skips: what an operator checks the week against."""
     rows = [[str(name), str(report.count(name))] for name in Classification]
@@ -792,20 +957,29 @@ def _summary_table(report: ImportReport, manifest: Path | None) -> TableSpec:
 
 
 def _caption(report: ImportReport, manifest: Path | None) -> str:
-    """What the numbers mean, in the one line under the table."""
+    """What the numbers mean, in the lines under the table: NEW's baseline, and first-seen beside it."""
     against = (
         f"against {report.previous_snapshot.isoformat()}"
         if report.previous_snapshot is not None
         else "the first archive for this caselist"
     )
     warned = f", {report.warning_count} filename(s) not fully read" if report.warning_count else ""
+    new_means = (
+        f"NEW: not present in the {report.previous_snapshot.isoformat()} snapshot"
+        if report.previous_snapshot is not None
+        else "NEW: no earlier snapshot to compare with"
+    )
+    first_seen = (
+        f"; {report.first_seen} first seen in {report.caselist}" if report.first_seen is not None else ""
+    )
+    meaning = f"{new_means}{first_seen}."
     if not report.applied:
         return (
-            f"{report.member_count} member(s), {against}{warned}. Planned only; nothing was "
+            f"{report.member_count} member(s), {against}{warned}. {meaning} Planned only; nothing was "
             "written. Re-run without --dry-run to import it."
         )
     return (
-        f"{report.member_count} member(s), {against}{warned}. "
+        f"{report.member_count} member(s), {against}{warned}. {meaning} "
         f"{report.newly_stored_blobs} new file(s) stored; manifest at "
         f"{manifest.name if manifest else 'none'}."
     )

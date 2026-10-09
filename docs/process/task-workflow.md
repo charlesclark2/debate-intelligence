@@ -91,9 +91,12 @@ For a task merged with `--partial` whose worktree is gone, the same command recr
 
 ### 4. PM review
 
+`scripts/task report` prints the report and copies it to the clipboard; `scripts/task review`
+shows the task's commits and diffstat against `origin/dev`.
+
 ```bash
-scripts/task report <task>     # prints the report and copies it to the clipboard
-scripts/task review <task>     # commits and diffstat against origin/dev
+scripts/task report <task>
+scripts/task review <task>
 ```
 
 Give the report to the PM (paste it, or just name the task: the worktrees live under the

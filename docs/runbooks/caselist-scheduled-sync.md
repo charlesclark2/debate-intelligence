@@ -172,6 +172,13 @@ DEBATE_ENV=dev debate-research caselist pull --caselist hsld26
 ```
 
 Success is exit `0` with `publish: completed` and `report: completed` in the stage table.
+Exit `0` with `publish: pending` means the SSO session expired after the import: what was captured
+is safe, and [When something goes wrong](#when-something-goes-wrong) says how to finish it. Exit `1` means
+a stage did not complete; the stage table names it and why, and that includes a stage that failed
+because the bucket did not answer. Exit `3` means the bucket did not answer before any stage could
+record it, as `error.code` says (`STORE_CREDENTIALS_EXPIRED`, `STORE_ACCESS_DENIED` or
+`STORE_UNAVAILABLE`): log in again if it is the session, then run the same command. Exit `70` is a
+bug. The agent never retries any of them on its own; the next attempt is next week's run.
 `parse: skipped` and `landscape: skipped` are expected until E31 and E32 ship — those stages are
 optional by design and cannot fail a run whose bytes are already captured.
 
@@ -304,11 +311,15 @@ One JSON object per run on stdout. The fields to read first:
 | `objects_published` | What reached the bucket |
 | `pending_publish` | Snapshots waiting for an AWS session |
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
+| `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
 | `stages[]` | One entry per stage, each with the sentence saying why it ended that way |
 
-Nothing in that object is a school, a team code, a debater's initials, a disclosure path or the
-`caselist_token` — the policy forbids all of them in a log, and the summary is built to the same
-rule, so these logs can be pasted into an issue as they are.
+Nothing in that object is a school, a team code, a debater's initials, a disclosure path, a camp
+file's title or the `caselist_token` — the policy forbids all of them in a log, and the summary is
+built to the same rule, so these logs can be pasted into an issue as they are. A camp download is
+named by its OpenEv id, `openev-777`, with `(sha256 2b912c191a8a)` once the run has its bytes, and
+never by its file name, which is its title (`v1-e34-t12`). Summaries and logs written before that
+change may still name camp files, so check older ones before pasting them.
 
 ## The download inbox
 
@@ -319,6 +330,9 @@ Between two runs it holds:
   import failed, a newer week waiting behind it, or a week whose publish is pending an AWS login.
 * **Camp downloads** in the same state (`openev-<id>-<name>`), and any camp download the OpenEv
   delivery record does not cover.
+* **A camp release holding only junk** (`.DS_Store`, `__MACOSX/`, no camp file), named as
+  `not_imported` in every summary: no manifest row with a classification came from it, so
+  retention keeps it. It is not imported again (`v1-e34-t08`); the delivery record says it was.
 * `.partial/`, downloads in progress, which a run sweeps.
 * Anything put there by hand. The pull never touches a file whose name it did not give it.
 
@@ -409,7 +423,9 @@ newer weeks of that caselist that waited behind it. What the operator has to do 
 cause the reason names — an archive over `caselist.max_archive_bytes`, a caselist slug this build
 does not know the event of, an unreadable zip — because a run meets the same archive again and,
 with the cause still there, fails the same way. An unreadable zip is the one case to delete by
-hand: remove it from the inbox, and the next run downloads it again.
+hand: remove it from the inbox, and the next run downloads it again. A camp download is named in the
+reason by its id, `openev-777 (sha256 2b912c191a8a)`; its file in the inbox is the one whose name
+starts `openev-777-`.
 
 **A camp file shows `skipped_as_removed`** (and the select stage says *N OpenEv file(s) skipped as
 removed*). Nothing is wrong: it was taken out with `caselist remove`, and the run did not fetch it
@@ -421,18 +437,36 @@ most one download of each removed file, which the importer refuses. `caselist re
 removed camp file's copy from the inbox, and writes its digests to that record first when the
 record does not have them (`v1-e30-t09`), so the copy going does not cost a download either.
 
+**The select stage says *N taken as a revision of an id no longer listed (openev-512 -> openev-640)*.**
+A camp uploaded a file again. OpenEv cannot replace a file in place, so a revision is the old id
+deleted and a new id uploaded, normally at the same path. The run fetched the new id because a row
+of the release manifest at its path names the old id (`openev-512-…`, the name the sync gave that
+download) and the old id is no longer listed anywhere (`v1-e34-t08`). The selection's `revision_of`
+says the same in the JSON. Nothing needs doing. The old version stays in the store beside the new
+one; nothing is deleted. A camp file imported by hand is never taken as a revision, because its row
+does not say which upload it came from, so a re-upload of one is not fetched; fetch it by hand
+through `caselist import-openev` if it matters.
+
 **A camp file shows `same_path_as_a_removed_file`.** OpenEv lists a new id at the path of a camp
 file that was removed; that is how a camp uploads a file again, since OpenEv cannot replace a file in
 place. The run holds it back: a removal covers a camp's later upload of the same file, because the request
 was about the material and a revised file normally still contains it (PM decision, `v1-e34-t07`).
-Nothing needs doing. If the data-use policy is ever read the other way, this becomes a download; until
-then, fetching such a file by hand through `caselist import-openev` is a decision to record in the
-register.
+This hold is decided before a revision is fetched, and it holds a revision whose old version was
+removed on another machine too, since the bucket's copy of the list is read. It covers a copy
+already in the inbox as well (`v1-e34-t14`): a new id downloaded before this machine knew of the
+removal, whose import never ran, is held rather than imported from there. The select stage names it
+by id and digest, `openev-640 (sha256 1f2e3d4c5b6a)`, never by its title. A held copy stays in the
+inbox untouched; retention keeps it as `not_imported` (no manifest came from its bytes), and
+`caselist remove` leaves it alone, since the list names none of its bytes. Nothing needs doing.
+After `caselist unsuppress` of the old file, the next run fetches the new id, or imports the copy
+already in the inbox without downloading it. If the data-use policy is ever read the other way, this
+becomes a download; until then, fetching such a file by hand through `caselist import-openev` is a
+decision to record in the register.
 
 **A camp file shows `suppression_list_unreadable`.** The run could not read the suppression list:
 the bucket refused its copy (a missing grant, `access denied`) or a copy has a line nobody can read.
-It did not fetch any camp file it may have been told to remove, and the import stage fails for the
-same reason. Fix what the import stage's reason names; the next run decides it. An expired SSO
+It did not fetch any camp file it may have been told to remove, nor import a copy of one already in
+the inbox whose path a removal may cover, and the import stage fails for the same reason. Fix what the import stage's reason names; the next run decides it. An expired SSO
 session does not cause this (below).
 
 **The summary's `suppression_list_local_copy_only` is set** (and the select or import stage says

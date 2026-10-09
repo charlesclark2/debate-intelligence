@@ -174,5 +174,8 @@ be always passes.
   READMEs and the operator follow-ups of a session report. Put the explanation in the prose.
 * Put one-time commands and every-time commands in separate blocks, rather than marking them with
   a comment.
-* `v1-e01-t19` adds a check that enforces this.
+* `scripts/check_command_blocks.py` enforces this in CI (`v1-e01-t19`). It reads the `bash`, `sh`,
+  `zsh`, `shell` and `console` blocks of every tracked Markdown file, and a session report when a
+  pull request adds or changes it. A `#` inside quotes, a heredoc body or a word such as a URL's
+  `#anchor` is not a comment and passes.
 

@@ -77,6 +77,7 @@ from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.testing.fakes import empty_suppression_list
 
 from .conftest import REQUEST, RemovalWorld
+from .test_sync_fetches_revised_camp_files import JUNK_RELEASE, junk_release_zip
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -727,6 +728,53 @@ async def test_retention_removes_camp_downloads_once_recorded_and_the_next_pull_
         ESTUARY.openev_id: "already_imported",
         RELEASE.openev_id: "already_imported",
     }
+
+
+async def test_retention_removes_a_revised_camp_file_only_on_the_conditions_any_camp_download_meets(
+    installation: Installation, empty_bucket: S3EvidenceObjectStore
+) -> None:
+    """512 is pulled and leaves the inbox; upstream deletes it and 640 is uploaded at its path.
+
+    640 is fetched as a revision of 512 (`v1-e34-t08`) and is a camp download like any other here:
+    with its release not confirmed in the bucket it stays, and once it is confirmed it goes, named
+    by its SHA-256 prefix. 512 is not fetched again.
+    """
+    revised_body = CAMP_BODIES["canal-counterplan-revised"]
+    source = FakeSource(installation.archives, openev=[(ESTUARY, ESTUARY_BODY)])
+    first = await installation.sync(source).run([CASELIST])
+    assert removed(first) == [sha256_label(ESTUARY_BODY)]
+    source.openev = [(ESTUARY.model_copy(update={"openev_id": 640}), revised_body)]
+
+    unconfirmed = await installation.sync(source, compare_with=empty_bucket).run([CASELIST])
+
+    assert source.openev_fetches == [ESTUARY.openev_id, 640]
+    assert [one.revision_of for one in unconfirmed.openev] == [ESTUARY.openev_id]
+    assert kept(unconfirmed) == {sha256_label(revised_body): "not_confirmed"}
+
+    confirmed = await installation.sync(source).run([CASELIST])
+
+    assert source.openev_fetches == [ESTUARY.openev_id, 640]
+    assert removed(confirmed) == [sha256_label(revised_body)]
+    assert installation.inbox_names() == set()
+
+
+async def test_retention_keeps_a_camp_release_of_junk_alone_and_the_next_pull_does_not_import_it_again(
+    installation: Installation,
+) -> None:
+    """A camp release holding only junk (`v1-e30-t09` Follow-up 4) has no manifest row with a
+    classification, so no manifest came from its bytes and retention keeps it as `not_imported`,
+    before `v1-e34-t08` and after. What changed is the next pull: it used to import it again."""
+    source = FakeSource(installation.archives, openev=[(JUNK_RELEASE, junk_release_zip())])
+
+    first = await installation.sync(source).run([CASELIST])
+
+    assert kept(first) == {sha256_label(junk_release_zip()): "not_imported"}
+
+    again = await installation.sync(source).run([CASELIST])
+
+    assert source.openev_fetches == [JUNK_RELEASE.openev_id]
+    assert again.snapshots_imported == (), "the junk-only release was imported again"
+    assert kept(again) == {sha256_label(junk_release_zip()): "not_imported"}
 
 
 async def test_retention_keeps_a_camp_download_the_delivery_record_does_not_cover(

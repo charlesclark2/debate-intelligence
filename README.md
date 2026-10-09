@@ -53,13 +53,23 @@ interpreter; `.python-version` picks it for a checkout), and [uv](https://docs.a
 `pyproject.toml` is a uv workspace whose members are the four packages under `packages/`; it also
 holds the configuration for every quality tool.
 
+Set up a clone: `uv sync --all-packages` creates `.venv` with all packages and the dev tools from
+`uv.lock`, and `pre-commit install`, once per clone, installs the hooks (ruff, formatting,
+whitespace, a large-file guard).
+
 ```bash
-uv sync --all-packages             # create .venv with all packages + dev tools from uv.lock
-uv run pre-commit install          # once per clone: ruff, formatting, whitespace, large-file guard
-uv run ruff check                  # lint
-uv run ruff format --check         # formatting
-uv run pyright packages/debate_core   # strict type check of the domain core
-uv run pytest                      # parallel, with coverage, network blocked
+uv sync --all-packages
+uv run pre-commit install
+```
+
+Then the checks: lint, formatting, a strict type check of the domain core, and the tests, which
+run in parallel, with coverage and the network blocked.
+
+```bash
+uv run ruff check
+uv run ruff format --check
+uv run pyright packages/debate_core
+uv run pytest
 ```
 
 `pytest` runs with `-n auto`, coverage and sockets disabled, and deselects `slow` and `live`
@@ -73,9 +83,16 @@ rejects any other.
 `config/profiles/`. A source checkout with `DEBATE_ENV` unset runs as `dev`, so nothing you run
 by accident writes to the production data directory.
 
+Copy `.env.example` to `.env` once, for your own machine's secrets; `.env` is never committed.
+
 ```bash
-cp .env.example .env                  # your own machine's secrets; .env is never committed
-uv run debate-research config show    # every setting, its value and where that value came from
+cp .env.example .env
+```
+
+`config show` prints every setting, its value and where that value came from.
+
+```bash
+uv run debate-research config show
 ```
 
 Values are layered, highest first: a command-line flag, `DEBATE_*` variables in your shell,
@@ -91,11 +108,15 @@ and validated in dev before a `dev` → `main` promotion. Details:
 
 ## Working on a task
 
+`ready` lists what can start now. `start` creates a worktree and branch off `dev` and launches
+Claude with the spec. After PM review, `pr` opens the pull request into `dev`, and after the merge
+`finish` cleans up the worktree and branches.
+
 ```bash
-scripts/task ready                 # what can start now
-scripts/task start <task>          # worktree + branch off dev, launches Claude with the spec
-scripts/task pr <task>             # after PM review: PR into dev
-scripts/task finish <task>         # after merge: clean up worktree and branches
+scripts/task ready
+scripts/task start <task>
+scripts/task pr <task>
+scripts/task finish <task>
 ```
 
 See [docs/process/task-workflow.md](docs/process/task-workflow.md) and the

@@ -460,7 +460,8 @@ class TestFailures:
 
         result = invoke("store", "sync")
 
-        assert result.exit_code == ExitCode.DOMAIN_FAILURE
+        # 3, not 1: logging in again and re-running succeeds (v1-e01-t20).
+        assert result.exit_code == ExitCode.RETRIEVAL_FAILURE
         assert "aws sso login --profile debate-dev-evidence" in result.stderr
         assert "Traceback" not in result.stderr
         assert "STORE_CREDENTIALS_EXPIRED" in result.stderr

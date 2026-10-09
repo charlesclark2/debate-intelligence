@@ -40,11 +40,13 @@ from tests.fixtures.caselist.build_synthetic_archives import (
 )
 from tests.fixtures.caselist.publish_expectations import expected_publish
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
+from tests.fixtures.permissions import needs_permissions, refused
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
-from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired
+from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired, StoreUnavailable
+from debate_core.integrations.local import BLOB_DIRECTORY
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -475,3 +477,43 @@ def test_a_live_dry_run_lists_the_operators_own_caselist() -> None:
     assert envelope["exit_code"] == ExitCode.OK, envelope
     assert envelope["data"]["archives_downloaded"] == 0
     assert envelope["data"]["archives_seen"] > 0
+
+
+# ------------------------------------------------------------------------------------------------
+# Failures a retry may cure, and the exit code each ends with (v1-e01-t20)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_bucket_listing_that_does_not_answer_ends_the_run_with_three(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The publish stage's plan lists the bucket first; a 503 there escapes the run as a store failure."""
+
+    async def unavailable(self: S3EvidenceObjectStore, prefix: str) -> Any:
+        raise StoreUnavailable("ListObjectsV2", prefix, "simulated 503 SlowDown")
+
+    monkeypatch.setattr(S3EvidenceObjectStore, "list_objects", unavailable)
+
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.RETRIEVAL_FAILURE, pulled
+    assert pulled["error"]["code"] == "STORE_UNAVAILABLE"
+
+
+@needs_permissions
+def test_an_unreadable_blob_directory_fails_the_import_stage_and_names_its_role(
+    installation: Path, bucket: S3Client, site: respx.MockRouter
+) -> None:
+    """The import stage folds the refusal into its own outcome, so the run is the `1` an import
+    that did not complete has always been; before v1-e01-t20 it escaped as exit 70, "a bug"."""
+    blobs = installation / "data" / BLOB_DIRECTORY
+    blobs.mkdir(parents=True)
+
+    with refused(blobs):
+        pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.DOMAIN_FAILURE, pulled
+    stages = {one["stage"]: one for one in run_summary(pulled)["stages"]}
+    assert stages["import"]["outcome"] == "failed"
+    assert "not allowed to read the blob directory" in stages["import"]["reason"]
+    assert str(installation) not in stages["import"]["reason"]

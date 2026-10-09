@@ -1,0 +1,83 @@
+# TASK v1-e01-t26-dispatch-opens-back-merge - The manual sweep also opens the back-merge pull request
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t26-dispatch-opens-back-merge
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The manual sweep also opens the back-merge pull request"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e01-t15's Follow-up work.
+  description: >-
+    After a lost push to `main`, v1-e01-t15's scheduled or dispatched sweep turns an open
+    promotion's `back-merge` red, but the back-merge pull request the red check tells the
+    operator to merge was never opened, because only a push runs `open-back-merge-pull-request`.
+    The process doc gives the `gh pr create` to open it by hand. Let the `workflow_dispatch`
+    (and, if justified, the schedule) also run that job, which is already idempotent, so
+    recovery from a lost push is one click. Out of scope: the sweep's own decisions and the
+    guards.
+  priority: 3
+  constraints:
+    packages: [.github/workflows, docs/process, tests/scripts]
+    forbidden:
+      - "Granting `pull-requests: write` or `contents: write` to any job other than the one that opens the back-merge pull request"
+      - Opening a second back-merge pull request when one is already open
+  context:
+    - kind: TaskRef
+      name: v1-e01-t15-promotion-guard-sweep
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A dispatch on a repository where `main` holds a commit `dev` lacks opens the
+        back-merge pull request, or names the open one, by shape test and in a sandbox.
+    - id: ac2
+      description: >-
+        The permission shape v1-e01-t15 established is otherwise unchanged and actionlint
+        stays clean.
+    - id: ac3
+      description: >-
+        docs/process/branching-and-environments.md drops the hand-run `gh pr create` from
+        the recovery steps or says when it is still needed.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t26-dispatch-opens-back-merge-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Let the dispatch reach the idempotent open job, keep the permissions, prove it in a sandbox.
+  goalRef:
+    name: v1-e01-t26-dispatch-opens-back-merge
+  graph:
+    nodes:
+      - id: dispatch-opens
+        kind: Task
+        name: Dispatch reaches the open job
+        description: >-
+          Trigger wiring, shape tests, the doc, and a sandbox check.
+        estimatedEffort: 1.5h
+        acceptanceCriteria:
+          - type: custom
+            name: A dispatch opened the back-merge pull request in a sandbox
+            description: >-
+              Charlie confirms the dispatched run opened, or named, the back-merge
+              pull request in a sandbox repository after a commit was put on main
+              without a push.
+status:
+  phase: Pending

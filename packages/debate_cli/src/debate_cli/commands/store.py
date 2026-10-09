@@ -38,10 +38,13 @@ pointed at prod by a typo in an argument would be a command that eventually is.
 From :mod:`debate_cli.exit_codes`, and no new numbers. `0` when the run did what it was asked;
 `1` when the answer is a failure the operator has to deal with — an object that would not verify,
 a content-addressed key whose two sides disagree, an environment with no bucket, a prod push with
-no `--confirm-prod`; `3` when a provider failed. An expired SSO session arrives as
-:class:`~debate_core.application.errors.StoreCredentialsExpired`, which carries the `aws sso
-login --profile …` line the adapter built, and the root group renders that as the hint on a
-one-line failure rather than a traceback.
+no `--confirm-prod`; `3` when the store did not answer: it was unavailable, the SSO session
+expired, or it refused access (`v1-e01-t20`). An `--apply` run that carried on past failed objects
+exits `3` only when every one of them failed that way and nothing mismatched; one object that
+would not verify makes the run a `1`, because running it again cannot fix that one. An expired SSO
+session arrives as :class:`~debate_core.application.errors.StoreCredentialsExpired`, which carries
+the `aws sso login --profile …` line the adapter built, and the root group renders that as the hint
+on a one-line failure rather than a traceback.
 """
 
 from __future__ import annotations
@@ -54,7 +57,7 @@ from typing import Annotated, Any
 import typer
 
 from debate_cli.context import CliContext, cli_context, command_name
-from debate_cli.exit_codes import ExitCode
+from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.evidence_sync import (
     SyncAction,
@@ -140,8 +143,9 @@ def sync(
     # gets the table, because the counts are most of what they came for.
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=_sync_table(report, settings))
-    cli.output.failure(_sync_failure(report, payload), command=command_name(ctx))
-    raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)
+    failure = _sync_failure(report, payload)
+    cli.output.failure(failure, command=command_name(ctx))
+    raise typer.Exit(code=failure.exit_code)
 
 
 def ls(
@@ -357,11 +361,14 @@ def _filtered(plan: SyncPlan) -> str:
 
 
 def _sync_failure(report: SyncReport, payload: dict[str, JsonValue]) -> CommandFailure:
-    """What a run that could not verify everything reports, and exits `1` with.
+    """What a run that could not verify everything reports, and the exit code it ends with.
 
     `payload` is the same object a successful run puts under `data`, carried in `details` so that
     a consumer reading a failed run still gets every count, the journal path and the list of what
     failed — the things it needs in order to decide whether to re-run.
+
+    `3` when every failed object failed because the store did not answer and nothing mismatched,
+    otherwise `1` (:func:`~debate_cli.exit_codes.exit_code_for_failure_codes`).
     """
     mismatched = report.plan.of(SyncAction.MISMATCHED)
     if report.failed:
@@ -372,7 +379,11 @@ def _sync_failure(report: SyncReport, payload: dict[str, JsonValue]) -> CommandF
                 f"{len(report.failed)} object(s) could not be transferred and verified; "
                 f"the first was {first.key}"
             ),
-            exit_code=ExitCode.DOMAIN_FAILURE,
+            exit_code=(
+                ExitCode.DOMAIN_FAILURE
+                if mismatched
+                else exit_code_for_failure_codes(outcome.error_code for outcome in report.failed)
+            ),
             details={**payload, "first_key": first.key},
             hint="Re-run the same command: everything that did verify is journaled and is skipped.",
         )

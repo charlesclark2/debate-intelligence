@@ -44,6 +44,15 @@ rename survives a power loss. A reader therefore sees either no file or the whol
 half-written one. An interrupted write leaves a `.incoming-*.tmp` file and no blob, which is the
 correct outcome: the snapshot is simply not stored, and the retrieval is repeated.
 
+## The operating system refusing the store
+
+A blob directory this user cannot read or write is
+:class:`~debate_core.application.errors.StoreAccessDenied` naming "the blob directory", never a
+raw `PermissionError` and never the directory's path (:mod:`debate_core.integrations.local.refusals`,
+`v1-e01-t20`). It is a store that could not be read, which `verify` reports as "could not run"
+rather than as a bug, and which is not :class:`~debate_core.application.errors.NotFound`: the blob
+may well be there.
+
 There is no `delete` and no overwrite, because :class:`~debate_core.application.ports.persistence.
 SnapshotStore` has neither. Removing a source under `docs/runbooks/caselist-removal.md` is an
 operator procedure against this directory, not something a use case can reach.
@@ -59,6 +68,7 @@ from pathlib import Path
 
 from debate_core.application.errors import BlobIntegrityError, NotFound
 from debate_core.domain import SHA256_HEX_PATTERN, Sha256Hex
+from debate_core.integrations.local.refusals import refused_as_access_denied, role_of
 
 __all__ = [
     "BLOB_DIRECTORY",
@@ -91,6 +101,9 @@ _BLOB_KEY_PATTERN = re.compile(SHA256_HEX_PATTERN)
 
 #: The name `NotFound` and `BlobIntegrityError` report, matching the in-memory store's wording.
 _ENTITY = "snapshot blob"
+
+#: What a refusal names instead of the directory's path.
+_ROLE = role_of(BLOB_DIRECTORY.parts[0])
 
 
 class FsSnapshotStore:
@@ -136,10 +149,11 @@ class FsSnapshotStore:
         """
         key = hashlib.sha256(data).hexdigest()
         destination = self.path_for(key)
-        if destination.exists():
-            return key
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        _write_atomically(destination, data)
+        with refused_as_access_denied("write", _ROLE):
+            if destination.exists():
+                return key
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            _write_atomically(destination, data)
         return key
 
     async def get(self, key: Sha256Hex) -> bytes:
@@ -147,16 +161,18 @@ class FsSnapshotStore:
 
         Raises :class:`~debate_core.application.errors.NotFound` when nothing is stored under the
         key — including when `key` is not a digest at all, because such a key can never have been
-        minted by :meth:`put` — and
+        minted by :meth:`put` —
         :class:`~debate_core.application.errors.BlobIntegrityError` when the stored bytes have
-        changed.
+        changed, and :class:`~debate_core.application.errors.StoreAccessDenied` when the operating
+        system refuses the blob directory.
         """
         try:
             path = self.path_for(key)
         except ValueError as malformed:
             raise NotFound(_ENTITY, key) from malformed
         try:
-            data = path.read_bytes()
+            with refused_as_access_denied("read", _ROLE):
+                data = path.read_bytes()
         except FileNotFoundError as missing:
             raise NotFound(_ENTITY, key) from missing
         actual = hashlib.sha256(data).hexdigest()
@@ -165,12 +181,18 @@ class FsSnapshotStore:
         return data
 
     async def exists(self, key: Sha256Hex) -> bool:
-        """True when a blob is filed under `key`. Does not read or verify it."""
+        """True when a blob is filed under `key`. Does not read or verify it.
+
+        A blob directory the operating system refuses is
+        :class:`~debate_core.application.errors.StoreAccessDenied`, not `False`: "cannot look" is
+        not "not there".
+        """
         try:
             path = self.path_for(key)
         except ValueError:
             return False
-        return path.is_file()
+        with refused_as_access_denied("read", _ROLE):
+            return path.is_file()
 
 
 def _write_atomically(destination: Path, data: bytes) -> None:

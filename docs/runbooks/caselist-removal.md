@@ -72,8 +72,9 @@ Reply within 3 business days. Something like:
 
 ## Step 3 — Identify what to remove
 
+See what is in the store for this environment, and whether it matches S3:
+
 ```bash
-# What is in the store for this environment, and does it match S3?
 DEBATE_ENV=dev uv run debate-research caselist status
 ```
 
@@ -155,13 +156,17 @@ with *a caselist pull is running*, and you re-run it once the pull has finished.
 
 ## Step 6 — Verify dev
 
-```bash
-# 1. The store and S3 agree and the sources are gone.
-DEBATE_ENV=dev uv run debate-research caselist status
+First, the store and S3 agree and the sources are gone:
 
-# 2. Re-importing a snapshot that still contains the file reports it as SUPPRESSED,
-#    stores no blob and writes no manifest row. An archive older than the newest one imported
-#    needs --allow-out-of-order.
+```bash
+DEBATE_ENV=dev uv run debate-research caselist status
+```
+
+Then re-import a snapshot that still contains the file. It reports the file as `SUPPRESSED`, stores
+no blob and writes no manifest row. An archive older than the newest one imported needs
+`--allow-out-of-order`.
+
+```bash
 DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld26 --snapshot <date>
 ```
 
@@ -230,7 +235,10 @@ DEBATE_ENV=prod uv run debate-research caselist status
         records the rewritten file's digest; the removal log entry's `inbox_rewrites` pairs it with
         the digest of the archive as downloaded, and the zip's own comment names the request.
       - **Left alone:** everything holding nothing the list stops, and `<inbox>/.partial/` (downloads
-        in progress, which the pull sweeps itself).
+        in progress, which the pull sweeps itself). That includes a camp's later upload of a removed
+        file, a new OpenEv id at the same path, if it was downloaded before the removal: its bytes
+        are new, so the list does not name them, but the pull holds it back as
+        `same_path_as_a_removed_file` and does not import it (`v1-e34-t14`).
 - [ ] **A removal made before `v1-e30-t09`** left its files in the inbox. Run the same command again
       — same `--team` or `--source`, same `--request` and `--reason` — dry run first, then
       `--execute`: it finds nothing left in the store or the buckets, appends nothing, and purges
@@ -284,11 +292,16 @@ and one waiting to be imported was rewritten without the file. Recovery means re
 from the original weekly archive, fetched again from OpenCaselist (the site keeps its back-catalogue,
 ADR-0017; it costs one of the day's five bulk downloads), which the suppression list refuses until
 the suppression is lifted. It is lifted by **appending** an un-suppress entry,
-never by editing the list:
+never by editing the list. First the dry run, which changes nothing:
 
 ```bash
 DEBATE_ENV=dev uv run debate-research caselist unsuppress --sha256 <sha256> \
-    --reason REMOVED_IN_ERROR --request RM-2026-01                          # dry run
+    --reason REMOVED_IN_ERROR --request RM-2026-01
+```
+
+Then the same command with the takedown profile and `--execute`:
+
+```bash
 DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal uv run debate-research caselist unsuppress \
     --sha256 <sha256> --reason REMOVED_IN_ERROR --request RM-2026-01 --execute
 ```

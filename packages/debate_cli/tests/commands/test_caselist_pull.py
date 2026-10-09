@@ -21,6 +21,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 import respx
 from tests.fixtures.caselist.build_synthetic_archives import (
@@ -28,10 +29,12 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
+from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP_BODIES
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.commands.caselist_pull import _caption  # pyright: ignore[reportPrivateUsage]
+from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist_sync import (
     InboxFileKind,
@@ -43,6 +46,8 @@ from debate_core.application.caselist_sync import (
     StageRecord,
     SyncStage,
 )
+from debate_core.application.ports.notifier import RecordingNotifier
+from debate_core.integrations.local.macos_notifier import MacOsNotifier
 
 API = "https://api.opencaselist.example.invalid/v1"
 FILE_HOST = "https://files.opencaselist.example.invalid"
@@ -334,6 +339,102 @@ def test_a_run_summary_reaches_the_data_directory_where_the_run_log_will_read_it
     text = written.read_text(encoding="utf-8")
     for forbidden in ("Maple Grove", "Cedar Hollow", "Riverbend Academy", "ZaLu", "MnPr"):
         assert forbidden not in text
+
+
+# ------------------------------------------------------------------------------------------------
+# A camp file is named by id, never by title (v1-e34-t12)
+# ------------------------------------------------------------------------------------------------
+
+PROBE = "Zqxprobe"
+"""In each camp file's folder and title, and so in its inbox name. Searched for case-insensitively."""
+
+#: A camp document the run imports, and a camp release the archive reader refuses, naming the file.
+PROBE_CAMP_FILES = {
+    f"/openev/2026/{PROBE} Institute/{PROBE} Estuary Solvency Advocate.docx": (
+        512,
+        CAMP_BODIES["estuary-solvency"],
+    ),
+    f"/openev/2026/{PROBE} Institute/{PROBE} Camp Release.zip": (
+        777,
+        b"PK\x03\x04 an invented camp release, cut short: not a zip any reader can open",
+    ),
+}
+
+
+@pytest.fixture
+def probe_site() -> Iterator[respx.MockRouter]:
+    """OpenCaselist listing no archives and the two camp files in :data:`PROBE_CAMP_FILES`."""
+    listing = [
+        {
+            "openev_id": openev_id,
+            "path": path,
+            "filename": path.rsplit("/", 1)[-1],
+            "year": 2026,
+            "camp": f"{PROBE} Institute",
+            "tags": {"policy": True},
+        }
+        for path, (openev_id, _) in PROBE_CAMP_FILES.items()
+    ]
+
+    def download(request: httpx.Request) -> httpx.Response:
+        # The client takes the leading `/` off a listed path before asking for it.
+        return httpx.Response(200, content=PROBE_CAMP_FILES["/" + request.url.params["path"]][1])
+
+    with respx.mock(assert_all_called=False) as router:
+        router.get(f"{API}/caselists/{SYNTHETIC_CASELIST}/downloads").respond(200, json=[])
+        router.get(f"{API}/openev").respond(200, json=listing)
+        router.get(f"{API}/download").mock(side_effect=download)
+        yield router
+
+
+@pytest.fixture
+def notified(monkeypatch: pytest.MonkeyPatch) -> RecordingNotifier:
+    """What the run monitor would have shown: the `test` environment's notifier shows nothing."""
+    notifier = RecordingNotifier()
+    monkeypatch.setattr(ServiceContainer, "sync_notifier", lambda _: notifier)
+    return notifier
+
+
+def printed(*arguments: str) -> Result:
+    return runner.invoke(create_app(), list(arguments))
+
+
+def assert_no_probe(where: str, text: str) -> None:
+    assert PROBE.casefold() not in text.casefold(), f"a camp file's title reached {where}: {text!r}"
+
+
+def test_no_output_of_a_pull_names_a_camp_file_by_its_title(
+    installation: Path, probe_site: respx.MockRouter, notified: RecordingNotifier
+) -> None:
+    """ac1 through the command: the line the launchd agent writes to stdout, the table a person reads,
+    the summary file, `caselist runs` both ways and the notifications. 512 is imported and 777 is
+    refused, so the run exits 1 and the failure's own message and details are printed too."""
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.DOMAIN_FAILURE
+    assert_no_probe("the stdout line of `caselist pull --json`", json.dumps(envelope))
+    selections = envelope["error"]["details"]["openev_selections"]
+    assert [(one["openev_id"], one["decision"]) for one in selections] == [
+        (512, "download"),
+        (777, "download"),
+    ]
+    assert all(one["inbox_file"].startswith("sha256 ") for one in selections)
+    assert all("inbox_name" not in one for one in selections)
+    summary_file = Path(envelope["error"]["details"]["summary_written_to"])
+    assert_no_probe("the run-summary file", summary_file.read_text(encoding="utf-8"))
+
+    rendered = printed("caselist", "pull", "--caselist", SYNTHETIC_CASELIST)
+
+    assert rendered.exit_code == ExitCode.DOMAIN_FAILURE
+    assert "openev-777 (sha256 " in rendered.output, "the table no longer names the refused download"
+    assert_no_probe("the rendered `caselist pull`", rendered.output + (rendered.stderr or ""))
+    for arguments in (("--json", "caselist", "runs"), ("caselist", "runs")):
+        runs = printed(*arguments)
+        assert runs.exit_code == ExitCode.OK, runs.output
+        assert_no_probe(f"`{' '.join(arguments)}`", runs.output + (runs.stderr or ""))
+    assert [one.title for one in notified.sent] == ["caselist pull failed", "caselist pull failed"]
+    shown = MacOsNotifier(executable="osascript")
+    assert_no_probe("the notifications", " ".join(" ".join(shown.command_for(one)) for one in notified.sent))
 
 
 # ------------------------------------------------------------------------------------------------

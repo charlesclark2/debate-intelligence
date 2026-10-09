@@ -28,7 +28,11 @@ handles both: `jq`, a dataframe, and the publisher's
 
 The summary row keeps the caselist summary's keys, adds `year` and `archives` (every download
 digest the rows name, sorted), and leaves `archive_sha256` and `previous_snapshot` `null`, because
-a camp release is not one download and has no previous week.
+a camp release is not one download and has no previous week. It has no `first_seen`, the weekly
+summary's count of files new to the caselist (`v1-e30-t08`): a release has no earlier snapshots to
+be first seen against, and the key is additive, so a reader of both kinds already handles its
+absence — while adding it here would change the bytes of every release manifest already written on
+its next re-import.
 
 ## It accumulates
 

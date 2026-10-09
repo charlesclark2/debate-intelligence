@@ -84,6 +84,14 @@ spec:
       inputs:
         goalRef: v1-e02-t05-settings-config
         specRef: plan_specs/v1/e02-domain-core/t05-settings-config.yaml
+    - id: ext-v1-e01-t20-retryable-failures-exit-3
+      kind: External
+      name: 'Prerequisite from E01: A failure that may succeed on retry never shares an exit code with a verdict'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t20-retryable-failures-exit-3
+        specRef: plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml
     - id: t01
       kind: Task
       name: AWS account baseline
@@ -212,5 +220,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e29-t06-removal-grant-scope-test
+    - id: t07
+      kind: Task
+      name: 'A profile missing from the AWS config is a configuration error, not an expired session'
+      description: >-
+        A profile the AWS config lacks is reported as a configuration error with exit 1, not
+        as an expired session with exit 3.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml
+        goalRef: v1-e29-t07-missing-profile-not-retryable
+      dependsOn:
+      - ext-v1-e01-t20-retryable-failures-exit-3
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t07-missing-profile-not-retryable reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t07-missing-profile-not-retryable
 status:
   phase: Pending

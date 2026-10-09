@@ -16,6 +16,7 @@ from typing import Annotated, Any
 
 import pytest
 import typer
+from tests.fixtures.permissions import needs_permissions, refused
 from tests.fixtures.verify.manifest_world import (
     ALL_VERIFIED,
     MIXED,
@@ -32,6 +33,7 @@ from debate_cli.commands import verify as verify_command
 from debate_cli.context import cli_context
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.errors import StoreError, StoreUnavailable
+from debate_core.integrations.local import BLOB_DIRECTORY
 from debate_core.testing import InMemoryArticleRepository, InMemorySnapshotStore
 
 runner = CliRunner()
@@ -359,3 +361,23 @@ def test_a_person_is_told_verification_could_not_run() -> None:
     message = " ".join(result.stderr.split())
     assert "VERIFICATION_COULD_NOT_RUN" in message and "exit 3" in message
     assert "GetObject on blobs/sha256 failed: connection refused" in message
+
+
+@needs_permissions
+def test_an_unreadable_blob_directory_exits_three_and_names_its_role(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real filesystem store, refused by the operating system: a store that could not be read,
+    not a bug (v1-e01-t20 ac2). Before that task the `PermissionError` escaped as exit 70."""
+    data_dir = tmp_path / "data"
+    build_fixture_data_dir(data_dir)
+    monkeypatch.setenv("DEBATE_STORAGE__DATA_DIR", str(data_dir))
+
+    with refused(data_dir / BLOB_DIRECTORY):
+        result = invoke("--json", "verify", str(ALL_VERIFIED))
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert (error["code"], error["details"]["cause"]) == ("VERIFICATION_COULD_NOT_RUN", "StoreAccessDenied")
+    assert "the blob directory" in error["message"]
+    assert str(data_dir) not in result.stdout + result.stderr

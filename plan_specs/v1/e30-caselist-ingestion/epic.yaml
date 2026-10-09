@@ -109,6 +109,14 @@ spec:
       inputs:
         goalRef: v1-e29-t05-evidence-sync-cli
         specRef: plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml
+    - id: ext-v1-e29-t06-removal-grant-scope-test
+      kind: External
+      name: 'Prerequisite from E29: Removal grants: the scope is tested, and a plan can count versions'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t06-removal-grant-scope-test
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml
     - id: t01
       kind: Task
       name: Caselist and OpenEv data-use policy
@@ -308,5 +316,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t09-removal-purges-inbox
+    - id: t10
+      kind: Task
+      name: 'caselist status reports noncurrent versions a removal left behind'
+      description: >-
+        caselist status reports noncurrent versions a removal left behind, read-only, and
+        the removal docstrings describe the grant as applied.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml
+        goalRef: v1-e30-t10-removal-docstrings-and-residue
+      dependsOn:
+      - ext-v1-e29-t06-removal-grant-scope-test
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t10-removal-docstrings-and-residue reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t10-removal-docstrings-and-residue
 status:
   phase: Pending

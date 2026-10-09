@@ -148,6 +148,14 @@ spec:
       inputs:
         goalRef: v1-e30-t06-initial-backfill
         specRef: plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml
+    - id: ext-v1-e01-t20-retryable-failures-exit-3
+      kind: External
+      name: 'Prerequisite from E01: A failure that may succeed on retry never shares an exit code with a verdict'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t20-retryable-failures-exit-3
+        specRef: plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml
     - id: t01
       kind: Task
       name: OpenCaselist API client
@@ -402,5 +410,87 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t12-summary-names-no-camp-file
+    - id: t13
+      kind: Task
+      name: 'A pull stage that fails on a retryable cause ends the run with exit 3'
+      description: >-
+        A pull stage that failed only on a retryable cause ends the run with exit 3, a local
+        refusal is never reported as an expired login, and the remaining filesystem stores
+        translate PermissionError.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t13-pull-stage-failure-classes.yaml
+        goalRef: v1-e34-t13-pull-stage-failure-classes
+      dependsOn:
+      - t12
+      - ext-v1-e01-t20-retryable-failures-exit-3
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t13-pull-stage-failure-classes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t13-pull-stage-failure-classes
+    - id: t14
+      kind: Task
+      name: 'A camp file already in the inbox is held if its path was removed'
+      description: >-
+        A camp file whose path was removed is held even when its copy is already in the
+        inbox, so a takedown cannot be undone by a download that predates it.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t14-removed-path-hold-for-inbox-copies.yaml
+        goalRef: v1-e34-t14-removed-path-hold-for-inbox-copies
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t14-removed-path-hold-for-inbox-copies reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t14-removed-path-hold-for-inbox-copies
+    - id: t15
+      kind: Task
+      name: 'A camp release of junk alone leaves the inbox once it is handled'
+      description: >-
+        A camp release of junk alone leaves the inbox after it is imported, instead of
+        staying for good as not_imported.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t15-junk-release-leaves-inbox.yaml
+        goalRef: v1-e34-t15-junk-release-leaves-inbox
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t15-junk-release-leaves-inbox reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t15-junk-release-leaves-inbox
+    - id: t16
+      kind: Task
+      name: 'The dry run''s download plan names no path on the operator''s machine'
+      description: >-
+        The dry run's download plan says 'into the inbox' instead of printing the operator's
+        home directory.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t16-dry-run-names-no-home-path.yaml
+        goalRef: v1-e34-t16-dry-run-names-no-home-path
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t16-dry-run-names-no-home-path reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t16-dry-run-names-no-home-path
 status:
   phase: Pending

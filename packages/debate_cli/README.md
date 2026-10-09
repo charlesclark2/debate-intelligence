@@ -119,13 +119,27 @@ rather than writing an integer.
 | 0 | `OK` | The command did what it was asked to do. |
 | 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, or a wired integration does not import). Running it again gives the same answer. |
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
-| 3 | `RETRIEVAL_FAILURE` | An external provider — search, fetch, a model — failed or rate-limited the call. The same command may well succeed later. |
+| 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`. |
 
-Exceptions are mapped by `exit_code_for`: `ProviderError` → 3, any other `DomainError` → 1, a
-usage error → 2, anything else → 70. A failure that is an *outcome* rather than an exception —
-`verify` finding an unverifiable card — is reported with `output.failure(...)` and then
+Exceptions are mapped by `exit_code_for`: `ProviderError` → 3; `StoreUnavailable`,
+`StoreCredentialsExpired` and `StoreAccessDenied` (`RETRYABLE_STORE_FAILURES`) → 3 in every
+command, and so are `caselist remove`'s `TakedownPreflightFailed` and `RemovalIncomplete` when one
+of those three is what stopped them (`v1-e01-t20`); any other `DomainError` → 1, including
+`NotFound`; a usage error → 2; anything else → 70. A failure that is an *outcome* rather than an
+exception — `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
 `raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`.
+
+Three commands report per-item failures rather than raising:
+
+* `store sync --apply` and `caselist publish` carry on past one object's failure. They exit 3 when
+  every failure was one of the three store failures, and 1 as soon as one was not (a checksum
+  mismatch, a file missing locally): running the command again cannot fix that one
+  (`exit_code_for_failure_codes`).
+* `caselist pull` records each stage's outcome as a sentence, and a failed required stage exits 1
+  whatever caused it, a store failure included. A store failure that ends the run before a stage
+  records it exits 3. An expired or refused AWS session during publish is still a *pending* publish
+  and exits 0, because what was captured is safe and the next run finishes it.
 
 ## `debate-research doctor`
 
@@ -245,7 +259,7 @@ Three rules worth knowing:
 
 ## Tests
 
-```console
+```bash
 uv run pytest packages/debate_cli/tests
 ```
 

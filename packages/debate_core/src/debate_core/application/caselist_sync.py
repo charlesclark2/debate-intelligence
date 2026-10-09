@@ -155,14 +155,36 @@ What the memory does not know, it cannot use. A camp file this machine never imp
 somewhere else, is fetched once; the importer refuses it, the memory records what it delivered, and
 the next run skips it. A file still in the inbox is read there instead, so it costs nothing.
 
+## A camp file that changed upstream
+
 **A camp file changes upstream only under a new id.** OpenCaselist has no route that replaces a
 file's bytes: `POST /openev` refuses a path that exists, `DELETE /openev/{id}` is the only other
 write, and ids are `AUTO_INCREMENT` (`server/v1/controllers/openev/`, `server/v1/db/caselist.sql`,
-upstream). A re-uploaded file therefore arrives as a new id, usually at the same path. A removal
-covers a camp's later upload of the same file (PM decision, `v1-e34-t07`): the request was about the
-material, and a revised file normally still contains it. Such an id is held back as
-:attr:`SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE` and logged. If the data-use policy is read the
-other way, that decision becomes a download.
+upstream at `fb2903e`, read by `v1-e34-t07`). A re-uploaded file therefore arrives as a new id,
+usually at the same path.
+
+**A revision is fetched** (`v1-e34-t08`). A listed id no manifest row holds is a revision when a row
+of its release manifest at the same path names its own OpenEv id (`openev-<id>-…`, the name the sync
+gives a download) and that id is listed nowhere upstream any more: the row is the old version. The
+new id is fetched like any new camp file, paced and counted by the same rules, and the run summary
+names it by ids alone (`revision_of` on its selection, and `openev-<old> -> openev-<new>` in the
+select stage's reason). Nothing else is a revision, so nothing is fetched again on a guess. A row
+naming no id is a hand import, which cannot say which upload it came from, and holds the file at its
+path as before (`v1-e34-t06`); a row whose id is still listed is that id's. The old version is not
+touched: its rows, its blobs and its delivery entry stay, and the new id's row sits beside them
+under its own `openev-<new id>-…` path, because the importer keys a release's rows by path.
+
+**A removal covers a camp's later upload of the same file** (PM decision, `v1-e34-t07`): the request
+was about the material, and a revised file normally still contains it. Such an id is held back as
+:attr:`SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE` and logged, and the hold is decided before the
+revision rule and wins over it. It asks the list about what the delivery record remembers at that
+path and, for a revision, about the old rows' own bytes too: a removal made on another machine
+leaves this machine's rows in place, and the record may not know the old id. The hold is asked
+before a copy already in the inbox is read, so it holds that copy too (`v1-e34-t14`): an inbox copy
+changes only whether a download is needed, never whether the file may be imported. A held copy is
+left where it is, for retention and removal to decide about, and after `caselist unsuppress` the
+next run imports it from the inbox. If the data-use policy is read the other way, that decision
+becomes a download; after `caselist unsuppress` it is one.
 
 ## Credentials, and stages that come back later
 
@@ -201,6 +223,12 @@ Counts, caselist slugs, snapshot dates, archive names and digests. Never the cas
 a school, a team code, a debater's initials, a disclosure path or a camp file's title
 (`docs/policies/caselist-data-use.md` rule 4). The per-run JSON summary obeys the same rule: it is
 written for an operator and for `v1-e34-t03`'s run log, and it carries no personal data at all.
+
+A camp download is named `openev-<id>`, with `sha256 <first 12 hex>` where the run has its bytes,
+the form the retention stage names it by. Its inbox name, `openev-<id>-<file name>`, carries the
+camp file's title, so it stays in memory where the run needs it to find the file and is never
+serialised; a failed fetch or import whose error quotes it has it taken out of the stage's reason
+(`v1-e34-t12`).
 """
 
 from __future__ import annotations
@@ -212,7 +240,7 @@ import logging
 import os
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
@@ -344,13 +372,23 @@ BULK_DOWNLOAD_WINDOW: Final = timedelta(hours=24)
 
 DOWNLOAD_LEDGER_SCHEMA_VERSION: Final = 1
 
-RUN_SUMMARY_SCHEMA_VERSION: Final = 2
+RUN_SUMMARY_SCHEMA_VERSION: Final = 3
 """The shape of :meth:`RunSummary.as_json`.
 
 Version 2 (`v1-e34-t06`) reports the download window as `bulk_download_window_start` and
 `bulk_downloads_spent_in_window`. The summaries written before it carry no version and report
 `bulk_downloads_spent_today` instead; nothing reads them back, and `caselist runs` reads the run
 log (:mod:`debate_core.application.sync_runs`), whose records have neither field.
+
+A key added since leaves the version as it is (`v1-e34-t07`'s rule): it changes no existing key, and
+nothing reads a summary back. Under version 2 these were `note`, `openev_skipped_as_removed`
+(`v1-e34-t07`), `inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of`
+(`v1-e34-t08`).
+
+Version 3 (`v1-e34-t12`) removes an OpenEv selection's `inbox_name`, `openev-<id>-<file name>`,
+because a camp file's name is its title, and adds `inbox_file`, the start of the download's SHA-256
+when the run had its bytes. A key removed is not additive, so the version moves. No code reads the
+summary back; the operator reads it with `jq`, and a filter on `inbox_name` now finds nothing.
 """
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
@@ -521,12 +559,15 @@ class ArchiveSelection:
 class OpenEvSelection:
     """One listed OpenEv camp file, and what this run decided about it.
 
-    Named by its `openev_id` and the inbox name it downloads to. The file's own upstream path names
-    a camp's file and is never carried here (`docs/policies/caselist-data-use.md` rule 4).
+    Named by its `openev_id`, and by the start of its SHA-256 once the run has its bytes. Its inbox
+    name and its upstream path both carry the camp file's name, which is its title, so neither is
+    ever in the summary (`docs/policies/caselist-data-use.md` rule 4, `v1-e34-t12`).
     """
 
     openev_id: int
     inbox_name: str
+    """`openev-<id>-<file name>`, where the download lands. For finding the file; never serialised."""
+
     year: int
     event: Event | None
     decision: SelectionDecision
@@ -534,18 +575,41 @@ class OpenEvSelection:
     note: str | None = None
     """Why the decision deserves an operator's eye, when it does. Ids and codes only, never a path."""
 
+    revision_of: int | None = None
+    """The OpenEv id this file was uploaded again in place of, when the run takes it as a revision.
+
+    Set only when the file is fetched or imported from the inbox. See "A camp file that changed
+    upstream" in the module docstring (`v1-e34-t08`). An id, never a path or a title.
+    """
+
+    download_sha256: str | None = None
+    """The SHA-256 of its bytes, when this run has them: found in the inbox, or fetched by this run."""
+
     @property
     def wanted(self) -> bool:
         return self.decision is SelectionDecision.DOWNLOAD
 
+    @property
+    def label(self) -> str:
+        """How a stage's reason names it: `openev-<id>`, and `(sha256 <first 12 hex>)` when known."""
+        if self.download_sha256 is None:
+            return f"openev-{self.openev_id}"
+        return f"openev-{self.openev_id} ({_sha256_label(self.download_sha256)})"
+
+    def with_download(self, sha256: str) -> OpenEvSelection:
+        """The same selection, knowing the bytes this run fetched."""
+        return replace(self, download_sha256=sha256)
+
     def as_json(self) -> dict[str, object]:
         return {
             "openev_id": self.openev_id,
-            "inbox_name": self.inbox_name,
+            # Named as `inbox_retention` names the same file, so the two can be read together.
+            "inbox_file": _sha256_label(self.download_sha256) if self.download_sha256 else None,
             "year": self.year,
             "event": str(self.event) if self.event is not None else None,
             "decision": str(self.decision),
             "note": self.note,
+            "revision_of": self.revision_of,
         }
 
 
@@ -1670,7 +1734,11 @@ class CaselistSyncService:
             )
         else:
             detail = f"{listed}{fetch} to fetch; {window}"
-        tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, detail + _removal_sentence(plan.openev))
+        tally.record(
+            SyncStage.SELECT,
+            StageOutcome.COMPLETED,
+            detail + _removal_sentence(plan.openev) + _revision_sentence(plan.openev),
+        )
         return plan
 
     async def _select_archives(self, caselist: str, *, inbox_names: frozenset[str]) -> list[ArchiveSelection]:
@@ -1707,11 +1775,14 @@ class CaselistSyncService:
 
         "Already imported" is decided against what the release manifest records, not against the
         name the sync would give the file (`v1-e34-t06` ac3): a camp file imported by hand through
-        `caselist import-openev` is recorded under its own path. See :func:`_held_openev_ids`. A
+        `caselist import-openev` is recorded under its own path. See :func:`_match_listed_openev`,
+        which also says which listed files are revisions of an id no longer listed (`v1-e34-t08`). A
         file the manifest does not record is then judged against the suppression list before it is
-        fetched or imported from the inbox (`v1-e34-t07`): see :meth:`_judge_unrecorded`.
+        fetched or imported from the inbox (`v1-e34-t07`): see :meth:`_judge_unrecorded`. A revision
+        is judged there too, so the removed-path hold is decided before the revision is fetched.
         """
         files = await self._source.list_openev(year=self._openev_year)
+        listed_anywhere = frozenset(file.openev_id for file in files)
         placed: list[tuple[OpenEvFile, int, Event | None]] = []
         by_release: dict[tuple[int, Event], list[OpenEvFile]] = {}
         for file in files:
@@ -1721,8 +1792,8 @@ class CaselistSyncService:
             if event is not None:
                 by_release.setdefault((year, event), []).append(file)
         recorded = {release: self._recorded_openev(*release) for release in by_release}
-        held = {
-            release: _held_openev_ids(listed, recorded[release].paths)
+        matched = {
+            release: _match_listed_openev(listed, recorded[release].paths, listed_anywhere=listed_anywhere)
             for release, listed in by_release.items()
         }
         remembered = self._deliveries.read()
@@ -1731,12 +1802,15 @@ class CaselistSyncService:
         for file, year, event in placed:
             inbox_name = openev_inbox_name(file)
             note: str | None = None
+            revision_of: int | None = None
+            inbox_digest: str | None = None
             if event is None:
                 decision = SelectionDecision.NO_EVENT_CONFIGURED
-            elif file.openev_id in held[(year, event)]:
+            elif file.openev_id in matched[(year, event)].held:
                 decision = SelectionDecision.ALREADY_IMPORTED
             else:
                 release = recorded[(year, event)]
+                replaces = matched[(year, event)].revisions.get(file.openev_id, frozenset())
                 in_inbox = inbox_name in inbox_names
                 inbox_digest = _digest_of(self._inbox / inbox_name) if in_inbox else None
                 if inbox_digest is not None and inbox_digest in release.download_digests:
@@ -1750,12 +1824,21 @@ class CaselistSyncService:
                         remembered,
                         suppression,
                         in_inbox=(self._inbox / inbox_name, inbox_digest) if inbox_digest else None,
+                        replaces=replaces,
                     )
                     # Otherwise in the inbox, its import failed or never ran, and this run imports
-                    # it (v1-e34-t06 ac1); or it is new, and this run fetches it.
+                    # it (v1-e34-t06 ac1); or it is new, or a revision, and this run fetches it.
                     decision = judged or (
                         SelectionDecision.ALREADY_IN_INBOX if in_inbox else SelectionDecision.DOWNLOAD
                     )
+                    if judged is None and replaces:
+                        # Ids are AUTO_INCREMENT upstream: the highest is the version uploaded last.
+                        revision_of = max(replaces)
+                        logger.info(
+                            "caselist sync: OpenEv file %d is a revision of %d, which is no longer listed",
+                            file.openev_id,
+                            revision_of,
+                        )
             selections.append(
                 OpenEvSelection(
                     openev_id=file.openev_id,
@@ -1765,6 +1848,8 @@ class CaselistSyncService:
                     decision=decision,
                     file=file,
                     note=note,
+                    revision_of=revision_of,
+                    download_sha256=inbox_digest,
                 )
             )
         return selections
@@ -1777,30 +1862,50 @@ class CaselistSyncService:
         suppression: _SuppressionReadOnce,
         *,
         in_inbox: tuple[Path, str] | None,
+        replaces: frozenset[int] = frozenset(),
     ) -> tuple[SelectionDecision | None, str | None]:
         """Whether a camp file the manifest does not record was removed, and so must not be fetched.
 
         Returns a decision, or `None` to fetch it (or import it from the inbox) as before, and a
-        note for the operator. The suppression list decides; the delivery record and the inbox only
-        say which digests to ask it about (see "A camp file that was removed" in the module
-        docstring):
+        note for the operator. The suppression list decides; the delivery record, the inbox and the
+        old rows of a revision only say which digests to ask it about (see "A camp file that was
+        removed" in the module docstring):
 
-        * Every member this id delivered is suppressed: `SKIPPED_AS_REMOVED`.
+        * A remembered id that delivered no member at all — a camp release of junk alone: it was
+          imported, and holds nothing to import again or to remove, so `ALREADY_IMPORTED`
+          (`v1-e30-t09` Follow-up 4, `v1-e34-t08`).
+        * An id the record does not know, at the upstream path of a remembered id whose members are
+          all suppressed, or a revision (`replaces`, the old ids whose rows are at its path) one of
+          whose old rows' bytes are all suppressed: `SAME_PATH_AS_A_REMOVED_FILE`, a policy default
+          (:meth:`_removed_path_hold`). The old rows are asked as well as the record because a
+          removal made on another machine leaves this machine's rows in place, and the record may
+          not know the old id. This is asked first, before a copy in the inbox is read, and decides
+          for the copy too (`v1-e34-t14`): the copy can be there only because it was downloaded
+          before this machine knew of the removal, and a held copy is left in the inbox untouched.
+        * Every member this id delivered — by the record, or by its copy in the inbox — is
+          suppressed: `SKIPPED_AS_REMOVED`.
         * Every member is recorded in the release manifest or suppressed — a camp release some of
           whose members were removed: `ALREADY_IMPORTED`.
         * A remembered id whose bytes are neither: fetched, with a note. The usual cause is an
           `unsuppress`, which is why it is fetched rather than skipped on the record's word.
-        * An id never seen, at the upstream path of a remembered id whose members are all
-          suppressed: `SAME_PATH_AS_A_REMOVED_FILE`, a policy default.
 
         With a list that cannot be read, nothing here can tell removed from not: a remembered id or
-        a re-upload is left for a later run, and a file in the inbox goes on to an import that will
+        a re-upload is left for a later run — a re-upload whose copy is in the inbox as well, rather
+        than imported on a guess — and any other file in the inbox goes on to an import that will
         meet the same unreadable list and fail with its own reason.
         """
         delivery = remembered.get(file.openev_id)
         from_record = delivery is not None
-        if delivery is None and in_inbox is not None:
-            delivery = self._delivery_in_inbox(*in_inbox)
+        if delivery is not None and not delivery.member_sha256:
+            return SelectionDecision.ALREADY_IMPORTED, None
+        if delivery is None:
+            # Before the inbox copy is read (`v1-e34-t14`): a copy changes whether a download is
+            # needed, never whether the file may be imported.
+            held = await self._removed_path_hold(file, release, remembered, suppression, replaces=replaces)
+            if held is not None:
+                return held
+            if in_inbox is not None:
+                delivery = self._delivery_in_inbox(*in_inbox)
         if delivery is not None and delivery.member_sha256:
             members = delivery.member_sha256
             state = await suppression.state()
@@ -1826,23 +1931,41 @@ class CaselistSyncService:
             )
             logger.warning("caselist sync: OpenEv file %d was %s; fetching it again", file.openev_id, note)
             return None, note
-        if delivery is None:
-            path = _path_digest(file.path)
-            earlier = [
-                one
-                for openev_id, one in remembered.items()
-                if openev_id != file.openev_id and one.path_sha256 == path and one.member_sha256
-            ]
-            if not earlier:
-                return None, None
-            state = await suppression.state()
-            if state is None:
-                return SelectionDecision.SUPPRESSION_LIST_UNREADABLE, None
-            if any(all(state.suppresses_source(member) for member in one.member_sha256) for one in earlier):
-                note = "a new id at the upstream path of a camp file that was removed; the removal covers it"
-                logger.warning("caselist sync: OpenEv file %d is %s", file.openev_id, note)
-                return SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE, note
         return None, None
+
+    async def _removed_path_hold(
+        self,
+        file: OpenEvFile,
+        release: _RecordedOpenEv,
+        remembered: Mapping[int, OpenEvDelivery],
+        suppression: _SuppressionReadOnce,
+        *,
+        replaces: frozenset[int],
+    ) -> tuple[SelectionDecision, str | None] | None:
+        """The removed-path hold (`v1-e34-t07`) for an id the delivery record does not know, or `None`.
+
+        Asks the list about every earlier id at `file`'s upstream path: what the delivery record
+        remembers there, and for a revision the old rows' own bytes (`v1-e34-t08`). It is asked
+        whether or not the inbox holds a copy of `file` (`v1-e34-t14`). With no earlier id it reads
+        nothing; with one and a list that cannot be read, the file waits.
+        """
+        path = _path_digest(file.path)
+        earlier = [
+            one.member_sha256
+            for openev_id, one in remembered.items()
+            if openev_id != file.openev_id and one.path_sha256 == path and one.member_sha256
+        ]
+        earlier.extend(old for one in sorted(replaces) if (old := release.digests_named_by_id.get(one)))
+        if not earlier:
+            return None
+        state = await suppression.state()
+        if state is None:
+            return SelectionDecision.SUPPRESSION_LIST_UNREADABLE, None
+        if any(all(state.suppresses_source(member) for member in one) for one in earlier):
+            note = "a new id at the upstream path of a camp file that was removed; the removal covers it"
+            logger.warning("caselist sync: OpenEv file %d is %s", file.openev_id, note)
+            return SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE, note
+        return None
 
     def _delivery_in_inbox(self, path: Path, digest: str) -> OpenEvDelivery | None:
         """What a download still in the inbox delivered, read from its bytes: a zip's members, or itself.
@@ -1878,6 +2001,7 @@ class CaselistSyncService:
         paths: set[str] = set()
         stored: set[str] = set()
         digests: set[str] = set()
+        named: dict[int, set[str]] = {}
         for line in read_manifest_lines(self._manifest_path(key)):
             try:
                 row: object = json.loads(line)
@@ -1889,16 +2013,22 @@ class CaselistSyncService:
             if fields.get("classification") is None:
                 continue
             path = fields.get("path")
+            sha256 = fields.get("sha256")
             if isinstance(path, str):
                 paths.add(path)
-            sha256 = fields.get("sha256")
+                openev_id = openev_id_of_inbox_name(_PATH_SEPARATORS.split(path)[-1])
+                if openev_id is not None and isinstance(sha256, str):
+                    named.setdefault(openev_id, set()).add(sha256)
             if fields.get("classification") in _STORED_CLASSIFICATION_NAMES and isinstance(sha256, str):
                 stored.add(sha256)
             download = fields.get("archive_sha256")
             if isinstance(download, str):
                 digests.add(download)
         return _RecordedOpenEv(
-            paths=frozenset(paths), stored_digests=frozenset(stored), download_digests=frozenset(digests)
+            paths=frozenset(paths),
+            stored_digests=frozenset(stored),
+            download_digests=frozenset(digests),
+            digests_named_by_id={one: frozenset(found) for one, found in named.items()},
         )
 
     def _inbox_names(self) -> frozenset[str]:
@@ -2032,10 +2162,16 @@ class CaselistSyncService:
                     continue
                 try:
                     downloaded = await self._source.download_openev(file, self._inbox)
-                except DomainError as refused:
-                    failure = f"openev-{openev_selection.openev_id}: {refused}"
+                except (DomainError, OSError) as refused:
+                    failure = _camp_download_refused(openev_selection, refused)
                     break
                 tally.downloaded_openev.append((openev_selection, downloaded))
+                tally.openev = tuple(
+                    one.with_download(downloaded.sha256)
+                    if one.openev_id == openev_selection.openev_id
+                    else one
+                    for one in tally.openev
+                )
 
         fetched = len(tally.downloaded_archives) + len(tally.downloaded_openev)
         if failure is not None and deferred_from is None:
@@ -2084,8 +2220,8 @@ class CaselistSyncService:
                 await self._import_openev(
                     openev_selection, self._downloaded(tally, openev_selection.inbox_name, path), tally
                 )
-            except DomainError as refused:
-                failures.append(f"openev-{openev_selection.openev_id}: {refused}")
+            except (DomainError, OSError) as refused:
+                failures.append(_camp_download_refused(openev_selection, refused))
         waiting = (
             f"; {held_back} archive(s) in the inbox held back for a later run, behind an older week"
             if held_back
@@ -2491,7 +2627,7 @@ class CaselistSyncService:
         openev_id = openev_id_of_inbox_name(name)
         if openev_id is None:
             return _JudgedLocally(
-                f"sha256 {digest[:12]}", InboxFileKind.OTHER, size, path, RetentionDecision.UNCLASSIFIED
+                _sha256_label(digest), InboxFileKind.OTHER, size, path, RetentionDecision.UNCLASSIFIED
             )
         in_releases = releases.get(digest, frozenset())
         if not in_releases:
@@ -2503,7 +2639,7 @@ class CaselistSyncService:
         else:
             kept_because = None
         return _JudgedLocally(
-            f"sha256 {digest[:12]}",
+            _sha256_label(digest),
             InboxFileKind.CAMP_DOWNLOAD,
             size,
             path,
@@ -2833,8 +2969,9 @@ def _removal_sentence(openev: Sequence[OpenEvSelection]) -> str:
     parts: list[str] = []
     if skipped := ids(SelectionDecision.SKIPPED_AS_REMOVED):
         parts.append(f"{len(skipped)} OpenEv file(s) skipped as removed")
-    if same_path := ids(SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE):
-        listed = ", ".join(f"openev-{one}" for one in same_path)
+    if same_path := [one for one in openev if one.decision is SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE]:
+        # By `label`: a held copy already in the inbox is named by its digest too (`v1-e34-t14`).
+        listed = ", ".join(one.label for one in same_path)
         parts.append(f"{len(same_path)} held back as a new id at a removed file's path ({listed})")
     if unreadable := ids(SelectionDecision.SUPPRESSION_LIST_UNREADABLE):
         parts.append(f"{len(unreadable)} not fetched because the suppression list could not be read")
@@ -2845,6 +2982,44 @@ def _removal_sentence(openev: Sequence[OpenEvSelection]) -> str:
             f"{len(noted)} fetched before and neither recorded nor suppressed now, so taken again ({listed})"
         )
     return "; " + "; ".join(parts) if parts else ""
+
+
+def _revision_sentence(openev: Sequence[OpenEvSelection]) -> str:
+    """Which camp files this run takes as revisions, old id to new, for the select stage's reason.
+
+    The run log keeps that reason. OpenEv ids only: never a title, a path or an inbox name.
+    """
+    revised = [(one.revision_of, one.openev_id) for one in openev if one.revision_of is not None]
+    if not revised:
+        return ""
+    listed = ", ".join(f"openev-{old} -> openev-{new}" for old, new in revised)
+    return f"; {len(revised)} taken as a revision of an id no longer listed ({listed})"
+
+
+def _camp_download_refused(selection: OpenEvSelection, refused: DomainError | OSError) -> str:
+    """A camp download's failed fetch or import, for a stage's reason: by id and digest, never by name.
+
+    The error's own message can name the file: the archive reader says which file it could not read,
+    by its inbox name (`openev-<id>-<file name>`), and a camp file's name is its title. Every name the
+    file goes by, here and upstream, is replaced by "the download" (`v1-e34-t12`).
+
+    An `OSError` — the inbox refusing the write, or the file the read — is given by its class alone,
+    as the run log gives any error this project did not write: its message quotes the path it failed
+    on. It used to end the run, and `caselist pull --json` printed that message as the command's
+    error; it is now the fetch or import failing, like any other refusal of that file.
+    """
+    if not isinstance(refused, DomainError):
+        return f"{selection.label}: {type(refused).__name__}"
+    message = str(refused)
+    file = selection.file
+    names = {selection.inbox_name}
+    if file is not None:
+        names.update((file.path, file.path.lstrip("/"), _PATH_SEPARATORS.split(file.path)[-1]))
+        if file.filename:
+            names.add(file.filename)
+    for name in sorted((one for one in names if one), key=len, reverse=True):
+        message = message.replace(name, "the download")
+    return f"{selection.label}: {message}"
 
 
 def _imported_by(plan: SyncPlan) -> tuple[tuple[str, ...], int]:
@@ -2889,6 +3064,13 @@ class _RecordedOpenEv:
     paths: frozenset[str]
     stored_digests: frozenset[str]
     download_digests: frozenset[str]
+    digests_named_by_id: Mapping[int, frozenset[str]] = field(
+        default_factory=lambda: dict[int, frozenset[str]]()
+    )
+    """The bytes of the rows whose file name says which OpenEv id they came from (`openev-<id>-…`).
+
+    What a revision's old rows hold, for the removed-path hold to ask the list about (`v1-e34-t08`).
+    """
 
 
 _STORED_CLASSIFICATION_NAMES: Final = frozenset(str(one) for one in STORED_CLASSIFICATIONS)
@@ -2921,6 +3103,11 @@ class _SuppressionReadOnce:
                     type(unreadable).__name__,
                 )
         return self._state
+
+
+def _sha256_label(digest: str) -> str:
+    """`sha256 <first 12 hex>`: how a summary names a file it may not name by its file name (`v1-e34-t11`)."""
+    return f"sha256 {digest[:12]}"
 
 
 def _path_digest(path: str) -> str:
@@ -2997,8 +3184,25 @@ def _comparable_components(path: str) -> tuple[str, ...]:
     )
 
 
-def _held_openev_ids(listed: Sequence[OpenEvFile], recorded_paths: Iterable[str]) -> frozenset[int]:
-    """The listed camp files a release manifest already records, however they were imported.
+@dataclass(frozen=True, slots=True)
+class _ReleaseMatch:
+    """What a release manifest's rows say about the release's listed camp files."""
+
+    held: frozenset[int]
+    """Recorded already, however they were imported: not fetched again."""
+
+    revisions: Mapping[int, frozenset[int]]
+    """Listed files at the path of rows naming an id listed nowhere, each with those ids.
+
+    A file in :attr:`held` may be here too, when another row holds it; the selection asks `held`
+    first, so it is held.
+    """
+
+
+def _match_listed_openev(
+    listed: Sequence[OpenEvFile], recorded_paths: Iterable[str], *, listed_anywhere: frozenset[int]
+) -> _ReleaseMatch:
+    """Which listed camp files a release manifest already records, and which revise one it records.
 
     A recorded path names a listed file in one of two ways:
 
@@ -3010,6 +3214,14 @@ def _held_openev_ids(listed: Sequence[OpenEvFile], recorded_paths: Iterable[str]
       imported without its folder could be either, and a wrong guess would leave a camp file the
       store does not hold undownloaded for good. Both are fetched instead, and the one already held
       costs a download and a `DUPLICATE` row.
+
+    A path matched only by path holds the file, with one exception (`v1-e34-t08`): a row that names
+    its own id, where that id is listed nowhere upstream (`listed_anywhere`, the whole listing, not
+    this release's part of it). OpenEv changes a file only by deleting it and uploading it again,
+    so that row is an old version, and the listed file at its path is its **revision**: not held.
+    A row that names no id, a hand import, cannot say which upload it came from, and still holds
+    the file at its path; so does a row whose id is still listed. A file any row holds is held,
+    whatever else is at its path: the selection asks :attr:`_ReleaseMatch.held` first.
     """
     ids = {file.openev_id for file in listed}
     by_name: dict[str, list[tuple[int, tuple[str, ...]]]] = {}
@@ -3018,12 +3230,15 @@ def _held_openev_ids(listed: Sequence[OpenEvFile], recorded_paths: Iterable[str]
         if components:
             by_name.setdefault(components[-1], []).append((file.openev_id, components))
     held: set[int] = set()
+    revised: dict[int, set[int]] = {}
     for path in recorded_paths:
         *folders, name = _PATH_SEPARATORS.split(path)
         prefixed = _OPENEV_INBOX_PREFIX.match(name)
+        named: int | None = None
         if prefixed is not None:
-            if int(prefixed.group(1)) in ids:
-                held.add(int(prefixed.group(1)))
+            named = int(prefixed.group(1))
+            if named in ids:
+                held.add(named)
                 continue
             name = name[prefixed.end() :]
         components = _comparable_components("/".join([*folders, name]))
@@ -3035,9 +3250,16 @@ def _held_openev_ids(listed: Sequence[OpenEvFile], recorded_paths: Iterable[str]
         ]
         longest = max((length for length, _ in shared), default=0)
         winners = [openev_id for length, openev_id in shared if length == longest]
-        if len(winners) == 1:
+        if len(winners) != 1:
+            continue
+        if named is not None and named not in listed_anywhere:
+            revised.setdefault(winners[0], set()).add(named)
+        else:
             held.add(winners[0])
-    return frozenset(held)
+    return _ReleaseMatch(
+        held=frozenset(held),
+        revisions={new: frozenset(old) for new, old in revised.items()},
+    )
 
 
 def _shared_tail(one: tuple[str, ...], other: tuple[str, ...]) -> int:

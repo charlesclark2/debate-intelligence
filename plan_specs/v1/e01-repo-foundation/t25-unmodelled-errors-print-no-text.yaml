@@ -1,0 +1,82 @@
+# TASK v1-e01-t25-unmodelled-errors-print-no-text - An unexpected error never prints its message on the command line
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t25-unmodelled-errors-print-no-text
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "An unexpected error never prints its message on the command line"
+spec:
+  # Filed by the PM, 2026-10-08, from v1-e34-t12's Follow-up work 2.
+  description: >-
+    The CLI's generic handler in `debate_cli.app` turns any exception it does not model into
+    exit 70 and prints `str(exception)` in the error envelope and on stderr. An `OSError` there
+    quotes a full path, which carries the home directory and, for files in the inbox, a camp
+    file's title; v1-e34-t12 closed the camp-download routes into it, but every other command
+    still reaches it. Print the exception's class and a fixed sentence pointing at `--verbose`,
+    keep the full traceback behind `--verbose` only, and keep exit 70. Out of scope: errors the
+    CLI already models, which keep their messages, and the exit-code mapping v1-e01-t20 settled.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests, docs]
+    forbidden:
+      - An unmodelled exception's message, a path or a file name in the default output or the JSON envelope
+      - Changing exit 70 or any modelled error's exit code or message
+  context:
+    - kind: TaskRef
+      name: v1-e01-t20-retryable-failures-exit-3
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An unmodelled exception whose message holds a distinctive probe string (a path and a
+        title) produces output and a JSON envelope without the probe, shown failing first,
+        and still exits 70 naming the exception class.
+    - id: ac2
+      description: >-
+        `--verbose` still shows the traceback with the message, and a modelled `DomainError`
+        still prints its own message, both by test.
+    - id: ac3
+      description: >-
+        The CLI README's exit-code section says what exit 70 prints and how to get the
+        detail.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t25-unmodelled-errors-print-no-text-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Strip the message from the generic handler, keep it behind --verbose, prove it with a probe.
+  goalRef:
+    name: v1-e01-t25-unmodelled-errors-print-no-text
+  graph:
+    nodes:
+      - id: generic-handler
+        kind: Task
+        name: The generic handler prints the class, not the message
+        description: >-
+          The handler change, the probe test, and the README.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests]
+status:
+  phase: Pending

@@ -587,5 +587,66 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t23-managed-python
+    - id: t24
+      kind: Task
+      name: 'A partial merge''s open items are read from the current session''s sections'
+      description: >-
+        `scripts/task pr --partial` reads the open-items markers only from the current
+        session's sections, so a resumed report cannot pass on an earlier session's NOT RUN.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t24-partial-open-items-current-session.yaml
+        goalRef: v1-e01-t24-partial-open-items-current-session
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t24-partial-open-items-current-session reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t24-partial-open-items-current-session
+    - id: t25
+      kind: Task
+      name: 'An unexpected error never prints its message on the command line'
+      description: >-
+        The CLI's catch-all prints an unexpected exception's class and a pointer to
+        --verbose, never its message, so no path or camp title reaches the terminal by that
+        route.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t25-unmodelled-errors-print-no-text.yaml
+        goalRef: v1-e01-t25-unmodelled-errors-print-no-text
+      dependsOn:
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t25-unmodelled-errors-print-no-text reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t25-unmodelled-errors-print-no-text
+    - id: t26
+      kind: Task
+      name: 'The manual sweep also opens the back-merge pull request'
+      description: >-
+        The dispatched sweep also opens the back-merge pull request, so recovering from a
+        lost push to main is one click.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t26-dispatch-opens-back-merge.yaml
+        goalRef: v1-e01-t26-dispatch-opens-back-merge
+      dependsOn:
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t26-dispatch-opens-back-merge reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t26-dispatch-opens-back-merge
 status:
   phase: Pending

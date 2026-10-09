@@ -103,8 +103,10 @@ not distinct keys:
 
 ## Running them
 
+The first command runs every binding; the second only the snapshot store's.
+
 ```bash
-uv run pytest packages/debate_core/tests/contracts            # every binding
+uv run pytest packages/debate_core/tests/contracts
 uv run pytest packages/debate_core/tests/contracts -k snapshot_store
 ```
 

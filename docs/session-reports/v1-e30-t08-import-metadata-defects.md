@@ -556,3 +556,38 @@ Accepted. Both requested changes are made, and the earlier review and everything
 - If the operator would rather merge first, `scripts/task pr --partial` is authorised on this review.
 
 Follow-up work: the PM files the `caselist status` hint (a manifest mismatch needs a publish, not a person) as an E30 task (priority 3).
+
+## Operator results and close-out (2026-10-09)
+
+The operator ran the follow-ups from this task worktree on 2026-10-09, against the dev store
+`~/.debate-research/dev`, and pasted the output into the session. Every count matches what the read-only
+measurement predicted. The results are recorded in
+[`docs/data/caselist-backfill-2026-09.md`](../data/caselist-backfill-2026-09.md), section *Camp
+metadata corrected, 2026-10-09*. The Goal is now `Succeeded`.
+
+| Criterion | Status | Evidence (command → result) |
+|---|---|---|
+| **ac2**: re-importing the 105 camp files in the dev store corrects camp and title in place, changes no sha256 and no manifest key, downloads nothing | PASS | Dry run, then `caselist reimport-openev-metadata --year 2026 --event policy --json` → `rows 105`, `rows_changed 105`, `titles_changed 104`, `camps_before {"UNKNOWN": 105}`, `camps_after` 14 camps plus `UNKNOWN 1` (the table in the data doc), `camp_files_updated 102`, `camp_files_missing 0`, `blobs_missing 0`, `manifest_key manifests/openev/2026-policy.jsonl`. No download: the command has no network port. The dev and prod publishes uploaded 0 sources and skipped all 102, so every sha256 key was already there and unchanged. |
+| **ac4**: neither fix alters a stored byte, a sha256 or a manifest key, proved by `caselist status` against the dev bucket finding no drift | PASS | Regression tests: see Acceptance criteria above. Dev, after the republish: `caselist status --caselist openev` → **Every snapshot agrees** (1 snapshot, 102/102, 0 missing, 0 mismatches). The loop over `hsld26`, `hspolicy26`, `hspf26` → **Every snapshot agrees** each (14, 13 and 13 snapshots). Prod, after `publish --confirm-prod` (0 uploaded, 102 skipped, manifest `uploaded`): unscoped `caselist status` → **Every snapshot agrees**, all 41 snapshots. The operator confirmed the variables were unset afterwards (`DEBATE_ENV=unset`). |
+
+Commands run by the session afterwards: `uv run scripts/task_helper.py set-phase
+v1-e30-t08-import-metadata-defects Succeeded`, then `uv run scripts/validate_specs.py` → `OK: 319 files,
+38 epics, 261 tasks, 20 releases`, and `--require-succeeded v1-e30-t08-import-metadata-defects` →
+`Succeeded`.
+
+The PM's caution in the last review is noted and not acted on here, as the review asks. Spellings
+that are ordinary words or proper nouns (`Wake`, `Harvard`, `Emory`) could attribute a camp-less
+file whose title uses them; in this release none does. If one ever does, the fix is to prefer the
+camp block's position, not to widen detection.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

@@ -379,3 +379,57 @@ planned the same counts.
 sync ("Every snapshot agrees"), and `store ls manifests/hsld26/2026-09-15.jsonl` returned 930.7 KB.
 
 prod status: in sync
+
+## Camp metadata corrected, 2026-10-09 (`v1-e30-t08`)
+
+The 105 camp files above were imported with camp `UNKNOWN`. On 2026-10-09 the operator ran
+`caselist reimport-openev-metadata --year 2026 --event policy` against this store
+(`~/.debate-research/dev`), with the alias table as `v1-e30-t08` leaves it, then republished the
+release manifest to dev and to prod. Following
+[`docs/runbooks/caselist-backfill.md`](../runbooks/caselist-backfill.md), *After the backfill:
+correct the camp files' camp and title*. Nothing was downloaded, no source was uploaded, and no
+sha256 or manifest key changed.
+
+| Camp | Files before | Files after |
+|---|---|---|
+| CNDI | 0 | 5 |
+| DDI | 0 | 27 |
+| Emory | 0 | 1 |
+| Georgetown | 0 | 2 |
+| Gonzaga | 0 | 2 |
+| Harvard | 0 | 8 |
+| JDI | 0 | 4 |
+| Mean Green | 0 | 1 |
+| Michigan | 0 | 40 |
+| MSDI | 0 | 6 |
+| NHSI | 0 | 2 |
+| UTNIF | 0 | 3 |
+| Wake Forest | 0 | 2 |
+| Wyoming | 0 | 1 |
+| **UNKNOWN** | **105** | **1** |
+
+From the re-import's `--json`:
+
+* **Titles changed: 104.** Rows re-derived: 105; rows changed: 105. The one file still `UNKNOWN`
+  carries a reworded warning. Its camp position names a high school, not a camp, so it is left out
+  of the alias table on purpose.
+* Camp-file records updated: 102 (one per distinct file), with 0 missing and 0 files not held
+  locally.
+* The dry run first planned the same counts.
+
+| Step | Environment | Result |
+|---|---|---|
+| `caselist publish --caselist openev --snapshot 2026-policy` | dev | 0 uploaded, 102 skipped, 0 failed; manifest `uploaded` |
+| `caselist status --caselist openev` | dev | exit `0`, **Every snapshot agrees**: 1 snapshot, 102/102 |
+| `caselist status --caselist hsld26`, `hspolicy26`, `hspf26` | dev | each **Every snapshot agrees**: 14, 13 and 13 snapshots, 0 missing, 0 mismatches |
+| `caselist publish … --dry-run` | prod | 0 uploads planned, 102 present, manifest `verify` |
+| `caselist publish … --confirm-prod` | prod | 0 uploaded, 102 skipped, 0 failed; manifest `uploaded` |
+| `caselist status` | prod | **Every snapshot agrees**: all 41 snapshots, 0 missing, 0 mismatches |
+
+Dev's status was checked one caselist at a time. An unscoped dev status exits `1` because the dev
+bucket also holds `testcl26`, kept by PM decision. The superseded manifest stays in each bucket as
+a noncurrent version for its retention window: 30 days in dev, 365 in prod.
+
+dev status (openev, hsld26, hspolicy26, hspf26): in sync
+
+prod status: in sync

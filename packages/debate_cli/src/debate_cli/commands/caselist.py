@@ -149,6 +149,7 @@ from debate_core.application.caselist.publish_service import (
     SourceResult,
 )
 from debate_core.application.caselist.status_service import CaselistStatusReport, SnapshotStatus
+from debate_core.application.caselist_sync import full_archive_of_inbox_name
 from debate_core.application.settings import ConfigurationError, Environment, Settings
 from debate_core.domain.caselist import Event
 
@@ -231,6 +232,8 @@ def import_archive(
     """Import one weekly caselist archive, deduplicated against the ones already imported."""
     cli = cli_context(ctx)
     cli.services.settings  # noqa: B018 - loaded first, so a broken profile is reported before a bad flag
+    if full_archive_of_inbox_name(source.name) is not None:
+        raise CompleteArchiveNotImportedByHand(source.name)
     published = _snapshot_date(snapshot)
     resolved_event = event or event_for_caselist(caselist)
     if resolved_event is None:
@@ -760,6 +763,24 @@ def _snapshot_date(value: str) -> date:
         return date.fromisoformat(value.strip())
     except ValueError as malformed:
         raise InvalidSnapshotDate(value) from malformed
+
+
+class CompleteArchiveNotImportedByHand(ConfigurationError):
+    """`caselist import` was given a complete archive (`<slug>-all-<date>.zip`, `v1-e34-t04`).
+
+    This command files into the weekly series, where a complete archive collides with the weekly of
+    its date and strands every older one (ADR-0017, revision of 2026-09-26). It is imported as its
+    own snapshot by `caselist pull --full-archive <slug>` instead. Recognised by its name, as the
+    site and the pull name it; a renamed copy is not recognised.
+    """
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            f"{name} is a complete archive, which `caselist import` would file into the weekly series; "
+            "import it with `caselist pull --full-archive <slug>`, which files it as its own snapshot",
+            field="source",
+            source="cli",
+        )
 
 
 class InvalidSnapshotDate(ConfigurationError):

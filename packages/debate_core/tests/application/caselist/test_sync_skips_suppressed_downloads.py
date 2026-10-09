@@ -270,6 +270,13 @@ def release_classifications(world: RemovalWorld) -> dict[str, int]:
     return next(row for row in rows if row["kind"] == "summary")["classifications"]
 
 
+def release_member_paths(world: RemovalWorld) -> list[str]:
+    """The release manifest's member rows, by path, in the order the manifest keeps them."""
+    path = world.local.object_path_for(openev_manifest_key(YEAR, Event.POLICY))  # type: ignore[misc]
+    rows = [json.loads(line) for line in read_manifest_lines(path)]
+    return [row["path"] for row in rows if row["kind"] == "member"]
+
+
 def select_reason(summary: RunSummary) -> str:
     record = summary.stage(SyncStage.SELECT)
     assert record is not None and record.reason is not None
@@ -412,7 +419,7 @@ async def test_with_the_skip_blind_the_importer_still_refuses_the_removed_file(w
     assert decisions(again) == {ESTUARY.openev_id: SelectionDecision.DOWNLOAD}
     assert again.blobs_stored == 0 and again.files_imported == 0
     assert release_classifications(world) == {"SUPPRESSED": 1}
-    assert not world.local.blob_path_for(ESTUARY_SHA256).exists()  # type: ignore[misc]
+    assert not FsSnapshotStore(world.data_dir).path_for(ESTUARY_SHA256).exists()
 
 
 # ------------------------------------------------------------------------------------------------
@@ -531,15 +538,17 @@ async def test_a_removed_file_uploaded_again_under_a_new_id_is_held_back(
     assert any("OpenEv file 640" in message for message in caplog.messages)
 
 
-async def test_a_file_uploaded_again_where_nothing_was_removed_is_held_by_its_old_row_as_before(
+async def test_a_file_uploaded_again_where_nothing_was_removed_is_fetched_as_a_revision(
     world: RemovalWorld,
 ) -> None:
-    """Not this task's rule, pinned so the report's account of it stays true. A known defect.
+    """`v1-e34-t07` pinned the defect here as `…_is_held_by_its_old_row_as_before`; `v1-e34-t08`
+    inverted it.
 
-    512's row, `openev-512-…`, names an id no longer listed, so `v1-e34-t06`'s matching reads it by
-    path, and the re-upload at that path counts as already imported: its revised bytes are never
-    fetched. `v1-e34-t08` fixes it, and must invert this test — the re-upload fetched — rather than
-    delete it.
+    512's row, `openev-512-…`, names its own id, and 512 is no longer listed, so 640 at its path is
+    a revision of it rather than a duplicate of a hand import. It is fetched, imported beside the
+    old row, which stays, and named in the summary by ids alone. Before `v1-e34-t08` the old row held
+    640 as already imported, and the revised bytes were never fetched: the session report keeps that
+    run. Once imported, 640 is held by its own row, and is not fetched again.
     """
     source = FakeOpenEvSource([(ESTUARY, DOCUMENT_BODIES["estuary-solvency"])])
     await pull(world, source)
@@ -548,8 +557,25 @@ async def test_a_file_uploaded_again_where_nothing_was_removed_is_held_by_its_ol
 
     again = await pull(world, source)
 
-    assert source.openev_fetches == [ESTUARY.openev_id]
-    assert decisions(again) == {640: SelectionDecision.ALREADY_IMPORTED}
+    assert source.openev_fetches == [ESTUARY.openev_id, 640], "the revised camp file was not fetched"
+    assert decisions(again) == {640: SelectionDecision.DOWNLOAD}
+    (selection,) = again.openev
+    assert selection.revision_of == ESTUARY.openev_id
+    assert again.blobs_stored == 1
+    assert "1 taken as a revision of an id no longer listed (openev-512 -> openev-640)" in (
+        select_reason(again)
+    )
+    assert [one["revision_of"] for one in again.as_json()["openev_selections"]] == [512]  # type: ignore[union-attr]
+    assert release_member_paths(world) == [
+        "openev-512-TSF-Estuary_Solvency_Advocate.docx",
+        "openev-640-TSF-Estuary_Solvency_Advocate.docx",
+    ]
+
+    settled = await pull(world, source)
+
+    assert source.openev_fetches == [ESTUARY.openev_id, 640], "the revision was fetched a second time"
+    assert decisions(settled) == {640: SelectionDecision.ALREADY_IMPORTED}
+    assert settled.openev[0].revision_of is None
 
 
 async def test_with_the_list_unreadable_a_remembered_file_waits_and_a_new_one_is_fetched(

@@ -227,7 +227,7 @@ def test_an_unresolved_camp_is_recorded_as_unknown_with_its_warning(harness: Har
     unknown = [one for one in harness.camp_files() if one.camp == "UNKNOWN"]
     assert [one.file_title for one in unknown] == ["Zephyr Scholars - Glacier Case Neg"]
     assert unknown[0].parse_warnings == (
-        "no folder and no filename prefix names a camp in the alias table; camp recorded as UNKNOWN",
+        "no folder and no word of the filename names a camp in the alias table; camp recorded as UNKNOWN",
     )
 
 

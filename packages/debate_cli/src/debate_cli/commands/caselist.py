@@ -1,4 +1,4 @@
-"""`debate-research caselist import | import-openev | publish | status`: archives in, the bucket out.
+"""`debate-research caselist import | import-openev | reimport-openev-metadata | publish | status`.
 
 `import` turns one downloaded archive into the local evidence store (`v1-e30-t03`), and
 `import-openev` does the same for OpenEv camp files (`v1-e30-t04`). `publish` puts what was
@@ -66,6 +66,22 @@ the import is recorded under, today by default; `--camp-aliases` replaces the pa
 table. A camp nobody listed is not a failure: the file is imported with camp `UNKNOWN` and the
 count is in the summary. Exit codes are `import`'s.
 
+## `caselist reimport-openev-metadata`
+
+::
+
+    debate-research caselist reimport-openev-metadata --year 2026 --event policy --dry-run
+    debate-research caselist reimport-openev-metadata --year 2026 --event policy
+
+Re-derives camp, lab, title and warnings for a release already imported, from the paths its
+manifest recorded, with the current alias table
+(:class:`~debate_core.application.caselist.openev_metadata_reimport.OpenEvMetadataReimportService`,
+`v1-e30-t08`). It reads the local manifest, corrects the camp-file records, and writes the manifest
+back to the same key — only when it changed, and never under `--dry-run`. It downloads nothing and
+never writes a blob, a digest or a key. The manifest's bytes change, so `caselist status` reports
+the release as drifted until `caselist publish --caselist openev --snapshot <year>-<event>`
+re-uploads it. Exit codes are `import`'s.
+
 ## `caselist publish`
 
 ::
@@ -124,6 +140,7 @@ from debate_core.application.caselist.manifest import (
 )
 from debate_core.application.caselist.openev_import_service import OpenEvImportReport
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
+from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimport
 from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
 from debate_core.application.caselist.publish_service import (
     ManifestOutcome,
@@ -144,7 +161,9 @@ __all__ = [
     "import_openev",
     "import_summary",
     "openev_import_summary",
+    "openev_metadata_reimport_summary",
     "publish",
+    "reimport_openev_metadata",
     "publish_summary",
     "status",
     "status_summary",
@@ -309,6 +328,58 @@ def import_openev(
         command_name(ctx),
         openev_import_summary(report, manifest),
         display=_openev_summary_table(report, manifest),
+    )
+
+
+def reimport_openev_metadata(
+    ctx: typer.Context,
+    year: Annotated[
+        int,
+        typer.Option("--year", min=2000, max=9999, help="Topic year of the camp release, e.g. 2026."),
+    ],
+    event: Annotated[
+        Event,
+        typer.Option("--event", case_sensitive=False, help="Event the files were cut for: ld, policy or pf."),
+    ],
+    camp_aliases: Annotated[
+        Path | None,
+        typer.Option(
+            "--camp-aliases",
+            exists=True,
+            dir_okay=False,
+            help="An alias table to use instead of the packaged camp_aliases.yaml.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Report what would change and write nothing at all."),
+    ] = False,
+) -> None:
+    """Re-derive camp and title for camp files already imported. Downloads nothing."""
+    cli = cli_context(ctx)
+    cli.services.settings  # noqa: B018 - loaded first, so a broken profile is reported before a bad flag
+    aliases = load_camp_aliases(camp_aliases)
+    manifest_path = cli.services.evidence_object_path(openev_manifest_key(year, event))
+
+    report = _run(
+        cli.services.openev_metadata_reimport().reimport(
+            year=year,
+            event=event,
+            recorded_manifest=read_manifest_lines(manifest_path),
+            aliases=aliases,
+            dry_run=dry_run,
+        )
+    )
+
+    manifest = None
+    if not dry_run and report.manifest_changed:
+        manifest = write_manifest_lines(report.manifest_lines, manifest_path)
+        cli.output.detail(f"wrote {manifest.name}")
+
+    cli.output.success(
+        command_name(ctx),
+        openev_metadata_reimport_summary(report, manifest),
+        display=_reimport_table(report, manifest),
     )
 
 
@@ -805,6 +876,63 @@ def _openev_summary_table(report: OpenEvImportReport, manifest: Path | None) -> 
         rows=rows,
         title=f"openev {report.release} ({'dry run' if not report.applied else 'imported'})",
         caption=f"{report.member_count} member(s){unknown}{disclosed}. {outcome}",
+    )
+
+
+def openev_metadata_reimport_summary(
+    report: OpenEvMetadataReimport, manifest: Path | None
+) -> dict[str, JsonValue]:
+    """The `--json` envelope's `data` for `caselist reimport-openev-metadata`.
+
+    Counts and camps only. `camps_before` and `camps_after` count member rows per camp; a camp is an
+    institution, and no path, title or file name appears here. `manifest` is the path written, or
+    `null` when nothing was (a dry run, or a manifest already right).
+    """
+    return {
+        "release": report.release,
+        "year": report.year,
+        "event": str(report.event),
+        "applied": report.applied,
+        "manifest_key": report.manifest_key,
+        "rows": report.rows,
+        "rows_changed": report.rows_changed,
+        "titles_changed": report.titles_changed,
+        "warnings_changed": report.warnings_changed,
+        "camps_before": dict(report.camps_before),
+        "camps_after": dict(report.camps_after),
+        "unknown_before": report.unknown_before,
+        "unknown_after": report.unknown_after,
+        "camp_files_updated": report.camp_files_updated,
+        "camp_files_missing": report.camp_files_missing,
+        "blobs_missing": report.blobs_missing,
+        "manifest_changed": report.manifest_changed,
+        "manifest": str(manifest) if manifest is not None else None,
+    }
+
+
+def _reimport_table(report: OpenEvMetadataReimport, manifest: Path | None) -> TableSpec:
+    """One row per camp, before and after, then what was written."""
+    camps = sorted(set(report.camps_before) | set(report.camps_after))
+    rows = [
+        [camp, str(report.camps_before.get(camp, 0)), str(report.camps_after.get(camp, 0))] for camp in camps
+    ]
+    if not report.applied:
+        outcome = "Planned only; nothing was written. Re-run without --dry-run to apply it."
+    elif manifest is None:
+        outcome = "The manifest was already right; nothing was written."
+    else:
+        outcome = (
+            f"{report.camp_files_updated} camp-file record(s) corrected; manifest at {manifest.name}. "
+            "Publish the release to bring the bucket's manifest in line."
+        )
+    return TableSpec(
+        columns=("Camp", "Files before", "Files after"),
+        rows=rows,
+        title=f"openev {report.release} metadata ({'dry run' if not report.applied else 're-derived'})",
+        caption=(
+            f"{report.rows} file(s), {report.titles_changed} title(s) changed, "
+            f"{report.blobs_missing} not held locally. {outcome}"
+        ),
     )
 
 

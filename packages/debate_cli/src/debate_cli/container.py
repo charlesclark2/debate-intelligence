@@ -103,6 +103,7 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService
 from debate_core.application.caselist.inbox_purge import CaselistInbox
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
+from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import RemovalPlanner
 from debate_core.application.caselist.removal_service import (
@@ -178,6 +179,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_token_store",
     "evidence_sync",
     "openev_import",
+    "openev_metadata_reimport",
     "opencaselist_client",
     "verify_manifest",
 )
@@ -443,6 +445,21 @@ class ServiceContainer:
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
             suppression=self.local_suppression_list(),
+        )
+
+    def openev_metadata_reimport(self) -> OpenEvMetadataReimportService:
+        """Build the camp-and-title re-derivation over the same local store as `openev_import`.
+
+        No S3, no network: it reads a local manifest and the local records, and only asks the blob
+        store whether each digest is held (`v1-e30-t08-import-metadata-defects`).
+        """
+        return self.singleton(
+            "openev_metadata_reimport",
+            lambda: OpenEvMetadataReimportService(
+                caselists=SqliteCaselistRepository(self.database),
+                blobs=FsSnapshotStore(self.settings.storage.data_dir),
+                suppression=self.local_suppression_list(),
+            ),
         )
 
     def evidence_sync(self, *, blob_prefix: str | None = None) -> EvidenceSyncService:

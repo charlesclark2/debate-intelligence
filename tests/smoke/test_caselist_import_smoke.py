@@ -1,4 +1,4 @@
-"""`debate-research caselist import` and `import-openev` end to end, as `validate-dev` runs them.
+"""`debate-research caselist import`, `import-openev` and `reimport-openev-metadata`, end to end.
 
 The whole user-facing surface in one check: an operator's three weekly archives, imported in
 order through the installed command, into a data directory that did not exist a moment ago —
@@ -252,6 +252,49 @@ def test_a_camp_file_dry_run_writes_nothing(
     assert data["manifest"] is None
     assert _blob_count(installation) == 0
     assert not (installation / "objects" / "manifests" / "openev").exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# caselist reimport-openev-metadata (v1-e30-t08)
+# ------------------------------------------------------------------------------------------------
+
+
+def reimport_camp_metadata(cli: InstalledCli, *extra: str) -> CliRun:
+    """Run `reimport-openev-metadata` as an operator types it, with the same invented-camp table."""
+    return cli.run(
+        "--json",
+        "caselist",
+        "reimport-openev-metadata",
+        "--year",
+        "2026",
+        "--event",
+        "policy",
+        "--camp-aliases",
+        str(CAMP_ALIASES_PATH),
+        *extra,
+    )
+
+
+def test_re_deriving_camp_metadata_with_the_same_table_changes_nothing_on_disk(
+    installed_cli: InstalledCli, installation: Path, camp_files: Path
+) -> None:
+    """The command runs through the installed build, reads the release the import wrote, and with
+    the table that import used has nothing to correct: no manifest write, no blob."""
+    reported(import_camp_files(installed_cli, camp_files))
+    before = _tree_of(installation)
+    manifest = installation / "objects" / "manifests" / "openev" / "2026-policy.jsonl"
+    manifest_bytes = manifest.read_bytes()
+
+    planned = reported(reimport_camp_metadata(installed_cli, "--dry-run"))
+    applied = reported(reimport_camp_metadata(installed_cli))
+
+    for data in (planned, applied):
+        assert data["manifest_key"] == "manifests/openev/2026-policy.jsonl"
+        assert (data["rows_changed"], data["camp_files_updated"], data["blobs_missing"]) == (0, 0, 0)
+        assert data["manifest"] is None
+    assert applied["unknown_after"] == expected_openev()["first_download"]["after_caselist"]["unknown_camps"]
+    assert _tree_of(installation) == before
+    assert manifest.read_bytes() == manifest_bytes
 
 
 def _blob_count(data_dir: Path) -> int:

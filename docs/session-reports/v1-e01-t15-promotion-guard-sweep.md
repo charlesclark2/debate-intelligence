@@ -439,3 +439,43 @@ Accepted, as built. The sandbox procedure is approved, with two changes the oper
   - The dispatch also opening the back-merge pull request is filed by the PM as an E01 task (priority 3).
   - The Ubuntu 26 move is noted, but not filed until a reason to move exists.
   - The 60-day idle limit is moot while `dev` sees weekly activity.
+
+## Sandbox attempt, 2026-10-09
+
+Recorded on the PM's instruction. ac5 and the `lost-push-proof` node remain **NOT RUN**, and the
+Goal remains `InProgress`. The PM authorised `scripts/task pr --partial` on the review above, and
+this section asks for no new review. The proof will be retried later, against the same sandbox or a
+recreated one, and its results will get their own appended section.
+
+The operator ran follow-up 1 against a new sandbox, `charlesclark2/promotion-guard-sweep-sandbox`.
+All times below are UTC.
+
+* **Setup was as the procedure describes.** The sandbox was created at 04:30:12. Its commit
+  `b2f35d97` was pushed as `main` and `dev`, `dev` was made the default branch, and protect-main
+  was copied with only `promotion-source` and `back-merge` required. Actions was enabled with all
+  actions allowed, and both workflows were `active`.
+* **No event reached GitHub Actions.** Three events each produced check suites from the account's
+  installed third-party apps (Netlify, dbt Cloud) but no `github-actions` suite and no run:
+  * PR #1 (`dev` → `main`) opened at 04:31:09. Its `PullRequestEvent` appears in the repository's
+    events feed.
+  * Its description was edited around 04:37 (an `edited` event).
+  * An empty commit was pushed to `dev` at 04:39:47 (a `synchronize` event).
+
+  The setup push to `main` started no *Back-merge main into dev* run either. The pull request was
+  mergeable throughout (`mergeable: true`, with a merge commit), and GitHub Status reported "All
+  Systems Operational". As of 04:49:43 the repository had exactly one run in total, the dispatch
+  below.
+* **Only `workflow_dispatch` worked.** *Back-merge main into dev* was dispatched from `dev` at
+  04:36 (run 37884630719, success). The sweep logged
+  `##[warning]#1: no promotion-guard run exists for head 85df9485…, so there is nothing to re-run. …`
+  and then `Swept 1 pull request open against main at b2f35d973a02: no guard run #1.` That is the
+  manual route (ac3) and the no-guard-run path (Deviation 2) working live. No other part of the
+  proof could run, because each needs a `pull_request` run to exist first.
+* **One correction to the procedure for the retry.** GitHub writes a `::warning::` command into the
+  run log as `##[warning]`, so the log `grep` in blocks 5 and 6 must match
+  `'Swept|re-running|No pull requests|##\[(warning|error)\]'`. As written, it would have shown no
+  warning or error.
+* **What this says about the task's premise.** For at least 20 minutes, GitHub left push and
+  pull-request events undelivered to this repository's workflows, while a dispatched run started
+  within seconds. That is the class of failure the schedule exists for. Whether scheduled runs keep
+  arriving during such a gap is what the retried proof still has to show.

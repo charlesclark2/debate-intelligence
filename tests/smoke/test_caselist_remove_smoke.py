@@ -305,7 +305,9 @@ def test_a_removal_profile_missing_from_the_aws_config_is_refused_with_nothing_c
 
     refused = run(*REMOVE, "--execute")
 
-    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE
+    # The S3 adapter reports a profile missing from the AWS config as StoreCredentialsExpired, so the
+    # preflight failure it causes ends the run as a store failure, 3 (v1-e01-t20).
+    assert refused["exit_code"] == ExitCode.RETRIEVAL_FAILURE
     assert "debate-dev-evidence-removal-typo" in refused["error"]["message"] + str(refused["error"]["hint"])
     assert "nothing was deleted" in refused["error"]["message"]
     assert (tree(installation / "dev"), versions(bucket)) == before

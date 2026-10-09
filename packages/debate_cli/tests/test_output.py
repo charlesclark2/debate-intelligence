@@ -17,11 +17,18 @@ import typer
 from debate_cli.exit_codes import ExitCode, error_code_for, exit_code_for
 from debate_cli.output import SCHEMA_VERSION, CliOutput, CommandFailure, OutputMode, TableSpec
 from debate_core.application.errors import (
+    AlreadyExists,
+    ArchiveTooLarge,
     BlobIntegrityError,
     NotFound,
     ProviderRateLimited,
     ProviderUnavailable,
     RevisionMismatch,
+    SnapshotIntegrityCheck,
+    SnapshotIntegrityError,
+    StoreAccessDenied,
+    StoreCredentialsExpired,
+    StoreUnavailable,
 )
 
 ENVELOPE_KEYS = {"schema_version", "status", "command", "data", "error"}
@@ -313,6 +320,41 @@ def test_a_usage_error_keeps_clicks_own_exit_code() -> None:
 )
 def test_exit_code_for(exception: BaseException, expected: ExitCode) -> None:
     assert exit_code_for(exception) is expected
+
+
+#: The three store failures a retry may cure (v1-e01-t20): a store that did not answer, a session
+#: that expired, a store or directory that refused. None of them is an answer about the request.
+RETRYABLE_STORE_FAILURES = [
+    (StoreUnavailable("GetObject", "blobs/sha256", "connection refused"), "STORE_UNAVAILABLE"),
+    (
+        StoreCredentialsExpired(hint="aws sso login --profile debate-dev-evidence"),
+        "STORE_CREDENTIALS_EXPIRED",
+    ),
+    (StoreAccessDenied("read", "the blob directory"), "STORE_ACCESS_DENIED"),
+]
+
+#: Answers that a second run gives again, so they stay `1` however close to a store they arise.
+DETERMINISTIC_FAILURES = [
+    NotFound("snapshot blob", "0" * 64),
+    AlreadyExists("Card", "01J"),
+    RevisionMismatch("Card", "01J", expected_revision=1, actual_revision=2),
+    BlobIntegrityError("sha256/ab/cd/ef", "0" * 64),
+    SnapshotIntegrityError("01J", SnapshotIntegrityCheck.RAW_BYTES_HASH),
+    ArchiveTooLarge(measured="archive", actual_bytes=2, limit_bytes=1, source="hsld26.zip"),
+]
+
+
+@pytest.mark.parametrize(("exception", "code"), RETRYABLE_STORE_FAILURES, ids=lambda value: str(value)[:24])
+def test_a_store_failure_a_retry_may_cure_is_a_retrieval_failure(exception: Exception, code: str) -> None:
+    failure = CommandFailure.from_exception(exception)
+
+    assert exit_code_for(exception) is ExitCode.RETRIEVAL_FAILURE
+    assert (failure.code, failure.exit_code) == (code, ExitCode.RETRIEVAL_FAILURE)
+
+
+@pytest.mark.parametrize("exception", DETERMINISTIC_FAILURES, ids=lambda error: type(error).__name__)
+def test_a_deterministic_answer_stays_a_domain_failure(exception: Exception) -> None:
+    assert exit_code_for(exception) is ExitCode.DOMAIN_FAILURE
 
 
 def test_error_code_for_matches_the_exception_class_name() -> None:

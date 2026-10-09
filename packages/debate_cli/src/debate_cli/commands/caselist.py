@@ -86,15 +86,18 @@ bucket and is refused.
 
 Exit codes: `0` when every requested snapshot is complete in the bucket; `1` when any is not —
 with the failed sha256 values in the message and every count in `error.details` — or when a guard
-refused to start. An expired SSO session ends the run at once, before any further manifest, and is
-reported with the `aws sso login --profile …` line the adapter built.
+refused to start; `3` when the store did not answer: an expired SSO session or a refused request,
+which end the run at once, before any further manifest, or an applied run whose every failure was
+the store being unavailable (`v1-e01-t20`). An expired session is reported with the
+`aws sso login --profile …` line the adapter built.
 
 ## `caselist status`
 
 Compares this machine's snapshots with the bucket's
 (:class:`~debate_core.application.caselist.status_service.CaselistStatusService`) and writes
 nothing. `0` only when every snapshot agrees; `1` on any drift, with the per-snapshot report in
-`error.details`. With no `--caselist` it compares every caselist either side holds a manifest for.
+`error.details`; `3` when the bucket could not be read. With no `--caselist` it compares every
+caselist either side holds a manifest for.
 """
 
 from __future__ import annotations
@@ -109,7 +112,7 @@ import typer
 
 from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
-from debate_cli.exit_codes import ExitCode
+from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.caselist.import_service import Classification, ImportReport
@@ -122,7 +125,12 @@ from debate_core.application.caselist.manifest import (
 from debate_core.application.caselist.openev_import_service import OpenEvImportReport
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
-from debate_core.application.caselist.publish_service import PublishReport, SourceResult
+from debate_core.application.caselist.publish_service import (
+    ManifestOutcome,
+    PublishReport,
+    SnapshotOutcome,
+    SourceResult,
+)
 from debate_core.application.caselist.status_service import CaselistStatusReport, SnapshotStatus
 from debate_core.application.settings import ConfigurationError, Environment, Settings
 from debate_core.domain.caselist import Event
@@ -353,8 +361,9 @@ def publish(
         return
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
-    cli.output.failure(_publish_failure(report, payload), command=command_name(ctx))
-    raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)
+    failure = _publish_failure(report, payload)
+    cli.output.failure(failure, command=command_name(ctx))
+    raise typer.Exit(code=failure.exit_code)
 
 
 def status(
@@ -618,7 +627,12 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
 
 
 def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> CommandFailure:
-    """What an incomplete publish exits `1` with: the failed digests, and every count in details."""
+    """What an incomplete publish reports: the failed digests, and every count in details.
+
+    A plan that cannot be carried out (`PUBLISH_BLOCKED`) is `1`. An applied run that left a
+    snapshot incomplete is `3` when every failure behind it is the store not answering, and `1` as
+    soon as one is not (:func:`_failure_codes`, `v1-e01-t20`).
+    """
     failed = report.failed_sha256
     if not report.applied:
         return CommandFailure(
@@ -640,10 +654,28 @@ def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> Co
     return CommandFailure(
         code="PUBLISH_INCOMPLETE",
         message=f"{len(incomplete)} snapshot(s) not complete in the bucket, manifest {withheld}{named}",
-        exit_code=ExitCode.DOMAIN_FAILURE,
+        exit_code=exit_code_for_failure_codes(_failure_codes(incomplete)),
         details=payload,
         hint="Re-run the same command: every confirmed source is skipped and the manifests follow.",
     )
+
+
+def _failure_codes(incomplete: list[SnapshotOutcome]) -> list[str | None]:
+    """The error code behind every failure that left these snapshots incomplete.
+
+    A withheld manifest is the consequence of its failed sources, whose codes are counted. A manifest
+    that failed on its own carries its code at the front of `manifest_error`, as
+    `"STORE_UNAVAILABLE: …"`. A snapshot that is incomplete for neither reason contributes `None`,
+    which is never a retryable code, so a case nobody anticipated is reported as `1`, not `3`.
+    """
+    codes: list[str | None] = []
+    for outcome in incomplete:
+        codes.extend(source.error_code for source in outcome.failed)
+        if outcome.manifest is ManifestOutcome.FAILED:
+            codes.append((outcome.manifest_error or "").partition(": ")[0] or None)
+        elif not outcome.failed:
+            codes.append(None)
+    return codes
 
 
 def _snapshot_date(value: str) -> date:

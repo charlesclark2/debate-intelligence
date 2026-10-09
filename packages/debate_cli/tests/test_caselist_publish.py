@@ -272,7 +272,8 @@ class TestPublishOutcomes:
 
         result = publish()
 
-        assert result.exit_code == ExitCode.DOMAIN_FAILURE
+        # The only failure is a 503 from the store, which a re-run may get past: 3 (v1-e01-t20).
+        assert result.exit_code == ExitCode.RETRIEVAL_FAILURE
         error = envelope_of(result)["error"]
         assert error["code"] == "PUBLISH_INCOMPLETE"
         assert failing in error["message"]

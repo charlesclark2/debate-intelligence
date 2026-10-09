@@ -79,10 +79,11 @@ def test_a_filename_prefix_gives_the_camp_and_is_taken_off_the_title() -> None:
         ("QDI_Harbor Tariffs Aff.docx", "Harbor Tariffs Aff"),
         ("qdi.Harbor Tariffs Aff.docx", "Harbor Tariffs Aff"),
         ("QDI – Harbor Tariffs Aff.docx", "Harbor Tariffs Aff"),
-        ("QDI 2026 Harbor Tariffs Aff.docx", "2026 Harbor Tariffs Aff"),
+        ("QDI 2026 Harbor Tariffs Aff.docx", "Harbor Tariffs Aff"),
     ],
 )
 def test_any_separator_after_the_prefix_is_taken_off_and_nothing_else(path: str, title: str) -> None:
+    """The year directly after the camp is part of the camp block (`v1-e30-t08`), so it goes too."""
     parsed = parse(path)
 
     assert (parsed.camp, parsed.file_title) == ("QDI", title)
@@ -117,8 +118,137 @@ def test_when_the_folder_and_the_prefix_disagree_the_folder_is_recorded_with_a_w
 
     assert (parsed.camp, parsed.file_title) == ("BWW", "Tidewater Impact Turns")
     assert parsed.warnings == (
-        "the filename prefix names camp QDI but the folder names BWW; the folder's camp is recorded",
+        "the filename names camp QDI but the folder names BWW; the folder's camp is recorded",
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e30-t08: the camp anywhere in the filename, by whole word, and only one of them
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_camp_at_the_end_of_the_filename_is_found() -> None:
+    parsed = parse("Kritiks/Orchard Kritik - TSF 2026 MNO.docx")
+
+    assert (parsed.camp, parsed.lab, parsed.file_title) == ("TSF", None, "Orchard Kritik")
+    assert parsed.warnings == ()
+
+
+def test_a_camp_in_the_middle_of_the_filename_is_found() -> None:
+    parsed = parse("Orchard Kritik Tamarack Neg Blocks.docx")
+
+    assert (parsed.camp, parsed.file_title) == ("TSF", "Orchard Kritik Neg Blocks")
+
+
+def test_a_multi_word_spelling_at_the_end_is_one_match() -> None:
+    parsed = parse("Orchard Kritik - Brightwater Workshop 2026 MN.docx")
+
+    assert (parsed.camp, parsed.file_title, parsed.warnings) == ("BWW", "Orchard Kritik", ())
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "Orchard Kritik - QDIX 2026.docx",
+        "Orchard Kritik - XQDI 2026.docx",
+        "Quillfeathers Orchard Kritik.docx",
+        "Orchard Kritik - TamarackSummer 2026.docx",
+    ],
+)
+def test_a_spelling_inside_a_longer_word_is_never_a_camp(path: str) -> None:
+    parsed = parse(path)
+
+    assert parsed.camp == UNKNOWN_CAMP
+    assert parsed.file_title == path.removesuffix(".docx")
+
+
+def test_two_different_camps_in_the_filename_are_unknown_with_a_warning_never_a_guess() -> None:
+    parsed = parse("Tamarack Rebuttals - QDI 2026 MNO.docx")
+
+    assert parsed.camp == UNKNOWN_CAMP
+    assert parsed.file_title == "Tamarack Rebuttals - QDI 2026 MNO"
+    assert parsed.warnings == (
+        "the filename names more than one camp in the alias table (QDI, TSF); camp recorded as UNKNOWN",
+    )
+
+
+def test_two_spellings_of_one_camp_are_that_camp_and_the_one_before_the_year_comes_off() -> None:
+    parsed = parse("Quillfeather Rebuttals - QDI 2026 MNO.docx")
+
+    assert (parsed.camp, parsed.file_title, parsed.warnings) == ("QDI", "Quillfeather Rebuttals", ())
+
+
+def test_a_camp_folder_wins_over_a_different_camp_at_the_end_of_the_filename() -> None:
+    parsed = parse("Brightwater/Orchard Kritik - TSF 2026 MNO.docx")
+
+    assert (parsed.camp, parsed.file_title) == ("BWW", "Orchard Kritik")
+    assert parsed.warnings == (
+        "the filename names camp TSF but the folder names BWW; the folder's camp is recorded",
+    )
+
+
+def test_a_camp_folder_wins_over_a_filename_naming_two_other_camps_and_keeps_the_stem() -> None:
+    parsed = parse("Brightwater/Tamarack Rebuttals - QDI 2026.docx")
+
+    assert (parsed.camp, parsed.file_title) == ("BWW", "Tamarack Rebuttals - QDI 2026")
+    assert parsed.warnings == (
+        "the filename names camp QDI, TSF but the folder names BWW; the folder's camp is recorded",
+    )
+
+
+def test_two_folders_naming_different_camps_are_unknown_with_a_warning() -> None:
+    parsed = parse("Tamarack/Brightwater/Orchard Kritik.docx")
+
+    assert (parsed.camp, parsed.lab) == (UNKNOWN_CAMP, None)
+    assert parsed.warnings == (
+        "the folders name more than one camp in the alias table (BWW, TSF); camp recorded as UNKNOWN",
+    )
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e30-t08: the title is what is left once the camp block is taken off
+# ------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("path", "title"),
+    [
+        ("Orchard Kritik - TSF 2026 MNOP.docx", "Orchard Kritik"),
+        ("Orchard Kritik - TSF 2026 M.docx", "Orchard Kritik"),
+        ("Orchard Kritik - TSF 2026.docx", "Orchard Kritik"),
+        ("Orchard Kritik - TSF.docx", "Orchard Kritik"),
+        ("Orchard_Kritik_-_TSF_2026_MNO.docx", "Orchard_Kritik"),
+        ("Orchard Kritik - TSF 2026 MNO (1).docx", "Orchard Kritik (1)"),
+        ("Orchard Kritik - TSF 2026 (2).docx", "Orchard Kritik (2)"),
+    ],
+)
+def test_the_camp_the_year_after_it_and_trailing_initials_come_off(path: str, title: str) -> None:
+    assert parse(path).file_title == title
+
+
+@pytest.mark.parametrize(
+    ("path", "title"),
+    [
+        ("Orchard Kritik - TSF 2026 MNOPQ.docx", "Orchard Kritik MNOPQ"),
+        ("Orchard Kritik - TSF 2026 Aff.docx", "Orchard Kritik Aff"),
+        ("Orchard Kritik - TSF 2026 MNO Neg.docx", "Orchard Kritik MNO Neg"),
+        ("Orchard Kritik 2026 - TSF MNO.docx", "Orchard Kritik 2026 MNO"),
+        ("Orchard Kritik - TSF 26 MNO.docx", "Orchard Kritik 26 MNO"),
+        ("Orchard Kritik - TSF (2026) MNO.docx", "Orchard Kritik (2026) MNO"),
+    ],
+)
+def test_a_year_or_initials_not_directly_after_the_camp_stay_in_the_title(path: str, title: str) -> None:
+    """Five letters are not initials, nor is `Aff`; initials that do not end the name stay; a year
+    that is not the next word after the camp is not the camp's year."""
+    assert parse(path).file_title == title
+
+
+def test_an_unknown_camp_keeps_its_year_and_initials() -> None:
+    assert parse("Orchard Kritik - Zephyr 2026 MNO.docx").file_title == "Orchard Kritik - Zephyr 2026 MNO"
+
+
+def test_a_filename_that_is_only_a_camp_block_keeps_its_stem() -> None:
+    assert parse("Tamarack/TSF 2026 MNO.docx").file_title == "TSF 2026 MNO"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -134,7 +264,7 @@ def test_a_camp_nobody_listed_is_unknown_with_a_warning_and_keeps_its_whole_stem
     assert parsed.lab is None
     assert parsed.file_title == "Zephyr Scholars - Glacier Case Neg"
     assert parsed.warnings == (
-        "no folder and no filename prefix names a camp in the alias table; camp recorded as UNKNOWN",
+        "no folder and no word of the filename names a camp in the alias table; camp recorded as UNKNOWN",
     )
 
 
@@ -190,6 +320,10 @@ def test_the_packaged_table_loads_and_lists_the_camps_the_spec_names() -> None:
     aliases = load_camp_aliases()
 
     assert set(aliases.camps) >= {"DDI", "Michigan", "Gonzaga", "SDI", "NHSI", "UTNIF"}
+    # Added by v1-e30-t08 after PM review: the camps the real release names that were missing.
+    assert set(aliases.camps) >= {
+        "CNDI", "Emory", "Georgetown", "Harvard", "JDI", "Mean Green", "MSDI", "Wake Forest", "Wyoming",
+    }  # fmt: skip
 
 
 def test_the_packaged_table_resolves_a_prefix_and_a_folder() -> None:

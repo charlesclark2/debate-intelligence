@@ -7,29 +7,56 @@ It is the OpenEv importer's metadata extractor, the counterpart of
 
 ## Where the camp comes from
 
-Camp files reach the operator in two shapes. The OpenEv site files them as
-`<year>/<camp>/<lab>/<file>`, so a download of several keeps that folder structure; and a file
-fetched on its own usually carries its camp as a filename prefix, `DDI - Politics DA.docx` or
-`GDI_Topicality.docx`. Both are read:
+Camp files reach the operator in three shapes. The OpenEv site files them as
+`<year>/<camp>/<lab>/<file>`, so a download of several can keep that folder structure. A file
+fetched on its own may carry its camp as a filename prefix, `DDI - Politics DA.docx`. And the
+real release the v1-e30-t06 backfill imported names the camp *after* the title, before the year,
+with the lab's initials last — `<title> - <camp> <year> <initials>` — in folders named for the kind
+of argument rather than for the camp. All three are read:
 
-1. **A folder.** The outermost directory in the path that names a camp in the alias table. The
+1. **A folder.** A directory in the path whose whole name is a spelling in the alias table. The
    directory directly below it, if there is one, is the lab.
-2. **A filename prefix.** The leading words of the filename, matched against the same table,
-   longest spelling first.
+2. **A word of the filename.** Every run of whole words in the filename's stem that is a spelling
+   in the same table, wherever it sits: start, middle or end. Matching is by whole word, never by
+   substring — `SDI` is not found in `SDIX`, nor `Michigan` in `Michiganders` — and at each word
+   the longest spelling is tried first, so `Spartan Debate Institute` is one match, not three.
 
-A folder is the stronger evidence — it is where OpenEv itself filed the file — so when both name a
-camp and they disagree, the folder's is recorded and the disagreement is a warning. When neither
-names one, the camp is :data:`UNKNOWN_CAMP` with a warning, and the file is imported regardless
-(ac1): a file with an unreadable camp is still evidence.
+The folder wins: it is where OpenEv itself filed the file. When the filename names a different
+camp, the folder's is recorded and the disagreement is a warning.
+
+Without a camp folder, the filename has to name **exactly one** camp. Two different camps in one
+filename (`Dartmouth Rebuttals - Michigan 2026`) is :data:`UNKNOWN_CAMP` with a warning naming
+both, never a guess at which is the camp and which is part of the title. The same camp named
+twice is that camp. Two folders naming different camps are treated the same way.
+
+When nothing names a camp the table knows, the camp is :data:`UNKNOWN_CAMP` with a warning, and
+the file is imported regardless (ac1): a file with an unreadable camp is still evidence. Nothing
+outside the table is ever a camp, however camp-like it looks: an operator who meets a new camp
+adds it to the table (`v1-e30-t08`).
 
 ## The file title
 
-The filename without its extension and without the camp prefix, if the filename had one:
-`GDI_Topicality.docx` is `Topicality`, and `Politics DA.docx` in a `DDI/` folder is `Politics DA`.
-Nothing else is taken off — a year, a lab name or a side in the filename stays in the title,
-because what counts as noise in a title differs camp by camp and a wrong guess loses information
-that the path still has. A filename that is nothing *but* a camp keeps its whole stem as the
-title rather than having none.
+The filename's stem, without the extension and without its *camp block*: the camp's words, the
+year directly after them, and lab initials directly after that year if they end the name. So
+`Politics DA - DDI 2026 ABC.docx` is `Politics DA`, `GDI_Topicality.docx` is `Topicality`, and
+`Politics DA.docx` in a `DDI/` folder is `Politics DA`.
+
+* **The year** is a four-digit `19xx` or `20xx` word immediately after the camp's words. A year
+  anywhere else stays in the title.
+* **Lab initials** are one to four capital letters immediately after that year, followed by
+  nothing but separators or a browser's copy marker such as `(1)`. `Aff` is not initials, and
+  nor is anything that does not end the name.
+* What was before the camp block and what was after it are joined by a single space, with the
+  separators at the join (` - `, `_`, `.`) dropped: `Saltmarsh T - UTNIF 2026 (1)` is
+  `Saltmarsh T (1)`.
+* When a camp is named twice, the occurrence followed by a year is the block; failing that, the
+  first.
+
+A file whose camp is :data:`UNKNOWN_CAMP` keeps its whole stem, because without a camp there is
+no block to find, and guessing which words were the camp would lose information the path still
+has. A filename that is nothing *but* its camp block keeps its whole stem rather than having no
+title. With a camp folder and a filename naming a different single camp, that camp's block is
+still taken off.
 
 The scheduled sync (`v1-e34-t02`) saves each downloaded file as `openev-<id>-<file name>`
 (:func:`debate_core.integrations.opencaselist.openev.openev_inbox_name`). That inbox prefix is
@@ -90,12 +117,23 @@ _WORD: Final = re.compile(r"[^\W_]+")
 #: The prefix `openev_inbox_name` gives a file the scheduled sync downloads.
 _INBOX_PREFIX: Final = re.compile(r"^openev-[0-9]+-")
 
-#: What may sit between a camp prefix and the title: separators and whitespace.
-_LEADING_SEPARATORS: Final = re.compile(r"^[\W_]+")
+#: The separators dropped where a camp block is cut out of a title: whitespace, `-`, `_`, `.` and
+#: the dashes a word processor substitutes for a hyphen. Brackets are not, so a `(1)` survives.
+_SEPARATORS: Final = r"[\s\-_.–—]"
+_LEADING_SEPARATORS: Final = re.compile(rf"^{_SEPARATORS}+")
+_TRAILING_SEPARATORS: Final = re.compile(rf"{_SEPARATORS}+$")
+
+#: A topic year, as a whole word directly after a camp's words.
+_YEAR: Final = re.compile(r"(?:19|20)[0-9]{2}")
+
+#: Lab initials directly after that year, ending the name but for separators and a copy marker.
+_TRAILING_INITIALS: Final = re.compile(
+    rf"{_SEPARATORS}*[A-Z]{{1,4}}(?=(?:{_SEPARATORS}*\([0-9]+\))?{_SEPARATORS}*$)"
+)
 
 #: Warnings, as written into the camp-file record and the manifest. They name no path or file.
 _UNRESOLVED_WARNING: Final = (
-    "no folder and no filename prefix names a camp in the alias table; camp recorded as UNKNOWN"
+    "no folder and no word of the filename names a camp in the alias table; camp recorded as UNKNOWN"
 )
 
 
@@ -233,54 +271,130 @@ def parse_camp_path(relative_path: str, *, aliases: CampAliases) -> ParsedCampPa
     path = PurePosixPath(relative_path)
     warnings: list[str] = []
 
-    folder_camp, lab = _camp_and_lab_from_folders(path.parts[:-1], aliases)
+    folder_camps, lab = _camps_and_lab_from_folders(path.parts[:-1], aliases)
     filename = _INBOX_PREFIX.sub("", path.name)
     stem = PurePosixPath(filename).stem or filename
-    prefix_camp, title = _camp_prefix_and_title(stem, aliases)
+    matches = _camp_matches(stem, aliases)
+    filename_camps = sorted({match.camp for match in matches})
 
-    if folder_camp is not None and prefix_camp is not None and folder_camp != prefix_camp:
-        warnings.append(
-            f"the filename prefix names camp {prefix_camp} but the folder names {folder_camp}; "
-            "the folder's camp is recorded"
-        )
-    camp = folder_camp or prefix_camp
-    if camp is None:
+    camp: str | None = None
+    if len(folder_camps) > 1:
+        warnings.append(_more_than_one_camp("the folders name", folder_camps))
+        lab = None
+    elif folder_camps:
+        (camp,) = folder_camps
+        others = [named for named in filename_camps if named != camp]
+        if others:
+            warnings.append(
+                f"the filename names camp {', '.join(others)} but the folder names {camp}; "
+                "the folder's camp is recorded"
+            )
+    elif len(filename_camps) > 1:
+        warnings.append(_more_than_one_camp("the filename names", filename_camps))
+    elif filename_camps:
+        (camp,) = filename_camps
+    else:
         warnings.append(_UNRESOLVED_WARNING)
 
     return ParsedCampPath(
         source_path=relative_path,
         camp=camp or UNKNOWN_CAMP,
         lab=lab,
-        file_title=title,
+        file_title=_title(stem, _camp_block(stem, matches, camp, filename_camps)),
         source_format=source_format_for(path.name),
         warnings=tuple(warnings),
     )
 
 
-def _camp_and_lab_from_folders(
+@dataclass(frozen=True, slots=True)
+class _CampMatch:
+    """One run of whole words in a filename's stem that is a spelling in the alias table."""
+
+    camp: str
+    start: int
+    """Where the spelling's first word starts in the stem."""
+    end: int
+    """Where its last word ends."""
+
+
+def _camp_matches(stem: str, aliases: CampAliases) -> tuple[_CampMatch, ...]:
+    """Every spelling in `stem`, left to right, by whole words, longest spelling first at each word.
+
+    Never a substring: a spelling's words must be whole words of the stem, so `SDI` is not found
+    in `SDIX`. Matches do not overlap, so `Spartan Debate Institute` is one match, not three.
+    """
+    words = list(_WORD.finditer(stem))
+    found: list[_CampMatch] = []
+    index = 0
+    while index < len(words):
+        for length in range(min(aliases.longest_spelling, len(words) - index), 0, -1):
+            spelling = tuple(word.group().casefold() for word in words[index : index + length])
+            camp = aliases.by_words.get(spelling)
+            if camp is not None:
+                found.append(_CampMatch(camp, words[index].start(), words[index + length - 1].end()))
+                index += length
+                break
+        else:
+            index += 1
+    return tuple(found)
+
+
+def _more_than_one_camp(where: str, camps: list[str]) -> str:
+    return f"{where} more than one camp in the alias table ({', '.join(camps)}); camp recorded as UNKNOWN"
+
+
+def _camps_and_lab_from_folders(
     folders: tuple[str, ...], aliases: CampAliases
-) -> tuple[str | None, str | None]:
-    """The outermost folder naming a camp, and the folder directly below it as the lab."""
+) -> tuple[list[str], str | None]:
+    """Every camp a whole folder name names, sorted, and the folder below the outermost one as the lab."""
+    camps: set[str] = set()
+    lab: str | None = None
     for index, folder in enumerate(folders):
         camp = aliases.camp_for(folder)
-        if camp is not None:
-            lab = folders[index + 1] if index + 1 < len(folders) else None
-            return camp, lab
-    return None, None
-
-
-def _camp_prefix_and_title(stem: str, aliases: CampAliases) -> tuple[str | None, str]:
-    """The camp the stem's leading words name, and the stem with those words taken off.
-
-    Tries the longest spelling first, so `Spartan Debate Institute - K` is SDI with title `K`
-    rather than a match on `Spartan` leaving `Debate Institute - K`.
-    """
-    matches = list(_WORD.finditer(stem))
-    for length in range(min(aliases.longest_spelling, len(matches)), 0, -1):
-        words = tuple(match.group().casefold() for match in matches[:length])
-        camp = aliases.by_words.get(words)
         if camp is None:
             continue
-        title = _LEADING_SEPARATORS.sub("", stem[matches[length - 1].end() :]).strip()
-        return camp, title or stem
-    return None, stem
+        if not camps:
+            lab = folders[index + 1] if index + 1 < len(folders) else None
+        camps.add(camp)
+    return sorted(camps), lab
+
+
+def _camp_block(
+    stem: str, matches: tuple[_CampMatch, ...], camp: str | None, named: list[str]
+) -> _CampMatch | None:
+    """The match whose words, year and initials come off the title, or `None` to keep the stem.
+
+    The recorded camp's match; with a camp folder and a filename naming one other camp, that
+    camp's. Of several, the last one followed by a year, else the first.
+    """
+    if camp is None:
+        return None
+    wanted = camp if camp in named else named[0] if len(named) == 1 else None
+    candidates = [match for match in matches if match.camp == wanted]
+    followed_by_year = [match for match in candidates if _year_after(stem, match.end) is not None]
+    if followed_by_year:
+        return followed_by_year[-1]
+    return candidates[0] if candidates else None
+
+
+def _title(stem: str, block: _CampMatch | None) -> str:
+    """`stem` without `block`: its words, the year directly after them, and lab initials after that."""
+    if block is None:
+        return stem
+    end = block.end
+    year = _year_after(stem, end)
+    if year is not None:
+        end = year.end()
+        initials = _TRAILING_INITIALS.match(stem, end)
+        end = initials.end() if initials is not None else end
+    before = _TRAILING_SEPARATORS.sub("", stem[: block.start])
+    after = _LEADING_SEPARATORS.sub("", stem[end:])
+    return (f"{before} {after}" if before and after else before or after) or stem
+
+
+def _year_after(stem: str, position: int) -> re.Match[str] | None:
+    """The year that is the next word after `position`, with only separators between, if there is one."""
+    word = _WORD.search(stem, position)
+    if word is None or _LEADING_SEPARATORS.sub("", stem[position : word.start()]):
+        return None
+    return word if _YEAR.fullmatch(word.group()) else None

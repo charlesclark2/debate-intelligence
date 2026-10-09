@@ -70,6 +70,7 @@ def register_commands(app: typer.Typer) -> None:
     disclosed_evidence.command("import-openev")(caselist.import_openev)
     disclosed_evidence.command("publish")(caselist.publish)
     disclosed_evidence.command("pull")(caselist_pull.pull)
+    disclosed_evidence.command("reimport-openev-metadata")(caselist.reimport_openev_metadata)
     disclosed_evidence.command("remove")(caselist_remove.remove)
     disclosed_evidence.command("runs")(caselist_runs.runs)
     disclosed_evidence.command("status")(caselist.status)

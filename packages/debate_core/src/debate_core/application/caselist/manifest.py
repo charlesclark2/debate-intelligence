@@ -37,6 +37,15 @@ Every line is one JSON object carrying `schema_version` and `kind`. `kind` is `m
 rows and `summary` for the single trailing one, so a consumer can read the file in one pass
 without counting lines or seeking to the end.
 
+The summary's `classifications` count each member against the week before, so its `NEW` means "not
+present in the preceding snapshot", never "new to the caselist". Beside it, `first_seen` is the
+number of distinct stored digests no earlier snapshot of this caselist held
+(:attr:`~debate_core.application.caselist.import_service.ImportReport.first_seen`), or `null` when
+the import could not read the earlier manifests. It was added by `v1-e30-t08` as an additive key,
+so `schema_version` stays `1`: a reader that does not know it ignores it. Manifests written before
+it have no `first_seen` key and are not rewritten to add one; a later removal's rewrite keeps the
+count as the import recorded it, as it keeps `members`.
+
 A member row is flat — `school`, `side`, `round`, `round_normalized` rather than nested objects —
 because the thing that reads it is usually `jq` or a dataframe, and a flat row is one column each.
 Fields that do not apply to a row are `null` rather than absent, so every row has the same keys
@@ -304,6 +313,7 @@ def _summary_row(report: ImportReport) -> dict[str, object]:
         "warnings": report.warning_count,
         "classifications": counted(report.counts),
         "skipped": counted(report.skipped),
+        "first_seen": report.first_seen,
     }
 
 

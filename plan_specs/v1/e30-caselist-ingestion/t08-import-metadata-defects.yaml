@@ -81,7 +81,7 @@ spec:
         neither fix alters a stored byte, a sha256 or a manifest key - proved by re-running
         `caselist status` against the dev bucket and finding no drift.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -60,8 +60,8 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 36 | 32 | 210 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 34 | 26 | 286 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 39 | 33 | 214 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 40 | 27 | 296 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -106,7 +106,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [Empty the import-boundary exception lists](plan_specs/v1/e01-repo-foundation/t13-composition-root-cleanup.yaml) `v1-e01-t13-composition-root-cleanup` | Succeeded | 1 | 4.0 |
 | [One source for the supported interpreter, enforced at install](plan_specs/v1/e01-repo-foundation/t14-install-interpreter-bound.yaml) `v1-e01-t14-install-interpreter-bound` | Succeeded | 2 | 6.0 |
 | [Re-run the promotion guards without waiting for an event](plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml) `v1-e01-t15-promotion-guard-sweep` | Pending | 1 | 7.0 |
-| [Generate the docs index instead of hand-editing it](plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml) `v1-e01-t16-generated-docs-index` | InProgress | 1 | 6.5 |
+| [Generate the docs index instead of hand-editing it](plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml) `v1-e01-t16-generated-docs-index` | Succeeded | 1 | 6.5 |
 | [The installed build carries what its commands need](plan_specs/v1/e01-repo-foundation/t17-installed-build-extras.yaml) `v1-e01-t17-installed-build-extras` | Succeeded | 1 | 4.0 |
 | [scripts/task restarts a task that merged partially](plan_specs/v1/e01-repo-foundation/t18-restart-partial-tasks.yaml) `v1-e01-t18-restart-partial-tasks` | Succeeded | 1 | 3.0 |
 | [Command blocks in the docs are safe to paste into zsh](plan_specs/v1/e01-repo-foundation/t19-paste-safe-command-blocks.yaml) `v1-e01-t19-paste-safe-command-blocks` | Succeeded | 1 | 3.0 |
@@ -114,6 +114,9 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [The storage and OpenCaselist smoke checks run against the installed build](plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml) `v1-e01-t21-installed-smoke-stand-ins` | Pending | 1 | 4.0 |
 | [The real install is the build the rehearsal checked, and doctor answers for all of it](plan_specs/v1/e01-repo-foundation/t22-install-resolves-once.yaml) `v1-e01-t22-install-resolves-once` | Succeeded | 1 | 3.0 |
 | [The installed build runs on a Python that uv manages](plan_specs/v1/e01-repo-foundation/t23-managed-python.yaml) `v1-e01-t23-managed-python` | InProgress | 1 | 2.5 |
+| [A partial merge's open items are read from the current session's sections](plan_specs/v1/e01-repo-foundation/t24-partial-open-items-current-session.yaml) `v1-e01-t24-partial-open-items-current-session` | Pending | 1 | 1.5 |
+| [An unexpected error never prints its message on the command line](plan_specs/v1/e01-repo-foundation/t25-unmodelled-errors-print-no-text.yaml) `v1-e01-t25-unmodelled-errors-print-no-text` | Pending | 1 | 1.0 |
+| [The manual sweep also opens the back-merge pull request](plan_specs/v1/e01-repo-foundation/t26-dispatch-opens-back-merge.yaml) `v1-e01-t26-dispatch-opens-back-merge` | Pending | 1 | 1.5 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -152,7 +155,8 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Evidence buckets and operator access](plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml) `v1-e29-t03-evidence-buckets` | Succeeded | 1 | 9.0 |
 | [S3 blob-store adapter](plan_specs/v1/e29-cloud-evidence-store/t04-s3-blob-store.yaml) `v1-e29-t04-s3-blob-store` | Succeeded | 2 | 11.0 |
 | [`debate-research store` sync commands](plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml) `v1-e29-t05-evidence-sync-cli` | Succeeded | 3 | 11.5 |
-| [Removal grants: the scope is tested, and a plan can count versions](plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml) `v1-e29-t06-removal-grant-scope-test` | InProgress | 1 | 8.0 |
+| [Removal grants: the scope is tested, and a plan can count versions](plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml) `v1-e29-t06-removal-grant-scope-test` | Succeeded | 1 | 8.0 |
+| [A profile missing from the AWS config is a configuration error, not an expired session](plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml) `v1-e29-t07-missing-profile-not-retryable` | Pending | 1 | 1.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 
@@ -167,6 +171,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Source removal and suppression list](plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml) `v1-e30-t07-source-removal` | Succeeded | 2 | 12.5 |
 | [Importer metadata defects found by the backfill](plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml) `v1-e30-t08-import-metadata-defects` | Pending | 3 | 7.0 |
 | [A removal leaves no removed bytes in the inbox](plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml) `v1-e30-t09-removal-purges-inbox` | Succeeded | 2 | 6.0 |
+| [caselist status reports noncurrent versions a removal left behind](plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml) `v1-e30-t10-removal-docstrings-and-residue` | Pending | 1 | 2.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -196,6 +201,10 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The weekly agent runs nothing from a git checkout](plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) `v1-e34-t10-agent-outside-checkout` | Succeeded | 1 | 2.0 |
 | [Imported downloads leave the inbox](plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml) `v1-e34-t11-inbox-retention` | Succeeded | 1 | 4.0 |
 | [The pull summary names a camp download by id, never by title](plan_specs/v1/e34-caselist-sync/t12-summary-names-no-camp-file.yaml) `v1-e34-t12-summary-names-no-camp-file` | Succeeded | 1 | 1.5 |
+| [A pull stage that fails on a retryable cause ends the run with exit 3](plan_specs/v1/e34-caselist-sync/t13-pull-stage-failure-classes.yaml) `v1-e34-t13-pull-stage-failure-classes` | Pending | 2 | 4.0 |
+| [A camp file already in the inbox is held if its path was removed](plan_specs/v1/e34-caselist-sync/t14-removed-path-hold-for-inbox-copies.yaml) `v1-e34-t14-removed-path-hold-for-inbox-copies` | Pending | 1 | 1.5 |
+| [A camp release of junk alone leaves the inbox once it is handled](plan_specs/v1/e34-caselist-sync/t15-junk-release-leaves-inbox.yaml) `v1-e34-t15-junk-release-leaves-inbox` | Pending | 1 | 1.0 |
+| [The dry run's download plan names no path on the operator's machine](plan_specs/v1/e34-caselist-sync/t16-dry-run-names-no-home-path.yaml) `v1-e34-t16-dry-run-names-no-home-path` | Pending | 1 | 0.5 |
 
 
 ### v1.2 — Argument landscape & file building

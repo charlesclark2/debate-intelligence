@@ -141,9 +141,25 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-09
 
 **Notes:**
+
+Accepted. Merge with `scripts/task pr`; the Goal is `Succeeded`.
+
+- **Checked against the branch:** `9473c8a`, tree clean, 0 commits behind `origin/dev`.
+  - `_judge_unrecorded` asks `_removed_path_hold` before it reads an inbox copy. The hold's logic moved without changing, its revision branch included.
+  - The red run stored the revised bytes, and the fix holds them.
+  - All three mutants the PM named were caught. Moving the hold leaves all 36 t07 and t08 tests green, so these new tests are what pins its position. That is the right evidence.
+  - The t07 and t08 test files are byte-for-byte unchanged.
+- **Decisions 1–6 are accepted.**
+  - Decision 2 reads the PM correctly. The wait applies when the hold has a question, as it already did for a download, and a copy at a path nothing else used goes on to an importer that fails closed on the same unreadable list. Making every inbox copy wait would have changed t07.
+  - Decision 3: `inbox_file` and retention's entry share the same `sha256` prefix, so the two can be read together.
+  - Decision 4's relabelling (`same_path_as_a_removed_file` taking precedence over `skipped_as_removed`) blocks the same things it blocked before.
+  - Decision 5 proves retention keeps the held copy with a status service wired in, rather than assuming it.
+- **Follow-up 1 is a real policy gap. The PM rules on it and files it.**
+  - Under v1-e34-t07's ruling, a removal covers later uploads at the same path. So a revision imported before its old version was removed falls under the same request.
+  - That is removal work, not sync work. The PM files an E30 task (priority 2): `caselist remove`'s plan lists every later upload at a removed source's path that the store holds, by id and digest, and includes it in the removal, so the operator confirms one plan that covers them all.

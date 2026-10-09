@@ -319,6 +319,9 @@ Between two runs it holds:
   import failed, a newer week waiting behind it, or a week whose publish is pending an AWS login.
 * **Camp downloads** in the same state (`openev-<id>-<name>`), and any camp download the OpenEv
   delivery record does not cover.
+* **A camp release holding only junk** (`.DS_Store`, `__MACOSX/`, no camp file), named as
+  `not_imported` in every summary: no manifest row with a classification came from it, so
+  retention keeps it. It is not imported again (`v1-e34-t08`); the delivery record says it was.
 * `.partial/`, downloads in progress, which a run sweeps.
 * Anything put there by hand. The pull never touches a file whose name it did not give it.
 
@@ -421,13 +424,25 @@ most one download of each removed file, which the importer refuses. `caselist re
 removed camp file's copy from the inbox, and writes its digests to that record first when the
 record does not have them (`v1-e30-t09`), so the copy going does not cost a download either.
 
+**The select stage says *N taken as a revision of an id no longer listed (openev-512 -> openev-640)*.**
+A camp uploaded a file again. OpenEv cannot replace a file in place, so a revision is the old id
+deleted and a new id uploaded, normally at the same path. The run fetched the new id because a row
+of the release manifest at its path names the old id (`openev-512-…`, the name the sync gave that
+download) and the old id is no longer listed anywhere (`v1-e34-t08`). The selection's `revision_of`
+says the same in the JSON. Nothing needs doing. The old version stays in the store beside the new
+one; nothing is deleted. A camp file imported by hand is never taken as a revision, because its row
+does not say which upload it came from, so a re-upload of one is not fetched; fetch it by hand
+through `caselist import-openev` if it matters.
+
 **A camp file shows `same_path_as_a_removed_file`.** OpenEv lists a new id at the path of a camp
 file that was removed; that is how a camp uploads a file again, since OpenEv cannot replace a file in
 place. The run holds it back: a removal covers a camp's later upload of the same file, because the request
 was about the material and a revised file normally still contains it (PM decision, `v1-e34-t07`).
-Nothing needs doing. If the data-use policy is ever read the other way, this becomes a download; until
-then, fetching such a file by hand through `caselist import-openev` is a decision to record in the
-register.
+This hold is decided before a revision is fetched, and it holds a revision whose old version was
+removed on another machine too, since the bucket's copy of the list is read. Nothing needs doing.
+After `caselist unsuppress` of the old file, the next run fetches the new id. If the data-use policy
+is ever read the other way, this becomes a download; until then, fetching such a file by hand
+through `caselist import-openev` is a decision to record in the register.
 
 **A camp file shows `suppression_list_unreadable`.** The run could not read the suppression list:
 the bucket refused its copy (a missing grant, `access denied`) or a copy has a line nobody can read.

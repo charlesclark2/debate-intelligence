@@ -1244,7 +1244,7 @@ async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it
     summary = await service.run([SYNTHETIC_CASELIST])
     written = json.loads(service.summary_path(summary).read_text(encoding="utf-8"))
 
-    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 2
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 3
     assert written["bulk_download_window_start"] == "2026-09-15T06:00:00+00:00"
     assert written["bulk_downloads_spent_in_window"] == 2
     assert written["bulk_downloads_allowed"] == 3

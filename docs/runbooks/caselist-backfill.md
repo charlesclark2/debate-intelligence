@@ -24,10 +24,13 @@ under `~/.debate-research/dev/caselist-sync-runs/`. `caselist runs` (`v1-e34-t03
 summaries back. Every archive this backfill downloads comes through `pull`, because that is
 the only path that counts downloads against the daily cap before spending them.
 
-**The manual commands handle what is already on this Mac.** `pull` has no way to take in a file
-you already have: an archive sitting in its inbox is skipped (`already_in_inbox`) and never
-imported. The three HS LD weeklies and the 105 Policy camp files already downloaded go in with
-`caselist import` and `caselist import-openev`. That also saves three of the scarce downloads.
+**The manual commands handle what is already on this Mac.** The three HS LD weeklies and the 105
+Policy camp files already downloaded go in with `caselist import` and `caselist import-openev`.
+That also saves three of the scarce downloads. When this backfill ran, `pull` could not take in a
+file you already had: an archive in its inbox was skipped (`already_in_inbox`) and never imported.
+Since `v1-e34-t06` it imports any weekly in the inbox that is newer than the caselist's latest
+manifest. The files on hand here were never in the inbox under the site's names, so the hand
+imports would still be the route for them.
 
 **Order is enforced, and it decides day 1.** The importer compares each weekly with the snapshot
 immediately before it, and refuses an archive older than one already imported
@@ -136,7 +139,8 @@ hspolicy26**.
 `pull`'s download ledger (`caselist-sync-downloads.json`) is keyed by the **UTC** date, although
 its docstring says local time. Steps 2 and 5 share one day's allowance through that ledger. If the
 UTC date changes between them, step 5 starts from a fresh five, and the site's own counter refuses
-part way through.
+part way through. That was the ledger when this backfill ran. Since `v1-e34-t06` it counts download
+starts over a rolling 24 hours instead, so steps 2 and 5 share one allowance however late they run.
 
 ### 1. Rehearse
 
@@ -242,6 +246,12 @@ date, not a rolling 24 hours: measured 2026-09-29, a run 20 h 34 min after the p
 downloads was granted all five. If the site ever refuses part way anyway, `pull` records the rest
 as `deferred_by_rate_limit` and still exits `0`. The SSO login is needed only when the session
 has expired, but running it anyway does no harm.
+
+That timing is how days 2–6 actually ran. Since `v1-e34-t06`, `pull`'s own ledger counts download
+starts over a rolling 24 hours, so a run is granted only what is left after the starts of the
+previous 24 hours. The schedule becomes one run at least 24 hours after the previous day's
+downloads, at any time of day. The run summaries show it: a run 80 minutes after five downloads
+on 2026-10-08 was granted none.
 
 ```bash
 export DEBATE_ENV=dev
@@ -428,7 +438,8 @@ check has passed.
 | What happened | What to do |
 |---|---|
 | A `pull` exited `1` at **download** | `caselist runs --last 3` names the stage. Run the same command again. An archive already in the inbox is not fetched twice |
-| A `pull` exited `1` at **import** | The archive is in `~/.debate-research/dev/inbox/` but has no manifest. A re-run will **not** import it: it is marked `already_in_inbox`, and `pull` imports only what it downloaded in the same run. Fix the cause, then import it by hand with the date from its name: `caselist import ~/.debate-research/dev/inbox/<slug>-weekly-<date>.zip --caselist <slug> --snapshot <date>`, then `caselist publish --caselist <slug>` |
+| A `pull` exited `1` at **import** | Fix the cause, then run the same command again. The archive stays in `~/.debate-research/dev/inbox/` with no manifest, and since `v1-e34-t06` the next run imports it from there (`already_in_inbox`) without spending a download. A caselist's weeks are imported oldest first and stop at the first gap, so anything newer waits in the inbox for that week. No hand import is needed |
+| The inbox is empty after a run | Expected. Since `v1-e34-t11`, the last stage of every real run (**retention**) deletes a download once a manifest on this machine came from its bytes and that snapshot is confirmed in sync in the bucket. A download that is not yet imported or not yet confirmed stays, and the run summary's `inbox_retention` names it with the reason. A deleted weekly is never fetched again by `pull`, because its week is `already_imported`; the site's back-catalogue keeps it if it is ever needed by hand. The final backfill run cleared 37 files, 3,527,154,833 bytes, leaving the inbox at 0 B |
 | `pending_publish` is not empty | `aws sso login --profile debate-dev-evidence`, then `caselist pull --publish-pending` |
 | `another caselist sync is already running` | Another `pull` holds the lock; wait for it. See the scheduled-sync runbook if none is running |
 | `SnapshotOutOfOrder` on a manual import | Stop. Something newer is already held. Never pass `--allow-out-of-order` in this backfill |

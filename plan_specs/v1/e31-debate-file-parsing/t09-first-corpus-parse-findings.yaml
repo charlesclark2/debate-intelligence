@@ -62,7 +62,7 @@ spec:
         writes a new version directory, and the report records the refusal counts and
         empty-tag counts before and after.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

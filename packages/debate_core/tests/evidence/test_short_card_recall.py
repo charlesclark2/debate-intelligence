@@ -253,6 +253,9 @@ def measure() -> dict[str, Row]:
     short_set = load_short_cards()
     short_cards = Placed(short_set, placed_clusters(short_set))
     short_lengths = original_lengths(short_set)
+    extended_set = load_short_cards(extended=True)
+    extended = Placed(extended_set, placed_clusters(extended_set))
+    extended_lengths = original_lengths(extended_set)
 
     def short(lengths: dict[str, int]) -> Callable[[Variant, Variant], bool]:
         return lambda left, right: (
@@ -281,12 +284,29 @@ def measure() -> dict[str, Row]:
         "short-card set, abbreviated with abbreviated": row_over(
             short_cards, lambda left, right: is_abbreviated(left) and is_abbreviated(right)
         ),
+        "extended set, all pairs": row_over(extended, lambda _left, _right: True),
+        "extended set, full short cards": row_over(extended, both_full(short(extended_lengths))),
+        "extended set, full long cards": row_over(
+            extended, both_full(lambda left, right: not short(extended_lengths)(left, right))
+        ),
+        "extended set, abbreviated with a full copy": row_over(
+            extended, lambda left, right: is_abbreviated(left) != is_abbreviated(right)
+        ),
+        "extended set, abbreviated with abbreviated": row_over(
+            extended, lambda left, right: is_abbreviated(left) and is_abbreviated(right)
+        ),
     }
 
 
 @pytest.fixture(scope="module")
 def measured() -> dict[str, Row]:
     return measure()
+
+
+@pytest.fixture(scope="module")
+def extended_clusters() -> dict[str, str]:
+    """Row id to cluster id for the whole short-card set, t06's rows and t08's placed together."""
+    return placed_clusters(load_short_cards(extended=True))
 
 
 def test_the_short_card_set_is_what_it_says_it_is() -> None:
@@ -374,18 +394,181 @@ T06_MISSES: Final[dict[str, dict[Miss, int]]] = {
     "short-card set, abbreviated with abbreviated": {Miss.SPLIT_FULL_COPIES: 4, Miss.NO_FULL_COPY: 1},
 }
 
+#: The extended set (t06's 28 rows and t08's 36, placed together) against the code as t06 left it,
+#: worked out by hand from the rows before the run. t06's rows contribute what they do above.
+#:
+#: * Full short cards, 37 same-card pairs. Kessler's five copies are five clusters: ten misses, four
+#:   of them pairs where one copy is wholly inside the other (candidates) and six with a changed
+#:   word or no overlap (confirmation). Verran's two-typo copy misses its two clean copies.
+#: * Full long cards, 4 pairs. Ostrander's two-typo copy misses its two clean copies.
+#: * Abbreviated with a full copy, 55 pairs. Every Verran and Ostrander abbreviation matches full
+#:   copies in two clusters (9 misses), and so does the Pryce 5 ... 5 cut (1). The Pryce 6 ... 7 cut
+#:   links.
+#: * Abbreviated with abbreviated, 20 pairs. The two Verran cuts are both unlinked by the split;
+#:   the four Quill cuts (6 pairs) and the two Sable cuts have no full copy.
+#:
+#: **The one false positive was not predicted.** The row that is only the thirteen words two
+#: Tolland cards share was labelled a card of its own, on the expectation that it would stay one.
+#: Today's banding happens to pair it with the first of the two and not the second, containment is
+#: 1.0, and it joins that card. Had the banding paired it with both, the two cards would have
+#: merged through it. `v1-e31-t08` has to end with this at zero.
+BASELINE_EXTENDED_TABLE: Final[dict[str, tuple[int, int, int]]] = {
+    "extended set, all pairs": (39, 1, 77),
+    "extended set, full short cards": (18, 1, 19),
+    "extended set, full long cards": (2, 0, 2),
+    "extended set, abbreviated with a full copy": (12, 0, 43),
+    "extended set, abbreviated with abbreviated": (7, 0, 13),
+}
 
-def test_the_table_is_t06s_row_for_row(measured: dict[str, Row]) -> None:
-    """The baseline `v1-e31-t08` starts from: t06's table, reproduced before anything changes."""
-    assert {name: row.figures for name, row in measured.items()} == T06_TABLE
+BASELINE_EXTENDED_MISSES: Final[dict[str, dict[Miss, int]]] = {
+    "extended set, all pairs": {
+        Miss.CONFIRMATION: 17,
+        Miss.CANDIDATES: 4,
+        Miss.SPLIT_FULL_COPIES: 48,
+        Miss.NO_FULL_COPY: 8,
+    },
+    "extended set, full short cards": {Miss.CONFIRMATION: 15, Miss.CANDIDATES: 4},
+    "extended set, full long cards": {Miss.CONFIRMATION: 2},
+    "extended set, abbreviated with a full copy": {Miss.SPLIT_FULL_COPIES: 43},
+    "extended set, abbreviated with abbreviated": {Miss.SPLIT_FULL_COPIES: 5, Miss.NO_FULL_COPY: 8},
+}
+
+EXPECTED_TABLE: Final = T06_TABLE | BASELINE_EXTENDED_TABLE
+"""What the code under test should measure today. Each fix replaces the rows it changes."""
+
+EXPECTED_MISSES: Final = T06_MISSES | BASELINE_EXTENDED_MISSES
+
+
+def test_the_table_is_as_expected_row_for_row(measured: dict[str, Row]) -> None:
+    """t06's eight rows, then the extended set's five, each worked out before it was measured."""
+    assert {name: row.figures for name, row in measured.items()} == EXPECTED_TABLE
 
 
 def test_every_miss_comes_from_one_of_t06s_three_mechanisms(measured: dict[str, Row]) -> None:
-    assert {name: row.by_mechanism for name, row in measured.items()} == T06_MISSES
+    assert {name: row.by_mechanism for name, row in measured.items()} == EXPECTED_MISSES
+
+
+# ------------------------------------------------------------------------------------------------
+# One fixture case per mechanism (ac2), and the hard negatives
+# ------------------------------------------------------------------------------------------------
+
+NOT_YET: Final = "v1-e31-t08 baseline: fails against the code as t06 left it; the fix removes this mark"
+
+
+@pytest.mark.xfail(strict=True, reason=NOT_YET)
+@pytest.mark.parametrize(
+    ("copy", "original"),
+    [
+        ("k1-ocr-join", "k1-original"),
+        ("k1-dropped-word", "k1-original"),
+        ("s1-typo", "s1-original"),
+        ("s4-ocr-split", "s4-original"),
+    ],
+)
+def test_mechanism_1_one_changed_word_keeps_a_short_card_in_its_cluster(
+    extended_clusters: dict[str, str], copy: str, original: str
+) -> None:
+    assert extended_clusters[copy] == extended_clusters[original]
+
+
+@pytest.mark.xfail(strict=True, reason=NOT_YET)
+@pytest.mark.parametrize("copy", ["k1-trimmed-end", "k1-trimmed-start"])
+def test_mechanism_1_a_short_cards_trimmed_copy_is_compared_with_it(
+    extended_clusters: dict[str, str], copy: str
+) -> None:
+    """Wholly inside the original, sharing a third of its shingles: the banding never pairs them."""
+    assert extended_clusters[copy] == extended_clusters["k1-original"]
+
+
+@pytest.mark.xfail(strict=True, reason=NOT_YET)
+@pytest.mark.parametrize(
+    ("abbreviation", "original"),
+    [
+        ("a-v1-five-five", "v1-original"),
+        ("a-v1-three-six", "v1-original"),
+        ("a-w1-five-five", "w1-original"),
+        ("a-s1-three-eight", "s1-original"),
+    ],
+)
+def test_mechanism_2_an_abbreviation_links_although_its_full_copies_are_split(
+    extended_clusters: dict[str, str], abbreviation: str, original: str
+) -> None:
+    assert extended_clusters[abbreviation] == extended_clusters[original]
+
+
+@pytest.mark.xfail(strict=True, reason=NOT_YET)
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ("a-orphan-four-four", "a-orphan-three-five"),
+        ("a-q1-six-six", "a-q1-four-eight"),
+        ("a-q1-six-six", "a-q1-five-four-brackets"),
+        ("a-q1-four-eight", "a-q1-five-four-brackets"),
+    ],
+)
+def test_mechanism_3_two_cuts_of_a_card_with_no_full_copy_share_a_cluster(
+    extended_clusters: dict[str, str], left: str, right: str
+) -> None:
+    assert extended_clusters[left] == extended_clusters[right]
+
+
+def test_the_copies_two_typos_split_off_stay_split(extended_clusters: dict[str, str]) -> None:
+    """Linking an abbreviation never merges the full-card clusters it matches."""
+    assert extended_clusters["v1-two-typos"] != extended_clusters["v1-original"]
+    assert extended_clusters["w1-two-typos"] != extended_clusters["w1-original"]
+
+
+HARD_NEGATIVES: Final = [
+    # t06's: two short cards from one article, and an abbreviation of each.
+    ("s1-original", "s2-original"),
+    ("a-s1-five-five", "a-s2-five-five"),
+    # A whole short card that is another card's first twelve words plus two.
+    ("x1-original", "x2-original"),
+    # Thirteen shared opening words.
+    ("p1-original", "p2-original"),
+    ("p0-shared-opening", "p2-original"),
+    # The next year's audit: the same sentence with two words different.
+    ("r1-original", "r2-original"),
+    # Same five opening and thirteen closing words; and the 5 ... 5 cut both match.
+    ("y1-original", "y2-original"),
+    ("a-y1-five-five", "y2-original"),
+    ("a-y1-five-five", "a-y2-six-seven"),
+    # Orphans: same author and year, same opening phrase.
+    ("a-q1-six-six", "a-q2-six-six"),
+    ("a-q1-five-four-brackets", "a-q2-six-six"),
+    # ... same closing phrase.
+    ("a-q1-six-six", "a-q3-seven-six"),
+    ("a-q1-four-eight", "a-q3-seven-six"),
+    # ... same three words at each end.
+    ("a-q1-three-three", "a-q4-six-six"),
+    ("a-q1-six-six", "a-q4-six-six"),
+    # ... a cut two different orphans both open and close with.
+    ("a-t1-eight-seven", "a-t2-eight-seven"),
+    ("a-t1-four-six", "a-t2-eight-seven"),
+    # An orphan that opens and closes like another card's linked 3 ... 3 cut.
+    ("a-s5-five-five", "a-s4-three-three"),
+    ("a-s5-five-five", "s4-original"),
+]
+
+
+@pytest.mark.parametrize(("left", "right"), HARD_NEGATIVES)
+def test_hard_negatives_stay_in_separate_clusters(
+    extended_clusters: dict[str, str], left: str, right: str
+) -> None:
+    assert extended_clusters[left] != extended_clusters[right]
+
+
+@pytest.mark.xfail(strict=True, reason=NOT_YET)
+def test_a_cut_that_is_only_two_cards_shared_opening_joins_neither(
+    extended_clusters: dict[str, str],
+) -> None:
+    """Thirteen words that two different cards both open with are a cut of either, so of neither."""
+    assert extended_clusters["p0-shared-opening"] != extended_clusters["p1-original"]
+    assert extended_clusters["p0-shared-opening"] != extended_clusters["p2-original"]
 
 
 def test_report_short_card_recall(measured: dict[str, Row]) -> None:
-    """Prints the table; asserts only that no subset merged two different cards."""
+    """Prints the table the session report quotes."""
     print()
     print(f"{'pairs':46} {'TP':>3} {'FP':>3} {'FN':>3}  precision  recall  misses by mechanism")
     for name, row in measured.items():
@@ -395,4 +578,9 @@ def test_report_short_card_recall(measured: dict[str, Row]) -> None:
             f"{name:46} {counts.true_positives:3} {counts.false_positives:3} "
             f"{counts.false_negatives:3}  {counts.precision:9.3f}  {counts.recall:6.3f}  {mechanisms}"
         )
-    assert all(row.counts.false_positives == 0 for row in measured.values())
+
+
+@pytest.mark.xfail(strict=True, reason=NOT_YET)
+def test_no_two_different_cards_share_a_cluster_on_either_labelled_set(measured: dict[str, Row]) -> None:
+    """Precision 1.000 everywhere: the spec forbids a single false positive."""
+    assert {name: row.counts.false_positives for name, row in measured.items() if row.figures[1]} == {}

@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 39 | 33 | 214 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 45 | 33 | 312 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 47 | 33 | 317 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -186,7 +186,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Parser accuracy evaluation](plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) `v1-e31-t05-parser-eval` | InProgress | 1 | 16.0 |
 | [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | Succeeded | 5 | 12.0 |
 | [Labeling worksheets survive a spreadsheet round trip](plan_specs/v1/e31-debate-file-parsing/t07-worksheet-round-trip.yaml) `v1-e31-t07-worksheet-round-trip` | Succeeded | 1 | 4.0 |
-| [Near-duplicate matching finds short cards and abbreviated disclosures](plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml) `v1-e31-t08-short-card-recall` | Pending | 1 | 5.0 |
+| [Near-duplicate matching finds short cards and abbreviated disclosures](plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml) `v1-e31-t08-short-card-recall` | InProgress | 1 | 5.0 |
 | [Parser findings from the first full-corpus parse](plan_specs/v1/e31-debate-file-parsing/t09-first-corpus-parse-findings.yaml) `v1-e31-t09-first-corpus-parse-findings` | Pending | 1 | 4.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
@@ -210,6 +210,8 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A camp release of junk alone leaves the inbox once it is handled](plan_specs/v1/e34-caselist-sync/t15-junk-release-leaves-inbox.yaml) `v1-e34-t15-junk-release-leaves-inbox` | Pending | 1 | 1.0 |
 | [The dry run's download plan names no path on the operator's machine](plan_specs/v1/e34-caselist-sync/t16-dry-run-names-no-home-path.yaml) `v1-e34-t16-dry-run-names-no-home-path` | Pending | 1 | 0.5 |
 | [The weekly pull parses the sources it imported](plan_specs/v1/e34-caselist-sync/t17-pull-parses-new-sources.yaml) `v1-e34-t17-pull-parses-new-sources` | Pending | 2 | 3.0 |
+| [A publish stopped by an expired session still owes every snapshot it did not finish](plan_specs/v1/e34-caselist-sync/t18-publish-owes-every-unpublished-snapshot.yaml) `v1-e34-t18-publish-owes-every-unpublished-snapshot` | Pending | 1 | 2.0 |
+| [Unreadable local files fail a stage, and a notification says whether a failure is transient](plan_specs/v1/e34-caselist-sync/t19-unreadable-local-files-and-notification-codes.yaml) `v1-e34-t19-unreadable-local-files-and-notification-codes` | Pending | 1 | 3.0 |
 
 
 ### v1.2 — Argument landscape & file building

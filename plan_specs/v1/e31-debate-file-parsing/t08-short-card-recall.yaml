@@ -73,7 +73,7 @@ spec:
         cluster or link on the real corpus, drawn at random, are checked by eye and recorded
         as tallies only (same card / different card / unsure).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

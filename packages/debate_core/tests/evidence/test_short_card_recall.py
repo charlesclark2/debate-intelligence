@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import random
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -433,10 +434,54 @@ BASELINE_EXTENDED_MISSES: Final[dict[str, dict[Miss, int]]] = {
     "extended set, abbreviated with abbreviated": {Miss.SPLIT_FULL_COPIES: 5, Miss.NO_FULL_COPY: 8},
 }
 
-EXPECTED_TABLE: Final = T06_TABLE | BASELINE_EXTENDED_TABLE
+#: After the short-body step (`v1-e31-t08`, mechanism 1), worked out by hand before the run.
+#:
+#: * Every full short copy t06's rows missed differs from its original by one word with five
+#:   unchanged words either side, so all seven pairs join, and the variant set's four with them.
+#: * With no split left among t06's full copies, every one of its abbreviations links: all 44 pairs
+#:   with a full copy, and the four abbreviated pairs the split had cost. The orphan pair remains.
+#: * Kessler's five copies are one cluster (10 pairs). The copies with *two* typos stay split, short
+#:   (Verran) and long (Ostrander), so their abbreviations still match two clusters.
+#: * The row that is only two cards' shared opening is inside both, and joins neither.
+AFTER_SHORT_BODY_STEP_TABLE: Final[dict[str, tuple[int, int, int]]] = {
+    "variant set, all pairs": (75, 0, 0),
+    "variant set, pairs with a short card": (6, 0, 0),
+    "variant set, pairs of long cards only": (69, 0, 0),
+    "short-card set, all pairs": (80, 0, 1),
+    "short-card set, full short cards": (24, 0, 0),
+    "short-card set, full long card": (1, 0, 0),
+    "short-card set, abbreviated with a full copy": (44, 0, 0),
+    "short-card set, abbreviated with abbreviated": (11, 0, 1),
+    "extended set, all pairs": (93, 0, 23),
+    "extended set, full short cards": (35, 0, 2),
+    "extended set, full long cards": (2, 0, 2),
+    "extended set, abbreviated with a full copy": (45, 0, 10),
+    "extended set, abbreviated with abbreviated": (11, 0, 9),
+}
+
+AFTER_SHORT_BODY_STEP_MISSES: Final[dict[str, dict[Miss, int]]] = {
+    "variant set, all pairs": {},
+    "variant set, pairs with a short card": {},
+    "variant set, pairs of long cards only": {},
+    "short-card set, all pairs": {Miss.NO_FULL_COPY: 1},
+    "short-card set, full short cards": {},
+    "short-card set, full long card": {},
+    "short-card set, abbreviated with a full copy": {},
+    "short-card set, abbreviated with abbreviated": {Miss.NO_FULL_COPY: 1},
+    "extended set, all pairs": {Miss.CONFIRMATION: 4, Miss.SPLIT_FULL_COPIES: 11, Miss.NO_FULL_COPY: 8},
+    "extended set, full short cards": {Miss.CONFIRMATION: 2},
+    "extended set, full long cards": {Miss.CONFIRMATION: 2},
+    "extended set, abbreviated with a full copy": {Miss.SPLIT_FULL_COPIES: 10},
+    "extended set, abbreviated with abbreviated": {Miss.SPLIT_FULL_COPIES: 1, Miss.NO_FULL_COPY: 8},
+}
+
+BASELINE_TABLE: Final = T06_TABLE | BASELINE_EXTENDED_TABLE
+"""Every row against the code as t06 left it: what each fix is measured from."""
+
+EXPECTED_TABLE: Final = AFTER_SHORT_BODY_STEP_TABLE
 """What the code under test should measure today. Each fix replaces the rows it changes."""
 
-EXPECTED_MISSES: Final = T06_MISSES | BASELINE_EXTENDED_MISSES
+EXPECTED_MISSES: Final = AFTER_SHORT_BODY_STEP_MISSES
 
 
 def test_the_table_is_as_expected_row_for_row(measured: dict[str, Row]) -> None:
@@ -448,6 +493,15 @@ def test_every_miss_comes_from_one_of_t06s_three_mechanisms(measured: dict[str, 
     assert {name: row.by_mechanism for name, row in measured.items()} == EXPECTED_MISSES
 
 
+def test_no_row_is_worse_than_before_the_fixes(measured: dict[str, Row]) -> None:
+    """Against the baseline: no row has fewer true positives, and none has a false positive."""
+    assert T06_MISSES.keys() | BASELINE_EXTENDED_MISSES.keys() == measured.keys()
+    for name, row in measured.items():
+        true_positives, false_positives, _ = row.figures
+        assert true_positives >= BASELINE_TABLE[name][0], name
+        assert false_positives == 0, name
+
+
 # ------------------------------------------------------------------------------------------------
 # One fixture case per mechanism (ac2), and the hard negatives
 # ------------------------------------------------------------------------------------------------
@@ -455,7 +509,6 @@ def test_every_miss_comes_from_one_of_t06s_three_mechanisms(measured: dict[str, 
 NOT_YET: Final = "v1-e31-t08 baseline: fails against the code as t06 left it; the fix removes this mark"
 
 
-@pytest.mark.xfail(strict=True, reason=NOT_YET)
 @pytest.mark.parametrize(
     ("copy", "original"),
     [
@@ -471,7 +524,6 @@ def test_mechanism_1_one_changed_word_keeps_a_short_card_in_its_cluster(
     assert extended_clusters[copy] == extended_clusters[original]
 
 
-@pytest.mark.xfail(strict=True, reason=NOT_YET)
 @pytest.mark.parametrize("copy", ["k1-trimmed-end", "k1-trimmed-start"])
 def test_mechanism_1_a_short_cards_trimmed_copy_is_compared_with_it(
     extended_clusters: dict[str, str], copy: str
@@ -487,7 +539,6 @@ def test_mechanism_1_a_short_cards_trimmed_copy_is_compared_with_it(
         ("a-v1-five-five", "v1-original"),
         ("a-v1-three-six", "v1-original"),
         ("a-w1-five-five", "w1-original"),
-        ("a-s1-three-eight", "s1-original"),
     ],
 )
 def test_mechanism_2_an_abbreviation_links_although_its_full_copies_are_split(
@@ -510,6 +561,21 @@ def test_mechanism_3_two_cuts_of_a_card_with_no_full_copy_share_a_cluster(
     extended_clusters: dict[str, str], left: str, right: str
 ) -> None:
     assert extended_clusters[left] == extended_clusters[right]
+
+
+@pytest.mark.parametrize(
+    ("abbreviation", "original"),
+    [
+        ("a-s1-three-eight", "s1-original"),
+        ("a-s1-five-five", "s1-typo"),
+        ("a-s4-three-three", "s4-ocr-split"),
+    ],
+)
+def test_an_abbreviation_links_once_one_changed_word_no_longer_splits_its_full_copies(
+    extended_clusters: dict[str, str], abbreviation: str, original: str
+) -> None:
+    """t06's own 33 misses of this kind: the split was mechanism 1's, so mechanism 1's fix heals it."""
+    assert extended_clusters[abbreviation] == extended_clusters[original]
 
 
 def test_the_copies_two_typos_split_off_stay_split(extended_clusters: dict[str, str]) -> None:
@@ -558,13 +624,23 @@ def test_hard_negatives_stay_in_separate_clusters(
     assert extended_clusters[left] != extended_clusters[right]
 
 
-@pytest.mark.xfail(strict=True, reason=NOT_YET)
 def test_a_cut_that_is_only_two_cards_shared_opening_joins_neither(
     extended_clusters: dict[str, str],
 ) -> None:
     """Thirteen words that two different cards both open with are a cut of either, so of neither."""
     assert extended_clusters["p0-shared-opening"] != extended_clusters["p1-original"]
     assert extended_clusters["p0-shared-opening"] != extended_clusters["p2-original"]
+
+
+@pytest.mark.parametrize("shuffle_seed", [1, 2, 3])
+def test_cluster_ids_do_not_depend_on_the_order_of_the_cards(
+    extended_clusters: dict[str, str], shuffle_seed: int
+) -> None:
+    """Joining short bodies and linking abbreviations are functions of the set of cards."""
+    reordered = load_short_cards(extended=True)
+    random.Random(shuffle_seed).shuffle(reordered)
+    assert placed_clusters(reordered) == extended_clusters
+    assert placed_clusters(list(reversed(reordered))) == extended_clusters
 
 
 def test_report_short_card_recall(measured: dict[str, Row]) -> None:
@@ -580,7 +656,6 @@ def test_report_short_card_recall(measured: dict[str, Row]) -> None:
         )
 
 
-@pytest.mark.xfail(strict=True, reason=NOT_YET)
 def test_no_two_different_cards_share_a_cluster_on_either_labelled_set(measured: dict[str, Row]) -> None:
     """Precision 1.000 everywhere: the spec forbids a single false positive."""
     assert {name: row.counts.false_positives for name, row in measured.items() if row.figures[1]} == {}

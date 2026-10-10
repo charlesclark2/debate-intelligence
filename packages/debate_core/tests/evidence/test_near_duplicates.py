@@ -47,15 +47,20 @@ from debate_core.evidence.fingerprints import card_fingerprint
 from debate_core.evidence.near_duplicates import (
     LSH_BANDS,
     LSH_ROWS_PER_BAND,
+    MAX_CONTAINER_CLUSTERS,
+    MIN_CUT_SHARE,
     MINHASH_PERMUTATIONS,
     SHINGLE_SIZE,
+    SHORT_BODY_SHINGLES,
     NearDuplicateThresholds,
     cluster_near_duplicates,
+    contained_but_for_one_word,
     containment,
     jaccard,
     matching_words,
     minhash_signature,
     shingles,
+    word_shingles,
 )
 
 VARIANTS_PATH = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "fingerprints" / "variants.jsonl"
@@ -367,3 +372,193 @@ def test_thresholds_are_configurable(variants: list[Variant]) -> None:
     strict_clusters = cluster_ids(variants, strict)
     assert relaxed["a1-ocr-spacing"] == relaxed["a1-original"]
     assert strict_clusters["a1-ocr-spacing"] != strict_clusters["a1-original"]
+
+
+# ------------------------------------------------------------------------------------------------
+# Short bodies (`v1-e31-t08`): matched as cuts, by enumeration, and never by a guess
+# ------------------------------------------------------------------------------------------------
+
+LIBRARY: list[str] = [
+    *("extending", "library", "hours", "past", "nine", "in", "the", "evening", "tripled", "the"),
+    *("number", "of", "students", "using", "the", "study", "rooms", "on", "weeknights"),
+]
+"""Nineteen words. `students` is the thirteenth: twelve words before it and six after."""
+
+
+def numbered(stem: str, count: int) -> list[str]:
+    """`count` distinct invented words, so no shingle is shared except where a test shares it."""
+    return [f"{stem}{index}" for index in range(count)]
+
+
+def clustered(*bodies: list[str]) -> list[str]:
+    """Cluster ids of `bodies`, in the order given. Each body is keyed by a made-up fingerprint."""
+    keys = [f"{index:064x}" for index in range(len(bodies))]
+    clusters = cluster_near_duplicates({key: " ".join(body) for key, body in zip(keys, bodies, strict=True)})
+    return [clusters[key] for key in keys]
+
+
+def replaced(words: list[str], position: int, *replacement: str, count: int = 1) -> list[str]:
+    return [*words[:position], *replacement, *words[position + count :]]
+
+
+@pytest.mark.parametrize(
+    ("short", "long"),
+    [
+        # One word changed.
+        (replaced(LIBRARY, 12, "studnts"), LIBRARY),
+        (LIBRARY, replaced(LIBRARY, 12, "studnts")),
+        # One word split in two by a stray space, read from either side.
+        (LIBRARY, replaced(LIBRARY, 12, "stud", "ents")),
+        (replaced(LIBRARY, 12, "stud", "ents"), [*numbered("before", 3), *LIBRARY, *numbered("after", 3)]),
+        # Two words run together.
+        (replaced(LIBRARY, 5, "inthe", count=2), LIBRARY),
+        # One word dropped from the copy, and one added to it.
+        (replaced(LIBRARY, 9, count=1), LIBRARY),
+        (LIBRARY, replaced(LIBRARY, 9, count=1)),
+        # A cut of the body, with a changed word inside the cut.
+        (replaced(LIBRARY, 12, "studnts")[3:], LIBRARY),
+        # No change at all: wholly inside.
+        (LIBRARY[2:17], LIBRARY),
+    ],
+)
+def test_a_short_body_is_inside_another_but_for_one_word(short: list[str], long: list[str]) -> None:
+    assert contained_but_for_one_word(short, long)
+
+
+@pytest.mark.parametrize(
+    ("short", "long"),
+    [
+        # The changed word has fewer than five unchanged words before it, or after it.
+        (replaced(LIBRARY, 3, "passed"), LIBRARY),
+        (replaced(LIBRARY, 15, "studdy"), LIBRARY),
+        # Two words changed, however far apart.
+        (replaced(replaced(LIBRARY, 6, "teh"), 12, "studnts"), LIBRARY),
+        # Two adjacent words changed.
+        (replaced(LIBRARY, 11, "off", "studnts", count=2), LIBRARY),
+        # Two cards that open with the same twelve words and then say different things.
+        ([*LIBRARY[:12], "pupils", "enrolled"], LIBRARY),
+        ([*LIBRARY[:12], *numbered("otherwise", 7)], LIBRARY),
+        # Too short to have five unchanged words on both sides of anything.
+        (replaced(LIBRARY[:10], 5, "inn"), LIBRARY),
+        # Its opening is nowhere in the other body.
+        (numbered("unrelated", 19), LIBRARY),
+    ],
+)
+def test_a_short_body_is_not_inside_another_but_for_one_word(short: list[str], long: list[str]) -> None:
+    assert not contained_but_for_one_word(short, long)
+
+
+def test_the_short_line_is_where_the_containment_threshold_admits_one_changed_word() -> None:
+    """`SHORT_BODY_SHINGLES` is derived, not chosen: at the line, t04's rule needs no help.
+
+    The costliest change the short step tolerates is a word split in two inside a cut of a longer
+    body, which costs the cut the `SHINGLE_SIZE + 1` shingles that hold either half. That is a tenth
+    of 60: one shingle fewer and the threshold refuses it, which is the case the step is for.
+    """
+    assert SHORT_BODY_SHINGLES == (SHINGLE_SIZE + 1) * 10
+    limit = NearDuplicateThresholds().containment
+    body = numbered("word", 200)
+
+    def cut_with_a_split_word(shingle_count: int) -> list[str]:
+        cut = replaced(body[50 : 50 + shingle_count + SHINGLE_SIZE - 2], 30, "split", "apart")
+        assert len(word_shingles(cut)) == shingle_count
+        return cut
+
+    def overlap(cut: list[str]) -> float:
+        return containment(frozenset(word_shingles(cut)), frozenset(word_shingles(body)))
+
+    at_the_line = cut_with_a_split_word(SHORT_BODY_SHINGLES)
+    under_the_line = cut_with_a_split_word(SHORT_BODY_SHINGLES - 1)
+    assert contained_but_for_one_word(at_the_line, body)
+    assert contained_but_for_one_word(under_the_line, body)
+    assert overlap(at_the_line) >= limit
+    assert overlap(under_the_line) < limit
+
+
+def test_a_short_copy_with_one_changed_word_joins_its_card() -> None:
+    original, typo, unrelated = clustered(LIBRARY, replaced(LIBRARY, 12, "studnts"), numbered("other", 19))
+    assert original == typo
+    assert unrelated != original
+
+
+def test_a_short_cut_joins_the_one_card_it_is_inside() -> None:
+    """Thirteen words of a 38-word card: a quarter of its shingles, which the banding rarely pairs."""
+    card = [*numbered("shared", 13), *numbered("first", 25)]
+    assert len(set(clustered(card, card[:13]))) == 1
+
+
+def test_a_short_body_inside_two_different_cards_joins_neither_and_does_not_merge_them() -> None:
+    """The fragment two cards share is a cut of either. Joining one would be a guess, and joining
+    both would make one card of two."""
+    opening = numbered("shared", 13)
+    first = [*opening, *numbered("first", 25)]
+    second = [*opening, *numbered("second", 24)]
+    assert len(set(clustered(first, second, opening))) == 3
+    assert len(set(clustered(first, opening))) == 1
+    assert len(set(clustered(second, opening))) == 1
+
+
+def test_a_short_cut_joins_once_the_copies_that_hold_it_are_one_cluster() -> None:
+    """Two copies of one card a word apart both hold the cut, and are one cluster by the same step."""
+    card = [*numbered("shared", 13), *numbered("first", 25)]
+    assert len(set(clustered(card, replaced(card, 20, "changed"), card[:13]))) == 1
+
+
+def test_a_short_cut_joins_a_body_no_more_than_four_times_its_size() -> None:
+    assert MIN_CUT_SHARE == 0.25
+    body = numbered("word", 64)  # 60 shingles
+    a_quarter = body[:19]  # 15 shingles
+    under_a_quarter = body[:18]  # 14 shingles
+    assert len(set(clustered(body, a_quarter))) == 1
+    assert len(set(clustered(body, under_a_quarter))) == 2
+
+
+def test_a_body_too_large_to_join_still_makes_a_short_body_ambiguous() -> None:
+    """A whole section parsed as one card holds many cards' text. It cannot gather them, and a
+    short body inside it and inside one real card is still inside two."""
+    fragment = numbered("shared", 14)
+    card = [*fragment, *numbered("card", 20)]
+    section = [*numbered("before", 100), *fragment, *numbered("after", 100)]
+    assert len(set(clustered(card, fragment))) == 1
+    assert len(set(clustered(card, section, fragment))) == 3
+
+
+def templated(count: int) -> list[list[str]]:
+    """`count` different bodies that all open with the same five words and close with the same five."""
+    return [
+        [*numbered("opens", 5), *numbered(f"body{index}x", 20), *numbered("closes", 5)]
+        for index in range(count)
+    ]
+
+
+def test_a_short_body_that_opens_and_closes_like_many_others_is_left_alone() -> None:
+    """Past `MAX_CONTAINER_CLUSTERS` other clusters holding both its ends, nothing is compared."""
+    assert MAX_CONTAINER_CLUSTERS == 8
+    few = templated(MAX_CONTAINER_CLUSTERS)
+    many = templated(MAX_CONTAINER_CLUSTERS + 1)
+    copy = replaced(few[0], 15, "changed")
+    assert copy == replaced(many[0], 15, "changed")
+
+    joined = clustered(*few, copy)
+    assert joined[-1] == joined[0]
+    assert len(set(joined)) == MAX_CONTAINER_CLUSTERS
+
+    left_alone = clustered(*many, copy)
+    assert len(set(left_alone)) == MAX_CONTAINER_CLUSTERS + 2
+
+
+def test_a_long_bodys_cut_is_still_left_to_the_banding() -> None:
+    """The short step is for short bodies. Two long bodies are matched exactly as before it existed:
+    a 64-word cut of a 400-word card shares a seventh of its shingles, the banding does not pair
+    them, and nothing else looks. One word shorter, the cut is short and is not a quarter of the
+    card, so it does not join either; cut from a card four times its size, it does."""
+    card = numbered("word", 400)
+    long_cut = card[100:164]
+    assert len(word_shingles(long_cut)) == SHORT_BODY_SHINGLES
+    assert len(set(clustered(card, long_cut))) == 2
+
+    smaller_card = card[80:320]  # 236 shingles: four times 59
+    short_cut = card[100:163]
+    assert len(word_shingles(short_cut)) == SHORT_BODY_SHINGLES - 1
+    assert len(set(clustered(smaller_card, short_cut))) == 1
+    assert len(set(clustered(smaller_card, long_cut))) == 2

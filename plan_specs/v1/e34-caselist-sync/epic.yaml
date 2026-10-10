@@ -492,5 +492,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t16-dry-run-names-no-home-path
+    - id: t17
+      kind: Task
+      name: 'The weekly pull parses the sources it imported'
+      description: >-
+        caselist pull parses the sources each run imports and publishes the parsed store
+        with the raw one, so the weekly agent keeps the parsed store current.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t17-pull-parses-new-sources.yaml
+        goalRef: v1-e34-t17-pull-parses-new-sources
+      dependsOn:
+      - t13
+      - ext-v1-e31-t06-parse-pipeline
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t17-pull-parses-new-sources reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t17-pull-parses-new-sources
 status:
   phase: Pending

@@ -1,0 +1,109 @@
+# TASK v1-e31-t08-short-card-recall - Near-duplicate matching finds short cards and abbreviated disclosures
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t08-short-card-recall
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "Near-duplicate matching finds short cards and abbreviated disclosures"
+spec:
+  # Filed by the PM, 2026-10-10, from v1-e31-t06's Short-card recall section and Follow-up work 1.
+  description: >-
+    v1-e31-t06 measured near-duplicate recall apart for short cards (under 60 words). Precision
+    was 1.000 everywhere. Recall was 0.947 overall on v1-e31-t04's variant set but 0.333 on
+    pairs involving a short card. On the new hand-labelled short-card set
+    (`tests/fixtures/fingerprints/short_cards.jsonl`) it was 0.708 for full short cards and
+    0.250 for an abbreviated disclosure against its full copy. It found three mechanisms. (1)
+    One changed word puts a short card's containment under the 0.9 confirmation threshold, and
+    t04's 32x4 banding missed one pair outright. (2) An abbreviated disclosure links only when
+    every matching full card is in one cluster, so one near-duplicate miss among the full copies
+    unlinks every abbreviation of that card. (3) Two abbreviations of the same card cut at
+    different words never meet unless no full copy exists to link both. Abbreviated disclosures
+    dominate wiki-converted caselists, so E32's distinct-team and most-read counts would
+    undercount the corpus's main format. Fix all three, or justify leaving one: length-aware
+    candidates and confirmation for short bodies, a linking rule that tolerates a split among
+    the matching full cards, and a link key among abbreviated disclosures themselves. Keep
+    precision. The exact fingerprint is a content identity other code keys on and does not
+    change. Cluster ids may change, which bumps `FINGERPRINT_VERSION`. t06's store rebuilds its
+    aggregates on every run, so no re-parse follows.
+  priority: 1
+  constraints:
+    packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, tests/fixtures/fingerprints, docs/data]
+    forbidden:
+      - Any false positive on either hand-labelled set
+      - Changing how the exact fingerprint is computed
+      - Editing the labels of either hand-labelled set to improve a figure (new labelled rows may be added, committed before the measurement that uses them)
+      - Card text, a tag or a cite in any log at INFO or above
+  context:
+    - kind: TaskRef
+      name: v1-e31-t06-parse-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On both hand-labelled sets, through `CaselistCardStatsService.place`, precision
+        stays 1.000. Recall reaches at least 0.90 for full short cards, at least 0.75 for an
+        abbreviated disclosure against a full copy, and at least 0.75 for abbreviated
+        against abbreviated. If a target cannot be met without a false positive, the report
+        shows the trade-off and the PM amends the target rather than the session relaxing
+        precision.
+    - id: ac2
+      description: >-
+        Each of the three mechanisms has a fixture case shown failing first against today's
+        code and passing after.
+    - id: ac3
+      description: >-
+        The report gives t06's recall table before and after, row for row, and the rebuild
+        time on t06's structural fixture world and on t03's 300-page synthetic file before
+        and after. Neither more than doubles without a justification the PM accepts.
+    - id: ac4
+      description: >-
+        If cluster ids change, `FINGERPRINT_VERSION` is bumped, and
+        docs/data/parsed-card-store.md and the t04 docstrings say what changed.
+    - id: ac5
+      description: >-
+        Operator-run, from the dev data directory after the next parse: 20 pairs that newly
+        cluster or link on the real corpus, drawn at random, are checked by eye and recorded
+        as tallies only (same card / different card / unsure).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t08-short-card-recall-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Fix short-card candidates and confirmation, the split-cluster linking rule and
+    abbreviated-to-abbreviated linking, measured on the labelled sets with precision held.
+  goalRef:
+    name: v1-e31-t08-short-card-recall
+  graph:
+    nodes:
+      - id: short-card-matching
+        kind: Task
+        name: Short cards and abbreviations cluster and link
+        description: >-
+          The three fixes, the before and after measurements, the version bump if any, and
+          the operator spot check.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fingerprint and recall tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence]
+status:
+  phase: Pending

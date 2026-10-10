@@ -4,7 +4,7 @@
   "corpus": "caselist",
   "summary": "A disclosure that went through Google Docs, which keeps outline levels and the bold and sizes that go with them but references no Verbatim style. Structure survives as `w:outlineLvl` plus formatting, and the profile's size and weight guards are what make the promotion safe.",
   "profile_version": "2026.09.20-verbatim-1",
-  "parser_version": "2026.09.20-docx-1",
+  "parser_version": "2026.10.10-docx-2",
   "warnings_contain": [],
   "paragraphs": [
     {

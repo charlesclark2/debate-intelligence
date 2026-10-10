@@ -32,12 +32,25 @@ so a later change that starts reading authorship has to change that test to do i
 
 ## XML hardening
 
-`word/document.xml` is scanned for a DTD or an entity declaration and refused if it has one,
-before a parser sees it. The parser itself is then built with `resolve_entities=False`,
-`no_network=True`, `load_dtd=False`, `dtd_validation=False` and `huge_tree=False`, so even a
-construct the scan missed cannot expand, fetch a URL or exhaust memory. `remove_blank_text` stays
-off: a `<w:t>` holding nothing but spaces is part of a card's text, and evidence is copied
-exactly.
+Every part this reader opens is refused if it declares a document type, in three steps:
+
+1. **The bytes are scanned for `<!DOCTYPE` and `<!ENTITY`** before a parser is built. XML allows an
+   entity declaration, and the `SYSTEM` and `PUBLIC` identifiers of an external reference, in one
+   place only: a document type declaration. So a part with no `<!DOCTYPE` declares none of them.
+2. **The parser is built to resolve nothing** (:func:`hardened_xml_parser`): `resolve_entities=False`,
+   `no_network=True`, `load_dtd=False`, `dtd_validation=False` and `huge_tree=False`. Whatever
+   reaches it cannot expand an entity, read a file, fetch a URL or exhaust memory.
+3. **The parsed part is refused if it carries a document type at all.** The scan reads bytes, and in
+   UTF-16 a zero byte sits between every two letters of `<!DOCTYPE`. What the parser found is the
+   same in every encoding.
+
+The scan once also looked for `SYSTEM "` and `PUBLIC '` anywhere in the part. Those are words, and
+they are markup only inside a declaration step 1 already refuses. The first parse of the whole
+corpus refused 23 ordinary files for card text such as *the system "works"* (`v1-e31-t09`), and not
+one of them holds a declaration.
+
+`remove_blank_text` stays off: a `<w:t>` holding nothing but spaces is part of a card's text, and
+evidence is copied exactly.
 """
 
 from __future__ import annotations
@@ -67,6 +80,7 @@ __all__ = [
     "PackageLimits",
     "StyleDefinition",
     "XmlElement",
+    "hardened_xml_parser",
     "open_debate_docx",
     "qualified_name",
 ]
@@ -123,9 +137,11 @@ ENCRYPTED_PACKAGE_STREAM: Final = "EncryptedPackage".encode("utf-16-le")
 #: First bytes of a PDF.
 PDF_MAGIC: Final = b"%PDF"
 
-#: A DTD or entity declaration anywhere in a part. Refused before a parser is built, because the
-#: cheapest defence against entity expansion is never to hand the document to a parser at all.
-_FORBIDDEN_XML_CONSTRUCT = re.compile(rb"<!DOCTYPE|<!ENTITY|SYSTEM\s+[\"']|PUBLIC\s+[\"']", re.IGNORECASE)
+#: A document type or entity declaration anywhere in a part. Refused before a parser is built,
+#: because the cheapest defence against entity expansion is never to hand the document to a parser
+#: at all. An external `SYSTEM` or `PUBLIC` identifier can only be written inside one of these two
+#: declarations, so the words themselves are not looked for: in a `w:t` they are card text.
+_FORBIDDEN_XML_CONSTRUCT = re.compile(rb"<!DOCTYPE|<!ENTITY", re.IGNORECASE)
 
 
 def qualified_name(local_name: str, namespace: str = W_NAMESPACE) -> str:
@@ -324,15 +340,15 @@ def _read_part(archive: zipfile.ZipFile, name: str, limits: PackageLimits) -> by
     return data
 
 
-def _parse_xml(data: bytes, name: str) -> XmlElement:
-    """Parse one part with every expansion, validation and network route switched off."""
-    match = _FORBIDDEN_XML_CONSTRUCT.search(data)
-    if match is not None:
-        raise DocxPackageError(
-            ParseFailureReason.FORBIDDEN_XML_CONSTRUCT,
-            f"{name} declares {match.group(0).decode('ascii', 'replace')}, which is never resolved",
-        )
-    parser = etree.XMLParser(
+def hardened_xml_parser() -> etree.XMLParser:
+    """An XML parser with every expansion, validation and network route switched off.
+
+    `resolve_entities=False` leaves an entity reference as a reference: nothing is expanded and no
+    external entity is read. `load_dtd=False` and `dtd_validation=False` leave an external subset
+    unread. `no_network=True` forbids a fetch outright, and `huge_tree=False` keeps libxml2's own
+    limits on depth and size. A new parser for every part, so one part's errors are never another's.
+    """
+    return etree.XMLParser(
         resolve_entities=False,
         no_network=True,
         load_dtd=False,
@@ -343,12 +359,32 @@ def _parse_xml(data: bytes, name: str) -> XmlElement:
         remove_comments=True,
         remove_pis=True,
     )
+
+
+def _parse_xml(data: bytes, name: str) -> XmlElement:
+    """Parse one part, refusing it if it declares a document type in any encoding."""
+    match = _FORBIDDEN_XML_CONSTRUCT.search(data)
+    if match is not None:
+        raise DocxPackageError(
+            ParseFailureReason.FORBIDDEN_XML_CONSTRUCT,
+            f"{name} declares {match.group(0).decode('ascii', 'replace')}, which is never resolved",
+        )
     try:
-        root = etree.fromstring(data, parser=parser)
+        root = etree.fromstring(data, parser=hardened_xml_parser())
     except etree.XMLSyntaxError as error:
         raise DocxPackageError(ParseFailureReason.MALFORMED_XML, f"{name} is not well-formed XML") from error
     if root is None:
         raise DocxPackageError(ParseFailureReason.MALFORMED_XML, f"{name} holds no root element")
+    # The scan above reads bytes, so a declaration in UTF-16 passes it. The parser has resolved
+    # nothing, and what it found is the same whatever the encoding: any document type is refused.
+    # libxml2 records a subset for every document type declaration, even one that declares
+    # nothing; lxml's stubs type it as always present, which it is not.
+    declared: object = root.getroottree().docinfo.internalDTD
+    if declared is not None:
+        raise DocxPackageError(
+            ParseFailureReason.FORBIDDEN_XML_CONSTRUCT,
+            f"{name} declares <!DOCTYPE in an encoding the byte scan does not read, which is never resolved",
+        )
     return root
 
 
@@ -407,9 +443,9 @@ def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_
 
     The order is deliberate: the formats we do not parse are named from their magic bytes before
     a zip is opened, the zip directory is checked before anything is decompressed, macros are
-    refused before a document part is looked for, and the XML is scanned for expansion constructs
-    before a parser is built. Nothing about the document's contents is examined until all of that
-    has passed.
+    refused before a document part is looked for, and the XML is scanned for a document type
+    declaration before a parser is built. Nothing about the document's contents is examined until
+    all of that has passed.
     """
     _refuse_non_zip_formats(content)
     try:

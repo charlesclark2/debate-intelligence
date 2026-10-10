@@ -4,7 +4,7 @@
   "corpus": "team",
   "summary": "A file that has been copied between documents for three seasons. `Heading411` is a Heading 4 that Word de-duplicated twice — 197 files in the survey carry one — and it must resolve to a tag rather than to the pocket its id starts with. The block heading below it survives only as bold underlined text at a heading size, with no outline level at all: the wall CardMirror hits and leaves flat.",
   "profile_version": "2026.09.20-verbatim-1",
-  "parser_version": "2026.09.20-docx-1",
+  "parser_version": "2026.10.10-docx-2",
   "warnings_contain": [],
   "paragraphs": [
     {

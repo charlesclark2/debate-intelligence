@@ -4,7 +4,7 @@
   "corpus": "team",
   "summary": "A speech-time table whose first cell carries `Heading4`, and a page banner in a text box that Word wrote twice. Both are OTHER: a table cell and a text box are page furniture whatever style they carry, and the box is read once rather than twice.",
   "profile_version": "2026.09.20-verbatim-1",
-  "parser_version": "2026.09.20-docx-1",
+  "parser_version": "2026.10.10-docx-2",
   "warnings_contain": [],
   "paragraphs": [
     {

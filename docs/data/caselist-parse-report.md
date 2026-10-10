@@ -154,3 +154,348 @@ figures do and do not show, is in that task's session report under "Corpus-scale
 * **Each parser version is a full copy.** A version bump writes a new 5.8 GB directory beside the
   old one, locally and in both buckets. Retention of superseded version directories is noted for a
   later task.
+
+## What the refusals and the empty tags were (`v1-e31-t09`)
+
+Diagnosed on 2026-10-10 by reading the dev data directory's blobs and parsed store in place,
+read-only, with scratch scripts that wrote nothing there. Counts and construct names only. The fixes
+are in parser version `2026.10.10-docx-2`; the store this report describes is unchanged until the
+operator re-parses, and the "after" columns below are what that parser produced over the same
+sources in a read-only run, not what a store holds yet.
+
+### The 30 failures, by reason
+
+| Reason | Caselist | Files | The construct or defect | Part | Verdict |
+|---|---|---|---|---|---|
+| `FORBIDDEN_XML_CONSTRUCT` | hspolicy26 | 19 | The words `system "` (16 files) or `system '` (3) in a paragraph's text. No `DOCTYPE`, no entity declaration, no external reference | `word/document.xml`, inside `w:t` | Parser defect. Read from `2026.10.10-docx-2` |
+| `FORBIDDEN_XML_CONSTRUCT` | openev | 3 | The words `public '` (2 files), or `system '` and `system "` (1), in a paragraph's text | `word/document.xml`, inside `w:t` | Parser defect. Read from `2026.10.10-docx-2` |
+| `FORBIDDEN_XML_CONSTRUCT` | hspf26 | 1 | The words `public '` in a paragraph's text | `word/document.xml`, inside `w:t` | Parser defect. Read from `2026.10.10-docx-2` |
+| `MALFORMED_XML` | hsld26 | 3 | Four U+0001 control characters written raw into the text. XML 1.0 forbids them, so the part is not well-formed | `word/document.xml`, inside `w:t` | Genuinely broken. Still refused |
+| `MALFORMED_XML` | hsld26 | 2 | One U+0002 control character and 26 U+FFFE noncharacters written raw into the text | `word/document.xml`, inside `w:t` | Genuinely broken. Still refused |
+| `NOT_A_ZIP` | hsld26 | 1 | A gzip stream holding a JSON document, 44 KB, disclosed as a DOCX. That is the shape of CardMirror's native `.cmir` format, not a Word package | The whole file | Genuinely not a DOCX. Still refused |
+| `COMPRESSION_RATIO_EXCEEDED` | openev | 1 | One entry expands 278-fold against a limit of 200: a 1.9 MB page thumbnail stored as 7 KB | `docProps/thumbnail.emf` | The guard working as set. Still refused; see below |
+
+**The 23.** The refusal's scan looked for a document type or entity declaration, and also for the
+words `SYSTEM` or `PUBLIC` followed by a quotation mark anywhere in a part, in any letter case.
+Those words are markup only inside a declaration. In a paragraph they are prose, such as a card
+that says a system "works". All 23 document parts are well-formed UTF-8, none declares a document
+type, and every match is inside the text of a `w:t` element. No other part of the 23 packages
+matched. The scan now looks for `<!DOCTYPE` and `<!ENTITY` only, which is the one place XML allows
+an external identifier, and a part that carries a document type in any encoding is refused after
+parsing. Across the 9,738 distinct DOCX sources that open as a zip, every document part is UTF-8
+and none begins with a document type declaration.
+
+**The 5 malformed files** are all exports of one program. Each package has the same eight parts,
+with `docProps/custom.xml` and no `docProps/app.xml`, and its custom properties name CardMirror's
+document id. 2,703 sources share that shape and 2,691 of them parse. In these five the exporter
+wrote a character into the text that XML does not allow, so no conforming XML parser reads the
+part. The three files with U+0001 are well-formed once those four characters are taken out, which
+shows the characters are the whole defect there. Taking them out would be editing evidence text,
+which the parser never does.
+
+**The compression ratio.** Of the 9,738 distinct DOCX sources that open as a zip, 9,732 have no
+entry above 50-fold, five have one between 50 and 100, and this file is the only one above 100.
+The refused entry is the page thumbnail Word saves beside a document, which the parser never
+opens. The file is ordinary, but 278 against 200 is not a small margin, and nothing else in the
+corpus comes within half of the limit, so the limit is left where it is.
+
+### Counts before and after, from the same sources
+
+| Caselist | DOCX sources | Parsed before | Parsed after | Failed before | Failed after | Cards before | Cards after |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 4,360 | 4,354 | 4,354 | 6 | 6 | 67,914 | 64,678 |
+| hspf26 | 2,650 | 2,649 | 2,650 | 1 | 0 | 44,298 | 42,906 |
+| hspolicy26 | 2,629 | 2,610 | 2,629 | 19 | 0 | 87,556 | 82,565 |
+| openev | 102 | 98 | 101 | 4 | 1 | 7,288 | 8,056 |
+| **Total** | 9,741 | 9,711 | 9,734 | 30 | 7 | 207,056 | 198,205 |
+
+The 23 newly read files hold 2,212 cards (328 in hspf26, 807 in hspolicy26, 1,077 in openev). The
+seven failures left are the five `MALFORMED_XML` and the `NOT_A_ZIP` in hsld26 and the
+`COMPRESSION_RATIO_EXCEEDED` in openev.
+
+### Cards with an empty tag
+
+The store holds 15,528 cards with an empty tag, 7.5% of its cards. Every one is the empty string;
+none is whitespace.
+
+| Caselist | `FULL` | `ABBREVIATED` | `CITE_ONLY` | Empty tags | Of cards |
+|---|---|---|---|---|---|
+| hsld26 | 1,554 | 2,227 | 821 | 4,602 | 6.8% |
+| hspf26 | 2,688 | 585 | 372 | 3,645 | 8.2% |
+| hspolicy26 | 2,995 | 3,192 | 695 | 6,882 | 7.9% |
+| openev | 231 | 112 | 56 | 399 | 5.5% |
+| **Total** | 7,468 | 6,116 | 1,944 | 15,528 | 7.5% |
+
+5,947 of the 9,711 parsed sources hold at least one. Three rules produced them:
+
+| Rule | Empty-tag cards | What happened |
+|---|---|---|
+| A cite that arrives after a body starts a new card with no tag | 14,387 | A paragraph inside a card's body was classified as a cite, by `heuristic-cite-line-author-year` (6,826), `heuristic-wiki-cite-entry` (6,182), `verbatim-cite-run-style` (1,243) or a cite paragraph style (136). The card was closed there and the rest stored as another with no tag |
+| A cite with no card open above it starts one with no tag | 1,102 | A cite straight after a block, hat or pocket heading, an analytic, or loose text. The file gives it no tag |
+| A blank line in `Heading 4` opens a card with an empty tag | 39 | The blank heading also demoted the real tag above it to an analytic, so the card lost a tag the document has |
+
+The first is the operator's sample. Its second and third stored cards were the middle and the end
+of the first card's body: two paragraphs of small print that each hold an ellipsis and a name with
+a year, which the wiki cite-entry heuristic takes for a cite entry. The document has one card
+there, not three.
+
+In `2026.10.10-docx-2` a cite the classifier *guessed*, arriving inside an open body, stays in that
+body when it is formatted as body (small print throughout, or highlighted) and does not open with a
+bold name. 11,912 paragraphs are re-read that way. A blank line in any heading, tag, cite, analytic
+or undertag style is `OTHER`: 7,986 paragraphs. Expected after a re-parse:
+
+| Caselist | `FULL` | `ABBREVIATED` | `CITE_ONLY` | Cards with no tag | Of cards |
+|---|---|---|---|---|---|
+| hsld26 | 1,086 | 0 | 270 | 1,356 | 2.1% |
+| hspf26 | 1,755 | 0 | 152 | 1,907 | 4.4% |
+| hspolicy26 | 739 | 0 | 355 | 1,094 | 1.3% |
+| openev | 79 | 0 | 19 | 98 | 1.2% |
+| **Total** | 3,659 | 0 | 796 | 4,455 | 2.2% |
+
+No card is `ABBREVIATED` in this table because none is anywhere after the re-parse: see
+[`ABBREVIATED`, by shape](#abbreviated-by-shape).
+
+Those 4,455 are written as `"tag": null`, never as an empty string. They are cards whose cite came
+from a cite style (1,658), from the cite-line heuristic and looked like a cite (2,398), or from the
+wiki heuristic outside small print (399). Whether each is a second card under one tag or one more
+split is for the labelled evaluation to say; [parsed-card-store.md](parsed-card-store.md#a-card-with-no-tag)
+says how a reader should treat them.
+
+What the change did not touch: of the cards stored now, 186,634 have the same paragraph range under
+the new parser, and every one of those has the same tag. 183,417 also have the same evidence text
+and the same cite. The other 3,217 are cards that
+[a later rule](#a-cards-body-filed-as-its-cite) reached: their first body paragraph was stored in
+the cite and is in the evidence text now. 1,630 of the 186,634 have a different section path,
+because 1,847 stored cards carry an empty string in their path from a blank heading line, and none
+does afterwards. Completeness changes on 18,227 of them, in two ways only, each described below:
+15,776 from `ABBREVIATED` to `FULL` and 2,451 from `CITE_ONLY` to `FULL`.
+
+### `ABBREVIATED`, by shape
+
+The first parse called a card `ABBREVIATED` when an ellipsis marker (`…`, `...`, `[…]`, `[...]` or
+`***`) appeared anywhere in its body or its cite: 22,443 cards. `2026.10.10-docx-2` decides it from
+the shape of a disclosure of first and last words, and the rule was taken from these counts. They
+are over the 198,205 cards the new parser reads from the same sources, measured read-only on
+2026-10-10. Words are whitespace-separated.
+
+The counts were taken twice: before [the rule of the next section](#a-cards-body-filed-as-its-cite),
+which moves 3,365 paragraphs out of cites and into bodies, and again with it in place. The figures
+below are the second set. The first set had 19,402 bodies with a marker where this has 22,053, and
+gave the same answer at every bound.
+
+Under the old rule 23,842 of those cards would be `ABBREVIATED`: 22,053 whose body holds a marker,
+and 1,789 whose body holds none and whose cite does.
+
+**Body length, by how many markers the body holds** (22,053 cards):
+
+| Body words | 1 marker | 2 | 3 to 5 | 6 or more | All |
+|---|---|---|---|---|---|
+| 20 or fewer | 0 | 0 | 0 | 0 | 0 |
+| 21 to 30 | 6 | 0 | 1 | 0 | 7 |
+| 31 to 60 | 32 | 0 | 0 | 0 | 32 |
+| 61 to 100 | 69 | 2 | 7 | 0 | 78 |
+| 101 to 200 | 344 | 41 | 16 | 2 | 403 |
+| 201 to 500 | 2,471 | 443 | 155 | 36 | 3,105 |
+| 501 to 1,000 | 3,872 | 743 | 574 | 106 | 5,295 |
+| Over 1,000 | 6,194 | 2,291 | 2,984 | 1,664 | 13,133 |
+| **All** | 12,988 | 3,520 | 3,737 | 1,808 | 22,053 |
+
+For comparison, 10,668 of the 173,898 bodies with no marker are 100 words or fewer (6.1%), against
+117 of these 22,053 (0.5%). A body with an ellipsis is, if anything, longer than one without.
+
+**Where the marker sits**, in the 12,988 bodies with one marker, as the share of the body's words
+before it:
+
+| Before the marker | 0 to 9% | 10s | 20s | 30s | 40s | 50s | 60s | 70s | 80s | 90s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Cards | 691 | 1,148 | 1,700 | 1,476 | 1,556 | 1,704 | 1,050 | 1,050 | 1,259 | 1,354 |
+
+It sits anywhere, as an omission in running text does. In 68 the marker opens or closes the body (1
+opens, 67 close), so it joins nothing.
+
+**The words either side**, in the 12,920 one-marker bodies with words on both sides, by the longer
+of the two sides. Cumulative:
+
+| Longer side, at most | 12 | 15 | 20 | 30 | 40 | 50 | 60 | 80 | 100 | 150 | 200 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Cards | 0 | 0 | 6 | 15 | 39 | 56 | 60 | 128 | 205 | 506 | 874 |
+
+The shortest longer side in the corpus is 17 words. The 38 one-marker bodies of 60 words or fewer
+are a handful of texts disclosed several times each, and by their paragraph counts and lengths they
+are whole short cards with an omission.
+
+**The distribution does not separate, because there is no second population.** A disclosure of
+first and last words would show as a cluster of short bodies with one marker and a few words either
+side. There is none: not one body has a single marker with 15 words or fewer on both sides. What
+the old rule marked is one population, whole cards, with a thin lower tail of whole short cards.
+
+**The rule, chosen on the conservative side:** a body is `ABBREVIATED` when it holds exactly one
+marker, has words on both sides of it, and no more than **twelve** on either side. A marker in the
+cite decides nothing.
+
+* **Exactly one** marker: one joins a beginning to an end; two or more leave things out of a
+  quotation. 9,065 bodies hold two or more, and all but 13 of those are over 120 words.
+* **Words on both sides:** a marker at either end joins nothing.
+* **Twelve** is the middle of the only gap there is. Below it are the disclosures we have a model of:
+  the convention is a card's first and last few words, and the profile's own examples have three to
+  nine a side. Above it is everything the corpus holds, from 17 up. Any bound from 9 to 16 gives the
+  same answer on this corpus. Raising it to 20 would call 6 cards abbreviated, to 30 15, to 50 56,
+  and nothing tells those from any other short card.
+
+**Before and after, per caselist:**
+
+| Caselist | Stored: `FULL` | `ABBREVIATED` | `CITE_ONLY` | After: `FULL` | `ABBREVIATED` | `CITE_ONLY` |
+|---|---|---|---|---|---|---|
+| hsld26 | 57,057 | 8,418 | 2,439 | 63,949 | 0 | 729 |
+| hspf26 | 40,319 | 2,972 | 1,007 | 42,506 | 0 | 400 |
+| hspolicy26 | 74,902 | 10,524 | 2,130 | 81,529 | 0 | 1,036 |
+| openev | 6,563 | 529 | 196 | 7,967 | 0 | 89 |
+| **Total** | 178,841 | 22,443 | 5,772 | 195,951 | 0 | 2,254 |
+
+The card totals differ between the two halves because the empty-tag fix merged split cards, as
+above, and `CITE_ONLY` falls because of the rule in the next section. To see the completeness rule
+alone, take the new parser's 198,205 cards and apply each rule to them:
+
+| Caselist | `ABBREVIATED` to `FULL` | `FULL` to `ABBREVIATED` |
+|---|---|---|
+| hsld26 | 9,086 | 0 |
+| hspf26 | 3,473 | 0 |
+| hspolicy26 | 10,593 | 0 |
+| openev | 690 | 0 |
+| **Total** | 23,842 | 0 |
+
+Of the 23,842, 22,053 held a marker in the body and 1,789 only in the cite. This rule does not
+touch `CITE_ONLY`: 2,254 either way. Among the 186,634 stored cards whose paragraph range is the
+same under the new parser, 15,776 go from `ABBREVIATED` to `FULL`.
+
+**So the corpus as it stands holds no abbreviated disclosure in a card's body**, and
+`v1-e31-t08`'s abbreviation linking will find nothing to link by that route after the re-parse.
+That is what the files hold: these caselists disclose open-source documents, which are whole cards.
+
+### A card's body filed as its cite
+
+Added to `2026.10.10-docx-2` after the two rules above, and measured the same way. Before it,
+2,902 of the 4,731 `CITE_ONLY` cards held a cite paragraph of more than 100 words: whole cards,
+2,713 of them with a tag, with their body in the cite field.
+
+**The defect.** The wiki cite-entry heuristic takes any paragraph that holds an ellipsis and a name
+with a year for a cite, at any length. The cite-line heuristic takes any paragraph of 400
+characters or fewer that opens with a capitalised word and a year. The empty-tag rule above keeps
+such a paragraph in its card once a body is open. The *first* body paragraph has no body open
+before it, so it was added to the card's cite. A card whose whole body is that one paragraph came
+out `CITE_ONLY`: thousands of characters in `full_cite`, and no evidence text for anything to
+fingerprint or cluster.
+
+**The rule.** A cite the classifier *guessed*, arriving while a card is open and has no body yet,
+is the body's first paragraph when all of these hold:
+
+* **it is formatted as body**, in the same sense as above: highlighted, or small print throughout,
+  and not opening with a bold name;
+* **no run carries the cite character style.** A cite style never moves, whatever its length;
+* **the card already has a cite.** With no cite before it, only length can say where a cite would
+  end: the paragraph must be longer than 2,000 characters and must not open with a name and a year;
+* **it is not a line in the middle of a cite:** a paragraph of 2,000 characters or fewer with
+  another cite directly below it is left where it is.
+
+A guess that arrives with no card open is left alone. Read as body it would belong to no card.
+
+**The bound of 2,000 characters**, from the 772 paragraphs the wiki heuristic makes the first cite
+under a tag. A paragraph is marked as a cite by its author when it carries the cite character style
+or opens with a name and a year:
+
+| Characters | Paragraphs | Marked as a cite | Formatted as body |
+|---|---|---|---|
+| 1,000 or fewer | 258 | 194 | 6 |
+| 1,001 to 1,517 | 81 | 74 | 10 |
+| 1,518 to 2,678 | 35 | 0 | 34 |
+| 2,679 or more | 398 | 32 | 323 |
+
+* **Against cite styles.** The classifier calls a paragraph a cite by its character style up to
+  1,000 characters, the profile's own bound, so the 139,012 such cites end at 999. The 1,414
+  paragraphs in a cite *paragraph* style at the head of a card have no such bound, and the longest
+  is 1,427 characters.
+* **It separates.** Paragraphs marked as cites run up to 1,517 characters and stop. The next one
+  is at 2,679, and from there they are whole cards written as one paragraph behind a name. Between
+  the two, all but one of the 35 are formatted as body.
+* **2,000 is in the gap, on the conservative side.** Any bound from 1,518 to 2,678 moves no
+  paragraph the corpus marks as a cite. 1,518 would move 11 more paragraphs than 2,000 does, and
+  they are left alone.
+* **In characters,** because the classifier's two cite bounds are.
+
+**What it moved**, over the same 9,734 parsed sources: 3,365 paragraphs.
+
+| Rule id on the paragraph | Guess it overrode | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|---|
+| `assembly-cite-guess-after-card-cite` | wiki cite entry | 1,225 | 398 | 783 | 85 | 2,491 |
+| `assembly-cite-guess-after-card-cite` | cite line | 62 | 152 | 298 | 25 | 537 |
+| `assembly-cite-guess-longer-than-a-cite` | wiki cite entry | 168 | 97 | 65 | 7 | 337 |
+
+3,007 of the 3,365 are highlighted. Of the 2,491, 2,156 are longer than 2,000 characters. With a
+body open one paragraph earlier, the empty-tag rule takes 40 more guesses that follow one of these.
+
+**`CITE_ONLY`, per caselist:**
+
+| Caselist | Before | After | Cards that gained evidence text |
+|---|---|---|---|
+| hsld26 | 1,906 | 729 | 1,178 |
+| hspf26 | 849 | 400 | 449 |
+| hspolicy26 | 1,807 | 1,036 | 773 |
+| openev | 169 | 89 | 80 |
+| **Total** | 4,731 | 2,254 | 2,480 |
+
+* **2,480 cards gain evidence text where they had none**, 2,445 of them with a tag. 1,721 gain more
+  than 1,000 words and 40 gain 100 or fewer. In 885 more cards, which already had a body, its first
+  paragraph comes back from the cite.
+* **No card is `ABBREVIATED` afterwards either.**
+* **Card totals rise by 9**, to 198,205, and so do cards with no tag, to 4,455. In 9 cards the
+  paragraph that now opens the body is followed by a real cite, so the card ends there and the cite
+  starts a card with no tag: two cards under one tag. In the seven where the cite follows directly,
+  the paragraph is highlighted and between 5,673 and 16,871 characters long.
+* **Every card the rule does not reach is unchanged in every field:** 194,831 cards compared field
+  by field against the parser without the rule. The other 3,374 are the 3,365 it reached and the 9
+  split off them.
+* **Of the cards it reached,** the 3,356 that keep their paragraph range keep their tag, undertag,
+  section path and provenance, and every line of the old cite and body is still in the new cite or
+  body. No card loses a short cite: all 2,324 that had one keep it. The 337 re-read under a tag
+  with no cite had none, and their `full_cite` is now empty.
+
+**What it left alone**, among guesses formatted as body and standing before any body:
+
+| Left as a cite | Paragraphs |
+|---|---|
+| A cite line as the first cite under a tag: too short to be anything else | 342 |
+| A wiki entry as the first cite under a tag, 2,000 characters or fewer | 24 |
+| Carries the cite character style | 22 |
+| A guess over 2,000 characters with no card open | 19 |
+| A guess of 2,000 characters or fewer with no card open | 50 |
+| Between the card's cite and another cite, and short enough to be a cite entry | 11 |
+| A first paragraph over 2,000 characters that opens with a name and a year | 4 |
+
+**What the counts cannot settle.**
+
+* **A small-print line under the cite.** 358 of the 3,365 are small print with no highlighting. 218
+  of those are lines of 400 characters or fewer that open with a word and a number, sit directly
+  under the card's cite and are followed by more body. They read as the body's first line. A cite's
+  second line set in small print, with no bold opening, would look the same, and 9 of the 218 hold
+  a URL. The labelled evaluation is what can say.
+* **460 `CITE_ONLY` cards still hold a cite paragraph of more than 100 words**, down from 2,902;
+  in 388 of them it is a guess, down from 2,828. Across all cards, 764 cite paragraphs from the
+  wiki heuristic are over 100 words, down from 3,515, and 295 are over 1,000 words, down from
+  2,058. Most of what is left is not formatted as body: it opens with a bold name, or sits at
+  reading size with nothing highlighted, which is how a card written as one paragraph behind its
+  cite looks. The rest are in the table above.
+* **A short wiki entry that really is a first-and-last-words disclosure stays `CITE_ONLY`.** At
+  most 84 paragraphs from that heuristic are 40 words or fewer. Splitting an entry into its cite
+  and its words is a model question, filed separately.
+
+### What this raised and did not change
+
+* **The classifier lets go of a cite character style past 1,000 characters.** 53 of the 69 first
+  wiki cites between 1,001 and 1,500 characters carry that style: real cites, too long for the
+  style rule, that the wiki heuristic happens to catch because they hold an ellipsis. One without
+  an ellipsis falls through to body text. That is the profile's bound and the classifier's rule,
+  not the assembly's, and it is not changed here.
+* **The labelled evaluation cannot yet arbitrate.** Two of its 30 files are corrected by a person,
+  both team files with no untagged card. On those 60 paragraphs the blank-line rule raised tag
+  precision from 0.714 to 1.000, every card boundary stayed where it was, and completeness is
+  right on 4 of 4 matched cards before and after each of the three rules.

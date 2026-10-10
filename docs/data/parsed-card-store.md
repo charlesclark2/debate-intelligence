@@ -44,6 +44,15 @@ beside it, and neither touches the old one:
 The current directory of a caselist is the newest generation of the parser version the reader
 runs. Nothing ever writes into an older one again; the local adapter refuses to.
 
+A parser version is bumped whenever what the parser emits changes, and also when the only change
+is that a file once refused is now read: a refusal is a recorded entry like any other, so under the
+same version the skip key below would pass that file over for good.
+
+| Parser version | What it read | Differs from the one before |
+|---|---|---|
+| `2026.09.20-docx-1` | The first full corpus, 2026-10-10 ([caselist-parse-report.md](caselist-parse-report.md)) | |
+| `2026.10.10-docx-2` | Written by the next `caselist parse` | Reads 23 files refused for the words `system "` and `public '` in card text. Keeps a body paragraph guessed to be a cite in its card. Does not take a blank line in a heading style for a heading. Calls a card `ABBREVIATED` for the shape of a first-and-last-words disclosure, not for an ellipsis. Writes "no tag" as `null`, under record `schema_version` 2 (`v1-e31-t09`) |
+
 ## The skip key
 
 A source is parsed once per **(source sha256, parser_version, profile_version)**. A run skips every
@@ -62,7 +71,7 @@ Every line of every file is one JSON object with sorted keys, and every one carr
 
 | Field | What it is |
 |---|---|
-| `schema_version` | `1` |
+| `schema_version` | `2` in a record written now; `1` in every record of `2026.09.20-docx-1`. See [Schema versions](#schema-versions) |
 | `record` | `source`, `document` or `occurrence` |
 | `caselist` | The caselist slug, or `openev` |
 | `snapshot` | `YYYY-MM-DD` for a caselist; `<year>-<event>` for an OpenEv release |
@@ -70,6 +79,23 @@ Every line of every file is one JSON object with sorted keys, and every one carr
 | `parser_version` | The parser that read it, e.g. `2026.09.20-docx-1` |
 | `profile_version` | The style profile it resolved through, e.g. `2026.09.20-verbatim-1` |
 | `fingerprint_version` | The card matching rules, e.g. `card-fingerprint-v2`. What it says depends on the record: see [Fingerprint versions](#fingerprint-versions) |
+
+### Schema versions
+
+`schema_version` says which shape a record has. A reader that does not go through the Python
+models (a `jq` line, a notebook, a later cloud reader) branches on it.
+
+| Version | Written by | What differs |
+|---|---|---|
+| `1` | `2026.09.20-docx-1` | A stored card's `tag` is always a string. `""` means the file gave the card no tag |
+| `2` | `2026.10.10-docx-2` and later (`v1-e31-t09`) | A stored card's `tag` is a string or `null`, and is never `""`. A reader that calls a string function on `tag` needs a null check. Nothing else moved: no field was added, removed or renamed |
+
+A record keeps the version it was written with. The `2026.09.20-docx-1` directories stay version 1,
+here and in both buckets, because nothing rewrites a version directory. `LocalParsedStore` and the
+record models read both, and refuse a version they do not know and a version-2 document that says
+"no tag" as `""`. The source and occurrence records have the same fields under both versions; they
+carry 2 because one version covers a directory, so a reader checks one line rather than every
+record kind.
 
 ### `source`: a line of `index.jsonl`, and the first line of a source's file
 
@@ -95,7 +121,7 @@ and its `source_format` says which.
 | `TOO_LARGE`, `TOO_MANY_ENTRIES`, `COMPRESSION_RATIO_EXCEEDED` | Oversized, or shaped like a zip bomb |
 | `MACRO_ENABLED` | A Word package carrying a VBA project |
 | `ENCRYPTED` | Password-protected |
-| `FORBIDDEN_XML_CONSTRUCT` | A DTD or an entity declaration |
+| `FORBIDDEN_XML_CONSTRUCT` | A part that declares a document type (`<!DOCTYPE`) or an entity, in any encoding. The words `SYSTEM` and `PUBLIC` in card text are not one |
 | `TIMEOUT` | Still parsing at the per-file time limit |
 | `WORKER_CRASHED` | The worker process died while parsing it |
 | `PARSER_ERROR` | The parser raised instead of returning a failure: a parser bug |
@@ -124,6 +150,73 @@ text, formatting and font-size spans as offsets into that text, completeness, ma
 confidence, rule ids, `UNVERIFIED` status and `FILE_IMPORT` provenance with its element range. A
 reader in Python calls `DocumentRecord.to_parsed_document(path)` with a path from the manifests and
 gets a validated `ParsedDocument` back.
+
+#### A card with no tag
+
+A file may give a card no tag. In a record that is **`"tag": null`**, and from `2026.10.10-docx-2`
+on it is never an empty string. In Python, ask `card.has_tag`.
+
+`null` is not a parser failure to work around. What it means depends on the card's `completeness`:
+
+| `tag` | `completeness` | What the file holds there | How to treat it |
+|---|---|---|---|
+| `null` | `CITE_ONLY` | A citation on its own: a source is named, with no claim and no text | A citation the file lists. Not an argument, and nothing to match a body against |
+| `null` | `FULL` or `ABBREVIATED` | Evidence with a cite and no claim line above it | Either the file is written that way, or it is a second card under the tag of the card before it. Its `rule_ids` say which rule read its cite; a first rule beginning `heuristic-` was a guess |
+
+In `2026.09.20-docx-1` the same thing was written as `"tag": ""`, and `to_parsed_document` reads
+both. That directory also holds 15,528 such cards against 4,455 expected in the next, because
+about 11,000 of them were not cards the file holds: a paragraph inside a card's body had been
+read as the cite of a new one. A card whose `rule_ids` include
+`assembly-cite-guess-inside-card-body:…` kept such a paragraph in its body.
+
+A heading in a card's `section_path` is never an empty string either. In `2026.09.20-docx-1`,
+1,847 cards carry one, from a blank line in a heading style.
+
+#### What `ABBREVIATED` means
+
+From `2026.10.10-docx-2`, a card is `ABBREVIATED` when its body has the shape of a disclosure of
+first and last words: **exactly one** ellipsis marker (`…`, `...`, `[…]`, `[...]` or `***`), words on
+both sides of it, and **no more than twelve** on either side. A marker in the cite decides nothing.
+A whole card whose text leaves something out, once or ten times, is `FULL`.
+
+The bound was set from what a disclosure is, because the corpus has none to measure. Of the 22,053
+card bodies that hold a marker, none has a single marker with 15 words or fewer on both sides, and
+only 38 with a single marker are 60 words or shorter in all
+([caselist-parse-report.md](caselist-parse-report.md#abbreviated-by-shape)). So over the corpus as
+it stood on 2026-10-10 the new parser calls **no card** `ABBREVIATED`, where the first parse called
+22,443 so. Expect the value to be rare, and treat a store with none as normal.
+
+**In `2026.09.20-docx-1`, do not read `ABBREVIATED` as "first and last words only".** There it means
+an ellipsis marker anywhere in the body or the cite, and 21,278 of its 22,443 `ABBREVIATED` cards
+have a body longer than 1,000 characters.
+
+#### What `CITE_ONLY` means, and a body that was filed as a cite
+
+A card is `CITE_ONLY` when the file gives it a cite and no body: its `evidence_text` is empty and
+nothing fingerprints it.
+
+**In `2026.09.20-docx-1`, at least 2,451 of the 5,772 `CITE_ONLY` cards are not that.** The
+classifier guesses that a paragraph holding an ellipsis and a name with a year is a cite entry, at
+any length. When that paragraph was the first of a card's body, it was added to the cite, and a
+card whose whole body is one paragraph was stored with thousands of characters in `full_cite` and
+no evidence text.
+From `2026.10.10-docx-2` such a paragraph opens the body
+([caselist-parse-report.md](caselist-parse-report.md#a-cards-body-filed-as-its-cite)): 2,480 cards
+gain evidence text, and `CITE_ONLY` falls from 4,731 to 2,254 over the same sources.
+
+| A rule id on the card that begins | Says |
+|---|---|
+| `assembly-cite-guess-inside-card-body:` | A guessed cite inside an open body was kept in the body |
+| `assembly-cite-guess-after-card-cite:` | A guessed cite straight after the card's cite, formatted as body, opened the body |
+| `assembly-cite-guess-longer-than-a-cite:` | A guessed cite over 2,000 characters, the first thing under a tag and formatted as body, is the body. The card has no cite: `full_cite` is empty and `short_cite` is `null` |
+
+The part after the colon is the guess that was overruled. A cite read from a cite *style* is never
+re-read, at any length.
+
+**Still expect a long `full_cite` now and then.** 460 `CITE_ONLY` cards hold a cite paragraph of
+more than 100 words after the change. Most are a card written as one paragraph behind a bold name,
+which the parser leaves as the file has it. A short wiki entry of a name, a year and a card's first
+and last words is also still one cite paragraph, and its card is `CITE_ONLY`.
 
 ### `occurrence`: a line of `occurrences.jsonl`
 
@@ -238,6 +331,14 @@ A source's file is written as its parse finishes, and every file is written to a
 renamed into place. A run stopped part-way leaves whole per-source files that the next run skips,
 and aggregates that are either the previous run's or the next one's.
 
+## A directory this machine refuses
+
+If the operating system will not let this user read or write `<data_dir>/parsed`, or any directory
+under the caselist and version a command asked for, the command stops with exit 3 and
+`STORE_ACCESS_DENIED`, names "the parsed card store" and points at `storage.data_dir`. It never
+treats a directory it could not read as holding nothing: a run that did would count every source
+filed there as never parsed (`v1-e31-t09`). Another caselist's unreadable directory stops nothing.
+
 ## After a removal
 
 `caselist remove --execute` deletes, locally and in the bucket with every noncurrent version:
@@ -273,6 +374,13 @@ jq -r '.fingerprint_version' ~/.debate-research/dev/parsed/hsld26/2026.09.20-doc
 
 The last line prints one version and the number of rows. Two versions would mean a half-written
 file, which the atomic rename rules out.
+
+Cards with no tag, by completeness, in a `2026.10.10-docx-2` directory (about a minute for a
+caselist, because it reads every card):
+
+```bash
+find ~/.debate-research/dev/parsed/hsld26/2026.10.10-docx-2/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r 'select(.record == "document") | .document.cards[] | select(.tag == null) | .completeness' | sort | uniq -c
+```
 
 `caselist parse --caselist hsld26 --failures` lists the failures with their disclosure paths, read
 from the manifests. Those paths name schools and team codes: that listing is for the terminal, and

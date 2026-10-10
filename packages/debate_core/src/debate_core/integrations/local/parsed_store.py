@@ -23,6 +23,19 @@ what lets a re-publish compare a file's checksum with the bucket's and upload no
 generation of the entry's own parser version, and will not replace a source's file unless the entry
 already there is one the next run retries. Those are the task spec's forbidden overwrite of an
 earlier parser version, made a property of the adapter rather than of every caller.
+
+## A directory this machine refuses
+
+This adapter walks and reads `<data_dir>/parsed` itself, so it translates the operating system's
+refusal itself (`v1-e31-t09`), the way the other filesystem stores do (`refusals.py`): a
+`PermissionError` becomes :class:`~debate_core.application.errors.LocalStoreAccessDenied` naming
+"the parsed card store", never the path, and `caselist parse` exits 3 with the fix.
+
+**A refused tree is never listed as an empty one.** :meth:`LocalParsedStore.read_entries` is what a
+run takes to be "every source already parsed". Listed with `Path.rglob`, a fan-out directory this
+user may not read was skipped, and the sources filed in it counted as never parsed. The walk is
+:func:`~debate_core.integrations.local.refusals.files_under`, which raises instead. It opens only
+the caselist and version it was asked for, so another caselist's unreadable directory stops nothing.
 """
 
 from __future__ import annotations
@@ -47,10 +60,20 @@ from debate_core.application.ports.parsed_store import (
     source_object_key,
 )
 from debate_core.integrations.file_streaming import INCOMING_FILE_PREFIX, atomic_replacement
+from debate_core.integrations.local.refusals import (
+    directories_in,
+    files_under,
+    is_regular_file,
+    refused_as_access_denied,
+    role_of,
+)
 
 __all__ = ["LocalParsedStore", "UnreadableParsedStore"]
 
 _SOURCE_DIRECTORY: Final = "sha256"
+
+#: What an operator would call `<data_dir>/parsed`, for a refusal that names no path.
+_ROLE: Final = role_of(PARSED_PREFIX)
 
 
 class UnreadableParsedStore(ValueError):
@@ -80,23 +103,23 @@ class LocalParsedStore:
     # -- reading ------------------------------------------------------------------------------
 
     async def version_directories(self, caselist: str) -> tuple[str, ...]:
-        directory = self._root / caselist
-        if not directory.is_dir():
-            return ()
-        names = [path.name for path in directory.iterdir() if path.is_dir()]
+        with refused_as_access_denied("list", _ROLE):
+            names = directories_in(self._root / caselist)
         return tuple(sorted(names, key=parse_version_directory))
 
     async def read_entries(
         self, caselist: str, version: str, *, snapshot: str | None = None
     ) -> tuple[SourceEntry, ...]:
         sources = self._root / caselist / version / _SOURCE_DIRECTORY
-        if not sources.is_dir():
-            return ()
+        with refused_as_access_denied("list", _ROLE):
+            paths = sorted(
+                path
+                for path in files_under(sources)
+                if path.suffix == ".jsonl" and not path.name.startswith(INCOMING_FILE_PREFIX)
+            )
         entries: list[SourceEntry] = []
-        for path in sorted(sources.rglob("*.jsonl")):
-            if path.name.startswith(INCOMING_FILE_PREFIX):
-                continue
-            with path.open(encoding="utf-8") as stream:
+        for path in paths:
+            with refused_as_access_denied("read", _ROLE), path.open(encoding="utf-8") as stream:
                 first = stream.readline()
             entry = self._record(SourceEntry, first, path, 1)
             if snapshot is None or entry.snapshot == snapshot:
@@ -105,11 +128,12 @@ class LocalParsedStore:
 
     async def read_document(self, caselist: str, version: str, sha256: str) -> DocumentRecord | None:
         path = self._root / source_object_key(caselist, version, sha256)
-        if not path.is_file():
-            return None
-        with path.open(encoding="utf-8") as stream:
-            stream.readline()
-            second = stream.readline()
+        with refused_as_access_denied("read", _ROLE):
+            if not is_regular_file(path):
+                return None
+            with path.open(encoding="utf-8") as stream:
+                stream.readline()
+                second = stream.readline()
         if not second.strip():
             return None
         return self._record(DocumentRecord, second, path, 2)
@@ -138,9 +162,13 @@ class LocalParsedStore:
                 "and only a parsed entry is"
             )
         path = self._root / source_object_key(caselist, version, entry.source_sha256)
-        if path.is_file():
-            with path.open(encoding="utf-8") as stream:
-                existing = self._record(SourceEntry, stream.readline(), path, 1)
+        first: str | None = None
+        with refused_as_access_denied("write", _ROLE):
+            if is_regular_file(path):
+                with path.open(encoding="utf-8") as stream:
+                    first = stream.readline()
+        if first is not None:
+            existing = self._record(SourceEntry, first, path, 1)
             if not existing.retried_next_run:
                 raise ParsedStoreRefusal(
                     f"source {entry.source_sha256} is already recorded in {caselist}/{version}; "
@@ -187,20 +215,21 @@ class LocalParsedStore:
 
     def _write_lines(self, path: Path, records: Iterable[StoreRecord]) -> None:
         text = "".join(f"{_render(record)}\n" for record in records)
-        with atomic_replacement(path) as incoming:
+        with refused_as_access_denied("write", _ROLE), atomic_replacement(path) as incoming:
             incoming.write_text(text, encoding="utf-8")
 
     def _read_lines[RecordT: StoreRecord](
         self, model: type[RecordT], path: Path
     ) -> tuple[RecordT, ...] | None:
-        if not path.is_file():
-            return None
-        with path.open(encoding="utf-8") as stream:
-            return tuple(
-                self._record(model, line, path, number)
-                for number, line in enumerate(stream, start=1)
-                if line.strip()
-            )
+        with refused_as_access_denied("read", _ROLE):
+            if not is_regular_file(path):
+                return None
+            with path.open(encoding="utf-8") as stream:
+                return tuple(
+                    self._record(model, line, path, number)
+                    for number, line in enumerate(stream, start=1)
+                    if line.strip()
+                )
 
     def _record[RecordT: StoreRecord](
         self, model: type[RecordT], line: str, path: Path, number: int

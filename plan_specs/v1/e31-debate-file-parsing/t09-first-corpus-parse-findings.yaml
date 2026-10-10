@@ -31,7 +31,8 @@ spec:
     near-duplicate matching (v1-e31-t08).
   priority: 2
   constraints:
-    packages: [debate_core.integrations.docx_parser, debate_core.domain, packages/debate_core/tests, tests/fixtures, docs/data]
+    # debate_core.integrations.local was authorised by the PM, 2026-10-10, for ac5.
+    packages: [debate_core.integrations.docx_parser, debate_core.integrations.local, debate_core.domain, packages/debate_core/tests, tests/fixtures, docs/data]
     forbidden:
       - Accepting an XML entity declaration or external reference that the refusal guards against
       - Committing, quoting or logging any real disclosed file, tag, cite or card text (fixtures reproduce a construct synthetically)
@@ -61,8 +62,44 @@ spec:
         If the parser changes, `parser_version` is bumped. Operator-run: a re-parse in dev
         writes a new version directory, and the report records the refusal counts and
         empty-tag counts before and after.
+    # Added by the PM, 2026-10-10, from v1-e34-t13-pull-stage-failure-classes' follow-up work.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-10. `LocalParsedStore` walks and reads `<data_dir>/parsed/`
+        itself: a `PermissionError` there becomes `LocalStoreAccessDenied` naming the
+        directory's role ("the parsed card store") through `integrations/local/refusals.py`,
+        and a listing of an unreadable tree raises instead of listing nothing. `caselist
+        parse` exits 3 with `STORE_ACCESS_DENIED` and a hint naming `storage.data_dir`, shown
+        failing first.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-10, from this task's own finding. `_completeness` calls a card
+        `ABBREVIATED` when an ellipsis marker appears anywhere in its body or its cite, and
+        21,278 of the 22,443 cards it marks have a body over 1,000 characters: an omission
+        inside a full card, not a disclosure of first and last words. `ABBREVIATED` is decided
+        from the disclosure's shape instead, and the rule is derived from the corpus by
+        read-only counts. Synthetic fixtures show a full card with an omission marker as
+        `FULL`, a first-words-marker-last-words disclosure as `ABBREVIATED`, a cite holding a
+        marker as no evidence of abbreviation, and `CITE_ONLY` unchanged, each shown failing
+        first. The strict xfail passes and is no longer an xfail. Completeness on the two
+        corrected evaluation files stays 4 of 4. It ships under the same parser version,
+        `2026.10.10-docx-2`, which nothing has written yet, so the operator's one re-parse
+        carries both fixes.
+    - id: ac7
+      description: >-
+        Added by the PM, 2026-10-10, from this task's revision (Follow-up work added). The
+        classifier's wiki cite heuristic files body paragraphs as cite text. 2,902 of the 4,731
+        `CITE_ONLY` cards are whole cards whose body sits in `full_cite`, so nothing
+        fingerprints them, and 3,440 more hold a cite paragraph over 100 words. In the
+        assembly, a cite guessed by a heuristic (never a cite style) after the card already
+        has a cite, and formatted as body by the existing rule, opens the body. A heuristic
+        cite with no cite before it becomes body only past a length bound derived from the
+        corpus by read-only counts, chosen on the conservative side so that a real cite entry
+        is never moved. Synthetic fixtures show each case failing first, and a cite-style
+        paragraph of any length stays a cite. It ships under the same parser version,
+        `2026.10.10-docx-2`.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

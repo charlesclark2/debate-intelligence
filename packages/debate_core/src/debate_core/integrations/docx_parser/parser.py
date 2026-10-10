@@ -8,20 +8,47 @@ same card, and it is where a `ParsedCard`'s provenance is attached.
 
 Every unit — pocket, hat, block, tag, cite, evidence, analytic, undertag — is resolved by
 :func:`~debate_core.evidence.style_classifier.classify_paragraph`, which tries the Verbatim style
-first, its aliases second and a measured heuristic last. This module adds three decisions the
+first, its aliases second and a measured heuristic last. This module adds six decisions the
 classifier does not make, because each needs something the classifier cannot see:
 
 * **A tag with no cite and no evidence under it is an analytic.** `Heading4` is what a debater
   types for a line of analysis as well as for a card's tag, and only the following paragraphs
   tell the two apart.
 * **A card that is only its first and last words is abbreviated, not truncated.** An opencaselist
-  disclosure often records a tag, a cite and an ellipsis between the opening and closing words —
+  disclosure may record a tag, a cite and an ellipsis between the opening and closing words —
   all the open-source rules require. Padding it or dropping it would both misrepresent the file,
-  so it is kept and flagged.
+  so it is kept and flagged. It is told by its *shape*: one ellipsis marker with a few words
+  either side (:data:`MAXIMUM_DISCLOSED_FRAGMENT_WORDS`). An ellipsis on its own proves nothing:
+  the first parse of the corpus called 22,443 cards abbreviated for holding one, and 21,278 of
+  them have a body over 1,000 characters (`v1-e31-t09`).
 * **Page furniture is `OTHER`, whatever style it carries.** A paragraph in a table cell or in a
   text box is a speech-time chart or a page banner, not a card. The classifier resolves a style
   before it looks at where a paragraph sits, so a `Heading4` in a table cell comes back from it
   as a tag; here it is `OTHER`, and the rule that said otherwise is kept in the rule id.
+* **A blank line is `OTHER`, whatever style it carries.** A debater presses Enter in `Heading4`
+  and leaves an empty heading behind: 5,043 of them in the first parse of the corpus, in nearly a
+  quarter of its files. Read as a tag it opened a card with an empty tag and demoted the real tag
+  above it; read as a pocket, hat or block it put an empty string in every path below it. It
+  opens, closes and names nothing (`v1-e31-t09`). A blank line in a *body* style is left alone:
+  it changes no structure, and evidence text is copied as the file lays it out.
+* **A cite guessed inside a card's body is body when it is formatted as body.** A paragraph of a
+  source's own prose that holds an ellipsis and a name with a year, or that opens *In 2019*,
+  comes back from the classifier's two cite heuristics as a cite. The classifier cannot see that
+  a card is already open with its body under way. Taking the guess at its word cut the card short
+  there and stored the rest as a card with no tag: about 11,000 of the 15,528 empty tags in the
+  first parse of the corpus. So when the paragraph is small print or highlighted, which is what a
+  debater does to evidence, and does not open with a bold name, which is how a cite is written,
+  it is the card's next body paragraph (`v1-e31-t09`). A cite *style* is never second-guessed.
+* **A cite guessed before the body has opened is the body's first paragraph in two cases.** The
+  rule above needs a body to be open, so the *first* body paragraph a guess misread was still
+  added to the card's cite: 2,480 cards were left with a cite thousands of characters long and no
+  evidence text at all. Formatted as body in the same sense, and carrying no cite character
+  style, such a paragraph opens the body when the card already has a cite, unless it is short
+  enough to be a cite entry and another cite follows it. When the card has no cite, only length
+  says where one would end, so it opens the body past
+  :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` and not when it opens with a name and a year
+  (`v1-e31-t09`). A guess that arrives with no card open stays the cite of a card with no tag:
+  re-read as body it would belong to nothing and be dropped.
 
 ## Where a section path comes from
 
@@ -60,6 +87,7 @@ from debate_core.domain.debate_files import (
 )
 from debate_core.domain.style_profile import (
     ParagraphStyleMatch,
+    RunEmphasis,
     StructuralUnit,
     StyleMatchSource,
     StyleProfile,
@@ -88,8 +116,17 @@ from debate_core.integrations.docx_parser.runs import (
 __all__ = ["DOCX_PARSER_VERSION", "DebateDocxParser"]
 
 #: Version recorded on every card this parser produces. Bumped whenever the output changes, so a
-#: stored card always names the reading that produced it.
-DOCX_PARSER_VERSION: Final = "2026.09.20-docx-1"
+#: stored card always names the reading that produced it. Bumped too when the only change is that
+#: a file once refused is now read: the parsed store skips a source it has already recorded under
+#: the running version, refusals included, so without a new version the file would never be tried
+#: again.
+#:
+#: `2026.09.20-docx-1` read the first full corpus. `2026.10.10-docx-2` (`v1-e31-t09`) reads the 23
+#: files it refused for the words `system "` and `public '`, keeps a body paragraph guessed to be
+#: a cite in its card, no longer takes a blank line in a heading style for a heading, calls a card
+#: abbreviated for the shape of a first-and-last-words disclosure rather than for an ellipsis, and
+#: no longer files the first paragraph of a body as the card's cite.
+DOCX_PARSER_VERSION: Final = "2026.10.10-docx-2"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")
@@ -105,6 +142,38 @@ HEADING_UNITS: Final = (
     StructuralUnit.BLOCK,
     StructuralUnit.TAG,
 )
+
+#: The units a paragraph with no visible text may still be. Everything else structures the file,
+#: and a blank line structures nothing.
+_UNITS_A_BLANK_PARAGRAPH_KEEPS: Final = (StructuralUnit.OTHER, StructuralUnit.EVIDENCE)
+
+#: The most words a disclosure of a card's first and last words gives on either side of its
+#: ellipsis marker.
+#:
+#: Set from what such a disclosure is, because the corpus has no population of them to measure. The
+#: disclosure rules ask for a card's first and last few words; the profile's own examples give
+#: eight and nine. Of the 22,053 card bodies this parser reads from the corpus that hold a marker,
+#: 12,988 hold exactly one, and in none of those are both sides 15 words or fewer: the shortest longer
+#: side is 17 words, in a whole card with an omission. Twelve sits
+#: in the middle of that gap, above every disclosure we have a model of and below every whole card
+#: the corpus holds. A whole card is never called abbreviated; a disclosure that quoted thirteen
+#: words would be called whole, which is the safe way to be wrong.
+MAXIMUM_DISCLOSED_FRAGMENT_WORDS: Final = 12
+
+#: The longest paragraph a guess may make the first cite of a card, in characters.
+#:
+#: Measured over the 772 paragraphs in the corpus that the wiki heuristic makes the first cite
+#: under a tag. A paragraph is marked as a cite by its author when it carries the cite character
+#: style or opens with a name and a year. Up to 1,000 characters 194 of 258 are; from 1,001 to
+#: 1,517 characters 74 of 81 are; and from 1,518 to 2,678 not one of 35 is. The longest cite
+#: paragraph *style* at the head of a card is 1,427 characters. So a real cite entry ends by
+#: 1,517, and 2,000 sits in the gap above it: any bound from 1,518 to 2,678 moves no paragraph
+#: the corpus marks as a cite, and this one leaves 11 unmarked paragraphs alone that 1,518 would
+#: have moved. The classifier's own bound for a cite *style* is the profile's 1,000.
+LONGEST_GUESSED_CITE_ENTRY_CHARACTERS: Final = 2_000
+
+#: A body paragraph re-read from a cite guess is no surer than the classifier's own shrunk-text rule.
+_REREAD_BODY_CONFIDENCE: Final = 0.6
 
 #: How much a match source is worth when a card reports the weakest one it was built from.
 _MATCH_SOURCE_STRENGTH: Final = {
@@ -226,6 +295,11 @@ class DebateDocxParser:
     ) -> None:
         self._profile = profile if profile is not None else load_style_profile()
         self._limits = limits
+        # One pattern for every spelling. `[...]` is one marker, not a bracket, a marker and a
+        # bracket: a match is taken where it starts first, and the bracketed spelling starts earlier.
+        self._ellipsis_marker = re.compile(
+            "|".join(re.escape(marker) for marker in self._profile.cite.wiki_ellipsis_markers)
+        )
 
     @property
     def parser_version(self) -> str:
@@ -314,6 +388,13 @@ class DebateDocxParser:
                 )
             else:
                 match = classify_paragraph(read.description, self._profile)
+                if match.unit not in _UNITS_A_BLANK_PARAGRAPH_KEEPS and not read.text.strip():
+                    match = ParagraphStyleMatch(
+                        unit=StructuralUnit.OTHER,
+                        rule_id=f"assembly-empty-paragraph:{match.rule_id}",
+                        match_source=StyleMatchSource.HEURISTIC,
+                        confidence=1.0,
+                    )
             sections.append(_ReadSection(read=read, match=match, in_text_box=body_paragraph.in_text_box))
         return sections
 
@@ -347,6 +428,128 @@ class DebateDocxParser:
             )
         return demoted
 
+    def _keep_a_guessed_cite_in_its_body(
+        self, section: _ReadSection, building: _CardUnderConstruction | None
+    ) -> _ReadSection:
+        """Re-read a cite guessed inside an open body as body, when it is formatted as body.
+
+        Three things have to hold, and each is something only the assembly can see or weigh:
+
+        * a card is open and already has a body, so there is a body for the paragraph to belong to;
+        * the classifier *guessed*: the match is one of its cite heuristics, not a Verbatim cite
+          style, which is the file's author saying "cite" and is taken at its word;
+        * the paragraph is formatted the way a body is and not the way a cite is
+          (:meth:`_is_formatted_as_body`).
+
+        Otherwise the paragraph stays the cite the classifier called it, and starts a card with no
+        tag, which is what two cards under one tag look like.
+        """
+        match = section.match
+        if building is None or not building.has_body:
+            return section
+        if match.unit is not StructuralUnit.CITE or match.match_source is not StyleMatchSource.HEURISTIC:
+            return section
+        if not self._is_formatted_as_body(section.read):
+            return section
+        return _reread_as_body(section, "assembly-cite-guess-inside-card-body")
+
+    def _open_the_body_with_a_guessed_cite(
+        self,
+        section: _ReadSection,
+        building: _CardUnderConstruction | None,
+        *,
+        a_cite_follows: bool,
+    ) -> _ReadSection:
+        """Re-read a cite guessed before the card's body has opened as the body's first paragraph.
+
+        :meth:`_keep_a_guessed_cite_in_its_body` needs a body to be open. This is the paragraph
+        before that: a card is open and has no body yet. The guess has to be a guess, and the
+        paragraph formatted as body, exactly as there. Two things more are asked, because here the
+        paragraph sits where a cite belongs:
+
+        * **no run carries a cite character style.** The classifier lets go of its style rule
+          past 1,000 characters and its guess takes over, but the author's mark is still on the
+          paragraph, and a cite style never moves;
+        * **the card already has a cite**, so the paragraph is not the only cite the card has.
+          Failing that, it must be longer than any cite entry
+          (:data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS`) and must not open with a name and a year,
+          which is where a cite run together with its card would have its cite;
+        * **it is not a line in the middle of a cite.** A paragraph short enough to be a cite
+          entry, with the card's cite above it and another cite right below, is left where it is.
+          Re-read as body it would end the card at the cite below, and the real body under that
+          would go to a card with no tag.
+
+        With no card open the paragraph is left the cite of a card with no tag. Re-read as body it
+        would belong to no card, and :meth:`_close` drops a body with neither tag nor cite.
+        """
+        match = section.match
+        if building is None:
+            return section
+        if match.unit is not StructuralUnit.CITE or match.match_source is not StyleMatchSource.HEURISTIC:
+            return section
+        if not self._is_formatted_as_body(section.read) or self._carries_a_cite_style(section.read):
+            return section
+        # A guess formatted as body that is still a cite here was not taken by an open body, so
+        # the card has none yet.
+        text = section.read.text
+        longer_than_a_cite_entry = len(text) > LONGEST_GUESSED_CITE_ENTRY_CHARACTERS
+        if building.has_cite:
+            if a_cite_follows and not longer_than_a_cite_entry:
+                return section
+            return _reread_as_body(section, "assembly-cite-guess-after-card-cite")
+        if longer_than_a_cite_entry and self._short_cite(text) is None:
+            return _reread_as_body(section, "assembly-cite-guess-longer-than-a-cite")
+        return section
+
+    def _followed_by_a_cite(self, sections: Sequence[_ReadSection]) -> list[bool]:
+        """For each paragraph, whether the next one that says anything is a cite that stays a cite.
+
+        Blank lines and page furniture are stepped over. A cite stays a cite unless it is a guess
+        formatted as body, which an open body takes for itself
+        (:meth:`_keep_a_guessed_cite_in_its_body`).
+        """
+        followed = [False] * len(sections)
+        a_cite_is_next = False
+        for position in range(len(sections) - 1, -1, -1):
+            followed[position] = a_cite_is_next
+            section = sections[position]
+            match = section.match
+            if match.unit is StructuralUnit.OTHER:
+                continue
+            a_cite_is_next = match.unit is StructuralUnit.CITE and not (
+                match.match_source is StyleMatchSource.HEURISTIC and self._is_formatted_as_body(section.read)
+            )
+        return followed
+
+    def _carries_a_cite_style(self, read: ReadParagraph) -> bool:
+        """Whether any visible run is in a cite character style, as the classifier's style rule asks."""
+        for run in read.description.visible_runs:
+            style = self._profile.resolve_character_style(
+                run.character_style_id, run.character_style_name, run.character_style_based_on
+            )
+            if style is not None and style.emphasis is RunEmphasis.CITE:
+                return True
+        return False
+
+    def _is_formatted_as_body(self, read: ReadParagraph) -> bool:
+        """Whether a paragraph carries a body's formatting and not a cite's.
+
+        Small print throughout, or highlighting, is what a debater does to evidence: the profile's
+        shrink rule measured the first, and nobody highlights a citation. A bold name at the front
+        is how a cite is written, so a paragraph that has both is left as the classifier called it.
+        Underline on its own decides nothing: a cite's link is underlined as often as a card's text.
+        """
+        description = read.description
+        visible = description.visible_runs
+        if not visible:
+            return False
+        opens_bold = visible[0].bold if visible[0].bold is not None else bool(description.paragraph_bold)
+        if opens_bold:
+            return False
+        return description.has_highlighted_run or self._profile.is_shrunk(
+            description.effective_half_points, underlined=False
+        )
+
     # -- building the output ------------------------------------------------------------------
 
     def _build_document(
@@ -366,7 +569,12 @@ class DebateDocxParser:
         building: _CardUnderConstruction | None = None
         deletions_dropped = 0
 
-        for section in read_sections:
+        followed_by_a_cite = self._followed_by_a_cite(read_sections)
+        for read_section, a_cite_follows in zip(read_sections, followed_by_a_cite, strict=True):
+            section = self._keep_a_guessed_cite_in_its_body(read_section, building)
+            section = self._open_the_body_with_a_guessed_cite(
+                section, building, a_cite_follows=a_cite_follows
+            )
             unit = section.match.unit
             deletions_dropped += section.read.deletions_dropped
 
@@ -518,7 +726,7 @@ class DebateDocxParser:
 
         body = concatenate_spanned_text(building.evidence_parts)
         full_cite = "\n".join(building.cite_lines).strip()
-        completeness = self._completeness(body.text, full_cite)
+        completeness = self._completeness(body.text)
         cards.append(
             ParsedCard(
                 tag=building.tag,
@@ -554,16 +762,30 @@ class DebateDocxParser:
 
     # -- the two judgements about a card ------------------------------------------------------
 
-    def _completeness(self, evidence_text: str, full_cite: str) -> CardCompleteness:
-        """Decide whether a card is whole, abbreviated or a cite on its own. Goal criterion ac2."""
+    def _completeness(self, evidence_text: str) -> CardCompleteness:
+        """Decide whether a card is whole, abbreviated or a cite on its own.
+
+        From the body alone. A cite carries an ellipsis for its own reasons, a shortened title or
+        a list of authors, and says nothing about how much of the card the file holds.
+        """
         if not evidence_text.strip():
             return CardCompleteness.CITE_ONLY
-        markers = self._profile.cite.wiki_ellipsis_markers
-        if any(marker in evidence_text for marker in markers) or any(
-            marker in full_cite for marker in markers
-        ):
+        if self._is_first_and_last_words(evidence_text):
             return CardCompleteness.ABBREVIATED
         return CardCompleteness.FULL
+
+    def _is_first_and_last_words(self, evidence_text: str) -> bool:
+        """Whether a body has the shape of a disclosure: a few words, one marker, a few words more.
+
+        Exactly one marker, because one joins a beginning to an end and two leave things out of a
+        quotation. Words on both sides of it, because a marker that opens or closes a body joins
+        nothing. And no more than :data:`MAXIMUM_DISCLOSED_FRAGMENT_WORDS` on either side, counted
+        over the whole body, so a line break between the two halves changes nothing.
+        """
+        fragments = self._ellipsis_marker.split(evidence_text)
+        if len(fragments) != 2:
+            return False
+        return all(0 < len(fragment.split()) <= MAXIMUM_DISCLOSED_FRAGMENT_WORDS for fragment in fragments)
 
     def _short_cite(self, full_cite: str) -> str | None:
         """Split the part a debater says out loud off the front of a cite line.
@@ -579,6 +801,21 @@ class DebateDocxParser:
             return None
         short = match.group(0).strip().rstrip(",")
         return short or None
+
+
+def _reread_as_body(section: _ReadSection, reason: str) -> _ReadSection:
+    """The same paragraph as evidence, with the assembly rule and the guess it overrode on record."""
+    match = section.match
+    return _ReadSection(
+        read=section.read,
+        match=ParagraphStyleMatch(
+            unit=StructuralUnit.EVIDENCE,
+            rule_id=f"{reason}:{match.rule_id}",
+            match_source=StyleMatchSource.HEURISTIC,
+            confidence=min(match.confidence, _REREAD_BODY_CONFIDENCE),
+        ),
+        in_text_box=section.in_text_box,
+    )
 
 
 def _card_follows(sections: Sequence[_ReadSection], position: int) -> bool:

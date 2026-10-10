@@ -96,8 +96,20 @@ __all__ = [
     "version_directory_name",
 ]
 
-PARSED_STORE_SCHEMA_VERSION: Final = 1
-"""Version of every record's shape. Bumped only by a change that breaks an existing reader."""
+PARSED_STORE_SCHEMA_VERSION: Final = 2
+"""Version of every record's shape as it is written now. Bumped by a change that breaks a reader.
+
+* **1**: what `2026.09.20-docx-1` wrote. A stored card's `tag` is always a string, and `""` means
+  the file gave the card none.
+* **2** (`v1-e31-t09`): a stored card's `tag` is a string or `null`, and is never `""`. A reader that
+  calls a string function on `tag` needs a null check, which is what makes this a new shape.
+
+Version-1 records stay on disk and in both buckets as they are; nothing rewrites a version
+directory. Every reader takes both (:data:`ReadableSchemaVersion`).
+"""
+
+type ReadableSchemaVersion = Literal[1, 2]
+"""Every record version a reader accepts. A record keeps the version it was written with."""
 
 PARSED_PREFIX: Final = "parsed"
 """The directory under `<data_dir>` and the key prefix in the bucket that the store lives under."""
@@ -219,7 +231,7 @@ _FAILURE_REASONS: Final = frozenset(str(reason) for reason in ParseFailureReason
 class StoreRecord(DomainModel):
     """The six fields every record in the store carries (task spec ac2)."""
 
-    schema_version: Literal[1] = PARSED_STORE_SCHEMA_VERSION
+    schema_version: ReadableSchemaVersion = PARSED_STORE_SCHEMA_VERSION
     caselist: str = Field(description="Caselist slug, or `openev` for camp files.")
     snapshot: str = Field(
         description="`YYYY-MM-DD` for a caselist snapshot; `<year>-<event>` for an OpenEv release."
@@ -334,7 +346,18 @@ class DocumentRecord(StoreRecord):
             raise ValueError("the stored document names another source than its record")
         if self.document.get("parser_version") != self.parser_version:
             raise ValueError("the stored document names another parser version than its record")
+        if self.schema_version >= 2 and self._has_an_empty_tag:
+            raise ValueError(
+                'a version 2 document says "no tag" as null; an empty string is how version 1 said it'
+            )
         return self
+
+    @property
+    def _has_an_empty_tag(self) -> bool:
+        cards = self.document.get("cards")
+        return isinstance(cards, list) and any(
+            isinstance(card, dict) and card.get("tag") == "" for card in cards
+        )
 
     @classmethod
     def from_parsed_document(

@@ -4,7 +4,7 @@
   "corpus": "negative",
   "summary": "A syllabus that uses outline levels and no Verbatim style. It must not come out as a stack of pockets, and it must produce no cards: this is what the profile's size and weight guards exist for, and what a parser without them gets wrong at scale.",
   "profile_version": "2026.09.20-verbatim-1",
-  "parser_version": "2026.09.20-docx-1",
+  "parser_version": "2026.10.10-docx-2",
   "warnings_contain": [],
   "paragraphs": [
     {

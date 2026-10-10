@@ -227,5 +227,5 @@ async def test_the_parsed_store_publisher_stops_rather_than_publishing_nothing(
     with refused(parsed.root), pytest.raises(StoreAccessDenied) as caught:
         await publisher.publish(SYNTHETIC_CASELIST, "a-parser-version")
 
-    assert_stopped_on(caught, "the parsed-file directory", data_dir)
+    assert_stopped_on(caught, "the parsed card store", data_dir)
     assert keys_in(s3_client, evidence_bucket) == set()

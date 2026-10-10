@@ -1331,3 +1331,531 @@ for E31 after this task closes. It is not part of this change.
 * Add a new, empty PM review after this one.
 
 ac4 stays NOT RUN, and the Goal stays `InProgress`.
+
+## Second revision 2026-10-10: body text filed as cite (Change 4, ac7)
+
+| | |
+|---|---|
+| Session status | PARTIAL: Change 4 is done; the operator's re-parse (ac4) is still NOT RUN and the Goal is `InProgress` |
+| Commits | `38caf62` (your review and ac7), `ed96833`, `97cbd70`, `05f7f5d`, `1d9d99e`, `2c47b8e`, `6c4a11f`, and the report commit |
+| Synced | Onto `origin/dev` at `1448452`, which has `v1-e34-t18` (#216). No conflict |
+
+Everything above this section is as you reviewed it, unchanged. Where it gives a figure that
+Change 4 moves, **this section is current**, and its operator follow-ups replace both earlier sets.
+
+**Read first:**
+
+1. **`CITE_ONLY` falls from 4,731 to 2,254.** 2,480 cards gain evidence text where they had none,
+   and 885 more get the first paragraph of their body back from the cite. The 194,831 cards the
+   rule does not reach are identical in every field.
+2. **The 863 do separate, and the bound is 2,000 characters.** Paragraphs the corpus marks as
+   cites stop at 1,517 characters and do not start again until 2,679. The rule with no cite before
+   it moves 337 paragraphs.
+3. **The rule has three conditions you did not list.** Each is on the conservative side, has a
+   count and a mutant, and is under [Deviations](#deviations-added-in-the-second-revision). The
+   third came out of the measurement: without it eleven more cards were split in two.
+4. **Card totals and cards with no tag both rise by 9.** In nine cards the paragraph that now
+   opens the body is followed by a real cite, which starts a second card under the same tag.
+5. **One of your fixtures cannot be built as you wrote it.** The classifier does not call a
+   paragraph in the cite *character* style a cite past 1,000 characters. I built the 300-word
+   fixture two ways and say below what each shows.
+6. **What the counts cannot settle:** 218 short small-print lines directly under a cite are now
+   read as the body's first line. They may include second lines of cites.
+7. **The `ABBREVIATED` figures in the two data documents are re-measured,** because bodies are
+   longer now. The rule and the answer are the same: no card is `ABBREVIATED`, at any bound from 9
+   to 16.
+
+### Change 4: the rule
+
+In the assembly, beside the rule from the first submission (`parser.py`,
+`_open_the_body_with_a_guessed_cite`). A cite the classifier *guessed*, arriving while a card is
+open and has no body yet, is re-read as the body's first paragraph when:
+
+* **it is formatted as body** by the existing test: highlighted, or small print throughout, and
+  not opening with a bold name;
+* **no run carries the cite character style;**
+* **the card already has a cite.** Then it opens the body at any length, unless it is 2,000
+  characters or fewer and another cite follows it directly;
+* **or the card has no cite,** and the paragraph is longer than 2,000 characters and does not open
+  with a name and a year.
+
+A cite read from a cite style is never re-read, at any length. A guess with no card open is left
+as it was. Each re-read paragraph records which rule did it and which guess it overrode:
+`assembly-cite-guess-after-card-cite:…` or `assembly-cite-guess-longer-than-a-cite:…`. The
+existing rule's id is unchanged.
+
+### The bound for the 863
+
+**Measured** read-only, flags and lengths only, over every paragraph the classifier calls a cite:
+181,797 of them. The comparison you asked for, by character length, for the 772 paragraphs the
+wiki heuristic makes the first cite under a tag. "Marked as a cite" means the paragraph carries
+the cite character style or opens with a name and a year:
+
+| Characters | Paragraphs | Marked as a cite | Formatted as body |
+|---|---|---|---|
+| 1,000 or fewer | 258 | 194 | 6 |
+| 1,001 to 1,517 | 81 | 74 | 10 |
+| 1,518 to 2,678 | 35 | 0 | 34 |
+| 2,679 or more | 398 | 32 | 323 |
+
+* **Cite styles.** A cite read from the character style ends at 999 characters, because the
+  classifier's style rule stops at the profile's 1,000: 139,012 paragraphs, 35 over 150 words.
+  A cite *paragraph* style has no such stop. Of the 1,414 at the head of a card the longest is
+  1,427 characters.
+* **It separates.** Marked paragraphs are dense up to 1,517 characters and then absent until
+  2,679, where they are whole cards written as one paragraph behind a name.
+* **2,000, on the conservative side.** Any bound from 1,518 to 2,678 moves no paragraph the corpus
+  marks as a cite. 2,000 leaves alone 11 unmarked paragraphs that 1,518 would have moved.
+* **In characters,** as the classifier's two cite bounds are. My earlier figures for this were in
+  words; 2,000 characters is about 300 words.
+* **The 863 was a count by words over a wider set.** By this measure the paragraphs with no cite
+  before them, formatted as body and over 2,000 characters, are 346 under a tag and 19 with no
+  card open. The rule moves 337: 5 carry the cite character style and 4 open with a name and a
+  year. The 19 are left, because a body with no tag and no cite belongs to no card.
+
+### Fixtures
+
+37 tests in three classes of `test_first_corpus_parse_findings.py`. 33 were written and committed
+before the rule (`ed96833`: 14 failed, 19 passed, every failure an assertion). The fixtures for a
+short guess between two cites were committed before that condition (`05f7f5d`: 2 failed against
+the rule as it stood), and one of the 33 was rewritten there: it had expected a short paragraph
+before a second cite to end the card. The last test, for a run in the underline style, came with
+its mutant.
+
+| Yours | Test | Before the rule | After |
+|---|---|---|---|
+| A body paragraph after the card's cite, formatted as body, opens the body | `test_a_body_paragraph_after_the_cards_cite_opens_the_body`, and the other eleven tests of `TestABodyFiledAsTheCardsCite` | `CITE_ONLY`, the paragraph in `full_cite` | `FULL`, the paragraph is the evidence text |
+| The same paragraph formatted as a cite stays a cite | `test_the_same_paragraph_formatted_as_a_cite_stays_a_cite` ×3: at reading size; small print behind a bold opening; highlighted behind a bold opening | cite | cite |
+| A cite-style paragraph of 300 words stays a cite | `…in_a_cite_paragraph_style_stays_a_cite` ×2; `…with_a_run_in_the_cite_character_style_stays_a_cite` ×2 | cite | cite |
+| A first heuristic cite past the bound, formatted as body, is body | `test_a_whole_card_in_one_paragraph_under_its_tag_is_the_cards_body` ×2; `test_a_guess_one_character_past_the_bound_is_the_body` | `CITE_ONLY` | `FULL`, with no cite |
+| A short wiki cite entry stays a cite | `test_a_short_wiki_cite_entry_is_still_the_cards_cite` ×4; `test_a_guess_at_the_bound_is_still_the_cards_cite` | cite | cite |
+| A card with two real cites keeps both | `test_a_card_with_two_real_cites_keeps_both` ×4: a bold name; the cite character style in small print; a bold name in small print; reading size with an underlined link | both | both |
+
+**Four of your six rows cannot fail first,** and I am not claiming they did: a paragraph that
+stays a cite has the same reading with and without the rule. Their proof is a mutant, named in the
+[mutation table](#mutation-for-change-4).
+
+**The 300-word cite-style paragraph, built two ways:**
+
+* **In a cite paragraph style** (`CiteParagraph`), 355 words in small print. The classifier reads
+  it from the style, the rule never sees a guess, and it stays a cite.
+* **With a run in the cite character style.** Past 1,000 characters the classifier's style rule
+  lets go, and its wiki heuristic catches the paragraph only because the fixture holds an ellipsis
+  and a name with a year. That is a guess, in small print, so the rule would move it. The
+  cite-style condition is what holds it.
+* **What neither shows.** A 300-word paragraph in the cite character style with no ellipsis is not
+  a cite to the classifier at all: it falls through to body text, with or without this change.
+  That is `debate_core/evidence/`, which is not mine to edit. It is under Follow-up work.
+
+**Mine, for the edges:** the rest of the body follows the re-read paragraph; each paragraph names
+its own rule; a run in the underline style does not count as a cite style; first and last words on
+their own line under the cite are an `ABBREVIATED` body; a card with a cite and no tag gets its
+body too; a whole body before a second cite makes two cards; two guesses in a row are both body; a
+short guess between two cites stays a line of the cite, with or without a blank line between; 2,000
+characters stays and 2,001 moves; a long first paragraph opening with a name and a year stays; a
+long guess with no card open stays.
+
+**Against the parser without the rule,** the final test set: 16 failed, 1,083 passed, 1 skipped
+(mutant "the new rule is never applied", below).
+
+### The corpus, before and after
+
+Read-only, `2026.10.10-docx-2`, both parsers run in one process over the same bytes of the 9,741
+DOCX sources. "Before" is the parser as you accepted it in the first revision. Counts only.
+
+| Caselist | `CITE_ONLY` before | After | Gained evidence text | Cards before | After | No tag before | After |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 1,906 | 729 | 1,178 | 64,675 | 64,678 | 1,353 | 1,356 |
+| hspf26 | 849 | 400 | 449 | 42,902 | 42,906 | 1,903 | 1,907 |
+| hspolicy26 | 1,807 | 1,036 | 773 | 82,563 | 82,565 | 1,092 | 1,094 |
+| openev | 169 | 89 | 80 | 8,056 | 8,056 | 98 | 98 |
+| **Total** | 4,731 | 2,254 | 2,480 | 198,196 | 198,205 | 4,446 | 4,455 |
+
+* **Paragraphs moved: 3,365.** 2,491 wiki entries and 537 cite lines after the card's cite, and
+  337 wiki entries over the bound with no cite before them. 3,007 are highlighted.
+* **Cards that gain evidence text where they had none: 2,480,** 2,445 of them with a tag. 1,721
+  gain more than 1,000 words; 40 gain 100 or fewer.
+* **Cards whose body grows: 885.** They already had a body, and its first paragraph was in the
+  cite.
+* **`FULL`** goes from 193,465 to 195,951. **`ABBREVIATED`** stays at 0.
+* **Card totals: +9. Cards with no tag: +9.** Nine cards end at a real cite that follows the
+  re-read paragraph, and that cite starts a card with no tag. In the seven where the cite follows
+  directly, the paragraph is highlighted and between 5,673 and 16,871 characters. Cards with no
+  tag are `FULL` 3,659 and `CITE_ONLY` 796, from 3,618 and 828.
+* **Cards the rule does not reach: 194,831, every one identical in every field** to the same card
+  from the parser without the rule. The remaining 3,374 are the 3,365 it reached and the 9 split
+  off them.
+* **Cards it reached that keep their paragraph range: 3,356.** All keep their tag, undertag,
+  section path and provenance. In all of them every line of the old cite and body is still in the
+  new cite or body. All 2,324 that had a short cite keep it.
+* **The 337 with no cite before them have no cite afterwards:** `full_cite` is empty and
+  `short_cite` is null. They had no short cite before either.
+* **A knock-on in the existing rule:** with a body open one paragraph earlier, it takes 40 more
+  guesses, 11,912 in all. Its code is unchanged.
+* **Your 2,902** (`CITE_ONLY` cards holding a cite paragraph over 100 words) **is 460 now.** Cards
+  with a body that hold one go from 3,440 to 3,237. In 371 of those it is a guess, down from 654;
+  in the rest it is a cite style. Wiki cite paragraphs over 100 words go from 3,515 to 764.
+* **The operator's sample source:** 10 cards, the first five `FULL` with tags, as before. The rule
+  touches nothing in it.
+* **Against the stored `2026.09.20-docx-1`:** 186,634 cards have the same paragraph range and all
+  have the same tag. 3,217 differ in text or cite, all through this rule. 2,451 go from
+  `CITE_ONLY` to `FULL` and 15,776 from `ABBREVIATED` to `FULL`.
+
+**What it leaves as cites,** among guesses formatted as body and standing before any body:
+
+| Left as a cite | Paragraphs |
+|---|---|
+| A cite line as the first cite under a tag: 400 characters at most | 342 |
+| A wiki entry as the first cite under a tag, 2,000 characters or fewer | 24 |
+| Carries the cite character style | 22 |
+| Over 2,000 characters with no card open | 19 |
+| 2,000 characters or fewer with no card open | 50 |
+| Between the card's cite and another cite, and 2,000 characters or fewer | 11 |
+| A first paragraph over 2,000 characters that opens with a name and a year | 4 |
+
+**The re-parse figures in the documents are from the final code.** I ran the whole comparison
+again after the last code change, and its output is identical to the run before it. `v1-e34-t18`
+changed no file under `integrations/`, `evidence/`, `domain/` or `application/ports/`, so the
+corpus was not read again after the sync.
+
+### The two corrected evaluation files
+
+Unchanged, line for line, from the first revision's output: completeness right on **4 of 4**
+matched cards, boundaries 4 of 5, and every unit score the same. Neither file holds a paragraph
+the rule reaches. The evaluation tiers still skip: 28 of 30 label files are uncorrected.
+
+### Mutation for Change 4
+
+The same driver and rules: a clean committed tree, a fresh `HYPOTHESIS_STORAGE_DIRECTORY` for each
+run, restore, and check clean. 1,100 tests across the same six paths, 8 to 17 seconds a run, two
+batches of under two minutes, on the synced final tree. **Seventeen mutants, seventeen caught.**
+Yours are in bold.
+
+| Mutant | Caught | Tests failing |
+|---|---|---|
+| **A cite style moved to body:** a style match is re-read like a guess | yes | 2 |
+| **A cite style moved to body:** a run in the cite character style no longer holds it | yes | 2 |
+| **The "already has a cite" condition dropped** | yes | 9 |
+| **The formatting condition dropped** | yes | 15, and 4 errors |
+| **The length bound removed:** a first guess of any length is body | yes | 3 |
+| **The length bound removed** everywhere it is used | yes | 5 |
+| The bound one character lower | yes | 1 |
+| The bound one character higher | yes | 1 |
+| A long first paragraph that opens with a name and a year is body | yes | 1 |
+| The between-two-cites condition dropped | yes | 2 |
+| The between-two-cites condition held at any length | yes | 1 |
+| The look-ahead counts a guess a body would take as a cite | yes | 1 |
+| The look-ahead stops at a blank line | yes | 1 |
+| Any character style counts as a cite style | yes | 1 |
+| A re-read paragraph keeps the guess's confidence | yes | 4 |
+| The new rule is never applied | yes | 16 |
+| A long guess with no card open is re-read as body | yes | 1 |
+
+* **Which mutant proves each row that could not fail first:** "the formatting condition dropped"
+  fails the same-paragraph-as-a-cite and two-real-cites tests; the two "cite style" mutants fail
+  the two 300-word fixtures; "the length bound removed" fails the short wiki entry tests.
+* **The 4 errors** under "the formatting condition dropped" are test fixtures that check a file's
+  digest before use. The 15 failures are assertions.
+* **One condition was deleted, not tested.** I had written "and the card has no body" into the new
+  rule. No input can reach it with a body open, because the existing rule has already taken the
+  paragraph, so no test could tell it from its absence. It is gone (`2c47b8e`).
+
+### Acceptance criteria, as they stand after Change 4
+
+Results are from `6c4a11f`, the tip before this report, synced onto `origin/dev` at `1448452`.
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| ac1, ac2, ac3, ac5, ac6 | PASS | As in the first report and the first revision. Their tests pass on the synced tree. |
+| ac4, first half: `parser_version` bumped | PASS | Still `2026.10.10-docx-2`. Nothing has written it. |
+| ac4, second half: the operator's re-parse | **NOT RUN** | [Operator follow-ups, second revision](#operator-follow-ups-second-revision). |
+| **ac7**: a guessed cite after the card's cite, formatted as body, opens the body; with no cite before it, only past a bound derived from the corpus on the conservative side; fixtures each failing first; a cite style stays a cite at any length; the same parser version | PASS, with the four rows that cannot fail first named above, and one fixture built two ways | `uv run pytest packages/debate_core/tests/integrations/docx_parser/test_first_corpus_parse_findings.py -k "TestABodyFiledAsTheCardsCite or TestALongGuessUnderATagWithNoCite or TestACiteThatDoesNotOpenTheBody"` → `37 passed`. The whole file: 167 passed. |
+| Node: `uv run pytest packages/debate_core/tests/integrations` | PASS | `820 passed in 5.17s` |
+| Default suite, two commands | PASS | `packages`: `4125 passed in 66.65s`. `tests`: `1259 passed, 1 skipped, 1 warning in 55.62s`. The skip and the warning are the same two as before. Slow parser timing test: `1 passed`. |
+| Static checks and gates | PASS | `pyright` 0 errors; `lint-imports` 12 kept; `ruff check` and `ruff format --check` clean, 583 files; `check_thin_handlers.py`, `check_links.py`, `check_command_blocks.py --base origin/dev`, `docs_index.py --check-descriptions`, `export_schemas.py --check` all OK. |
+| t03's structural fixtures | PASS | Unchanged by Change 4. Ten lines still differ from the start commit, each `parser_version`. |
+| `uv run scripts/validate_specs.py` | PASS | `OK: 327 files, 38 epics, 269 tasks, 20 releases`. Phase `InProgress`. |
+
+### Files changed in the second revision
+
+- `packages/debate_core/src/debate_core/integrations/docx_parser/parser.py`:
+  `_open_the_body_with_a_guessed_cite`, `_followed_by_a_cite`, `_carries_a_cite_style`,
+  `LONGEST_GUESSED_CITE_ENTRY_CHARACTERS`, and `_reread_as_body`, which both rules now share.
+- `packages/debate_core/tests/integrations/docx_parser/test_first_corpus_parse_findings.py`: 37
+  tests, and one docstring's figures.
+- `docs/data/caselist-parse-report.md`: a section on the rule, the bound and its result; every
+  "after" figure the rule moves; the `ABBREVIATED` tables re-measured.
+- `docs/data/parsed-card-store.md`: what `CITE_ONLY` means in each version, and the three rule ids.
+- The spec and this report: your review and ac7, committed as you left them (`38caf62`).
+
+Nothing under `debate_core/evidence/` and not `caselist_card_stats.py`.
+
+### Deviations added in the second revision
+
+16. **A run in the cite character style holds a paragraph where it is.** You wrote "a cite guessed
+    by a heuristic (never a cite style)". Past 1,000 characters the classifier's style rule lets
+    go and its heuristic takes over, so a paragraph the author marked with the cite style arrives
+    as a guess. I check the runs as well as the match. It leaves 22 paragraphs alone.
+17. **A first paragraph that opens with a name and a year is left, at any length.** A cite run
+    together with its card has its cite there, and re-reading it would put the cite in the
+    evidence text and leave the card with none. It leaves 4 paragraphs alone.
+18. **A short guess between two cites is left.** Not in your rule. Without it the measurement
+    showed 20 cards split. Ten of the splits were at small-print paragraphs of exactly 321
+    characters, each followed by a cite line of exactly 216: by those lengths, one passage
+    disclosed ten times. There the card kept its tag and that line as its body, and the real body
+    went to a card with no tag. With the condition 9 cards split. It costs one look-ahead in the
+    assembly loop and leaves 11 paragraphs alone.
+19. **A guess with no card open is left, at any length.** Re-read as body it would be dropped, and
+    the card with it. 19 paragraphs over the bound.
+20. **The bound is in characters,** where my proposal and your review counted words.
+21. **The 300-word cite-style fixture is built two ways,** as under Fixtures, because the
+    classifier's own bound keeps the plain form from being a cite at all.
+22. **The data documents' `ABBREVIATED` figures changed** from the ones you accepted in Change 1:
+    22,053 bodies with a marker where there were 19,402, and so on down the tables. The rule
+    moved cite paragraphs into bodies, so I measured again. No conclusion changes.
+23. **Three commands ran past two minutes.** Each was two read-only passes chained in one
+    command: about 180 seconds, 165 seconds, and over 170 seconds. The third ran while the
+    operator pruned the `uv` cache. Outside that one, no single pass took over 104 seconds. I ran
+    one pass per command from then on.
+24. **More read-only passes than you listed:** the cite census twice, the before-and-after
+    comparison three times (without the between-cites condition, with it, and on the final code),
+    and one pass each for the moved paragraphs, the stored cards, the marker histogram and the
+    cite-paragraph counts. All write numbers and flags only, outside the repository and outside
+    the data directory.
+25. **The scratch files are still there:** 258 MB of counts in the session's temporary directory,
+    kept until the task closes in case you ask for another cut of them.
+
+### Operator follow-ups, second revision
+
+These replace both earlier sets of operator follow-ups. **The commands are the ones in the first
+revision; what differs is the expected counts in step 4.** They close ac4, and they run only after:
+
+1. the PM accepts this second revision;
+2. the branch merges with `scripts/task pr v1-e31-t09-first-corpus-parse-findings --partial`;
+3. `scripts/task finish v1-e31-t09-first-corpus-parse-findings --partial` closes it out.
+
+**The PM hands over one combined order with `v1-e31-t08`'s steps.** t08's by-eye sample runs
+between step 5 and step 7 here. Don't run any of this while `caselist pull` is running.
+
+**What to know before starting.**
+
+- **Disk.** Each version directory is about 5.8 GB on this Mac and in each bucket. The re-parse
+  writes a second one beside the first. **The old one stays where it is**, here and in both
+  buckets; whether and when it goes is a PM follow-up, not a step here.
+- **`v1-e31-t08` is merged.** This one re-parse covers both tasks and all four parser changes: the new directory's occurrence
+  rows are built under `card-fingerprint-v2`.
+- **A weekly pull since 2026-10-10** adds sources. "Sources" and "to parse" then rise by what it
+  imported, and the other counts with them.
+
+**1. Start in the main checkout, on an updated `dev`** (seconds):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+git branch --show-current
+git status --short
+git pull --ff-only origin dev
+git log --oneline -1 --grep='^v1-e31-t09-first-corpus-parse-findings:'
+git log --oneline -1 --grep='^v1-e31-t08-short-card-recall:'
+export DEBATE_ENV=dev
+uv run debate-research caselist runs --last 1
+df -h ~/.debate-research
+```
+
+Expected: `dev`; `git status` prints nothing; each `git log` prints one line; the last pull run has
+finished; `df` shows **at least 8 GiB available**.
+
+* **Either `git log` prints nothing:** that merge is not on `dev` yet. Stop.
+* **Less than 8 GiB available:** stop. **Delete nothing**, the old version directory least of all.
+  Send the `df` line; freeing space is the PM's decision.
+
+**2. The dry run, and a fingerprint of the old directories** (about a minute; writes nothing under
+the data directory; needs no AWS session):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+export DEBATE_ENV=dev
+for c in hsld26 hspolicy26 hspf26 openev; do uv run debate-research --json caselist parse --caselist ${c} --dry-run | jq -c '.data | {caselist, version, new_version, superseded, fingerprint_version, to_parse, skipped, suppressed}'; done
+find ~/.debate-research/dev/parsed/*/2026.09.20-docx-1 -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 > ~/parsed-old-version-before.txt
+cat ~/parsed-old-version-before.txt
+```
+
+Expected for each caselist: `version` `2026.10.10-docx-2`, `new_version` true, `superseded`
+`2026.09.20-docx-1`, `fingerprint_version` `card-fingerprint-v2`, `skipped` 0 and `suppressed` 0.
+`to_parse` is 4,461 for hsld26, 2,657 for hspolicy26, 3,906 for hspf26 and 102 for openev, as the
+store stood on 2026-10-10. Any other `version` or `fingerprint_version` means the build is not
+this one: stop and paste the four lines back.
+
+**3. The dev re-parse and publish** (about 30 minutes in all; the first full parse measured 518 s
+for hsld26, 747 s for hspolicy26, 352 s for hspf26 and 106 s for openev). One caselist at a time.
+Run it only if step 1 showed 8 GiB available.
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+aws sso login --profile debate-dev-evidence
+export DEBATE_ENV=dev
+uv run debate-research --json caselist parse --caselist hsld26 --publish > ~/reparse-dev-hsld26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspolicy26 --publish > ~/reparse-dev-hspolicy26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspf26 --publish > ~/reparse-dev-hspf26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist openev --publish > ~/reparse-dev-openev.json; echo "exit $?"
+```
+
+Expected: `exit 0` each time.
+
+* **`exit 1` with `PARSE_FAILURE_RATE_EXCEEDED`:** not expected for any caselist. Send the counts.
+* **`PARSED_PUBLISH_INCOMPLETE`:** something was not confirmed in the bucket. Run the same line
+  again.
+* **`exit 3` with `STORE_ACCESS_DENIED`:** this Mac refused a directory under the data directory.
+  The message says which store; fix the permission and run the same line again.
+
+**4. The counts to paste back** (about 3 minutes; prints counts, versions and sizes only):
+
+```zsh
+for c in hsld26 hspolicy26 hspf26 openev; do jq -c '(.data // .error.details) | {caselist, version, superseded, fingerprint_version, sources, parsed, cards, unsupported, failed, failure_rate, store, elapsed_seconds, publish: .publish.counts}' ~/reparse-dev-${c}.json; done
+for c in hsld26 hspolicy26 hspf26 openev; do echo ${c}; find ~/.debate-research/dev/parsed/${c}/2026.10.10-docx-2/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r 'select(.record == "document") | .document.cards[] | "\(.completeness) \(if .tag == null then "no-tag" else "tagged" end)"' | sort | uniq -c; done
+for c in hsld26 hspolicy26 hspf26 openev; do jq -r '"\(.schema_version) \(.fingerprint_version)"' ~/.debate-research/dev/parsed/${c}/2026.10.10-docx-2/occurrences.jsonl | sort | uniq -c; done
+head -1 ~/.debate-research/dev/parsed/hsld26/2026.09.20-docx-1/index.jsonl | jq -c '{schema_version, parser_version}'
+grep -rlF '"tag":""' ~/.debate-research/dev/parsed/*/2026.10.10-docx-2/sha256 | wc -l
+find ~/.debate-research/dev/parsed/*/2026.09.20-docx-1 -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | diff - ~/parsed-old-version-before.txt && echo "old directories unchanged"
+ls -d ~/.debate-research/dev/parsed/*/*
+du -sh ~/.debate-research/dev/parsed
+```
+
+Expected, if no weekly pull has run since 2026-10-10. The first loop:
+
+| Caselist | Sources | Parsed | Unsupported | Failed, by reason | Failure rate | Cards | Uploaded |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 4,461 | 4,354 | 101 | 6: `MALFORMED_XML` 5, `NOT_A_ZIP` 1 | 0.14% | 64,678 | 4,464 |
+| hspolicy26 | 2,657 | 2,629 | 28 | 0 | 0% | 82,565 | 2,660 |
+| hspf26 | 3,906 | 2,650 | 1,256 | 0 | 0% | 42,906 | 3,909 |
+| openev | 102 | 101 | 0 | 1: `COMPRESSION_RATIO_EXCEEDED` | 0.98% | 8,056 | 105 |
+| **Total** | 11,126 | 9,734 | 1,385 | 7 | | 198,205 | 11,138 |
+
+No `FORBIDDEN_XML_CONSTRUCT` anywhere: it was 23. The second loop prints four lines for each
+caselist, and **no line beginning `ABBREVIATED`**:
+
+| Caselist | `FULL tagged` | `FULL no-tag` | `CITE_ONLY tagged` | `CITE_ONLY no-tag` | Cards | With no tag |
+|---|---|---|---|---|---|---|
+| hsld26 | 62,863 | 1,086 | 459 | 270 | 64,678 | 1,356 |
+| hspolicy26 | 80,790 | 739 | 681 | 355 | 82,565 | 1,094 |
+| hspf26 | 40,751 | 1,755 | 248 | 152 | 42,906 | 1,907 |
+| openev | 7,888 | 79 | 70 | 19 | 8,056 | 98 |
+| **Total** | 192,292 | 3,659 | 1,458 | 796 | 198,205 | 4,455 |
+
+The completeness split is the sum of each pair: `FULL` 63,949, 81,529, 42,506 and 7,967;
+`CITE_ONLY` 729, 1,036, 400 and 89; `ABBREVIATED` 0. In the stored `2026.09.20-docx-1` it is
+`ABBREVIATED` 8,418, 10,524, 2,972 and 529, and `CITE_ONLY` 2,439, 2,130, 1,007 and 196.
+
+* **The third loop** prints one line for each caselist, `2 card-fingerprint-v2`, with the number of
+  occurrence rows. Occurrence and cluster counts are t08's to expect, not predicted here.
+* **The `head` line** prints `{"schema_version":1,"parser_version":"2026.09.20-docx-1"}`: the old
+  directory is as it was.
+* **The `grep` line** prints 0: no record says `"tag":""`.
+* **The `diff` line** prints "old directories unchanged".
+* **`ls`** shows two directories for each caselist, and **`du`** about 11.6 GB.
+
+These figures come from running this branch's final parser over the same sources, read-only, on
+2026-10-10. A count that differs with no pull in between is
+worth sending back before prod. A few `ABBREVIATED` lines after a pull are not a fault: a real
+first-and-last-words disclosure would be one.
+
+**5. The second run, which must parse and upload nothing** (about 18 minutes in all; it is the
+rebuild, which measured 348, 460, 214 and 60 s):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+export DEBATE_ENV=dev
+for c in hsld26 hspolicy26 hspf26 openev; do uv run debate-research --json caselist parse --caselist ${c} --publish | jq -c '.data | {caselist, version, attempted, skipped, elapsed_seconds, uploaded: .publish.counts.uploaded}'; done
+uv run debate-research store ls parsed/hsld26/2026.10.10-docx-2/index.jsonl
+```
+
+Expected: `attempted` 0, `skipped` equal to the sources, and `uploaded` 0 for each caselist;
+`store ls` lists 1 object.
+
+**6. The sample again** (about 5 minutes, by eye). The source the first sample check found wrong.
+Its digest prefix is in the kickoff, not here: put it into `P`.
+
+```zsh
+cd ~/.debate-research/dev/parsed/hsld26/2026.10.10-docx-2
+P=paste-the-sample-digest-prefix-here
+D=$(jq -r --arg p "${P}" 'select(.source_sha256 | startswith($p)) | .source_sha256' index.jsonl)
+jq -r --arg d "${D}" 'select(.source_sha256 == $d) | "\(.outcome) \(.cards)"' index.jsonl
+cp -f ~/.debate-research/dev/blobs/sha256/${D:0:2}/${D:2:2}/${D} /tmp/parse-sample.docx
+open /tmp/parse-sample.docx
+sed -n 2p sha256/${D:0:2}/${D:2:2}/${D}.jsonl | jq -r '.document.cards[:5][] | "\(.completeness)  \(.tag)"'
+```
+
+Expected: `PARSED 10`, where it was 12. The five lines are the document's first five cards, each
+with its tag, and **each reads `FULL`, the first included**. In the first parse the second and
+third stored cards had no tag; they were the rest of the first card's body, and are in it now. The
+other four files tallied as right before should still be. Record tallies only; the file and the
+tags are real disclosures. Then:
+
+```zsh
+rm -f /tmp/parse-sample.docx
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+```
+
+**Before step 7: `v1-e31-t08`'s ac5 sample runs here, between the dev re-parse and the prod
+publish. A "different card" verdict in that sample stops the prod publish.** Do not run step 7
+until that sample is done and clean.
+
+**7. The prod publish**, from the same dev data directory, only after dev looks right and t08's
+sample is clean (about 15 minutes; nothing is parsed again; the first measured 279, 370, 202 and
+55 s):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+aws sso login --profile debate-prod-evidence
+export DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev"
+uv run debate-research --json caselist parse --caselist hsld26 --dry-run | jq -c '.data | {caselist, version, fingerprint_version, to_parse, skipped}'
+uv run debate-research --json caselist parse --caselist hsld26 --publish --confirm-prod > ~/reparse-prod-hsld26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspolicy26 --publish --confirm-prod > ~/reparse-prod-hspolicy26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspf26 --publish --confirm-prod > ~/reparse-prod-hspf26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist openev --publish --confirm-prod > ~/reparse-prod-openev.json; echo "exit $?"
+uv run debate-research store ls parsed/hsld26/2026.10.10-docx-2/index.jsonl
+unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
+```
+
+* **`DEBATE_STORAGE__DATA_DIR` is the point of this block.** Without it the prod profile reads an
+  empty `~/.debate-research/prod` and publishes nothing.
+* **The dry run** must show `version` `2026.10.10-docx-2`, `fingerprint_version`
+  `card-fingerprint-v2`, `to_parse` 0 and `skipped` 4,461. If `to_parse` is not 0, the data
+  directory is wrong: stop.
+* **Each publish** should exit 0 and upload what dev's did: 4,464, 2,660, 3,909 and 105.
+* **Paste back** the first loop of step 4 with `reparse-prod-` in place of `reparse-dev-`.
+* **The `unset` at the end matters.** A shell left on prod with the dev data directory is how the
+  next command would write to prod unchecked.
+* **Prod's `parsed/<caselist>/2026.09.20-docx-1/` prefixes stay**, as dev's do.
+
+The JSON summaries hold counts, digests and keys, and no names or paths. Keep them out of the
+repository all the same. Whoever closes ac4 records the counts in
+`docs/data/caselist-parse-report.md` and sets the Goal to `Succeeded` in a small spec PR.
+
+### Follow-up work added in the second revision
+
+- **A cite in the cite character style past 1,000 characters (E31, classifier).** 53 of the 69
+  first wiki cites between 1,001 and 1,500 characters carry that style. They are real cites that
+  the style rule let go and the wiki heuristic caught because they hold an ellipsis. One without
+  an ellipsis becomes body text. The fix is the profile's `maximum_cite_characters` or the style
+  rule, in `debate_core/evidence/`.
+- **A small-print line under the cite (labelled evaluation).** 218 lines of 400 characters or
+  fewer, small print with no highlighting, opening with a word and a number, directly under a
+  cite and followed by more body. Read as the body's first line now. 9 hold a URL.
+- **A card written as one paragraph behind its cite.** 460 `CITE_ONLY` cards still hold a cite
+  paragraph over 100 words, and 295 wiki cite paragraphs are over 1,000 words. Most open with a
+  bold name. Splitting the cite from the words is the same model question as the short wiki
+  entries, which stay `CITE_ONLY` as you ruled.
+- **The 337 cards with no cite.** Their cite may be on the tag line or missing from the file.
+  Nothing here looks for it.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

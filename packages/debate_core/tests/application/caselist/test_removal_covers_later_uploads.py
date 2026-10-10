@@ -44,14 +44,18 @@ from tests.fixtures.caselist.build_revised_path_archives import (
     digest_of,
     write_archive,
 )
+from tests.fixtures.openev.build_synthetic_openev import CAMP_ALIASES_PATH
 
+from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.caselist.evidence_listing import LocalEvidence, snapshots_before_full_archive
 from debate_core.application.caselist.import_service import CaselistImportService, Classification
 from debate_core.application.caselist.manifest import (
     full_archive_manifest_key,
     manifest_key,
     write_manifest,
+    write_manifest_lines,
 )
+from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import Disposition, SourceSelector, parse_team_selector
 from debate_core.application.caselist.status_service import CaselistStatusService
@@ -497,6 +501,59 @@ async def test_a_later_upload_another_path_also_holds_keeps_its_blob_and_that_pa
     assert await world.repository.find_source(LATER_SHARED) is not None
     kept = (await world.repository.list_disclosures(source_sha256=LATER_SHARED, limit=10)).items
     assert [one.source_path for one in kept] == [OTHER_TEAM_PATH]
+
+
+async def a_camp_releases_the_later_revision(world: RemovalWorld, scratch: Path) -> str:
+    """The later revision's bytes imported as a camp file by hand, and published. Returns its manifest key."""
+    released = scratch / "Tamarack" / "TSF-Lakeshore Affirmative.docx"
+    released.parent.mkdir(parents=True)
+    released.write_bytes(BODIES["later-revision"])
+    report = await OpenEvImportService(
+        caselists=world.repository,
+        blobs=FsSnapshotStore(world.data_dir),
+        suppression=empty_suppression_list(),
+    ).import_release(
+        read_archive(scratch, **LIMITS),
+        year=2026,
+        event=Event.POLICY,
+        imported_on=date(2026, 9, 20),
+        archive_sha256=archive_digest(scratch),
+        aliases=load_camp_aliases(CAMP_ALIASES_PATH),
+    )
+    write_manifest_lines(
+        report.manifest_lines, FsEvidenceObjectStore(world.data_dir).path_for(report.manifest_key)
+    )
+    publisher = CaselistPublishService(
+        local=world.local, remote=world.bucket, suppression=empty_suppression_list()
+    )
+    assert (await publisher.execute(await publisher.plan("openev"))).succeeded
+    return report.manifest_key
+
+
+async def test_a_later_upload_that_is_also_a_camp_file_keeps_its_blob_and_the_camp_file(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """The other holder is a camp release, not a team: the same rule, and the camp file stays whole."""
+    release = await a_camp_releases_the_later_revision(world, tmp_path / "camp")
+    camp_copy = f"raw/openev/2026/sha256/{LATER_REVISION[:2]}/{LATER_REVISION[2:4]}/{LATER_REVISION}"
+    assert len(versions_of(world, camp_copy)) == 1
+
+    await remove_the_named_file(world)
+
+    for rows in rows_on_both_sides(world, "2026-09-15"):
+        assert held_at(rows, REVISED_PATH) == set(), "only the removed path's row goes"
+    assert local_blob(world, LATER_REVISION).read_bytes() == BODIES["later-revision"]
+    assert len(versions_of(world, camp_copy)) == 1
+    assert versions_of(world, raw_key(LATER_REVISION)) == [], "no team in the caselist holds it any more"
+    for text in (local_manifest_text(world, release), bucket_manifest_text(world, release)):
+        assert [row["sha256"] for row in member_rows(text)] == [LATER_REVISION]
+    assert (await world.repository.list_camp_files(source_sha256=LATER_REVISION, limit=5)).items
+    assert not (await world.repository.list_disclosures(source_sha256=LATER_REVISION, limit=5)).items
+    for entries in suppression_lines(world):
+        assert (LATER_REVISION, disclosure_digest(CASELIST, REVISED_PATH)) in {
+            (entry.sha256, entry.disclosure) for entry in entries
+        }
+        assert (LATER_REVISION, None) not in {(entry.sha256, entry.disclosure) for entry in entries}
 
 
 async def test_the_waiting_weekly_in_the_inbox_keeps_the_other_paths_copy(world: RemovalWorld) -> None:

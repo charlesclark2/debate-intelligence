@@ -446,6 +446,23 @@ async def test_a_team_removal_withdrawing_a_shared_file_has_no_later_uploads(
     assert {source.inclusion for source in plan.sources} == {Inclusion.NAMED}
 
 
+async def test_a_shared_file_named_by_source_and_skipped_has_no_later_uploads(
+    removal_world: RemovalWorld, tmp_path: Path
+) -> None:
+    """`--source` on a shared file without `--include-shared` does nothing to it, so nothing follows it."""
+    await import_a_fourth_week_revising_the_other_teams_copy(removal_world, tmp_path / "week-four")
+
+    plan = await removal_world.service().plan(
+        SourceSelector(SHARED), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_SITE_ADMIN
+    )
+
+    assert [(source.sha256, source.disposition) for source in plan.sources] == [
+        (SHARED, Disposition.SKIP_SHARED)
+    ]
+    assert plan.later_uploads == () and plan.earlier_versions == ()
+    assert plan.nothing_to_do
+
+
 async def test_a_team_removal_with_include_shared_adds_the_later_upload_at_the_other_holders_path(
     removal_world: RemovalWorld, tmp_path: Path
 ) -> None:

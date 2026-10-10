@@ -251,11 +251,14 @@ def test_camp_paths_are_compared_as_names_as_the_sync_compares_them() -> None:
 
 
 def test_a_camp_row_that_names_no_openev_id_is_not_a_later_upload_and_has_none() -> None:
-    """A hand import cannot say which upload it was, in either direction."""
-    hand_import = "Tamarack/TSF-Estuary Solvency Advocate.docx"
+    """A hand import cannot say which upload it was, in either direction.
 
-    assert camp_versions_of_a([camp_row(OLD_ROW, A), camp_row(hand_import, B)]) == []
-    assert camp_versions_of_a([camp_row(hand_import, A), camp_row(NEW_ROW, B)]) == []
+    Imported from inside its camp folder, or from a flat directory, where its name alone is the
+    whole of what an `openev-<id>-` row's name is.
+    """
+    for hand_import in ("Tamarack/TSF-Estuary Solvency Advocate.docx", "TSF-Estuary Solvency Advocate.docx"):
+        assert camp_versions_of_a([camp_row(OLD_ROW, A), camp_row(hand_import, B)]) == []
+        assert camp_versions_of_a([camp_row(hand_import, A), camp_row(NEW_ROW, B)]) == []
 
 
 def test_another_camp_file_and_another_release_are_other_camp_paths() -> None:

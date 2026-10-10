@@ -81,6 +81,14 @@ spec:
         otherwise cross 5%. The default and the reasoning are documented. Tests cover the
         boundary on both sides, and a small run over the minimum still fails on the rate,
         shown failing first.
+    - id: ac7
+      description: >-
+        Added by the PM, 2026-10-10, from v1-e34-t13's Follow-up work. `caselist parse
+        --publish` exits 1 for any incomplete publish today. Its per-object failures carry
+        the same error codes `caselist publish` uses, so its exit follows v1-e01-t20's
+        `exit_code_for_failure_codes`, as pull's does: 3 when every failure is retryable, 1
+        otherwise. The pull's parse stage records those codes. Shown failing first for a
+        bucket that does not answer.
 status:
   phase: Pending
 ---

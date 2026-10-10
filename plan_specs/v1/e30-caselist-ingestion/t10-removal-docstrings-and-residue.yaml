@@ -60,6 +60,14 @@ spec:
         docstring's own "First seen" section). The complete archive (`v1-e34-t04`) is the
         cumulative copy. The paragraph is rewritten to say so, consistent with the rest of
         the docstring, with no change to code.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-10, from v1-e34-t13's Follow-up work.
+        `UnreadableAppendOnlyRecord` (`application/ports/suppression.py`) carries the local
+        copy's absolute path, and `caselist import`'s error shows it. Name the copy by its
+        role, the local suppression list under `storage.data_dir`, never by path. A test
+        with a probe data directory shows the path gone from the message and the JSON
+        envelope, failing first. The exit code is unchanged.
 status:
   phase: Pending
 ---

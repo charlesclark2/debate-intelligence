@@ -46,6 +46,15 @@ spec:
       description: >-
         v1-e01-t20's consumer table is updated for the changed code, and the CLI README says
         what the new error means.
+    - id: ac4
+      description: >-
+        Added by the PM, 2026-10-10, from v1-e34-t13's Follow-up work. A bucket's
+        `AccessDenied` gets its hint in the S3 adapter: the profile lacks a grant, with a
+        pointer to docs/runbooks/evidence-store.md and never `aws sso login`. So `caselist
+        publish`, `caselist status`, `store sync` and `caselist remove` show it, not only
+        `caselist pull`, where v1-e34-t13 wrote it in the sync. The sync then uses the
+        adapter's hint rather than its own. The error code stays `STORE_ACCESS_DENIED` and
+        the exit stays 3. Shown failing first for `caselist publish` and `store sync`.
 status:
   phase: Pending
 ---

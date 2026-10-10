@@ -177,6 +177,7 @@ __all__ = [
     "Disposition",
     "Inclusion",
     "InvalidRemovalRequest",
+    "LaterUploadOutcome",
     "ManifestRewrite",
     "ObjectKind",
     "ObjectRemoval",
@@ -289,6 +290,19 @@ class Inclusion(StrEnum):
     """Held at a path the removal takes a named file from, in a later snapshot (`v1-e30-t11`)."""
     UNFINISHED = "unfinished"
     """Suppressed by an earlier run of this request, with something of it still on this machine."""
+
+
+class LaterUploadOutcome(StrEnum):
+    """What a plan does about one later upload at one removed path."""
+
+    REMOVED = "removed"
+    """Held at no other path: it goes everywhere."""
+    WITHDRAWN_FROM_THE_PATH = "withdrawn_from_the_path"
+    """Another path holds it too: only its rows and records at the removed path go."""
+    KEPT_SHARED = "kept_shared"
+    """A camp path of a file another holder has too, which cannot be withdrawn on its own."""
+    LEFT_IN_PLACE = "left_in_place"
+    """Not in the plan: `--only-named`."""
 
 
 class Side(StrEnum):
@@ -440,6 +454,31 @@ class RemovalPlan:
     def source(self, sha256: str) -> PlannedSource | None:
         """What the plan does to one file, or `None` when it is not in the plan."""
         return next((source for source in self.sources if source.sha256 == sha256), None)
+
+    def later_upload_outcome(self, version: PathVersion) -> LaterUploadOutcome:
+        """What this plan does about one entry of :attr:`later_uploads`."""
+        source = self.source(version.sha256)
+        if source is None:
+            return LaterUploadOutcome.LEFT_IN_PLACE
+        if source.disposition is Disposition.REMOVE:
+            return LaterUploadOutcome.REMOVED
+        if (version.caselist, version.path) in source.requester_paths:
+            return LaterUploadOutcome.WITHDRAWN_FROM_THE_PATH
+        return LaterUploadOutcome.KEPT_SHARED
+
+    @property
+    def later_uploads_added(self) -> int:
+        """How many files the plan removes or withdraws only because they are later uploads."""
+        return sum(
+            1
+            for source in self.included_as(Inclusion.LATER_UPLOAD)
+            if source.disposition is not Disposition.SKIP_SHARED
+        )
+
+    @property
+    def later_uploads_found(self) -> int:
+        """How many distinct files :attr:`later_uploads` lists, added or not."""
+        return len({version.sha256 for version in self.later_uploads})
 
     @property
     def suppression_entries(self) -> tuple[SuppressionEntry, ...]:

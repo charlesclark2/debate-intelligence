@@ -18,7 +18,8 @@ from pathlib import Path
 import pytest
 from tests.fixtures.permissions import needs_permissions, refused
 
-from debate_core.application.errors import LocalStoreAccessDenied, StoreAccessDenied, error_code_of
+from debate_core.application import errors
+from debate_core.application.errors import StoreAccessDenied
 from debate_core.application.ports.evidence_versions import ObjectVersion
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
@@ -53,11 +54,15 @@ def a_file(tmp_path: Path) -> Path:
 def assert_refused(
     caught: pytest.ExceptionInfo[StoreAccessDenied], *, operation: str, role: str, data_dir: Path
 ) -> None:
-    """A local refusal: the operation, the directory's role, the data-directory hint, and no path."""
+    """A local refusal: the operation, the directory's role, the data-directory hint, and no path.
+
+    The subclass and the code function are looked up here rather than imported by name, so that
+    against a build without them each test fails on what the store did, not at import.
+    """
     error = caught.value
-    assert type(error) is LocalStoreAccessDenied
+    assert type(error) is errors.LocalStoreAccessDenied
     assert (error.operation, error.resource, error.hint) == (operation, role, ACCESS_DENIED_HINT)
-    assert error_code_of(error) == "STORE_ACCESS_DENIED"
+    assert errors.error_code_of(error) == "STORE_ACCESS_DENIED"
     assert isinstance(error.__cause__, PermissionError)
     assert str(data_dir) not in str(error)
     assert str(data_dir.parent) not in str(error)

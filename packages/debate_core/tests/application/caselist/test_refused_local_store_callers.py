@@ -26,11 +26,12 @@ import pytest
 from tests.fixtures.caselist.build_synthetic_archives import DOCUMENT_BODIES, SYNTHETIC_CASELIST
 from tests.fixtures.permissions import needs_permissions, refused
 
+from debate_core.application import errors
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import SourceSelector
 from debate_core.application.caselist.status_service import CaselistStatusService
-from debate_core.application.errors import LocalStoreAccessDenied
+from debate_core.application.errors import StoreAccessDenied
 from debate_core.application.evidence_sync import EvidenceSyncService, SyncDirection, SyncKeyspace
 from debate_core.application.ports.suppression import ReasonCode
 from debate_core.integrations.local import FsEvidenceObjectStore
@@ -45,9 +46,10 @@ if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
 pytestmark = [pytest.mark.anyio, needs_permissions]
 
 
-def assert_stopped_on(
-    caught: pytest.ExceptionInfo[LocalStoreAccessDenied], role: str, data_dir: Path
-) -> None:
+def assert_stopped_on(caught: pytest.ExceptionInfo[StoreAccessDenied], role: str, data_dir: Path) -> None:
+    """Stopped by this machine's refusal, named by role. The subclass is looked up here rather than
+    imported by name, so that against a build without it each test fails on what the caller did."""
+    assert type(caught.value) is errors.LocalStoreAccessDenied
     assert caught.value.resource == role
     assert str(data_dir) not in str(caught.value)
     assert "aws sso login" not in str(caught.value)
@@ -62,7 +64,7 @@ async def test_a_publish_stops_rather_than_planning_every_source_as_missing(
 ) -> None:
     service = CaselistPublishService(local=local, remote=bucket, suppression=empty_suppression_list())
 
-    with refused(imported_data_dir / "blobs"), pytest.raises(LocalStoreAccessDenied) as caught:
+    with refused(imported_data_dir / "blobs"), pytest.raises(StoreAccessDenied) as caught:
         await service.plan(SYNTHETIC_CASELIST)
 
     assert_stopped_on(caught, "the blob directory", imported_data_dir)
@@ -75,7 +77,7 @@ async def test_a_publish_stops_rather_than_finding_no_manifest_to_publish(
     service = CaselistPublishService(local=local, remote=bucket, suppression=empty_suppression_list())
     manifests = imported_data_dir / "objects" / "manifests"
 
-    with refused(manifests), pytest.raises(LocalStoreAccessDenied) as caught:
+    with refused(manifests), pytest.raises(StoreAccessDenied) as caught:
         await service.plan(SYNTHETIC_CASELIST)
 
     assert_stopped_on(caught, "the manifest directory", imported_data_dir)
@@ -89,7 +91,7 @@ async def test_status_stops_rather_than_reporting_every_snapshot_as_drifted(
     status = CaselistStatusService(local=local, remote=bucket, suppression=empty_suppression_list())
     assert (await status.status(SYNTHETIC_CASELIST)).in_sync
 
-    with refused(imported_data_dir / "blobs"), pytest.raises(LocalStoreAccessDenied) as caught:
+    with refused(imported_data_dir / "blobs"), pytest.raises(StoreAccessDenied) as caught:
         await status.status(SYNTHETIC_CASELIST)
 
     assert_stopped_on(caught, "the blob directory", imported_data_dir)
@@ -113,7 +115,7 @@ async def test_store_sync_stops_rather_than_planning_against_an_empty_store(
         ),
     )
 
-    with refused(objects.root), pytest.raises(LocalStoreAccessDenied) as caught:
+    with refused(objects.root), pytest.raises(StoreAccessDenied) as caught:
         await service.plan(direction=direction)
 
     assert_stopped_on(caught, "the evidence object directory", imported_data_dir)
@@ -128,7 +130,7 @@ async def test_a_removal_stops_rather_than_planning_to_take_nothing_out_of_this_
     manifests = removal_world.data_dir / "objects" / "manifests"
     before = keys_in(removal_world.client, removal_world.bucket_name)
 
-    with refused(manifests), pytest.raises(LocalStoreAccessDenied) as caught:
+    with refused(manifests), pytest.raises(StoreAccessDenied) as caught:
         await removal_world.planner().plan(
             SourceSelector(digest), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
         )
@@ -143,7 +145,7 @@ async def test_a_removal_stops_rather_than_reporting_no_local_blob(removal_world
     A file one team alone disclosed, so the plan is to remove it and the blob tree is asked."""
     digest = hashlib.sha256(DOCUMENT_BODIES["bayview-semis-neg"]).hexdigest()
 
-    with refused(removal_world.data_dir / "blobs"), pytest.raises(LocalStoreAccessDenied) as caught:
+    with refused(removal_world.data_dir / "blobs"), pytest.raises(StoreAccessDenied) as caught:
         await removal_world.planner().plan(
             SourceSelector(digest), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
         )

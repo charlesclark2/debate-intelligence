@@ -448,72 +448,66 @@ def failed(stage: SyncStage, *codes: str, hint: str | None = None) -> StageRecor
 
 
 @pytest.mark.parametrize(
-    ("stages", "expected"),
+    ("failures", "expected"),
     [
         pytest.param(
-            [failed(SyncStage.IMPORT, "STORE_UNAVAILABLE")],
+            [(SyncStage.IMPORT, ("STORE_UNAVAILABLE",))],
             ExitCode.RETRIEVAL_FAILURE,
             id="the store did not answer the import",
         ),
         pytest.param(
-            [
-                failed(SyncStage.DOWNLOAD, "PROVIDER_UNAVAILABLE"),
-                failed(SyncStage.PUBLISH, "STORE_ACCESS_DENIED"),
-            ],
+            [(SyncStage.DOWNLOAD, ("PROVIDER_UNAVAILABLE",)), (SyncStage.PUBLISH, ("STORE_ACCESS_DENIED",))],
             ExitCode.RETRIEVAL_FAILURE,
             id="two stages, both retryable",
         ),
         pytest.param(
-            [
-                failed(SyncStage.DOWNLOAD, "PROVIDER_UNAVAILABLE"),
-                failed(SyncStage.IMPORT, "UNREADABLE_ARCHIVE"),
-            ],
+            [(SyncStage.DOWNLOAD, ("PROVIDER_UNAVAILABLE",)), (SyncStage.IMPORT, ("UNREADABLE_ARCHIVE",))],
             ExitCode.DOMAIN_FAILURE,
             id="one retryable stage and one deterministic",
         ),
         pytest.param(
-            [failed(SyncStage.IMPORT, "STORE_UNAVAILABLE", "UNREADABLE_ARCHIVE")],
+            [(SyncStage.IMPORT, ("STORE_UNAVAILABLE", "UNREADABLE_ARCHIVE"))],
             ExitCode.DOMAIN_FAILURE,
             id="one stage, a retryable failure and a deterministic one",
         ),
         pytest.param(
-            [failed(SyncStage.DOWNLOAD, "ARCHIVE_UNAVAILABLE")],
+            [(SyncStage.DOWNLOAD, ("ARCHIVE_UNAVAILABLE",))],
             ExitCode.DOMAIN_FAILURE,
             id="a refused archive",
         ),
         pytest.param(
-            [failed(SyncStage.DOWNLOAD, "DAILY_DOWNLOAD_LIMIT_REACHED")],
+            [(SyncStage.DOWNLOAD, ("DAILY_DOWNLOAD_LIMIT_REACHED",))],
             ExitCode.DOMAIN_FAILURE,
             id="the daily cap",
         ),
         pytest.param(
-            [failed(SyncStage.IMPORT, "A_CODE_NOBODY_MAPPED")],
+            [(SyncStage.IMPORT, ("A_CODE_NOBODY_MAPPED",))],
             ExitCode.DOMAIN_FAILURE,
             id="a code on no list",
         ),
         pytest.param(
-            [failed(SyncStage.IMPORT, "INTERNAL_ERROR")],
+            [(SyncStage.IMPORT, ("INTERNAL_ERROR",))],
             ExitCode.DOMAIN_FAILURE,
             id="an error nobody modelled",
         ),
         pytest.param(
-            [failed(SyncStage.IMPORT)],
+            [(SyncStage.IMPORT, ())],
             ExitCode.DOMAIN_FAILURE,
             id="a failed stage that recorded no code",
         ),
         pytest.param(
-            [failed(SyncStage.IMPORT, "STORE_UNAVAILABLE"), failed(SyncStage.REPORT, "CASELIST_DRIFT")],
+            [(SyncStage.IMPORT, ("STORE_UNAVAILABLE",)), (SyncStage.REPORT, ("CASELIST_DRIFT",))],
             ExitCode.RETRIEVAL_FAILURE,
             id="a stage that need not finish decides nothing",
         ),
     ],
 )
 def test_the_exit_code_is_three_only_when_every_required_failure_is_retryable(
-    stages: list[StageRecord], expected: ExitCode
+    failures: list[tuple[SyncStage, tuple[str, ...]]], expected: ExitCode
 ) -> None:
     """The rule by itself, on hand-written stage records: 3 only when every failure behind a stage
     that had to finish is one a retry may cure; 1 as soon as one is not, or has no code."""
-    failure = _pull_failure(failed_run(*stages), {})
+    failure = _pull_failure(failed_run(*(failed(stage, *codes) for stage, codes in failures)), {})
 
     assert failure.exit_code is expected
     assert failure.code == "CASELIST_PULL_INCOMPLETE"

@@ -472,3 +472,6 @@ its round's record and is kept, coming down only through removal.
 hspolicy26 and hspf26 get their first complete archives when the weekly agent runs the rotation.
 That waits for the maintainer's confirmation that the complete archive is covered by clause 12;
 until then the agent runs with `caselist.full_archive_rotation` off.
+
+**Update, 2026-10-10:** policy 1.6 records that the maintainer's confirmation covers the complete
+archive, so the weekly agent may run the rotation once it is reinstalled with a build that has it.

@@ -71,6 +71,20 @@ spec:
         and a listing of an unreadable tree raises instead of listing nothing. `caselist
         parse` exits 3 with `STORE_ACCESS_DENIED` and a hint naming `storage.data_dir`, shown
         failing first.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-10, from this task's own finding. `_completeness` calls a card
+        `ABBREVIATED` when an ellipsis marker appears anywhere in its body or its cite, and
+        21,278 of the 22,443 cards it marks have a body over 1,000 characters: an omission
+        inside a full card, not a disclosure of first and last words. `ABBREVIATED` is decided
+        from the disclosure's shape instead, and the rule is derived from the corpus by
+        read-only counts. Synthetic fixtures show a full card with an omission marker as
+        `FULL`, a first-words-marker-last-words disclosure as `ABBREVIATED`, a cite holding a
+        marker as no evidence of abbreviation, and `CITE_ONLY` unchanged, each shown failing
+        first. The strict xfail passes and is no longer an xfail. Completeness on the two
+        corrected evaluation files stays 4 of 4. It ships under the same parser version,
+        `2026.10.10-docx-2`, which nothing has written yet, so the operator's one re-parse
+        carries both fixes.
 status:
   phase: InProgress
 ---

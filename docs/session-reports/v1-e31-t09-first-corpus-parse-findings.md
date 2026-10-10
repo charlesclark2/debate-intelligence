@@ -639,9 +639,102 @@ repository all the same. Whoever closes ac4 records the counts in
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+This is excellent work, and nearly all of it stands as it is. I am asking for one more fix, and
+only because the operator's re-parse costs 30 minutes and another 5.8 GB in three places. It is
+the defect you found and set aside: `ABBREVIATED`. You were right to raise it rather than widen
+the task on your own. I am widening it, because one re-parse should carry both fixes rather than
+two.
+
+**What stands:**
+
+* **The diagnosis.** All 23 `FORBIDDEN_XML_CONSTRUCT` refusals were prose, not declarations. The
+  five malformed files traced to one exporter's control characters. The `.cmir` was identified
+  from its bytes. The ratio was measured against the corpus distribution. Every one is specific,
+  counted and checkable, and none names a file.
+* **The empty tags.** You mirrored the assembly until it reproduced the store's 15,528 exactly,
+  then attributed every card to a rule. That is the right standard of evidence. Deciding "formatted
+  as body" from the corpus's own counts, using existing profile rules and no new threshold, is the
+  right method.
+* **Deviation 5, the UTF-16 route,** is the most important thing in this report. A guard that
+  scans bytes cannot see a declaration written in two-byte characters, and an internal entity in
+  an attribute was expanded. You found it while proving that narrowing the scan weakened nothing,
+  which is what that proof is for. Refusing any parsed part that carries a document type closes
+  it, and the 8-bit cases still never reach a parser.
+* **The `no_network` mutant you could not catch:** keep the option, as you did. Offline tests
+  cannot observe it while the other two options are off. It is defence in depth against a later
+  change to either of them. You said so plainly, which is what working agreement 8 asks.
+* **Deviations 1, 2, 4, 6, 8 and 9:** accepted.
+* **Deviation 3:** accepted. Making `ParsedCard.tag` `str | None` follows `v1-e31-t08`, as you
+  propose.
+* **Deviation 7:** a 126-second read-only run, 6 seconds over the line. Noted. It wrote nothing.
+* **The refusals that stay:** accepted. The ratio guard stays, by my own rule. CardMirror's
+  control characters stay refused: dropping a character, even an invisible one, is editing
+  disclosed text, and five files do not justify a policy exception. The PM files both as
+  follow-ups.
+
+**Change 1: decide `ABBREVIATED` from the disclosure's shape (ac6, added to the spec in this
+branch).** The current rule marks a card abbreviated if an ellipsis marker appears anywhere in its
+body or cite. 95% of the cards it marks are whole cards with an omission. This matters beyond the
+label:
+
+* `CaselistCardStatsService.place` clusters only `FULL` cards. Every other card goes down the
+  abbreviation-linking path, so these 21,000 whole cards are never compared as near-duplicates.
+* `v1-e31-t08`, running now, measures abbreviated linking on the real store through that path.
+* E32's counts are built on it.
+
+How:
+
+* **Derive the rule from the corpus, read-only and counts only.** Among cards carrying a marker,
+  measure: the body's word count; how many markers it holds; where the marker sits; and the word
+  counts of the fragments either side. The disclosure shape is short, with one marker joining an
+  opening fragment and a closing fragment. A cut card is long, and its markers sit mid-text. Pick
+  the bounds where the distribution separates. Report the histogram as counts and the bounds you
+  chose with the reason. If it does not separate cleanly, say so and choose the conservative side,
+  so that a whole card is not called abbreviated.
+* **A marker in the cite is not evidence of abbreviation.** Cites carry ellipses for their own
+  reasons.
+* **Fixtures, synthetic, each shown failing first.**
+  * A full card with one omission marker mid-body is `FULL`.
+  * A full card with several omissions is `FULL`.
+  * A first-words-marker-last-words disclosure is `ABBREVIATED`, including the wiki profile's other
+    marker spellings.
+  * A short body with no marker is `FULL`.
+  * A cite with a marker and a full body is `FULL`.
+  * `CITE_ONLY` is unchanged.
+  * Your strict xfail passes and stops being an xfail.
+* **Same version.** `2026.10.10-docx-2` has written nothing anywhere, so it carries this too.
+  Re-run the read-only comparison over the 9,741 sources. Report completeness counts per caselist
+  before and after, and how many cards change from `ABBREVIATED` to `FULL` and the reverse.
+  Re-check the two corrected evaluation files.
+* **Mutation, each shown caught:** the marker-anywhere rule restored; the length bound removed; a
+  marker in the cite counted.
+
+**Change 2: bump `PARSED_STORE_SCHEMA_VERSION` (authorised outside your packages:
+`debate_core.application.ports`).** Deviation 10 is right that `ParsedCard` reads both forms. But
+a record whose `tag` can now be `null` is a new record shape. The version is how a reader that
+does not go through `ParsedCard` (a `jq` line, E32's code, a future cloud reader) learns that.
+Make it 2. Records in `2026.09.20-docx-1` stay 1. Readers accept both, shown by reading a stored
+version-1 record. `parsed-card-store.md` says what changed.
+
+**Change 3: the operator follow-ups.**
+
+* Update every expected count for Change 1: the card totals if any change, the completeness split,
+  and the no-tag table by completeness.
+* **Disk.** The new directory leaves about 8 GiB free on 14 GiB. Keep the 8 GiB check before
+  step 3, and say what to do if it fails: stop, nothing is deleted.
+* Leave the old directory alone; its retention is a PM follow-up.
+* Step 6's sample check should now also read the first card as `FULL`.
+
+**Coordination with `v1-e31-t08`.** The PM is telling t08's session about Change 1 now. If t08
+merges first, run `scripts/task sync` before your report and re-run everything, as briefed.
+
+**When you resubmit:** append a revision section with the evidence for Changes 1 to 3, re-run the
+full suite and the gates, and add a new empty PM review after this one. ac4's re-parse stays NOT
+RUN, and the Goal stays `InProgress`.

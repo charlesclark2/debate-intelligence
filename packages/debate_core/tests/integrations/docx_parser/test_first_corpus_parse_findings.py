@@ -44,6 +44,7 @@ from debate_core.integrations.docx_parser import package as docx_package
 from debate_core.integrations.docx_parser.package import DocxPackageError, open_debate_docx
 from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.testing.docx_builder import (
+    DEFAULT_STYLE_DEFINITIONS,
     W_NAMESPACE,
     build_docx,
     build_styles_xml,
@@ -921,6 +922,483 @@ class TestAbbreviatedIsADisclosuresShape:
 # --------------------------------------------------------------------------------------------
 # ac4: the output changed, so the version did
 # --------------------------------------------------------------------------------------------
+
+
+# --------------------------------------------------------------------------------------------
+# ac7: a card's body filed as its cite
+# --------------------------------------------------------------------------------------------
+
+#: A whole card's body in one paragraph: 355 words and 2,104 characters of a source's own prose,
+#: with an omission and a name followed by a year. The classifier's wiki rule calls it a cite
+#: entry, at any length.
+WHOLE_BODY_IN_ONE_PARAGRAPH = (
+    "Reserve margins across the interconnection have narrowed in every one of the last six "
+    "planning cycles, and the regional operator no longer treats the trend as a forecasting "
+    "error. The projections that Halvorsen 2019 set out assumed that new load would arrive "
+    "slowly … and that assumption failed within two years of the report being filed. Data "
+    "centre developers asked for more firm capacity in a single quarter than the utility had "
+    "expected to connect over the whole of the decade, and most of those requests were sited on "
+    "the eastern side of the system, where the transmission lines were already carrying close to "
+    "their thermal limits on ordinary summer afternoons. The utility answered by deferring the "
+    "retirement of two ageing gas units and by asking the commission for permission to sign "
+    "emergency purchase agreements with its neighbours. Neither measure adds a megawatt of new "
+    "supply. The deferred units were scheduled to close because they failed too often to be "
+    "counted on during a heat wave, and the neighbouring systems face the same shortage of spare "
+    "generation at exactly the same hours of the year. The operator's own assessment says as "
+    "much in plain terms: if the connection queue is honoured as it stands, the reserve margin "
+    "falls below the reliability standard in three of the five zones by the second summer, and "
+    "it stays below the standard in every later year of the study. A shortfall of that size "
+    "cannot be managed with voluntary conservation appeals, which have never delivered more than "
+    "a small fraction of the reduction the operator would need. It means rotating outages on the "
+    "hottest days, ordered by the operator and carried out by the distribution companies, in "
+    "neighbourhoods that have no say in which large customers were connected ahead of them. The "
+    "utility's reply, that the queue will thin itself as speculative projects withdraw, is a "
+    "hope and not a plan, and the filings give no figure for it. The "
+    "commission has the authority to pause new large connections until supply catches up, and "
+    "nothing in the record suggests that any other remedy would arrive in time to matter."
+)
+
+#: A disclosure's first and last words on their own line, where the words happen to name a study.
+FIRST_AND_LAST_WORDS_NAMING_A_STUDY = (
+    "Reserve margins narrowed after Halvorsen 2019 … no slack would be left."
+)
+
+#: A wiki cite entry: a name, a year, the card's first words, a marker and its last words.
+WIKI_CITE_ENTRIES = [
+    "Okonkwo 26 — Grid operators in the region … thinner than at any point.",
+    "Grid operators in the region … thinner than at any point (Okonkwo 2026).",
+]
+
+FERREIRA_TAIL = " (Journal of Grid Studies, 2 November 2025)."
+
+#: The default styles, and the cite paragraph style a few templates define.
+STYLES_WITH_A_CITE_PARAGRAPH = build_styles_xml(
+    [*DEFAULT_STYLE_DEFINITIONS, ("CiteParagraph", "paragraph", "Cite Paragraph", "Normal")]
+)
+
+AFTER_THE_CARDS_CITE = "assembly-cite-guess-after-card-cite"
+LONGER_THAN_A_CITE = "assembly-cite-guess-longer-than-a-cite"
+INSIDE_THE_BODY = "assembly-cite-guess-inside-card-body"
+
+
+def highlighted_paragraph(text: str) -> str:
+    """A paragraph at reading size whose middle third a debater has highlighted."""
+    third = len(text) // 3
+    return paragraph_xml(
+        run_xml(text[:third], half_points=22)
+        + run_xml(text[third : 2 * third], highlight="yellow", half_points=22)
+        + run_xml(text[2 * third :], half_points=22)
+    )
+
+
+def reading_size_paragraph(text: str) -> str:
+    """A paragraph at 11 pt with nothing done to it: how a cite's second line is often left."""
+    return paragraph_xml(run_xml(text, half_points=22))
+
+
+def behind_a_bold_opening(text: str, *, highlight: str | None = None) -> str:
+    """A small-print paragraph whose first two words are bold, the way a cite opens."""
+    opening_ends = text.index(" ", text.index(" ") + 1)
+    return paragraph_xml(
+        run_xml(text[:opening_ends], bold=True, half_points=10)
+        + run_xml(text[opening_ends:], highlight=highlight, half_points=10)
+    )
+
+
+def in_a_cite_paragraph_style(text: str) -> str:
+    return paragraph_xml(run_xml(text, half_points=10), style="CiteParagraph")
+
+
+def with_a_run_in_the_cite_character_style(text: str) -> str:
+    """Small print throughout, with the name and year in Verbatim's cite character style."""
+    before, name, after = text.partition("Halvorsen 2019")
+    return paragraph_xml(
+        run_xml(before, half_points=10)
+        + run_xml(name, character_style="Style13ptBold", half_points=10)
+        + run_xml(after, half_points=10)
+    )
+
+
+def cut_to(characters: int) -> str:
+    """The whole body cut to an exact length, ending on a letter and not on a space."""
+    cut = WHOLE_BODY_IN_ONE_PARAGRAPH[:characters].rstrip()
+    return cut + "s" * (characters - len(cut))
+
+
+def parse_with_a_cite_paragraph_style(parser: DebateDocxParser, body: str) -> ParsedDocument:
+    result = parse_bytes(parser, build_docx(body, styles_xml=STYLES_WITH_A_CITE_PARAGRAPH))
+    assert isinstance(result, ParsedDocument), result
+    return result
+
+
+class TestABodyFiledAsTheCardsCite:
+    """A body paragraph the classifier guesses to be a cite, before the card has any body.
+
+    The rule from the first findings keeps such a paragraph in its card when a body is already
+    open. The *first* body paragraph has no body open before it, so it was added to the card's
+    cite, and a card whose whole body is that one paragraph was stored with no evidence text at
+    all.
+    """
+
+    def test_a_body_paragraph_after_the_cards_cite_opens_the_body(self, parser: DebateDocxParser) -> None:
+        document = parse(
+            parser, tag_paragraph() + cite_paragraph() + small_print_paragraph(ELLIPSIS_AND_YEAR)
+        )
+
+        (card,) = document.cards
+        assert card.tag == TAG
+        assert card.full_cite == SHORT_CITE + CITE_TAIL
+        assert card.evidence_text == ELLIPSIS_AND_YEAR
+        assert card.completeness is CardCompleteness.FULL
+
+    def test_a_whole_card_in_one_paragraph_under_its_cite_is_a_full_card(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """It was stored as cite-only: a tag, and a cite 2,000 characters long."""
+        document = parse(
+            parser, tag_paragraph() + cite_paragraph() + small_print_paragraph(WHOLE_BODY_IN_ONE_PARAGRAPH)
+        )
+
+        (card,) = document.cards
+        assert card.full_cite == SHORT_CITE + CITE_TAIL
+        assert card.short_cite == SHORT_CITE
+        assert card.evidence_text == WHOLE_BODY_IN_ONE_PARAGRAPH
+        assert card.completeness is CardCompleteness.FULL
+
+    def test_the_rest_of_the_body_follows_it(self, parser: DebateDocxParser) -> None:
+        body = (
+            tag_paragraph()  # 0
+            + cite_paragraph()  # 1
+            + small_print_paragraph(ELLIPSIS_AND_YEAR)  # 2: read as a cite entry, and no body is open
+            + marked_up_paragraph(SECOND_BODY)  # 3
+            + underlined_small_print_paragraph(UNDERLINED_ELLIPSIS_AND_YEAR)  # 4: read as one too
+        )
+        document = parse(parser, body)
+
+        (card,) = document.cards
+        assert card.evidence_text == "\n".join(
+            [ELLIPSIS_AND_YEAR, "".join(SECOND_BODY), "".join(UNDERLINED_ELLIPSIS_AND_YEAR)]
+        )
+        assert card.full_cite == SHORT_CITE + CITE_TAIL
+        assert (card.provenance.first_element_index, card.provenance.last_element_index) == (0, 4)
+
+    def test_each_paragraph_names_the_rule_that_reread_it(self, parser: DebateDocxParser) -> None:
+        """The one that opens the body and the one inside it are two rules, and say which."""
+        body = (
+            tag_paragraph()
+            + cite_paragraph()
+            + small_print_paragraph(ELLIPSIS_AND_YEAR)
+            + marked_up_paragraph(SECOND_BODY)
+            + underlined_small_print_paragraph(UNDERLINED_ELLIPSIS_AND_YEAR)
+        )
+        document = parse(parser, body)
+
+        opening, inside = document.sections[2], document.sections[4]
+        assert opening.unit is StructuralUnit.EVIDENCE
+        assert opening.match.rule_id == f"{AFTER_THE_CARDS_CITE}:heuristic-wiki-cite-entry"
+        assert opening.match.match_source is StyleMatchSource.HEURISTIC
+        assert opening.match.confidence <= 0.6
+        assert inside.match.rule_id == f"{INSIDE_THE_BODY}:heuristic-wiki-cite-entry"
+        assert document.cards[0].rule_ids == (
+            "verbatim-style-id:Heading4",
+            "heuristic-cite-line-author-year",
+            f"{AFTER_THE_CARDS_CITE}:heuristic-wiki-cite-entry",
+            "heuristic-marked-up-body-text",
+            f"{INSIDE_THE_BODY}:heuristic-wiki-cite-entry",
+        )
+
+    @pytest.mark.parametrize("formatting", ["small print", "highlighted"])
+    def test_a_first_body_paragraph_that_opens_with_a_year_opens_the_body(
+        self, parser: DebateDocxParser, formatting: str
+    ) -> None:
+        """`In 2019 …` opens the way a short cite does. Under the card's cite, set as body, it is prose."""
+        first = (
+            small_print_paragraph(OPENS_WITH_A_YEAR)
+            if formatting == "small print"
+            else highlighted_paragraph(OPENS_WITH_A_YEAR)
+        )
+        document = parse(parser, tag_paragraph() + cite_paragraph() + first + marked_up_paragraph())
+
+        (card,) = document.cards
+        assert card.evidence_text == OPENS_WITH_A_YEAR + "\n" + "".join(MARKED_UP)
+        assert card.full_cite == SHORT_CITE + CITE_TAIL
+        assert document.sections[2].match.rule_id == (
+            f"{AFTER_THE_CARDS_CITE}:heuristic-cite-line-author-year"
+        )
+
+    def test_its_underline_lands_on_its_own_words(self, parser: DebateDocxParser) -> None:
+        """It is body now, so its spans are the card's."""
+        body = (
+            tag_paragraph()
+            + cite_paragraph()
+            + underlined_small_print_paragraph(UNDERLINED_ELLIPSIS_AND_YEAR)
+        )
+        (card,) = parse(parser, body).cards
+        underlined = UNDERLINED_ELLIPSIS_AND_YEAR[1]
+
+        assert card.evidence_text == "".join(UNDERLINED_ELLIPSIS_AND_YEAR)
+        assert any(
+            card.evidence_text[span.start_offset : span.end_offset] == underlined
+            and span.start_offset == len(UNDERLINED_ELLIPSIS_AND_YEAR[0])
+            for span in card.formatting_spans
+        )
+
+    def test_first_and_last_words_on_their_own_line_under_the_cite_are_the_abbreviated_body(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """Six words, a marker and five: a disclosure, whose words happen to name a study."""
+        document = parse(
+            parser,
+            tag_paragraph() + cite_paragraph() + small_print_paragraph(FIRST_AND_LAST_WORDS_NAMING_A_STUDY),
+        )
+
+        (card,) = document.cards
+        assert card.evidence_text == FIRST_AND_LAST_WORDS_NAMING_A_STUDY
+        assert card.full_cite == SHORT_CITE + CITE_TAIL
+        assert card.completeness is CardCompleteness.ABBREVIATED
+
+    def test_a_card_with_a_cite_and_no_tag_gets_its_body_too(self, parser: DebateDocxParser) -> None:
+        body = (
+            paragraph_xml(run_xml("Sources"), style="Heading3")
+            + cite_paragraph()
+            + small_print_paragraph(ELLIPSIS_AND_YEAR)
+        )
+        (card,) = parse(parser, body).cards
+
+        assert card.has_tag is False
+        assert card.short_cite == SHORT_CITE
+        assert card.evidence_text == ELLIPSIS_AND_YEAR
+        assert card.completeness is CardCompleteness.FULL
+
+    def test_a_real_cite_after_it_starts_the_next_card(self, parser: DebateDocxParser) -> None:
+        """The body is open now, so a second cite under the tag is a second card, as it always was."""
+        body = (
+            tag_paragraph()
+            + cite_paragraph()
+            + small_print_paragraph(ELLIPSIS_AND_YEAR)
+            + cite_paragraph("Ferreira 25", FERREIRA_TAIL)
+            + marked_up_paragraph(SECOND_BODY)
+        )
+        document = parse(parser, body)
+
+        assert [(card.tag, card.short_cite, card.evidence_text) for card in document.cards] == [
+            (TAG, "Okonkwo 26", ELLIPSIS_AND_YEAR),
+            ("", "Ferreira 25", "".join(SECOND_BODY)),
+        ]
+
+
+class TestALongGuessUnderATagWithNoCite:
+    """The first paragraph under a tag, guessed to be a cite, with no cite before it.
+
+    Nothing says where the card's cite ends, so only length can: a guess is re-read as the body
+    when it is longer than 2,000 characters, which no paragraph the corpus marks as a cite reaches.
+    """
+
+    def test_the_fixture_is_past_the_bound_and_is_300_words(self) -> None:
+        assert len(WHOLE_BODY_IN_ONE_PARAGRAPH) == 2104
+        assert len(WHOLE_BODY_IN_ONE_PARAGRAPH.split()) == 355
+
+    @pytest.mark.parametrize("formatting", ["small print", "highlighted"])
+    def test_a_whole_card_in_one_paragraph_under_its_tag_is_the_cards_body(
+        self, parser: DebateDocxParser, formatting: str
+    ) -> None:
+        paragraph = (
+            small_print_paragraph(WHOLE_BODY_IN_ONE_PARAGRAPH)
+            if formatting == "small print"
+            else highlighted_paragraph(WHOLE_BODY_IN_ONE_PARAGRAPH)
+        )
+        document = parse(parser, tag_paragraph() + paragraph)
+
+        (card,) = document.cards
+        assert card.tag == TAG
+        assert card.evidence_text == WHOLE_BODY_IN_ONE_PARAGRAPH
+        assert card.full_cite == ""
+        assert card.short_cite is None
+        assert card.completeness is CardCompleteness.FULL
+        assert document.sections[1].unit is StructuralUnit.EVIDENCE
+        assert document.sections[1].match.rule_id == f"{LONGER_THAN_A_CITE}:heuristic-wiki-cite-entry"
+        assert document.sections[1].match.confidence <= 0.6
+
+    def test_the_paragraphs_under_it_are_the_same_body(self, parser: DebateDocxParser) -> None:
+        document = parse(
+            parser,
+            tag_paragraph() + small_print_paragraph(WHOLE_BODY_IN_ONE_PARAGRAPH) + marked_up_paragraph(),
+        )
+
+        (card,) = document.cards
+        assert card.evidence_text == WHOLE_BODY_IN_ONE_PARAGRAPH + "\n" + "".join(MARKED_UP)
+
+    def test_a_guess_one_character_past_the_bound_is_the_body(self, parser: DebateDocxParser) -> None:
+        text = cut_to(2001)
+        assert len(text) == 2001
+
+        (card,) = parse(parser, tag_paragraph() + small_print_paragraph(text)).cards
+
+        assert (card.completeness, card.full_cite, card.evidence_text) == (CardCompleteness.FULL, "", text)
+
+    def test_a_guess_at_the_bound_is_still_the_cards_cite(self, parser: DebateDocxParser) -> None:
+        text = cut_to(2000)
+        assert len(text) == 2000
+
+        (card,) = parse(parser, tag_paragraph() + small_print_paragraph(text)).cards
+
+        assert (card.completeness, card.full_cite, card.evidence_text) == (
+            CardCompleteness.CITE_ONLY,
+            text,
+            "",
+        )
+
+    @pytest.mark.parametrize("entry", WIKI_CITE_ENTRIES)
+    @pytest.mark.parametrize("formatting", ["small print", "highlighted"])
+    def test_a_short_wiki_cite_entry_is_still_the_cards_cite(
+        self, parser: DebateDocxParser, entry: str, formatting: str
+    ) -> None:
+        """A name, a year, first words, a marker and last words: the entry is the card's cite."""
+        paragraph = (
+            small_print_paragraph(entry) if formatting == "small print" else highlighted_paragraph(entry)
+        )
+        document = parse(parser, tag_paragraph() + paragraph)
+
+        (card,) = document.cards
+        assert card.full_cite == entry
+        assert card.evidence_text == ""
+        assert card.completeness is CardCompleteness.CITE_ONLY
+        assert document.sections[1].match.rule_id == "heuristic-wiki-cite-entry"
+
+    def test_a_long_first_paragraph_that_opens_with_a_name_and_a_year_is_still_the_cite(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """A cite and its card run together in one paragraph. The cite is in there, so it is left."""
+        text = "Okonkwo 26, " + WHOLE_BODY_IN_ONE_PARAGRAPH
+        (card,) = parse(parser, tag_paragraph() + small_print_paragraph(text)).cards
+
+        assert card.short_cite == "Okonkwo 26"
+        assert card.full_cite == text
+        assert card.completeness is CardCompleteness.CITE_ONLY
+
+    def test_a_long_guess_with_no_card_open_is_still_a_card_with_no_tag(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """No tag and no cite: re-read as body it would belong to no card and be dropped."""
+        body = paragraph_xml(run_xml("Sources"), style="Heading3") + small_print_paragraph(
+            WHOLE_BODY_IN_ONE_PARAGRAPH
+        )
+        (card,) = parse(parser, body).cards
+
+        assert card.has_tag is False
+        assert card.full_cite == WHOLE_BODY_IN_ONE_PARAGRAPH
+        assert card.completeness is CardCompleteness.CITE_ONLY
+
+
+class TestACiteThatDoesNotOpenTheBody:
+    """What the rule leaves alone, in the place where it would otherwise act."""
+
+    @pytest.mark.parametrize(
+        "as_a_cite",
+        [
+            reading_size_paragraph(ELLIPSIS_AND_YEAR),
+            behind_a_bold_opening(ELLIPSIS_AND_YEAR),
+            behind_a_bold_opening(ELLIPSIS_AND_YEAR, highlight="yellow"),
+        ],
+        ids=["at reading size", "small print behind a bold opening", "highlighted behind a bold opening"],
+    )
+    def test_the_same_paragraph_formatted_as_a_cite_stays_a_cite(
+        self, parser: DebateDocxParser, as_a_cite: str
+    ) -> None:
+        document = parse(parser, tag_paragraph() + cite_paragraph() + as_a_cite)
+
+        (card,) = document.cards
+        assert card.full_cite == SHORT_CITE + CITE_TAIL + "\n" + ELLIPSIS_AND_YEAR
+        assert card.evidence_text == ""
+        assert card.completeness is CardCompleteness.CITE_ONLY
+        assert document.sections[2].unit is StructuralUnit.CITE
+        assert document.sections[2].match.rule_id == "heuristic-wiki-cite-entry"
+
+    @pytest.mark.parametrize("position", ["after the card's cite", "as the card's first cite"])
+    def test_a_paragraph_of_300_words_in_a_cite_paragraph_style_stays_a_cite(
+        self, parser: DebateDocxParser, position: str
+    ) -> None:
+        """The file's author said "cite". Small print and 355 words do not overrule that."""
+        before = cite_paragraph() if position == "after the card's cite" else ""
+        document = parse_with_a_cite_paragraph_style(
+            parser, tag_paragraph() + before + in_a_cite_paragraph_style(WHOLE_BODY_IN_ONE_PARAGRAPH)
+        )
+
+        (card,) = document.cards
+        assert card.full_cite.endswith(WHOLE_BODY_IN_ONE_PARAGRAPH)
+        assert card.evidence_text == ""
+        assert card.completeness is CardCompleteness.CITE_ONLY
+        assert document.sections[-1].unit is StructuralUnit.CITE
+        assert document.sections[-1].match.rule_id == "verbatim-style-id:CiteParagraph"
+
+    @pytest.mark.parametrize("position", ["after the card's cite", "as the card's first cite"])
+    def test_a_paragraph_of_300_words_with_a_run_in_the_cite_character_style_stays_a_cite(
+        self, parser: DebateDocxParser, position: str
+    ) -> None:
+        """Past 1,000 characters the classifier's style rule lets go of it and its guess takes over.
+
+        The guess is still about a paragraph the author marked with the cite style, so it stands.
+        """
+        before = cite_paragraph() if position == "after the card's cite" else ""
+        document = parse(
+            parser,
+            tag_paragraph() + before + with_a_run_in_the_cite_character_style(WHOLE_BODY_IN_ONE_PARAGRAPH),
+        )
+
+        (card,) = document.cards
+        assert card.full_cite.endswith(WHOLE_BODY_IN_ONE_PARAGRAPH)
+        assert card.evidence_text == ""
+        assert card.completeness is CardCompleteness.CITE_ONLY
+        assert document.sections[-1].unit is StructuralUnit.CITE
+        assert document.sections[-1].match.rule_id == "heuristic-wiki-cite-entry"
+
+    @pytest.mark.parametrize(
+        ("second", "second_text"),
+        [
+            (cite_paragraph("Ferreira 25", FERREIRA_TAIL), "Ferreira 25" + FERREIRA_TAIL),
+            (
+                paragraph_xml(
+                    run_xml("Ferreira 25", character_style="Style13ptBold", half_points=16)
+                    + run_xml(FERREIRA_TAIL, half_points=16)
+                ),
+                "Ferreira 25" + FERREIRA_TAIL,
+            ),
+            (
+                paragraph_xml(
+                    run_xml("Ferreira 25", bold=True, half_points=16) + run_xml(FERREIRA_TAIL, half_points=16)
+                ),
+                "Ferreira 25" + FERREIRA_TAIL,
+            ),
+            (
+                paragraph_xml(
+                    run_xml("Ferreira 25, Journal of Grid Studies, ", half_points=22)
+                    + run_xml("example.invalid/grid", underline="single", half_points=22)
+                ),
+                "Ferreira 25, Journal of Grid Studies, example.invalid/grid",
+            ),
+        ],
+        ids=[
+            "a bold name",
+            "the cite character style in small print",
+            "a bold name in small print",
+            "reading size with an underlined link",
+        ],
+    )
+    def test_a_card_with_two_real_cites_keeps_both(
+        self, parser: DebateDocxParser, second: str, second_text: str
+    ) -> None:
+        document = parse(parser, tag_paragraph() + cite_paragraph() + second + marked_up_paragraph())
+
+        (card,) = document.cards
+        assert card.full_cite == SHORT_CITE + CITE_TAIL + "\n" + second_text
+        assert card.short_cite == SHORT_CITE
+        assert card.evidence_text == "".join(MARKED_UP)
+        assert [section.unit for section in document.sections] == [
+            StructuralUnit.TAG,
+            StructuralUnit.CITE,
+            StructuralUnit.CITE,
+            StructuralUnit.EVIDENCE,
+        ]
 
 
 class TestTheParserVersion:

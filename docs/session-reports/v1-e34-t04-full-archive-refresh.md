@@ -316,9 +316,62 @@ because it states the rule rather than leaning on string order.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+Accepted in full, phase `Succeeded`.
+
+* **ac0 was done first and proved against the real failure.** The red run used the naive path
+  `v1-e30-t06` actually hit (`import_archive` plus the weekly key). It reproduced the overwrite,
+  the stranded back-catalogue and the changed weekly diffs. A test written against an imagined
+  bug would have proved much less.
+* **The table of manifest readers is the deliverable I most wanted.** Every reader now handles
+  the complete archive on purpose, and you said for each one whether it includes or ignores it.
+  `v1-e31-t06` will adopt your `snapshot_of_manifest_key` as its single weekly-series rule after
+  it syncs.
+* **The equivalent first-seen mutant was handled well.** You explained why it can't fail: string
+  order already excludes `full/…`. Then you changed the test to the realistic case (a complete
+  archive dated before the weekly, holding the weekly's file), so the mutant a real refactor
+  would produce is caught. You also kept the explicit flag, so the code states the rule rather
+  than relying on string order.
+
+**Rulings:**
+
+* **Deviation 1, the complete archive's record is its manifest:** accepted. A series column and a
+  migration of two primary keys would be a task of their own. Nothing needs them yet:
+  `v1-e31-t06` parses only the weekly series and the OpenEv release. If E32 ever needs to
+  attribute files that only a complete archive holds, it files the migration then.
+* **Deviation 2, outside the packages:** accepted. The ceiling, the composition root, the runbook
+  the spec itself names, and the smoke check of a changed surface.
+* **Deviation 3, a ceiling for the complete archive alone:** accepted. 8 GiB packed and 16 GiB
+  unpacked is a reasoned projection from the measured hspf26 figure. Leaving weekly ceilings
+  unchanged keeps the safety margin where it already worked. The first real fetch records the
+  actual size.
+* **Deviation 4, the interval:** keep 30 days. A refresh roughly every five weekly runs is fine.
+  The complete archive is the site's largest file, withdrawal detection is not time-critical,
+  and fewer large downloads is the polite choice. The epic's "within a month" is approximate,
+  and no spec change is needed.
+* **Clause 12:** ADR-0017 does not settle it. That ADR is our own decision, and it says itself
+  that the policy wins. The maintainer's confirmation, as recorded, covers "scheduled downloads
+  of the weekly archives".
+  * The operator's one-off `--full-archive` fetch is a manual download through the documented
+    API. That is covered as any manual download is (terms clauses 4 and 7), so operator
+    follow-up 1 may go ahead.
+  * The scheduled rotation is not covered yet. Until Charlie confirms it, either from the
+    maintainer's reply on file or by asking, the weekly agent is reinstalled with
+    `caselist.full_archive_rotation` off. The PM records the confirmation in clause 12 when it
+    arrives.
+
+**Operator follow-ups:**
+
+* Follow-up 1 needs `aws sso login --profile debate-dev-evidence` first, because the pull
+  publishes to the dev bucket.
+* Follow-up 3, the agent reinstall, waits for two things:
+  * the 2026-10-14 scheduled run, which `v1-e34-t05` observes on the build installed now;
+  * the clause 12 confirmation, or the rotation set off.
+
+**Merge order:** this task merges before `v1-e31-t06`, which syncs onto it.

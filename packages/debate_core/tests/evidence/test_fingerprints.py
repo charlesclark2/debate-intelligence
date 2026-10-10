@@ -26,6 +26,7 @@ from debate_core.domain.debate_files import (
 )
 from debate_core.domain.style_profile import RunEmphasis, StyleMatchSource
 from debate_core.evidence.abbreviated_links import (
+    SPLIT_COPY_OVERLAP,
     FullCardWords,
     abbreviation_anchor,
     link_abbreviated,
@@ -38,7 +39,7 @@ from debate_core.evidence.fingerprints import (
     fingerprint_text,
     normalize_for_matching,
 )
-from debate_core.evidence.near_duplicates import matching_words
+from debate_core.evidence.near_duplicates import containment, matching_words, word_shingles
 
 SOURCE_SHA256 = "a" * 64
 
@@ -384,6 +385,57 @@ def test_abbreviated_card_is_not_guessed_between_two_clusters() -> None:
     assert link_abbreviated(anchor, [evening]) == EVENING_CLUSTER
     assert link_abbreviated(anchor, [lookalike]) == LOOKALIKE_CLUSTER
     assert link_abbreviated(anchor, [evening, lookalike]) is None
+
+
+#: The full card with two words misspelled far apart: what near-duplicate clustering splits off.
+TWO_TYPO_BODY = FULL_BODY.replace("green space", "gren space").replace("regional", "regonal")
+TWO_TYPO_CLUSTER = "4" * 64
+
+
+def test_abbreviated_card_joins_the_cluster_with_most_copies_when_one_card_is_split() -> None:
+    """Matches in two clusters that are one card, split: the link survives, to one of them."""
+    anchor = abbreviation_anchor(
+        abbreviated_card("Cities that pave over … an aesthetic one."), markers=("…",)
+    )
+    assert anchor is not None
+    assert TWO_TYPO_BODY != FULL_BODY
+
+    def matches(evening_copies: int, typo_copies: int) -> list[FullCardWords]:
+        key, body = short_cite_key("Pellam 26"), tuple(matching_words(FULL_BODY))
+        return [
+            FullCardWords(EVENING_CLUSTER, key, body, evening_copies),
+            FullCardWords(TWO_TYPO_CLUSTER, key, tuple(matching_words(TWO_TYPO_BODY)), typo_copies),
+        ]
+
+    assert link_abbreviated(anchor, matches(2, 1)) == EVENING_CLUSTER
+    assert link_abbreviated(anchor, matches(1, 3)) == TWO_TYPO_CLUSTER
+    # A tie goes to the smaller cluster id, whichever order the cards arrive in.
+    assert link_abbreviated(anchor, matches(1, 1)) == EVENING_CLUSTER
+    assert link_abbreviated(anchor, list(reversed(matches(1, 1)))) == EVENING_CLUSTER
+
+
+def test_abbreviated_card_is_not_linked_when_any_match_is_a_different_card() -> None:
+    """A split is tolerated among copies of one card. One lookalike among the matches, and no link:
+    however many copies the other clusters hold."""
+    anchor = abbreviation_anchor(abbreviated_card("Cities that pave … an aesthetic one."), markers=("…",))
+    assert anchor is not None
+    key = short_cite_key("Pellam 26")
+    evening = FullCardWords(EVENING_CLUSTER, key, tuple(matching_words(FULL_BODY)), 5)
+    typo = FullCardWords(TWO_TYPO_CLUSTER, key, tuple(matching_words(TWO_TYPO_BODY)), 1)
+    lookalike = FullCardWords(LOOKALIKE_CLUSTER, key, tuple(matching_words(LOOKALIKE_BODY)), 1)
+
+    assert link_abbreviated(anchor, [evening, typo]) == EVENING_CLUSTER
+    assert link_abbreviated(anchor, [evening, lookalike]) is None
+    assert link_abbreviated(anchor, [evening, typo, lookalike]) is None
+
+
+def test_abbreviated_split_overlap_is_more_of_the_text_shared_than_not() -> None:
+    assert SPLIT_COPY_OVERLAP == 0.5
+    evening, typo, lookalike = (
+        frozenset(word_shingles(matching_words(body))) for body in (FULL_BODY, TWO_TYPO_BODY, LOOKALIKE_BODY)
+    )
+    assert containment(evening, typo) >= SPLIT_COPY_OVERLAP
+    assert containment(evening, lookalike) < SPLIT_COPY_OVERLAP
 
 
 @pytest.mark.parametrize(

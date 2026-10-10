@@ -475,13 +475,34 @@ AFTER_SHORT_BODY_STEP_MISSES: Final[dict[str, dict[Miss, int]]] = {
     "extended set, abbreviated with abbreviated": {Miss.SPLIT_FULL_COPIES: 1, Miss.NO_FULL_COPY: 8},
 }
 
+#: After the linking rule tolerates a split (mechanism 2), worked out by hand before the run. Only
+#: the extended set's abbreviated rows move, because mechanism 1's fix had already healed every
+#: split among t06's own full copies.
+#:
+#: * The two Verran cuts and the Ostrander cut join the cluster of the clean copies, which holds
+#:   two copies to the two-typo copy's one: six more pairs with a full copy, and the pair of Verran
+#:   cuts with each other. Their three pairs with the two-typo copies stay apart, as does the split
+#:   itself: an abbreviation joins one cluster and merges none.
+#: * The Pryce 5 ... 5 cut matches two different cards, which share a third of their text. No link.
+AFTER_SPLIT_TOLERANT_LINKING_TABLE: Final[dict[str, tuple[int, int, int]]] = AFTER_SHORT_BODY_STEP_TABLE | {
+    "extended set, all pairs": (100, 0, 16),
+    "extended set, abbreviated with a full copy": (51, 0, 4),
+    "extended set, abbreviated with abbreviated": (12, 0, 8),
+}
+
+AFTER_SPLIT_TOLERANT_LINKING_MISSES: Final[dict[str, dict[Miss, int]]] = AFTER_SHORT_BODY_STEP_MISSES | {
+    "extended set, all pairs": {Miss.CONFIRMATION: 4, Miss.SPLIT_FULL_COPIES: 4, Miss.NO_FULL_COPY: 8},
+    "extended set, abbreviated with a full copy": {Miss.SPLIT_FULL_COPIES: 4},
+    "extended set, abbreviated with abbreviated": {Miss.NO_FULL_COPY: 8},
+}
+
 BASELINE_TABLE: Final = T06_TABLE | BASELINE_EXTENDED_TABLE
 """Every row against the code as t06 left it: what each fix is measured from."""
 
-EXPECTED_TABLE: Final = AFTER_SHORT_BODY_STEP_TABLE
+EXPECTED_TABLE: Final = AFTER_SPLIT_TOLERANT_LINKING_TABLE
 """What the code under test should measure today. Each fix replaces the rows it changes."""
 
-EXPECTED_MISSES: Final = AFTER_SHORT_BODY_STEP_MISSES
+EXPECTED_MISSES: Final = AFTER_SPLIT_TOLERANT_LINKING_MISSES
 
 
 def test_the_table_is_as_expected_row_for_row(measured: dict[str, Row]) -> None:
@@ -532,7 +553,6 @@ def test_mechanism_1_a_short_cards_trimmed_copy_is_compared_with_it(
     assert extended_clusters[copy] == extended_clusters["k1-original"]
 
 
-@pytest.mark.xfail(strict=True, reason=NOT_YET)
 @pytest.mark.parametrize(
     ("abbreviation", "original"),
     [
@@ -582,6 +602,21 @@ def test_the_copies_two_typos_split_off_stay_split(extended_clusters: dict[str, 
     """Linking an abbreviation never merges the full-card clusters it matches."""
     assert extended_clusters["v1-two-typos"] != extended_clusters["v1-original"]
     assert extended_clusters["w1-two-typos"] != extended_clusters["w1-original"]
+
+
+def test_linking_abbreviations_never_changes_a_full_cards_cluster(
+    extended_clusters: dict[str, str],
+) -> None:
+    """An abbreviation joins one cluster and merges none: full cards placed alone land the same."""
+    full_cards = [variant for variant in load_short_cards(extended=True) if not is_abbreviated(variant)]
+    alone = placed_clusters(full_cards)
+    assert alone == {variant.variant_id: extended_clusters[variant.variant_id] for variant in full_cards}
+
+
+def test_every_card_is_placed_once_in_the_order_given() -> None:
+    cards = [variant.card for variant in load_short_cards(extended=True)]
+    placements = CaselistCardStatsService(build_fake_caselist_repository()).place(cards)
+    assert [placement.card for placement in placements] == cards
 
 
 HARD_NEGATIVES: Final = [

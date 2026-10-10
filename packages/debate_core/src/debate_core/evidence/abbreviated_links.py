@@ -24,30 +24,53 @@ An abbreviated card is keyed by its **short cite** and its **opening and closing
 ## When it links, and when it does not
 
 A full card *matches* when its short-cite key is equal and its body begins with the opening words
-and ends with the closing words. The abbreviated card joins a cluster only when every matching full
-card is in that **one** cluster. No match, or matches in two clusters, and it stays
-:attr:`~debate_core.domain.card_occurrence.ClusterMembership.UNLINKED`: two cards from the same
-article can share an author, a year and a stock opening, and choosing between them would be a
-guess about what a team read.
+and ends with the closing words. The abbreviated card joins a cluster when every matching full card
+is in that **one** cluster. No match and it stays
+:attr:`~debate_core.domain.card_occurrence.ClusterMembership.UNLINKED`.
 
-Linking changes which cluster an occurrence is counted in. It never changes a cluster id (those
-come from full cards only), and it never merges an abbreviated card's text into anything.
+## Matches in more than one cluster (`v1-e31-t08`)
+
+Two different things put an abbreviation's matches in two clusters, and they call for opposite
+answers.
+
+* **Two different cards.** Two cards from one article can share an author, a year and a stock
+  opening and closing. Choosing between them would be a guess about what a team read, so the
+  abbreviation stays unlinked.
+* **One card, split.** Near-duplicate clustering missed a copy: two typos, a damaged paste. Every
+  abbreviation of that card then matches both clusters, and under the first rule alone one miss
+  among the full copies unlinked them all (`v1-e31-t06` measured 33 of 44 pairs lost this way).
+
+They are told apart by the full cards' own text, which is there to read. The abbreviation joins the
+cluster that holds the most disclosed copies among its matches (the smallest cluster id on a tie),
+provided every match outside that cluster shares at least :data:`SPLIT_COPY_OVERLAP` of the smaller
+body's shingles with a match inside it. Same cite, same opening words, same closing words and
+most of the same text between them is one card that was split; anything less is two cards, and no
+link. The cluster with the most copies, because that is where most of the card's disclosures are
+already counted, so the fewest pairs are left apart, and because the choice does not depend on the
+order the cards arrive in.
+
+**An abbreviation joins one cluster and merges none.** The clusters it matched stay two clusters
+with their own ids, and the copies in the other one are still counted apart. Linking changes which
+cluster an occurrence is counted in. It never changes a full card's cluster id, and it never merges
+an abbreviated card's text into anything.
 """
 
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Final
 
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard
 from debate_core.evidence.fingerprints import normalize_for_matching
-from debate_core.evidence.near_duplicates import matching_words
+from debate_core.evidence.near_duplicates import containment, matching_words, word_shingles
 from debate_core.evidence.style_profile_loader import load_style_profile
 
 __all__ = [
     "MIN_ANCHOR_WORDS",
+    "SPLIT_COPY_OVERLAP",
     "AbbreviationAnchor",
     "FullCardWords",
     "abbreviation_anchor",
@@ -58,6 +81,10 @@ __all__ = [
 
 MIN_ANCHOR_WORDS: Final = 3
 """Fewest opening words, and fewest closing words, an abbreviated card must carry to be linked."""
+
+SPLIT_COPY_OVERLAP: Final = 0.5
+"""Share of the smaller body's shingles two matching full cards in different clusters must have in
+common to be read as copies of one card that clustering split: more of the text shared than not."""
 
 _FOUR_DIGIT_YEAR: Final = re.compile(r"^(?:19|20)(\d{2})$")
 
@@ -96,6 +123,8 @@ class FullCardWords:
     cluster_id: str
     short_cite_key: str | None
     words: tuple[str, ...]
+    copies: int = 1
+    """How many disclosed cards have this body under this short cite."""
 
 
 def abbreviation_anchor(card: ParsedCard, markers: Sequence[str] | None = None) -> AbbreviationAnchor | None:
@@ -123,15 +152,31 @@ def abbreviation_anchor(card: ParsedCard, markers: Sequence[str] | None = None) 
 
 
 def link_abbreviated(anchor: AbbreviationAnchor, full_cards: Iterable[FullCardWords]) -> str | None:
-    """The one cluster every matching full card is in, or `None` when there is not exactly one."""
-    clusters = {
-        full.cluster_id
+    """The cluster an abbreviated card joins, or `None` when it matches nothing or two cards.
+
+    The one cluster every matching full card is in. When they are in more than one, the cluster
+    with the most copies among them, but only when the matches outside it are copies of the same
+    card (this module's docstring); otherwise `None`. Never more than one cluster.
+    """
+    matches = [
+        full
         for full in full_cards
         if full.short_cite_key == anchor.short_cite_key and _matches(anchor, full.words)
-    }
-    if len(clusters) != 1:
-        return None
-    return next(iter(clusters))
+    ]
+    copies: Counter[str] = Counter()
+    for full in matches:
+        copies[full.cluster_id] += full.copies
+    if len(copies) <= 1:
+        return next(iter(copies), None)
+    chosen = min(copies, key=lambda cluster_id: (-copies[cluster_id], cluster_id))
+    inside = [frozenset(word_shingles(full.words)) for full in matches if full.cluster_id == chosen]
+    for full in matches:
+        if full.cluster_id == chosen:
+            continue
+        body = frozenset(word_shingles(full.words))
+        if all(containment(body, held) < SPLIT_COPY_OVERLAP for held in inside):
+            return None
+    return chosen
 
 
 def _matches(anchor: AbbreviationAnchor, body: tuple[str, ...]) -> bool:

@@ -260,14 +260,21 @@ class CaselistCardStatsService:
                 bodies.setdefault(fingerprint, card.evidence_text)
         clusters = cluster_near_duplicates(bodies, self._thresholds)
 
-        full_by_cite: defaultdict[str | None, dict[tuple[str, str], FullCardWords]] = defaultdict(dict)
+        copies: Counter[tuple[str, str | None]] = Counter()
+        full_by_cite: defaultdict[str | None, dict[str, FullCardWords]] = defaultdict(dict)
+        for card, fingerprint in zip(cards, fingerprints, strict=True):
+            if card.completeness is CardCompleteness.FULL:
+                copies[(fingerprint, short_cite_key(card.short_cite))] += 1
         for card, fingerprint in zip(cards, fingerprints, strict=True):
             if card.completeness is CardCompleteness.FULL:
                 key = short_cite_key(card.short_cite)
-                full_by_cite[key].setdefault(
-                    (fingerprint, key or ""),
-                    FullCardWords(clusters[fingerprint], key, tuple(matching_words(card.evidence_text))),
-                )
+                if fingerprint not in full_by_cite[key]:
+                    full_by_cite[key][fingerprint] = FullCardWords(
+                        clusters[fingerprint],
+                        key,
+                        tuple(matching_words(card.evidence_text)),
+                        copies[(fingerprint, key)],
+                    )
 
         placed: list[CardPlacement] = []
         for card, fingerprint in zip(cards, fingerprints, strict=True):

@@ -1,0 +1,96 @@
+# TASK v1-e34-t19-unreadable-local-files-and-notification-codes - Unreadable local files fail a stage, and a notification says whether a failure is transient
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t19-unreadable-local-files-and-notification-codes
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "Unreadable local files fail a stage, and a notification says whether a failure is transient"
+spec:
+  # Filed by the PM, 2026-10-10, from v1-e34-t13's and v1-e34-t12's Follow-up work.
+  description: >-
+    Three loose ends left after v1-e34-t13 and v1-e34-t12. (1) `manifest.read_manifest_lines`
+    and `write_manifest` open a manifest file by path, so an unreadable manifest file in a
+    readable directory is still a raw `PermissionError` and exit 70. v1-e34-t13 translated the
+    stores, not these direct reads. (2) A weekly archive's `OSError` (an unreadable or vanished
+    zip in the inbox) ends the whole run instead of failing that archive's import and letting
+    the rest go on. v1-e34-t12 noted it. (3) The weekly agent's notification is built from the
+    run record, which carries no error codes. So it cannot say whether a failed run was
+    transient (exit 3, next week retries) or needs a person (exit 1). Give the run record the
+    failed stages' codes in a way both the installed build and a new one can read. The record
+    forbids unknown fields today, so this is a schema change, made compatibly. Then word the
+    notification from them. Out of scope: the exit-code rule, and the stores v1-e34-t13
+    translated.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - A path, camp title or inbox file name in a stage reason, a record or a notification
+      - A run record a build released before this task cannot read
+  context:
+    - kind: TaskRef
+      name: v1-e34-t13-pull-stage-failure-classes
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An unreadable manifest file is `LocalStoreAccessDenied` naming the manifest
+        directory's role, for reading and writing. Through `caselist pull` it fails its
+        stage with exit 3 and the data-directory hint, never exit 70. Shown failing first.
+    - id: ac2
+      description: >-
+        A weekly archive that cannot be read fails that archive's import with its code. The
+        other archives in the run import, and the run exits by v1-e34-t13's rule. Shown
+        failing first.
+    - id: ac3
+      description: >-
+        The run record carries the failed stages' codes. A record written by this build is
+        read by the build currently installed (a stored record from the start commit's code,
+        and the reverse), by test.
+    - id: ac4
+      description: >-
+        The notification for a failed run says whether the next scheduled run should retry
+        it (every failed required code retryable) or a person should look (any other).
+        docs/runbooks/caselist-scheduled-sync.md shows both wordings.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t19-unreadable-local-files-and-notification-codes-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Translate the direct manifest reads, contain an unreadable archive to its own import, and
+    carry codes into the record and the notification.
+  goalRef:
+    name: v1-e34-t19-unreadable-local-files-and-notification-codes
+  graph:
+    nodes:
+      - id: local-files-and-codes
+        kind: Task
+        name: Local file errors contained and notifications coded
+        description: >-
+          The manifest translation, archive containment, the compatible record change and
+          the notification wording.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pull tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, pull or sync or manifest]
+status:
+  phase: Pending

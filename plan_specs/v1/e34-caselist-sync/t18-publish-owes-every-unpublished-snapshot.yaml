@@ -1,0 +1,91 @@
+# TASK v1-e34-t18-publish-owes-every-unpublished-snapshot - A publish stopped by an expired session still owes every snapshot it did not finish
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t18-publish-owes-every-unpublished-snapshot
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A publish stopped by an expired session still owes every snapshot it did not finish"
+spec:
+  # Filed by the PM, 2026-10-10, from v1-e34-t13's Follow-up work (pre-existing, noticed).
+  description: >-
+    When the AWS session expires part-way through `caselist pull`'s publish stage, the run marks
+    publish pending and writes the snapshots it still owes to the pending-work file, so
+    `--publish-pending` publishes them after `aws sso login`. v1-e34-t13 noticed that snapshots
+    which had already ended incomplete earlier in the same stage are left out of that file.
+    Nothing then owes them: the next pull finds them imported and the next `--publish-pending`
+    does not know about them, so they stay unpublished until a person notices drift in `caselist
+    status`. Make the pending-work file hold every snapshot the stage did not confirm complete,
+    whatever ended it, and make `--publish-pending` publish all of them. Out of scope: the
+    exit-code rule and the stage codes v1-e34-t13 settled.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - Dropping a snapshot from the pending-work file before the bucket has confirmed it complete
+      - Changing v1-e34-t13's exit-code rule or a stage's recorded codes
+  context:
+    - kind: TaskRef
+      name: v1-e34-t13-pull-stage-failure-classes
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Against moto, a publish stage where one snapshot ends incomplete (an upload refused)
+        and the session then expires on a later snapshot leaves both snapshots in the
+        pending-work file. Shown failing first against today's code.
+    - id: ac2
+      description: >-
+        `caselist pull --publish-pending` after a fresh session publishes every owed
+        snapshot and empties the file only of the ones the bucket confirmed, by test,
+        including a second expiry part-way through the retry.
+    - id: ac3
+      description: >-
+        A test walks every way the publish stage can end (completed, failed on a code,
+        pending) and checks the file afterwards holds exactly the snapshots not confirmed
+        complete.
+    - id: ac4
+      description: >-
+        docs/runbooks/caselist-scheduled-sync.md says what the pending-work file holds and
+        how to check it is empty after a retry.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t18-publish-owes-every-unpublished-snapshot-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Write every unconfirmed snapshot to the pending-work file whatever ended the stage, and
+    prove the retry drains it.
+  goalRef:
+    name: v1-e34-t18-publish-owes-every-unpublished-snapshot
+  graph:
+    nodes:
+      - id: owed-snapshots
+        kind: Task
+        name: Every unconfirmed snapshot stays owed
+        description: >-
+          The fix, the walk over stage endings, the retry tests and the runbook sentence.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pull tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, pull or sync or pending]
+status:
+  phase: Pending

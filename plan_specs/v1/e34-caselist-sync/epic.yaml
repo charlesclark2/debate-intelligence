@@ -513,5 +513,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t17-pull-parses-new-sources
+    - id: t18
+      kind: Task
+      name: 'A publish stopped by an expired session still owes every snapshot it did not finish'
+      description: >-
+        A publish stage stopped by an expired session leaves every snapshot it did not
+        confirm complete in the pending-work file, so --publish-pending finishes the job.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t18-publish-owes-every-unpublished-snapshot.yaml
+        goalRef: v1-e34-t18-publish-owes-every-unpublished-snapshot
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t18-publish-owes-every-unpublished-snapshot reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t18-publish-owes-every-unpublished-snapshot
+    - id: t19
+      kind: Task
+      name: 'Unreadable local files fail a stage, and a notification says whether a failure is transient'
+      description: >-
+        An unreadable manifest or archive fails only its own stage or import, and the weekly
+        agent's notification says whether a failure is transient.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t19-unreadable-local-files-and-notification-codes.yaml
+        goalRef: v1-e34-t19-unreadable-local-files-and-notification-codes
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t19-unreadable-local-files-and-notification-codes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t19-unreadable-local-files-and-notification-codes
 status:
   phase: Pending

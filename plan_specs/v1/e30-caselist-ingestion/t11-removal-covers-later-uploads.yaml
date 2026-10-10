@@ -69,7 +69,7 @@ spec:
         limiting flag, and that Step 8's hold and this plan together cover a later upload
         whether or not it was imported.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

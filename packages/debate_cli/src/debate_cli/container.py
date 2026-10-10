@@ -96,7 +96,7 @@ from __future__ import annotations
 import functools
 import sys
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
@@ -119,7 +119,7 @@ from debate_core.application.caselist.suppression import (
     RecordedSuppressionList,
 )
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
-from debate_core.application.caselist_sync import CaselistSyncService
+from debate_core.application.caselist_sync import CaselistSyncService, FullArchiveRotation
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
     SyncJournal,
@@ -323,6 +323,19 @@ class ServiceContainer:
             max_unpacked_bytes=caselist.max_unpacked_bytes,
         )
 
+    def read_full_archive(self, source: Path) -> Iterator[ArchiveEntry]:
+        """Read a complete archive (`<slug>-all-<date>.zip`) within its own, larger ceilings (`v1-e34-t04`).
+
+        `caselist.max_full_archive_bytes` and `caselist.max_full_archive_unpacked_bytes`; a weekly
+        is still read by :meth:`read_archive`, under the weekly ceilings.
+        """
+        caselist = self.settings.caselist
+        return archive_reader.read_archive(
+            source,
+            max_archive_bytes=caselist.max_full_archive_bytes,
+            max_unpacked_bytes=caselist.max_full_archive_unpacked_bytes,
+        )
+
     def caselist_inbox(self) -> CaselistInbox:
         """The directory `caselist pull` downloads into, as a removal purges it (`v1-e30-t09`).
 
@@ -337,6 +350,10 @@ class ServiceContainer:
             archives=archive_reader.ZipArchiveRewriter(
                 max_archive_bytes=caselist.max_archive_bytes,
                 max_unpacked_bytes=caselist.max_unpacked_bytes,
+            ),
+            full_archives=archive_reader.ZipArchiveRewriter(
+                max_archive_bytes=caselist.max_full_archive_bytes,
+                max_unpacked_bytes=caselist.max_full_archive_unpacked_bytes,
             ),
         )
 
@@ -726,6 +743,13 @@ class ServiceContainer:
             openev_year=caselist.openev_year,
             bulk_downloads_per_day=caselist.bulk_downloads_per_day,
             clock=self.clock(),
+            # The complete-archive rotation (`v1-e34-t04`): on unless the profile turns it off.
+            full_archive_rotation=FullArchiveRotation(
+                interval=timedelta(days=caselist.full_archive_interval_days)
+            )
+            if caselist.full_archive_rotation
+            else None,
+            read_full_archive=self.read_full_archive,
         )
 
     def caselist_sync_monitor(self) -> SyncRunMonitor:

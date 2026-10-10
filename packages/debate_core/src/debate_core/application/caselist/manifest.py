@@ -16,6 +16,13 @@ bucket uses and therefore the key the local evidence object store uses — so
 `objects/` to keep them out of the content-addressed `blobs/` tree. The session report records
 the difference from ac4's literal path.
 
+A complete archive (`<slug>-all-<date>.zip`, `v1-e34-t04`) is filed one level down, under
+`manifests/<caselist>/full/<date>.jsonl` (:func:`full_archive_manifest_key`). It is dated with the
+week's weekly, so a sibling key would collide with that weekly's manifest, and every reader of the
+weekly series (`manifests/<caselist>/<date>.jsonl`, exactly one `/` after the caselist) skips a
+nested key without being told to. A reader that wants the complete archives too asks for them; see
+:func:`~debate_core.application.caselist.publish_plan.snapshot_of_manifest_key`.
+
 ## It describes the archive, never the run
 
 Every field in a manifest is a fact about the archive and the week before it, so two imports of
@@ -45,6 +52,17 @@ the import could not read the earlier manifests. It was added by `v1-e30-t08` as
 so `schema_version` stays `1`: a reader that does not know it ignores it. Manifests written before
 it have no `first_seen` key and are not rewritten to add one; a later removal's rewrite keeps the
 count as the import recorded it, as it keeps `members`.
+
+A complete archive's summary (`manifests/<slug>/full/<date>.jsonl`, `v1-e34-t04`) differs in three
+keys and nothing else. Its `snapshot` and `previous_snapshot` are snapshot names, `full/<date>`,
+because it is classified against the complete archive before it, so its `NEW` means "not present
+in the preceding complete archive". It has no `first_seen`: that count is new evidence over time,
+measured against the weekly series alone, and a complete archive is not a point in that series.
+It carries `withdrawn`, `superseded` and `earlier_snapshots` instead: of the digests the caselist's
+earlier snapshots held, weekly and complete, those absent from this archive whose every path is gone
+too, those one of whose paths now holds other bytes, and how many snapshots were compared
+(:mod:`~debate_core.application.caselist.withdrawals`). Counts only. A weekly's summary is
+unchanged by this, byte for byte. These are additive keys, so `schema_version` stays `1`.
 
 A member row is flat — `school`, `side`, `round`, `round_normalized` rather than nested objects —
 because the thing that reads it is usually `jq` or a dataframe, and a flat row is one column each.
@@ -86,11 +104,13 @@ from debate_core.application.ports.suppression import SuppressionState, disclosu
 
 __all__ = [
     "DISCLOSURE_FIELDS",
+    "FULL_ARCHIVE_DIRECTORY",
     "MANIFEST_DIRECTORY",
     "MANIFEST_SCHEMA_VERSION",
     "SuppressedRowRefused",
     "common_member_fields",
     "counted",
+    "full_archive_manifest_key",
     "manifest_key",
     "manifest_lines",
     "name_of",
@@ -112,6 +132,9 @@ would not reach any of them.
 
 MANIFEST_DIRECTORY: Final = "manifests"
 """The object-key prefix manifests live under, in the bucket and in the local store alike."""
+
+FULL_ARCHIVE_DIRECTORY: Final = "full"
+"""Where a caselist's complete-archive manifests sit, under its own manifest directory (`v1-e34-t04`)."""
 
 #: Fixed separators, so two renderings of one report are byte-identical.
 _COMPACT_SEPARATORS: Final = (",", ":")
@@ -142,6 +165,18 @@ def manifest_key(caselist: str, snapshot: date) -> ObjectKey:
     outside the evidence directory.
     """
     return validate_object_key(f"{MANIFEST_DIRECTORY}/{caselist}/{snapshot.isoformat()}.jsonl")
+
+
+def full_archive_manifest_key(caselist: str, archive_date: date) -> ObjectKey:
+    """The object key a complete archive's manifest is filed under (`v1-e34-t04`).
+
+    `manifests/hsld26/full/2026-10-06.jsonl`: beside the caselist's weekly series rather than in
+    it, so the complete archive and the weekly of the same date are two keys. See the module
+    docstring for why it is nested.
+    """
+    return validate_object_key(
+        f"{MANIFEST_DIRECTORY}/{caselist}/{FULL_ARCHIVE_DIRECTORY}/{archive_date.isoformat()}.jsonl"
+    )
 
 
 def manifest_lines(report: ImportReport) -> list[str]:
@@ -298,23 +333,31 @@ def _summary_row(report: ImportReport) -> dict[str, object]:
     Nothing here is a property of the run — see this module's docstring for why `applied` and
     `newly_stored_blobs` are deliberately absent.
     """
-    return {
+    named = f"{FULL_ARCHIVE_DIRECTORY}/" if report.full_archive else ""
+    row: dict[str, object] = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "kind": "summary",
         "caselist": report.caselist,
-        "snapshot": report.snapshot.isoformat(),
+        "snapshot": f"{named}{report.snapshot.isoformat()}",
         "event": str(report.event),
         "archive_sha256": report.archive_sha256,
         "previous_snapshot": (
-            report.previous_snapshot.isoformat() if report.previous_snapshot is not None else None
+            f"{named}{report.previous_snapshot.isoformat()}" if report.previous_snapshot is not None else None
         ),
         "members": report.member_count,
         "distinct_sha256": report.distinct_digests,
         "warnings": report.warning_count,
         "classifications": counted(report.counts),
         "skipped": counted(report.skipped),
-        "first_seen": report.first_seen,
     }
+    if report.withdrawals is None:
+        row["first_seen"] = report.first_seen
+        return row
+    # A complete archive's own measure in place of first-seen (`v1-e34-t04`): see the module docstring.
+    row["withdrawn"] = report.withdrawals.withdrawn
+    row["superseded"] = report.withdrawals.superseded
+    row["earlier_snapshots"] = report.withdrawals.earlier_snapshots
+    return row
 
 
 def counted[KeyT: StrEnum](counts: Mapping[KeyT, int]) -> dict[str, int]:

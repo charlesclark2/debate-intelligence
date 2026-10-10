@@ -42,6 +42,17 @@ parser reads a disclosure (:mod:`debate_core.application.caselist.path_parser`).
 drops every row of that team's in every manifest of the caselist — files, junk entries, `REMOVED`
 rows — because each one names the team.
 
+## The complete archive
+
+A caselist's complete archive (`v1-e34-t04`) is its own snapshot, with its manifest at
+`manifests/<slug>/full/<date>.jsonl` on this machine and in the bucket. Every manifest reader here
+asks for it as well as for the weeklies (:meth:`RemovalPlanner._manifest_copies`), so a removal
+finds a file only the complete archive holds, counts the complete archive's holders when it asks
+whether a file is shared, and rewrites that manifest like a weekly's. Its sources are under the
+caselist's own `raw/` prefix, and the executor's sweep of superseded versions lists
+`manifests/<slug>/`, which holds `full/` too. The repository holds no disclosure record for it, so
+what it says about a team is read from its manifest alone.
+
 ## The sync's inbox
 
 The plan also lists every file in the download inbox (`caselist pull`'s, `v1-e30-t09`) that holds
@@ -397,8 +408,16 @@ class _ManifestCopy:
 
     @property
     def release(self) -> str:
-        """The snapshot or OpenEv release the key names: `2026-09-15`, `2026-policy`."""
+        """The snapshot or OpenEv release the key names: `2026-09-15`, `2026-policy`.
+
+        For a complete archive, its date alone; :attr:`full_archive` says which it is.
+        """
         return self.key.rsplit("/", 1)[-1].removesuffix(".jsonl")
+
+    @property
+    def full_archive(self) -> bool:
+        """Whether this is a complete archive's manifest, `manifests/<slug>/full/<date>.jsonl`."""
+        return self.caselist != OPENEV and self.key.count("/") == 3
 
 
 @dataclass(slots=True)
@@ -539,6 +558,7 @@ class RemovalPlanner:
             self._inbox,
             suppression=after,
             imported_weeks=_imported_weeks(copies),
+            imported_full_archives=_imported_weeks(copies, full_archives=True),
             imported_openev_downloads=_imported_openev_downloads(copies),
             team=(selector.caselist, selector.school, selector.team_code)
             if isinstance(selector, TeamSelector)
@@ -573,27 +593,40 @@ class RemovalPlanner:
         """Every caselist either copy of the store holds a manifest for, and OpenEv.
 
         All of them, whatever the selector: whether a team's file is shared depends on who else
-        disclosed it, in any caselist, and a file is in the bucket under every caselist that did.
+        disclosed it, in any caselist, and a file is in the bucket under every caselist that did. A
+        caselist known only from a complete archive (`manifests/<slug>/full/<date>.jsonl`) counts.
         """
         found: set[str] = {OPENEV}
         for store in (self._local.objects, self._remote):
             for info in await store.list_objects(f"{MANIFEST_DIRECTORY}/"):
                 parts = info.key.split("/")
-                if len(parts) == 3 and (parts[1] == OPENEV or _CASELIST_SLUG.match(parts[1])):
+                weekly_or_release = len(parts) == 3 and (parts[1] == OPENEV or _CASELIST_SLUG.match(parts[1]))
+                complete = (
+                    len(parts) == 4
+                    and _CASELIST_SLUG.match(parts[1]) is not None
+                    and snapshot_of_manifest_key(parts[1], info.key, full_archives=True) is not None
+                )
+                if weekly_or_release or complete:
                     found.add(parts[1])
         return sorted(found)
 
     async def _manifest_copies(self, caselist: str) -> list[_ManifestCopy]:
+        """Every manifest of `caselist` on either side: its weeklies **and its complete archives**.
+
+        A complete archive's manifest (`v1-e34-t04`) names schools, team codes and paths as a
+        weekly's does, and a takedown that missed it would leave the removed row in the corpus's
+        own copy. So it is read here, rewritten like any other, and swept like any other.
+        """
         prefix = manifest_prefix(caselist)
         local_keys = {
             info.key
             for info in await self._local.objects.list_objects(prefix)
-            if snapshot_of_manifest_key(caselist, info.key)
+            if snapshot_of_manifest_key(caselist, info.key, full_archives=True)
         }
         remote_keys = {
             info.key
             for info in await self._remote.list_objects(prefix)
-            if snapshot_of_manifest_key(caselist, info.key)
+            if snapshot_of_manifest_key(caselist, info.key, full_archives=True)
         }
         copies: list[_ManifestCopy] = []
         for key in sorted(local_keys | remote_keys):
@@ -1078,15 +1111,19 @@ def _affected_caselists(sources: Sequence[PlannedSource], caselists: Sequence[st
     return tuple(sorted(caselists))
 
 
-def _imported_weeks(copies: Sequence[_ManifestCopy]) -> frozenset[tuple[str, date]]:
+def _imported_weeks(
+    copies: Sequence[_ManifestCopy], *, full_archives: bool = False
+) -> frozenset[tuple[str, date]]:
     """The weeks this machine holds a manifest for: what the sync calls imported (`_decide_archive`).
 
     This machine's copies only. The inbox is this machine's, and so is the sync's notion of what it
-    has imported; a manifest that is only in the bucket has not been imported here.
+    has imported; a manifest that is only in the bucket has not been imported here. The weekly
+    series, or with `full_archives` the complete archives' dates instead: a complete archive shares
+    its date with that week's weekly, and the one being imported says nothing about the other.
     """
     weeks: set[tuple[str, date]] = set()
     for copy in copies:
-        if copy.side is Side.LOCAL and copy.caselist != OPENEV:
+        if copy.side is Side.LOCAL and copy.caselist != OPENEV and copy.full_archive is full_archives:
             try:
                 weeks.add((copy.caselist, date.fromisoformat(copy.release)))
             except ValueError:

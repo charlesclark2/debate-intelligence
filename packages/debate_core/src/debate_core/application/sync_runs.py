@@ -315,9 +315,17 @@ def record_for_summary(
     )
 
 
+_MAX_SELECT_REASON_CHARACTERS: Final = 2000
+"""The select stage's reason carries the complete-archive rotation's decision and each caselist's
+state (`v1-e34-t04`) after the download window, and with three caselists that passes 500
+characters. Like retention's, only the length allowed is longer: every earlier build reads it."""
+
+
 def _reason_limit(stage: SyncStage) -> int:
     if stage is SyncStage.RETENTION:
         return _MAX_RETENTION_REASON_CHARACTERS
+    if stage is SyncStage.SELECT:
+        return _MAX_SELECT_REASON_CHARACTERS
     return _MAX_MESSAGE_CHARACTERS
 
 

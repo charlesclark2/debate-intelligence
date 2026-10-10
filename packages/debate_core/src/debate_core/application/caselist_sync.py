@@ -59,16 +59,62 @@ The downloads listing carries two archive kinds per caselist
 
 * `WEEKLY` — `<slug>-weekly-<date>.zip`, the week's edits. **This is what a weekly sync pulls**,
   and only those dated after the latest snapshot the local manifests already hold.
-* `FULL` — `<slug>-all-<date>.zip`, the whole caselist, regenerated rather than retained. A weekly
-  run **does not** fetch it. Whether the run should also refresh the full archive periodically, and
-  at what interval against a 5-per-day cap, is a question this task raises rather than settles; the
-  session report's Deviations section carries it. The one-off back-catalogue fetch of the older
-  weeklies is `v1-e30-t06`'s.
+* `FULL` — `<slug>-all-<date>.zip`, the whole caselist, regenerated rather than retained. The
+  weekly run refreshes **at most one** of them, on a rotation (`v1-e34-t04`); see "The complete
+  archive" below. The one-off back-catalogue fetch of the older weeklies is `v1-e30-t06`'s.
 * `UNRECOGNISED` — a listed name following neither pattern, which the client refuses to date by
   guesswork. It is **never downloaded**: an archive with no date cannot be filed as a snapshot, and
   the importer's ordering rule is built on snapshot dates. It is counted and named in the run
   summary so that a new naming scheme upstream shows up as a number an operator can see rather than
   as a silently empty run.
+
+## The complete archive
+
+ADR-0017 makes the complete archive the corpus and the weeklies a history of edits, and its
+decision 5 is why one is fetched at all: a sha256 an earlier snapshot held and the complete archive
+does not is a disclosure withdrawn upstream, which no run of weeklies alone can see. A weekly's
+path-level `REMOVED` cannot stand in for it, because a filename carries a per-team sequence number
+and a path missing from one week is a rename as often as a withdrawal (`v1-e30-t06` ac2).
+
+What stops a weekly fetch of every complete archive is the cap: five bulk downloads a day, three
+caselists' weeklies already spend three, and a complete archive is the largest file the site
+serves. So each run plans its weeklies first, against the same :class:`DownloadLedger`, and only
+what they leave can buy a complete archive (:func:`decide_full_archives`):
+
+* **At most one per run**, whatever is due.
+* **Due** when the newest complete archive this machine holds is more than
+  `caselist.full_archive_interval_days` (30 by default) older than the run, or when it holds none.
+  A listed archive no newer than the newest held is `ALREADY_IMPORTED`.
+* **Least recently refreshed first**: a caselist with none yet, then the oldest held. The others
+  wait for the next run, which is what makes the rotation catch up by itself after a missed week.
+* **Never at the weeklies' expense**: when the weeklies leave no allowance, the one in turn is
+  `FULL_ARCHIVE_DEFERRED_FOR_WEEKLIES` and goes first next time.
+* `caselist pull --full-archive <slug>` takes the run's one slot for that caselist whatever the
+  interval or `caselist.full_archive_rotation` say, budgeted after the weeklies in the same way,
+  and the run refuses (:class:`FullArchiveRefused`) before fetching anything when it cannot.
+
+Every run says which rule applied, in the select stage's reason and in the summary's
+`full_archive`, so a complete archive not fetched is a sentence an operator can read rather than an
+absence. A complete archive already in the inbox and not imported is imported from there, without
+a download and without taking the slot.
+
+**Its own snapshot.** A complete archive shares its date with that week's weekly, so it is filed
+apart from the weekly series: its manifest at `manifests/<slug>/full/<date>.jsonl`, its snapshot
+named `full/<date>`, and no `(caselist, date)` snapshot or disclosure record in the repository,
+because those tables are keyed by the weekly series' own key
+(:meth:`~debate_core.application.caselist.import_service.CaselistImportService.import_full_archive`).
+It is classified against the complete archive before it, not against a weekly; the weekly series'
+:meth:`_latest_imported_snapshot` and the importer's previous snapshot never see one. Its sources
+are content-addressed like any other, so what overlaps the weeklies costs no disk, only the
+download.
+
+**Withdrawals.** After the import, every sha256 that an earlier snapshot of the caselist held —
+weekly or complete, dated before this one — and this archive does not is counted, in two numbers
+(:func:`~debate_core.application.caselist.withdrawals.count_withdrawals`): *withdrawn* when no path
+it was held at is in the archive any more, *superseded* when one is, holding other bytes (a
+re-upload). Counts only, in the summary's `full_archive` and the import stage's reason, apart from
+the weeklies' path-level `REMOVED`. Whether a withdrawal should suppress anything is a policy
+question, not this module's.
 
 ## The inbox
 
@@ -92,10 +138,11 @@ the first run after it shipped cleared the backlog — and a dry run lists what 
 removes nothing. A file goes only when all of these hold:
 
 * **Imported: a manifest on this machine came from these bytes.** A weekly archive's own week has a
-  manifest whose `archive_sha256` is the file's digest; a camp download's digest is the
-  `archive_sha256` of a row in an OpenEv release manifest. That is also what holds a download
-  waiting for `v1-e34-t06`'s import retry: the retry imports exactly the inbox files no manifest
-  came from, so no separate hold is needed, and none is kept.
+  manifest whose `archive_sha256` is the file's digest, and a complete archive's own
+  `manifests/<slug>/full/<date>.jsonl` likewise (`v1-e34-t04`, on the same conditions); a camp
+  download's digest is the `archive_sha256` of a row in an OpenEv release manifest. That is also
+  what holds a download waiting for `v1-e34-t06`'s import retry: the retry imports exactly the inbox
+  files no manifest came from, so no separate hold is needed, and none is kept.
 * **Confirmed: that snapshot is in sync in the bucket, as this run checked it.** The report stage's
   comparison for the snapshots this run published; for a snapshot an earlier run imported, a fresh
   comparison by the retention stage itself (:class:`CaselistStatusService`, the same one), never an
@@ -247,9 +294,14 @@ from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Final, Protocol, Self, cast
 
-from debate_core.application.caselist.evidence_listing import LocalEvidence, read_local_snapshots
+from debate_core.application.caselist.evidence_listing import (
+    LocalEvidence,
+    read_local_snapshots,
+    snapshots_before_full_archive,
+)
 from debate_core.application.caselist.import_service import CaselistImportService, ImportReport
 from debate_core.application.caselist.manifest import (
+    full_archive_manifest_key,
     manifest_key,
     read_manifest_lines,
     write_manifest,
@@ -261,7 +313,12 @@ from debate_core.application.caselist.openev_import_service import (
 )
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
-from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
+from debate_core.application.caselist.publish_plan import (
+    full_archive_date,
+    full_archive_snapshot,
+    manifest_prefix,
+    snapshot_of_manifest_key,
+)
 from debate_core.application.caselist.publish_service import (
     CaselistPublishService,
     NothingToPublish,
@@ -294,6 +351,7 @@ if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its ty
 __all__ = [
     "BULK_DOWNLOAD_WINDOW",
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
+    "DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS",
     "INBOX_PARTIAL_DIRECTORY",
     "LEGACY_DOWNLOAD_LEDGER_FILENAME",
     "LOCK_FILENAME",
@@ -306,6 +364,10 @@ __all__ = [
     "CaselistParseStage",
     "CaselistSyncService",
     "DownloadLedger",
+    "FullArchiveImport",
+    "FullArchivePlan",
+    "FullArchiveRefused",
+    "FullArchiveRotation",
     "InboxFileKind",
     "InboxFileVerdict",
     "InboxRetention",
@@ -328,6 +390,8 @@ __all__ = [
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "decide_full_archives",
+    "full_archive_of_inbox_name",
     "inbox_files",
     "openev_id_of_inbox_name",
     "run_pull",
@@ -339,6 +403,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BULK_DOWNLOADS_PER_DAY: Final = 5
 """OpenCaselist's own ceiling on bulk archive downloads per user per day (`weeklyLimiter`)."""
+
+DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS: Final = 30
+"""How old a caselist's newest complete archive may be before the rotation refreshes it (`v1-e34-t04`)."""
 
 SKIP_TODAY_SECONDS: Final = 3600.0
 """A `Retry-After` at or above this is the daily limiter, not a burst: stop fetching, run on.
@@ -466,13 +533,31 @@ class SelectionDecision(StrEnum):
 
     DOWNLOAD = "download"
     ALREADY_IMPORTED = "already_imported"
-    """Its date is not newer than the latest snapshot the local manifests hold."""
+    """Its date is not newer than the latest snapshot the local manifests hold.
+
+    For a complete archive: not newer than the newest complete archive this machine holds.
+    """
 
     ALREADY_IN_INBOX = "already_in_inbox"
     """In the inbox and not yet in a manifest: imported from there, without fetching it again."""
 
-    FULL_ARCHIVE_NOT_PULLED_WEEKLY = "full_archive_not_pulled_weekly"
-    """`<slug>-all-<date>.zip`. A weekly run pulls weeklies; see this module's docstring."""
+    FULL_ARCHIVE_ROTATION_OFF = "full_archive_rotation_off"
+    """A complete archive, and this installation's rotation is off (`caselist.full_archive_rotation`).
+
+    `caselist pull --full-archive <slug>` still fetches one. See "The complete archive".
+    """
+
+    FULL_ARCHIVE_NOT_DUE = "full_archive_not_due"
+    """A complete archive of a caselist refreshed within `caselist.full_archive_interval_days`."""
+
+    FULL_ARCHIVE_WAITS_ITS_TURN = "full_archive_waits_its_turn"
+    """Due, but another caselist's goes first: at most one complete archive per run."""
+
+    FULL_ARCHIVE_DEFERRED_FOR_WEEKLIES = "full_archive_deferred_for_weeklies"
+    """Due and first in turn, but this run's weeklies left none of the day's bulk downloads."""
+
+    FULL_ARCHIVE_NOT_NEWEST = "full_archive_not_newest"
+    """A complete archive older than another the same caselist lists: only the newest is wanted."""
 
     UNRECOGNISED_NAME = "unrecognised_name"
     """A listed name matching neither archive pattern, so it has no date to file it under."""
@@ -531,8 +616,12 @@ class ArchiveSelection:
 
         Both ways the cap shows up count: the budget this run planned against
         (`OVER_DAILY_BUDGET`) and the server's own limiter mid-run (`DEFERRED_BY_RATE_LIMIT`).
+
+        A weekly only. A complete archive the cap held back is the rotation's business, said in
+        the summary's `full_archive`: counted here it would read as weekly backlog in the run log,
+        whose growing-backlog warning is about weeks waiting to be fetched (`v1-e34-t03`).
         """
-        return self.decision in _DEFERRED_BY_CAP
+        return self.kind is not ArchiveKind.FULL and self.decision in _DEFERRED_BY_CAP
 
     def deferred(self) -> ArchiveSelection:
         """The same selection, marked as left for a later run by the daily limiter."""
@@ -614,6 +703,100 @@ class OpenEvSelection:
 
 
 @dataclass(frozen=True, slots=True)
+class FullArchiveRotation:
+    """The complete-archive rotation's setting. See "The complete archive" in the module docstring.
+
+    `None` in its place, on :class:`CaselistSyncService`, is the rotation turned off: only
+    `--full-archive <slug>` fetches one then.
+    """
+
+    interval: timedelta = timedelta(days=DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS)
+    """How old the newest complete archive held may be before the caselist is due again."""
+
+
+@dataclass(frozen=True, slots=True)
+class FullArchivePlan:
+    """What one run's rotation decided, and the one sentence that says why. Slugs and dates only."""
+
+    rotation: bool
+    """Whether the rotation is on (`caselist.full_archive_rotation`)."""
+
+    interval_days: int | None
+    """The rotation's interval, or `None` when it is off."""
+
+    requested: str | None
+    """The caselist `--full-archive` asked for, or `None` for the rotation's own choice."""
+
+    fetch: str | None
+    """The caselist whose complete archive this run downloads, or `None`."""
+
+    first_in_turn: str | None
+    """The caselist the rotation (or `--full-archive`) put first, fetched or not."""
+
+    allowance_after_weeklies: int
+    """What this run's weeklies left of the day's bulk downloads."""
+
+    last_refreshed: Mapping[str, date | None]
+    """Per caselist of the run, the date of the newest complete archive this machine holds."""
+
+    reason: str
+    """Why: which rule applied, for the select stage's reason and the summary."""
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "rotation": self.rotation,
+            "interval_days": self.interval_days,
+            "requested": self.requested,
+            "fetch": self.fetch,
+            "first_in_turn": self.first_in_turn,
+            "allowance_after_weeklies": self.allowance_after_weeklies,
+            "last_refreshed": {
+                caselist: one.isoformat() if one is not None else None
+                for caselist, one in sorted(self.last_refreshed.items())
+            },
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class FullArchiveImport:
+    """One complete archive this run imported, and what it showed was withdrawn. Counts only.
+
+    `withdrawn` and `superseded` are the two halves of
+    :class:`~debate_core.application.caselist.withdrawals.WithdrawalCount`; neither is the weeklies'
+    path-level `REMOVED`, which a manifest's summary row carries and this never does.
+    """
+
+    caselist: str
+    snapshot: str
+    """`full/<date>`."""
+
+    byte_size: int
+    """The archive's size: the number the first real fetch measures (`v1-e34-t04`)."""
+
+    withdrawn: int
+    superseded: int
+    earlier_snapshots: int
+    """How many earlier snapshots of the caselist, weekly and complete, it was compared against."""
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "caselist": self.caselist,
+            "snapshot": self.snapshot,
+            "bytes": self.byte_size,
+            "withdrawn": self.withdrawn,
+            "superseded": self.superseded,
+            "earlier_snapshots": self.earlier_snapshots,
+        }
+
+    def sentence(self) -> str:
+        return (
+            f"complete archive {self.caselist} {self.snapshot}: {self.withdrawn} withdrawn, "
+            f"{self.superseded} superseded against {self.earlier_snapshots} earlier snapshot(s)"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SyncPlan:
     """What a run intends to do, worked out from listings alone, before anything is fetched."""
 
@@ -629,13 +812,22 @@ class SyncPlan:
     bulk_download_window_start: datetime
     """Where those 24 hours began: the plan's own time less :data:`BULK_DOWNLOAD_WINDOW`."""
 
+    full_archive: FullArchivePlan | None = None
+    """What the rotation decided this run, and why; `None` only for a run that never planned."""
+
     @property
     def archives_to_download(self) -> tuple[ArchiveSelection, ...]:
-        """The archives to fetch, oldest first, which is the order they must be imported in."""
+        """The archives to fetch: weeklies oldest first, the order they must be imported in, then
+        the complete archive, last, so that a daily limiter met part way defers it before a week."""
         return tuple(
             sorted(
                 (one for one in self.archives if one.wanted),
-                key=lambda one: (one.archive_date or date.min, one.caselist, one.name),
+                key=lambda one: (
+                    one.kind is ArchiveKind.FULL,
+                    one.archive_date or date.min,
+                    one.caselist,
+                    one.name,
+                ),
             )
         )
 
@@ -689,6 +881,8 @@ class InboxFileKind(StrEnum):
     """What an inbox file is, by the name `caselist pull` gave it."""
 
     WEEKLY_ARCHIVE = "weekly_archive"
+    FULL_ARCHIVE = "full_archive"
+    """`<slug>-all-<date>.zip` (`v1-e34-t04`)."""
     CAMP_DOWNLOAD = "camp_download"
     OTHER = "other"
 
@@ -697,7 +891,8 @@ class InboxFileKind(StrEnum):
 class InboxFileVerdict:
     """One inbox file, as the run summary names it, and what retention decided about it.
 
-    `name` is a weekly archive's caselist and date (`hsld26 2026-09-15`), or for anything else the
+    `name` is a weekly archive's caselist and date (`hsld26 2026-09-15`), a complete archive's
+    caselist and snapshot (`hsld26 full/2026-10-06`), or for anything else the
     first twelve hex digits of its SHA-256: a camp download's file name is a camp's title, and a
     name somebody gave a file by hand can say anything (`docs/policies/caselist-data-use.md` rule 4).
     """
@@ -787,7 +982,9 @@ _MAX_NAMED: Final = 250
 
 def _named(files: Sequence[InboxFileVerdict]) -> str:
     """Weeklies by caselist and date, camp downloads and other files by count and SHA-256 prefix."""
-    weeklies = [one.name for one in files if one.kind is InboxFileKind.WEEKLY_ARCHIVE]
+    weeklies = [
+        one.name for one in files if one.kind in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE)
+    ]
     camp = [one.name for one in files if one.kind is InboxFileKind.CAMP_DOWNLOAD]
     other = [one.name for one in files if one.kind is InboxFileKind.OTHER]
     parts: list[str] = []
@@ -869,6 +1066,21 @@ class NoCaselistsConfigured(DomainError):
         super().__init__(
             "no caselist to pull: pass --caselist <slug> (repeatable), or set caselist.sync_caselists "
             "in this environment's profile"
+        )
+
+
+class FullArchiveRefused(DomainError):
+    """`caselist pull --full-archive <slug>` cannot fetch it this run, so the run fetched nothing.
+
+    Raised after selection and before any download: the day's allowance is gone once the weeklies
+    are planned, the caselist lists no complete archive, or the newest listed is already held.
+    The message is the rotation's own reason, slugs and dates only.
+    """
+
+    def __init__(self, caselist: str, reason: str) -> None:
+        self.caselist = caselist
+        super().__init__(
+            f"no complete archive of {caselist} is fetched this run, and nothing else was: {reason}"
         )
 
 
@@ -1330,6 +1542,12 @@ class RunSummary:
     inbox_retention: InboxRetention | None = None
     """What the retention stage removed and kept, or `None` when it judged nothing (`v1-e34-t11`)."""
 
+    full_archive: FullArchivePlan | None = None
+    """What the complete-archive rotation decided, and why; `None` when the run never planned."""
+
+    full_archive_imports: tuple[FullArchiveImport, ...] = ()
+    """The complete archives this run imported, each with its withdrawal counts (`v1-e34-t04`)."""
+
     @property
     def archives_seen(self) -> int:
         return len(self.archives)
@@ -1427,6 +1645,16 @@ class RunSummary:
             ),
             "suppression_list_local_copy_only": self.suppression_list_local_copy_only,
             "inbox_retention": self.inbox_retention.as_json() if self.inbox_retention is not None else None,
+            # Additive (`v1-e34-t07`'s rule): the version stays. Withdrawals live here and nowhere
+            # near a weekly's path-level REMOVED, which only the manifests carry.
+            "full_archive": (
+                {
+                    **self.full_archive.as_json(),
+                    "imported": [one.as_json() for one in self.full_archive_imports],
+                }
+                if self.full_archive is not None
+                else None
+            ),
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -1469,6 +1697,8 @@ class _RunTally:
     confirmed: set[PendingSnapshot] = field(default_factory=lambda: set[PendingSnapshot]())
     """Snapshots the report stage found in sync in the bucket this run."""
     inbox_retention: InboxRetention | None = None
+    full_archive: FullArchivePlan | None = None
+    full_archive_imports: list[FullArchiveImport] = field(default_factory=lambda: list[FullArchiveImport]())
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
@@ -1553,6 +1783,11 @@ class CaselistSyncService:
         bulk_downloads_per_day: The upstream ceiling; never raised above
             :data:`DEFAULT_BULK_DOWNLOADS_PER_DAY`.
         clock: Returns an aware `datetime`; the run's timestamps and the download window come from it.
+        full_archive_rotation: The complete-archive rotation (`v1-e34-t04`), or `None` for it off,
+            the default here; the composition root builds it from `caselist.full_archive_rotation`
+            and `caselist.full_archive_interval_days`. Off, `--full-archive` still fetches one.
+        read_full_archive: Reads a downloaded complete archive, within the complete archive's own
+            size ceilings (`caselist.max_full_archive_bytes`). Defaults to `read_archive`.
     """
 
     def __init__(
@@ -1575,12 +1810,16 @@ class CaselistSyncService:
         openev_year: int | None = None,
         bulk_downloads_per_day: int = DEFAULT_BULK_DOWNLOADS_PER_DAY,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        full_archive_rotation: FullArchiveRotation | None = None,
+        read_full_archive: ArchiveReader | None = None,
     ) -> None:
         self._source = source
         self._archives = archive_importer
         self._openev_importer = openev_importer
         self._local = local
         self._read_archive = read_archive
+        self._read_full_archive = read_full_archive or read_archive
+        self._rotation = full_archive_rotation
         self._event_for_caselist = event_for_caselist
         self._inbox = Path(inbox)
         self._state_dir = Path(state_dir)
@@ -1609,49 +1848,81 @@ class CaselistSyncService:
         """The publishes this machine still owes, so a command can report them without a run."""
         return self._pending
 
-    async def plan(self, caselists: Sequence[str]) -> SyncPlan:
+    async def plan(self, caselists: Sequence[str], *, full_archive: str | None = None) -> SyncPlan:
         """Decide what a run would fetch, using listing calls only and writing nothing.
 
         This is the whole of `--dry-run`: no download, no import, no upload, no state file. It is
         also the first stage of a real run, so the two can never disagree about what was selected.
+
+        The weeklies are budgeted first; the complete-archive rotation then decides from what they
+        leave (:func:`decide_full_archives`). `full_archive` is `--full-archive <slug>`: that
+        caselist's newest complete archive takes the run's one slot, still after the weeklies, and
+        the caselist is pulled too when it is not among `caselists`.
         """
+        caselists = _with_requested(caselists, full_archive)
         if not caselists:
             raise NoCaselistsConfigured
         now = self._clock()
         allowed = self._ledger.remaining_at(now)
         inbox_names = self._inbox_names()
         selections: list[ArchiveSelection] = []
+        full_listings: list[ArchiveListing] = []
+        listed_order: list[tuple[str, str]] = []
         for caselist in caselists:
-            selections.extend(await self._select_archives(caselist, inbox_names=inbox_names))
+            weekly, full, order = await self._select_archives(caselist, inbox_names=inbox_names)
+            selections.extend(weekly)
+            full_listings.extend(full)
+            listed_order.extend(order)
         selections = within_daily_budget(selections, allowed=allowed)
+        # After the weeklies, from what they left, never before (ac3).
+        left = max(allowed - sum(1 for one in selections if one.wanted), 0)
+        full_selections, full_plan = decide_full_archives(
+            full_listings,
+            caselists=caselists,
+            last_refreshed={caselist: await self._newest_full_archive(caselist) for caselist in caselists},
+            inbox_names=inbox_names,
+            allowance=left,
+            today=now.date(),
+            rotation=self._rotation,
+            requested=full_archive,
+        )
+        decided = {(one.caselist, one.name): one for one in (*selections, *full_selections)}
         openev = await self._select_openev(inbox_names=inbox_names)
         return SyncPlan(
             caselists=tuple(caselists),
-            archives=tuple(selections),
+            archives=tuple(decided[key] for key in listed_order),
             openev=tuple(openev),
             bulk_downloads_allowed=allowed,
             bulk_downloads_spent_in_window=self._ledger.spent_in_window(now),
             bulk_download_window_start=self._ledger.window_start(now),
+            full_archive=full_plan,
         )
 
-    async def run(self, caselists: Sequence[str], *, dry_run: bool = False) -> RunSummary:
+    async def run(
+        self, caselists: Sequence[str], *, dry_run: bool = False, full_archive: str | None = None
+    ) -> RunSummary:
         """One whole pull. Holds the run lock for its duration.
 
         Raises :class:`SyncRunInProgress` at once if another run holds the lock, and
         :class:`NoCaselistsConfigured` if asked to pull nothing. Everything else is an outcome in
         the returned :class:`RunSummary` rather than an exception, because a run that got half way
-        has captured bytes worth recording — the two exceptions being an expired OpenCaselist token
-        (policy E34 gate 5: the run stops and the operator is told) and a store this machine cannot
-        write manifests to.
+        has captured bytes worth recording — the exceptions being an expired OpenCaselist token
+        (policy E34 gate 5: the run stops and the operator is told), a store this machine cannot
+        write manifests to, and a `full_archive` (`--full-archive <slug>`) the run cannot fetch,
+        :class:`FullArchiveRefused`, raised before anything is downloaded. A dry run reports that
+        refusal in its summary instead of raising it.
         """
+        caselists = _with_requested(caselists, full_archive)
         if not caselists:
             raise NoCaselistsConfigured
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
             tally = _RunTally()
             fallbacks = self._suppression_fallbacks()
-            plan = await self._selection_stage(caselists, tally)
+            plan = await self._selection_stage(caselists, tally, full_archive=full_archive)
             self._note_local_copy_only(tally, SyncStage.SELECT, since=fallbacks)
+            if full_archive is not None and not dry_run:
+                _refuse_unless_fetchable(plan, full_archive)
             if dry_run:
                 self._plan_remaining_stages(plan, tally)
             else:
@@ -1696,10 +1967,12 @@ class CaselistSyncService:
     # Selection
     # --------------------------------------------------------------------------------------
 
-    async def _selection_stage(self, caselists: Sequence[str], tally: _RunTally) -> SyncPlan:
+    async def _selection_stage(
+        self, caselists: Sequence[str], tally: _RunTally, *, full_archive: str | None = None
+    ) -> SyncPlan:
         """Run :meth:`plan` as a stage, recording a listing that failed rather than raising it."""
         try:
-            plan = await self.plan(caselists)
+            plan = await self.plan(caselists, full_archive=full_archive)
         except ProviderRateLimited as limited:
             now = self._clock()
             plan = SyncPlan(
@@ -1717,6 +1990,7 @@ class CaselistSyncService:
         tally.bulk_downloads_allowed = plan.bulk_downloads_allowed
         tally.bulk_downloads_spent_in_window = plan.bulk_downloads_spent_in_window
         tally.bulk_download_window_start = plan.bulk_download_window_start
+        tally.full_archive = plan.full_archive
         fetch = len(plan.archives_to_download) + len(plan.openev_to_download)
         deferred = sum(1 for one in plan.archives if one.deferred_by_cap)
         listed = f"{len(plan.archives)} archive(s) and {len(plan.openev)} OpenEv file(s) listed; "
@@ -1734,18 +2008,31 @@ class CaselistSyncService:
             )
         else:
             detail = f"{listed}{fetch} to fetch; {window}"
+        full = f"; {plan.full_archive.reason}" if plan.full_archive is not None else ""
         tally.record(
             SyncStage.SELECT,
             StageOutcome.COMPLETED,
-            detail + _removal_sentence(plan.openev) + _revision_sentence(plan.openev),
+            detail + full + _removal_sentence(plan.openev) + _revision_sentence(plan.openev),
         )
         return plan
 
-    async def _select_archives(self, caselist: str, *, inbox_names: frozenset[str]) -> list[ArchiveSelection]:
-        """Decide about every archive one caselist lists, against the manifests and the inbox."""
+    async def _select_archives(
+        self, caselist: str, *, inbox_names: frozenset[str]
+    ) -> tuple[list[ArchiveSelection], list[ArchiveListing], list[tuple[str, str]]]:
+        """Decide about every weekly and undated archive one caselist lists.
+
+        Returns those decisions, the complete archives it lists, which :func:`decide_full_archives`
+        decides once the weeklies are budgeted, and every listed name in listing order.
+        """
         latest = await self._latest_imported_snapshot(caselist)
         selections: list[ArchiveSelection] = []
+        full: list[ArchiveListing] = []
+        order: list[tuple[str, str]] = []
         for listing in await self._source.list_archives(caselist):
+            order.append((caselist, listing.name))
+            if listing.kind is ArchiveKind.FULL and listing.archive_date is not None:
+                full.append(listing)
+                continue
             selections.append(
                 ArchiveSelection(
                     caselist=caselist,
@@ -1756,19 +2043,38 @@ class CaselistSyncService:
                     listing=listing,
                 )
             )
-        return selections
+        return selections, full, order
 
     async def _latest_imported_snapshot(self, caselist: str) -> date | None:
-        """The newest snapshot this machine holds a manifest for, or `None` for a first pull.
+        """The newest snapshot of the weekly series this machine holds a manifest for, or `None`.
 
         Read from the manifests rather than from the repository, because a manifest is what says a
         snapshot was imported *and* is what the publisher and `v1-e34-t03` read. One source of
         truth for "we already have this week".
+
+        **The weekly series only.** A complete archive (`manifests/<slug>/full/<date>.jsonl`) is
+        dated with the newest weekly, so counting it would mark every older weekly not yet imported
+        `ALREADY_IMPORTED` and strand the back-catalogue (`v1-e34-t04` ac0). `read_local_snapshots`
+        leaves it out unless asked; this does not ask.
         """
         snapshots = await read_local_snapshots(self._local, caselist)
         dates = [_parsed_date(one.snapshot) for one in snapshots]
         found = [one for one in dates if one is not None]
         return max(found) if found else None
+
+    async def _newest_full_archive(self, caselist: str) -> date | None:
+        """The date of the newest complete archive of `caselist` this machine holds a manifest for.
+
+        From the key names alone: `manifests/<slug>/full/<date>.jsonl`. What the rotation measures
+        "last refreshed" by, so a refresh counts once it is imported, not once it is downloaded.
+        """
+        dates = [
+            found
+            for info in await self._local.objects.list_objects(manifest_prefix(caselist))
+            if (named := snapshot_of_manifest_key(caselist, info.key, full_archives=True)) is not None
+            and (found := full_archive_date(named)) is not None
+        ]
+        return max(dates, default=None)
 
     async def _select_openev(self, *, inbox_names: frozenset[str]) -> list[OpenEvSelection]:
         """Decide about every OpenEv camp file the API lists for the configured year.
@@ -2191,7 +2497,8 @@ class CaselistSyncService:
         """
         archive_queues = self._archive_import_queues(tally)
         openev_queue = self._openev_import_queue(tally)
-        if not any(queue.ready for queue in archive_queues) and not openev_queue:
+        full_queue = self._full_archive_import_queue(tally)
+        if not any(queue.ready for queue in archive_queues) and not openev_queue and not full_queue:
             waiting = sum(queue.waiting for queue in archive_queues)
             tally.record(
                 SyncStage.IMPORT,
@@ -2222,6 +2529,15 @@ class CaselistSyncService:
                 )
             except (DomainError, OSError) as refused:
                 failures.append(_camp_download_refused(openev_selection, refused))
+        # Last: after this run's weeklies, so that its withdrawals are counted against them too.
+        for full_selection, path in full_queue:
+            try:
+                await self._import_full_archive(
+                    full_selection, self._downloaded(tally, full_selection.name, path), tally
+                )
+            except DomainError as refused:
+                failures.append(f"{full_selection.name}: {refused}")
+        withdrawals = "".join(f"; {one.sentence()}" for one in tally.full_archive_imports)
         waiting = (
             f"; {held_back} archive(s) in the inbox held back for a later run, behind an older week"
             if held_back
@@ -2231,7 +2547,7 @@ class CaselistSyncService:
             tally.record(
                 SyncStage.IMPORT,
                 StageOutcome.FAILED,
-                f"{len(tally.snapshots_imported)} imported; {len(failures)} refused: "
+                f"{len(tally.snapshots_imported)} imported{withdrawals}; {len(failures)} refused: "
                 + "; ".join(failures)
                 + waiting,
             )
@@ -2240,6 +2556,7 @@ class CaselistSyncService:
             SyncStage.IMPORT,
             StageOutcome.COMPLETED,
             f"{len(tally.snapshots_imported)} snapshot(s) imported, {tally.blobs_stored} new file(s) stored"
+            + withdrawals
             + waiting,
         )
 
@@ -2254,6 +2571,9 @@ class CaselistSyncService:
         fetched = {selection.name for selection, _ in tally.downloaded_archives}
         by_caselist: dict[str, list[ArchiveSelection]] = {}
         for selection in tally.archives:
+            # The weekly series only: a complete archive is its own queue, never a gap in this one.
+            if selection.kind is not ArchiveKind.WEEKLY:
+                continue
             if selection.decision in _NEWER_THAN_HELD and selection.archive_date is not None:
                 by_caselist.setdefault(selection.caselist, []).append(selection)
         queues: list[_ImportQueue] = []
@@ -2273,6 +2593,64 @@ class CaselistSyncService:
                 waiting += 1 if in_inbox else 0
             queues.append(_ImportQueue(ready=tuple(ready), waiting=waiting))
         return queues
+
+    def _full_archive_import_queue(self, tally: _RunTally) -> list[tuple[ArchiveSelection, Path]]:
+        """The complete archives to import: fetched by this run, or in the inbox and not yet imported."""
+        fetched = {selection.name for selection, _ in tally.downloaded_archives}
+        return [
+            (selection, self._inbox / selection.name)
+            for selection in tally.archives
+            if selection.kind is ArchiveKind.FULL
+            and selection.archive_date is not None
+            and (selection.name in fetched or selection.decision is SelectionDecision.ALREADY_IN_INBOX)
+        ]
+
+    async def _import_full_archive(
+        self, selection: ArchiveSelection, downloaded: DownloadedFile, tally: _RunTally
+    ) -> None:
+        """Import one complete archive as its own snapshot, and count what it shows was withdrawn.
+
+        See "The complete archive" in the module docstring. Its baseline and the earlier snapshots
+        its withdrawals are counted against are read from this machine's manifests before its own
+        is written; its manifest goes to `manifests/<slug>/full/<date>.jsonl`, never to the weekly
+        key of the same date; and it is published as snapshot `full/<date>`.
+        """
+        event = self._event_for_caselist(selection.caselist)
+        if event is None:
+            raise UnknownSyncEvent(selection.caselist)
+        if selection.archive_date is None:  # pragma: no cover - never selected without a date
+            raise UndatedArchive(selection.name)
+        previous, earlier = await snapshots_before_full_archive(
+            self._local, selection.caselist, selection.archive_date
+        )
+        report = await self._archives.import_full_archive(
+            self._read_full_archive(downloaded.path),
+            caselist=selection.caselist,
+            archive_date=selection.archive_date,
+            event=event,
+            archive_sha256=downloaded.sha256,
+            previous=previous,
+            earlier=earlier,
+        )
+        write_manifest(
+            report, self._manifest_path(full_archive_manifest_key(selection.caselist, selection.archive_date))
+        )
+        self._count_archive(report, tally)
+        snapshot = full_archive_snapshot(selection.archive_date)
+        tally.snapshots_imported.append(f"{report.caselist} {snapshot}")
+        tally.publish_targets.append(PendingSnapshot(caselist=report.caselist, snapshot=snapshot))
+        withdrawals = report.withdrawals
+        assert withdrawals is not None  # import_full_archive always counts them
+        tally.full_archive_imports.append(
+            FullArchiveImport(
+                caselist=report.caselist,
+                snapshot=snapshot,
+                byte_size=downloaded.byte_size,
+                withdrawn=withdrawals.withdrawn,
+                superseded=withdrawals.superseded,
+                earlier_snapshots=withdrawals.earlier_snapshots,
+            )
+        )
 
     def _openev_import_queue(self, tally: _RunTally) -> list[tuple[OpenEvSelection, Path]]:
         """The camp files to import: fetched by this run, or already in the inbox and not recorded."""
@@ -2624,6 +3002,21 @@ class CaselistSyncService:
                 None if imported else RetentionDecision.NOT_IMPORTED,
                 frozenset({PendingSnapshot(caselist, week.isoformat())}),
             )
+        full = full_archive_of_inbox_name(name)
+        if full is not None:
+            # On the weekly's conditions, nothing loosened (`v1-e34-t11`): its own manifest names
+            # these bytes, and that snapshot is confirmed in the bucket.
+            caselist, archive_date = full
+            snapshot = full_archive_snapshot(archive_date)
+            imported = self._imported_full_archive_digest(caselist, archive_date) == digest
+            return _JudgedLocally(
+                f"{caselist} {snapshot}",
+                InboxFileKind.FULL_ARCHIVE,
+                size,
+                path,
+                None if imported else RetentionDecision.NOT_IMPORTED,
+                frozenset({PendingSnapshot(caselist, snapshot)}),
+            )
         openev_id = openev_id_of_inbox_name(name)
         if openev_id is None:
             return _JudgedLocally(
@@ -2681,7 +3074,14 @@ class CaselistSyncService:
 
     def _imported_archive_digest(self, caselist: str, week: date) -> str | None:
         """The `archive_sha256` this machine's manifest for a week records: the bytes imported."""
-        for line in read_manifest_lines(self._manifest_path(manifest_key(caselist, week))):
+        return self._summary_digest(manifest_key(caselist, week))
+
+    def _imported_full_archive_digest(self, caselist: str, archive_date: date) -> str | None:
+        """The `archive_sha256` this machine's manifest for a complete archive records."""
+        return self._summary_digest(full_archive_manifest_key(caselist, archive_date))
+
+    def _summary_digest(self, key: str) -> str | None:
+        for line in read_manifest_lines(self._manifest_path(key)):
             try:
                 row: object = json.loads(line)
             except ValueError:
@@ -2786,6 +3186,8 @@ class CaselistSyncService:
             bulk_download_window_start=tally.bulk_download_window_start,
             suppression_list_local_copy_only=tally.suppression_list_local_copy_only,
             inbox_retention=tally.inbox_retention,
+            full_archive=tally.full_archive,
+            full_archive_imports=tuple(tally.full_archive_imports),
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:
@@ -2823,6 +3225,7 @@ async def run_pull(
     publish_pending: bool,
     monitor: Callable[[], SyncRunMonitor],
     progress: Callable[[str], None],
+    full_archive: str | None = None,
 ) -> PulledRun:
     """Run one `caselist pull`: a dry run, a whole run, or `--publish-pending`.
 
@@ -2835,17 +3238,20 @@ async def run_pull(
             `dry_run`; the command refuses that combination before calling this.
         monitor: Builds the run monitor. Not called for a dry run.
         progress: Where a one-line account of what is starting goes (the CLI's `--verbose`).
+        full_archive: `--full-archive <slug>`: that caselist's complete archive takes the run's one
+            slot (`v1-e34-t04`), and the caselist is pulled too. Never with `publish_pending`.
 
     Raises :class:`NoCaselistsConfigured` when asked to pull no caselist, and whatever the service
     or the monitor raise; the monitor has recorded and announced it first.
     """
     record: SyncRunRecord | None = None
+    caselists = _with_requested(caselists, full_archive)
     if dry_run:
         # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
         if not caselists:
             raise NoCaselistsConfigured
         progress(f"pulling {', '.join(caselists)} (dry run)")
-        summary = await sync_service().run(caselists, dry_run=True)
+        summary = await sync_service().run(caselists, dry_run=True, full_archive=full_archive)
     else:
 
         async def one_run() -> RunSummary:
@@ -2857,7 +3263,7 @@ async def run_pull(
             if not caselists:
                 raise NoCaselistsConfigured
             progress(f"pulling {', '.join(caselists)}")
-            return await sync_service().run(caselists)
+            return await sync_service().run(caselists, full_archive=full_archive)
 
         monitored = await monitor().watch(
             one_run, caselists=caselists, mode="publish_pending" if publish_pending else "run"
@@ -2897,16 +3303,203 @@ _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not sh
 def _decide_archive(
     listing: ArchiveListing, *, latest: date | None, inbox_names: frozenset[str]
 ) -> SelectionDecision:
-    """What a weekly run does about one listed archive. See this module's docstring for why."""
-    if listing.kind is ArchiveKind.UNRECOGNISED or listing.archive_date is None:
+    """What a run does about one listed weekly or undated archive. See this module's docstring.
+
+    A dated complete archive never comes here: :func:`decide_full_archives` decides it, once the
+    weeklies are budgeted.
+    """
+    if listing.kind is not ArchiveKind.WEEKLY or listing.archive_date is None:
         return SelectionDecision.UNRECOGNISED_NAME
-    if listing.kind is ArchiveKind.FULL:
-        return SelectionDecision.FULL_ARCHIVE_NOT_PULLED_WEEKLY
     if latest is not None and listing.archive_date <= latest:
         return SelectionDecision.ALREADY_IMPORTED
     if listing.name in inbox_names:
         return SelectionDecision.ALREADY_IN_INBOX
     return SelectionDecision.DOWNLOAD
+
+
+def decide_full_archives(
+    listings: Sequence[ArchiveListing],
+    *,
+    caselists: Sequence[str],
+    last_refreshed: Mapping[str, date | None],
+    inbox_names: frozenset[str],
+    allowance: int,
+    today: date,
+    rotation: FullArchiveRotation | None,
+    requested: str | None = None,
+) -> tuple[list[ArchiveSelection], FullArchivePlan]:
+    """Decide every listed complete archive, after the weeklies: the rotation's rules, in one place.
+
+    See "The complete archive" in the module docstring. `listings` are the complete archives the
+    run's caselists list; `last_refreshed` the date of the newest one this machine holds per
+    caselist; `allowance` what the run's weeklies left of the day's bulk downloads; `requested` the
+    caselist `--full-archive` named.
+    """
+    newest: dict[str, ArchiveListing] = {}
+    for listing in listings:
+        held = newest.get(listing.caselist)
+        if held is None or (listing.archive_date or date.min, listing.name) > (
+            held.archive_date or date.min,
+            held.name,
+        ):
+            newest[listing.caselist] = listing
+    decided: dict[str, SelectionDecision] = {}
+    due: list[str] = []
+    for listing in listings:
+        if newest[listing.caselist] is not listing:
+            decided[listing.name] = SelectionDecision.FULL_ARCHIVE_NOT_NEWEST
+    for caselist, listing in newest.items():
+        last = last_refreshed.get(caselist)
+        listed = listing.archive_date or date.min
+        if last is not None and listed <= last:
+            decided[listing.name] = SelectionDecision.ALREADY_IMPORTED
+        elif listing.name in inbox_names:
+            decided[listing.name] = SelectionDecision.ALREADY_IN_INBOX
+        elif caselist == requested:
+            due.append(caselist)
+        elif rotation is None:
+            decided[listing.name] = SelectionDecision.FULL_ARCHIVE_ROTATION_OFF
+        elif last is not None and today - last <= rotation.interval:
+            decided[listing.name] = SelectionDecision.FULL_ARCHIVE_NOT_DUE
+        else:
+            due.append(caselist)
+    # Least recently refreshed first: none held before any held, then the oldest held, then the
+    # order the caselists were configured in. `--full-archive` takes the slot outright.
+    position = {caselist: index for index, caselist in enumerate(caselists)}
+    first = (
+        requested
+        if requested in due
+        else min(
+            due,
+            key=lambda caselist: (
+                last_refreshed.get(caselist) is not None,
+                last_refreshed.get(caselist) or date.min,
+                position.get(caselist, len(position)),
+                caselist,
+            ),
+            default=None,
+        )
+    )
+    for caselist in due:
+        if caselist != first:
+            # At most one complete archive in a run, whatever is due (ac2).
+            decided[newest[caselist].name] = SelectionDecision.FULL_ARCHIVE_WAITS_ITS_TURN
+        elif allowance < 1:
+            # Never at the weeklies' expense (ac3): they were budgeted first and left nothing.
+            decided[newest[caselist].name] = SelectionDecision.FULL_ARCHIVE_DEFERRED_FOR_WEEKLIES
+        else:
+            decided[newest[caselist].name] = SelectionDecision.DOWNLOAD
+    selections = [
+        ArchiveSelection(
+            caselist=listing.caselist,
+            name=listing.name,
+            kind=listing.kind,
+            archive_date=listing.archive_date,
+            decision=decided[listing.name],
+            listing=listing,
+        )
+        for listing in listings
+    ]
+    fetch = next((one.caselist for one in selections if one.decision is SelectionDecision.DOWNLOAD), None)
+    plan = FullArchivePlan(
+        rotation=rotation is not None,
+        interval_days=rotation.interval.days if rotation is not None else None,
+        requested=requested,
+        fetch=fetch,
+        first_in_turn=first,
+        allowance_after_weeklies=allowance,
+        last_refreshed={caselist: last_refreshed.get(caselist) for caselist in caselists},
+        reason=_full_archive_reason(
+            selections,
+            caselists=caselists,
+            last_refreshed=last_refreshed,
+            today=today,
+            allowance=allowance,
+            rotation=rotation,
+            requested=requested,
+            first=first,
+        ),
+    )
+    return selections, plan
+
+
+_FULL_ARCHIVE_STATE: Final = {
+    SelectionDecision.DOWNLOAD: "fetched this run",
+    SelectionDecision.ALREADY_IN_INBOX: "in the inbox, imported from there",
+    SelectionDecision.ALREADY_IMPORTED: "the newest listed is already held",
+    SelectionDecision.FULL_ARCHIVE_ROTATION_OFF: "rotation off",
+    SelectionDecision.FULL_ARCHIVE_NOT_DUE: "not due",
+    SelectionDecision.FULL_ARCHIVE_WAITS_ITS_TURN: "due, waits its turn",
+    SelectionDecision.FULL_ARCHIVE_DEFERRED_FOR_WEEKLIES: (
+        "due and first in turn, deferred: the weeklies left no bulk download"
+    ),
+    SelectionDecision.DEFERRED_BY_RATE_LIMIT: "deferred: OpenCaselist's daily limit was reached",
+}
+
+
+def _full_archive_reason(
+    selections: Sequence[ArchiveSelection],
+    *,
+    caselists: Sequence[str],
+    last_refreshed: Mapping[str, date | None],
+    today: date,
+    allowance: int,
+    rotation: FullArchiveRotation | None,
+    requested: str | None,
+    first: str | None,
+) -> str:
+    """The rotation's reason: what happened, then each caselist's state. Slugs, dates and counts."""
+    newest = {
+        one.caselist: one
+        for one in selections
+        if one.decision is not SelectionDecision.FULL_ARCHIVE_NOT_NEWEST
+    }
+    fetched = next((one for one in newest.values() if one.decision is SelectionDecision.DOWNLOAD), None)
+    if fetched is not None:
+        why = (
+            "as --full-archive asked"
+            if fetched.caselist == requested
+            else "least recently refreshed of those due"
+        )
+        head = f"complete archive: {fetched.caselist}'s is fetched this run, {why}"
+    elif first is not None:
+        head = f"complete archive: none fetched; {first} is first in turn"
+    elif rotation is None and requested is None:
+        head = "complete archive: none fetched; the rotation is off (caselist.full_archive_rotation)"
+    else:
+        head = "complete archive: none fetched"
+    interval = f", interval {rotation.interval.days} days" if rotation is not None else ""
+    parts = [f"{head}; {allowance} bulk download(s) left after the weeklies{interval}"]
+    for caselist in caselists:
+        last = last_refreshed.get(caselist)
+        refreshed = (
+            f"last refreshed {last.isoformat()}, {(today - last).days} days ago"
+            if last is not None
+            else "never refreshed"
+        )
+        listed = newest.get(caselist)
+        state = _FULL_ARCHIVE_STATE.get(listed.decision, str(listed.decision)) if listed else "none listed"
+        parts.append(f"{caselist}: {state} ({refreshed})")
+    return "; ".join(parts)
+
+
+def _with_requested(caselists: Sequence[str], requested: str | None) -> tuple[str, ...]:
+    """The run's caselists, with the one `--full-archive` names added when it is not among them."""
+    if requested is None or requested in caselists:
+        return tuple(caselists)
+    return (*caselists, requested)
+
+
+def _refuse_unless_fetchable(plan: SyncPlan, requested: str) -> None:
+    """Raise :class:`FullArchiveRefused` unless the run gets `requested`'s complete archive."""
+    wanted = (SelectionDecision.DOWNLOAD, SelectionDecision.ALREADY_IN_INBOX)
+    if any(
+        one.caselist == requested and one.kind is ArchiveKind.FULL and one.decision in wanted
+        for one in plan.archives
+    ):
+        return
+    reason = plan.full_archive.reason if plan.full_archive is not None else "OpenCaselist could not be listed"
+    raise FullArchiveRefused(requested, reason)
 
 
 def within_daily_budget(selections: Sequence[ArchiveSelection], *, allowed: int) -> list[ArchiveSelection]:
@@ -3030,8 +3623,13 @@ def _imported_by(plan: SyncPlan) -> tuple[tuple[str, ...], int]:
     """
     would_import = (SelectionDecision.DOWNLOAD, SelectionDecision.ALREADY_IN_INBOX)
     weeklies = tuple(
-        f"{one.caselist} {one.archive_date.isoformat()}"
-        for one in sorted(plan.archives, key=lambda one: (one.caselist, one.archive_date or date.min))
+        f"{one.caselist} {full_archive_snapshot(one.archive_date)}"
+        if one.kind is ArchiveKind.FULL
+        else f"{one.caselist} {one.archive_date.isoformat()}"
+        for one in sorted(
+            plan.archives,
+            key=lambda one: (one.caselist, one.kind is ArchiveKind.FULL, one.archive_date or date.min),
+        )
         if one.decision in would_import and one.archive_date is not None
     )
     return weeklies, sum(1 for one in plan.openev if one.decision in would_import)
@@ -3140,6 +3738,23 @@ def weekly_archive_of_inbox_name(name: str) -> tuple[str, date] | None:
         return None
     try:
         return weekly["caselist"], date.fromisoformat(weekly["date"])
+    except ValueError:
+        return None
+
+
+_FULL_ARCHIVE_INBOX_NAME: Final = re.compile(
+    r"^(?P<caselist>[a-z]+[0-9]{2})-all-(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})\.zip$"
+)
+"""`<slug>-all-<date>.zip`, as `caselist pull` names a complete archive (the site's own name)."""
+
+
+def full_archive_of_inbox_name(name: str) -> tuple[str, date] | None:
+    """The caselist and date an inbox file was downloaded as a complete archive, or `None`."""
+    full = _FULL_ARCHIVE_INBOX_NAME.match(name)
+    if full is None or _CASELIST_SLUG.match(full["caselist"]) is None:
+        return None
+    try:
+        return full["caselist"], date.fromisoformat(full["date"])
     except ValueError:
         return None
 

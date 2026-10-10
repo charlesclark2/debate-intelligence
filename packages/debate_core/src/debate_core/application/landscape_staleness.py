@@ -185,10 +185,15 @@ class LandscapeStalenessCheck:
         )
 
     async def newest_snapshot(self, caselist: str) -> date | None:
-        """The latest snapshot date with a manifest, read from key names alone."""
+        """The latest snapshot date with a manifest, read from key names alone.
+
+        The weekly series only, on purpose (`v1-e34-t04`): staleness asks how fresh the weekly
+        capture is. A complete archive is fetched only by a run that took its weeklies first, so it
+        never stands in for a stale series, and its `manifests/<slug>/full/` key is not read here.
+        """
         dates: list[date] = []
         for info in await self._objects.list_objects(manifest_prefix(caselist)):
-            named = snapshot_of_manifest_key(caselist, info.key)
+            named = snapshot_of_manifest_key(caselist, info.key, full_archives=False)
             if named is None:
                 continue
             try:

@@ -521,3 +521,18 @@ def test_the_refusal_names_the_archive_and_no_member_of_it(
 
     assert "Maple Grove" not in result.stdout + result.stderr
     assert "ZaLu" not in result.stdout + result.stderr
+
+
+def test_a_complete_archive_is_refused_and_pointed_at_full_archive(
+    zips: dict[date, Path], data_dir: Path, tmp_path: Path
+) -> None:
+    """`<slug>-all-<date>.zip` would collide with that week's weekly here (`v1-e34-t04`): refused."""
+    newest = SNAPSHOTS[-1].snapshot
+    complete = tmp_path / f"{SYNTHETIC_CASELIST}-all-{newest.isoformat()}.zip"
+    complete.write_bytes(zips[newest].read_bytes())
+
+    result = import_week(complete, newest)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert "caselist pull --full-archive" in " ".join(result.output.split())
+    assert not (data_dir / "objects" / manifest_key(SYNTHETIC_CASELIST, newest)).exists()

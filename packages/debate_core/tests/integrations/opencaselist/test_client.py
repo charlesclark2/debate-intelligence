@@ -368,6 +368,60 @@ def test_download_larger_than_the_archive_ceiling_is_refused_before_reading(
     assert list(inbox.glob("*.zip")) == []
 
 
+def full_listing(day: int = 15) -> ArchiveListing:
+    name = f"{CASELIST}-all-2026-09-{day:02d}.zip"
+    return ArchiveListing(
+        caselist=CASELIST,
+        name=name,
+        kind=ArchiveKind.FULL,
+        archive_date=date(2026, 9, day),
+        url=f"{FILES}/weekly/{CASELIST}/{name}",
+    )
+
+
+def test_a_complete_archive_has_its_own_larger_ceiling_and_a_weekly_keeps_its_own(
+    tmp_path: Path,
+    token_store: CaselistTokenStore,
+    simulated: SimulatedTime,
+    api: respx.MockRouter,
+    inbox: Path,
+) -> None:
+    """The same bytes, over the weekly ceiling and under the complete archive's (`v1-e34-t04`)."""
+    ceilings = build_client(
+        tmp_path,
+        token_store,
+        simulated,
+        max_archive_bytes=16,
+        max_full_archive_bytes=len(ARCHIVE_BYTES),
+    )
+    weekly, full = weekly_listing(), full_listing()
+    api.get(weekly.url).mock(return_value=archive_response())
+    api.get(full.url).mock(return_value=archive_response())
+
+    with pytest.raises(ArchiveTooLarge):
+        run(ceilings.download_archive(weekly, inbox))
+    downloaded = run(ceilings.download_archive(full, inbox))
+
+    assert downloaded.byte_size == len(ARCHIVE_BYTES)
+    assert [path.name for path in inbox.glob("*.zip")] == [full.name]
+
+
+def test_a_complete_archive_over_its_own_ceiling_is_refused_before_reading(
+    tmp_path: Path,
+    token_store: CaselistTokenStore,
+    simulated: SimulatedTime,
+    api: respx.MockRouter,
+    inbox: Path,
+) -> None:
+    small = build_client(tmp_path, token_store, simulated, max_full_archive_bytes=len(ARCHIVE_BYTES) - 1)
+    full = full_listing()
+    api.get(full.url).mock(return_value=archive_response())
+
+    with pytest.raises(ArchiveTooLarge):
+        run(small.download_archive(full, inbox))
+    assert list(inbox.glob("*.zip")) == []
+
+
 def test_download_interrupted_mid_stream_leaves_no_partial_file(
     tmp_path: Path,
     token_store: CaselistTokenStore,

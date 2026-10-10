@@ -551,3 +551,18 @@ changed and both status results in a dated section of
   nothing from the store is committed
 * [`docs/data/caselist-sync-runs.md`](../data/caselist-sync-runs.md): the 2026-09-24 validation run
   and the 2026-09-25 cap measurement this plan is built on
+
+## Since `v1-e34-t04`: the complete archive
+
+This runbook describes the backfill as it ran, from the weekly series alone, while `pull` never
+fetched a complete archive (`full_archive_not_pulled_weekly`). That decision no longer exists. A
+build containing `v1-e34-t04-full-archive-refresh` fetches one caselist's complete archive per run,
+after the weeklies and only from what they leave of the day's allowance, and imports it as its own
+snapshot, `manifests/<slug>/full/<date>.jsonl`, beside the weekly series. The collisions described
+under "The complete archive: not part of this backfill" above cannot happen through `pull`, and
+`caselist import` now refuses a `-all-` archive by name. The withdrawal count this runbook defers is
+reported by every complete-archive import. See
+[`caselist-scheduled-sync.md`](caselist-scheduled-sync.md#the-complete-archive).
+
+The shell functions in "Recording the numbers" read `manifests/<slug>/*.jsonl`, which does not
+descend into `full/`, so they still count the weekly series alone, as their tables intend.

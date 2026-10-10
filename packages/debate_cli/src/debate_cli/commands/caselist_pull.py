@@ -5,6 +5,7 @@ One command, three shapes::
     debate-research caselist pull --caselist hsld26 --caselist hspolicy26
     debate-research caselist pull --caselist hsld26 --dry-run     # list only, write nothing
     debate-research caselist pull --publish-pending               # after `aws sso login`
+    debate-research caselist pull --full-archive hsld26           # one complete archive, on demand
 
 Every decision in it belongs to
 :class:`~debate_core.application.caselist_sync.CaselistSyncService`, and which of the three a run
@@ -19,6 +20,16 @@ rendered for a person and for a program.
 `--caselist`, repeatable, or `caselist.sync_caselists` in the environment's profile when the flag
 is not given. There is no default list: which caselists this installation follows is the
 operator's decision, and a slug hardcoded in a committed file would make it ours.
+
+## The complete archive
+
+The weekly run refreshes at most one caselist's complete archive (`<slug>-all-<date>.zip`) on a
+rotation, after its weeklies and only from the bulk downloads they leave (`v1-e34-t04`; see
+:mod:`debate_core.application.caselist_sync`, "The complete archive"). `--full-archive <slug>`
+takes that one slot for the named caselist whatever the rotation says, still after the weeklies,
+and the run refuses — exit `1`, nothing fetched — when the day's allowance cannot cover it. With
+`--dry-run` it reports what would happen, refusal included, and fetches nothing. The caption says
+what the rotation decided, every run.
 
 ## The schedule is weekly
 
@@ -87,12 +98,29 @@ def pull(
             help="Only complete the publishes an earlier run deferred, and exit.",
         ),
     ] = False,
+    full_archive: Annotated[
+        str | None,
+        typer.Option(
+            "--full-archive",
+            metavar="SLUG",
+            help=(
+                "Also fetch this caselist's complete archive (<slug>-all-<date>.zip) now, outside the "
+                "rotation, after the run's weeklies and from the same daily allowance; refused, "
+                "fetching nothing, when the allowance cannot cover it."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Download, import and publish this week's caselist archives and OpenEv files."""
     cli = cli_context(ctx)
     settings = cli.services.settings
     if publish_pending and dry_run:
         raise ConflictingPullMode
+    if publish_pending and full_archive is not None:
+        raise typer.BadParameter(
+            "--publish-pending fetches nothing, so it cannot fetch a complete archive; pass one or the other",
+            param_hint="--full-archive",
+        )
     slugs = [] if publish_pending else list(caselist) if caselist else list(settings.caselist.sync_caselists)
 
     pulled = _run(
@@ -103,6 +131,7 @@ def pull(
             publish_pending=publish_pending,
             monitor=cli.services.caselist_sync_monitor,
             progress=cli.output.detail,
+            full_archive=full_archive,
         )
     )
     summary = pulled.summary
@@ -176,7 +205,7 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
     """
     deferred = summary.archives_deferred
     backlog = _backlog_sentence(record)
-    inbox = _inbox_sentence(summary)
+    inbox = _full_archive_sentence(summary) + _inbox_sentence(summary)
     if summary.dry_run:
         wanted = sum(1 for one in summary.archives if one.wanted)
         camp = sum(1 for one in summary.openev if one.wanted)
@@ -213,6 +242,31 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
         f"{summary.objects_published} object(s) published{pending}.{waiting}{backlog}{inbox} "
         f"{summary.duration_seconds:.1f}s."
     )
+
+
+def _full_archive_sentence(summary: RunSummary) -> str:
+    """What the complete-archive rotation decided, as a leading-space sentence (`v1-e34-t04`).
+
+    The select row of the table carries the whole reason, each caselist's state included; this is
+    the headline, and the allowance the weeklies left, which a dry run before `--full-archive` is
+    run to read.
+    """
+    plan = summary.full_archive
+    if plan is None:
+        return ""
+    left = f"{plan.allowance_after_weeklies} bulk download(s) left after the weeklies"
+    withdrawn = "".join(
+        f" {one.caselist} {one.snapshot}: {one.withdrawn} withdrawn, {one.superseded} superseded."
+        for one in summary.full_archive_imports
+    )
+    verb = "would be fetched" if summary.dry_run else "fetched"
+    if plan.fetch is not None:
+        return f" Complete archive: {plan.fetch}'s {verb}; {left}.{withdrawn}"
+    if plan.first_in_turn is not None:
+        return f" Complete archive: none {verb}; {plan.first_in_turn} is first in turn but {left}.{withdrawn}"
+    if not plan.rotation and plan.requested is None:
+        return f" Complete archive: the rotation is off; {left}.{withdrawn}"
+    return f" Complete archive: none due; {left}.{withdrawn}"
 
 
 def _inbox_sentence(summary: RunSummary) -> str:

@@ -19,7 +19,7 @@ import json
 import shutil
 from datetime import date
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 import pytest
 from pydantic import ValidationError
@@ -60,7 +60,7 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture
-def stored_lines() -> list[dict[str, object]]:
+def stored_lines() -> list[dict[str, Any]]:
     """Every record in the stored fixture, as plain JSON."""
     return [
         json.loads(line)
@@ -117,20 +117,20 @@ def record_of(document: ParsedDocument) -> DocumentRecord:
 # ------------------------------------------------------------------------------------------------
 
 
-def test_the_stored_fixture_is_a_version_1_store(stored_lines: list[dict[str, object]]) -> None:
+def test_the_stored_fixture_is_a_version_1_store(stored_lines: list[dict[str, Any]]) -> None:
     assert len(stored_lines) == 10
     assert {line["schema_version"] for line in stored_lines} == {1}
     assert {line["parser_version"] for line in stored_lines} == {FIRST_VERSION}
     assert sorted({str(line["record"]) for line in stored_lines}) == ["document", "occurrence", "source"]
 
 
-def test_the_stored_fixture_says_no_tag_as_an_empty_string(stored_lines: list[dict[str, object]]) -> None:
+def test_the_stored_fixture_says_no_tag_as_an_empty_string(stored_lines: list[dict[str, Any]]) -> None:
+    document: dict[str, Any]
     (document,) = [
         line["document"]
         for line in stored_lines
         if line["record"] == "document" and line["source_sha256"] == TWO_CARDS
     ]
-    assert isinstance(document, dict)
     assert [card["tag"] for card in document["cards"]] == [TAG, ""]
 
 

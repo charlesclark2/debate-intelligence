@@ -23,7 +23,10 @@ tournaments are the E30 fixture's invented ones, and the documents are synthetic
 | `broken` | DOCX | fails: `NOT_A_ZIP` | 09-08 | Cedar Hollow ZaLu R4 |
 | `direct` | DOCX | 1 FULL | 09-15 | Westfield XY R6 |
 
-The archives are cumulative: every file in a week is in the weeks after it. The `verbatim`,
+The archives are cumulative: every file in a week is in the weeks after it. Real weekly archives
+are adjacent windows of editing activity that overlap little (`docs/data/caselist-backfill-2026-09.md`);
+these re-list every file so that the occurrence table's one row per disclosure, however many
+weeks list it, is exercised on every file. The `verbatim`,
 `wiki`, `cardmirror` and `direct` bodies are the structural fixtures `team-verbatim-file`,
 `wiki-converted-cite-entries`, `cardmirror-caselist-upload` and `pre-2026-direct-formatting`.
 
@@ -46,6 +49,9 @@ __all__ = [
     "BODIES",
     "CASELIST",
     "EXPECTED",
+    "R1_COPY_PATH",
+    "R1_PATH",
+    "R5_PATH",
     "SHARED_TEAM",
     "STRUCTURAL",
     "WEEKS",
@@ -94,6 +100,11 @@ _R3: Final = "Northgate Prep/BeCo/Northgate Prep-BeCo-Neg-Ridgeline Round Robin-
 _QUARTERS_DOC: Final = "Riverbend Academy/MnPr/Riverbend Academy-MnPr-Neg-Seaside Cup-Quarters.doc"
 _R4: Final = "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-Aff-Harbor Classic-Round 4.docx"
 _R6: Final = "Westfield/XY/Westfield-XY-Neg-Bayview Open-Round 6.docx"
+
+R1_PATH: Final = _R1
+R1_COPY_PATH: Final = _R1_COPY
+R5_PATH: Final = _R5
+"""The three paths disclosing the `verbatim` file: R1 from 09-01, its `(1)` copy and R5 from 09-08."""
 
 SHARED_TEAM: Final = f"{CASELIST}/Riverbend Academy/MnPr"
 """The team whose removal withdraws its copy of the shared `verbatim` file, and removes its PDF,
@@ -194,22 +205,23 @@ EXPECTED: Final[dict[str, dict[str, Any]]] = {
         "unsupported": {"DOC": 1, "PDF": 1},
         "failed": {"NOT_A_ZIP": 1},
         "failure_rate": 0.25,
-        # verbatim: 1 card x (09-01 R1; 09-08 R1, R1 (1), R5); wiki: 2 x (09-01, 09-08); cardmirror: 1
-        "occurrences": 4 + 4 + 1,
+        # One row per card per disclosure (path), whatever the number of weeks listing it.
+        # verbatim: 1 card x (R1, R1 (1), R5); wiki: 2 cards x R2; cardmirror: 1 x R3
+        "occurrences": 3 + 2 + 1,
     },
     "after_0915": {
         "sources": 7,
         "parsed_this_run": 1,
         "skipped_this_run": 6,
         "cards": 5,
-        # verbatim 1 x 7 disclosures; wiki 2 x 3; cardmirror 1 x 2; direct 1 x 1
-        "occurrences": 7 + 6 + 2 + 1,
+        # verbatim 1 x 3 disclosures; wiki 2 x 1; cardmirror 1 x 1; direct 1 x 1
+        "occurrences": 3 + 2 + 1 + 1,
     },
     "after_shared_team_removed": {
-        # The PDF and the .doc go; verbatim stays for Maple Grove QX without Riverbend's 2 disclosures.
+        # The PDF and the .doc go; verbatim stays for Maple Grove QX without Riverbend's R5.
         "sources": 5,
         "unsupported": 0,
-        "occurrences": (7 - 2) + 6 + 2 + 1,
+        "occurrences": (3 - 1) + 2 + 1 + 1,
     },
 }
 """What the pipeline reports over :data:`WEEKS`, derived by hand from the table in the docstring.

@@ -465,7 +465,10 @@ class CaselistParseService:
         held: dict[str, EnumeratedSource],
         state: SuppressionState,
     ) -> tuple[list[OccurrenceRecord], int]:
-        """One row per card per disclosure the list does not stop, and the number of clusters."""
+        """One row per card per disclosure the list does not stop, and the number of clusters.
+
+        A disclosure is one row however many snapshots list it, spanning the first to the latest.
+        """
         cards: list[ParsedCard] = []
         for entry in entries:
             source = held.get(entry.source_sha256)
@@ -484,23 +487,17 @@ class CaselistParseService:
             )
         cards.sort(key=lambda card: (card.provenance.source_sha256, card.provenance.first_element_index))
         placements = self._place_cards(cards)
-        rows: dict[tuple[str, int, str, str | None], OccurrenceRecord] = {}
+        spans = {sha256: _disclosure_spans(source, state) for sha256, source in held.items()}
+        rows: list[OccurrenceRecord] = []
         for placement in placements:
             provenance = placement.card.provenance
             source = held[provenance.source_sha256]
-            for disclosed in _live_disclosures(source, state):
-                disclosure = None if source.is_camp_file else disclosure_digest(plan.caselist, disclosed.path)
-                key = (
-                    provenance.source_sha256,
-                    provenance.first_element_index,
-                    disclosed.snapshot,
-                    disclosure,
-                )
-                rows.setdefault(
-                    key,
+            for disclosure, first, last in spans[provenance.source_sha256]:
+                rows.append(
                     OccurrenceRecord(
                         caselist=plan.caselist,
-                        snapshot=disclosed.snapshot,
+                        snapshot=first,
+                        last_snapshot=last,
                         source_sha256=provenance.source_sha256,
                         parser_version=plan.parser_version,
                         profile_version=plan.profile_version,
@@ -516,7 +513,7 @@ class CaselistParseService:
                     ),
                 )
         ordered = sorted(
-            rows.values(),
+            rows,
             key=lambda row: (
                 row.cluster_id,
                 row.source_sha256,
@@ -594,6 +591,23 @@ def _live_disclosures(source: EnumeratedSource, state: SuppressionState) -> tupl
             else disclosure_digest(source.caselist, disclosed.path),
         )
     )
+
+
+def _disclosure_spans(source: EnumeratedSource, state: SuppressionState) -> list[tuple[str | None, str, str]]:
+    """`(disclosure, first snapshot, latest snapshot)` for each live disclosure of `source`.
+
+    A caselist disclosure is a path, named by its digest: listed in fourteen weekly manifests, it
+    is still one disclosure. A camp file has no disclosure, so each release is its own.
+    """
+    spans: dict[tuple[str | None, str | None], tuple[str, str]] = {}
+    for disclosed in _live_disclosures(source, state):
+        if source.is_camp_file:
+            key: tuple[str | None, str | None] = (None, disclosed.snapshot)
+        else:
+            key = (disclosure_digest(source.caselist, disclosed.path), None)
+        first, last = spans.get(key, (disclosed.snapshot, disclosed.snapshot))
+        spans[key] = (min(first, disclosed.snapshot), max(last, disclosed.snapshot))
+    return [(disclosure, first, last) for (disclosure, _), (first, last) in spans.items()]
 
 
 def _index_rows(

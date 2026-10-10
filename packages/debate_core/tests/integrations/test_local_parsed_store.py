@@ -29,6 +29,7 @@ from debate_core.application.ports.parsed_store import (
     PipelineFailureReason,
     SourceEntry,
     SourceOutcome,
+    StoreRecord,
     parse_version_directory,
     skip_key,
     source_object_key,
@@ -118,10 +119,17 @@ def _document(parsed: ParsedDocument) -> DocumentRecord:
     )
 
 
-def _occurrence(sha256: str) -> OccurrenceRecord:
+def _occurrence(
+    sha256: str,
+    *,
+    caselist: str = "testcl26",
+    snapshot: str = "2026-09-08",
+    last_snapshot: str = "2026-09-15",
+) -> OccurrenceRecord:
     return OccurrenceRecord(
-        caselist="testcl26",
-        snapshot="2026-09-08",
+        caselist=caselist,
+        snapshot=snapshot,
+        last_snapshot=last_snapshot,
         source_sha256=sha256,
         parser_version=PARSER,
         profile_version=PROFILE,
@@ -402,6 +410,34 @@ def test_an_unsupported_format_is_an_outcome_and_everything_else_a_failure() -> 
 def test_a_record_refuses_a_name_outside_the_layout(caselist: str, snapshot: str) -> None:
     with pytest.raises(ValueError, match="snapshot|caselist"):
         _entry("a" * 64, cards=1, caselist=caselist, snapshot=snapshot)
+
+
+@pytest.mark.parametrize(
+    ("caselist", "snapshot", "last_snapshot", "message"),
+    [
+        ("testcl26", "2026-09-08", "2026-09-01", "before snapshot"),
+        ("testcl26", "2026-09-08", "2026-9-15", "YYYY-MM-DD"),
+        ("openev", "2026-policy", "2027-policy", "one release"),
+    ],
+)
+def test_an_occurrence_spans_its_first_to_its_latest_snapshot(
+    caselist: str, snapshot: str, last_snapshot: str, message: str
+) -> None:
+    assert _occurrence("a" * 64).last_snapshot == "2026-09-15"
+    with pytest.raises(ValueError, match=message):
+        _occurrence("a" * 64, caselist=caselist, snapshot=snapshot, last_snapshot=last_snapshot)
+
+
+@pytest.mark.parametrize("record", [SourceEntry, DocumentRecord, OccurrenceRecord])
+def test_no_record_has_a_field_for_a_path_school_team_tournament_or_round(record: type[StoreRecord]) -> None:
+    """The store never gains a field naming who disclosed what; `docs/data/parsed-card-store.md`."""
+    named = {
+        name
+        for name in record.model_fields
+        for word in ("path", "school", "team", "tournament", "round", "debater")
+        if word in name
+    }
+    assert named == set()
 
 
 def test_a_stored_document_refuses_to_carry_its_path(parsed: ParsedDocument) -> None:

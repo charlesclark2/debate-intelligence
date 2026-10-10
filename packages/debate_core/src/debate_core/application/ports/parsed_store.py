@@ -378,13 +378,19 @@ class DocumentRecord(StoreRecord):
 class OccurrenceRecord(StoreRecord):
     """One card in one disclosure: a line of `occurrences.jsonl`.
 
-    `snapshot` is the disclosure's snapshot, and `disclosure` the digest of its caselist and path
-    (:func:`~debate_core.application.ports.suppression.disclosure_digest`); a camp file has no
-    disclosure and records `None`. The same file disclosed in three weeks is three rows of each of
-    its cards, parsed once. Who disclosed it is a join with the manifests, never a field here.
+    A disclosure is one path holding one file's bytes, named by `disclosure`, the digest of its
+    caselist and path (:func:`~debate_core.application.ports.suppression.disclosure_digest`). It is
+    one row however many weekly manifests list it: `snapshot` is the first that does and
+    `last_snapshot` the latest. A path whose bytes change has a new digest, so it is a new source
+    and a new row, with no special case. A camp file has no disclosure and records `None`, one row
+    per card per release, with `last_snapshot` equal to `snapshot`. Who disclosed it is a join with
+    the manifests, never a field here.
     """
 
     record: Literal["occurrence"] = "occurrence"
+    last_snapshot: str = Field(
+        description="The latest snapshot listing this disclosure; `snapshot` is the first. Same form."
+    )
     disclosure: Sha256Hex | None = Field(description="Digest of `<caselist>/<path>`; None for a camp file.")
     camp: NonEmptyText | None = Field(default=None, description="Camp for an OpenEv file; None otherwise.")
     first_element_index: int = Field(ge=0, description="First paragraph of the card in its document.")
@@ -393,6 +399,22 @@ class OccurrenceRecord(StoreRecord):
     cluster_id: Sha256Hex = Field(description="The near-duplicate cluster the card was placed in.")
     membership: ClusterMembership = Field(description="How the card joined its cluster.")
     completeness: CardCompleteness = Field(description="FULL, ABBREVIATED or CITE_ONLY, as parsed.")
+
+    @model_validator(mode="after")
+    def _check_span(self) -> Self:
+        if self.caselist == OPENEV_STORE:
+            if self.last_snapshot != self.snapshot:
+                raise ValueError("a camp file's occurrence is one release: last_snapshot is snapshot")
+        else:
+            try:
+                parsed = date.fromisoformat(self.last_snapshot)
+            except ValueError:
+                parsed = None
+            if parsed is None or parsed.isoformat() != self.last_snapshot:
+                raise ValueError(f"a caselist snapshot is YYYY-MM-DD; got {self.last_snapshot!r}")
+            if self.last_snapshot < self.snapshot:
+                raise ValueError("last_snapshot is before snapshot")
+        return self
 
 
 # ------------------------------------------------------------------------------------------------

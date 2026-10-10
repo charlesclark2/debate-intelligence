@@ -39,6 +39,9 @@ from tests.fixtures.parse_pipeline.build_parse_world import (
     BODIES,
     CASELIST,
     EXPECTED,
+    R1_COPY_PATH,
+    R1_PATH,
+    R5_PATH,
     WEEKS,
     digest_of,
     import_weeks,
@@ -266,24 +269,52 @@ async def test_a_first_run_parses_every_source_and_reports_the_hand_derived_coun
 async def test_the_occurrence_table_has_a_row_per_card_per_disclosure_named_by_its_digest(
     world: World,
 ) -> None:
-    """A file disclosed in two weeks and under two paths is one parse and one row per disclosure."""
+    """The same file under three paths over two weeks: one parse, one row per path, with its span.
+
+    R1 is listed in both weeks, its `(1)` copy and R5 only in the second. Re-listing a path in a
+    later week moves its row's `last_snapshot`; it adds no row.
+    """
     await world.run()
     rows = world.lines("occurrences.jsonl")
     verbatim = [row for row in rows if row["source_sha256"] == digest_of("verbatim")]
-    paths = {path for week in WEEKS[:2] for path, body in week.members if body == "verbatim"}
-    disclosures = {
-        (week.snapshot.isoformat(), disclosure_digest(CASELIST, path))
-        for week in WEEKS[:2]
-        for path, body in week.members
-        if body == "verbatim"
-    }
-    assert {(row["snapshot"], row["disclosure"]) for row in verbatim} == disclosures
-    assert len(verbatim) == 4 == len(disclosures)
-    assert len(paths) == 3
+    assert sorted((row["disclosure"], row["snapshot"], row["last_snapshot"]) for row in verbatim) == sorted(
+        [
+            (disclosure_digest(CASELIST, R1_PATH), "2026-09-01", "2026-09-08"),
+            (disclosure_digest(CASELIST, R1_COPY_PATH), "2026-09-08", "2026-09-08"),
+            (disclosure_digest(CASELIST, R5_PATH), "2026-09-08", "2026-09-08"),
+        ]
+    )
     assert {row["completeness"] for row in rows if row["source_sha256"] == digest_of("wiki")} == {
         "ABBREVIATED",
         "CITE_ONLY",
     }
+    wiki = [row for row in rows if row["source_sha256"] == digest_of("wiki")]
+    assert {(row["snapshot"], row["last_snapshot"]) for row in wiki} == {("2026-09-01", "2026-09-08")}
+
+
+@pytest.mark.anyio
+async def test_a_later_week_listing_the_same_disclosures_moves_their_span_and_adds_no_row(
+    world: World,
+) -> None:
+    await world.run()
+    before = {
+        (row["source_sha256"], row["first_element_index"], row["disclosure"]): row["snapshot"]
+        for row in world.lines("occurrences.jsonl")
+    }
+    await import_weeks(world.data_dir, world.zips_dir, through=THROUGH_0915, after=THROUGH_0908)
+
+    await world.run()
+
+    rows = world.lines("occurrences.jsonl")
+    carried = [row for row in rows if row["source_sha256"] != digest_of("direct")]
+    assert {(row["source_sha256"], row["first_element_index"], row["disclosure"]) for row in carried} == set(
+        before
+    )
+    assert all(
+        row["snapshot"] == before[(row["source_sha256"], row["first_element_index"], row["disclosure"])]
+        for row in carried
+    )
+    assert {row["last_snapshot"] for row in rows} == {"2026-09-15"}
 
 
 # ------------------------------------------------------------------------------------------------

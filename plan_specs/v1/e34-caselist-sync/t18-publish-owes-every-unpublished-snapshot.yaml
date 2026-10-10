@@ -55,8 +55,16 @@ spec:
       description: >-
         docs/runbooks/caselist-scheduled-sync.md says what the pending-work file holds and
         how to check it is empty after a retry.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-10. A pending-work file that cannot be read is never read as
+        nothing owed and never overwritten: the publish stage fails with a code and a hint
+        that names the file by role ("the pending-work file under storage.data_dir"), never
+        by path, and the file is left for a person. The file is written atomically, to a
+        temporary file renamed in the same directory, so a crash mid-write cannot produce
+        the malformed file this rule refuses. Shown failing first against today's code.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

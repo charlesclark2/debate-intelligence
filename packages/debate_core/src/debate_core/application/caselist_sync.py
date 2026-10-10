@@ -2193,11 +2193,11 @@ class CaselistSyncService:
         with RunLock(self._state_dir / LOCK_FILENAME):
             tally = _RunTally()
             try:
-                owed = f"{len(self._pending.read())} snapshot(s) owed"
+                selected = f"{len(self._pending.read())} snapshot(s) owed"
             except PendingWorkUnreadable:
                 # The publish stage reads it again and is the one that fails on it, with the fix.
-                owed = "what is owed could not be read"
-            tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, owed)
+                selected = "what is owed could not be read"
+            tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, selected)
             for stage in (SyncStage.DOWNLOAD, SyncStage.IMPORT):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending does no fetching or importing")
             await self._publish_stage(tally)

@@ -362,9 +362,65 @@ of 3. That means transient, and the runbook's new section says what to check.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+Accepted in full, phase `Succeeded`. One rule now decides pull's exit. The code it reads moved to
+the one place that can share it. A refusal is no longer reported as a login. The three
+filesystem stores stop pretending that an unreadable directory is an empty one.
+
+* **The callers table is the most valuable part.** For each caller, it shows what an unreadable
+  directory used to do in practice. Select spent the day's five downloads re-fetching weeks it
+  already held. `store sync` planned to push nothing, or pull everything. `caselist remove`
+  planned to remove nothing locally. Silent wrong answers like these are why ac3 existed, and you
+  found them rather than assuming.
+* **Shown failing first, done properly.** You ran the full test set against the start commit's
+  source (100 failed), not only the tests you wrote first. You also said plainly that two of my
+  scenarios already had the right exit code, so their red was only the missing field and the
+  mutants are their proof.
+* **Mutation: 33 of 33 caught**, all by assertion failures. The seven caught by a single test
+  each are named and explained.
+
+**Rulings:**
+
+* **Deviation 1:** accepted, and ac2 is amended in this branch. A refusal in report alone exits 0
+  with report failed, its hint and a notification. My kickoff's rule was the right one. ac2's
+  "exit 1 or 3" contradicted it, and that is my error. Making drift found by report exit 1 would
+  be a different decision, and I am not making it.
+* **Deviation 2:** accepted. It fixes a real defect in `v1-e01-t20`'s handling. The escaping 503
+  left the imported snapshots owed by nothing, so "the next run retries" was untrue for the very
+  case it was written for. The change of `error.code` to `CASELIST_PULL_INCOMPLETE` is recorded in
+  the consumer table, and the exit is still 3.
+* **Deviation 3:** accepted. My "no new vocabulary" meant no new name for an existing outcome. The
+  daily cap and a burst limit arrived as one error with one code, and the code is all the CLI
+  sees. Two outcomes that need different exits must be two classes. `DailyDownloadLimitReached`
+  being outside `ProviderError` makes it exit 1 by either route, which is the safe direction.
+* **Deviation 4 (the wrapper's comment) and Deviation 5:** accepted. Deviation 5 also fixes a
+  misleading notification. A publish that failed on a checksum mismatch used to send "waiting for
+  an AWS login".
+* **`LocalStoreAccessDenied` showing as `verify`'s `details.cause`:** accepted. The code is
+  unchanged, and the cause is a class name, which is what that field documents.
+
+**Follow-up work, by the PM in the next spec batch:**
+
+* **Snapshots left unowed when the session expires part-way through publish (E34, p2).** Of your
+  follow-ups this is the one that loses work, so it gets its own task.
+* **Manifest files read by path (E34, p3), together with the notification's missing codes.**
+  Both concern what the record and the readers can say.
+* **The grant hint in the S3 adapter:** goes into `v1-e29-t07`, which already changes
+  `integrations/s3/client.py`.
+* **`caselist parse --publish`'s exit:** goes into `v1-e34-t17`, which already touches
+  `debate_cli` for the parse stage.
+* **The parsed store's `PermissionError`:** goes into `v1-e31-t09`, which already works in the
+  parser's adapters. If it does not fit there, the PM will file it on its own.
+* **`UnreadableAppendOnlyRecord`'s absolute path:** goes into `v1-e30-t10`, beside its other E30
+  corrections.
+* **The weekly archive's `OSError`:** already on record from `v1-e34-t12`. It is filed with the
+  manifest-read task above.
+
+**No operator steps.** The installed agent keeps the old behaviour until it is reinstalled, which
+waits for the 2026-10-14 scheduled run (`v1-e34-t05`).

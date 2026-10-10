@@ -18,8 +18,9 @@ schedule around it is `ops/launchd/`.
 
 [`docs/policies/caselist-data-use.md`](../policies/caselist-data-use.md) E34 gate 4 permits
 **weekly cadence at most, no polling faster than archives are published**. It was agreed with the
-OpenCaselist maintainer, whose confirmation (clause 12 of the clause register) is scoped to the
-weekly archives, and [ADR-0017](../adr/0017-caselist-corpus-is-retrievable.md) records that the
+OpenCaselist maintainer, whose confirmation (clause 12 of the clause register) covers scheduled
+retrieval of the archives, weekly and complete, through the API at 10 file downloads per minute
+(policy 1.6), and [ADR-0017](../adr/0017-caselist-corpus-is-retrievable.md) records that the
 daily cadence a superseded decision record proposed contradicted it and was therefore wrong.
 
 Do not shorten the interval. If a faster cadence ever looks necessary, it is renegotiated with the

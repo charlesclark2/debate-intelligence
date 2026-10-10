@@ -628,9 +628,9 @@ the Goal stays `InProgress`.
 
 | | |
 |---|---|
-| Session status | PARTIAL: Changes 1, 3 and 4 done; Change 2 waits for `v1-e34-t04` to merge (its spec is still `Pending` on `origin/dev` today); ac5 NOT RUN |
+| Session status | PARTIAL: Changes 1 to 4 done (Change 2 after `v1-e34-t04` merged into `dev` the same day); ac5 NOT RUN |
 | Goal | `InProgress` |
-| Commits | `a5dd71d` (the PM's review and spec fix, committed as written), `dbcb172` (Change 1), `7a5c0fe` (Change 3), `f125908` (the store document), and this section |
+| Commits, after the rebase onto t04 | `ecb1893` (the PM's review and spec fix, committed as written), `72dd677` (Change 1), `cacf10e` (Change 3), `535bdad` (the store document), `74d574d` (this section), `f4608f2` (Change 2), and this section's completion |
 
 **Read this first: the weekly manifests are not cumulative, so Change 1 removes about 9% of rows,
 not most of them.** The review's premise was that each weekly snapshot re-lists every file still
@@ -702,7 +702,9 @@ span key. It was caught: 11 failed, 30 passed. The first failure is `assert (6, 
 so the mutant reproduces the old behaviour's 9 rows exactly. That is the new expectations shown
 failing against the old code. Every earlier mutant was re-run against the new code. The
 suppression mutant for the occurrence table was re-pointed at `_disclosure_spans`, where the check
-now lives.
+now lives. The table is the final run, on the branch rebased onto t04 and with Change 2 in. The
+count for `occurrences-per-snapshot` went from 11 to 12 failures, because t04's key adds a sixth
+full-archive case.
 
 | Mutant | Result |
 |---|---|
@@ -713,12 +715,13 @@ now lives.
 | reparse-into-old-directory | caught, 3 failed |
 | reparse-into-old-directory-unguarded | caught, 2 failed |
 | unsupported-counted-as-failure | caught, 3 failed |
-| full-archive-enumerated | caught, 5 failed |
+| full-archive-enumerated (re-pointed in Change 2) | caught, 2 failed |
+| **full-archive-any-name-enumerated (new in Change 2)** | caught, 6 failed |
 | index-ignores-suppression | caught, 1 failed |
 | failures-ignores-suppression | caught, 1 failed |
 | occurrences-ignore-suppression (re-pointed) | caught, 1 failed |
 | removal-keeps-aggregates | caught, 2 failed |
-| **occurrences-per-snapshot (new)** | caught, 11 failed |
+| **occurrences-per-snapshot (new)** | caught, 12 failed |
 
 The tree was clean after each.
 
@@ -729,22 +732,54 @@ The tree was clean after each.
   or touched the file, not proof that the file is still on the caselist. A gap between the two
   snapshots is still one row.
 
-### Change 2: sync with `v1-e34-t04`, not done yet
+### Change 2: sync with `v1-e34-t04`
 
-t04 is not on `origin/dev` today, so there is nothing to sync with. What is left, for the session
-after it merges:
+t04 merged into `dev` as #206.
 
-* `scripts/task sync`.
-* Replace `series_snapshot` with t04's `snapshot_of_manifest_key(caselist, key, *,
-  full_archives=False)`. If the two differ for `openev` or any other name, keep this one and pin
-  the difference in a test, with the reason.
-* Keep the five planted shapes and add t04's real key, built with `full_archive_manifest_key`.
-* Re-run the mutants and the suite.
+**The sync.** `scripts/task sync` rebased the branch onto `origin/dev`. Two conflicts came up, and
+both were additive, so I kept both sides:
 
-`dev` already has a `snapshot_of_manifest_key(caselist, key)` without the keyword. On seven sample
-keys it agrees with `series_snapshot`: a weekly date, a camp release, a date under `openev`, a dated
-name with a suffix, a malformed date, an impossible date, and a release name under a caselist. The comparison that counts
-is with t04's version, which may change it.
+* **`removal_plan.py`'s module docstring.** t04's "The complete archive" section and this task's
+  "The parsed card store's aggregates" section were both added at the same spot.
+* **`container.py`'s imports.** t04 imports `FullArchiveRotation` from `caselist_sync` and this
+  task imports `CaselistParseService`.
+
+The rebase rewrote every commit, so the SHAs in the first part of this report are the old ones.
+
+**One rule.** `parse_sources.series_snapshot` is gone. `enumerate_sources` calls t04's
+`publish_plan.snapshot_of_manifest_key(caselist, key)`, with its default `full_archives=False`.
+Before replacing it I compared the two on 229 keys across `hsld26`, `hspf26` and `openev`:
+
+* a weekly date, a malformed date and an impossible date;
+* camp releases, including one in capitals;
+* a date under `openev`, and a release name under a caselist;
+* t04's `full/<date>` and the planted `all/`, `archive/`, suffixed and dotted shapes, plus a
+  nested `full/<date>/x`;
+* the suppression list's key and another caselist's key;
+* names with a trailing space or newline, and non-ASCII digits;
+* each with the suffix `.jsonl`, `.json` and none.
+
+They agreed on every key. So there is no difference to pin with a test, and the module docstring
+says the old rule was replaced and why. On t04's own key,
+`manifests/hsld26/full/2026-10-06.jsonl`, both return `None`. t04's returns `full/2026-10-06` only
+when asked for `full_archives=True`, which `caselist parse` never does.
+
+**The test.** `test_the_full_archive_namespace_is_neither_parsed_nor_in_the_occurrence_table` now
+runs over six keys. The first is t04's own, built with
+`manifest.full_archive_manifest_key(CASELIST, date(2026, 10, 6))`, dated as a refresh after the
+weeklies. The other five are the shapes planted before t04, kept so that a later rename of the
+namespace is still caught. All six pass.
+
+**Mutation.** Two mutants guard the exclusion, each run on a fresh Hypothesis database:
+
+* `full-archive-enumerated`, re-pointed to the realistic mistake: the pipeline asks
+  `snapshot_of_manifest_key` for `full_archives=True`. Caught by both `full/` keys. The pipeline
+  does not quietly count the complete archive; it stops with `ValueError: Invalid isoformat string:
+  'full/2026-10-06'`, because a card's provenance date is read from the snapshot name. That is
+  louder than a silent inclusion and still not something to rely on, which is why the default is
+  what keeps it out.
+* `full-archive-any-name-enumerated` (new): every manifest name enumerated, whatever its shape.
+  Caught by all six keys.
 
 ### Change 3: the removal runbook (authorised outside the packages)
 
@@ -784,24 +819,24 @@ block). If that should go from the public repository, it is a one-line edit for 
 
 | Check | Result |
 |---|---|
-| Full suite | 4,836 passed, 1 skipped (the parser eval waiting for corrected labels, as before), in 72 s. The one warning is `test_pytests_own_process_has_no_network_in_an_offline_check`, which tries the network on purpose to prove it is blocked |
-| Parse pipeline tests (service, adapter, removal, CLI, smoke) | 87 passed |
+| Full suite, rebased onto t04, with Change 2 | 4,871 passed, 1 skipped (the parser eval waiting for corrected labels, as before), in 82 s. The one warning is `test_pytests_own_process_has_no_network_in_an_offline_check`, which tries the network on purpose to prove it is blocked |
+| Parse pipeline tests (service, adapter, removal, CLI, smoke) | 88 passed |
 | `pyright` | 0 errors |
 | `lint-imports` | 12 kept, 0 broken |
 | `ruff check`, `ruff format --check` | clean |
 | `scripts/check_thin_handlers.py` | OK, 21 handlers |
-| `scripts/check_command_blocks.py`, `scripts/check_links.py` | OK |
-| `uv run scripts/validate_specs.py` | OK: 319 files |
+| `scripts/check_command_blocks.py --base origin/dev`, `scripts/check_links.py` | OK |
+| `uv run scripts/validate_specs.py` | OK: 323 files |
 
 ### Operator follow-ups, revised
 
 These replace the earlier **Operator follow-ups**, and they run only after this sequence:
 
-1. `v1-e34-t04` merges.
-2. A session makes Change 2.
-3. The PM accepts.
-4. The branch merges with `scripts/task pr v1-e31-t06-parse-pipeline --partial`, and
-   `scripts/task finish v1-e31-t06-parse-pipeline --partial` closes it out.
+1. The PM accepts this revision.
+2. The branch merges with `scripts/task pr v1-e31-t06-parse-pipeline --partial`.
+3. `scripts/task finish v1-e31-t06-parse-pipeline --partial` closes it out.
+
+t04 has merged and Change 2 is in, so nothing else comes first.
 
 That way the corpus is parsed by reviewed code. Don't run them while `caselist pull` is running.
 
@@ -960,6 +995,8 @@ the incremental rebuild if step 3 or 4 crossed the PM's limits.
    same docstring's "First seen" section, the backfill report and the manifests all say a weekly
    archive is a week's window. A one-paragraph docstring fix in E30's module, left for the PM to
    assign rather than edited here.
+
+Follow-up 8 above (sync with `v1-e34-t04` and re-run the full-archive test) is done: see Change 2.
 
 ## PM review
 

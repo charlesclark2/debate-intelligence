@@ -503,16 +503,26 @@ def test_abbreviated_group_that_disagrees_with_itself_is_no_group() -> None:
 
 
 def test_abbreviated_key_read_from_the_cite_line_is_never_grouped() -> None:
-    """Its opening words start with cite text of unknown length, so they cannot be compared."""
-    from_cite = cite_only_card(
-        "Tamsin 26 (Invented Author, Fictional Review) Shaded orchards on the … two degrees on "
-        "August nights.",
-        short_cite="Tamsin 26",
+    """Its opening words start with cite text of unknown length, and may be nothing else.
+
+    Two cite-only entries under one cite: the first gives no opening words of its card at all, the
+    second opens with a card's. Read as keys, the first's "opening" is the start of the second's
+    and they close alike, so they would be grouped on a cite and a closing phrase alone.
+    """
+    cite = "Tamsin 26 (Invented Author)"
+    no_opening = cite_only_card(f"{cite} … two degrees on August nights.", short_cite="Tamsin 26")
+    another_card = cite_only_card(
+        f"{cite} Whitewashed roofs in the … two degrees on August nights.", short_cite="Tamsin 26"
     )
-    anchor = abbreviation_anchor(from_cite, markers=("…",))
-    assert anchor is not None
-    assert anchor.from_cite_line
-    assert group_unmatched_abbreviations({A: anchor, B: ORCHARD_THREE_SIX}) == {}
+    anchors = [abbreviation_anchor(card, markers=("…",)) for card in (no_opening, another_card)]
+    assert anchors[0] is not None
+    assert anchors[1] is not None
+    assert anchors[0].from_cite_line
+    assert anchors[1].from_cite_line
+    assert anchors[0].opening_words == ("tamsin", "26", "invented", "author")
+    assert anchors[1].opening_words[:4] == anchors[0].opening_words
+
+    assert group_unmatched_abbreviations({A: anchors[0], B: anchors[1]}) == {}
 
 
 @pytest.mark.parametrize(

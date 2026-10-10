@@ -377,8 +377,10 @@ def _parse_xml(data: bytes, name: str) -> XmlElement:
         raise DocxPackageError(ParseFailureReason.MALFORMED_XML, f"{name} holds no root element")
     # The scan above reads bytes, so a declaration in UTF-16 passes it. The parser has resolved
     # nothing, and what it found is the same whatever the encoding: any document type is refused.
-    document_type = root.getroottree().docinfo
-    if document_type.doctype or document_type.internalDTD is not None:
+    # libxml2 records a subset for every document type declaration, even one that declares
+    # nothing; lxml's stubs type it as always present, which it is not.
+    declared: object = root.getroottree().docinfo.internalDTD
+    if declared is not None:
         raise DocxPackageError(
             ParseFailureReason.FORBIDDEN_XML_CONSTRUCT,
             f"{name} declares <!DOCTYPE in an encoding the byte scan does not read, which is never resolved",

@@ -227,6 +227,10 @@ HOSTILE_DECLARATIONS = {
         '<!DOCTYPE w:document [<!ENTITY % outside SYSTEM "http://example.invalid/more.dtd"> %outside;]>',
         "ordinary text",
     ),
+    "a document type that declares nothing": (
+        "<!DOCTYPE w:document>",
+        "ordinary text",
+    ),
     "a declaration beside the prose the scan used to refuse": (
         '<!DOCTYPE w:document [<!ENTITY filler "filler">]>',
         "the system \"as it stands\" and public 'comment'",
@@ -304,9 +308,10 @@ class TestTheXmlParserResolvesNothing:
         root = etree.fromstring(
             hostile_document(declaration, text).encode(), parser=docx_package.hardened_xml_parser()
         )
+        serialised = etree.tostring(root, encoding="unicode")
 
-        assert "filler filler" not in "".join(root.itertext())
-        assert b"filler filler filler</" not in etree.tostring(root)
+        assert "a &filler; b" in serialised
+        assert "filler filler filler" not in serialised
 
     def test_an_external_entity_is_not_read_from_disk(self, tmp_path: Path) -> None:
         outside = tmp_path / "outside.txt"
@@ -316,20 +321,24 @@ class TestTheXmlParserResolvesNothing:
             hostile_document(declaration, "a &outside; b").encode(),
             parser=docx_package.hardened_xml_parser(),
         )
+        serialised = etree.tostring(root, encoding="unicode")
 
-        assert "READ FROM OUTSIDE" not in "".join(root.itertext())
-        assert b"READ FROM OUTSIDE" not in etree.tostring(root)
+        assert "a &outside; b" in serialised
+        assert "READ FROM OUTSIDE" not in serialised
 
     def test_an_external_dtd_is_not_loaded(self, tmp_path: Path) -> None:
-        """A DTD that was loaded would add its default attribute to the root element."""
+        """A DTD that was loaded would be on the parsed tree, and would define the entity used."""
         dtd = tmp_path / "document.dtd"
-        dtd.write_text('<!ATTLIST w:document loaded CDATA "from the DTD">', encoding="utf-8")
+        dtd.write_text('<!ENTITY fromdtd "DEFINED IN THE EXTERNAL SUBSET">', encoding="utf-8")
         declaration = f'<!DOCTYPE w:document SYSTEM "{dtd.as_uri()}">'
         root = etree.fromstring(
-            hostile_document(declaration).encode(), parser=docx_package.hardened_xml_parser()
+            hostile_document(declaration, "a &fromdtd; b").encode(),
+            parser=docx_package.hardened_xml_parser(),
         )
+        loaded: object = root.getroottree().docinfo.externalDTD
 
-        assert root.get("loaded") is None
+        assert loaded is None
+        assert "DEFINED IN THE EXTERNAL SUBSET" not in etree.tostring(root, encoding="unicode")
 
 
 # --------------------------------------------------------------------------------------------

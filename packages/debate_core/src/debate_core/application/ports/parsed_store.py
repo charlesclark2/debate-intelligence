@@ -41,6 +41,13 @@ profile version. The same bytes disclosed in fourteen weeks are one parse. A sou
 matches an entry already in the version directory is skipped, and a parser or profile change makes
 every key new.
 
+The fingerprint version is not part of the key, and does not need to be. A source's file holds its
+entry and its parsed document, and neither holds a fingerprint or a cluster id: those exist only in
+the occurrence table, which every run rebuilds from scratch and stamps with the version it used. So
+a change of :data:`~debate_core.evidence.fingerprints.FINGERPRINT_VERSION` re-parses nothing. The
+next run rewrites every occurrence row under the new version, and the per-source records keep the
+stamp of the day they were parsed (`v1-e31-t08`).
+
 ## Versions are never rewritten
 
 A version directory is named for the parser version that wrote it. A forced re-parse, or a style
@@ -220,7 +227,13 @@ class StoreRecord(DomainModel):
     source_sha256: Sha256Hex = Field(description="SHA-256 of the source file's bytes.")
     parser_version: NonEmptyText = Field(description="Version of the parser that read the source.")
     profile_version: NonEmptyText = Field(description="Version of the style profile it resolved through.")
-    fingerprint_version: NonEmptyText = Field(description="Version of the card fingerprint normalization.")
+    fingerprint_version: NonEmptyText = Field(
+        description=(
+            "Version of the card matching rules. On an occurrence, the version its fingerprint and "
+            "cluster id were computed under. On a source or document, the version in force when the "
+            "source was parsed, which nothing in the record depends on."
+        )
+    )
 
     @model_validator(mode="after")
     def _check_names(self) -> Self:

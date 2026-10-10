@@ -130,7 +130,7 @@ def test_exact_fingerprint_is_sha256_of_the_hand_normalized_body() -> None:
 
     assert fingerprint.exact_fingerprint == expected
     assert fingerprint.basis is FingerprintBasis.EVIDENCE_BODY
-    assert fingerprint.fingerprint_version == FINGERPRINT_VERSION == "card-fingerprint-v1"
+    assert fingerprint.fingerprint_version == FINGERPRINT_VERSION == "card-fingerprint-v2"
 
 
 # ------------------------------------------------------------------------------------------------

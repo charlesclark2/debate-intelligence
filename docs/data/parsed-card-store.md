@@ -53,6 +53,9 @@ A camp file and a caselist disclosure of the same bytes are parsed once in each 
 each caselist's store stands alone: it is published under its own prefix and a removal reaches it
 by caselist.
 
+The fingerprint version is not part of the key. A change of it re-parses nothing: see
+[Fingerprint versions](#fingerprint-versions).
+
 ## Every record
 
 Every line of every file is one JSON object with sorted keys, and every one carries these fields:
@@ -66,7 +69,7 @@ Every line of every file is one JSON object with sorted keys, and every one carr
 | `source_sha256` | The source file's SHA-256 |
 | `parser_version` | The parser that read it, e.g. `2026.09.20-docx-1` |
 | `profile_version` | The style profile it resolved through, e.g. `2026.09.20-verbatim-1` |
-| `fingerprint_version` | The card fingerprint normalization, e.g. `card-fingerprint-v1` |
+| `fingerprint_version` | The card matching rules, e.g. `card-fingerprint-v2`. What it says depends on the record: see [Fingerprint versions](#fingerprint-versions) |
 
 ### `source`: a line of `index.jsonl`, and the first line of a source's file
 
@@ -138,10 +141,18 @@ OpenEv release, and its two snapshot fields are that release.
 | `disclosure` | SHA-256 of `<caselist>/<path>`, the disclosure's pseudonym; `null` for a camp file |
 | `camp` | The camp for a camp file; `null` otherwise |
 | `first_element_index`, `last_element_index` | The card's paragraphs in its document |
-| `exact_fingerprint` | The card's exact fingerprint (`v1-e31-t04`) |
-| `cluster_id` | Its near-duplicate cluster |
-| `membership` | `NEAR_DUPLICATE`, `ABBREVIATED_LINK` or `UNLINKED` |
+| `exact_fingerprint` | The card's exact fingerprint (`v1-e31-t04`). The same digest under every fingerprint version so far |
+| `cluster_id` | Its cluster: the smallest exact fingerprint among the cluster's full cards, or among its abbreviated cards when no full card is in it. Comparable only between rows of one `fingerprint_version` |
+| `membership` | How it got there: `NEAR_DUPLICATE`, `ABBREVIATED_LINK` or `UNLINKED`, below |
 | `completeness` | `FULL`, `ABBREVIATED` or `CITE_ONLY` |
+
+`membership`, from `card-fingerprint-v2`:
+
+| Value | Meaning |
+|---|---|
+| `NEAR_DUPLICATE` | A full card, placed by its text |
+| `ABBREVIATED_LINK` | An abbreviated or cite-only card placed by its link key (short cite, first and last words): in a full card's cluster, or, when no full card matches it, in a cluster of abbreviated cards of the same card. The second kind is new in `v2`, and its `cluster_id` is no full card's fingerprint |
+| `UNLINKED` | An abbreviated or cite-only card that matched nothing, or two different cards. Its `cluster_id` is its own `exact_fingerprint` |
 
 Who disclosed a card is a join, not a field: compute `sha256(f"{caselist}/{path}")` for each stored
 row of the caselist's manifests and match it to `disclosure`. The digest is the same one the
@@ -153,6 +164,42 @@ a team uploaded or touched it. `last_snapshot` is the latest week that happened,
 file is still on the caselist. A path missing from some weeks between its first and latest is
 still one row. In the 2026-27 weekly manifests as imported on 2026-10-09, 91 to 93% of DOCX
 disclosures are listed in one week only, and none in more than five.
+
+## Fingerprint versions
+
+`fingerprint_version` names the card matching rules: the normalization the exact fingerprint is
+computed under, and the clustering and linking rules that decide which cards share a `cluster_id`
+([`fingerprints.py`](../../packages/debate_core/src/debate_core/evidence/fingerprints.py) lists
+each version and what it changed).
+
+| Version | Since | Exact fingerprints | Cluster ids |
+|---|---|---|---|
+| `card-fingerprint-v1` | `v1-e31-t04` | | |
+| `card-fingerprint-v2` | `v1-e31-t08` | the same as `v1` | changed: short cards and abbreviated disclosures that `v1` left apart now share clusters |
+
+**What the stamp says depends on the record.**
+
+* **On an `occurrence`**, it is the version the row's `exact_fingerprint`, `cluster_id` and
+  `membership` were computed under. Every row of one `occurrences.jsonl` carries the same version,
+  because the file is rebuilt whole on every run.
+* **On a `source` or a `document`**, in a per-source file or in `index.jsonl` and `failures.jsonl`,
+  it is the version that was in force when the source was parsed, and nothing in the record depends
+  on it. A parsed document holds cards as the parser read them: no fingerprint, no cluster id.
+  These records are never rewritten, so after a version change they go on saying the old one,
+  beside sources parsed since that say the new one. That is not staleness.
+
+**A version change re-parses nothing.** The skip key has no fingerprint version in it, and does not
+need one: the only records a fingerprint version decides are the occurrence rows, and the next
+`caselist parse` rewrites all of them under the new version from the per-source files it already
+has. After that run no row carries a cluster id under an old version
+(`test_a_rebuild_after_the_fingerprint_version_changed_leaves_no_old_stamp_on_a_new_cluster_id` in
+[`test_caselist_parse.py`](../../packages/debate_core/tests/application/test_caselist_parse.py)).
+`--publish` then uploads `occurrences.jsonl` alone, since no other file's bytes changed.
+
+**Between the change and that run**, `occurrences.jsonl` still holds the old version's rows, which
+say so. A reader compares the `fingerprint_version` of the occurrence rows it reads with the
+version it was written for, and treats a mismatch as "rebuild first". It never mixes cluster ids
+of two versions, and never keeps a `cluster_id` as a durable key: keep `exact_fingerprint`.
 
 ## What the store does not hold
 
@@ -221,7 +268,11 @@ The store holds no personal data, so these are safe to run and to paste:
 jq -r '.outcome' ~/.debate-research/dev/parsed/hsld26/2026.09.20-docx-1/index.jsonl | sort | uniq -c
 jq -r '"\(.reason) \(.source_format)"' ~/.debate-research/dev/parsed/hsld26/2026.09.20-docx-1/failures.jsonl | sort | uniq -c
 jq -r '.cluster_id' ~/.debate-research/dev/parsed/hsld26/2026.09.20-docx-1/occurrences.jsonl | sort -u | wc -l
+jq -r '.fingerprint_version' ~/.debate-research/dev/parsed/hsld26/2026.09.20-docx-1/occurrences.jsonl | sort | uniq -c
 ```
+
+The last line prints one version and the number of rows. Two versions would mean a half-written
+file, which the atomic rename rules out.
 
 `caselist parse --caselist hsld26 --failures` lists the failures with their disclosure paths, read
 from the manifests. Those paths name schools and team codes: that listing is for the terminal, and

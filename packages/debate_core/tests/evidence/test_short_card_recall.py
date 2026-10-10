@@ -11,7 +11,11 @@ card's first and last few words by construction. `v1-e31-t06` therefore measured
   and otherwise stay a cluster of their own.
 
 Over two hand-labelled sets: t04's variant set (`variants.jsonl`, full cards only), and
-`short_cards.jsonl`, written and committed with its labels before the measurement existed. Both go
+`short_cards.jsonl`, written and committed with its labels before the measurement existed.
+`v1-e31-t08` appended 36 rows to the second, marked `added_by`, again before anything was measured
+on them: fixture cases for each mechanism, and hard negatives that share an author, a year and an
+opening or closing phrase with a different card. t06's rows are unchanged, and are still measured
+on their own so its table can be read row for row. Both go
 through :meth:`CaselistCardStatsService.place`, the step the parse pipeline builds its occurrence
 table with. Two rows are the *same card* exactly when their labels are equal; precision and recall
 are over pairs of rows. Run with `-s` to see the table the session report quotes.
@@ -73,6 +77,9 @@ SHORT_CARDS_PATH: Final = (
 SHORT_WORDS: Final = 60
 """A card is short when its original body has fewer words than this. The t04 miss was 30 words."""
 
+ADDED_BY_T08: Final = "v1-e31-t08"
+"""The `added_by` field of the rows `v1-e31-t08` appended to the short-card set. t06's rows have none."""
+
 T04_THRESHOLDS: Final = NearDuplicateThresholds()
 """t04's confirmation rule, which the attribution of a full-card miss is read against."""
 
@@ -100,10 +107,16 @@ class Miss(StrEnum):
 MISS_COLUMNS: Final = tuple(Miss)
 
 
-def load_short_cards() -> list[Variant]:
+def load_short_cards(*, extended: bool = False) -> list[Variant]:
+    """t06's 28 rows, or with `extended` the rows `v1-e31-t08` added after them as well.
+
+    A row's position in the file is its source digest, so t06's rows read the same either way.
+    """
     variants: list[Variant] = []
     for position, line in enumerate(SHORT_CARDS_PATH.read_text(encoding="utf-8").splitlines()):
         row = json.loads(line)
+        if row.get("added_by") == ADDED_BY_T08 and not extended:
+            continue
         card = ParsedCard(
             tag=row["tag"],
             short_cite=row["short_cite"],
@@ -289,6 +302,37 @@ def test_the_short_card_set_is_what_it_says_it_is() -> None:
     }
     assert lengths["hollins-weekly-collection"] >= SHORT_WORDS
     assert sum(1 for left, right in itertools.combinations(short_set, 2) if left.label == right.label) == 81
+
+
+def test_the_rows_t08_added_are_what_they_say_they_are() -> None:
+    """36 rows after t06's 28, labelled by hand and committed before anything was measured on them.
+
+    Same-card pairs, counted from the labels: ten among the five Kessler copies; ten for Verran
+    (three full copies, two abbreviations); six for Ostrander (three full, one abbreviation); one
+    for each Pryce card and its abbreviation; six among the four cuts of the Quill towpaths card;
+    one for the two cuts of the Sable four-day-week card. Every other added row is a card of its
+    own: a hard negative.
+    """
+    original = load_short_cards()
+    extended = load_short_cards(extended=True)
+    added = extended[len(original) :]
+    assert [variant.variant_id for variant in extended[: len(original)]] == [
+        variant.variant_id for variant in original
+    ]
+    assert (len(extended), len(added)) == (64, 36)
+    assert sum(is_abbreviated(variant) for variant in added) == 16
+    assert len({variant.label for variant in added}) == 19
+    assert not {variant.label for variant in added} & {variant.label for variant in original}
+    same_card = Counter(
+        (is_abbreviated(left), is_abbreviated(right))
+        for left, right in itertools.combinations(extended, 2)
+        if left.label == right.label
+    )
+    full_pairs = same_card[(False, False)]
+    mixed_pairs = same_card[(False, True)] + same_card[(True, False)]
+    assert (full_pairs, mixed_pairs, same_card[(True, True)]) == (41, 55, 20)
+    assert original_lengths(extended)["ostrander-reservoir-levy"] >= SHORT_WORDS
+    assert original_lengths(extended)["kessler-night-buses"] < SHORT_WORDS
 
 
 # ------------------------------------------------------------------------------------------------

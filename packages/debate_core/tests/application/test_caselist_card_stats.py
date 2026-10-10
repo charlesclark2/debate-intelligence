@@ -390,6 +390,31 @@ def test_an_unmatched_cut_never_joins_a_cut_that_linked_to_a_full_card() -> None
     assert placed[2][0] != placed[0][0]
 
 
+def test_a_cut_that_matches_two_different_full_cards_is_not_grouped_with_a_third_cards_cut() -> None:
+    """It is a cut of one of the two full cards and nobody can say which. A longer cut that matches
+    neither is some third card, and grouping the two would settle the first by a guess."""
+    valley = card(
+        FILE_A,
+        0,
+        "Shaded orchards on the south slope of the valley cooled the town by two degrees on August nights.",
+    )
+    ridge = card(
+        FILE_B,
+        0,
+        "Shaded orchards on the south slope of the ridge lost their fruit to frost on August nights.",
+    )
+    either = abbreviated(FILE_C, "Shaded orchards on the south … on August nights.", "Pellam 26")
+    third = abbreviated(
+        FILE_D, "Shaded orchards on the south bank … the harvest on August nights.", "Pellam 26"
+    )
+
+    placed = place(valley, ridge, either, third)
+    assert len({cluster for cluster, _ in placed}) == 4
+    assert placed[2][1] is placed[3][1] is ClusterMembership.UNLINKED
+    # The same two cuts with no full card between them are consistent, and share five opening words.
+    assert len({cluster for cluster, _ in place(either, third)}) == 1
+
+
 def test_cutter_mark_is_recorded_on_the_occurrence_and_nowhere_else() -> None:
     signed = card(FILE_A, 4, full_cite="Pellam 26 (Oriel Pellam, Fictional Review, 2026) //zzTEST")
     report = build_report([signed], [disclosure(FILE_A, WEEK_ONE)], include_teams=True)

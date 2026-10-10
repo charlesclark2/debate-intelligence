@@ -13,6 +13,10 @@ Each of them now stops, with `LocalStoreAccessDenied` naming the directory's rol
 anything. The pull's own stages (select, publish, report, retention) are in
 `test_pull_stage_failure_codes.py`. The session report tabulates every caller.
 
+`v1-e31-t06` merged while this task was in progress and added two more callers, the parse
+pipeline's source listing and the parsed store's publisher. Neither file is changed here; both are
+tested at the end, because what they do with a refusal changed underneath them.
+
 Real stores, real `chmod 000`, the synthetic weeks, and moto for the bucket.
 """
 
@@ -28,6 +32,8 @@ from tests.fixtures.permissions import needs_permissions, refused
 
 from debate_core.application import errors
 from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.caselist.parse_sources import enumerate_sources
+from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import SourceSelector
 from debate_core.application.caselist.status_service import CaselistStatusService
@@ -151,3 +157,42 @@ async def test_a_removal_stops_rather_than_reporting_no_local_blob(removal_world
         )
 
     assert_stopped_on(caught, "the blob directory", removal_world.data_dir)
+
+
+# ------------------------------------------------------------------------------------------------
+# The callers `v1-e31-t06` added
+# ------------------------------------------------------------------------------------------------
+
+
+async def test_the_parse_pipeline_stops_rather_than_finding_no_source_to_parse(
+    imported_data_dir: Path, local: LocalEvidence
+) -> None:
+    """`caselist parse` lists a caselist's manifests to find its sources. Three weeks are imported:
+    an unreadable manifest directory used to mean "nothing to parse"."""
+    assert await enumerate_sources(local, SYNTHETIC_CASELIST) != ()
+
+    with refused(imported_data_dir / "objects" / "manifests"), pytest.raises(StoreAccessDenied) as caught:
+        await enumerate_sources(local, SYNTHETIC_CASELIST)
+
+    assert_stopped_on(caught, "the manifest directory", imported_data_dir)
+
+
+async def test_the_parsed_store_publisher_stops_rather_than_publishing_nothing(
+    tmp_path: Path, bucket: S3EvidenceObjectStore, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """The publisher lists one version directory of `<data_dir>/parsed`. Unreadable, the listing
+    used to be empty and the publish a success that had uploaded nothing."""
+    data_dir = tmp_path / "evidence"
+    parsed = FsEvidenceObjectStore(data_dir, subdirectory=Path("parsed"))
+    held = parsed.root / SYNTHETIC_CASELIST / "a-parser-version" / "sources" / "ab" / "a-source.jsonl"
+    held.parent.mkdir(parents=True)
+    held.write_bytes(b'{"an invented": "parsed record"}\n')
+    publisher = ParsedStorePublisher(
+        local=parsed, local_path_for=parsed.path_for, remote=bucket, suppression=empty_suppression_list()
+    )
+
+    with refused(parsed.root), pytest.raises(StoreAccessDenied) as caught:
+        await publisher.publish(SYNTHETIC_CASELIST, "a-parser-version")
+
+    assert_stopped_on(caught, "the parsed-file directory", data_dir)
+    assert keys_in(s3_client, evidence_bucket) == set()

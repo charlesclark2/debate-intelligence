@@ -84,18 +84,21 @@ IMPORTED_CARD_VERIFICATION_STATUS = VerificationStatus.UNVERIFIED
 class CardCompleteness(StrEnum):
     """How much of a card the file actually contained.
 
-    Caselist uploads are not team files. A disclosure often records only that a card exists —
+    Caselist uploads are not team files. A disclosure may record only that a card exists —
     its tag, its cite, and the first and last few words of its body, which is all the open-source
     rules require. Such a card is *abbreviated*, not broken, and it is worth keeping: it is
     evidence that a team read something, and `v1-e31-t04` fingerprints it alongside full cards.
     Padding it out or dropping it would both be lies of a different kind.
+
+    Abbreviated is a shape, not a mark. A whole card whose text leaves something out, with one
+    ellipsis or with ten, is `FULL`: the file holds the card (`v1-e31-t09`).
     """
 
     FULL = "FULL"
-    """Tag, cite and a body that runs from start to finish."""
+    """Tag, cite and a body that runs from start to finish, whatever it leaves out on the way."""
 
     ABBREVIATED = "ABBREVIATED"
-    """A body that carries a wiki-conversion ellipsis marker between its first and last words."""
+    """A body that is only its first and last words: a few words, one ellipsis marker, a few more."""
 
     CITE_ONLY = "CITE_ONLY"
     """A tag and a cite with no body at all."""

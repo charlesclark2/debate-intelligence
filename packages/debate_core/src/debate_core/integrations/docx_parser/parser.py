@@ -15,9 +15,12 @@ classifier does not make, because each needs something the classifier cannot see
   types for a line of analysis as well as for a card's tag, and only the following paragraphs
   tell the two apart.
 * **A card that is only its first and last words is abbreviated, not truncated.** An opencaselist
-  disclosure often records a tag, a cite and an ellipsis between the opening and closing words —
+  disclosure may record a tag, a cite and an ellipsis between the opening and closing words —
   all the open-source rules require. Padding it or dropping it would both misrepresent the file,
-  so it is kept and flagged.
+  so it is kept and flagged. It is told by its *shape*: one ellipsis marker with a few words
+  either side (:data:`MAXIMUM_DISCLOSED_FRAGMENT_WORDS`). An ellipsis on its own proves nothing:
+  the first parse of the corpus called 22,443 cards abbreviated for holding one, and 21,278 of
+  them have a body over 1,000 characters (`v1-e31-t09`).
 * **Page furniture is `OTHER`, whatever style it carries.** A paragraph in a table cell or in a
   text box is a speech-time chart or a page banner, not a card. The classifier resolves a style
   before it looks at where a paragraph sits, so a `Heading4` in a table cell comes back from it
@@ -110,7 +113,8 @@ __all__ = ["DOCX_PARSER_VERSION", "DebateDocxParser"]
 #:
 #: `2026.09.20-docx-1` read the first full corpus. `2026.10.10-docx-2` (`v1-e31-t09`) reads the 23
 #: files it refused for the words `system "` and `public '`, keeps a body paragraph guessed to be
-#: a cite in its card, and no longer takes a blank line in a heading style for a heading.
+#: a cite in its card, no longer takes a blank line in a heading style for a heading, and calls a
+#: card abbreviated for the shape of a first-and-last-words disclosure rather than for an ellipsis.
 DOCX_PARSER_VERSION: Final = "2026.10.10-docx-2"
 
 W_PARAGRAPH: Final = qualified_name("p")
@@ -131,6 +135,19 @@ HEADING_UNITS: Final = (
 #: The units a paragraph with no visible text may still be. Everything else structures the file,
 #: and a blank line structures nothing.
 _UNITS_A_BLANK_PARAGRAPH_KEEPS: Final = (StructuralUnit.OTHER, StructuralUnit.EVIDENCE)
+
+#: The most words a disclosure of a card's first and last words gives on either side of its
+#: ellipsis marker.
+#:
+#: Set from what such a disclosure is, because the corpus has no population of them to measure. The
+#: disclosure rules ask for a card's first and last few words; the profile's own examples give
+#: eight and nine. Of the 19,402 card bodies in the first corpus parse that hold a marker, 11,750
+#: hold exactly one, and in none of those are both sides 15 words or fewer: the shortest longer
+#: side is 17 words, in a whole card with an omission. Twelve sits
+#: in the middle of that gap, above every disclosure we have a model of and below every whole card
+#: the corpus holds. A whole card is never called abbreviated; a disclosure that quoted thirteen
+#: words would be called whole, which is the safe way to be wrong.
+MAXIMUM_DISCLOSED_FRAGMENT_WORDS: Final = 12
 
 #: A body paragraph re-read from a cite guess is no surer than the classifier's own shrunk-text rule.
 _REREAD_BODY_CONFIDENCE: Final = 0.6
@@ -255,6 +272,13 @@ class DebateDocxParser:
     ) -> None:
         self._profile = profile if profile is not None else load_style_profile()
         self._limits = limits
+        # Longest spelling first, so `[...]` is one marker and not a bracket, a marker and a bracket.
+        self._ellipsis_marker = re.compile(
+            "|".join(
+                re.escape(marker)
+                for marker in sorted(self._profile.cite.wiki_ellipsis_markers, key=len, reverse=True)
+            )
+        )
 
     @property
     def parser_version(self) -> str:
@@ -608,7 +632,7 @@ class DebateDocxParser:
 
         body = concatenate_spanned_text(building.evidence_parts)
         full_cite = "\n".join(building.cite_lines).strip()
-        completeness = self._completeness(body.text, full_cite)
+        completeness = self._completeness(body.text)
         cards.append(
             ParsedCard(
                 tag=building.tag,
@@ -644,16 +668,30 @@ class DebateDocxParser:
 
     # -- the two judgements about a card ------------------------------------------------------
 
-    def _completeness(self, evidence_text: str, full_cite: str) -> CardCompleteness:
-        """Decide whether a card is whole, abbreviated or a cite on its own. Goal criterion ac2."""
+    def _completeness(self, evidence_text: str) -> CardCompleteness:
+        """Decide whether a card is whole, abbreviated or a cite on its own.
+
+        From the body alone. A cite carries an ellipsis for its own reasons, a shortened title or
+        a list of authors, and says nothing about how much of the card the file holds.
+        """
         if not evidence_text.strip():
             return CardCompleteness.CITE_ONLY
-        markers = self._profile.cite.wiki_ellipsis_markers
-        if any(marker in evidence_text for marker in markers) or any(
-            marker in full_cite for marker in markers
-        ):
+        if self._is_first_and_last_words(evidence_text):
             return CardCompleteness.ABBREVIATED
         return CardCompleteness.FULL
+
+    def _is_first_and_last_words(self, evidence_text: str) -> bool:
+        """Whether a body has the shape of a disclosure: a few words, one marker, a few words more.
+
+        Exactly one marker, because one joins a beginning to an end and two leave things out of a
+        quotation. Words on both sides of it, because a marker that opens or closes a body joins
+        nothing. And no more than :data:`MAXIMUM_DISCLOSED_FRAGMENT_WORDS` on either side, counted
+        over the whole body, so a line break between the two halves changes nothing.
+        """
+        fragments = self._ellipsis_marker.split(evidence_text)
+        if len(fragments) != 2:
+            return False
+        return all(0 < len(fragment.split()) <= MAXIMUM_DISCLOSED_FRAGMENT_WORDS for fragment in fragments)
 
     def _short_cite(self, full_cite: str) -> str | None:
         """Split the part a debater says out loud off the front of a cite line.

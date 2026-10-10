@@ -771,8 +771,8 @@ def card_with_body(parser: DebateDocxParser, *paragraphs: str, cite: str | None 
 class TestAbbreviatedIsADisclosuresShape:
     """A disclosure of first and last words is a few words, one ellipsis, and a few words more.
 
-    Measured over the 19,402 bodies of the corpus that hold an ellipsis marker: not one has a
-    single marker with 15 words or fewer on both sides, and only 37 are 60 words or shorter in
+    Measured over the 22,053 bodies of the corpus that hold an ellipsis marker: not one has a
+    single marker with 15 words or fewer on both sides, and only 39 are 60 words or shorter in
     all. So the bound is set from what a disclosure is, twelve words a side, and it sits below
     every whole card the corpus holds.
     """

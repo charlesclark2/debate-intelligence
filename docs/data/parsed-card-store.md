@@ -164,7 +164,7 @@ on it is never an empty string. In Python, ask `card.has_tag`.
 | `null` | `FULL` or `ABBREVIATED` | Evidence with a cite and no claim line above it | Either the file is written that way, or it is a second card under the tag of the card before it. Its `rule_ids` say which rule read its cite; a first rule beginning `heuristic-` was a guess |
 
 In `2026.09.20-docx-1` the same thing was written as `"tag": ""`, and `to_parsed_document` reads
-both. That directory also holds 15,528 such cards against 4,446 expected in the next, because
+both. That directory also holds 15,528 such cards against 4,455 expected in the next, because
 about 11,000 of them were not cards the file holds: a paragraph inside a card's body had been
 read as the cite of a new one. A card whose `rule_ids` include
 `assembly-cite-guess-inside-card-body:…` kept such a paragraph in its body.
@@ -179,9 +179,9 @@ first and last words: **exactly one** ellipsis marker (`…`, `...`, `[…]`, `[
 both sides of it, and **no more than twelve** on either side. A marker in the cite decides nothing.
 A whole card whose text leaves something out, once or ten times, is `FULL`.
 
-The bound was set from what a disclosure is, because the corpus has none to measure. Of the 19,402
+The bound was set from what a disclosure is, because the corpus has none to measure. Of the 22,053
 card bodies that hold a marker, none has a single marker with 15 words or fewer on both sides, and
-only 37 are 60 words or shorter in all
+only 38 with a single marker are 60 words or shorter in all
 ([caselist-parse-report.md](caselist-parse-report.md#abbreviated-by-shape)). So over the corpus as
 it stood on 2026-10-10 the new parser calls **no card** `ABBREVIATED`, where the first parse called
 22,443 so. Expect the value to be rare, and treat a store with none as normal.
@@ -189,6 +189,34 @@ it stood on 2026-10-10 the new parser calls **no card** `ABBREVIATED`, where the
 **In `2026.09.20-docx-1`, do not read `ABBREVIATED` as "first and last words only".** There it means
 an ellipsis marker anywhere in the body or the cite, and 21,278 of its 22,443 `ABBREVIATED` cards
 have a body longer than 1,000 characters.
+
+#### What `CITE_ONLY` means, and a body that was filed as a cite
+
+A card is `CITE_ONLY` when the file gives it a cite and no body: its `evidence_text` is empty and
+nothing fingerprints it.
+
+**In `2026.09.20-docx-1`, at least 2,451 of the 5,772 `CITE_ONLY` cards are not that.** The
+classifier guesses that a paragraph holding an ellipsis and a name with a year is a cite entry, at
+any length. When that paragraph was the first of a card's body, it was added to the cite, and a
+card whose whole body is one paragraph was stored with thousands of characters in `full_cite` and
+no evidence text.
+From `2026.10.10-docx-2` such a paragraph opens the body
+([caselist-parse-report.md](caselist-parse-report.md#a-cards-body-filed-as-its-cite)): 2,480 cards
+gain evidence text, and `CITE_ONLY` falls from 4,731 to 2,254 over the same sources.
+
+| A rule id on the card that begins | Says |
+|---|---|
+| `assembly-cite-guess-inside-card-body:` | A guessed cite inside an open body was kept in the body |
+| `assembly-cite-guess-after-card-cite:` | A guessed cite straight after the card's cite, formatted as body, opened the body |
+| `assembly-cite-guess-longer-than-a-cite:` | A guessed cite over 2,000 characters, the first thing under a tag and formatted as body, is the body. The card has no cite: `full_cite` is empty and `short_cite` is `null` |
+
+The part after the colon is the guess that was overruled. A cite read from a cite *style* is never
+re-read, at any length.
+
+**Still expect a long `full_cite` now and then.** 460 `CITE_ONLY` cards hold a cite paragraph of
+more than 100 words after the change. Most are a card written as one paragraph behind a bold name,
+which the parser leaves as the file has it. A short wiki entry of a name, a year and a card's first
+and last words is also still one cite paragraph, and its card is `CITE_ONLY`.
 
 ### `occurrence`: a line of `occurrences.jsonl`
 

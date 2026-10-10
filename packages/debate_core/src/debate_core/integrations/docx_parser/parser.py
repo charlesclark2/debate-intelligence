@@ -41,8 +41,8 @@ classifier does not make, because each needs something the classifier cannot see
   it is the card's next body paragraph (`v1-e31-t09`). A cite *style* is never second-guessed.
 * **A cite guessed before the body has opened is the body's first paragraph in two cases.** The
   rule above needs a body to be open, so the *first* body paragraph a guess misread was still
-  added to the card's cite: 2,184 cards were left with a tag, a cite thousands of characters long
-  and no evidence text at all. Formatted as body in the same sense, and carrying no cite character
+  added to the card's cite: 2,480 cards were left with a cite thousands of characters long and no
+  evidence text at all. Formatted as body in the same sense, and carrying no cite character
   style, such a paragraph opens the body when the card already has a cite, unless it is short
   enough to be a cite entry and another cite follows it. When the card has no cite, only length
   says where one would end, so it opens the body past
@@ -152,8 +152,8 @@ _UNITS_A_BLANK_PARAGRAPH_KEEPS: Final = (StructuralUnit.OTHER, StructuralUnit.EV
 #:
 #: Set from what such a disclosure is, because the corpus has no population of them to measure. The
 #: disclosure rules ask for a card's first and last few words; the profile's own examples give
-#: eight and nine. Of the 19,402 card bodies in the first corpus parse that hold a marker, 11,750
-#: hold exactly one, and in none of those are both sides 15 words or fewer: the shortest longer
+#: eight and nine. Of the 22,053 card bodies this parser reads from the corpus that hold a marker,
+#: 12,988 hold exactly one, and in none of those are both sides 15 words or fewer: the shortest longer
 #: side is 17 words, in a whole card with an omission. Twelve sits
 #: in the middle of that gap, above every disclosure we have a model of and below every whole card
 #: the corpus holds. A whole card is never called abbreviated; a disclosure that quoted thirteen

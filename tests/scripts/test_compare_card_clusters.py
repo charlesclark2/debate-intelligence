@@ -288,6 +288,61 @@ def test_one_pair_is_offered_for_each_cluster_that_joined_another(data_dir: Path
     for pair in pairs:
         assert before[pair.joiner].cluster_id != before[pair.host].cluster_id
         assert after[pair.joiner].cluster_id == after[pair.host].cluster_id
+    # `sample --divided` asks the same question with the two placements exchanged: pairs in one
+    # cluster before and two after. Nothing was divided here.
+    assert script.joined_pairs(after, before) == []
+    assert script.joined_pairs(after, after) == []
+
+
+def test_cards_are_placed_by_the_rules_handed_over_not_the_installed_ones(data_dir: Path) -> None:
+    """`--before-rules` puts four modules from a git ref ahead of the installed package.
+
+    Here the four are today's, with the version string changed in one of them. The child process
+    stamps its placements with that string, which only the copy it was handed contains, and places
+    the cards exactly as this process does.
+    """
+
+    def todays_rules_renamed(module: str) -> bytes:
+        source = (script.PACKAGE_SOURCE / "debate_core" / module).read_bytes()
+        return source.replace(FINGERPRINT_VERSION.encode(), b"card-fingerprint-handed-over")
+
+    store = LocalParsedStore(data_dir)
+    version = script.current_version(store, CASELIST)
+    held = script.read_placements(store.root / CASELIST / version / "occurrences.jsonl")
+    here = script.placements_now(script.read_cards(store, CASELIST, version, held), FINGERPRINT_VERSION)
+
+    handed_over = script.placements_under_rules(todays_rules_renamed, data_dir, CASELIST)
+
+    assert {placement.fingerprint_version for placement in handed_over.values()} == {
+        "card-fingerprint-handed-over"
+    }
+    assert {key: placement.cluster_id for key, placement in handed_over.items()} == {
+        key: placement.cluster_id for key, placement in here.items()
+    }
+
+
+def test_counts_reads_the_earlier_rules_from_a_git_ref(
+    data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With `--before-rules HEAD`, before is the committed rules and after is the store's table.
+
+    The store's table here is the one v1 left, so the comparison reads backwards: three clusters
+    under the committed rules, five in the table, and the two that had joined are divided again.
+    """
+    arguments = ["--data-dir", str(data_dir), "counts", "--caselist", CASELIST, "--before-rules", "HEAD"]
+    assert script.main(arguments) == 0
+    output = capsys.readouterr().out
+    counts = json.loads(output)[CASELIST]
+    assert (counts["clusters_before"], counts["clusters_after"]) == (3, 5)
+    assert (counts["clusters_divided"], counts["clusters_merged_into_another"]) == (2, 0)
+    assert (counts["before_version"], counts["after_version"]) == (FINGERPRINT_VERSION, BEFORE_T08)
+    assert not [word for word in TELLTALE if word in output]
+
+
+def test_a_ref_git_does_not_have_is_refused_by_name(data_dir: Path) -> None:
+    arguments = ["--data-dir", str(data_dir), "counts", "--caselist", CASELIST]
+    with pytest.raises(SystemExit, match="git has no no-such-ref:packages/debate_core"):
+        script.main([*arguments, "--before-rules", "no-such-ref"])
 
 
 def test_sample_refuses_to_show_card_text_to_anything_but_a_terminal(
@@ -315,6 +370,7 @@ def test_the_sample_shows_each_pair_then_clears_it_and_returns_tallies_alone(dat
     tallies = script.run_sample(pairs, ask=lambda _prompt: next(answers), show=shown.append)
 
     assert sum(tallies.values()) == 2
+    assert sum("Newly in one cluster." in text for text in shown) == 2
     assert {verdict for _, verdict in tallies} == {"same card", "different card"}
     assert any("Coastal" in text for text in shown)
     assert shown[-1] == script.CLEAR_TERMINAL

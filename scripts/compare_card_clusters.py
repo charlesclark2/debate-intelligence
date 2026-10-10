@@ -12,20 +12,29 @@ caselist's occurrence table, in two ways:
   judge: same card, different card, unsure (Goal criterion ac5). Only the tallies are printed at
   the end.
 
-**Before and after.** A cluster placement is read from an `occurrences.jsonl`. *Before* is a copy
-of that file saved before `caselist parse` rebuilt it (`--before`), and *after* is the file the
-store holds now. With no `--before`, *before* is the file the store holds now and *after* is
-computed in memory by the checked-out code from the store's per-source files: a preview of the next
-rebuild, which takes about as long as one.
+**Before and after.** A cluster placement is one cluster id per card position. *After* is what
+the store's `occurrences.jsonl` holds now, and *before* is one of:
 
-**Operator-run on the real store.** It writes nothing. It never prints a card's text, tag or cite
-except in `sample`, to a terminal, one pair at a time, cleared before the next; `sample` refuses to
-run when its input or output is not a terminal, so nothing it shows can land in a file or a pipe.
-The store itself holds no path, school or team code (`docs/data/parsed-card-store.md`).
+* `--before FILE`: a copy of that file saved before `caselist parse` rebuilt it. Seconds.
+* `--before-rules REF`: the store's cards placed in memory by the matching rules as they were at
+  git ref `REF`. For when no earlier table exists for these cards: a re-parse under a new parser
+  version writes a new directory, and its first occurrence table is already the new rules'. Takes
+  about as long as a rebuild.
+* neither: *before* is the store's file and *after* is the store's cards placed in memory by the
+  checked-out rules. A preview of the next rebuild, which takes about as long as one.
+
+`sample --divided` shows the opposite change: pairs that shared a cluster before and no longer do.
+
+**Operator-run on the real store.** It writes nothing to the store or the repository;
+`--before-rules` copies source files, never card text, to a temporary directory it removes. It never
+prints a card's text, tag or cite except in `sample`, to a terminal, one pair at a time, cleared
+before the next; `sample` refuses to run when its input or output is not a terminal, so nothing it
+shows can land in a file or a pipe. The store itself holds no path, school or team code
+(`docs/data/parsed-card-store.md`).
 
     uv run python scripts/compare_card_clusters.py counts --caselist openev
     uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --before ~/saved/hsld26.jsonl
-    uv run python scripts/compare_card_clusters.py sample --caselist hsld26 --before ~/saved/hsld26.jsonl
+    uv run python scripts/compare_card_clusters.py sample --caselist hsld26 --before-rules 8c082b5
 """
 
 from __future__ import annotations
@@ -33,8 +42,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import random
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -53,6 +66,7 @@ from debate_core.testing.fakes import build_fake_caselist_repository
 
 __all__ = [
     "ABSORBED_BANDS",
+    "MATCHING_RULE_MODULES",
     "ClusterChange",
     "Joined",
     "Placement",
@@ -61,6 +75,7 @@ __all__ = [
     "joined_pairs",
     "main",
     "placements_now",
+    "placements_under_rules",
     "read_placements",
     "run_sample",
 ]
@@ -72,6 +87,19 @@ type CardKey = tuple[str, int]
 ABSORBED_BANDS = ((2, 2), (3, 5), (6, 20), (21, 100), (101, None))
 
 VERDICTS = {"s": "same card", "d": "different card", "u": "unsure"}
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+PACKAGE_SOURCE = REPO_ROOT / "packages" / "debate_core" / "src"
+
+#: The modules that decide a card's cluster, relative to the `debate_core` package. `--before-rules`
+#: takes these four from a git ref and everything else from the checkout, so the store's records
+#: are read by today's models and placed by that ref's rules.
+MATCHING_RULE_MODULES = (
+    "evidence/fingerprints.py",
+    "evidence/near_duplicates.py",
+    "evidence/abbreviated_links.py",
+    "application/caselist_card_stats.py",
+)
 
 #: Clear the screen and its scrollback, and move to the top: a pair is not left on the terminal.
 CLEAR_TERMINAL = "\x1b[2J\x1b[3J\x1b[H"
@@ -196,6 +224,75 @@ def placements_now(cards: Mapping[CardKey, ParsedCard], fingerprint_version: str
         )
         for key, placement in zip(ordered, placed, strict=True)
     }
+
+
+def _module_at(ref: str) -> Callable[[str], bytes]:
+    def read(module: str) -> bytes:
+        path = f"{ref}:packages/debate_core/src/debate_core/{module}"
+        shown = subprocess.run(["git", "-C", str(REPO_ROOT), "show", path], capture_output=True, check=False)
+        if shown.returncode != 0:
+            raise SystemExit(f"git has no {path}: {shown.stderr.decode('utf-8', 'replace').strip()}")
+        return shown.stdout
+
+    return read
+
+
+def placements_under_rules(
+    read_module: Callable[[str], bytes], data_dir: Path, caselist: str
+) -> dict[CardKey, Placement]:
+    """Place a caselist's stored cards with other matching rules, in a process of their own.
+
+    `read_module` returns the source of each of :data:`MATCHING_RULE_MODULES`. They replace those
+    modules in a temporary copy of the package, which a child process imports ahead of the
+    installed one. The child prints one line of digests and ids per card and no text.
+    """
+    with tempfile.TemporaryDirectory(prefix="card-matching-rules-") as temporary:
+        package = Path(temporary) / "debate_core"
+        shutil.copytree(PACKAGE_SOURCE / "debate_core", package, ignore=shutil.ignore_patterns("__pycache__"))
+        for module in MATCHING_RULE_MODULES:
+            (package / module).write_bytes(read_module(module))
+        environment = dict(os.environ)
+        environment["PYTHONPATH"] = os.pathsep.join(
+            part for part in (temporary, environment.get("PYTHONPATH", "")) if part
+        )
+        child = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "--data-dir",
+                str(data_dir),
+                "place",
+                "--caselist",
+                caselist,
+            ],
+            capture_output=True,
+            text=True,
+            env=environment,
+            check=False,
+        )
+    if child.returncode != 0:
+        # The child's error names a module and a line, and at worst a digest: never card text.
+        raise SystemExit(f"placing {caselist} under the other rules failed:\n{child.stderr.strip()[-2000:]}")
+    placed: dict[CardKey, Placement] = {}
+    for line in child.stdout.splitlines():
+        sha256, element, *fields = json.loads(line)
+        placed[(sha256, element)] = Placement(*fields)
+    return placed
+
+
+def _place(arguments: argparse.Namespace) -> int:
+    """The child of `placements_under_rules`: the store's cards, placed by whatever rules it imports."""
+    from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
+
+    store = LocalParsedStore(arguments.data_dir)
+    for caselist in arguments.caselist:
+        version = current_version(store, caselist)
+        held = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+        placed = placements_now(read_cards(store, caselist, version, held), FINGERPRINT_VERSION)
+        for (sha256, element), placement in sorted(placed.items()):
+            fields = [getattr(placement, name) for name in Placement.__dataclass_fields__]
+            print(json.dumps([sha256, element, *fields]))
+    return 0
 
 
 # ------------------------------------------------------------------------------------------------
@@ -333,12 +430,13 @@ def run_sample(
     *,
     ask: Callable[[str], str],
     show: Callable[[str], None],
+    change: str = "Newly in one cluster.",
 ) -> Counter[tuple[str, str]]:
     """Show each pair, take a verdict for it, and return the tallies by kind and verdict."""
     tallies: Counter[tuple[str, str]] = Counter()
     for number, (caselist, pair, joiner, host) in enumerate(pairs, start=1):
         show(CLEAR_TERMINAL)
-        show(f"Pair {number} of {len(pairs)} ({caselist}, {pair.kind}). Newly in one cluster.\n\n")
+        show(f"Pair {number} of {len(pairs)} ({caselist}, {pair.kind}). {change}\n\n")
         show(_show(joiner, "A"))
         show("\n")
         show(_show(host, "B"))
@@ -356,12 +454,17 @@ def run_sample(
 
 
 def _load(
-    store: LocalParsedStore, caselist: str, before_file: Path | None
+    arguments: argparse.Namespace, store: LocalParsedStore, caselist: str
 ) -> tuple[str, dict[CardKey, Placement], dict[CardKey, Placement]]:
+    """The version directory read, and the placements before and after."""
     version = current_version(store, caselist)
     held = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
-    if before_file is not None:
-        return version, read_placements(before_file), held
+    if arguments.before is not None:
+        before: Path = arguments.before
+        return version, read_placements(before / f"{caselist}.jsonl" if before.is_dir() else before), held
+    if arguments.before_rules is not None:
+        earlier = placements_under_rules(_module_at(arguments.before_rules), arguments.data_dir, caselist)
+        return version, earlier, held
     from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
     cards = read_cards(store, caselist, version, held)
@@ -373,18 +476,11 @@ def _counts(arguments: argparse.Namespace) -> int:
     results: dict[str, dict[str, object]] = {}
     for caselist in arguments.caselist:
         started = time.monotonic()
-        _, before, after = _load(store, caselist, _before_file(arguments, caselist))
+        _, before, after = _load(arguments, store, caselist)
         change = compare(before, after)
         results[caselist] = {**change.as_json(), "seconds": round(time.monotonic() - started, 1)}
     print(json.dumps(results, indent=2, sort_keys=True))
     return 0
-
-
-def _before_file(arguments: argparse.Namespace, caselist: str) -> Path | None:
-    if arguments.before is None:
-        return None
-    before: Path = arguments.before
-    return before / f"{caselist}.jsonl" if before.is_dir() else before
 
 
 def _sample(arguments: argparse.Namespace) -> int:
@@ -396,16 +492,24 @@ def _sample(arguments: argparse.Namespace) -> int:
     store = LocalParsedStore(arguments.data_dir)
     seed = arguments.seed if arguments.seed is not None else random.SystemRandom().randrange(10**9)
     candidates: list[tuple[str, str, Joined]] = []
+    counts: dict[str, dict[str, object]] = {}
     for caselist in arguments.caselist:
-        version, before, after = _load(store, caselist, _before_file(arguments, caselist))
-        candidates.extend((caselist, version, pair) for pair in joined_pairs(before, after))
+        print(f"Reading {caselist} ...", flush=True)
+        version, before, after = _load(arguments, store, caselist)
+        counts[caselist] = compare(before, after).as_json()
+        # A pair that was divided is a pair that joined, read from after to before.
+        changed = joined_pairs(after, before) if arguments.divided else joined_pairs(before, after)
+        candidates.extend((caselist, version, pair) for pair in changed)
     drawn = random.Random(seed).sample(candidates, min(arguments.count, len(candidates)))
     pairs: list[tuple[str, Joined, ParsedCard, ParsedCard]] = []
     for caselist, version, pair in drawn:
         cards = read_cards(store, caselist, version, [pair.joiner, pair.host])
         pairs.append((caselist, pair, cards[pair.joiner], cards[pair.host]))
-    tallies = run_sample(pairs, ask=input, show=lambda text: print(text, end="", flush=True))
-    print(f"Drew {len(pairs)} of {len(candidates)} newly joined pairs, seed {seed}.")
+    change = "No longer in one cluster." if arguments.divided else "Newly in one cluster."
+    tallies = run_sample(pairs, ask=input, show=lambda text: print(text, end="", flush=True), change=change)
+    print(json.dumps(counts, indent=2, sort_keys=True))
+    what = "divided" if arguments.divided else "newly joined"
+    print(f"Drew {len(pairs)} of {len(candidates)} {what} pairs, seed {seed}.")
     for (kind, verdict), count in sorted(tallies.items()):
         print(f"  {kind}: {verdict}: {count}")
     return 0
@@ -420,21 +524,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="The data directory whose parsed/ store is read. Default: the dev data directory.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    for name, handler in (("counts", _counts), ("sample", _sample)):
+    for name, handler in (("counts", _counts), ("sample", _sample), ("place", _place)):
         command = commands.add_parser(name)
         command.add_argument("--caselist", action="append", required=True, help="Repeat for several.")
-        command.add_argument(
+        command.set_defaults(handler=handler)
+        if name == "place":
+            continue  # run by --before-rules in a child process; prints digests and ids
+        earlier = command.add_mutually_exclusive_group()
+        earlier.add_argument(
             "--before",
             type=Path,
-            help=(
-                "An occurrences.jsonl saved before the rebuild, or a directory of <caselist>.jsonl. "
-                "Without it, the store's file is 'before' and the checked-out rules compute 'after'."
-            ),
+            help="An occurrences.jsonl saved before the rebuild, or a directory of <caselist>.jsonl.",
         )
-        command.set_defaults(handler=handler)
+        earlier.add_argument(
+            "--before-rules",
+            metavar="GIT_REF",
+            help="Place the store's cards with the matching rules as they were at this git ref.",
+        )
         if name == "sample":
             command.add_argument("--count", type=int, default=20)
             command.add_argument("--seed", type=int)
+            command.add_argument(
+                "--divided",
+                action="store_true",
+                help="Draw pairs that shared a cluster before and no longer do.",
+            )
     arguments = parser.parse_args(argv)
     handler: Callable[[argparse.Namespace], int] = arguments.handler
     return handler(arguments)

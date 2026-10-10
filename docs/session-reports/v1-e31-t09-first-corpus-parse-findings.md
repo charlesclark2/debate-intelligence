@@ -1253,9 +1253,81 @@ repository all the same. Whoever closes ac4 records the counts in
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+Changes 1 to 3 are accepted as they stand. I am asking for one more change, the one you raised,
+for the same reason as last time, and this time the arithmetic is harder. The operator's disk
+has 15 GB free. This re-parse takes about 6 GB. A third parser version later would need another
+6 GB that is not there unless the first version directory is deleted first. So the body-in-cite
+fix goes into this version, or it waits behind a retention task. **This is the last addition to
+this task's scope.** Anything else you find goes under Follow-up work, and I will not widen the
+task again.
+
+**On Changes 1 to 3:**
+
+* **Change 1 is right, including its uncomfortable result.** The histogram has no second
+  population. You said so plainly, chose the bound that calls no whole card abbreviated, and
+  showed that every bound from 9 to 16 gives the same answer. Zero `ABBREVIATED` cards in the
+  corpus is a measurement, not a defect. Your second finding explains it: where a
+  first-and-last-words entry exists, the wiki heuristic files it as a cite.
+* **It corrects a premise that came from me.** The briefs for t06 and t08 said abbreviated
+  disclosures dominate wiki-converted caselists. In this corpus they do not: at most 84 cite
+  entries are 40 words or fewer. t08's abbreviation linking is still correct, but it matters less
+  than I said. I will tell t08's operator sample to expect it.
+* **Saying which fixtures could not fail first,** and naming the mutants that prove them instead,
+  is what working agreement 8 asks. Deleting the sort that no mutant could detect is the same
+  discipline.
+* **Change 2, with Deviation 11:** accepted. Refusing `""` in a version-2 document is what makes
+  the version mean something. The stored version-1 fixture, written by the old build and never
+  regenerated, is the right kind of compatibility test.
+* **Deviations 12 to 15:** accepted. Delete the scratch files of numbers when the task closes.
+* **The rebase that stopped with "local changes would be overwritten" on a clean tree:** noted.
+  You checked the result by re-running everything, which is what mattered.
+
+**Change 4: body text filed as cite (ac7, added to the spec in this branch).**
+
+* **The rule you proposed:** a cite guessed by a heuristic after the card already has a cite,
+  and formatted as body by your existing rule, opens the body. It reaches about 2,652 of the
+  3,515 long heuristic cite paragraphs. A cite style decides nothing here and stays a cite,
+  whatever its length. 2,846 long paragraphs come from a cite character style, and they may be
+  real long cites.
+* **The 863 with no cite before them:** a heuristic cite becomes body only past a length bound.
+  Derive the bound from read-only counts, as you did for Change 1. Compare the word lengths of
+  heuristic cite paragraphs with those of cite-style cites (35 over 200 words in about 140,000),
+  and choose the conservative side, so that a real cite entry is never moved. If the
+  distribution does not separate, say so and leave the 863 alone. That is an acceptable
+  outcome.
+* **Fixtures, synthetic, each shown failing first, or named with the mutant that proves it:**
+  * a body paragraph after the card's cite, formatted as body, opens the body;
+  * the same paragraph formatted as a cite stays a cite;
+  * a cite-style paragraph of 300 words stays a cite;
+  * a first heuristic cite past the bound, formatted as body, is body;
+  * a short wiki cite entry ("name, year, first words … last words") stays a cite;
+  * a card with two real cites keeps both.
+* **Measure it on the corpus,** under the same version, read-only:
+  * `CITE_ONLY` per caselist before and after;
+  * how many cards gain evidence text;
+  * changes to card totals and no-tag counts;
+  * confirmation that no other field moves for the cards it does not reach.
+
+  Re-check the two corrected evaluation files.
+* **Mutation, each one shown caught:** a cite style moved to body; the "already has a cite"
+  condition dropped; the formatting condition dropped; the length bound removed.
+* **Update the operator follow-ups:** every expected count that Change 4 moves.
+
+**The short wiki entries that are really abbreviated disclosures (at most 84)** stay
+`CITE_ONLY`. Splitting an entry into its cite and its words is a model question. The PM files it
+for E31 after this task closes. It is not part of this change.
+
+**When you resubmit:**
+
+* Append a second revision section with the evidence for Change 4.
+* Re-run the full suite and the gates.
+* Add a new, empty PM review after this one.
+
+ac4 stays NOT RUN, and the Goal stays `InProgress`.

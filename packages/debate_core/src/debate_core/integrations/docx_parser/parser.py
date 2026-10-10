@@ -43,8 +43,9 @@ classifier does not make, because each needs something the classifier cannot see
   rule above needs a body to be open, so the *first* body paragraph a guess misread was still
   added to the card's cite: 2,184 cards were left with a tag, a cite thousands of characters long
   and no evidence text at all. Formatted as body in the same sense, and carrying no cite character
-  style, such a paragraph opens the body when the card already has a cite. When the card has none,
-  only length says where a cite would end, so it opens the body past
+  style, such a paragraph opens the body when the card already has a cite, unless it is short
+  enough to be a cite entry and another cite follows it. When the card has no cite, only length
+  says where one would end, so it opens the body past
   :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` and not when it opens with a name and a year
   (`v1-e31-t09`). A guess that arrives with no card open stays the cite of a card with no tag:
   re-read as body it would belong to nothing and be dropped.
@@ -453,7 +454,11 @@ class DebateDocxParser:
         return _reread_as_body(section, "assembly-cite-guess-inside-card-body")
 
     def _open_the_body_with_a_guessed_cite(
-        self, section: _ReadSection, building: _CardUnderConstruction | None
+        self,
+        section: _ReadSection,
+        building: _CardUnderConstruction | None,
+        *,
+        a_cite_follows: bool,
     ) -> _ReadSection:
         """Re-read a cite guessed before the card's body has opened as the body's first paragraph.
 
@@ -468,7 +473,11 @@ class DebateDocxParser:
         * **the card already has a cite**, so the paragraph is not the only cite the card has.
           Failing that, it must be longer than any cite entry
           (:data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS`) and must not open with a name and a year,
-          which is where a cite run together with its card would have its cite.
+          which is where a cite run together with its card would have its cite;
+        * **it is not a line in the middle of a cite.** A paragraph short enough to be a cite
+          entry, with the card's cite above it and another cite right below, is left where it is.
+          Re-read as body it would end the card at the cite below, and the real body under that
+          would go to a card with no tag.
 
         With no card open the paragraph is left the cite of a card with no tag. Re-read as body it
         would belong to no card, and :meth:`_close` drops a body with neither tag nor cite.
@@ -480,12 +489,35 @@ class DebateDocxParser:
             return section
         if not self._is_formatted_as_body(section.read) or self._carries_a_cite_style(section.read):
             return section
-        if building.has_cite:
-            return _reread_as_body(section, "assembly-cite-guess-after-card-cite")
         text = section.read.text
-        if len(text) > LONGEST_GUESSED_CITE_ENTRY_CHARACTERS and self._short_cite(text) is None:
+        longer_than_a_cite_entry = len(text) > LONGEST_GUESSED_CITE_ENTRY_CHARACTERS
+        if building.has_cite:
+            if a_cite_follows and not longer_than_a_cite_entry:
+                return section
+            return _reread_as_body(section, "assembly-cite-guess-after-card-cite")
+        if longer_than_a_cite_entry and self._short_cite(text) is None:
             return _reread_as_body(section, "assembly-cite-guess-longer-than-a-cite")
         return section
+
+    def _followed_by_a_cite(self, sections: Sequence[_ReadSection]) -> list[bool]:
+        """For each paragraph, whether the next one that says anything is a cite that stays a cite.
+
+        Blank lines and page furniture are stepped over. A cite stays a cite unless it is a guess
+        formatted as body, which an open body takes for itself
+        (:meth:`_keep_a_guessed_cite_in_its_body`).
+        """
+        followed = [False] * len(sections)
+        a_cite_is_next = False
+        for position in range(len(sections) - 1, -1, -1):
+            followed[position] = a_cite_is_next
+            section = sections[position]
+            match = section.match
+            if match.unit is StructuralUnit.OTHER:
+                continue
+            a_cite_is_next = match.unit is StructuralUnit.CITE and not (
+                match.match_source is StyleMatchSource.HEURISTIC and self._is_formatted_as_body(section.read)
+            )
+        return followed
 
     def _carries_a_cite_style(self, read: ReadParagraph) -> bool:
         """Whether any visible run is in a cite character style, as the classifier's style rule asks."""
@@ -535,9 +567,12 @@ class DebateDocxParser:
         building: _CardUnderConstruction | None = None
         deletions_dropped = 0
 
-        for read_section in read_sections:
+        followed_by_a_cite = self._followed_by_a_cite(read_sections)
+        for read_section, a_cite_follows in zip(read_sections, followed_by_a_cite, strict=True):
             section = self._keep_a_guessed_cite_in_its_body(read_section, building)
-            section = self._open_the_body_with_a_guessed_cite(section, building)
+            section = self._open_the_body_with_a_guessed_cite(
+                section, building, a_cite_follows=a_cite_follows
+            )
             unit = section.match.unit
             deletions_dropped += section.read.deletions_dropped
 

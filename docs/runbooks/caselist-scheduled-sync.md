@@ -175,12 +175,11 @@ DEBATE_ENV=dev debate-research caselist pull --caselist hsld26
 
 Success is exit `0` with `publish: completed` and `report: completed` in the stage table.
 Exit `0` with `publish: pending` means the SSO session expired after the import: what was captured
-is safe, and [When something goes wrong](#when-something-goes-wrong) says how to finish it. Exit `1` means
-a stage did not complete; the stage table names it and why, and that includes a stage that failed
-because the bucket did not answer. Exit `3` means the bucket did not answer before any stage could
-record it, as `error.code` says (`STORE_CREDENTIALS_EXPIRED`, `STORE_ACCESS_DENIED` or
-`STORE_UNAVAILABLE`): log in again if it is the session, then run the same command. Exit `70` is a
-bug. The agent never retries any of them on its own; the next attempt is next week's run.
+is safe, and [When something goes wrong](#when-something-goes-wrong) says how to finish it.
+Exit `3` and exit `1` both mean a download, an import or a publish did not complete, and
+[What the exit code says](#what-the-exit-code-says) says which is which: `3` is transient and the
+next run retries it, `1` is a verdict someone has to look at. Exit `70` is a bug. The agent never
+retries any of them on its own; the next attempt is next week's run.
 `parse: skipped` and `landscape: skipped` are expected until E31 and E32 ship — those stages are
 optional by design and cannot fail a run whose bytes are already captured.
 
@@ -315,14 +314,74 @@ One JSON object per run on stdout. The fields to read first:
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
 | `full_archive` | What the complete-archive rotation decided and why (`reason`), what the weeklies left of the day's allowance, and for a complete archive imported, its `bytes` and its `withdrawn` and `superseded` counts. See [The complete archive](#the-complete-archive) |
 | `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
-| `stages[]` | One entry per stage, each with the sentence saying why it ended that way |
+| `stages[]` | One entry per stage, each with the sentence saying why it ended that way (`reason`). A failed stage also carries `error_codes`, the code of each failure behind it, and, when a store refused it, `hint`, the fix that applies (`v1-e34-t13`). See [What the exit code says](#what-the-exit-code-says) |
+| `schema_version` | `4` since `v1-e34-t13`, which added the two fields above to every stage. A summary written by an older build says `3` and has neither. Nothing reads a summary back; `caselist runs` reads the run log, which builds of both kinds read and write alike |
 
 Nothing in that object is a school, a team code, a debater's initials, a disclosure path, a camp
 file's title or the `caselist_token` — the policy forbids all of them in a log, and the summary is
 built to the same rule, so these logs can be pasted into an issue as they are. A camp download is
 named by its OpenEv id, `openev-777`, with `(sha256 2b912c191a8a)` once the run has its bytes, and
 never by its file name, which is its title (`v1-e34-t12`). Summaries and logs written before that
-change may still name camp files, so check older ones before pasting them.
+change may still name camp files, so check older ones before pasting them. A failed stage's reason,
+codes and hint name no path on this Mac either: a folder the operating system refused is named by
+what it is for, and the data directory and the inbox by those names (`v1-e34-t13`).
+
+## What the exit code says
+
+A run that captured everything exits `0`. When a download, an import or a publish did not complete,
+the exit code says whether doing nothing is enough (`v1-e34-t13`). Each failed stage records the
+error code of every failure behind it, in `stages[].error_codes`, and the command reads the codes
+of the stages that had to finish (select, download, import, publish). The envelope's `error.code`
+is `CASELIST_PULL_INCOMPLETE` either way.
+
+| Exit | Means | What to do |
+|---|---|---|
+| `0` | Every stage that puts bytes somewhere durable finished. That includes a run that found nothing new, one whose `publish` is `pending` on an expired SSO session, and one where only `report` or `retention` failed | Nothing, or what the stage table names. `publish: pending` is under [When something goes wrong](#when-something-goes-wrong) |
+| `3` | **Transient.** Every failure is one a later run may not meet | Usually nothing: next week's run retries it, and what was captured is kept. Read the failed stage's `hint` first; a refused store has a fix to make before the retry helps |
+| `1` | **A verdict.** At least one failure will be the same next time, or the run was refused before it started | Read the failed stage's reason and deal with what it names |
+| `70` | A bug | Report it |
+
+The agent never runs again on any exit code: launchd records the number and waits for next week's
+slot. A `3` on Wednesday therefore means "next Wednesday's run, or the same command by hand now".
+
+Which failure is which:
+
+| The stage failed because | `error_codes` | Exit |
+|---|---|---|
+| The bucket did not answer: a 5xx, a throttle, a timeout | `STORE_UNAVAILABLE` | `3` |
+| The bucket refused the profile: it is signed in and lacks a grant | `STORE_ACCESS_DENIED` | `3`, with a `hint` |
+| This Mac refused a folder under the data directory | `STORE_ACCESS_DENIED` | `3`, with a `hint` |
+| OpenCaselist answered a download with a 5xx, or the connection failed or timed out, and the client's retries ran out | `PROVIDER_UNAVAILABLE` | `3` |
+| OpenCaselist rate-limited a download, and it was not the daily cap | `PROVIDER_RATE_LIMITED` | `3` |
+| The daily cap, on a weekly archive | none: the stage completes and the week is deferred | `0` |
+| The daily cap, on a camp file | `DAILY_DOWNLOAD_LIMIT_REACHED` | `1`: a verdict for the day |
+| OpenCaselist answered `401` or `403`: the `caselist_token` expired. Never retried, by policy | `CASELIST_AUTH_EXPIRED` | `1` |
+| The file host no longer serves an archive it listed | `ARCHIVE_UNAVAILABLE` | `1` |
+| An archive is over `caselist.max_archive_bytes` | `ARCHIVE_TOO_LARGE` | `1` |
+| A download did not arrive whole | `DOWNLOAD_INTEGRITY_ERROR` | `1` |
+| A zip cannot be read | `UNREADABLE_ARCHIVE` | `1` |
+| A copy of the suppression list has a line nobody can read | `UNREADABLE_APPEND_ONLY_RECORD` | `1` |
+| A source's bytes in the bucket are not the ones its key names | `CHECKSUM_MISMATCH` | `1` |
+| `--full-archive` cannot be covered by the day's allowance | none: the run is refused before any stage, with `error.code` `FULL_ARCHIVE_REFUSED` | `1` |
+| Anything with a code that is on neither list, or with no code | for example `INTERNAL_ERROR` | `1` |
+
+One failure of the second kind among any number of the first makes the run a `1`: a week that
+cannot be read is not fixed by the bucket coming back. A failure that ends the run before any stage
+records it, such as OpenCaselist not answering the listing, exits as it does in every other command:
+`3` for a store or a provider that did not answer, with that failure's own `error.code`.
+
+**A `hint` on a failed stage is the fix that applies, and it is never a login.** Two refusals have
+one, and they are told apart by where the refusal came from:
+
+* *This Mac refused a folder.* The hint names the folder by what it is for ("the blob directory",
+  "the manifest directory") and the setting `storage.data_dir`. Check that the user the agent runs
+  as can read and write the data directory, then run the command again.
+* *The bucket refused the profile.* The hint says the profile lacks a grant and points at
+  [`evidence-store.md`](evidence-store.md), which lists what each profile is granted and how to
+  check it. `aws sso login` does not change a grant.
+
+Before `v1-e34-t13` both were reported as `publish: pending` with a notification naming
+`aws sso login`, and a failed stage exited `1` whatever it failed on.
 
 ## The complete archive
 
@@ -482,12 +541,33 @@ Measure the inbox before and after with `du -sh <data_dir>/inbox`.
 
 ## When something goes wrong
 
-**`pending_publish` is not empty.** The SSO session expired. Log in and drain it:
+**`pending_publish` is not empty, and `publish` is `pending`.** The SSO session expired. Log in
+and drain it:
 
 ```bash
 aws sso login --profile debate-prod-evidence
 debate-research caselist pull --publish-pending
 ```
+
+**`pending_publish` is not empty, and `publish` is `failed`.** The snapshots are imported and still
+owed, and logging in is not the fix. If the stage has a `hint`, a store refused it: make the fix the
+hint names (a permission on the data directory, or a grant; see
+[What the exit code says](#what-the-exit-code-says)). If its code is `STORE_UNAVAILABLE`, the bucket
+did not answer and there is nothing to fix. Either way the next scheduled run publishes them, or
+drain them now:
+
+```bash
+debate-research caselist pull --publish-pending
+```
+
+**`report: failed` with a `hint`, and exit `0`.** Everything was published, and the comparison that
+confirms it was refused. Nothing is lost and nothing waits for a login, but nothing leaves the inbox
+until a run can confirm it. Make the fix the hint names; the next run confirms and clears the inbox.
+
+**The run stopped with `STORE_ACCESS_DENIED` before fetching anything.** This Mac refused the
+manifest folder, so the run could not tell which weeks it already holds. It stops there rather than
+take every listed week for new and fetch them all again, which is what an unreadable folder used to
+cause. Fix the permission on the data directory and run the command again.
 
 **`another caselist sync is already running`.** A run holds the lock at
 `<data_dir>/caselist-sync.lock`. It is an `flock`, so the kernel drops it when the process ends —
@@ -501,9 +581,10 @@ maintainer, not to work around it.
 
 **A download failed.** What did download is imported, up to the first week that did not arrive,
 and leaves the inbox once the bucket confirms it; a newer week of the same caselist waits in the inbox behind it rather than being
-imported out of order. Nothing needs doing: the next scheduled run fetches the missing week and
+imported out of order. With exit `3` nothing needs doing: the next scheduled run fetches the missing week and
 imports it and everything behind it, oldest first, and it does not fetch again anything already
-in the inbox — each fetch spends one of the five.
+in the inbox — each fetch spends one of the five. With exit `1` the download stage's reason says
+what will be the same next week (see [What the exit code says](#what-the-exit-code-says)).
 
 **An import failed** (`import: failed`, with the archive and the reason in its detail). The archive
 stays in the inbox, and the next run imports it from there without downloading it again, then the

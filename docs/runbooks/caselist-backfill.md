@@ -530,10 +530,11 @@ changed and both status results in a dated section of
 
 | What happened | What to do |
 |---|---|
+| A `pull` exited `3` | Transient (`v1-e34-t13`): every failed stage failed on something a later run may not meet, such as the bucket or OpenCaselist not answering. Read the failed stage's `hint` first, in case a store refused it. Otherwise run the same command again. Nothing captured is lost, and what was not published stays owed |
 | A `pull` exited `1` at **download** | `caselist runs --last 3` names the stage. Run the same command again. An archive already in the inbox is not fetched twice |
 | A `pull` exited `1` at **import** | Fix the cause, then run the same command again. The archive stays in `~/.debate-research/dev/inbox/` with no manifest, and since `v1-e34-t06` the next run imports it from there (`already_in_inbox`) without spending a download. A caselist's weeks are imported oldest first and stop at the first gap, so anything newer waits in the inbox for that week. No hand import is needed |
 | The inbox is empty after a run | Expected. Since `v1-e34-t11`, the last stage of every real run (**retention**) deletes a download once a manifest on this machine came from its bytes and that snapshot is confirmed in sync in the bucket. A download that is not yet imported or not yet confirmed stays, and the run summary's `inbox_retention` names it with the reason. A deleted weekly is never fetched again by `pull`, because its week is `already_imported`; the site's back-catalogue keeps it if it is ever needed by hand. The final backfill run cleared 37 files, 3,527,154,833 bytes, leaving the inbox at 0 B |
-| `pending_publish` is not empty | `aws sso login --profile debate-dev-evidence`, then `caselist pull --publish-pending` |
+| `pending_publish` is not empty | With `publish: pending`, the session expired: `aws sso login --profile debate-dev-evidence`, then `caselist pull --publish-pending`. With `publish: failed`, logging in is not the fix: do what the stage's `hint` or reason names first, then `caselist pull --publish-pending`. See the scheduled-sync runbook, "When something goes wrong" |
 | `another caselist sync is already running` | Another `pull` holds the lock; wait for it. See the scheduled-sync runbook if none is running |
 | `SnapshotOutOfOrder` on a manual import | Stop. Something newer is already held. Never pass `--allow-out-of-order` in this backfill |
 | `caselist status` shows drift | Re-run the `caselist publish` for that caselist. A checksum mismatch needs a person |

@@ -208,6 +208,13 @@ expired session); a `1` will not until you deal with what it names. An `--apply`
 on past failed objects is a `3` only when every one of them failed because the bucket did not
 answer.
 
+A `3` is also this computer refusing one of its own evidence folders: the error is
+`STORE_ACCESS_DENIED`, it names the folder by what it is for ("the manifest directory", "the blob
+directory"), and its hint names the setting `storage.data_dir`. Logging in to AWS does not help
+there. Check that your user can read and write the data directory, then run the command again.
+Until `v1-e34-t13` a folder that could not be read looked empty, so `store sync` reported nothing
+to push and `caselist status` reported everything as missing.
+
 ## The first sync of a whole corpus
 
 A first push of the hsld26 caselist snapshots is roughly 2,300 files and about 300 MB. That is one

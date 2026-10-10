@@ -60,7 +60,13 @@ from .test_inbox_retention import (
     removed,
     weekly_name,
 )
-from .test_pull_stage_failure_codes import assert_names_nothing_of_this_machine, pull, stage
+from .test_pull_stage_failure_codes import (
+    RefusingBucket,
+    assert_names_nothing_of_this_machine,
+    outage,
+    pull,
+    stage,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -736,6 +742,8 @@ async def test_a_pull_that_finds_the_file_unreadable_leaves_it_and_fails_publish
     assert published["outcome"] == "failed"
     assert published.get("error_codes") == ["PENDING_WORK_UNREADABLE"]
     assert "the pending-work file under storage.data_dir" in str(published.get("hint"))
+    assert "docs/runbooks/caselist-scheduled-sync.md" in str(published.get("hint"))
+    assert RUNBOOK.is_file()
     assert pending_file(installation).read_bytes() == contents
     assert summary.failure_codes == ("PENDING_WORK_UNREADABLE",)
     assert not summary.succeeded
@@ -762,6 +770,28 @@ async def test_an_unreadable_file_and_an_expired_session_fail_publish_and_name_w
     published = stage(summary, SyncStage.PUBLISH)
     assert published["outcome"] == "failed"
     assert published.get("error_codes") == ["PENDING_WORK_UNREADABLE"]
+    assert pending_file(installation).read_bytes() == b"{not json at all"
+    assert confirmed_in(s3_client, evidence_bucket) == []
+    assert summary.pending_publish == (OWED_1,)
+    assert "not recorded as owed: testcl26 2026-09-01" in str(published["reason"])
+    assert_names_nothing_of_this_machine(summary, installation)
+
+
+async def test_an_unreadable_file_and_a_bucket_that_did_not_answer_record_both_and_the_verdict_decides(
+    installation: Installation, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """The outage alone would be a run a retry cures. The file is not: both codes are recorded, so
+    the one a person has to look at is not hidden behind the one that passes by itself."""
+    installation.data_dir.mkdir(parents=True)
+    pending_file(installation).write_bytes(b"{not json at all")
+    source = FakeSource(installation.archives, weeks=[WEEK_1])
+
+    summary = await installation.sync(source, publish_to=RefusingBucket(outage())).run([CASELIST])
+
+    published = stage(summary, SyncStage.PUBLISH)
+    assert published["outcome"] == "failed"
+    assert published.get("error_codes") == ["STORE_UNAVAILABLE", "PENDING_WORK_UNREADABLE"]
+    assert summary.failure_codes == ("STORE_UNAVAILABLE", "PENDING_WORK_UNREADABLE")
     assert pending_file(installation).read_bytes() == b"{not json at all"
     assert confirmed_in(s3_client, evidence_bucket) == []
     assert summary.pending_publish == (OWED_1,)
@@ -830,6 +860,36 @@ def test_a_write_that_dies_part_way_leaves_the_file_as_it_was(
     assert PendingWork(path).read() == (PendingSnapshot("testcl26", "2026-09-08"),)
     left = sorted(one.name for one in tmp_path.iterdir())
     assert left == [PENDING_WORK_FILE], "a part-written file was left behind"
+
+
+# ------------------------------------------------------------------------------------------------
+# ac4: the runbook's account of the file is the file
+# ------------------------------------------------------------------------------------------------
+
+RUNBOOK = Path(__file__).resolve().parents[5] / "docs" / "runbooks" / "caselist-scheduled-sync.md"
+
+
+def test_the_runbook_names_the_pending_work_file_and_its_example_is_one_the_sync_reads(
+    tmp_path: Path,
+) -> None:
+    """The hint of an unreadable file sends a person to the runbook for the file's name and shape,
+    to write it again by hand. So the name there is the one the sync uses, and the example there,
+    copied out as it stands, reads back as the three snapshots it shows."""
+    runbook = RUNBOOK.read_text(encoding="utf-8")
+    section = runbook.split("\n## The pending-work file\n", 1)[1].split("\n## ", 1)[0]
+    example = section.split("```json\n", 1)[1].split("```", 1)[0]
+    copied = tmp_path / sync_module.PENDING_WORK_FILENAME
+    copied.write_text(example, encoding="utf-8")
+
+    assert sync_module.PENDING_WORK_FILENAME == PENDING_WORK_FILE
+    assert f"<data_dir>/{PENDING_WORK_FILE}" in section
+    assert PendingWork(copied).read() == (
+        PendingSnapshot("hsld26", "2026-10-07"),
+        PendingSnapshot("hsld26", "full/2026-10-07"),
+        PendingSnapshot("openev", "2026-policy"),
+    )
+    assert "Checking it is empty after a retry" in section
+    assert "PENDING_WORK_UNREADABLE" in section
 
 
 # ------------------------------------------------------------------------------------------------

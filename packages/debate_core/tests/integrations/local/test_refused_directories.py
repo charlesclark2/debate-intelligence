@@ -216,7 +216,7 @@ class TestTheVersionStore:
 
         assert (tmp_path / "taken-out" / "copy").read_bytes() == b"a synthetic disclosed file\n"
 
-    async def test_the_parsed_tree_is_named_as_the_parsed_file_directory(self, data_dir: Path) -> None:
+    async def test_the_parsed_tree_is_named_as_the_parsed_card_store(self, data_dir: Path) -> None:
         parsed = FsEvidenceVersionStore(data_dir / "parsed")
         (parsed.root / "hsld26").mkdir(parents=True)
         (parsed.root / "hsld26" / "a-parsed-file.json").write_bytes(b"{}\n")
@@ -224,7 +224,7 @@ class TestTheVersionStore:
         with refused(parsed.root), pytest.raises(StoreAccessDenied) as caught:
             await parsed.list_versions("hsld26/")
 
-        assert_refused(caught, operation="list", role="the parsed-file directory", data_dir=data_dir)
+        assert_refused(caught, operation="list", role="the parsed card store", data_dir=data_dir)
 
     async def test_a_root_that_does_not_exist_still_lists_nothing(self, data_dir: Path) -> None:
         assert await FsEvidenceVersionStore(data_dir / "parsed").list_versions("hsld26/") == ()

@@ -38,8 +38,9 @@ from debate_core.application.ports.parsed_store import (
 from debate_core.domain.card_occurrence import ClusterMembership
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import CardCompleteness, ParsedDocument, ParseFailureReason
-from debate_core.integrations.docx_parser import DebateDocxParser
+from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.integrations.local.parsed_store import LocalParsedStore, UnreadableParsedStore
+from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 from debate_core.testing.fakes import InMemoryParsedStore
 
 FIXTURE: Final = (
@@ -50,7 +51,9 @@ FIXTURE: Final = (
     / "structural"
     / "team-verbatim-file.docx"
 )
-PARSER: Final = "2026.09.20-docx-1"
+#: The running parser's version: the documents here are read by the real parser, and a record is
+#: filed under the version that read it.
+PARSER: Final = DOCX_PARSER_VERSION
 PROFILE: Final = "2026.09.20-verbatim-1"
 FINGERPRINTS: Final = "card-fingerprint-v1"
 #: A fictional disclosure path, in the shape a real one has: it names a school and a team code.
@@ -320,6 +323,90 @@ async def test_no_file_names_the_disclosure_path_or_anything_in_it(
     written = "".join(path.read_text(encoding="utf-8") for path in store.root.rglob("*.jsonl"))
     for fragment in ("Maple Grove", "QX", "Grove City", "source_path"):
         assert fragment not in written
+
+
+@pytest.fixture(scope="module")
+def parsed_with_an_untagged_card() -> ParsedDocument:
+    """An invented file of two cards under one tag: the second has a cite, a body and no tag."""
+
+    def cite(name: str) -> str:
+        return paragraph_xml(
+            run_xml(name, bold=True, half_points=26) + run_xml(", Journal of Grid Studies.", half_points=22)
+        )
+
+    def body(text: str) -> str:
+        return paragraph_xml(run_xml(text, underline="single", highlight="cyan", half_points=22))
+
+    content = build_docx(
+        paragraph_xml(run_xml("Data centre demand collapses the reserve margin"), style="Heading4")
+        + cite("Okonkwo 26")
+        + body("Demand rose faster than any other load category last year.")
+        + cite("Ferreira 25")
+        + body("Load growth outpaced every scenario the utility had planned against.")
+    )
+    source = SourceDocument(
+        sha256=hashlib.sha256(content).hexdigest(),
+        byte_size=len(content),
+        source_format=SourceFormat.DOCX,
+        origin=SourceOrigin.CASELIST_ARCHIVE,
+        caselist="testcl26",
+        first_seen_snapshot=date(2026, 9, 1),
+        last_seen_snapshot=date(2026, 9, 1),
+    )
+    document = DebateDocxParser().parse(content, source, source_path=PATH)
+    assert isinstance(document, ParsedDocument)
+    assert [card.has_tag for card in document.cards] == [True, False]
+    return document
+
+
+@pytest.mark.anyio
+async def test_a_card_with_no_tag_is_stored_as_null_and_never_as_an_empty_string(
+    tmp_path: Path, parsed_with_an_untagged_card: ParsedDocument
+) -> None:
+    """`v1-e31-t09`: the first corpus parse stored `"tag":""` 15,528 times. A reader could not
+    tell a card the file left untagged from a tag the parser had lost."""
+    parsed = parsed_with_an_untagged_card
+    store = LocalParsedStore(tmp_path)
+    await store.write_source(
+        "testcl26", PARSER, _entry(parsed.source_sha256, cards=len(parsed.cards)), _document(parsed)
+    )
+
+    written = (store.root / source_object_key("testcl26", PARSER, parsed.source_sha256)).read_text("utf-8")
+    stored_cards = json.loads(written.splitlines()[1])["document"]["cards"]
+    assert [card["tag"] for card in stored_cards] == ["Data centre demand collapses the reserve margin", None]
+    assert '"tag":""' not in written
+    assert '"tag":null' in written
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("kind", STORES)
+async def test_a_card_with_no_tag_reads_back_with_no_tag(
+    kind: str, tmp_path: Path, parsed_with_an_untagged_card: ParsedDocument
+) -> None:
+    parsed = parsed_with_an_untagged_card
+    store = STORES[kind](tmp_path)
+    await store.write_source(
+        "testcl26", PARSER, _entry(parsed.source_sha256, cards=len(parsed.cards)), _document(parsed)
+    )
+
+    record = await store.read_document("testcl26", PARSER, parsed.source_sha256)
+    assert record is not None
+    read_back = record.to_parsed_document(PATH)
+    assert [card.has_tag for card in read_back.cards] == [True, False]
+    assert read_back == parsed.model_copy(update={"sections": ()})
+
+
+def test_a_document_the_first_corpus_parse_stored_with_an_empty_tag_still_reads(
+    parsed_with_an_untagged_card: ParsedDocument,
+) -> None:
+    """The `2026.09.20-docx-1` directories stay where they are, and say `"tag": ""`."""
+    stored = _document(parsed_with_an_untagged_card)
+    cards = stored.document["cards"]
+    assert isinstance(cards, list)
+    as_first_stored = [{**card, "tag": card["tag"] or ""} for card in cards if isinstance(card, dict)]
+    old_record = stored.model_copy(update={"document": {**stored.document, "cards": as_first_stored}})
+
+    assert [card.has_tag for card in old_record.to_parsed_document(PATH).cards] == [True, False]
 
 
 @pytest.mark.anyio

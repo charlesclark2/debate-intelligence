@@ -32,6 +32,10 @@ able to list what it could not read.
 **Nothing here identifies a person.** A card records the caselist, the snapshot, the SHA-256 and
 the path it came from. There is no field for a debater, and the parser never reads `docProps`
 authorship or comment authors out of the package (architecture proposal §14).
+
+**"No tag" is said one way.** A card the file gave no tag has :attr:`ParsedCard.has_tag` false, and
+every record written from it says `"tag": null`: never an empty string, which reads the same as a
+tag the parser lost (`v1-e31-t09`).
 """
 
 from __future__ import annotations
@@ -39,7 +43,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_serializer, field_validator, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.caselist.values import CaselistSlug, SnapshotDate, SourceOrigin
@@ -339,9 +343,35 @@ class ParsedCard(DomainModel):
     heuristic however perfectly styled the tag and cite above it are. `rule_ids` is where the
     detail lives — `verbatim-style-id:Heading4`, `verbatim-cite-run-style`,
     `heuristic-marked-up-body-text` — and it is what `v1-e31-t05` sorts misses by.
+
+    ## A card with no tag
+
+    A file may give a card no tag: a citation listed on its own, or a second card under one tag.
+    :attr:`has_tag` says which, and it is the only thing to ask.
+
+    * **In a record**, "no tag" is `"tag": null`. :meth:`model_dump` and :meth:`model_dump_json`
+      never write an empty string for it, so a reader of the parsed store cannot mistake a card
+      the file left untagged for a tag that was lost on the way.
+    * **In memory**, :attr:`tag` is a string either way, `""` when there is none, because the code
+      that counts and labels cards (`caselist_card_stats`) sorts and compares it as text.
+    * **A tag of nothing but whitespace is refused.** It is neither a tag nor "no tag"; a blank
+      heading line is where one would come from, and the parser reads that as no heading at all.
+    * `""` is still accepted on the way in, as "no tag": the `2026.09.20-docx-1` store wrote it
+      15,528 times, and that store stays readable.
+
+    What a reader should make of a card with no tag depends on its completeness. `CITE_ONLY`: the
+    file names a source there and gives it no claim and no text, so it is a citation, not an
+    argument. `FULL` or `ABBREVIATED`: evidence with no claim line above it, which is either how
+    the file is written or a second card under the tag of the card before it.
     """
 
-    tag: str = Field(default="", description="The claim the card is read for; empty if the file had none.")
+    tag: str = Field(
+        default="",
+        description=(
+            "The claim the card is read for, exactly as written. Empty when the file gave the card "
+            "none, which a record writes as null: ask `has_tag`."
+        ),
+    )
     short_cite: str | None = Field(
         default=None, description="The part a debater says out loud, e.g. `Okonkwo 26`; None if unreadable."
     )
@@ -376,8 +406,24 @@ class ParsedCard(DomainModel):
     )
     provenance: FileImportProvenance = Field(description="Where in which file this card came from.")
 
+    @field_validator("tag", mode="before")
+    @classmethod
+    def _read_null_as_no_tag(cls, value: object) -> object:
+        """A record's `null` is this model's "no tag"."""
+        return "" if value is None else value
+
+    @field_serializer("tag")
+    def _write_no_tag_as_null(self, tag: str) -> str | None:
+        """A record never says `""` for a card the file gave no tag."""
+        return tag or None
+
     @model_validator(mode="after")
     def _check_card(self) -> Self:
+        if self.tag and not self.tag.strip():
+            raise ValueError(
+                "a tag of nothing but whitespace is neither a tag nor the absence of one; a card "
+                "the file gave no tag has none"
+            )
         if self.verification_status is not IMPORTED_CARD_VERIFICATION_STATUS:
             raise ValueError(
                 f"a parsed card is always {IMPORTED_CARD_VERIFICATION_STATUS}; it has not been "
@@ -391,6 +437,11 @@ class ParsedCard(DomainModel):
                 f"a {self.completeness} card carries a body, but this one has none; it is CITE_ONLY"
             )
         return self
+
+    @property
+    def has_tag(self) -> bool:
+        """Whether the file gave this card a tag. False is written to a record as `"tag": null`."""
+        return bool(self.tag)
 
     @property
     def is_abbreviated(self) -> bool:

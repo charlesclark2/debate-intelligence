@@ -27,7 +27,9 @@ and this task does not decide what it is.
 unreadable tree as holding nothing, and every caller then acts on "nothing is here": a publish
 finds every source missing, a pull finds no week imported and fetches them all again, a removal
 finds no local copy to take out. :func:`files_under` walks a tree and raises the refusal instead,
-for the stores to translate like any other.
+for the stores to translate like any other. :func:`directories_in` and :func:`is_regular_file` are
+the same promise for the two other questions a store asks of a tree, "which directories are here"
+and "is this file here": absent is an answer, and refused is never read as absent.
 """
 
 from __future__ import annotations
@@ -41,7 +43,14 @@ from typing import Final
 
 from debate_core.application.errors import LocalStoreAccessDenied
 
-__all__ = ["ACCESS_DENIED_HINT", "files_under", "refused_as_access_denied", "role_of"]
+__all__ = [
+    "ACCESS_DENIED_HINT",
+    "directories_in",
+    "files_under",
+    "is_regular_file",
+    "refused_as_access_denied",
+    "role_of",
+]
 
 ACCESS_DENIED_HINT: Final = (
     "the operating system refused it; check that this user can read and write the environment's "
@@ -53,7 +62,7 @@ ACCESS_DENIED_HINT: Final = (
 _ROLES: Final = {
     "blobs": "the blob directory",
     "objects": "the evidence object directory",
-    "parsed": "the parsed-file directory",
+    "parsed": "the parsed card store",
     "manifests": "the manifest directory",
     "reports": "the report directory",
     "suppression": "the suppression directory",
@@ -105,18 +114,35 @@ def files_under(directory: Path, *, descend: Callable[[Path], bool] | None = Non
             directories[:] = [name for name in directories if descend(Path(parent) / name)]
         for name in names:
             path = Path(parent) / name
-            if _is_regular_file(path):
+            if is_regular_file(path):
                 yield path
+
+
+def directories_in(directory: Path) -> tuple[str, ...]:
+    """The names of the directories directly inside `directory`, sorted; none when it does not exist.
+
+    Raises `PermissionError` when the operating system will not let this user list `directory` or
+    look at an entry in it, exactly as :func:`files_under` does for a whole tree.
+    """
+    if not _is_directory(directory):
+        return ()
+    with os.scandir(directory) as entries:
+        names = [entry.name for entry in entries]
+    return tuple(sorted(name for name in names if _is_directory(directory / name)))
+
+
+def is_regular_file(path: Path) -> bool:
+    """Whether `path` names a regular file. False when nothing is there.
+
+    Raises `PermissionError` when the operating system will not say: "refused" is never "absent".
+    """
+    mode = _mode_of(path)
+    return mode is not None and stat.S_ISREG(mode)
 
 
 def _is_directory(path: Path) -> bool:
     mode = _mode_of(path)
     return mode is not None and stat.S_ISDIR(mode)
-
-
-def _is_regular_file(path: Path) -> bool:
-    mode = _mode_of(path)
-    return mode is not None and stat.S_ISREG(mode)
 
 
 def _mode_of(path: Path) -> int | None:

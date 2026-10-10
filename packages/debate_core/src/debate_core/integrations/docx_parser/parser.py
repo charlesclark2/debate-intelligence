@@ -8,7 +8,7 @@ same card, and it is where a `ParsedCard`'s provenance is attached.
 
 Every unit — pocket, hat, block, tag, cite, evidence, analytic, undertag — is resolved by
 :func:`~debate_core.evidence.style_classifier.classify_paragraph`, which tries the Verbatim style
-first, its aliases second and a measured heuristic last. This module adds three decisions the
+first, its aliases second and a measured heuristic last. This module adds five decisions the
 classifier does not make, because each needs something the classifier cannot see:
 
 * **A tag with no cite and no evidence under it is an analytic.** `Heading4` is what a debater
@@ -22,6 +22,21 @@ classifier does not make, because each needs something the classifier cannot see
   text box is a speech-time chart or a page banner, not a card. The classifier resolves a style
   before it looks at where a paragraph sits, so a `Heading4` in a table cell comes back from it
   as a tag; here it is `OTHER`, and the rule that said otherwise is kept in the rule id.
+* **A blank line is `OTHER`, whatever style it carries.** A debater presses Enter in `Heading4`
+  and leaves an empty heading behind: 5,043 of them in the first parse of the corpus, in nearly a
+  quarter of its files. Read as a tag it opened a card with an empty tag and demoted the real tag
+  above it; read as a pocket, hat or block it put an empty string in every path below it. It
+  opens, closes and names nothing (`v1-e31-t09`). A blank line in a *body* style is left alone:
+  it changes no structure, and evidence text is copied as the file lays it out.
+* **A cite guessed inside a card's body is body when it is formatted as body.** A paragraph of a
+  source's own prose that holds an ellipsis and a name with a year, or that opens *In 2019*,
+  comes back from the classifier's two cite heuristics as a cite. The classifier cannot see that
+  a card is already open with its body under way. Taking the guess at its word cut the card short
+  there and stored the rest as a card with no tag: 12,000 of the 15,528 empty tags in the first
+  parse of the corpus. So when the paragraph is small print or highlighted, which is what a
+  debater does to evidence, and does not open with a bold name, which is how a cite is written,
+  it is the card's next body paragraph (`v1-e31-t09`). A cite *style* is never second-guessed,
+  and neither is a guess that arrives when no body is open.
 
 ## Where a section path comes from
 
@@ -88,8 +103,15 @@ from debate_core.integrations.docx_parser.runs import (
 __all__ = ["DOCX_PARSER_VERSION", "DebateDocxParser"]
 
 #: Version recorded on every card this parser produces. Bumped whenever the output changes, so a
-#: stored card always names the reading that produced it.
-DOCX_PARSER_VERSION: Final = "2026.09.20-docx-1"
+#: stored card always names the reading that produced it. Bumped too when the only change is that
+#: a file once refused is now read: the parsed store skips a source it has already recorded under
+#: the running version, refusals included, so without a new version the file would never be tried
+#: again.
+#:
+#: `2026.09.20-docx-1` read the first full corpus. `2026.10.10-docx-2` (`v1-e31-t09`) reads the 23
+#: files it refused for the words `system "` and `public '`, keeps a body paragraph guessed to be
+#: a cite in its card, and no longer takes a blank line in a heading style for a heading.
+DOCX_PARSER_VERSION: Final = "2026.10.10-docx-2"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")
@@ -105,6 +127,13 @@ HEADING_UNITS: Final = (
     StructuralUnit.BLOCK,
     StructuralUnit.TAG,
 )
+
+#: The units a paragraph with no visible text may still be. Everything else structures the file,
+#: and a blank line structures nothing.
+_UNITS_A_BLANK_PARAGRAPH_KEEPS: Final = (StructuralUnit.OTHER, StructuralUnit.EVIDENCE)
+
+#: A body paragraph re-read from a cite guess is no surer than the classifier's own shrunk-text rule.
+_REREAD_BODY_CONFIDENCE: Final = 0.6
 
 #: How much a match source is worth when a card reports the weakest one it was built from.
 _MATCH_SOURCE_STRENGTH: Final = {
@@ -314,6 +343,13 @@ class DebateDocxParser:
                 )
             else:
                 match = classify_paragraph(read.description, self._profile)
+                if match.unit not in _UNITS_A_BLANK_PARAGRAPH_KEEPS and not read.text.strip():
+                    match = ParagraphStyleMatch(
+                        unit=StructuralUnit.OTHER,
+                        rule_id=f"assembly-empty-paragraph:{match.rule_id}",
+                        match_source=StyleMatchSource.HEURISTIC,
+                        confidence=1.0,
+                    )
             sections.append(_ReadSection(read=read, match=match, in_text_box=body_paragraph.in_text_box))
         return sections
 
@@ -347,6 +383,59 @@ class DebateDocxParser:
             )
         return demoted
 
+    def _keep_a_guessed_cite_in_its_body(
+        self, section: _ReadSection, building: _CardUnderConstruction | None
+    ) -> _ReadSection:
+        """Re-read a cite guessed inside an open body as body, when it is formatted as body.
+
+        Three things have to hold, and each is something only the assembly can see or weigh:
+
+        * a card is open and already has a body, so there is a body for the paragraph to belong to;
+        * the classifier *guessed*: the match is one of its cite heuristics, not a Verbatim cite
+          style, which is the file's author saying "cite" and is taken at its word;
+        * the paragraph is formatted the way a body is and not the way a cite is
+          (:meth:`_is_formatted_as_body`).
+
+        Otherwise the paragraph stays the cite the classifier called it, and starts a card with no
+        tag, which is what two cards under one tag look like.
+        """
+        match = section.match
+        if building is None or not building.has_body:
+            return section
+        if match.unit is not StructuralUnit.CITE or match.match_source is not StyleMatchSource.HEURISTIC:
+            return section
+        if not self._is_formatted_as_body(section.read):
+            return section
+        return _ReadSection(
+            read=section.read,
+            match=ParagraphStyleMatch(
+                unit=StructuralUnit.EVIDENCE,
+                rule_id=f"assembly-cite-guess-inside-card-body:{match.rule_id}",
+                match_source=StyleMatchSource.HEURISTIC,
+                confidence=min(match.confidence, _REREAD_BODY_CONFIDENCE),
+            ),
+            in_text_box=section.in_text_box,
+        )
+
+    def _is_formatted_as_body(self, read: ReadParagraph) -> bool:
+        """Whether a paragraph carries a body's formatting and not a cite's.
+
+        Small print throughout, or highlighting, is what a debater does to evidence: the profile's
+        shrink rule measured the first, and nobody highlights a citation. A bold name at the front
+        is how a cite is written, so a paragraph that has both is left as the classifier called it.
+        Underline on its own decides nothing: a cite's link is underlined as often as a card's text.
+        """
+        description = read.description
+        visible = description.visible_runs
+        if not visible:
+            return False
+        opens_bold = visible[0].bold if visible[0].bold is not None else bool(description.paragraph_bold)
+        if opens_bold:
+            return False
+        return description.has_highlighted_run or self._profile.is_shrunk(
+            description.effective_half_points, underlined=False
+        )
+
     # -- building the output ------------------------------------------------------------------
 
     def _build_document(
@@ -366,7 +455,8 @@ class DebateDocxParser:
         building: _CardUnderConstruction | None = None
         deletions_dropped = 0
 
-        for section in read_sections:
+        for read_section in read_sections:
+            section = self._keep_a_guessed_cite_in_its_body(read_section, building)
             unit = section.match.unit
             deletions_dropped += section.read.deletions_dropped
 

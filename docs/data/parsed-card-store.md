@@ -124,12 +124,17 @@ gets a validated `ParsedDocument` back.
 
 ### `occurrence`: a line of `occurrences.jsonl`
 
-One row per card per disclosure. The same file disclosed in three weekly snapshots is three rows of
-each of its cards, from one parse.
+One row per card per disclosure. A disclosure is one path holding one file's bytes: however many
+weekly manifests list it, it is one row of each of its cards, from one parse, with the first and
+the latest snapshot that list it. A path whose bytes change has a new SHA-256, so it is a new source
+and a new disclosure. The same bytes under two paths, a team's `(1)` re-upload or a second team
+disclosing the file, are two disclosures. A camp file has no disclosure: it is one row per card per
+OpenEv release, and its two snapshot fields are that release.
 
 | Field | What it is |
 |---|---|
-| `snapshot` | The disclosure's snapshot |
+| `snapshot` | The first snapshot whose manifest lists this disclosure |
+| `last_snapshot` | The latest such snapshot; equal to `snapshot` for a camp file |
 | `disclosure` | SHA-256 of `<caselist>/<path>`, the disclosure's pseudonym; `null` for a camp file |
 | `camp` | The camp for a camp file; `null` otherwise |
 | `first_element_index`, `last_element_index` | The card's paragraphs in its document |
@@ -142,6 +147,13 @@ Who disclosed a card is a join, not a field: compute `sha256(f"{caselist}/{path}
 row of the caselist's manifests and match it to `disclosure`. The digest is the same one the
 removal suppression list records a withdrawn disclosure under.
 
+**What the span means.** A weekly archive is a window of about a week's editing activity, not the
+whole caselist (`docs/data/caselist-backfill-2026-09.md`), so a manifest lists a path in the weeks
+a team uploaded or touched it. `last_snapshot` is the latest week that happened, not proof that the
+file is still on the caselist. A path missing from some weeks between its first and latest is
+still one row. In the 2026-27 weekly manifests as imported on 2026-10-09, 91 to 93% of DOCX
+disclosures are listed in one week only, and none in more than five.
+
 ## What the store does not hold
 
 No disclosure path, no school, no team code, no tournament or round label, and no cutter mark. A
@@ -152,6 +164,17 @@ prefix, a built file's provenance sidecar and the per-school landscape view
 prefix is not on that list. So the store is built without them, and what is published is exactly
 what is on disk. The mapping from a team to what it disclosed stays in the manifests, where the
 evidence-store layout puts it and where a removal rewrites it.
+
+**The store must never gain a path, school, team code, tournament or round field** (PM ruling,
+2026-10-10, which keeps the policy as it is). Keeping `parsed/` free of personal data means a
+removal has fewer places to clean, and a leak of `parsed/` alone names nobody; a reader that needs
+the team joins the manifests, which live under the same controls. `disclosure` is a pseudonym, not
+anonymisation: anyone holding the manifests can recompute it. Two tests in
+[`test_local_parsed_store.py`](../../packages/debate_core/tests/integrations/test_local_parsed_store.py)
+hold the line. `test_no_record_has_a_field_for_a_path_school_team_tournament_or_round` checks the
+record models' field names. `test_no_file_names_the_disclosure_path_or_anything_in_it` scans every
+written file for a fixture path's school and team code. A change that needs either test changed
+needs the policy changed first.
 
 Card text, cites and headings are in the store: they are the evidence itself, and the `raw/` prefix
 already holds the whole file.

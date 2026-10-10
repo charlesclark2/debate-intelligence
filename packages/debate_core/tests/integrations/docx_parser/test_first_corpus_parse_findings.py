@@ -856,8 +856,12 @@ class TestAbbreviatedIsADisclosuresShape:
         assert card.completeness is CardCompleteness.CITE_ONLY
         assert card.evidence_text == ""
 
-    def test_twelve_words_either_side_is_the_most_a_disclosure_holds(self, parser: DebateDocxParser) -> None:
-        card = card_with_body(parser, f"{TWELVE_WORDS} … {TWELVE_WORDS}")
+    @pytest.mark.parametrize("marker", MARKER_SPELLINGS)
+    def test_twelve_words_either_side_is_the_most_a_disclosure_holds(
+        self, parser: DebateDocxParser, marker: str
+    ) -> None:
+        """In every spelling: a bracketed marker is one marker, and its brackets are not words."""
+        card = card_with_body(parser, f"{TWELVE_WORDS} {marker} {TWELVE_WORDS}")
 
         assert card.completeness is CardCompleteness.ABBREVIATED
 

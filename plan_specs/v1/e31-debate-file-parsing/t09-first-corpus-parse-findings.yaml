@@ -31,7 +31,8 @@ spec:
     near-duplicate matching (v1-e31-t08).
   priority: 2
   constraints:
-    packages: [debate_core.integrations.docx_parser, debate_core.domain, packages/debate_core/tests, tests/fixtures, docs/data]
+    # debate_core.integrations.local was authorised by the PM, 2026-10-10, for ac5.
+    packages: [debate_core.integrations.docx_parser, debate_core.integrations.local, debate_core.domain, packages/debate_core/tests, tests/fixtures, docs/data]
     forbidden:
       - Accepting an XML entity declaration or external reference that the refusal guards against
       - Committing, quoting or logging any real disclosed file, tag, cite or card text (fixtures reproduce a construct synthetically)
@@ -61,6 +62,15 @@ spec:
         If the parser changes, `parser_version` is bumped. Operator-run: a re-parse in dev
         writes a new version directory, and the report records the refusal counts and
         empty-tag counts before and after.
+    # Added by the PM, 2026-10-10, from v1-e34-t13-pull-stage-failure-classes' follow-up work.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-10. `LocalParsedStore` walks and reads `<data_dir>/parsed/`
+        itself: a `PermissionError` there becomes `LocalStoreAccessDenied` naming the
+        directory's role ("the parsed card store") through `integrations/local/refusals.py`,
+        and a listing of an unreadable tree raises instead of listing nothing. `caselist
+        parse` exits 3 with `STORE_ACCESS_DENIED` and a hint naming `storage.data_dir`, shown
+        failing first.
 status:
   phase: InProgress
 ---

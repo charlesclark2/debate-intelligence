@@ -113,6 +113,19 @@ afterwards.
 
 `store ls parsed/hsld26/2026.09.20-docx-1/index.jsonl` against prod lists the object (1.6 MB).
 
+## After `card-fingerprint-v2`
+
+Every cluster count above is under `card-fingerprint-v1`. `v1-e31-t08-short-card-recall` changed
+which cards share a cluster (`card-fingerprint-v2`; the exact fingerprints are the same), so the
+`Clusters` columns change when the aggregates are next rebuilt. Sources, parsed counts, cards and
+occurrence rows do not: nothing is parsed again.
+
+**Status: not rebuilt yet.** The rebuild in dev and prod, and the by-eye sample of 20 newly joined
+pairs, are that task's operator follow-up (its criterion ac5), and the figures are recorded here
+when it has run. The one measurement taken so far is a read-only preview of openev on 2026-10-10,
+which places the stored cards in memory and writes nothing: 7,288 cards, 5,467 clusters before
+and 5,466 after, the largest cluster 21 cards before and after, and no exact fingerprint changed.
+
 ## What the run settled, and what it raised
 
 * **No incremental rebuild yet.** The slowest rebuild was 460 s (hspolicy26). This will be

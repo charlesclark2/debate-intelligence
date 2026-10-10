@@ -248,6 +248,24 @@ class TestDeclarationsAreStillRefused:
         assert "word/document.xml" in refusal.detail
 
     @pytest.mark.parametrize("variant", HOSTILE_DECLARATIONS, ids=str)
+    def test_one_the_scan_can_read_never_reaches_an_xml_parser(
+        self, variant: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The cheapest defence is never to hand the part to a parser at all, and it still holds.
+
+        The package has no `_rels/.rels`, so the document part is the first XML the reader opens.
+        """
+
+        def no_parser_is_built() -> etree.XMLParser:
+            raise AssertionError("an XML parser was built for a part that declares a document type")
+
+        monkeypatch.setattr(docx_package, "hardened_xml_parser", no_parser_is_built)
+        declaration, text = HOSTILE_DECLARATIONS[variant]
+        content = build_docx("", document_xml=hostile_document(declaration, text), omit_parts=["_rels/.rels"])
+
+        assert refusal_of(content).reason is ParseFailureReason.FORBIDDEN_XML_CONSTRUCT
+
+    @pytest.mark.parametrize("variant", HOSTILE_DECLARATIONS, ids=str)
     @pytest.mark.parametrize("encoding", ["UTF-16", "UTF-16LE", "UTF-16BE"])
     def test_one_written_in_utf_16_is_refused_although_the_byte_scan_cannot_see_it(
         self, variant: str, encoding: str

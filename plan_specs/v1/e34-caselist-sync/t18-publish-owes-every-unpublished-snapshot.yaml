@@ -56,7 +56,7 @@ spec:
         docs/runbooks/caselist-scheduled-sync.md says what the pending-work file holds and
         how to check it is empty after a retry.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

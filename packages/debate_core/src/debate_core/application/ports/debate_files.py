@@ -45,6 +45,15 @@ class DebateFileParser(Protocol):
         """
         ...
 
+    @property
+    def profile_version(self) -> str:
+        """Version of the style profile every card this parser produces resolves through.
+
+        With :attr:`parser_version`, what the parse pipeline (`v1-e31-t06`) keys a parsed source
+        by, so it has to be known before a file is parsed, not read off the result.
+        """
+        ...
+
     def parse(
         self,
         content: bytes,

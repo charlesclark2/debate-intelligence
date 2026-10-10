@@ -17,7 +17,9 @@ and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` run
 (`v1-e03-t06-verify-command`); and :meth:`ServiceContainer.caselist_sync`, which
 `debate-research caselist pull` and the weekly launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
 :meth:`ServiceContainer.caselist_sync_monitor` and read back by
-:meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`). The import
+:meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`); and
+:meth:`ServiceContainer.caselist_parse` and :meth:`ServiceContainer.parsed_publisher`, which
+`debate-research caselist parse` runs (`v1-e31-t06-parse-pipeline`). The import
 commands also read archives and place manifests through it (:meth:`ServiceContainer.read_archive`,
 :meth:`ServiceContainer.archive_digest`, :meth:`ServiceContainer.evidence_object_path`), so no
 command imports an adapter (`v1-e01-t13-composition-root-cleanup`). The rest of V1's services and
@@ -94,6 +96,7 @@ integration's module name in a string, makes the check refuse rather than skip i
 from __future__ import annotations
 
 import functools
+import os
 import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -104,6 +107,8 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence, dig
 from debate_core.application.caselist.import_service import CaselistImportService, EarlierManifestDigests
 from debate_core.application.caselist.inbox_purge import CaselistInbox
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
+from debate_core.application.caselist.parse_workers import ProcessPoolParseRunner
+from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import RemovalPlanner
 from debate_core.application.caselist.removal_service import (
@@ -119,6 +124,7 @@ from debate_core.application.caselist.suppression import (
     RecordedSuppressionList,
 )
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
+from debate_core.application.caselist_parse import CaselistParseService
 from debate_core.application.caselist_sync import CaselistSyncService, FullArchiveRotation
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
@@ -150,6 +156,7 @@ from debate_core.integrations.local import (
     archive_reader,
 )
 from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
+from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.suppression_list import (
     local_removal_log_file,
@@ -170,6 +177,7 @@ __all__ = [
 
 SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_import",
+    "caselist_parse",
     "caselist_publish",
     "caselist_removal",
     "caselist_status",
@@ -380,6 +388,52 @@ class ServiceContainer:
             lambda: CaselistCardStatsService(
                 SqliteCaselistRepository(self.database), self.settings.fingerprints.thresholds()
             ),
+        )
+
+    def caselist_parse(self, *, with_bucket: bool) -> CaselistParseService:
+        """Build the incremental parse pipeline over this machine's store (`v1-e31-t06`).
+
+        `with_bucket` is whether this run publishes. A run that does reads the suppression list's
+        local and bucket copies as one, as every bucket-holding command does; a run that does not is
+        offline, like `caselist import`, and reads this machine's copy. The pool is sized by the
+        `parse` settings group, for a laptop that is doing other things.
+        """
+        name = "caselist_parse_publishing" if with_bucket else "caselist_parse"
+        return self.singleton(name, lambda: self._build_caselist_parse(with_bucket=with_bucket))
+
+    def _build_caselist_parse(self, *, with_bucket: bool) -> CaselistParseService:
+        # Imported here, not at module scope: lxml is loaded only by a command that parses.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        settings = self.settings
+        parse = settings.parse
+        return CaselistParseService(
+            local=self._local_evidence(),
+            store=LocalParsedStore(settings.storage.data_dir),
+            parser=DebateDocxParser(),
+            runner=ProcessPoolParseRunner(
+                workers=parse.worker_count(os.cpu_count()),
+                timeout_seconds=parse.per_file_timeout_seconds,
+            ),
+            suppression=self.suppression_list() if with_bucket else self.local_suppression_list(),
+            place_cards=self.caselist_card_stats().place,
+            failure_rate_threshold=parse.failure_rate_threshold,
+        )
+
+    def parsed_publisher(self) -> ParsedStorePublisher:
+        """Build the copy of the parsed card store to this environment's bucket (`v1-e31-t06`).
+
+        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket.
+        """
+        return self.singleton("parsed_publisher", self._build_parsed_publisher)
+
+    def _build_parsed_publisher(self) -> ParsedStorePublisher:
+        local = FsEvidenceObjectStore(self.settings.storage.data_dir, subdirectory=PARSED_DIRECTORY)
+        return ParsedStorePublisher(
+            local=local,
+            local_path_for=local.path_for,
+            remote=self._evidence_bucket(),
+            suppression=self.suppression_list(),
         )
 
     def verify_manifest(self) -> VerifyManifest:

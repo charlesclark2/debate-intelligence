@@ -154,6 +154,24 @@ says so, logs `INCOMPLETE`, and the fix is to run the same command again. The in
 while no `caselist pull` is running: if one holds the sync's lock, the removal stops `INCOMPLETE`
 with *a caselist pull is running*, and you re-run it once the pull has finished.
 
+**Then rebuild the parsed card store's aggregates.** The removal deletes the removed file's parsed
+cards and, for every caselist it touches, the store's `index.jsonl`, `failures.jsonl` and
+`occurrences.jsonl` (`v1-e31-t06`), here and in the bucket, because each of them can name the
+file or one of the team's disclosures. Nothing else rebuilds them until the next parse, and until
+then anything that reads the store finds no aggregates at all. The caselists to rebuild are the
+ones whose `parsed/<caselist>/<version>/index.jsonl` the plan listed under *WILL BE REMOVED*; if it
+listed none, the store was never built here and there is nothing to do. For each, with the everyday
+profile (a few minutes each; nothing is parsed again, only the aggregates are rebuilt and
+published):
+
+```bash
+aws sso login --profile debate-dev-evidence
+DEBATE_ENV=dev uv run debate-research caselist parse --caselist hsld26 --publish
+```
+
+It exits 0 and prints the rebuilt counts. The new aggregates leave out every source and disclosure
+the suppression list stops, which now includes this removal's.
+
 ## Step 6 — Verify dev
 
 First, the store and S3 agree and the sources are gone:
@@ -175,6 +193,8 @@ DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld2
 - [ ] The `DONE` line counts the inbox files deleted and rewritten, and the dry run run again says
       *DOWNLOAD INBOX (…): nothing in it holds a removed file.*
 - [ ] The re-import counts the file as `SUPPRESSED`.
+- [ ] The parse in step 5 exited 0, and each `index.jsonl` key the plan listed is back:
+      `DEBATE_ENV=dev uv run debate-research store ls <that key>` lists 1 object.
 - [ ] No `raw/` or `parsed/` object for those sha256 values remains — **including noncurrent
       versions**. Check with the AWS CLI if you want belt and braces:
       `aws s3api list-object-versions --bucket debate-dev-evidence-a7508de8 --prefix raw/caselist/hsld26/sha256/<ab>/<cd>/<sha256>`
@@ -198,6 +218,19 @@ DEBATE_ENV=prod uv run debate-research caselist status
       drifted — investigate before executing). The *DOWNLOAD INBOX* section may differ: each
       environment that pulls has its own inbox, and each environment's run purges its own.
 - [ ] `caselist status` is clean afterwards.
+
+Then rebuild prod's parsed aggregates, for the same caselists as in step 5. The parsed store is
+built on this machine in the dev data directory and published to both buckets from there, so this
+runs against the dev data directory with the prod bucket, after the dev removal has put the entries
+on that directory's suppression list:
+
+```bash
+aws sso login --profile debate-prod-evidence
+DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research caselist parse --caselist hsld26 --publish --confirm-prod
+```
+
+- [ ] It exits 0. Each variable is set on the command line only, so nothing is left pointing the
+      shell at prod.
 
 ## Step 8 — Suppression and built files
 

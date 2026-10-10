@@ -210,10 +210,20 @@ source_modules = [
     "debate_core.integrations.local",
     "debate_core.integrations.s3",
     "debate_core.integrations.file_streaming",
-    "debate_cli",
     "debate_api",
     "debate_workers",
 ]
+forbidden_modules = ["lxml", "docx"]
+
+# v1-e31-t06-parse-pipeline. `caselist parse` needs the parser built, and building adapters is the
+# composition root's job, so `debate_cli.container` imports `debate_core.integrations.docx_parser`
+# and the chain to lxml is by design. The CLI is held to the direct form of the rule, exactly as it
+# is for the AWS SDK above: no command imports lxml or python-docx itself.
+[[tool.importlinter.contracts]]
+name = "The CLI reaches lxml only through debate_core.integrations.docx_parser"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["debate_cli"]
 forbidden_modules = ["lxml", "docx"]
 
 # v1-e02-t06-import-boundary-guard. The contracts from here down are the shape of the architecture

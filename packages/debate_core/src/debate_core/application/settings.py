@@ -125,6 +125,7 @@ __all__ = [
     "HttpSettings",
     "CaselistSettings",
     "ModelSettings",
+    "ParseSettings",
     "ProviderSettings",
     "S3StorageSettings",
     "SearchProviderName",
@@ -746,6 +747,54 @@ class CardFingerprintSettings(SettingsGroup):
         )
 
 
+class ParseSettings(SettingsGroup):
+    """How `caselist parse` runs on the operator's machine (`v1-e31-t06-parse-pipeline`).
+
+    Sized for a Mac that is doing other things while a corpus parses: by default one worker fewer
+    than the machine has cores, and never more than `worker_cap`, so the parse never takes the whole
+    machine. `DEBATE_PARSE__WORKERS=2` slows it down for a day when the laptop is needed.
+    """
+
+    workers: int | None = Field(
+        default=None,
+        ge=1,
+        le=64,
+        description=(
+            "Parse processes to run at once. Unset: the machine's cores minus one, at most `worker_cap`."
+        ),
+    )
+    worker_cap: int = Field(
+        default=6,
+        ge=1,
+        le=64,
+        description="The most processes an unset `workers` will choose, however many cores there are.",
+    )
+    per_file_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        description=(
+            "A source still parsing after this long is stopped and recorded as TIMEOUT. A 300-page "
+            "file parses in about a second, so this is for the pathological file, not the large one."
+        ),
+    )
+    failure_rate_threshold: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "`caselist parse` exits non-zero when more than this share of the sources it tried to read "
+            "failed. Unsupported formats (PDF, legacy .doc) are an outcome, not a failure, and are "
+            "counted in neither the failures nor the sources tried."
+        ),
+    )
+
+    def worker_count(self, cpu_count: int | None) -> int:
+        """`workers` when set; otherwise `cpu_count` minus one, at least one and at most `worker_cap`."""
+        if self.workers is not None:
+            return self.workers
+        return max(1, min(self.worker_cap, (cpu_count or 2) - 1))
+
+
 class ModelSettings(SettingsGroup):
     """What the ModelRouter is allowed to do and which file tells it where to route.
 
@@ -814,6 +863,7 @@ class Settings(BaseSettings):
     models: ModelSettings
     caselist: CaselistSettings = Field(default_factory=CaselistSettings)
     fingerprints: CardFingerprintSettings = Field(default_factory=CardFingerprintSettings)
+    parse: ParseSettings = Field(default_factory=ParseSettings)
 
     @classmethod
     def settings_customise_sources(

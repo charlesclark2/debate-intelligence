@@ -16,6 +16,7 @@ import pytest
 
 from debate_cli.exit_codes import ExitCode, error_code_for, exit_code_for, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure
+from debate_core.application.caselist.removal_service import TakedownPreflightFailed
 from debate_core.application.caselist_sync import DailyDownloadLimitReached
 from debate_core.application.errors import (
     UNMODELLED_ERROR_CODE,
@@ -86,3 +87,17 @@ def test_a_refusal_by_this_machine_is_the_same_failure_to_a_program_as_one_by_th
     assert (failure.code, failure.exit_code) == ("STORE_ACCESS_DENIED", ExitCode.RETRIEVAL_FAILURE)
     assert failure.details["resource"] == "the manifest directory"
     assert failure.hint == "check storage.data_dir"
+
+
+def test_a_removal_this_machine_refused_part_way_is_a_retrieval_failure() -> None:
+    """`v1-e01-t20`'s rule for a removal stopped by a store reads the cause's type, so the
+    filesystem stores' subclass counts: before `v1-e34-t13` the cause was a raw `PermissionError`
+    and the same stop was a `1`."""
+    refused = LocalStoreAccessDenied("delete", "the blob directory")
+    try:
+        try:
+            raise refused
+        except LocalStoreAccessDenied as cause:
+            raise TakedownPreflightFailed("debate-dev-evidence-removal", "delete a blob", cause) from cause
+    except TakedownPreflightFailed as stopped:
+        assert exit_code_for(stopped) is ExitCode.RETRIEVAL_FAILURE

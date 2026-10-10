@@ -36,11 +36,13 @@ from debate_core.application.caselist.parse_sources import enumerate_sources
 from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import SourceSelector
+from debate_core.application.caselist.removal_service import RemovalIncomplete
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.errors import StoreAccessDenied
 from debate_core.application.evidence_sync import EvidenceSyncService, SyncDirection, SyncKeyspace
-from debate_core.application.ports.suppression import ReasonCode
+from debate_core.application.ports.suppression import ReasonCode, RemovalLogEntry, RemovalOutcome
 from debate_core.integrations.local import FsEvidenceObjectStore
+from debate_core.integrations.local.suppression_list import local_removal_log_file
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.testing.fakes import empty_suppression_list
 
@@ -157,6 +159,37 @@ async def test_a_removal_stops_rather_than_reporting_no_local_blob(removal_world
         )
 
     assert_stopped_on(caught, "the blob directory", removal_world.data_dir)
+
+
+async def test_a_removal_this_machine_refuses_part_way_is_logged_as_a_store_that_refused(
+    removal_world: RemovalWorld,
+) -> None:
+    """The plan is made, and when it runs this machine will not let the file's blob be deleted.
+
+    The removal stops as it always did, incomplete and logged, with the suppression entry appended
+    first. What changed is what stopped it: a store that refused, not a raw `PermissionError`, so
+    the log entry's code is the store's and the CLI's rule for a removal stopped by a store applies
+    (`v1-e01-t20`): the same command, once the permission is fixed, finishes it."""
+    digest = hashlib.sha256(DOCUMENT_BODIES["bayview-semis-neg"]).hexdigest()
+    service = removal_world.service()
+    plan = await service.plan(SourceSelector(digest), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM)
+    fan_out = removal_world.data_dir / "blobs" / "sha256" / digest[0:2] / digest[2:4]
+    assert (fan_out / digest).is_file()
+
+    fan_out.chmod(0o500)  # the blob can be found, and its directory entry cannot be removed
+    try:
+        with pytest.raises(RemovalIncomplete) as stopped:
+            await service.execute(plan)
+    finally:
+        fan_out.chmod(0o700)
+
+    assert type(stopped.value.__cause__) is errors.LocalStoreAccessDenied
+    assert stopped.value.error_code == "STORE_ACCESS_DENIED"
+    log = local_removal_log_file(removal_world.data_dir).path.read_text(encoding="utf-8").splitlines()
+    (entry,) = [RemovalLogEntry.from_line(line) for line in log]
+    assert (entry.outcome, entry.error_code) == (RemovalOutcome.INCOMPLETE, "STORE_ACCESS_DENIED")
+    assert (fan_out / digest).is_file(), "the blob is still there for the re-run to delete"
+    assert str(removal_world.data_dir) not in str(stopped.value)
 
 
 # ------------------------------------------------------------------------------------------------

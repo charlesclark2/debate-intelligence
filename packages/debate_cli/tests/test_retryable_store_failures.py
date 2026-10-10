@@ -272,6 +272,25 @@ class TestImportFamily:
         assert envelope["error"]["details"]["resource"] == "the blob directory"
         assert str(installation) not in json.dumps(envelope)
 
+    @needs_permissions
+    def test_an_unreadable_suppression_directory_exits_three_naming_its_role(
+        self, installation: Path, tmp_path: Path
+    ) -> None:
+        """`caselist import` reads this machine's suppression list before it stores anything. A
+        list it may not read is not an empty one, and it used to end the import as exit 70, "a
+        bug", with the file's path in the message (`v1-e34-t13`)."""
+        suppression = installation / "suppression"
+        suppression.mkdir(parents=True)
+        (suppression / "suppression-list.jsonl").write_bytes(b"")
+
+        with refused(suppression):
+            exit_code, envelope = import_the_first_week(tmp_path)
+
+        assert_refused_directory(
+            exit_code, envelope, role="the suppression directory", installation=installation
+        )
+        assert not (installation / BLOB_DIRECTORY).exists(), "nothing was stored"
+
 
 # ------------------------------------------------------------------------------------------------
 # caselist publish | status

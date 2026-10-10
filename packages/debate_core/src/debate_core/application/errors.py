@@ -23,6 +23,7 @@ The hierarchy::
     ├── UnreadableArchive
     ├── StoreError
     │   ├── StoreAccessDenied
+    │   │   └── LocalStoreAccessDenied
     │   ├── StoreCredentialsExpired
     │   └── StoreUnavailable
     ├── InvalidModelOutput
@@ -32,13 +33,26 @@ The hierarchy::
 
 Each class keeps the facts of the failure as attributes rather than only in its message, so a CLI
 can render "card 01J… was edited by someone else" instead of parsing a string.
+
+## Error codes
+
+A failure is reported to a program by one word, its **error code**: the class name in upper snake
+case, `StoreUnavailable` → `STORE_UNAVAILABLE` (:func:`error_code_of`). It is the `error.code` of
+the CLI's `--json` envelope, the `code` of each object a `store sync` or a `caselist publish` could
+not move, and what a failed stage of `caselist pull` records (`v1-e34-t13`). There is one
+vocabulary, defined here, because the services that record a code and the command that turns codes
+into an exit status must mean the same thing by it; `debate_cli.exit_codes` reads it from here, and
+this package never reads anything from there.
 """
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
+from typing import ClassVar, Final
 
 __all__ = [
+    "UNMODELLED_ERROR_CODE",
     "AlreadyExists",
     "ArchiveTooLarge",
     "BlobIntegrityError",
@@ -46,6 +60,7 @@ __all__ = [
     "DomainError",
     "InvalidCursor",
     "InvalidModelOutput",
+    "LocalStoreAccessDenied",
     "NotFound",
     "ProviderError",
     "ProviderRateLimited",
@@ -58,6 +73,9 @@ __all__ = [
     "StoreError",
     "StoreUnavailable",
     "UnreadableArchive",
+    "error_code_of",
+    "error_code_of_class",
+    "reported_error_code",
 ]
 
 
@@ -310,6 +328,23 @@ class StoreAccessDenied(StoreError):
         super().__init__(f"not allowed to {operation} {resource}" + (f": {hint}" if hint else ""))
 
 
+class LocalStoreAccessDenied(StoreAccessDenied):
+    """The operating system refused a directory of this machine's own store.
+
+    Raised by the filesystem adapters, and by nothing that talks to a bucket, so a caller can tell
+    the two refusals apart by type rather than by reading a message (`v1-e34-t13`). They have
+    different fixes: this one is a permission on the environment's data directory, and a refusal
+    by the bucket is a grant the profile lacks. Neither is an expired login.
+
+    :attr:`resource` is the directory's *role* — "the blob directory" — and never its path.
+
+    It is the same failure to a program as its parent: the same error code, so nothing that
+    branches on `STORE_ACCESS_DENIED` has to learn a second word, and the same exit status.
+    """
+
+    ERROR_CODE: ClassVar[str] = "STORE_ACCESS_DENIED"
+
+
 class StoreCredentialsExpired(StoreError):
     """There are no usable credentials: the SSO session expired, or there were never any.
 
@@ -420,3 +455,51 @@ class ProviderRateLimited(ProviderError):
         """Seconds to wait before retrying, when the provider stated a `Retry-After`."""
         wait = "" if retry_after_seconds is None else f" (retry after {retry_after_seconds}s)"
         super().__init__(provider, f"{message}{wait}")
+
+
+# --------------------------------------------------------------------------------------------
+# Error codes
+# --------------------------------------------------------------------------------------------
+
+UNMODELLED_ERROR_CODE: Final = "INTERNAL_ERROR"
+"""The code of a failure that is not a :class:`DomainError`: an exception nobody modelled.
+
+The CLI reports such an exception under the name of its exit status 70, and a failure a service
+records instead of raising is recorded under the same word (:func:`reported_error_code`). It is on
+no list of failures a retry may cure.
+"""
+
+_WORD_BOUNDARY: Final = re.compile(r"(?<!^)(?=[A-Z])")
+
+
+def error_code_of_class(kind: type[BaseException]) -> str:
+    """The error code instances of `kind` are reported under: `RevisionMismatch` → `REVISION_MISMATCH`.
+
+    A class that refines another without being a different failure to a program names the code it
+    keeps in `ERROR_CODE` (:class:`LocalStoreAccessDenied`); every other class is its own name.
+    """
+    declared = vars(kind).get("ERROR_CODE")
+    if isinstance(declared, str):
+        return declared
+    return _WORD_BOUNDARY.sub("_", kind.__name__).upper()
+
+
+def error_code_of(error: BaseException) -> str:
+    """The error code of `error`, from its class: see :func:`error_code_of_class`.
+
+    Defined for any exception, because the services that carry on past one object's failure catch
+    an `OSError` beside the port errors and report each by its class (`FILE_NOT_FOUND_ERROR`).
+    """
+    return error_code_of_class(type(error))
+
+
+def reported_error_code(error: BaseException) -> str:
+    """The code the CLI would report `error` under had it ended the command, for a failure that did not.
+
+    A :class:`DomainError`'s own code; :data:`UNMODELLED_ERROR_CODE` for anything else. A stage of
+    `caselist pull` records its failures with this, so that a failure reads the same whether it
+    stopped the run or one stage of it.
+    """
+    if isinstance(error, DomainError):
+        return error_code_of(error)
+    return UNMODELLED_ERROR_CODE

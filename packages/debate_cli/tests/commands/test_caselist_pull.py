@@ -33,7 +33,10 @@ from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
-from debate_cli.commands.caselist_pull import _caption  # pyright: ignore[reportPrivateUsage]
+from debate_cli.commands.caselist_pull import (
+    _caption,  # pyright: ignore[reportPrivateUsage]
+    _pull_failure,  # pyright: ignore[reportPrivateUsage]
+)
 from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist_sync import (
@@ -230,6 +233,294 @@ def test_a_download_the_site_will_not_serve_is_a_failure_with_a_usable_hint(
     assert envelope["error"]["details"]["snapshots_imported"] == [
         f"{SYNTHETIC_CASELIST} {SNAPSHOTS[0].snapshot.isoformat()}"
     ]
+
+
+# ------------------------------------------------------------------------------------------------
+# The exit code comes from what the failed stages failed on (v1-e34-t13)
+# ------------------------------------------------------------------------------------------------
+#
+# Through the real OpenCaselist client, so the status a server answers with is turned into an error
+# by the transport, recorded by the download stage under that error's code, and into an exit code by
+# the command. Week three is the one that fails: weeks one and two arrive and are imported, 2 of 3.
+
+WEEK_ONE, WEEK_TWO, WEEK_THREE = (snapshot.snapshot for snapshot in SNAPSHOTS)
+
+A_CAMP_FILE = {
+    "openev_id": 512,
+    "path": "/openev/2026/Tamarack/TSF-Estuary Solvency Advocate.docx",
+    "filename": "TSF-Estuary Solvency Advocate.docx",
+    "year": 2026,
+    "camp": "Tamarack",
+    "tags": {"policy": True},
+}
+"""One OpenEv file as `GET /openev` lists it, tagged with its event so the run selects it."""
+
+
+@pytest.fixture
+def quick_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two attempts and a short wait, so a test of the retries does not sit through the defaults."""
+    monkeypatch.setenv("DEBATE_CASELIST__MAX_ATTEMPTS", "2")
+    monkeypatch.setenv("DEBATE_CASELIST__BACKOFF_BASE_SECONDS", "0.01")
+
+
+def stages_of(envelope: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The run's stages by name, from `data` on success or the failure's `details`."""
+    summary = envelope["data"] if envelope["data"] is not None else envelope["error"]["details"]
+    return {one["stage"]: one for one in summary["stages"]}
+
+
+def requests_for(site: respx.MockRouter, archive: str) -> int:
+    return sum(1 for call in site.calls if call.request.url.path.endswith(f"/{archive}"))
+
+
+def test_a_download_answered_503_past_the_retries_exits_three_and_the_next_run_fetches_it(
+    installation: Path, site: respx.MockRouter, archives: dict[date, Path], quick_retries: None
+) -> None:
+    """The file host answers 503 to both attempts. That is a provider that did not answer, so the
+    run is a `3`; the next run fetches the one week still missing and nothing else."""
+    week_three = site.get(f"{FILE_HOST}/{weekly_name(WEEK_THREE)}")
+    week_three.respond(503)
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.RETRIEVAL_FAILURE, envelope
+    assert envelope["error"]["code"] == "CASELIST_PULL_INCOMPLETE"
+    assert envelope["error"]["exit_code"] == 3
+    assert requests_for(site, weekly_name(WEEK_THREE)) == 2, "bounded: two attempts, as configured"
+    download = stages_of(envelope)["download"]
+    assert (download["outcome"], download["error_codes"]) == ("failed", ["PROVIDER_UNAVAILABLE"])
+    assert envelope["error"]["details"]["snapshots_imported"] == [
+        f"{SYNTHETIC_CASELIST} {WEEK_ONE.isoformat()}",
+        f"{SYNTHETIC_CASELIST} {WEEK_TWO.isoformat()}",
+    ]
+
+    week_three.respond(200, content=archives[WEEK_THREE].read_bytes())
+    again = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert again["exit_code"] == ExitCode.OK, again
+    assert again["data"]["snapshots_imported"] == [f"{SYNTHETIC_CASELIST} {WEEK_THREE.isoformat()}"]
+    assert requests_for(site, weekly_name(WEEK_ONE)) == 1
+    assert requests_for(site, weekly_name(WEEK_TWO)) == 1
+
+
+def test_a_download_that_times_out_exits_three(
+    installation: Path, site: respx.MockRouter, quick_retries: None
+) -> None:
+    site.get(f"{FILE_HOST}/{weekly_name(WEEK_THREE)}").mock(side_effect=httpx.ReadTimeout("timed out"))
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.RETRIEVAL_FAILURE, envelope
+    assert stages_of(envelope)["download"]["error_codes"] == ["PROVIDER_UNAVAILABLE"]
+
+
+def test_a_connection_that_never_opens_exits_three(
+    installation: Path, site: respx.MockRouter, quick_retries: None
+) -> None:
+    site.get(f"{FILE_HOST}/{weekly_name(WEEK_THREE)}").mock(side_effect=httpx.ConnectError("refused"))
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.RETRIEVAL_FAILURE, envelope
+    assert stages_of(envelope)["download"]["error_codes"] == ["PROVIDER_UNAVAILABLE"]
+
+
+def test_a_rate_limit_that_is_not_the_daily_cap_exits_three(
+    installation: Path, site: respx.MockRouter, quick_retries: None
+) -> None:
+    """A `Retry-After` of ten minutes is longer than the client will sit through and far short of a
+    day: a burst limit that outlasted the retries, which a later run does not meet."""
+    site.get(f"{FILE_HOST}/{weekly_name(WEEK_THREE)}").respond(429, headers={"Retry-After": "600"})
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.RETRIEVAL_FAILURE, envelope
+    assert stages_of(envelope)["download"]["error_codes"] == ["PROVIDER_RATE_LIMITED"]
+
+
+def test_the_daily_cap_defers_the_week_and_the_run_still_exits_zero(
+    installation: Path, site: respx.MockRouter, quick_retries: None
+) -> None:
+    """Unchanged: a `Retry-After` of a day is the site's verdict for today, the week is deferred,
+    and a run that captured the rest is a success. It is never a `3`."""
+    site.get(f"{FILE_HOST}/{weekly_name(WEEK_THREE)}").respond(429, headers={"Retry-After": "86400"})
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.OK, envelope
+    download = stages_of(envelope)["download"]
+    assert (download["outcome"], download["error_codes"]) == ("completed", [])
+    assert envelope["data"]["archives_deferred"] == 1
+
+
+def test_the_daily_cap_on_a_camp_download_exits_one(
+    installation: Path, site: respx.MockRouter, quick_retries: None
+) -> None:
+    """A camp download has nothing to be deferred to, so the day's verdict fails the stage, and a
+    verdict is a `1`: running the command again today gets the same answer."""
+    site.get(f"{API}/openev").respond(200, json=[A_CAMP_FILE])
+    site.get(f"{API}/download").respond(429, headers={"Retry-After": "86400"})
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.DOMAIN_FAILURE, envelope
+    assert stages_of(envelope)["download"]["error_codes"] == ["DAILY_DOWNLOAD_LIMIT_REACHED"]
+
+
+def test_a_camp_download_the_api_answers_401_to_exits_one_and_is_asked_for_once(
+    installation: Path, site: respx.MockRouter, quick_retries: None
+) -> None:
+    """Policy E34 gate 5: a 401 is never retried, and no later run can cure it without a login."""
+    site.get(f"{API}/openev").respond(200, json=[A_CAMP_FILE])
+    refused = site.get(f"{API}/download")
+    refused.respond(401)
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.DOMAIN_FAILURE, envelope
+    assert stages_of(envelope)["download"]["error_codes"] == ["CASELIST_AUTH_EXPIRED"]
+    assert refused.call_count == 1
+
+
+def test_an_archive_the_file_host_no_longer_serves_exits_one(
+    installation: Path, site: respx.MockRouter, quick_retries: None
+) -> None:
+    site.get(f"{FILE_HOST}/{weekly_name(WEEK_THREE)}").respond(404)
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.DOMAIN_FAILURE, envelope
+    assert stages_of(envelope)["download"]["error_codes"] == ["ARCHIVE_UNAVAILABLE"]
+
+
+def test_an_archive_over_the_size_ceiling_exits_one(
+    installation: Path,
+    site: respx.MockRouter,
+    archives: dict[date, Path],
+    quick_retries: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ceiling is set between the fixture's two smaller weeks and its largest, week three."""
+    sizes = {day: path.stat().st_size for day, path in archives.items()}
+    assert max(sizes[WEEK_ONE], sizes[WEEK_TWO]) < sizes[WEEK_THREE]
+    monkeypatch.setenv("DEBATE_CASELIST__MAX_ARCHIVE_BYTES", str(sizes[WEEK_THREE] - 1))
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.DOMAIN_FAILURE, envelope
+    assert stages_of(envelope)["download"]["error_codes"] == ["ARCHIVE_TOO_LARGE"]
+
+
+def test_one_retryable_and_one_deterministic_failure_exit_one(
+    installation: Path, site: respx.MockRouter, quick_retries: None
+) -> None:
+    """Week three's download answers 503, which a retry may cure. Week two arrives as bytes no
+    reader can open, which it cannot. One verdict among the failures makes the run a `1`."""
+    site.get(f"{FILE_HOST}/{weekly_name(WEEK_TWO)}").respond(
+        200, content=b"PK\x03\x04 an invented archive, cut short: not a zip any reader can open"
+    )
+    site.get(f"{FILE_HOST}/{weekly_name(WEEK_THREE)}").respond(503)
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    stages = stages_of(envelope)
+    assert stages["download"]["error_codes"] == ["PROVIDER_UNAVAILABLE"]
+    assert stages["import"]["error_codes"] == ["UNREADABLE_ARCHIVE"]
+    assert envelope["exit_code"] == ExitCode.DOMAIN_FAILURE, envelope
+    assert envelope["error"]["exit_code"] == 1
+
+
+def failed_run(*stages: StageRecord) -> RunSummary:
+    """A run summary holding these stage records and nothing else: what the exit rule reads."""
+    started = datetime(2026, 9, 16, 6, 0, tzinfo=UTC)
+    return RunSummary(
+        run_id="20260916T060000Z",
+        started_at=started,
+        finished_at=started,
+        dry_run=False,
+        caselists=(SYNTHETIC_CASELIST,),
+        stages=stages,
+    )
+
+
+def failed(stage: SyncStage, *codes: str, hint: str | None = None) -> StageRecord:
+    return StageRecord(stage, StageOutcome.FAILED, "a sentence", error_codes=codes, hint=hint)
+
+
+@pytest.mark.parametrize(
+    ("failures", "expected"),
+    [
+        pytest.param(
+            [(SyncStage.IMPORT, ("STORE_UNAVAILABLE",))],
+            ExitCode.RETRIEVAL_FAILURE,
+            id="the store did not answer the import",
+        ),
+        pytest.param(
+            [(SyncStage.DOWNLOAD, ("PROVIDER_UNAVAILABLE",)), (SyncStage.PUBLISH, ("STORE_ACCESS_DENIED",))],
+            ExitCode.RETRIEVAL_FAILURE,
+            id="two stages, both retryable",
+        ),
+        pytest.param(
+            [(SyncStage.DOWNLOAD, ("PROVIDER_UNAVAILABLE",)), (SyncStage.IMPORT, ("UNREADABLE_ARCHIVE",))],
+            ExitCode.DOMAIN_FAILURE,
+            id="one retryable stage and one deterministic",
+        ),
+        pytest.param(
+            [(SyncStage.IMPORT, ("STORE_UNAVAILABLE", "UNREADABLE_ARCHIVE"))],
+            ExitCode.DOMAIN_FAILURE,
+            id="one stage, a retryable failure and a deterministic one",
+        ),
+        pytest.param(
+            [(SyncStage.DOWNLOAD, ("ARCHIVE_UNAVAILABLE",))],
+            ExitCode.DOMAIN_FAILURE,
+            id="a refused archive",
+        ),
+        pytest.param(
+            [(SyncStage.DOWNLOAD, ("DAILY_DOWNLOAD_LIMIT_REACHED",))],
+            ExitCode.DOMAIN_FAILURE,
+            id="the daily cap",
+        ),
+        pytest.param(
+            [(SyncStage.IMPORT, ("A_CODE_NOBODY_MAPPED",))],
+            ExitCode.DOMAIN_FAILURE,
+            id="a code on no list",
+        ),
+        pytest.param(
+            [(SyncStage.IMPORT, ("INTERNAL_ERROR",))],
+            ExitCode.DOMAIN_FAILURE,
+            id="an error nobody modelled",
+        ),
+        pytest.param(
+            [(SyncStage.IMPORT, ())],
+            ExitCode.DOMAIN_FAILURE,
+            id="a failed stage that recorded no code",
+        ),
+        pytest.param(
+            [(SyncStage.IMPORT, ("STORE_UNAVAILABLE",)), (SyncStage.REPORT, ("CASELIST_DRIFT",))],
+            ExitCode.RETRIEVAL_FAILURE,
+            id="a stage that need not finish decides nothing",
+        ),
+    ],
+)
+def test_the_exit_code_is_three_only_when_every_required_failure_is_retryable(
+    failures: list[tuple[SyncStage, tuple[str, ...]]], expected: ExitCode
+) -> None:
+    """The rule by itself, on hand-written stage records: 3 only when every failure behind a stage
+    that had to finish is one a retry may cure; 1 as soon as one is not, or has no code."""
+    failure = _pull_failure(failed_run(*(failed(stage, *codes) for stage, codes in failures)), {})
+
+    assert failure.exit_code is expected
+    assert failure.code == "CASELIST_PULL_INCOMPLETE"
+
+
+def test_a_stage_that_names_its_own_fix_supplies_the_commands_hint() -> None:
+    """A refused store's fix comes before "run it again": running it again changes nothing."""
+    fix = "This machine refused the blob directory: check storage.data_dir."
+    failure = _pull_failure(failed_run(failed(SyncStage.PUBLISH, "STORE_ACCESS_DENIED", hint=fix)), {})
+
+    assert failure.hint is not None
+    assert failure.hint.startswith(fix)
+    assert "--publish-pending" not in failure.hint
 
 
 # ------------------------------------------------------------------------------------------------

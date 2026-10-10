@@ -130,16 +130,35 @@ of those three is what stopped them (`v1-e01-t20`); any other `DomainError` → 
 exception — `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
 `raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`.
 
-Three commands report per-item failures rather than raising:
+A failure's **error code**, the `error.code` of the `--json` envelope, is its class name in upper
+snake case: `StoreUnavailable` → `STORE_UNAVAILABLE`. The word is defined once, in
+`debate_core.application.errors.error_code_of`, and `error_code_for` reads it from there
+(`v1-e34-t13`), because the services below record failures by the same code the CLI reports them
+under. `LocalStoreAccessDenied`, which the filesystem stores raise when the operating system refuses
+a directory, is reported as `STORE_ACCESS_DENIED` like its parent.
 
-* `store sync --apply` and `caselist publish` carry on past one object's failure. They exit 3 when
-  every failure was one of the three store failures, and 1 as soon as one was not (a checksum
-  mismatch, a file missing locally): running the command again cannot fix that one
-  (`exit_code_for_failure_codes`).
-* `caselist pull` records each stage's outcome as a sentence, and a failed required stage exits 1
-  whatever caused it, a store failure included. A store failure that ends the run before a stage
-  records it exits 3. An expired or refused AWS session during publish is still a *pending* publish
-  and exits 0, because what was captured is safe and the next run finishes it.
+Three commands record failures by error code rather than raising them, and all three decide their
+exit code with `exit_code_for_failure_codes`: 3 only when **every** recorded code is one a retry
+may cure, 1 as soon as one is not. A code on neither list, and a failure with no code, count as not
+retryable, so nothing exits 3 because nobody classified it. The retryable codes are those of
+`RETRYABLE_STORE_FAILURES` and of `RETRYABLE_PROVIDER_FAILURES` (`PROVIDER_UNAVAILABLE`,
+`PROVIDER_RATE_LIMITED`).
+
+* `store sync --apply` and `caselist publish` carry on past one object's failure and record each
+  object's code. A checksum mismatch or a file missing locally makes the run a 1: running the
+  command again cannot fix that one. `caselist publish` takes a failed manifest's code from the
+  publish result's `manifest_error_code`, which `--json` prints beside `manifest_error`; the
+  sentence in `manifest_error` is never read for it.
+* `caselist pull` records, on each failed stage, the code of every failure behind it
+  (`stages[].error_codes`), and the codes of the stages that had to finish (select, download,
+  import, publish) decide: 3 when the bucket or this machine's store did not answer or refused, or
+  an OpenCaselist download got a 5xx, a timeout or a rate limit that is not the daily cap; 1 for a
+  refused or unreadable archive, a size ceiling, an expired OpenCaselist token, a checksum mismatch,
+  or the daily cap on a camp file. `error.code` is `CASELIST_PULL_INCOMPLETE` either way. An
+  *expired* AWS session during publish is still a *pending* publish and exits 0, because what was
+  captured is safe and the next run finishes it. A session that is signed in and *refused* is not
+  pending: the stage fails, exits 3, and its `hint` names the fix, a permission under
+  `storage.data_dir` or a grant the profile lacks, never `aws sso login`.
 
 ## `debate-research doctor`
 

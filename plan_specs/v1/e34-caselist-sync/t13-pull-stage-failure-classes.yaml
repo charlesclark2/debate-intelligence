@@ -54,9 +54,13 @@ spec:
     - id: ac2
       description: >-
         A local `PermissionError` and a missing grant in publish or report fail that stage
-        with exit 1 or 3 per the rule above and name the fix that applies, never `aws sso
-        login`; an expired session still marks publish pending with exit 0. Shown failing
-        first.
+        and name the fix that applies, never `aws sso login`; an expired session still marks
+        publish pending with exit 0. Shown failing first. The exit follows the rule above,
+        which reads only the required stages: a refusal in publish exits 3, and a refusal in
+        report alone exits 0 with report failed, its hint and a notification. Amended by the
+        PM, 2026-10-10, from the session's Deviation 1: report puts no bytes anywhere, which
+        is v1-e34-t02's definition of a failed run, and "exit 1 or 3" as first written
+        contradicted the rule the PM gave in the kickoff.
     - id: ac3
       description: >-
         `FsEvidenceObjectStore` (including `list_objects`, which raises instead of listing
@@ -68,7 +72,7 @@ spec:
         v1-e01-t20's consumer table is brought up to date for every changed code, and each
         new guard is mutated and shown caught.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

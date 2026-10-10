@@ -92,6 +92,7 @@ from debate_core.application.caselist_sync import (
 from debate_core.application.errors import (
     ProviderRateLimited,
     StoreCredentialsExpired,
+    StoreUnavailable,
     UnreadableArchive,
 )
 from debate_core.application.ports.archive import ArchiveEntry
@@ -1246,7 +1247,7 @@ async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it
     summary = await service.run([SYNTHETIC_CASELIST])
     written = json.loads(service.summary_path(summary).read_text(encoding="utf-8"))
 
-    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 3
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 4
     assert written["bulk_download_window_start"] == "2026-09-15T06:00:00+00:00"
     assert written["bulk_downloads_spent_in_window"] == 2
     assert written["bulk_downloads_allowed"] == 3
@@ -1678,7 +1679,7 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
     assert body["objects_published"] == 0
     assert body["reports_written"] == 2
     assert body["duration_seconds"] == 0.0
-    assert set(body["stages"][0]) == {"stage", "outcome", "reason"}
+    assert set(body["stages"][0]) == {"stage", "outcome", "reason", "error_codes", "hint"}
 
     text = written.read_text(encoding="utf-8")
     for forbidden in ("Maple Grove", "Cedar Hollow", "Northgate Prep", "Riverbend Academy", "ZaLu"):
@@ -1723,9 +1724,37 @@ async def test_an_optional_stage_that_fails_does_not_fail_a_run_whose_bytes_are_
 
     summary = await service.run([SYNTHETIC_CASELIST])
 
-    assert summary.stage(SyncStage.PARSE).outcome is StageOutcome.FAILED  # type: ignore[union-attr]
+    parsed = summary.stage(SyncStage.PARSE)
+    assert parsed is not None and parsed.outcome is StageOutcome.FAILED
+    # An error this project did not write is given by its class alone and recorded as unmodelled
+    # (`v1-e34-t13`); an optional stage's codes decide nothing about the exit.
+    assert (parsed.reason, parsed.error_codes) == ("OSError", ("INTERNAL_ERROR",))
     assert summary.succeeded
+    assert summary.failure_codes == ()
     assert summary.files_imported == 28
+
+
+class LandscapeThatFails:
+    """A landscape stage whose store does not answer."""
+
+    async def regenerate(self, *, caselists: object) -> LandscapeStageResult:
+        raise StoreUnavailable("PutObject", "s3://bucket/reports/landscape", "503")
+
+
+async def test_a_landscape_stage_that_fails_records_its_code_and_does_not_fail_the_run(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    await import_first_week(data_dir, archives)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, landscape=LandscapeThatFails())
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    landscape = summary.stage(SyncStage.LANDSCAPE)
+    assert landscape is not None and landscape.outcome is StageOutcome.FAILED
+    assert landscape.error_codes == ("STORE_UNAVAILABLE",)
+    assert landscape.reason == "PutObject on s3://bucket/reports/landscape failed: 503"
+    assert summary.succeeded
+    assert summary.failure_codes == ()
 
 
 async def test_the_optional_stages_run_when_they_are_installed(

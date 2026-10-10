@@ -437,6 +437,21 @@ def test_a_removal_that_completed_unlogged_is_not_retried_whatever_refused_the_l
         (["BLOB_INTEGRITY_ERROR"], ExitCode.DOMAIN_FAILURE),
         (["NOT_FOUND"], ExitCode.DOMAIN_FAILURE),
         (["STORE_UNAVAILABLE", None], ExitCode.DOMAIN_FAILURE),
+        # What a stage of `caselist pull` records (v1-e34-t13): a provider that did not answer is
+        # retryable beside a store that did not, and one verdict among them decides.
+        (["PROVIDER_UNAVAILABLE"], ExitCode.RETRIEVAL_FAILURE),
+        (["PROVIDER_RATE_LIMITED", "STORE_UNAVAILABLE"], ExitCode.RETRIEVAL_FAILURE),
+        (["PROVIDER_UNAVAILABLE", "UNREADABLE_ARCHIVE"], ExitCode.DOMAIN_FAILURE),
+        (["ARCHIVE_UNAVAILABLE"], ExitCode.DOMAIN_FAILURE),
+        (["ARCHIVE_TOO_LARGE"], ExitCode.DOMAIN_FAILURE),
+        (["CASELIST_AUTH_EXPIRED"], ExitCode.DOMAIN_FAILURE),
+        (["DAILY_DOWNLOAD_LIMIT_REACHED"], ExitCode.DOMAIN_FAILURE),
+        (["FULL_ARCHIVE_REFUSED"], ExitCode.DOMAIN_FAILURE),
+        # Nothing reaches 3 because nobody classified it.
+        (["INTERNAL_ERROR"], ExitCode.DOMAIN_FAILURE),
+        (["A_CODE_NOBODY_MAPPED"], ExitCode.DOMAIN_FAILURE),
+        (["PROVIDER_ERROR"], ExitCode.DOMAIN_FAILURE),
+        (["STORE_ERROR"], ExitCode.DOMAIN_FAILURE),
     ],
 )
 def test_a_run_of_item_failures_is_a_three_only_when_every_one_is_a_store_failure(

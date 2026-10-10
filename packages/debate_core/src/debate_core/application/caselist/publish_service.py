@@ -84,11 +84,13 @@ from debate_core.application.caselist.publish_plan import (
 )
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import (
+    UNMODELLED_ERROR_CODE,
     BlobIntegrityError,
     DomainError,
     NotFound,
     StoreAccessDenied,
     StoreCredentialsExpired,
+    error_code_of,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.suppression import SuppressionList
@@ -96,6 +98,7 @@ from debate_core.domain import Sha256Hex
 
 __all__ = [
     "DEFAULT_CONCURRENCY",
+    "MANIFEST_NAMES_SUPPRESSED_SOURCE",
     "CaselistPublishService",
     "ManifestOutcome",
     "NothingToPublish",
@@ -114,6 +117,14 @@ DEFAULT_CONCURRENCY: Final = 8
 Enough to hide S3's per-request latency — a first publish of the September windows is about 2,300
 uploads, each a PutObject and two HeadObjects — and few enough that one laptop's upload link and
 the adapter's thread pool are not the bottleneck being tuned.
+"""
+
+
+MANIFEST_NAMES_SUPPRESSED_SOURCE: Final = "MANIFEST_NAMES_SUPPRESSED_SOURCE"
+"""The code of a manifest withheld because the local copy still has a row the suppression list stops.
+
+An outcome's code, like `CHECKSUM_MISMATCH` and `MISSING_LOCALLY` on a source: nothing was raised,
+and running the publish again gives the same answer until `caselist remove` rewrites the manifest.
 """
 
 
@@ -181,6 +192,16 @@ class SnapshotOutcome:
     sources: tuple[SourceOutcome, ...]
     manifest: ManifestOutcome
     manifest_error: str | None = None
+    """Why the manifest was withheld or failed, for a person. Never read for a decision."""
+
+    manifest_error_code: str | None = None
+    """The error code of a manifest that failed on its own, for a program (`v1-e34-t13`).
+
+    The code of what stopped the upload when :attr:`manifest` is `FAILED`, and
+    :data:`MANIFEST_NAMES_SUPPRESSED_SOURCE` when it was withheld for a suppressed row. `None` for
+    a manifest withheld because sources failed: their own codes say why. It replaces a code that
+    used to be written at the front of :attr:`manifest_error` and parsed back out.
+    """
 
     def of(self, result: SourceResult) -> tuple[SourceOutcome, ...]:
         return tuple(outcome for outcome in self.sources if outcome.result is result)
@@ -193,6 +214,22 @@ class SnapshotOutcome:
     def complete(self) -> bool:
         """True when the bucket now holds this snapshot's manifest, and so all of its sources."""
         return self.manifest in (ManifestOutcome.UPLOADED, ManifestOutcome.SKIPPED)
+
+    @property
+    def failure_codes(self) -> tuple[str, ...]:
+        """The error code behind every failure that left this snapshot incomplete; none when complete.
+
+        Each failed source's code, then the manifest's own when it has one. A source with no code,
+        or a snapshot incomplete with no code at all, contributes
+        :data:`~debate_core.application.errors.UNMODELLED_ERROR_CODE`, which is on no list of
+        failures a retry may cure: a case nobody anticipated is never reported as transient.
+        """
+        if self.complete:
+            return ()
+        codes = [source.error_code or UNMODELLED_ERROR_CODE for source in self.failed]
+        if self.manifest_error_code is not None:
+            codes.append(self.manifest_error_code)
+        return tuple(codes) or (UNMODELLED_ERROR_CODE,)
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,6 +255,16 @@ class PublishReport:
         if not self.applied:
             return tuple(sorted({source.sha256 for plan in self.plan.snapshots for source in plan.blocked}))
         return tuple(sorted({outcome.sha256 for snapshot in self.snapshots for outcome in snapshot.failed}))
+
+    @property
+    def failure_codes(self) -> tuple[str, ...]:
+        """The error code behind every failure of an applied run, snapshot by snapshot.
+
+        What `caselist publish` and the publish stage of `caselist pull` decide an exit status
+        from: the run is one a retry may cure only when every code here is
+        (:attr:`SnapshotOutcome.failure_codes`).
+        """
+        return tuple(code for snapshot in self.snapshots for code in snapshot.failure_codes)
 
     @property
     def suppressed_rows(self) -> tuple[Sha256Hex, ...]:
@@ -329,6 +376,7 @@ class CaselistPublishService:
                     f"source(s): {', '.join(plan.suppressed_rows)}; re-run `caselist remove` for them "
                     "on this machine to rewrite it"
                 ),
+                manifest_error_code=MANIFEST_NAMES_SUPPRESSED_SOURCE,
             )
 
         # The invariant, checked directly: every source this manifest names is confirmed in the
@@ -351,14 +399,16 @@ class CaselistPublishService:
                 ),
             )
 
+        manifest_error: str | None = None
+        manifest_error_code: str | None = None
         try:
             manifest = await self._publish_manifest(plan)
-            manifest_error = None
         except (StoreCredentialsExpired, StoreAccessDenied):
             raise
         except (DomainError, OSError) as failure:
             manifest = ManifestOutcome.FAILED
-            manifest_error = f"{error_code_of(failure)}: {failure}"
+            manifest_error = str(failure) or type(failure).__name__
+            manifest_error_code = error_code_of(failure)
         return SnapshotOutcome(
             caselist=plan.caselist,
             snapshot=plan.snapshot,
@@ -366,6 +416,7 @@ class CaselistPublishService:
             sources=tuple(sources),
             manifest=manifest,
             manifest_error=manifest_error,
+            manifest_error_code=manifest_error_code,
         )
 
     async def _publish_source(
@@ -519,14 +570,6 @@ async def _bounded[ResultT](
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         raise
-
-
-def error_code_of(failure: BaseException) -> str:
-    """`BlobIntegrityError` -> `BLOB_INTEGRITY_ERROR`, matching the CLI's `--json` error codes."""
-    name = type(failure).__name__
-    return "".join(
-        f"_{letter}" if letter.isupper() and index else letter for index, letter in enumerate(name)
-    ).upper()
 
 
 def _log_snapshot(outcome: SnapshotOutcome) -> None:

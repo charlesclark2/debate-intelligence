@@ -344,11 +344,44 @@ class TestFailedSourcesWithholdTheManifest:
         assert outcomes["2026-09-08"].manifest is ManifestOutcome.WITHHELD
         assert outcomes["2026-09-15"].manifest is ManifestOutcome.WITHHELD
         assert failing in (outcomes["2026-09-08"].manifest_error or "")
+        # The withheld manifests carry no code of their own: the failed source's says why, once
+        # for each snapshot it is in (`v1-e34-t13`).
+        assert outcomes["2026-09-08"].manifest_error_code is None
+        assert outcomes["2026-09-08"].failure_codes == ("STORE_UNAVAILABLE",)
+        assert outcomes["2026-09-01"].failure_codes == ()
+        assert report.failure_codes == ("STORE_UNAVAILABLE", "STORE_UNAVAILABLE")
         landed = bucket_keys(s3_client, evidence_bucket)
         assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-08.jsonl" not in landed
         assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-15.jsonl" not in landed
         # Everything else was still uploaded: one failure does not abandon the rest.
         assert landed >= EXPECTED_SOURCE_KEYS - {expected_source_key("ridgeline-round-6-neg")}
+
+    async def test_a_manifest_that_fails_on_its_own_states_its_code_in_a_field_of_its_own(
+        self, local: LocalEvidence, bucket: S3EvidenceObjectStore
+    ) -> None:
+        """Every source of the first week uploads; the manifest's own upload answers 503.
+
+        The code is `manifest_error_code` and the sentence is only a sentence (`v1-e34-t13`): until
+        then the code was written at the front of `manifest_error` for `caselist publish` to parse.
+        """
+
+        def manifests_answer_503(key: ObjectKey, _: int) -> None:
+            if key.startswith("manifests/"):
+                raise StoreUnavailable("PutObject", key, "simulated 503 SlowDown")
+
+        report = await publish(
+            service_over(local, ScriptedBucket(bucket, manifests_answer_503)), "2026-09-01"
+        )
+
+        assert not report.succeeded
+        (outcome,) = report.snapshots
+        assert outcome.failed == ()
+        assert outcome.manifest is ManifestOutcome.FAILED
+        assert outcome.manifest_error_code == "STORE_UNAVAILABLE"
+        assert outcome.manifest_error == (
+            f"PutObject on manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl failed: simulated 503 SlowDown"
+        )
+        assert report.failure_codes == ("STORE_UNAVAILABLE",)
 
     async def test_the_next_run_after_a_failure_completes_the_withheld_snapshots(
         self,
@@ -503,6 +536,11 @@ async def test_a_suppressed_source_is_never_uploaded_and_a_manifest_naming_it_is
     (outcome,) = report.snapshots
     assert outcome.manifest is ManifestOutcome.WITHHELD
     assert suppressed in str(outcome.manifest_error)
+    # No source failed, so the manifest's own code is the only one, and it is a verdict: publishing
+    # again gives the same answer until `caselist remove` rewrites the manifest (`v1-e34-t13`).
+    assert outcome.failed == ()
+    assert outcome.manifest_error_code == "MANIFEST_NAMES_SUPPRESSED_SOURCE"
+    assert report.failure_codes == ("MANIFEST_NAMES_SUPPRESSED_SOURCE",)
     landed = bucket_keys(s3_client, evidence_bucket)
     assert expected_source_key("harbor-octas-neg") not in landed
     assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" not in landed

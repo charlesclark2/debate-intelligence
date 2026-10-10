@@ -42,16 +42,32 @@ step (`docs/runbooks/caselist-scheduled-sync.md`).
 
 From :mod:`debate_cli.exit_codes`. `0` when every stage that puts bytes somewhere durable
 finished — including a run that found nothing new, and a run whose publish is pending because the
-SSO session expired, because in both cases nothing was lost and the next run continues. `1` when
-a download, an import or a publish failed, or when a guard refused to start: an expired
-OpenCaselist token, an API this installation has not turned on, no caselist to pull, or another
-run already holding the lock. A parse or landscape stage that failed is reported in the table and
-does not change the exit code — the captured bytes are safe and the derivation can be recomputed.
+SSO session expired, because in both cases nothing was lost and the next run continues. A parse,
+landscape, report or retention stage that failed is reported in the table and does not change the
+exit code — the captured bytes are safe and the rest can be recomputed.
 
-A stage records its failure as a sentence, so a stage that failed because the bucket did not
-answer is a `1` like any other failed stage. A store failure that ends the run before a stage can
-record it — the bucket refusing the publish stage's listing, say — is a `3`, as in every other
-command (`v1-e01-t20`).
+When a download, an import or a publish failed, the exit code comes from **what they failed on**
+(`v1-e34-t13`). Each failed stage records the error code of every failure behind it, and
+:func:`~debate_cli.exit_codes.exit_code_for_failure_codes` reads those of the stages that had to
+finish:
+
+* `3` when every one is a failure a retry may cure: the bucket or this machine's store did not
+  answer or refused (`STORE_UNAVAILABLE`, `STORE_ACCESS_DENIED`), or an OpenCaselist download got a
+  5xx, a timeout, or a rate limit that is not the daily cap (`PROVIDER_UNAVAILABLE`,
+  `PROVIDER_RATE_LIMITED`). Nothing captured is lost and the snapshots not yet published stay owed,
+  so the next run, or the same command, finishes the job.
+* `1` as soon as one is a verdict: an archive that cannot be read or is over the size ceiling, one
+  the file host no longer serves, an expired OpenCaselist token (never retried, by policy), the
+  site's daily download cap on a camp file, a checksum mismatch. So is any failure with a code
+  nobody put on the retryable list.
+
+`1` also when a guard refused to start: an expired OpenCaselist token, an API this installation has
+not turned on, no caselist to pull, another run already holding the lock, or a `--full-archive` the
+day's allowance cannot cover. A failure that ends the run before any stage records it exits as that
+exception does in every other command: `3` for a store or provider failure (`v1-e01-t20`).
+
+The envelope's `error.code` for a failed stage is `CASELIST_PULL_INCOMPLETE` whichever it is; the
+exit status and each stage's `error_codes` say which.
 """
 
 from __future__ import annotations
@@ -64,11 +80,12 @@ import typer
 
 from debate_cli.commands.caselist import event_for_caselist
 from debate_cli.context import cli_context, command_name
-from debate_cli.exit_codes import ExitCode
+from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist_sync import (
     RunSummary,
     StageOutcome,
+    StageRecord,
     SyncStage,
     run_pull,
 )
@@ -142,8 +159,9 @@ def pull(
         return
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
-    cli.output.failure(_pull_failure(summary, payload), command=command_name(ctx))
-    raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)
+    failure = _pull_failure(summary, payload)
+    cli.output.failure(failure, command=command_name(ctx))
+    raise typer.Exit(code=failure.exit_code)
 
 
 class ConflictingPullMode(typer.BadParameter):
@@ -308,28 +326,49 @@ def _backlog_sentence(record: SyncRunRecord | None) -> str:
 
 
 def _pull_failure(summary: RunSummary, payload: dict[str, JsonValue]) -> CommandFailure:
-    """What an incomplete run exits `1` with: the stages that failed, and the whole summary."""
+    """What an incomplete run reports: the stages that failed, and the whole summary.
+
+    Its exit code is `3` when every failure behind a stage that had to finish is one a retry may
+    cure, and `1` as soon as one is not (:attr:`RunSummary.failure_codes`,
+    :func:`~debate_cli.exit_codes.exit_code_for_failure_codes`, `v1-e34-t13`).
+    """
     failed = [record for record in summary.stages if record.outcome is StageOutcome.FAILED]
     named = "; ".join(f"{record.stage}: {record.reason}" for record in failed)
+    exit_code = exit_code_for_failure_codes(summary.failure_codes)
     return CommandFailure(
         code="CASELIST_PULL_INCOMPLETE",
         message=f"{len(failed)} stage(s) of the caselist pull did not complete — {named}",
-        exit_code=ExitCode.DOMAIN_FAILURE,
+        exit_code=exit_code,
         details=payload,
-        hint=_hint_for(failed),
+        hint=_hint_for(failed, retryable=exit_code is ExitCode.RETRIEVAL_FAILURE),
     )
 
 
-def _hint_for(failed: list[Any]) -> str:
+def _hint_for(failed: list[StageRecord], *, retryable: bool) -> str:
+    """What to do about the failed stages: the fix a stage names, or else how to run it again.
+
+    A stage a store refused carries its own fix, a permission on this machine or a grant the AWS
+    profile lacks, and that comes first: running the command again before it is made changes
+    nothing.
+    """
+    fixes = list(dict.fromkeys(record.hint for record in failed if record.hint))
+    if fixes:
+        return " ".join(fixes) + " Then run the same command again: what was captured is kept."
     stages = {record.stage for record in failed}
+    again = (
+        "Transient: every failure here is one a later run may not meet, and the next scheduled run "
+        "retries it. "
+        if retryable
+        else ""
+    )
     if SyncStage.DOWNLOAD in stages:
         return (
-            "Nothing that did download was lost: it is in the inbox and imported. Run the same "
+            f"{again}Nothing that did download was lost: it is in the inbox and imported. Run the same "
             "command again — an archive already held is not fetched twice."
         )
     if SyncStage.PUBLISH in stages:
-        return "Re-run `caselist pull --publish-pending`: every confirmed source is skipped."
-    return "Run the same command again; every stage is idempotent."
+        return f"{again}Re-run `caselist pull --publish-pending`: every confirmed source is skipped."
+    return f"{again}Run the same command again; every stage is idempotent."
 
 
 def _run[T](awaitable: Coroutine[Any, Any, T]) -> T:

@@ -309,9 +309,7 @@ async def test_a_second_expiry_part_way_through_the_retry_takes_only_the_confirm
     assert owed(installation) == [OWED_1, OWED_2, OWED_3]
 
     session = Session(installation.bucket, expires_on=MANIFEST[WEEK_2])
-    first = await pull(
-        installation, installation.sync(source, publish_to=session), publish_pending=True
-    )
+    first = await pull(installation, installation.sync(source, publish_to=session), publish_pending=True)
     await session.settle()
 
     assert stage(first.summary, SyncStage.PUBLISH)["outcome"] == "pending"
@@ -749,7 +747,7 @@ async def test_a_pull_that_finds_the_file_unreadable_leaves_it_and_fails_publish
     assert_names_nothing_of_this_machine(summary, installation)
 
 
-async def test_an_unreadable_file_and_an_expired_session_is_a_failed_publish_that_names_what_it_could_not_record(
+async def test_an_unreadable_file_and_an_expired_session_fail_publish_and_name_what_could_not_be_recorded(
     installation: Installation, s3_client: S3Client, evidence_bucket: str
 ) -> None:
     """Nothing can be published and nothing can be written down, so this is not "pending": pending
@@ -830,7 +828,8 @@ def test_a_write_that_dies_part_way_leaves_the_file_as_it_was(
     PendingWork(path).write([PendingSnapshot("testcl26", "2026-09-08")])
 
     assert PendingWork(path).read() == (PendingSnapshot("testcl26", "2026-09-08"),)
-    assert sorted(one.name for one in tmp_path.iterdir()) == [PENDING_WORK_FILE], "a part-written file was left"
+    left = sorted(one.name for one in tmp_path.iterdir())
+    assert left == [PENDING_WORK_FILE], "a part-written file was left behind"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -873,4 +872,3 @@ async def test_a_snapshot_left_owed_by_an_expiry_keeps_its_zip_through_the_next_
     assert installation.inbox_names() == set()
     assert owed(installation) == []
     assert source.archive_fetches == [weekly_name(WEEK_1), weekly_name(WEEK_2)]
-

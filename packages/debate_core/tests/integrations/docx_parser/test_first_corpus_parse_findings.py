@@ -1143,6 +1143,21 @@ class TestABodyFiledAsTheCardsCite:
             for span in card.formatting_spans
         )
 
+    def test_a_body_paragraph_with_a_run_in_an_underline_style_opens_the_body_too(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """Only the cite character style marks a cite. Verbatim's underline style marks evidence."""
+        opening, underlined, closing = UNDERLINED_ELLIPSIS_AND_YEAR
+        paragraph = paragraph_xml(
+            run_xml(opening, half_points=10)
+            + run_xml(underlined, character_style="StyleUnderline", half_points=10)
+            + run_xml(closing, half_points=10)
+        )
+        (card,) = parse(parser, tag_paragraph() + cite_paragraph() + paragraph).cards
+
+        assert card.evidence_text == "".join(UNDERLINED_ELLIPSIS_AND_YEAR)
+        assert card.full_cite == SHORT_CITE + CITE_TAIL
+
     def test_first_and_last_words_on_their_own_line_under_the_cite_are_the_abbreviated_body(
         self, parser: DebateDocxParser
     ) -> None:

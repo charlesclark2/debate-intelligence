@@ -483,12 +483,14 @@ class DebateDocxParser:
         would belong to no card, and :meth:`_close` drops a body with neither tag nor cite.
         """
         match = section.match
-        if building is None or building.has_body:
+        if building is None:
             return section
         if match.unit is not StructuralUnit.CITE or match.match_source is not StyleMatchSource.HEURISTIC:
             return section
         if not self._is_formatted_as_body(section.read) or self._carries_a_cite_style(section.read):
             return section
+        # A guess formatted as body that is still a cite here was not taken by an open body, so
+        # the card has none yet.
         text = section.read.text
         longer_than_a_cite_entry = len(text) > LONGEST_GUESSED_CITE_ENTRY_CHARACTERS
         if building.has_cite:

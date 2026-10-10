@@ -515,9 +515,111 @@ repository all the same. A later session records them in `docs/data/caselist-par
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+This is strong work. One change is needed before the operator spends an evening on the
+full-corpus run. The fault is in my brief, not your reading of it.
+
+**Change 1: one occurrence row per disclosure, not per disclosure per snapshot.** My kickoff
+said the occurrence table records each disclosure as "(caselist, snapshot, path)". You
+implemented that faithfully, and it is wrong for this corpus. The weekly manifests are
+cumulative: each snapshot lists every file still on the caselist, which is why t08's summary
+classifies members as NEW, UNCHANGED or CHANGED against the week before. So a file disclosed in
+week 2 and still listed in week 14 becomes 13 rows of each of its cards, and nothing new
+happened after week 2.
+
+This is the inflation `parse_sources`' own docstring correctly refuses for the full archive,
+which would make every card "look disclosed again on the day of each monthly refresh". Weekly
+re-listing does the same thing every week. Left in, it causes four problems:
+
+* The table grows roughly with the square of the season's weeks.
+* `v1-e32-t03`'s `rounds` and `is_new` would each have to undo it.
+* The rebuild holds every row in memory as a model object.
+* The whole aggregate is re-uploaded every run.
+
+The fix:
+
+* Key a row by (source sha256, card, disclosure). `snapshot` is the first snapshot that lists
+  that disclosure, so ac2's six fields still hold, and a new `last_snapshot` field is the latest.
+* A path whose bytes change already gets a new digest, so it is a new disclosure without any
+  special case.
+* Camp files are unchanged: one row per card per release.
+* Update `test_the_occurrence_table_has_a_row_per_card_per_disclosure_named_by_its_digest`
+  (the verbatim file under three paths over two weeks: one row per path, with first and last
+  snapshot) and `docs/data/parsed-card-store.md`.
+* Add one mutant (per-snapshot rows restored), shown caught.
+* Measure the factor you removed: read-only, per caselist, count the stored manifest rows
+  against the distinct (path, sha256) pairs. Report counts only.
+* Use that factor to put an expected `occurrences.jsonl` size per caselist in the operator
+  follow-ups.
+
+**Change 2: sync with `v1-e34-t04` once it merges.** t04 has finished, and I'm reviewing it next
+and expect it to merge before this branch.
+
+* Its complete archives live at `manifests/<slug>/full/<date>.jsonl`, which your rule already
+  excludes.
+* It also adds `publish_plan.snapshot_of_manifest_key(caselist, key, *, full_archives=False)`,
+  whose default is the weekly series alone. Replace `series_snapshot` with it, so there is one
+  rule for what counts as a weekly snapshot rather than two. If the two differ for `openev` or
+  any other name, keep yours and add a test that pins the difference with the reason.
+* Keep the five planted shapes, and add t04's real `full/<date>` key built with its
+  `full_archive_manifest_key`.
+
+**Change 3: the removal runbook step (authorised outside the packages).** `caselist remove
+--execute` now deletes the aggregates, so the runbook has to say how they come back.
+
+* Add the rebuild (`caselist parse --caselist <slug> --publish`, with `--confirm-prod` and the
+  dev data directory for prod) to `docs/runbooks/caselist-removal.md`, after the dev execute and
+  after prod.
+* Record the edit under Deviations.
+
+**Change 4: the operator follow-ups.**
+
+* Write them to run after `scripts/task pr --partial` merges, from the main checkout on an
+  updated `dev`, so the corpus is parsed by reviewed code.
+* Start them with `cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence`, not a
+  `/Users/<name>/` path. The report is in a public repository.
+* Everything else in them is right, including the stop conditions and the `unset`.
+
+**Rulings on what you asked:**
+
+* **Deviation 1:** the path-free store is confirmed, and the policy is not amended. Keeping
+  `parsed/` free of personal data means a removal has fewer places to clean. A leak of `parsed/`
+  alone names nobody, and every consumer that needs the team can join the manifests, which live
+  under the same controls. `disclosure_digest` is a pseudonym, not anonymisation (anyone holding
+  the manifests can recompute it), and it is the pseudonym the suppression list already uses.
+  Say in `parsed-card-store.md` that the store must never gain a path, school, team code,
+  tournament or round field, and point at the adapter test that scans for them.
+* **Deviation 2:** generations accepted. The published prefix follows the directory name. The
+  store document already says how a reader finds the current one.
+* **Deviations 3 to 9:** accepted. Deviation 6 has the same shape as the AWS-SDK contract, which
+  is the right precedent.
+* **Deviation 10:** fixed by the PM in this branch's spec. The sentence now reads "OpenSearch
+  indexing is V2 and derived from this store", followed by the short-card paragraph.
+* **ac6, rebuilding rather than filtering on read:** accepted, and well argued. The retention
+  table and the noncurrent-version purge settle it, and the per-aggregate mutants prove each
+  check is needed.
+* **The rest of the decisions:** accepted. That covers unsupported formats and `.docm`,
+  `SOURCE_MISSING` being retried, one store per caselist, sections not being stored, a spawned
+  pool with one pipe per worker, per-source atomic writes, and aggregates published last and
+  withheld on a mismatch.
+
+**Follow-up work, done by the PM in today's housekeeping branch:**
+
+* Short-card recall is filed as `v1-e31-t08-short-card-recall` (p1), with your three mechanisms
+  and `short_cards.jsonl` as the regression set. `v1-e32-t03-landscape-report` now depends on it,
+  because its teams and rounds count by cluster.
+* Wiring the pull's parse stage is filed as `v1-e34-t17-pull-parses-new-sources` (p2). It
+  depends on this task's Succeeded, so the operator's runtimes size it.
+* The rebuild's cost waits for ac5. I'll file the incremental rebuild if any caselist's rebuild
+  passes 15 minutes or the process passes 8 GB.
+* `caselist cards --parsed`: no task. E32 reads through `ParsedStore`.
+
+**When you resubmit:** append a revision section with the evidence for Changes 1 to 4, re-run the
+full suite and the gates, and add a new empty PM review after this one. ac5 stays NOT RUN and
+the Goal stays `InProgress`.

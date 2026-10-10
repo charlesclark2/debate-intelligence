@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 39 | 33 | 214 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 44 | 31 | 308 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 45 | 33 | 312 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -69,7 +69,7 @@ v2.3's extension work.
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
-| [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 11 | 0 | 109 |
+| [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
 | [v2.3](plan_specs/releases/v2.3.yaml) | Card library & extensions | 2 | 11 | 0 | 116 |
 | [v2.4](plan_specs/releases/v2.4.yaml) | Production readiness & school rollout | 1 | 7 | 0 | 79 |
 | [v3.0](plan_specs/releases/v3.0.yaml) | Debate file intelligence & argument graph | 2 | 9 | 0 | 109 |
@@ -184,9 +184,10 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Debate .docx parser](plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml) `v1-e31-t03-debate-docx-parser` | Succeeded | 2 | 15.0 |
 | [Card fingerprints and occurrences](plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml) `v1-e31-t04-card-fingerprints` | Succeeded | 1 | 13.0 |
 | [Parser accuracy evaluation](plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) `v1-e31-t05-parser-eval` | InProgress | 1 | 16.0 |
-| [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | InProgress | 5 | 12.0 |
+| [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | Succeeded | 5 | 12.0 |
 | [Labeling worksheets survive a spreadsheet round trip](plan_specs/v1/e31-debate-file-parsing/t07-worksheet-round-trip.yaml) `v1-e31-t07-worksheet-round-trip` | Succeeded | 1 | 4.0 |
 | [Near-duplicate matching finds short cards and abbreviated disclosures](plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml) `v1-e31-t08-short-card-recall` | Pending | 1 | 5.0 |
+| [Parser findings from the first full-corpus parse](plan_specs/v1/e31-debate-file-parsing/t09-first-corpus-parse-findings.yaml) `v1-e31-t09-first-corpus-parse-findings` | Pending | 1 | 4.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -204,7 +205,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The weekly agent runs nothing from a git checkout](plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) `v1-e34-t10-agent-outside-checkout` | Succeeded | 1 | 2.0 |
 | [Imported downloads leave the inbox](plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml) `v1-e34-t11-inbox-retention` | Succeeded | 1 | 4.0 |
 | [The pull summary names a camp download by id, never by title](plan_specs/v1/e34-caselist-sync/t12-summary-names-no-camp-file.yaml) `v1-e34-t12-summary-names-no-camp-file` | Succeeded | 1 | 1.5 |
-| [A pull stage that fails on a retryable cause ends the run with exit 3](plan_specs/v1/e34-caselist-sync/t13-pull-stage-failure-classes.yaml) `v1-e34-t13-pull-stage-failure-classes` | Pending | 2 | 4.0 |
+| [A pull stage that fails on a retryable cause ends the run with exit 3](plan_specs/v1/e34-caselist-sync/t13-pull-stage-failure-classes.yaml) `v1-e34-t13-pull-stage-failure-classes` | Succeeded | 2 | 4.0 |
 | [A camp file already in the inbox is held if its path was removed](plan_specs/v1/e34-caselist-sync/t14-removed-path-hold-for-inbox-copies.yaml) `v1-e34-t14-removed-path-hold-for-inbox-copies` | Succeeded | 1 | 1.5 |
 | [A camp release of junk alone leaves the inbox once it is handled](plan_specs/v1/e34-caselist-sync/t15-junk-release-leaves-inbox.yaml) `v1-e34-t15-junk-release-leaves-inbox` | Pending | 1 | 1.0 |
 | [The dry run's download plan names no path on the operator's machine](plan_specs/v1/e34-caselist-sync/t16-dry-run-names-no-home-path.yaml) `v1-e34-t16-dry-run-names-no-home-path` | Pending | 1 | 0.5 |
@@ -452,6 +453,7 @@ Hybrid BM25/vector search with reranking returns ten strong, explained results i
 | [Hybrid BM25 + kNN retrieval](plan_specs/v2/e15-search-index/t04-hybrid-retrieval.yaml) `v2-e15-t04-hybrid-retrieval` | Pending | 1 | 10.0 |
 | [Rerank and result rationale](plan_specs/v2/e15-search-index/t05-rerank-rationale.yaml) `v2-e15-t05-rerank-rationale` | Pending | 2 | 9.0 |
 | [Index rebuild from source of truth](plan_specs/v2/e15-search-index/t06-index-rebuild.yaml) `v2-e15-t06-index-rebuild` | Pending | 3 | 11.0 |
+| [Parse PDF disclosures into the parsed card store](plan_specs/v2/e15-search-index/t07-pdf-disclosure-parsing.yaml) `v2-e15-t07-pdf-disclosure-parsing` | Pending | 2 | 8.0 |
 
 #### [E16 — Research Workspace UI](plan_specs/v2/e16-research-ui/epic.yaml)
 

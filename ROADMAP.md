@@ -184,7 +184,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Debate .docx parser](plan_specs/v1/e31-debate-file-parsing/t03-debate-docx-parser.yaml) `v1-e31-t03-debate-docx-parser` | Succeeded | 2 | 15.0 |
 | [Card fingerprints and occurrences](plan_specs/v1/e31-debate-file-parsing/t04-card-fingerprints.yaml) `v1-e31-t04-card-fingerprints` | Succeeded | 1 | 13.0 |
 | [Parser accuracy evaluation](plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) `v1-e31-t05-parser-eval` | InProgress | 1 | 16.0 |
-| [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | Pending | 5 | 12.0 |
+| [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | InProgress | 5 | 12.0 |
 | [Labeling worksheets survive a spreadsheet round trip](plan_specs/v1/e31-debate-file-parsing/t07-worksheet-round-trip.yaml) `v1-e31-t07-worksheet-round-trip` | Succeeded | 1 | 4.0 |
 | [Near-duplicate matching finds short cards and abbreviated disclosures](plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml) `v1-e31-t08-short-card-recall` | Pending | 1 | 5.0 |
 

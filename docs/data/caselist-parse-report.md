@@ -246,11 +246,14 @@ or undertag style is `OTHER`: 7,986 paragraphs. Expected after a re-parse:
 
 | Caselist | `FULL` | `ABBREVIATED` | `CITE_ONLY` | Cards with no tag | Of cards |
 |---|---|---|---|---|---|
-| hsld26 | 869 | 198 | 286 | 1,353 | 2.1% |
-| hspf26 | 1,566 | 170 | 167 | 1,903 | 4.4% |
-| hspolicy26 | 532 | 204 | 356 | 1,092 | 1.3% |
-| openev | 59 | 20 | 19 | 98 | 1.2% |
-| **Total** | 3,026 | 592 | 828 | 4,446 | 2.2% |
+| hsld26 | 1,067 | 0 | 286 | 1,353 | 2.1% |
+| hspf26 | 1,736 | 0 | 167 | 1,903 | 4.4% |
+| hspolicy26 | 736 | 0 | 356 | 1,092 | 1.3% |
+| openev | 79 | 0 | 19 | 98 | 1.2% |
+| **Total** | 3,618 | 0 | 828 | 4,446 | 2.2% |
+
+No card is `ABBREVIATED` in this table because none is anywhere after the re-parse: see
+[`ABBREVIATED`, by shape](#abbreviated-by-shape).
 
 Those 4,446 are written as `"tag": null`, never as an empty string. They are cards whose cite came
 from a cite style (1,653), from the cite-line heuristic and looked like a cite (2,394), or from the
@@ -263,13 +266,116 @@ the new parser, and every one of those has the same evidence text, the same cite
 the same completeness. 1,630 of them have a different section path, because 1,847 stored cards
 carry an empty string in their path from a blank heading line, and none does afterwards.
 
-### Two things this raised that it did not change
+### `ABBREVIATED`, by shape
 
-* **`ABBREVIATED` marks whole cards.** A card is `ABBREVIATED` when its body or cite holds an
-  ellipsis marker anywhere. Of the 22,443 stored, 176 have a body of 300 characters or fewer and
-  21,278 one longer than 1,000. The operator's sample shows it: its first card, read whole, is
-  `ABBREVIATED` because its source text holds an ellipsis. `v1-e31-t08` measures abbreviated
-  disclosures by this field.
+The first parse called a card `ABBREVIATED` when an ellipsis marker (`…`, `...`, `[…]`, `[...]` or
+`***`) appeared anywhere in its body or its cite: 22,443 cards. `2026.10.10-docx-2` decides it from
+the shape of a disclosure of first and last words, and the rule was taken from these counts. They
+are over the 198,196 cards the new parser reads from the same sources, measured read-only on
+2026-10-10. Words are whitespace-separated.
+
+Under the old rule 21,382 of those cards would be `ABBREVIATED`: 19,402 whose body holds a marker,
+and 1,980 whose body holds none and whose cite does.
+
+**Body length, by how many markers the body holds** (19,402 cards):
+
+| Body words | 1 marker | 2 | 3 to 5 | 6 or more | All |
+|---|---|---|---|---|---|
+| 20 or fewer | 0 | 0 | 0 | 0 | 0 |
+| 21 to 30 | 6 | 0 | 1 | 0 | 7 |
+| 31 to 60 | 31 | 0 | 0 | 0 | 31 |
+| 61 to 100 | 51 | 2 | 7 | 0 | 60 |
+| 101 to 200 | 305 | 39 | 15 | 1 | 360 |
+| 201 to 500 | 2,360 | 416 | 135 | 28 | 2,939 |
+| 501 to 1,000 | 3,565 | 643 | 459 | 69 | 4,736 |
+| Over 1,000 | 5,432 | 1,915 | 2,513 | 1,409 | 11,269 |
+| **All** | 11,750 | 3,015 | 3,130 | 1,507 | 19,402 |
+
+For comparison, 10,682 of the 174,063 bodies with no marker are 100 words or fewer (6.1%), against
+98 of these 19,402 (0.5%). A body with an ellipsis is, if anything, longer than one without.
+
+**Where the marker sits**, in the 11,750 bodies with one marker, as the share of the body's words
+before it:
+
+| Before the marker | 0 to 9% | 10s | 20s | 30s | 40s | 50s | 60s | 70s | 80s | 90s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Cards | 554 | 970 | 1,600 | 1,389 | 1,414 | 1,572 | 928 | 977 | 1,147 | 1,199 |
+
+It sits anywhere, as an omission in running text does. In 57 the marker opens or closes the body (1
+opens, 56 close), so it joins nothing.
+
+**The words either side**, in the 11,693 one-marker bodies with words on both sides, by the longer
+of the two sides. Cumulative:
+
+| Longer side, at most | 12 | 15 | 20 | 30 | 40 | 50 | 60 | 80 | 100 | 150 | 200 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Cards | 0 | 0 | 6 | 14 | 38 | 55 | 59 | 109 | 185 | 454 | 806 |
+
+The shortest longer side in the corpus is 17 words. The 37 one-marker bodies of 60 words or fewer
+are a handful of texts disclosed several times each, and by their paragraph counts and lengths they
+are whole short cards with an omission.
+
+**The distribution does not separate, because there is no second population.** A disclosure of
+first and last words would show as a cluster of short bodies with one marker and a few words either
+side. There is none: not one body has a single marker with 15 words or fewer on both sides. What
+the old rule marked is one population, whole cards, with a thin lower tail of whole short cards.
+
+**The rule, chosen on the conservative side:** a body is `ABBREVIATED` when it holds exactly one
+marker, has words on both sides of it, and no more than **twelve** on either side. A marker in the
+cite decides nothing.
+
+* **Exactly one** marker: one joins a beginning to an end; two or more leave things out of a
+  quotation. 7,652 bodies hold two or more, and all but 13 of those are over 120 words.
+* **Words on both sides:** a marker at either end joins nothing.
+* **Twelve** is the middle of the only gap there is. Below it are the disclosures we have a model of:
+  the convention is a card's first and last few words, and the profile's own examples have three to
+  nine a side. Above it is everything the corpus holds, from 17 up. Any bound from 9 to 16 gives the
+  same answer on this corpus. Raising it to 20 would call 6 cards abbreviated, to 30 14, to 50 55,
+  and nothing tells those from any other short card.
+
+**Before and after, per caselist:**
+
+| Caselist | Stored: `FULL` | `ABBREVIATED` | `CITE_ONLY` | After: `FULL` | `ABBREVIATED` | `CITE_ONLY` |
+|---|---|---|---|---|---|---|
+| hsld26 | 57,057 | 8,418 | 2,439 | 62,769 | 0 | 1,906 |
+| hspf26 | 40,319 | 2,972 | 1,007 | 42,053 | 0 | 849 |
+| hspolicy26 | 74,902 | 10,524 | 2,130 | 80,756 | 0 | 1,807 |
+| openev | 6,563 | 529 | 196 | 7,887 | 0 | 169 |
+| **Total** | 178,841 | 22,443 | 5,772 | 193,465 | 0 | 4,731 |
+
+The card totals differ between the two halves because the empty-tag fix merged split cards, as
+above. To see the completeness rule alone, take the new parser's 198,196 cards and apply each rule
+to them:
+
+| Caselist | `ABBREVIATED` to `FULL` | `FULL` to `ABBREVIATED` |
+|---|---|---|
+| hsld26 | 7,908 | 0 |
+| hspf26 | 3,026 | 0 |
+| hspolicy26 | 9,837 | 0 |
+| openev | 611 | 0 |
+| **Total** | 21,382 | 0 |
+
+Of the 21,382, 19,402 held a marker in the body and 1,980 only in the cite. `CITE_ONLY` is
+untouched: 4,731 either way. Among the 186,642 stored cards whose paragraph range is the same under
+the new parser, 15,781 go from `ABBREVIATED` to `FULL` and none goes any other way.
+
+**So the corpus as it stands holds no abbreviated disclosure in a card's body**, and
+`v1-e31-t08`'s abbreviation linking will find nothing to link by that route after the re-parse.
+That is what the files hold: these caselists disclose open-source documents, which are whole cards.
+
+### What this raised and did not change
+
+* **A body paragraph can be stored as the card's cite.** The wiki cite-entry heuristic takes any
+  paragraph holding an ellipsis and a name with a year for a cite. `2026.10.10-docx-2` keeps such a
+  paragraph in its card when a body is already open. When it is the *first* body paragraph, no body
+  is open yet, and it is still filed as cite text. Under the new parser 3,515 cite paragraphs from
+  that heuristic are longer than 100 words (2,058 of them longer than 1,000), where a cite read
+  from a cite style is longer than 200 words in 35 cases out of about 140,000. 2,902 of the 4,731
+  `CITE_ONLY` cards hold a cite paragraph of more than 100 words: they are whole cards with their
+  body in the cite field and no evidence text. This is the same defect family as the empty tags,
+  it is not fixed in `2026.10.10-docx-2`, and it is where a real first-and-last-words entry would
+  also be found: at most 84 cite paragraphs from that heuristic are 40 words or fewer.
 * **The labelled evaluation cannot yet arbitrate.** Two of its 30 files are corrected by a person,
   both team files with no untagged card. On those 60 paragraphs the blank-line rule raised tag
-  precision from 0.714 to 1.000 and left every card boundary where it was.
+  precision from 0.714 to 1.000, every card boundary stayed where it was, and completeness is
+  right on 4 of 4 matched cards before and after.

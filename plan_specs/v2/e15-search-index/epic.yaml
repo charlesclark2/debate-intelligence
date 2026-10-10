@@ -97,6 +97,22 @@ spec:
       inputs:
         goalRef: v2-e13-t02-sqs-workers
         specRef: plan_specs/v2/e13-async-jobs/t02-sqs-workers.yaml
+    - id: ext-v1-e31-t06-parse-pipeline
+      kind: External
+      name: 'Prerequisite from E31: Incremental parse pipeline'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t06-parse-pipeline
+        specRef: plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml
+    - id: ext-v1-e31-t05-parser-eval
+      kind: External
+      name: 'Prerequisite from E31: Parser accuracy evaluation'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t05-parser-eval
+        specRef: plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml
     - id: t01
       kind: Task
       name: OpenSearch Serverless collections
@@ -221,5 +237,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v2-e15-t06-index-rebuild
+    - id: t07
+      kind: Task
+      name: 'Parse PDF disclosures into the parsed card store'
+      description: >-
+        PDF disclosures (a third of PF) are parsed into the parsed card store, so the search
+        index covers them. Post-V1 by Charlie's call.
+      inputs:
+        specRef: plan_specs/v2/e15-search-index/t07-pdf-disclosure-parsing.yaml
+        goalRef: v2-e15-t07-pdf-disclosure-parsing
+      dependsOn:
+      - ext-v1-e31-t06-parse-pipeline
+      - ext-v1-e31-t05-parser-eval
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v2-e15-t07-pdf-disclosure-parsing reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v2-e15-t07-pdf-disclosure-parsing
 status:
   phase: Pending

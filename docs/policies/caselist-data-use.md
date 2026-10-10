@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.4 |
-| Status | **Approved**, version 1.4, 2026-10-01. See [Approval](#approval). |
+| Policy version | 1.5 |
+| Status | **Approved**, version 1.5, 2026-10-10. See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1) and 2026-10-01 (versions 1.3 and 1.4) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4) and 2026-10-10 (version 1.5) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -130,6 +130,11 @@ than quoted rules, and Charlie confirmed them at approval on 2026-09-19:
   [Attribution](#attribution) rules exist to make that automatic.
 - **Withdrawal is respected.** When a team asks for something to come down, it comes down, without
   the requester having to argue for it. See [Removal](#removal).
+- **A file deleted or replaced upstream stays part of its round's record.** Teams routinely replace
+  or tidy their files on the caselist, and a complete archive that no longer holds a file
+  (`v1-e34-t04`'s *withdrawn* and *superseded* counts) is not a request to us. A file that was
+  disclosed in a round is kept, under the same retention and attribution rules as everything else,
+  and comes down only through [Removal](#removal). Decided by Charlie, 2026-10-10.
 - **Camp files are gifts with expectations.** OpenEv files are released to the community for use
   in files and rounds, not for resale or re-publication under someone else's name.
 
@@ -525,7 +530,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.4 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.5 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -547,16 +552,24 @@ Version 1.4 adds the download inbox to [What removal does](#removal), now that v
 it, and drops the inbox from the list of manual steps. It tightens the policy, so under
 [Review and change control](#review-and-change-control) it takes effect on merge.
 
+Version 1.5 adds one [community disclosure norm](#community-disclosure-norms): a file that a team
+later deletes or replaces on the caselist stays part of its round's record and is kept, coming
+down only through [Removal](#removal). `v1-e34-t04`'s complete-archive refresh made the question
+concrete: hsld26's first complete archive no longer held 229 of the files its weekly series had
+captured. It settles what the platform does with a file the source no longer carries, so it is
+recorded as approved by the coach rather than taking effect on merge alone. Charlie decided it on
+2026-10-10.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.4; 1.3 included version 1.2's correction to rule 3 (1.0 and 1.1 approved 2026-09-19) |
+| Policy version | 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-01 (versions 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.4, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-10 (versions 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.5, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — school or district review, before V2 student accounts |

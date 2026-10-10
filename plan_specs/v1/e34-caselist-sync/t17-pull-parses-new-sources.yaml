@@ -15,6 +15,10 @@ metadata:
     debate/title: "The weekly pull parses the sources it imported"
 spec:
   # Filed by the PM, 2026-10-10, from v1-e31-t06's Follow-up work 3.
+  # Amended by the PM, 2026-10-10: v1-e31-t06's operator run measured a first full parse of about
+  # 29 minutes and a rebuild-only run of 348, 214, 460 and 60 s (hsld26, hspf26, hspolicy26,
+  # openev; docs/data/caselist-parse-report.md). Every pull that parses rebuilds each touched
+  # caselist's aggregates, so budget roughly 18 minutes when all four are touched.
   description: >-
     `caselist pull` has an optional `CaselistParseStage`, which v1-e34-t02 left for the parse
     pipeline. v1-e31-t06 shipped `CaselistParseService` but did not wire the stage, because
@@ -50,8 +54,10 @@ spec:
     - id: ac2
       description: >-
         A parse-stage failure (rate over the threshold, store unavailable, worker crash) is
-        reported in the run summary under its v1-e34-t13 failure class. The import and the
-        raw publish stand, by test.
+        reported in the run summary with the error code v1-e34-t13 records for a failed
+        stage, and exits as v1-e34-t13's rule says. The import and the raw publish stand, by
+        test. (Amended by the PM, 2026-10-10: v1-e34-t13 records the failing error's existing
+        code rather than a new class name.)
     - id: ac3
       description: >-
         The run summary carries the stage's counts only (attempted, skipped, unsupported,
@@ -64,7 +70,17 @@ spec:
       description: >-
         Operator-run: the first scheduled run after the agent is reinstalled with this build
         shows the stage's counts in `caselist runs --last 1` and exits as v1-e34-t13's
-        classes say.
+        rule says.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-10, from v1-e31-t06's first corpus run. The parse failure
+        rate is judged only once a run has tried at least a configurable minimum number of
+        sources that are not unsupported. Below it, failures are reported but do not fail the
+        stage. The reason: openev's release reached 3.9% from 4 failures out of 102, and a
+        weekly pull tries only that week's new sources, so one bad file in a small week would
+        otherwise cross 5%. The default and the reasoning are documented. Tests cover the
+        boundary on both sides, and a small run over the minimum still fails on the rate,
+        shown failing first.
 status:
   phase: Pending
 ---

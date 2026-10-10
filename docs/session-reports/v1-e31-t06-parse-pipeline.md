@@ -1050,3 +1050,34 @@ spec batch. Its "republishes everything every week" sentence is what misled this
 the counts in `docs/data/caselist-parse-report.md` and sets the Goal to `Succeeded` in a close-out
 PR. The PM also files the incremental rebuild if any caselist's second run passes 900 s, or the
 process passes 8 GB.
+
+### Close-out (PM, 2026-10-10)
+
+Charlie ran "Operator follow-ups, revised", steps 1 to 6, on 2026-10-10, from the main checkout on
+`dev` after the partial merge (#207). ac5 and the `operator-corpus-parse` node pass, and the Goal
+is `Succeeded`. The counts are in
+[`docs/data/caselist-parse-report.md`](../data/caselist-parse-report.md). Only counts are recorded
+here.
+
+* **Dev parse and publish:** all four caselists exited 0.
+  * 11,126 sources: 9,711 parsed, 1,385 unsupported (1,320 PDF, 65 other) and 30 failed.
+  * 207,056 cards and 239,055 occurrence rows.
+  * Failure rates: 0.14% (hsld26), 0.72% (hspolicy26), 0.04% (hspf26), 3.92% (openev).
+  * About 29 minutes of wall-clock in all, faster than the 45-to-80-minute estimate.
+* **One row per disclosure:** occurrences per card were 1.14 (hsld26), 1.22 (hspf26),
+  1.15 (hspolicy26) and 1.00 (openev). That matches the revision's measured disclosures per DOCX
+  source and is under the 1.5 stop line.
+* **Second run:** 0 attempted and 0 uploaded for every caselist. The rebuilds took 348, 214, 460
+  and 60 s, all under the PM's 900 s limit, so no incremental-rebuild task is filed.
+* **Sample check (5 hsld26 sources, by eye):** 4 looked right. In 1, the second and third stored
+  cards were wrong: two cards with an empty tag. This is followed up in `v1-e31-t09`.
+* **Prod publish** from the dev data directory: the dry run showed 0 to parse, and every publish
+  exited 0, uploading 4,464, 3,909, 2,660 and 105 objects. The store counts are identical to dev's,
+  and `index.jsonl` is listed in prod. The variables were unset afterwards.
+* **Filed at close-out:**
+  * `v1-e31-t09`: the 23 `FORBIDDEN_XML_CONSTRUCT` refusals, the 5 `MALFORMED_XML`, and cards with
+    an empty tag.
+  * The PDF parsing task (post-V1).
+  * An amendment to `v1-e34-t17`: a minimum number of sources tried before the failure rate is
+    judged, because openev's 4 of 102 is close to 5%.
+

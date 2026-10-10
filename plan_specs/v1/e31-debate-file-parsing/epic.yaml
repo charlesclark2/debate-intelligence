@@ -272,5 +272,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t08-short-card-recall
+    - id: t09
+      kind: Task
+      name: 'Parser findings from the first full-corpus parse'
+      description: >-
+        The parser's refusals and empty-tag cards from the first full-corpus parse are
+        diagnosed, and the defects among them fixed with a version bump.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t09-first-corpus-parse-findings.yaml
+        goalRef: v1-e31-t09-first-corpus-parse-findings
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t09-first-corpus-parse-findings reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t09-first-corpus-parse-findings
 status:
   phase: Pending

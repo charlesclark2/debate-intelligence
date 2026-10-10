@@ -142,6 +142,7 @@ from debate_core.application.caselist.publish_plan import (
     CASELIST_SOURCE_PREFIX,
     OPENEV,
     OPENEV_SOURCE_PREFIX,
+    full_archive_snapshot,
     local_blob_key,
     manifest_prefix,
     snapshot_of_manifest_key,
@@ -537,6 +538,11 @@ class _ManifestCopy:
     def full_archive(self) -> bool:
         """Whether this is a complete archive's manifest, `manifests/<slug>/full/<date>.jsonl`."""
         return self.caselist != OPENEV and self.key.count("/") == 3
+
+    @property
+    def snapshot(self) -> str:
+        """The snapshot's own name: `2026-09-15`, `full/2026-09-15`, or a release, `2026-policy`."""
+        return full_archive_snapshot(date.fromisoformat(self.release)) if self.full_archive else self.release
 
 
 @dataclass(slots=True)
@@ -1453,13 +1459,12 @@ def _path_holdings(copies: Sequence[_ManifestCopy]) -> tuple[PathHolding, ...]:
     """Every stored row of every manifest read, on either side: who holds which bytes at which path."""
     held: set[PathHolding] = set()
     for copy in copies:
-        snapshot = snapshot_of_manifest_key(copy.caselist, copy.key, full_archives=True)
-        if snapshot is None:
-            continue
         for _, row in copy.rows:
             digest, path = row.get("sha256"), row.get("path")
             if row.get("classification") in _STORED and isinstance(digest, str) and isinstance(path, str):
-                held.add(PathHolding(caselist=copy.caselist, snapshot=snapshot, path=path, sha256=digest))
+                held.add(
+                    PathHolding(caselist=copy.caselist, snapshot=copy.snapshot, path=path, sha256=digest)
+                )
     return tuple(sorted(held, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
 
 

@@ -171,7 +171,9 @@ def remove(
             command_name(ctx), plan_summary(plan, settings, None), display=render_plan(plan, None)
         )
         return
-    cli.output.detail(f"executing under the takedown profile: {_what_the_plan_covers(plan)}")
+    cli.output.detail(
+        f"executing under the takedown profile: {_what_the_plan_covers(plan, carried_out=True)}"
+    )
     report = _run(service.execute(plan))
     cli.output.success(
         command_name(ctx), plan_summary(plan, settings, report), display=render_plan(plan, report)
@@ -302,7 +304,7 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
             f"{report.inbox_files_rewritten} rewritten."
         )
-        lines.append(f"It covered {_what_the_plan_covers(plan)}.")
+        lines.append(f"It covered {_what_the_plan_covers(plan, carried_out=True)}.")
     lines.append(f"Request {plan.request_id}, reason {plan.reason}, selector {_describe(plan.selector)}.")
     if plan.nothing_to_do and not skipped:
         lines += ["", "Nothing is left to remove: everything this selects is already gone and suppressed."]
@@ -376,11 +378,11 @@ def _not_later_uploads(plan: RemovalPlan, disposition: Disposition) -> tuple[Pla
     return tuple(source for source in plan.of(disposition) if source.inclusion is not Inclusion.LATER_UPLOAD)
 
 
-def _what_the_plan_covers(plan: RemovalPlan) -> str:
+def _what_the_plan_covers(plan: RemovalPlan, *, carried_out: bool = False) -> str:
     """One clause: how many files the request names and how many later uploads the plan adds.
 
-    Said where the operator confirms the plan: above the `--execute` command, when it starts, and
-    on the `DONE` line.
+    Said where the operator confirms the plan, above the `--execute` command, and, as what was
+    `carried_out`, when the execution starts and on the `DONE` line.
     """
     named = len(plan.included_as(Inclusion.NAMED))
     found = plan.later_uploads_found
@@ -391,10 +393,10 @@ def _what_the_plan_covers(plan: RemovalPlan) -> str:
         )
     kept = found - plan.later_uploads_added
     also = f" ({kept} more is shared and kept)" if kept else ""
-    return (
-        f"the {named} file(s) named, and adds {plan.later_uploads_added} later upload(s) at the removed "
-        f"path(s){also}"
-    )
+    later = f"{plan.later_uploads_added} later upload(s) at the removed path(s){also}"
+    if carried_out:
+        return f"the {named} file(s) named and {later}"
+    return f"the {named} file(s) named, and adds {later}"
 
 
 def _what_the_flag_would_change(plan: RemovalPlan) -> list[str]:

@@ -147,6 +147,13 @@ def test_the_same_row_read_from_this_machine_and_from_the_bucket_is_one_holding(
     assert versions_of_a(rows) == {B: (VersionRelation.LATER, ("2026-09-15",))}
 
 
+def test_a_row_whose_snapshot_is_not_a_date_is_left_out() -> None:
+    """The planner never builds one: a manifest's key is checked before it is read."""
+    rows = [held("2026-09-08", A), held("not-a-snapshot", B), held("full/2026-13-45", C)]
+
+    assert versions_of_a(rows) == {}
+
+
 # ------------------------------------------------------------------------------------------------
 # What "the same path" means
 # ------------------------------------------------------------------------------------------------

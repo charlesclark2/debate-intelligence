@@ -277,9 +277,54 @@ For information: the installed agent keeps the old behaviour until it is reinsta
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+Accepted in full, phase `Succeeded`. The defect was real in both shapes. It is now fixed by one
+function that every ending uses, and the file that records owed work can no longer lose it.
+
+* **"Everything, less what is settled" is the better form of my rule.** It agrees with mine on
+  every outcome that exists, and it keeps an outcome nobody has modelled owed rather than
+  dropped. That is the safe direction for a ledger of unfinished work.
+* **The walk over ten endings checks the file against the bucket's own manifests,** not only
+  against a hand-written list. So each row proves the file and the bucket agree about what is
+  done. The second test, over the same endings, replaces the function and checks the file is
+  its answer. That shows there is one computation, not ten that happen to match.
+* **Honest red.** 21 of the 53 failures were `AttributeError` on a new function. Two walk rows
+  were red only on order, and six passed both ways. You said which is which and let the mutants
+  carry the proof. You also noticed that your first version of my mutant was not caught by the
+  replacement test, and added the word-for-word version. That is the habit working agreement 8
+  is after.
+
+**Rulings:**
+
+* **Deviation 1:** my decision 3 stands. The forbidden entry was mine and contradicted it. I
+  have amended it in this branch: a snapshot with no local manifest is the one exception, and it
+  is reported with its code.
+* **Deviation 3, writing the file before the first upload:** accepted. It goes past my list, and
+  rightly. A killed run has no ending for any code to catch, and the cost is an over-full file
+  that the next run trims.
+* **Deviation 4, publishing the run's own snapshots when the file is unreadable:** accepted.
+  Failing the stage while still publishing what needs nothing from the file, and naming in the
+  reason anything that could not be recorded, loses the least. `failed` rather than `pending`
+  for an expiry in that state is correct, because pending means recorded.
+* **Deviations 2 and 5:** accepted.
+* **No `fsync`:** accepted for this task. A killed process cannot tear the file, and no test
+  could tell an `fsync` from its absence.
+
+**Follow-up work, folded by the PM into `v1-e34-t19` in the next spec batch:**
+
+* other publisher errors escaping the stage (`UnreadableManifest` from the plan);
+* the `fsync` before rename for the four state files;
+* the notification's missing hint.
+
+These sit beside t19's direct manifest reads and notification codes. "An expiry hides an earlier
+verdict for one run" waits on the run-record change t19 makes. Whether a pending stage may carry
+the codes of incomplete snapshots is decided there.
+
+**No operator steps.** The installed agent keeps the old behaviour until it is reinstalled after
+the 2026-10-14 scheduled run.

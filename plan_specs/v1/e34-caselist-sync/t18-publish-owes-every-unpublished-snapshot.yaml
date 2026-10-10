@@ -29,7 +29,7 @@ spec:
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
     forbidden:
-      - Dropping a snapshot from the pending-work file before the bucket has confirmed it complete
+      - "Dropping a snapshot from the pending-work file before the bucket has confirmed it complete, except a snapshot with no local manifest, which can never be published from this machine: it is reported with its code and no longer owed (amended by the PM, 2026-10-10, from the session's Deviation 1)"
       - Changing v1-e34-t13's exit-code rule or a stage's recorded codes
   context:
     - kind: TaskRef

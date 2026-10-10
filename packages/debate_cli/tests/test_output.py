@@ -447,6 +447,10 @@ def test_a_removal_that_completed_unlogged_is_not_retried_whatever_refused_the_l
         (["CASELIST_AUTH_EXPIRED"], ExitCode.DOMAIN_FAILURE),
         (["DAILY_DOWNLOAD_LIMIT_REACHED"], ExitCode.DOMAIN_FAILURE),
         (["FULL_ARCHIVE_REFUSED"], ExitCode.DOMAIN_FAILURE),
+        # A pending-work file nobody can read is the same file next week (v1-e34-t18): a person has
+        # to look, and an outage beside it does not make the run one a retry cures.
+        (["PENDING_WORK_UNREADABLE"], ExitCode.DOMAIN_FAILURE),
+        (["STORE_UNAVAILABLE", "PENDING_WORK_UNREADABLE"], ExitCode.DOMAIN_FAILURE),
         # Nothing reaches 3 because nobody classified it.
         (["INTERNAL_ERROR"], ExitCode.DOMAIN_FAILURE),
         (["A_CODE_NOBODY_MAPPED"], ExitCode.DOMAIN_FAILURE),

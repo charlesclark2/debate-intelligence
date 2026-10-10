@@ -587,6 +587,31 @@ def test_publish_pending_with_nothing_owed_exits_zero_without_fetching(
     assert not any(call.request.url.host == "files.opencaselist.example.invalid" for call in site.calls)
 
 
+def test_a_pending_work_file_that_cannot_be_read_exits_one_names_it_by_role_and_is_left_alone(
+    installation: Path, site: respx.MockRouter
+) -> None:
+    """`--publish-pending` reads the pending-work file before anything else. One that was cut short
+    is not "nothing owed" (`v1-e34-t18`): the command exits `1`, its hint names the file by what it
+    is for and never by where it is, and the file is byte for byte what it was."""
+    cut_short = b'{"publish": [{"caselist": "testcl26", "snap'
+    installation.mkdir(parents=True)
+    (installation / "caselist-sync-pending.json").write_bytes(cut_short)
+
+    envelope = pull("--publish-pending")
+
+    assert envelope["exit_code"] == ExitCode.DOMAIN_FAILURE, envelope
+    assert envelope["error"]["code"] == "CASELIST_PULL_INCOMPLETE"
+    stages = {one["stage"]: one for one in envelope["error"]["details"]["stages"]}
+    assert stages["publish"]["outcome"] == "failed"
+    assert stages["publish"]["error_codes"] == ["PENDING_WORK_UNREADABLE"]
+    assert "the pending-work file under storage.data_dir" in envelope["error"]["hint"]
+    said = json.dumps([envelope["error"]["message"], envelope["error"]["hint"], stages["publish"]])
+    assert str(installation) not in said
+    assert "aws sso login" not in said
+    assert (installation / "caselist-sync-pending.json").read_bytes() == cut_short
+    assert not any(call.request.url.host == "files.opencaselist.example.invalid" for call in site.calls)
+
+
 def test_a_second_run_while_one_holds_the_lock_exits_at_once(
     installation: Path, site: respx.MockRouter
 ) -> None:

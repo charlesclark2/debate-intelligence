@@ -38,7 +38,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
-from tests.fixtures.caselist.publish_expectations import expected_publish
+from tests.fixtures.caselist.publish_expectations import digest_of_body, expected_publish
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
 from tests.fixtures.permissions import needs_permissions, refused
 from typer.testing import CliRunner, Result
@@ -712,3 +712,97 @@ def test_a_missing_grant_in_report_fails_it_with_the_grant_fix_and_is_never_pend
     assert data["run_record"]["outcome"] == "incomplete"
     assert "aws sso login" not in stage_text(pulled)
     assert str(installation) not in stage_text(pulled)
+
+
+# ------------------------------------------------------------------------------------------------
+# What a publish did not finish is owed, whatever ended it (v1-e34-t18)
+# ------------------------------------------------------------------------------------------------
+
+PENDING_WORK_FILE = "caselist-sync-pending.json"
+"""The pending-work file's name under the data directory, as the runbook gives it."""
+
+
+def owed_in_the_file(installation: Path) -> list[str]:
+    """The snapshots the pending-work file names, read as JSON; none when there is no file."""
+    path = installation / "data" / PENDING_WORK_FILE
+    if not path.exists():
+        return []
+    return [f"{one['caselist']} {one['snapshot']}" for one in json.loads(path.read_text())["publish"]]
+
+
+def test_a_session_that_expires_part_way_through_publish_owes_every_snapshot_it_did_not_finish(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first week's publish ends incomplete, because the bucket answers one of its uploads with
+    a 503, and the session then expires on the second week's manifest. The run used to write down
+    only the snapshots it had not reached, so nothing owed the first week and no later run
+    published it. All five are owed now, and `--publish-pending` after a login publishes them."""
+    week_one_only = digest_of_body("grove-round-2-neg-first")
+    session = {"expired": False, "logged_in": False}
+    expire_the_session(monkeypatch, while_set=session)
+    put_file = S3EvidenceObjectStore.put_file
+
+    async def put(self: S3EvidenceObjectStore, key: str, source: Path) -> Any:
+        if not session["logged_in"]:
+            if key == f"manifests/{SYNTHETIC_CASELIST}/2026-09-08.jsonl":
+                session["expired"] = True
+            elif key.endswith(week_one_only):
+                raise StoreUnavailable("PutObject", key, "simulated 503 SlowDown")
+        return await put_file(self, key, source)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(S3EvidenceObjectStore, "put_file", put)
+
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.OK, pulled
+    data = run_summary(pulled)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["publish"]["outcome"] == "pending", stages["publish"]
+    assert len(data["snapshots_imported"]) == 5
+    assert sorted(data["pending_publish"]) == sorted(data["snapshots_imported"])
+    assert sorted(owed_in_the_file(installation)) == sorted(data["snapshots_imported"])
+    assert not bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/testcl26/").get("Contents")
+
+    session.update(expired=False, logged_in=True)
+    drained = run("caselist", "pull", "--publish-pending")
+
+    assert drained["exit_code"] == ExitCode.OK, drained
+    data = run_summary(drained)
+    assert {one["stage"]: one["outcome"] for one in data["stages"]}["publish"] == "completed"
+    assert data["pending_publish"] == []
+    assert not (installation / "data" / PENDING_WORK_FILE).exists()
+    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" in published
+    status = run("caselist", "status")
+    assert status["exit_code"] == ExitCode.OK, status
+    assert status["data"]["in_sync"] is True
+
+
+def test_a_pending_work_file_that_cannot_be_read_fails_publish_with_one_and_is_left_for_a_person(
+    installation: Path, bucket: S3Client, site: respx.MockRouter
+) -> None:
+    """The file was cut short by something other than the sync. The run cannot know what it owed, so
+    it does not write over it: exit `1`, a verdict someone has to look at, with a hint that names
+    the file by what it is for and never by where it is. What this run imported needs nothing from
+    the file and is published all the same."""
+    cut_short = b'{"publish": [{"caselist": "testcl26", "snap'
+    (installation / "data").mkdir()
+    (installation / "data" / PENDING_WORK_FILE).write_bytes(cut_short)
+
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.DOMAIN_FAILURE, pulled
+    assert pulled["error"]["code"] == "CASELIST_PULL_INCOMPLETE"
+    data = run_summary(pulled)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["publish"]["outcome"] == "failed"
+    assert stages["publish"]["error_codes"] == ["PENDING_WORK_UNREADABLE"]
+    assert "the pending-work file under storage.data_dir" in stages["publish"]["hint"]
+    assert pulled["error"]["hint"].startswith(stages["publish"]["hint"])
+    assert (installation / "data" / PENDING_WORK_FILE).read_bytes() == cut_short
+    assert stages["report"]["outcome"] == "completed"
+    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-15.jsonl" in published
+    assert "aws sso login" not in stage_text(pulled)
+    assert str(installation) not in stage_text(pulled)
+    assert str(Path.home()) not in stage_text(pulled)

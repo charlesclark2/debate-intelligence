@@ -206,6 +206,16 @@ class TestTheVersionStore:
         assert_refused(caught, operation="delete", role="the blob directory", data_dir=data_dir)
         assert (blobs.root / BLOB_KEY).is_file(), "nothing was deleted"
 
+    async def test_a_version_that_is_not_refused_is_still_copied_to_where_the_caller_asks(
+        self, blobs: FsEvidenceVersionStore, tmp_path: Path
+    ) -> None:
+        """The read was rewritten to tell the store's refusal from the destination's; it still copies."""
+        version = ObjectVersion(key=BLOB_KEY, version_id=None, size=27)
+
+        await blobs.get_version_file(version, tmp_path / "taken-out" / "copy")
+
+        assert (tmp_path / "taken-out" / "copy").read_bytes() == b"a synthetic disclosed file\n"
+
     async def test_the_parsed_tree_is_named_as_the_parsed_file_directory(self, data_dir: Path) -> None:
         parsed = FsEvidenceVersionStore(data_dir / "parsed")
         (parsed.root / "hsld26").mkdir(parents=True)

@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import build_snapshot_zips
+from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket
+from tests.fixtures.caselist.publish_expectations import expected_publish, expected_source_key
 from tests.fixtures.permissions import needs_permissions, refused
 
 from debate_core.application.caselist.suppression import RecordedSuppressionList
@@ -35,6 +37,7 @@ from debate_core.application.caselist_sync import (
     PENDING_WORK_FILENAME,
     RUN_SUMMARY_SCHEMA_VERSION,
     CaselistSyncService,
+    PendingSnapshot,
     PendingWork,
     PulledRun,
     RunSummary,
@@ -119,6 +122,13 @@ def installation(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> I
         bucket=S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client),
         archives=build_snapshot_zips(tmp_path / "published"),
     )
+
+
+@pytest.fixture
+def empty_bucket(s3_client: S3Client) -> S3EvidenceObjectStore:
+    """A second bucket in the same moto account, holding nothing."""
+    s3_client.create_bucket(Bucket="debate-test-evidence-moto-empty")
+    return S3EvidenceObjectStore(bucket="debate-test-evidence-moto-empty", client=s3_client)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -313,6 +323,103 @@ async def test_a_publish_the_bucket_did_not_answer_fails_the_stage_and_the_next_
     assert source.archive_fetches == [weekly_name(WEEK_1)], "the week is fetched once, not again"
     assert stage(again, SyncStage.PUBLISH)["outcome"] == "completed"
     assert owed(installation) == []
+
+
+def every_upload_answers_503(key: ObjectKey, _: int) -> None:
+    raise StoreUnavailable("PutObject", key, "simulated 503 SlowDown")
+
+
+WEEK_1_SOURCES = [
+    week["sources"] for week in expected_publish()["snapshots"] if week["snapshot"] == "2026-09-01"
+][0]
+"""The synthetic documents week one stores, by the fixture's names (`expected_publish.json`)."""
+
+
+async def test_uploads_the_bucket_did_not_take_fail_publish_on_the_store_and_wait_for_no_login(
+    installation: Installation,
+) -> None:
+    """The bucket lists and answers, and every upload gets a 503. The publisher carries on past each
+    one, so the stage is failed by its sources, every one of them on the store. The week stays owed.
+
+    Until this task the report stage then read "something is owed" as "waiting for a login", and
+    the run notified the operator to `aws sso login`."""
+    source = FakeSource(installation.archives, weeks=[WEEK_1])
+    assert isinstance(installation.bucket, S3EvidenceObjectStore)
+    stuttering = ScriptedBucket(installation.bucket, every_upload_answers_503)
+
+    watched = await pull(installation, installation.sync(source, publish_to=stuttering))
+
+    published = stage(watched.summary, SyncStage.PUBLISH)
+    assert published["outcome"] == "failed"
+    assert published.get("error_codes") == ["STORE_UNAVAILABLE"]
+    assert str(published["reason"]).startswith("0 object(s) published; incomplete: testcl26 2026-09-01: ")
+    assert watched.summary.failure_codes == ("STORE_UNAVAILABLE",)
+    assert owed(installation) == ["testcl26 2026-09-01"]
+    assert stage(watched.summary, SyncStage.REPORT)["outcome"] == "skipped"
+    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed"]
+    assert "aws sso login" not in watched.notified
+    assert_names_nothing_of_this_machine(watched.summary, installation)
+
+
+async def test_other_bytes_under_a_sources_key_fail_publish_on_a_verdict(
+    installation: Installation, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """The bucket already holds something else under one of week one's keys. Publishing again gives
+    the same answer, so the code is the mismatch's, never the store's."""
+    s3_client.put_object(
+        Bucket=evidence_bucket, Key=expected_source_key(WEEK_1_SOURCES[0]), Body=b"other bytes"
+    )
+    source = FakeSource(installation.archives, weeks=[WEEK_1])
+
+    summary = await installation.sync(source).run([CASELIST])
+
+    published = stage(summary, SyncStage.PUBLISH)
+    assert published["outcome"] == "failed"
+    assert published.get("error_codes") == ["CHECKSUM_MISMATCH"]
+    assert summary.failure_codes == ("CHECKSUM_MISMATCH",)
+    assert owed(installation) == ["testcl26 2026-09-01"]
+
+
+async def test_a_mismatch_among_uploads_the_bucket_did_not_take_records_both(
+    installation: Installation, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """One source's key holds other bytes and every other upload gets a 503: a verdict beside the
+    outage, in one publish. Both codes are recorded, so the outage cannot hide the mismatch."""
+    s3_client.put_object(
+        Bucket=evidence_bucket, Key=expected_source_key(WEEK_1_SOURCES[0]), Body=b"other bytes"
+    )
+    source = FakeSource(installation.archives, weeks=[WEEK_1])
+    assert isinstance(installation.bucket, S3EvidenceObjectStore)
+    stuttering = ScriptedBucket(installation.bucket, every_upload_answers_503)
+
+    summary = await installation.sync(source, publish_to=stuttering).run([CASELIST])
+
+    published = stage(summary, SyncStage.PUBLISH)
+    assert published["outcome"] == "failed"
+    assert sorted(cast("list[str]", published.get("error_codes"))) == [
+        "CHECKSUM_MISMATCH",
+        "STORE_UNAVAILABLE",
+    ]
+    assert sorted(summary.failure_codes) == ["CHECKSUM_MISMATCH", "STORE_UNAVAILABLE"]
+
+
+async def test_an_owed_snapshot_with_no_manifest_fails_publish_on_a_verdict(
+    installation: Installation,
+) -> None:
+    """The pending-work file names a week this machine holds no manifest for. No later run finds one."""
+    installation.data_dir.mkdir(parents=True)
+    PendingWork(installation.data_dir / PENDING_WORK_FILENAME).write(
+        [PendingSnapshot(CASELIST, "2026-08-25")]
+    )
+    source = FakeSource(installation.archives)
+
+    summary = await installation.sync(source).publish_pending()
+
+    published = stage(summary, SyncStage.PUBLISH)
+    assert published["outcome"] == "failed"
+    assert published["reason"] == "0 object(s) published; incomplete: testcl26 2026-08-25: no local manifest"
+    assert published.get("error_codes") == ["NOTHING_TO_PUBLISH"]
+    assert summary.failure_codes == ("NOTHING_TO_PUBLISH",)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -619,6 +726,61 @@ async def test_a_session_that_expires_at_the_report_stage_still_pends_it(
     assert reported["outcome"] == "pending"
     assert reported.get("error_codes") == []
     assert [one.title for one in watched.notifier.sent] == ["caselist publish waiting for an AWS login"]
+
+
+async def test_a_bucket_that_does_not_answer_the_comparison_fails_report_and_is_not_pending(
+    installation: Installation,
+) -> None:
+    """Published, and the comparison meets a 503. Report fails on the store; nothing waits for a
+    login, and the report stage still decides nothing about the run's exit code."""
+    source = FakeSource(installation.archives, weeks=[WEEK_1])
+
+    watched = await pull(installation, installation.sync(source, compare_with=RefusingBucket(outage())))
+
+    reported = stage(watched.summary, SyncStage.REPORT)
+    assert reported["outcome"] == "failed"
+    assert reported.get("error_codes") == ["STORE_UNAVAILABLE"]
+    assert reported.get("hint") is None
+    assert watched.summary.succeeded
+    assert watched.summary.failure_codes == ()
+    assert "aws sso login" not in watched.notified
+
+
+async def test_a_snapshot_the_bucket_does_not_hold_in_sync_fails_report_as_drift(
+    installation: Installation, empty_bucket: S3EvidenceObjectStore
+) -> None:
+    """Published to one bucket and compared with another that holds nothing: drift, under the code
+    `caselist status` reports it by."""
+    source = FakeSource(installation.archives, weeks=[WEEK_1])
+
+    summary = await installation.sync(source, compare_with=empty_bucket).run([CASELIST])
+
+    reported = stage(summary, SyncStage.REPORT)
+    assert reported["outcome"] == "failed"
+    assert reported["reason"] == "0 snapshot(s) confirmed; not in sync: testcl26 2026-09-01"
+    assert reported.get("error_codes") == ["CASELIST_DRIFT"]
+    assert summary.succeeded
+
+
+@needs_permissions
+async def test_an_inbox_file_that_cannot_be_removed_fails_retention_as_an_unmodelled_error(
+    installation: Installation,
+) -> None:
+    """The week is imported and confirmed, and the inbox will not let its zip be deleted. That is
+    an `OSError` from the operating system, recorded under the code of an error nobody modelled."""
+    source = await backlog(installation, WEEK_1)
+    installation.inbox.chmod(0o500)
+    try:
+        summary = await installation.sync(source).run([CASELIST])
+    finally:
+        installation.inbox.chmod(0o700)
+
+    retention = stage(summary, SyncStage.RETENTION)
+    assert retention["outcome"] == "failed"
+    assert retention.get("error_codes") == ["INTERNAL_ERROR"]
+    assert installation.inbox_names() == {weekly_name(WEEK_1)}
+    assert summary.succeeded
+    assert_names_nothing_of_this_machine(summary, installation)
 
 
 # ------------------------------------------------------------------------------------------------

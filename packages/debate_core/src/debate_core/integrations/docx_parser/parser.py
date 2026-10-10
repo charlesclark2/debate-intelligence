@@ -272,12 +272,10 @@ class DebateDocxParser:
     ) -> None:
         self._profile = profile if profile is not None else load_style_profile()
         self._limits = limits
-        # Longest spelling first, so `[...]` is one marker and not a bracket, a marker and a bracket.
+        # One pattern for every spelling. `[...]` is one marker, not a bracket, a marker and a
+        # bracket: a match is taken where it starts first, and the bracketed spelling starts earlier.
         self._ellipsis_marker = re.compile(
-            "|".join(
-                re.escape(marker)
-                for marker in sorted(self._profile.cite.wiki_ellipsis_markers, key=len, reverse=True)
-            )
+            "|".join(re.escape(marker) for marker in self._profile.cite.wiki_ellipsis_markers)
         )
 
     @property

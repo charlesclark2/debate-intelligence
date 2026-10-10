@@ -53,7 +53,7 @@ from debate_core.application.caselist.manifest import (
     write_manifest,
 )
 from debate_core.application.caselist.publish_service import CaselistPublishService
-from debate_core.application.caselist.removal_plan import SourceSelector
+from debate_core.application.caselist.removal_plan import Disposition, SourceSelector, parse_team_selector
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import SUPPRESSION_LIST_KEY, RecordedSuppressionList
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, source_object_key
@@ -202,8 +202,7 @@ def add_bucket_history(world: RemovalWorld) -> None:
         )
 
 
-@pytest.fixture
-async def world(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> RemovalWorld:
+async def revised_path_world(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> RemovalWorld:
     """The fixture's archives imported and published, with history, parsed files and an inbox."""
     data_dir = tmp_path / "evidence"
     await import_revised_path_archives(data_dir, tmp_path / "downloads")
@@ -217,6 +216,11 @@ async def world(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> Re
     plant_parsed_files(built)
     fill_the_inbox(built, tmp_path / "downloads")
     return built
+
+
+@pytest.fixture
+async def world(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> RemovalWorld:
+    return await revised_path_world(tmp_path, s3_client, evidence_bucket)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -552,3 +556,43 @@ async def test_everything_else_is_untouched_and_status_is_clean(world: RemovalWo
         local=world.local, remote=world.bucket, suppression=world.suppression()
     ).status()
     assert status.in_sync, [entry for entry in status.snapshots if not entry.in_sync]
+
+
+# ------------------------------------------------------------------------------------------------
+# --team: it already named every version at the team's paths
+# ------------------------------------------------------------------------------------------------
+
+
+async def test_a_team_removal_names_every_version_at_the_teams_paths_from_every_snapshot(
+    world: RemovalWorld,
+) -> None:
+    """`--team` selects by path, so it reaches the earlier version and every later upload itself.
+
+    Alder Point KR's one path held five files across the weekly windows and the complete archives.
+    Four are held nowhere else and are removed; the fifth is Birch Hill MT's too, and is withdrawn.
+    This asks the planner for nothing `v1-e30-t11` added, and passed before it.
+    """
+    service = world.service()
+    plan = await service.plan(
+        parse_team_selector(f"{CASELIST}/Alder Point/KR"),
+        request_id=REQUEST,
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+    )
+
+    assert {source.sha256 for source in plan.of(Disposition.REMOVE)} == {
+        EARLIER,
+        NAMED,
+        LATER_REVISION,
+        LATER_IN_COMPLETE_ARCHIVE,
+    }
+    assert {source.sha256 for source in plan.of(Disposition.WITHDRAW)} == {LATER_SHARED}
+    assert len(plan.sources) == 5
+
+    assert (await service.execute(plan)).completed
+
+    for snapshot in ALL_SNAPSHOTS:
+        for rows in rows_on_both_sides(world, snapshot):
+            assert [row for row in rows if row["path"] == REVISED_PATH] == [], snapshot
+    for rows in rows_on_both_sides(world, "2026-10-06"):
+        assert held_at(rows, OTHER_TEAM_PATH) == {LATER_SHARED}
+    assert local_blob(world, LATER_SHARED).exists() and not local_blob(world, EARLIER).exists()

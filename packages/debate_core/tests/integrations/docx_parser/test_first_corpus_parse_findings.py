@@ -1170,20 +1170,41 @@ class TestABodyFiledAsTheCardsCite:
         assert card.evidence_text == ELLIPSIS_AND_YEAR
         assert card.completeness is CardCompleteness.FULL
 
-    def test_a_real_cite_after_it_starts_the_next_card(self, parser: DebateDocxParser) -> None:
-        """The body is open now, so a second cite under the tag is a second card, as it always was."""
+    def test_a_whole_body_before_a_second_cite_is_a_card_and_the_cite_starts_the_next(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """Two cards under one tag. The first one's body is too long to be a line of its cite."""
         body = (
             tag_paragraph()
             + cite_paragraph()
-            + small_print_paragraph(ELLIPSIS_AND_YEAR)
+            + small_print_paragraph(WHOLE_BODY_IN_ONE_PARAGRAPH)
             + cite_paragraph("Ferreira 25", FERREIRA_TAIL)
             + marked_up_paragraph(SECOND_BODY)
         )
         document = parse(parser, body)
 
         assert [(card.tag, card.short_cite, card.evidence_text) for card in document.cards] == [
-            (TAG, "Okonkwo 26", ELLIPSIS_AND_YEAR),
+            (TAG, "Okonkwo 26", WHOLE_BODY_IN_ONE_PARAGRAPH),
             ("", "Ferreira 25", "".join(SECOND_BODY)),
+        ]
+
+    def test_two_guesses_in_a_row_under_the_cite_are_both_body(self, parser: DebateDocxParser) -> None:
+        """The second is a cite only by a guess that the open body overrules, so the first is not
+        between two cites."""
+        body = (
+            tag_paragraph()
+            + cite_paragraph()
+            + small_print_paragraph(OPENS_WITH_A_YEAR)
+            + small_print_paragraph(ELLIPSIS_AND_YEAR)
+            + marked_up_paragraph()
+        )
+        document = parse(parser, body)
+
+        (card,) = document.cards
+        assert card.evidence_text == "\n".join([OPENS_WITH_A_YEAR, ELLIPSIS_AND_YEAR, "".join(MARKED_UP)])
+        assert [section.match.rule_id for section in document.sections[2:4]] == [
+            f"{AFTER_THE_CARDS_CITE}:heuristic-cite-line-author-year",
+            f"{INSIDE_THE_BODY}:heuristic-wiki-cite-entry",
         ]
 
 
@@ -1312,6 +1333,33 @@ class TestACiteThatDoesNotOpenTheBody:
         assert card.evidence_text == ""
         assert card.completeness is CardCompleteness.CITE_ONLY
         assert document.sections[2].unit is StructuralUnit.CITE
+        assert document.sections[2].match.rule_id == "heuristic-wiki-cite-entry"
+
+    @pytest.mark.parametrize("gap", ["", "a blank line"])
+    def test_a_short_guess_between_two_cites_is_a_line_of_the_cite(
+        self, parser: DebateDocxParser, gap: str
+    ) -> None:
+        """Small print between a cite and a cite, and short enough to be one: the middle of a cite.
+
+        Re-read as body it would end the card there, and the real body below would go to a card
+        with no tag.
+        """
+        body = (
+            tag_paragraph()
+            + cite_paragraph()
+            + small_print_paragraph(ELLIPSIS_AND_YEAR)
+            + (blank_paragraph() if gap else "")
+            + cite_paragraph("Ferreira 25", FERREIRA_TAIL)
+            + marked_up_paragraph(SECOND_BODY)
+        )
+        document = parse(parser, body)
+
+        assert [card.tag for card in document.cards] == [TAG]
+        card = document.cards[0]
+        assert card.full_cite == "\n".join(
+            [SHORT_CITE + CITE_TAIL, ELLIPSIS_AND_YEAR, "Ferreira 25" + FERREIRA_TAIL]
+        )
+        assert card.evidence_text == "".join(SECOND_BODY)
         assert document.sections[2].match.rule_id == "heuristic-wiki-cite-entry"
 
     @pytest.mark.parametrize("position", ["after the card's cite", "as the card's first cite"])

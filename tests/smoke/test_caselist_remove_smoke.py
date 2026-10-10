@@ -379,3 +379,144 @@ def test_the_download_inbox_is_listed_by_the_dry_run_and_purged_by_the_execution
         names = archive.namelist()
     assert not held & EXCLUSIVE and not any("Maple Grove/QX/" in name for name in names)
     assert any("Cedar Hollow/ZaLu/" in name for name in names), "another team's files are kept"
+
+
+# ------------------------------------------------------------------------------------------------
+# Later uploads at the removed path (v1-e30-t11)
+# ------------------------------------------------------------------------------------------------
+
+#: The synthetic caselist's Round 2 negative: one path, first disclosed on 09-01 and revised in place
+#: the week after (`tests/fixtures/caselist/build_synthetic_archives.py`), so the 09-01 weekly holds
+#: the first version and the 09-08 and 09-15 weeklies hold the revision.
+FIRST_VERSION = hashlib.sha256(DOCUMENT_BODIES["grove-round-2-neg-first"]).hexdigest()
+REVISION = hashlib.sha256(DOCUMENT_BODIES["grove-round-2-neg-revised"]).hexdigest()
+LATER_UPLOADS_REQUEST = ("--request", "RM-2026-03", "--reason", "REQUESTED_BY_TEAM")
+REMOVE_FIRST_VERSION = ("caselist", "remove", "--source", FIRST_VERSION, *LATER_UPLOADS_REQUEST)
+REMOVE_REVISION = ("caselist", "remove", "--source", REVISION, *LATER_UPLOADS_REQUEST)
+#: What the plan's JSON may not carry: a school, a team code, a tournament, a round, a file name.
+IDENTIFYING = ("Maple Grove", "QX", "Cedar Hollow", "ZaLu", "Grove City", "Bayview", "Round", ".docx")
+
+
+def raw_json(*arguments: str) -> str:
+    result: Result = runner.invoke(create_app(), ["--json", *arguments])
+    assert result.exit_code == ExitCode.OK, result.stdout
+    return result.stdout
+
+
+def bucket_holds(client: S3Client, sha: str) -> bool:
+    return any(sha in key for key, _ in versions(client))
+
+
+def test_the_dry_run_lists_a_later_upload_by_digest_caselist_and_snapshot_and_execute_removes_both(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned = run(*REMOVE_FIRST_VERSION)
+
+    assert planned["exit_code"] == ExitCode.OK, planned
+    assert planned["data"]["later_uploads"] == [
+        {
+            "sha256": REVISION,
+            "sha256_prefix": REVISION[:12],
+            "relation": "later",
+            "of_sha256": FIRST_VERSION,
+            "caselist": SYNTHETIC_CASELIST,
+            "snapshots": ["2026-09-08", "2026-09-15"],
+            "openev_ids": [],
+            "same_path_by": "caselist_path",
+            "outcome": "removed",
+        }
+    ]
+    assert planned["data"]["later_uploads_added"] == 1 and planned["data"]["only_named"] is False
+    assert [(one["sha256"], one["inclusion"]) for one in planned["data"]["sources"]] == [
+        (FIRST_VERSION, "named"),
+        (REVISION, "later_upload"),
+    ]
+    assert bucket_holds(bucket, FIRST_VERSION) and bucket_holds(bucket, REVISION), "a dry run"
+
+    shown = runner.invoke(create_app(), list(REMOVE_FIRST_VERSION)).stdout
+    assert "LATER UPLOADS AT A REMOVED PATH, ADDED TO THIS PLAN: 1 file(s)" in shown
+    assert (
+        f"later upload of sha256 {FIRST_VERSION[:12]} in {SYNTHETIC_CASELIST}, held in 2026-09-08, "
+        "2026-09-15: removed everywhere"
+    ) in shown
+    confirm = shown[shown.index("TO CARRY IT OUT") :]
+    assert (
+        "This plan covers the 1 file(s) named, and adds 1 later upload(s) at the removed path(s)." in confirm
+    )
+    assert "--only-named" in confirm and "--only-named --execute" not in confirm
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*REMOVE_FIRST_VERSION, "--execute")
+
+    assert done["exit_code"] == ExitCode.OK, done
+    assert json.loads(done["data"]["log_entry"])["removed_sha256"] == sorted([FIRST_VERSION, REVISION])
+    assert not bucket_holds(bucket, FIRST_VERSION) and not bucket_holds(bucket, REVISION)
+    blobs = installation / "dev" / "blobs" / "sha256"
+    for sha in (FIRST_VERSION, REVISION):
+        assert not (blobs / sha[0:2] / sha[2:4] / sha).exists()
+    assert run("caselist", "status")["exit_code"] == ExitCode.OK
+
+
+def test_only_named_removes_the_named_version_and_leaves_the_later_upload(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shown = runner.invoke(create_app(), [*REMOVE_FIRST_VERSION, "--only-named"]).stdout
+    assert "LATER UPLOADS AT A REMOVED PATH, LEFT IN PLACE (--only-named): 1 file(s)" in shown
+    confirm = shown[shown.index("TO CARRY IT OUT") :]
+    assert "the 1 file(s) named only; 1 later upload(s) at the removed path(s) are left in place" in confirm
+    assert "--only-named --execute" in confirm, "the printed command carries the flag"
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*REMOVE_FIRST_VERSION, "--only-named", "--execute")
+
+    assert done["exit_code"] == ExitCode.OK, done
+    assert done["data"]["only_named"] is True and done["data"]["later_uploads_added"] == 0
+    assert [one["outcome"] for one in done["data"]["later_uploads"]] == ["left_in_place"]
+    assert json.loads(done["data"]["log_entry"])["removed_sha256"] == [FIRST_VERSION]
+    assert not bucket_holds(bucket, FIRST_VERSION)
+    assert bucket_holds(bucket, REVISION)
+    assert (installation / "dev" / "blobs" / "sha256" / REVISION[0:2] / REVISION[2:4] / REVISION).exists()
+    assert run("caselist", "status")["exit_code"] == ExitCode.OK
+
+
+def test_an_earlier_version_is_listed_and_not_removed(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shown = runner.invoke(create_app(), list(REMOVE_REVISION)).stdout
+    assert "EARLIER VERSIONS AT A REMOVED PATH, NOT REMOVED: 1 file(s)" in shown
+    assert "LATER UPLOADS AT A REMOVED PATH" not in shown
+    assert "This plan covers the 1 file(s) named, and adds 0 later upload(s)" in shown
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*REMOVE_REVISION, "--execute")
+
+    assert done["exit_code"] == ExitCode.OK, done
+    assert [
+        (one["sha256"], one["relation"], one["snapshots"]) for one in done["data"]["earlier_versions"]
+    ] == [(FIRST_VERSION, "earlier", ["2026-09-01"])]
+    assert bucket_holds(bucket, FIRST_VERSION) and not bucket_holds(bucket, REVISION)
+
+
+def test_the_plans_json_names_no_school_team_path_or_file(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--source` with a later upload, `--team` with a withdrawn file, and an executed removal.
+
+    The text of the same plans names them, as it always has: that is the operator's terminal.
+    """
+    assert "Maple Grove/QX/" in runner.invoke(create_app(), list(REMOVE_FIRST_VERSION)).stdout
+
+    for arguments in (REMOVE_FIRST_VERSION, REMOVE, (*REMOVE, "--include-shared")):
+        emitted = raw_json(*arguments)
+        assert json.loads(emitted)["data"]["sources"], "a plan with something in it"
+        assert not [name for name in IDENTIFYING if name in emitted], arguments
+
+    team = json.loads(raw_json(*REMOVE))["data"]
+    assert team["selector"] == {"kind": "TEAM", "caselist": SYNTHETIC_CASELIST}
+    assert sum(len(source["disclosures"]) for source in team["sources"]) == 9
+    assert sum(len(source["withdrawn_disclosures"]) for source in team["sources"]) == 2
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    executed = raw_json(*REMOVE_FIRST_VERSION, "--execute")
+    assert json.loads(executed)["data"]["applied"] is True
+    assert not [name for name in IDENTIFYING if name in executed]

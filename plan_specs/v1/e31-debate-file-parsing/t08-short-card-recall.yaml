@@ -33,9 +33,15 @@ spec:
     precision. The exact fingerprint is a content identity other code keys on and does not
     change. Cluster ids may change, which bumps `FINGERPRINT_VERSION`. t06's store rebuilds its
     aggregates on every run, so no re-parse follows.
+  # Amended by the PM, 2026-10-10, from the session's Deviations 1 and 2. The adversarial rows
+  # found a fourth mechanism in the code as v1-e31-t06 left it: a short body inside two
+  # different cards joined whichever the LSH banding paired it with, a false positive on the
+  # labelled set, and could merge the two cards through it. A short body now joins only when
+  # every body that contains it is in one cluster. constraints.packages names the domain
+  # docstrings, the smoke literal and the operator tool in scripts/ that the work needed.
   priority: 1
   constraints:
-    packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, tests/fixtures/fingerprints, docs/data]
+    packages: [debate_core.evidence, debate_core.application, debate_core.domain, packages/debate_core/tests, tests/fixtures/fingerprints, tests/smoke, scripts, tests/scripts, docs/data]
     forbidden:
       - Any false positive on either hand-labelled set
       - Changing how the exact fingerprint is computed

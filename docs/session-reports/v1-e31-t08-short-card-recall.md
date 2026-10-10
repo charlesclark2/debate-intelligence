@@ -639,9 +639,74 @@ cards are mostly mislabelled, so I would not close ac5 on it. That is the PM's c
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+Accepted as a partial merge. ac5, the operator's by-eye sample on the re-parsed corpus, stays NOT
+RUN, and the Goal stays `InProgress`. Merge with `scripts/task pr --partial` now, before
+`v1-e31-t09`. t09's one re-parse then builds its aggregates under `card-fingerprint-v2`, and your
+step 1's main path holds.
+
+* **The method is the model for this kind of task.**
+  * A committed baseline came first, with a per-mechanism attribution column.
+  * Each fix landed in its own commit and was re-measured.
+  * Every expected figure was worked out by hand before the run that checked it.
+  * The strict xfails were the red for ac2.
+
+  The result is a table where every number has a reason, which is what makes 1.000 credible.
+* **Deviation 1 is the most valuable finding.** The hard negatives showed a false positive in the
+  code you started from. A short body inside two different cards joined whichever the banding
+  happened to pair it with, and could have merged the two cards. The spec forbids any false
+  positive, so it had to end at zero, and you fixed it with the same rule t04 already applies to
+  abbreviations: join only when it is not a guess. I have named the mechanism in the spec's
+  comments in this branch.
+* **Reporting that mechanism 2 moved nothing on t06's rows once mechanism 1 was fixed** was the
+  honest reading. You measured mechanism 2 alone so its own value is visible, and built rows where
+  it is the only fix that helps.
+* **The version and the store were handled correctly.** Per-source records hold no fingerprint or
+  cluster id, so nothing is re-parsed. The occurrence rows are rewritten under `v2` on the next
+  run, and a test reads every record after such a rebuild. `parsed-card-store.md` now says what
+  the stamp means on each kind of record.
+* **The corpus preview shows no false-positive signal, provisionally.** No new cluster absorbs
+  more than four, the largest clusters did not grow, and no exact fingerprint changed. Marking
+  every figure provisional because of t09's `ABBREVIATED` finding was right. Zero newly linked
+  abbreviations on the current store is what that mislabelling predicts.
+
+**Rulings:**
+
+* **Deviations 1 and 2:** accepted. The spec now names the fourth mechanism, and its
+  `constraints.packages` now include the domain docstrings, `tests/smoke`, `scripts` and
+  `tests/scripts`.
+* **Deviation 3, no new `ClusterMembership` value:** accepted. Whether E32 needs "nobody disclosed
+  this in full" as its own value is for `v1-e32-t03` to decide, with a store-schema note.
+* **Deviations 4 and 5:** accepted. The comparison tool's extra counts are counts only, and
+  `--before-rules` was checked against the stored `v1` table on openev.
+* **Deviation 6:** accepted. A local fetch and rebase of an unpushed branch is what
+  `scripts/task sync` does. Prefer the script next time, so the step is visible as the standard
+  one.
+* **The five `occurrences.jsonl` rows printed while writing the script:** noted. They hold digests,
+  element indices and the camp field, and nothing from them was committed.
+* **`MIN_CUT_SHARE` (0.25) and `MAX_CONTAINER_CLUSTERS` (8):** accepted as stated judgements. Step
+  4's sample of divided pairs is the evidence for revisiting the first.
+
+**The operator run.** It combines with t09's. The PM will hand the operator one sequence once
+both tasks have merged:
+
+1. t09's dev re-parse;
+2. your step 2 counts, and the step 3 sample (ac5) with step 4;
+3. t09's prod publish, only if the sample found no "different card";
+4. your step 5 clean-up.
+
+One "different card" stops prod, as you wrote.
+
+**Follow-up work, filed by the PM after the re-parse,** when the counts are real:
+
+* Long bodies merged through a shared fragment (your 1), together with the very large clusters
+  (your 10). hspolicy26's largest is 1,165 cards of 165 distinct texts, which may be the same
+  chain.
+* The minimum-cut key (your 4) and `MIN_CUT_SHARE` (your 8), if the samples point at them.
+* Your 2, 3 and 5 go to `v1-e32-t03`'s session as reading.

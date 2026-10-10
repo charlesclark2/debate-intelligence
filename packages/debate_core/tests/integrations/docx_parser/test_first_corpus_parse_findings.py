@@ -13,6 +13,10 @@ construct names only, they came to three rules:
 * **A blank line in a heading style was read as a heading.** An empty `Heading4` opened a card
   with an empty tag and demoted the real tag above it to an analytic.
 
+And a fourth, which the same reading turned up: **an ellipsis anywhere made a card `ABBREVIATED`.**
+21,278 of the 22,443 cards marked that way have a body over 1,000 characters. They are whole cards
+whose text leaves something out, not disclosures of a card's first and last words.
+
 Every file here is built in memory from invented text, in the formatting structure the real files
 have. The expected cards are written by hand from what each file holds, never taken from the
 parser (working agreement 6).
@@ -30,6 +34,7 @@ from debate_core.application.ports.parsed_store import parse_version_directory
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import (
     CardCompleteness,
+    ParsedCard,
     ParsedDocument,
     ParseFailure,
     ParseFailureReason,
@@ -480,15 +485,8 @@ class TestABodyParagraphGuessedToBeACite:
             for span in first.formatting_spans
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "The card is whole, but any body holding an ellipsis is called ABBREVIATED: the "
-            "completeness rule is t03's, is wrong for 95% of the cards it marks, and is reported "
-            "in the v1-e31-t09 session report as follow-up work rather than changed here."
-        ),
-    )
     def test_the_first_card_is_a_full_card(self, parser: DebateDocxParser) -> None:
+        """Its body holds two ellipses, in the source's own prose. It is whole all the same."""
         assert parse(parser, SPLIT_BY_A_GUESSED_CITE).cards[0].completeness is CardCompleteness.FULL
 
     def test_a_small_print_paragraph_that_opens_with_a_year_stays_in_the_body(
@@ -719,6 +717,201 @@ class TestABlankLineInAStructuralStyle:
 
         assert result.sections[3].unit is StructuralUnit.EVIDENCE
         assert result.cards[0].evidence_text == "First paragraph of the body.\n\nThird paragraph of the body."
+
+
+# --------------------------------------------------------------------------------------------
+# ac6: ABBREVIATED is a disclosure's shape, not an ellipsis
+# --------------------------------------------------------------------------------------------
+
+#: A whole card, 77 words, whose source leaves a clause out in the middle.
+WHOLE_BODY_WITH_ONE_OMISSION = (
+    "Grid operators in the region reported that demand from new data centres rose faster than "
+    "any other load category last year, and the increase outpaced every scenario the utility had "
+    "planned against … which left the reserve margin thinner than at any point in the past "
+    "decade, a result the regional operator had warned of in each of its three preceding annual "
+    "assessments and that the utility had dismissed as unlikely on every occasion it was raised."
+)
+
+#: A whole card cut down hard, as a debater cuts one: three omissions in three spellings.
+WHOLE_BODY_WITH_SEVERAL_OMISSIONS = (
+    "Planners at the utility assumed that load would grow by one percent a year through the "
+    "decade [...] a figure the regional operator abandoned within eighteen months of adopting it "
+    "*** because the connection requests already filed by developers exceeded the whole of the "
+    "forecast growth ... and none of the planning scenarios the commission had reviewed and "
+    "approved allowed for a single one of those requests being granted."
+)
+
+#: A whole card of one sentence: 21 words, an omission, 8 words. The shortest one-ellipsis bodies
+#: in the first corpus parse have this shape, and nothing separates them from any other short card.
+ONE_SENTENCE_WITH_AN_OMISSION = (
+    "The regional operator told the commission that the reserve margin would fall below its "
+    "target in three of the five zones … unless new capacity came online before the summer."
+)
+
+FIRST_WORDS = "Grid operators in the region reported that demand"
+LAST_WORDS = "thinner than at any point in the past decade."
+
+#: Twelve words, and thirteen: either side of the bound.
+TWELVE_WORDS = "one two three four five six seven eight nine ten eleven twelve"
+THIRTEEN_WORDS = TWELVE_WORDS + " thirteen"
+
+MARKER_SPELLINGS = ["…", "...", "[…]", "[...]", "***"]
+
+
+def card_with_body(parser: DebateDocxParser, *paragraphs: str, cite: str | None = None) -> ParsedCard:
+    """The one card of a file that is a tag, a cite and these body paragraphs in small print."""
+    body = tag_paragraph() + (cite_paragraph() if cite is None else cite_paragraph(tail=cite))
+    document = parse(parser, body + "".join(small_print_paragraph(text) for text in paragraphs))
+    assert len(document.cards) == 1
+    assert document.cards[0].evidence_text == "\n".join(paragraphs)
+    return document.cards[0]
+
+
+class TestAbbreviatedIsADisclosuresShape:
+    """A disclosure of first and last words is a few words, one ellipsis, and a few words more.
+
+    Measured over the 19,402 bodies of the corpus that hold an ellipsis marker: not one has a
+    single marker with 15 words or fewer on both sides, and only 37 are 60 words or shorter in
+    all. So the bound is set from what a disclosure is, twelve words a side, and it sits below
+    every whole card the corpus holds.
+    """
+
+    def test_a_whole_card_with_one_omission_is_full(self, parser: DebateDocxParser) -> None:
+        card = card_with_body(parser, WHOLE_BODY_WITH_ONE_OMISSION)
+
+        assert card.completeness is CardCompleteness.FULL
+        assert card.is_abbreviated is False
+
+    def test_a_whole_card_with_several_omissions_is_full(self, parser: DebateDocxParser) -> None:
+        card = card_with_body(parser, WHOLE_BODY_WITH_SEVERAL_OMISSIONS)
+
+        assert card.completeness is CardCompleteness.FULL
+
+    def test_a_whole_card_of_several_paragraphs_with_an_omission_in_each_is_full(
+        self, parser: DebateDocxParser
+    ) -> None:
+        card = card_with_body(parser, WHOLE_BODY_WITH_ONE_OMISSION, WHOLE_BODY_WITH_SEVERAL_OMISSIONS)
+
+        assert card.completeness is CardCompleteness.FULL
+
+    def test_a_whole_card_of_one_sentence_with_an_omission_is_full(self, parser: DebateDocxParser) -> None:
+        """Twenty-one words is not a card's first few. In doubt a whole card is not called abbreviated."""
+        card = card_with_body(parser, ONE_SENTENCE_WITH_AN_OMISSION)
+
+        assert card.completeness is CardCompleteness.FULL
+
+    def test_the_profile_still_names_the_five_marker_spellings(self, profile: StyleProfile) -> None:
+        """The spellings are the profile's. This list is here so each one is tried below."""
+        assert sorted(profile.cite.wiki_ellipsis_markers) == sorted(MARKER_SPELLINGS)
+
+    @pytest.mark.parametrize("marker", MARKER_SPELLINGS)
+    def test_first_words_a_marker_and_last_words_is_abbreviated(
+        self, parser: DebateDocxParser, marker: str
+    ) -> None:
+        card = card_with_body(parser, f"{FIRST_WORDS} {marker} {LAST_WORDS}")
+
+        assert card.completeness is CardCompleteness.ABBREVIATED
+        assert card.is_abbreviated is True
+        assert card.evidence_text == f"{FIRST_WORDS} {marker} {LAST_WORDS}"
+
+    @pytest.mark.parametrize("marker", MARKER_SPELLINGS)
+    def test_a_marker_written_against_the_words_either_side_is_still_one(
+        self, parser: DebateDocxParser, marker: str
+    ) -> None:
+        card = card_with_body(parser, f"{FIRST_WORDS}{marker}{LAST_WORDS}")
+
+        assert card.completeness is CardCompleteness.ABBREVIATED
+
+    def test_a_short_body_with_no_marker_is_full(self, parser: DebateDocxParser) -> None:
+        """Short is not abbreviated. 10,682 bodies in the corpus are 100 words or fewer."""
+        card = card_with_body(parser, f"{FIRST_WORDS} {LAST_WORDS}")
+
+        assert card.completeness is CardCompleteness.FULL
+
+    def test_a_marker_in_the_cite_does_not_abbreviate_a_whole_body(self, parser: DebateDocxParser) -> None:
+        """A cite carries an ellipsis for its own reasons: a shortened title, a list of authors."""
+        whole = "".join(MARKED_UP)
+        card = card_with_body(
+            parser, whole, cite=", Reserve Margins … and Load Growth, Journal of Grid Studies."
+        )
+
+        assert "…" in card.full_cite
+        assert card.completeness is CardCompleteness.FULL
+
+    @pytest.mark.parametrize("marker", MARKER_SPELLINGS)
+    def test_a_marker_in_the_cite_does_not_abbreviate_a_short_body_either(
+        self, parser: DebateDocxParser, marker: str
+    ) -> None:
+        card = card_with_body(
+            parser, f"{FIRST_WORDS} {LAST_WORDS}", cite=f", Reserve Margins {marker} Journal of Grid Studies."
+        )
+
+        assert marker in card.full_cite
+        assert card.completeness is CardCompleteness.FULL
+
+    def test_a_cite_with_a_marker_and_no_body_is_still_cite_only(self, parser: DebateDocxParser) -> None:
+        body = tag_paragraph() + cite_paragraph(tail=", Reserve Margins … Journal of Grid Studies.")
+        card = parse(parser, body + paragraph_xml(run_xml("Grid Reliability"), style="Heading2")).cards[0]
+
+        assert card.completeness is CardCompleteness.CITE_ONLY
+        assert card.evidence_text == ""
+
+    def test_twelve_words_either_side_is_the_most_a_disclosure_holds(self, parser: DebateDocxParser) -> None:
+        card = card_with_body(parser, f"{TWELVE_WORDS} … {TWELVE_WORDS}")
+
+        assert card.completeness is CardCompleteness.ABBREVIATED
+
+    @pytest.mark.parametrize(
+        ("before", "after"),
+        [
+            (THIRTEEN_WORDS, "one two three"),
+            ("one two three", THIRTEEN_WORDS),
+            (THIRTEEN_WORDS, THIRTEEN_WORDS),
+        ],
+        ids=["thirteen before", "thirteen after", "thirteen both"],
+    )
+    def test_thirteen_words_on_either_side_is_a_card_with_an_omission(
+        self, parser: DebateDocxParser, before: str, after: str
+    ) -> None:
+        card = card_with_body(parser, f"{before} … {after}")
+
+        assert card.completeness is CardCompleteness.FULL
+
+    @pytest.mark.parametrize(
+        "text",
+        [f"… {LAST_WORDS}", f"{FIRST_WORDS} …", f"[...] {LAST_WORDS}", f"{FIRST_WORDS}..."],
+        ids=["opens with it", "closes with it", "opens with a bracketed one", "trails off"],
+    )
+    def test_a_marker_at_either_end_joins_nothing(self, parser: DebateDocxParser, text: str) -> None:
+        """A quotation that starts or stops mid-sentence. There is no first-and-last to it."""
+        card = card_with_body(parser, text)
+
+        assert card.completeness is CardCompleteness.FULL
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Grid operators reported … demand rose … thinner than ever.",
+            "Grid operators reported ... demand rose [...] thinner than ever.",
+            "Grid operators reported ****** thinner than ever.",
+        ],
+        ids=["two markers", "two spellings", "one marker written twice"],
+    )
+    def test_two_markers_are_two_omissions_however_short_the_body(
+        self, parser: DebateDocxParser, text: str
+    ) -> None:
+        """One marker joins a beginning to an end. Two leave things out of a quotation."""
+        card = card_with_body(parser, text)
+
+        assert card.completeness is CardCompleteness.FULL
+
+    def test_a_disclosure_spread_over_two_paragraphs_is_read_as_one_body(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """The words are counted over the body, so where the line breaks fall changes nothing."""
+        card = card_with_body(parser, f"{FIRST_WORDS} …", LAST_WORDS)
+
+        assert card.completeness is CardCompleteness.ABBREVIATED
 
 
 # --------------------------------------------------------------------------------------------

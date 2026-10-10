@@ -339,6 +339,25 @@ def test_counts_reads_the_earlier_rules_from_a_git_ref(
     assert not [word for word in TELLTALE if word in output]
 
 
+def test_placements_under_earlier_rules_are_saved_once_and_read_back(
+    data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--save-before` keeps what `--before-rules` took minutes to compute, for `--before`."""
+    saved = data_dir / "saved-before"
+    arguments = ["--data-dir", str(data_dir), "counts", "--caselist", CASELIST]
+    assert script.main([*arguments, "--before-rules", "HEAD", "--save-before", str(saved)]) == 0
+    computed = json.loads(capsys.readouterr().out)[CASELIST]
+
+    written = (saved / f"{CASELIST}.jsonl").read_text(encoding="utf-8")
+    assert len(written.splitlines()) == 5
+    assert not [word for word in TELLTALE if word in written]
+
+    assert script.main([*arguments, "--before", str(saved)]) == 0
+    read_back = json.loads(capsys.readouterr().out)[CASELIST]
+    del computed["seconds"], read_back["seconds"]
+    assert read_back == computed
+
+
 def test_a_ref_git_does_not_have_is_refused_by_name(data_dir: Path) -> None:
     arguments = ["--data-dir", str(data_dir), "counts", "--caselist", CASELIST]
     with pytest.raises(SystemExit, match="git has no no-such-ref:packages/debate_core"):

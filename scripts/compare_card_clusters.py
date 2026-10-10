@@ -25,8 +25,9 @@ the store's `occurrences.jsonl` holds now, and *before* is one of:
 
 `sample --divided` shows the opposite change: pairs that shared a cluster before and no longer do.
 
-**Operator-run on the real store.** It writes nothing to the store or the repository;
-`--before-rules` copies source files, never card text, to a temporary directory it removes. It never
+**Operator-run on the real store.** It writes nothing to the store or the repository.
+`--before-rules` copies source files, never card text, to a temporary directory it removes, and
+`counts --save-before` writes digests and cluster ids where it is told to. It never
 prints a card's text, tag or cite except in `sample`, to a terminal, one pair at a time, cleared
 before the next; `sample` refuses to run when its input or output is not a terminal, so nothing it
 shows can land in a file or a pipe. The store itself holds no path, school or team code
@@ -78,6 +79,7 @@ __all__ = [
     "placements_under_rules",
     "read_placements",
     "run_sample",
+    "write_placements",
 ]
 
 type CardKey = tuple[str, int]
@@ -178,6 +180,20 @@ def read_placements(occurrences: Path) -> dict[CardKey, Placement]:
                 fingerprint_version=row["fingerprint_version"],
             )
     return placed
+
+
+def write_placements(placed: Mapping[CardKey, Placement], path: Path) -> None:
+    """Save placements in the shape `read_placements` reads: digests, indices and ids, no text.
+
+    For `counts --save-before`: placing a caselist under earlier rules takes minutes, and the
+    sample that follows should not have to do it again.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as stream:
+        for (sha256, element), placement in sorted(placed.items()):
+            row = {"source_sha256": sha256, "first_element_index": element}
+            row.update({name: getattr(placement, name) for name in Placement.__dataclass_fields__})
+            stream.write(json.dumps(row, sort_keys=True) + "\n")
 
 
 def current_version(store: LocalParsedStore, caselist: str) -> str:
@@ -479,6 +495,8 @@ def _counts(arguments: argparse.Namespace) -> int:
         _, before, after = _load(arguments, store, caselist)
         change = compare(before, after)
         results[caselist] = {**change.as_json(), "seconds": round(time.monotonic() - started, 1)}
+        if arguments.save_before is not None:
+            write_placements(before, arguments.save_before / f"{caselist}.jsonl")
     print(json.dumps(results, indent=2, sort_keys=True))
     return 0
 
@@ -541,6 +559,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             metavar="GIT_REF",
             help="Place the store's cards with the matching rules as they were at this git ref.",
         )
+        if name == "counts":
+            command.add_argument(
+                "--save-before",
+                type=Path,
+                metavar="DIRECTORY",
+                help="Also write the 'before' placements there as <caselist>.jsonl, to pass as --before.",
+            )
         if name == "sample":
             command.add_argument("--count", type=int, default=20)
             command.add_argument("--seed", type=int)

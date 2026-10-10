@@ -263,6 +263,65 @@ class TestParsedCard:
         assert not make_card().is_abbreviated
 
 
+class TestACardWithNoTag:
+    """`v1-e31-t09`: "the file gave this card no tag" is said one way, and never as `""` in a record.
+
+    The first corpus parse stored 15,528 cards as `"tag": ""`. A reader of the store could not tell
+    a card the file left untagged from a tag the parser had lost.
+    """
+
+    def test_a_card_built_without_a_tag_has_none(self) -> None:
+        card = make_card(tag=None)
+
+        assert card.has_tag is False
+        assert card.tag == ""
+
+    def test_a_card_with_a_tag_says_so(self) -> None:
+        assert make_card().has_tag is True
+
+    def test_no_tag_is_written_as_null_never_as_an_empty_string(self) -> None:
+        for tagless in (make_card(tag=None), make_card(tag="")):
+            assert tagless.model_dump(mode="json")["tag"] is None
+            assert tagless.model_dump()["tag"] is None
+            assert '"tag":null' in tagless.model_dump_json()
+            assert '"tag":""' not in tagless.model_dump_json()
+
+    def test_a_tag_is_written_exactly_as_the_file_spelled_it(self) -> None:
+        card = make_card(tag=" Data centre demand collapses the reserve margin ")
+
+        assert card.model_dump(mode="json")["tag"] == " Data centre demand collapses the reserve margin "
+
+    def test_null_reads_back_as_no_tag(self) -> None:
+        tagless = make_card(tag=None)
+
+        assert ParsedCard.model_validate_json(tagless.model_dump_json()) == tagless
+        assert ParsedCard.model_validate(tagless.model_dump(mode="json")).has_tag is False
+
+    def test_the_empty_string_the_first_corpus_parse_stored_still_reads_as_no_tag(self) -> None:
+        """The `2026.09.20-docx-1` directories stay, and their records say `"tag": ""`."""
+        stored = make_card().model_dump(mode="json") | {"tag": ""}
+
+        assert ParsedCard.model_validate(stored).has_tag is False
+
+    @pytest.mark.parametrize("blank", [" ", "   ", "\t", "\n", " "])
+    def test_a_tag_of_nothing_but_whitespace_is_refused(self, blank: str) -> None:
+        """It is neither a tag nor "no tag", and a blank heading line is where it would come from."""
+        with pytest.raises(ValidationError, match="nothing but whitespace"):
+            make_card(tag=blank)
+
+    def test_a_cite_only_card_may_have_no_tag(self) -> None:
+        """A bare citation: the file names a source and gives it no claim and no text."""
+        card = make_card(
+            tag=None,
+            completeness=CardCompleteness.CITE_ONLY,
+            evidence_text="",
+            formatting_spans=(),
+            font_size_spans=(),
+        )
+
+        assert (card.has_tag, card.completeness) == (False, CardCompleteness.CITE_ONLY)
+
+
 # --------------------------------------------------------------------------------------------
 # Sections and documents
 # --------------------------------------------------------------------------------------------

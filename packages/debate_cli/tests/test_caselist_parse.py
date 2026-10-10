@@ -24,6 +24,8 @@ from tests.fixtures.parse_pipeline.build_parse_world import (
     build_week_zips,
     digest_of,
 )
+from tests.fixtures.permissions import needs_permissions
+from tests.fixtures.permissions import refused as refused_directory
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -272,3 +274,71 @@ def test_publishing_from_test_is_refused(imported: Path, monkeypatch: pytest.Mon
 def test_a_caselist_that_is_not_a_slug_is_refused(imported: Path) -> None:
     result = invoke("--json", "caselist", "parse", "--caselist", "Maple Grove")
     assert result.exit_code != ExitCode.OK
+
+
+# ------------------------------------------------------------------------------------------------
+# A parsed card store this machine refuses (`v1-e31-t09` ac5)
+# ------------------------------------------------------------------------------------------------
+
+
+def assert_the_store_was_refused(result: Result, data_dir: Path) -> None:
+    """Exit 3, the store's own code, the role and the setting, and no path of this machine."""
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "STORE_ACCESS_DENIED"
+    assert "the parsed card store" in error["message"]
+    assert "storage.data_dir" in error["hint"]
+    assert "aws sso login" not in json.dumps(error)
+    assert str(data_dir) not in result.stdout
+    assert str(data_dir.parent) not in result.stdout
+
+
+@needs_permissions
+@pytest.mark.parametrize("arguments", [(), ("--dry-run",), ("--failures",), ("--reparse",)])
+def test_a_parsed_store_this_machine_refuses_exits_three_and_names_the_setting(
+    imported: Path, arguments: tuple[str, ...]
+) -> None:
+    """It used to end as exit 70, "a bug", with the data directory's path in the message."""
+    assert invoke("caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+
+    with refused_directory(imported / "parsed"):
+        result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, *arguments)
+
+    assert_the_store_was_refused(result, imported)
+
+
+@needs_permissions
+def test_a_dry_run_over_a_partly_refused_store_does_not_count_what_it_could_not_see_as_unparsed(
+    imported: Path,
+) -> None:
+    """The listing used to skip a directory it could not read: the dry run then exited 0 and
+    reported the sources filed there as still to parse."""
+    assert invoke("caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+    sources = imported / "parsed" / CASELIST / DOCX_PARSER_VERSION / "sha256"
+    fan_out = sorted(path for path in sources.iterdir() if path.is_dir())[0]
+
+    with refused_directory(fan_out):
+        result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--dry-run")
+
+    assert_the_store_was_refused(result, imported)
+
+
+@needs_permissions
+def test_a_refused_store_is_left_exactly_as_it_was(imported: Path) -> None:
+    assert invoke("caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+    before = {
+        path.relative_to(imported).as_posix(): path.read_bytes()
+        for path in (imported / "parsed").rglob("*")
+        if path.is_file()
+    }
+
+    with refused_directory(imported / "parsed" / CASELIST / DOCX_PARSER_VERSION):
+        result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--reparse")
+
+    assert_the_store_was_refused(result, imported)
+    after = {
+        path.relative_to(imported).as_posix(): path.read_bytes()
+        for path in (imported / "parsed").rglob("*")
+        if path.is_file()
+    }
+    assert after == before

@@ -1,0 +1,84 @@
+# TASK v1-e30-t12-status-names-manifest-mismatch - caselist status tells a manifest mismatch from a source mismatch
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t12-status-names-manifest-mismatch
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "caselist status tells a manifest mismatch from a source mismatch"
+spec:
+  # Filed by the PM, 2026-10-10, from v1-e30-t08's Follow-up work.
+  description: >-
+    `caselist status` prints "a checksum mismatch needs a person" for every mismatch. A manifest
+    whose local copy was legitimately rewritten differs from the bucket's until the next
+    publish. That happens after a camp metadata re-import (v1-e30-t08) or a removal before its
+    republish, and it needs `caselist publish`, not a person. v1-e30-t08's runbook had to
+    explain the misleading hint. Make the report tell a mismatch on a manifest key from a
+    mismatch on a source blob. Each kind gets its own hint: publish for a manifest, investigate
+    for a source. Keep the exit codes. Out of scope: publishing from `status`, and the residue
+    report v1-e30-t10 adds to the same command (this task follows it to avoid editing the same
+    code at once).
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli.commands, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Publishing, deleting or rewriting anything from `caselist status`
+      - Changing any exit code `caselist status` returns
+  context:
+    - kind: TaskRef
+      name: v1-e30-t10-removal-docstrings-and-residue
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        When the only mismatches are manifest keys, `caselist status` names them as manifest
+        mismatches, and its hint names `caselist publish --caselist <slug>` for each
+        caselist affected. Exit code unchanged. Shown failing first.
+    - id: ac2
+      description: >-
+        A source-blob mismatch keeps the hint that a person must investigate, and a run with
+        both kinds prints both hints, by test.
+    - id: ac3
+      description: >-
+        The JSON output gives each mismatch its kind, and docs/runbooks/caselist-backfill.md
+        drops the sentence that works around the old hint.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t12-status-names-manifest-mismatch-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Classify each mismatch by key kind and give each kind its own hint.
+  goalRef:
+    name: v1-e30-t12-status-names-manifest-mismatch
+  graph:
+    nodes:
+      - id: mismatch-kinds
+        kind: Task
+        name: Manifest and source mismatches reported apart
+        description: >-
+          The classification, the two hints, the JSON field, and the runbook sentence.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Status tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, status]
+status:
+  phase: Pending

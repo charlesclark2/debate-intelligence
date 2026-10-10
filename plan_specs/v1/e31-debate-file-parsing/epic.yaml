@@ -251,5 +251,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t07-worksheet-round-trip
+    - id: t08
+      kind: Task
+      name: 'Near-duplicate matching finds short cards and abbreviated disclosures'
+      description: >-
+        Short cards and abbreviated disclosures cluster and link with recall close to long
+        cards', with precision held at 1.000 on the labelled sets, before E32 counts teams
+        and rounds by cluster.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml
+        goalRef: v1-e31-t08-short-card-recall
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t08-short-card-recall reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t08-short-card-recall
 status:
   phase: Pending

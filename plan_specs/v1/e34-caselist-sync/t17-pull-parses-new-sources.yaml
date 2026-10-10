@@ -1,0 +1,102 @@
+# TASK v1-e34-t17-pull-parses-new-sources - The weekly pull parses the sources it imported
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t17-pull-parses-new-sources
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "The weekly pull parses the sources it imported"
+spec:
+  # Filed by the PM, 2026-10-10, from v1-e31-t06's Follow-up work 3.
+  description: >-
+    `caselist pull` has an optional `CaselistParseStage`, which v1-e34-t02 left for the parse
+    pipeline. v1-e31-t06 shipped `CaselistParseService` but did not wire the stage, because
+    doing so changes what the operator's weekly agent does. Wire it with a thin adapter over
+    `CaselistParseService.plan` and `run`. After a pull imports new snapshots, parse their new
+    sources and rebuild each touched caselist's aggregates. When the pull publishes, the parsed
+    store publishes too, through the same publisher. Size the stage from t06's operator-run
+    figures (its ac5): the stage runs inside the agent's weekly window. The setting that turns
+    it off defaults to on only if those figures fit that window. The stage passes the
+    suppression list as t06 requires. Out of scope: the parse pipeline's own behaviour, the
+    landscape stage, and the scheduled time.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - A parse-stage failure undoing or withholding the pull's import or raw publish
+      - A path, school, team code, file name or card text in the run summary or in any log at INFO or above
+      - Parsing sources from the full-archive namespace (v1-e31-t06's enumeration rule is unchanged)
+  context:
+    - kind: TaskRef
+      name: v1-e31-t06-parse-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t13-pull-stage-failure-classes
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A pull that imports a new snapshot parses only that snapshot's new sources, rebuilds
+        the touched caselists' aggregates and, when publishing, publishes them. A pull that
+        imports nothing parses nothing. Both shown with a counting parser, the first failing
+        first.
+    - id: ac2
+      description: >-
+        A parse-stage failure (rate over the threshold, store unavailable, worker crash) is
+        reported in the run summary under its v1-e34-t13 failure class. The import and the
+        raw publish stand, by test.
+    - id: ac3
+      description: >-
+        The run summary carries the stage's counts only (attempted, skipped, unsupported,
+        failed, cards, uploaded), with its schema version bumped if the shape changes.
+    - id: ac4
+      description: >-
+        The setting that disables the stage is documented in the agent runbook with its
+        default and the operator-run figures that justify it.
+    - id: ac5
+      description: >-
+        Operator-run: the first scheduled run after the agent is reinstalled with this build
+        shows the stage's counts in `caselist runs --last 1` and exits as v1-e34-t13's
+        classes say.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t17-pull-parses-new-sources-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Adapt CaselistParseService to the pull's parse stage, classify its failures, and report its
+    counts.
+  goalRef:
+    name: v1-e34-t17-pull-parses-new-sources
+  graph:
+    nodes:
+      - id: parse-stage
+        kind: Task
+        name: The pull's parse stage is wired
+        description: >-
+          The adapter, the composition-root wiring, the setting, the summary counts, the
+          runbook, and the first scheduled run.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pull tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, pull or sync]
+status:
+  phase: Pending

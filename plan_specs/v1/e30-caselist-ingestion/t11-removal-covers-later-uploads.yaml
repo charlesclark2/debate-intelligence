@@ -1,0 +1,105 @@
+# TASK v1-e30-t11-removal-covers-later-uploads - A removal also takes down later uploads at the removed path
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t11-removal-covers-later-uploads
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "A removal also takes down later uploads at the removed path"
+spec:
+  # Filed by the PM, 2026-10-10, from v1-e34-t14's Follow-up work 1 and the PM's v1-e30-t07 ruling.
+  description: >-
+    The PM ruled under v1-e30-t07 that a removal request covers later uploads at the same path.
+    v1-e34-t14 enforces that for files not yet imported: the sync holds a later upload at a
+    removed path. It does nothing for a revision imported before the removal. Example: revision
+    B of a file is uploaded at the same caselist path as A and imported in a later snapshot,
+    then A is removed. `caselist remove --source <A>` deletes A's bytes and rows only, and B
+    stays in the store and the bucket. Make the removal plan list every later upload the store
+    holds at each removed source's path. List them by digest and snapshot, never by name.
+    Include them in the plan the operator confirms, so one confirmed plan carries out the whole
+    request. A flag can limit the plan to the named digests, for a request that is explicitly
+    about one version. For an OpenEv camp file, a later upload is a new OpenEv id at the same
+    camp path: the revision identity v1-e34-t08 uses. Out of scope: earlier versions at the path
+    (not covered by the ruling; they are listed for the operator but not included), the
+    suppression list's format, and the takedown profile's grants.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli.commands, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - Removing a digest none of whose rows is at a path the removal names
+      - Deleting a shared blob that another live path still holds (the v1-e30-t07 rule for shared bytes is unchanged)
+      - A school, team code, path or file name in the plan's JSON output or in any log at INFO or above
+  context:
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t14-removed-path-hold-for-inbox-copies
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A fixture holds A at path P in one snapshot and revision B at P in a later one. The
+        dry run of `caselist remove --source <A>` lists B as a later upload at the removed
+        path by digest and snapshot, and `--execute` removes both from the local store and
+        the bucket, every version. Shown failing first against today's planner.
+    - id: ac2
+      description: >-
+        If B's bytes are also disclosed at another live path Q, B's blob and Q's rows stay
+        and only P's rows go. A digest at P from before A is listed as an earlier version
+        and left untouched. Both by test.
+    - id: ac3
+      description: >-
+        The limiting flag removes only the named digests, by test. Without it the plan
+        includes later uploads, and the confirmation prompt states how many it adds.
+    - id: ac4
+      description: >-
+        For a camp file, a later OpenEv id at the same camp path is included the same way,
+        by test on the openev fixture.
+    - id: ac5
+      description: >-
+        docs/runbooks/caselist-removal.md says what the plan now lists, when to use the
+        limiting flag, and that Step 8's hold and this plan together cover a later upload
+        whether or not it was imported.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t11-removal-covers-later-uploads-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Find later uploads at each removed path, include them in the confirmed plan, and prove it on
+    caselist and camp fixtures.
+  goalRef:
+    name: v1-e30-t11-removal-covers-later-uploads
+  graph:
+    nodes:
+      - id: later-uploads-in-plan
+        kind: Task
+        name: Later uploads at a removed path join the removal plan
+        description: >-
+          The planner change, the limiting flag, the tests for caselist and camp files,
+          and the runbook.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, removal or remove]
+status:
+  phase: Pending

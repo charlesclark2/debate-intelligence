@@ -117,6 +117,14 @@ spec:
       inputs:
         goalRef: v1-e29-t06-removal-grant-scope-test
         specRef: plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml
+    - id: ext-v1-e34-t14-removed-path-hold-for-inbox-copies
+      kind: External
+      name: 'Prerequisite from E34: A camp file already in the inbox is held if its path was removed'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t14-removed-path-hold-for-inbox-copies
+        specRef: plan_specs/v1/e34-caselist-sync/t14-removed-path-hold-for-inbox-copies.yaml
     - id: t01
       kind: Task
       name: Caselist and OpenEv data-use policy
@@ -336,5 +344,46 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t10-removal-docstrings-and-residue
+    - id: t11
+      kind: Task
+      name: 'A removal also takes down later uploads at the removed path'
+      description: >-
+        caselist remove plans the takedown of every later upload at a removed source's path,
+        not just the named digest, so one confirmed plan carries out the whole request.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t11-removal-covers-later-uploads.yaml
+        goalRef: v1-e30-t11-removal-covers-later-uploads
+      dependsOn:
+      - t07
+      - ext-v1-e34-t14-removed-path-hold-for-inbox-copies
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t11-removal-covers-later-uploads reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t11-removal-covers-later-uploads
+    - id: t12
+      kind: Task
+      name: 'caselist status tells a manifest mismatch from a source mismatch'
+      description: >-
+        caselist status says a mismatched manifest needs a publish and a mismatched source
+        needs a person, instead of the same hint for both.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t12-status-names-manifest-mismatch.yaml
+        goalRef: v1-e30-t12-status-names-manifest-mismatch
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t12-status-names-manifest-mismatch reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t12-status-names-manifest-mismatch
 status:
   phase: Pending

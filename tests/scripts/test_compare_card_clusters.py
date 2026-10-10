@@ -116,11 +116,16 @@ def _as_v1_placed(card: ParsedCard) -> tuple[str, ClusterMembership]:
     )
 
 
+#: The two sources' digests by name, filled in as the store is built.
+_SOURCES: dict[str, str] = {}
+
+
 @pytest.fixture
 def data_dir(tmp_path: Path) -> Path:
     """A store of two sources and five cards, with the occurrence table as v1 left it."""
     store = LocalParsedStore(tmp_path)
     documents = [_document("one", CARDS[:3]), _document("two", CARDS[3:])]
+    _SOURCES.update(one=documents[0].source_sha256, two=documents[1].source_sha256)
     entries: list[SourceEntry] = []
     rows: list[OccurrenceRecord] = []
     for document in documents:
@@ -174,6 +179,8 @@ def data_dir(tmp_path: Path) -> Path:
 #: Worked out by hand from `CARDS`: two of the five earlier clusters each joined another.
 EXPECTED_COUNTS = {
     "cards": 5,
+    "cards_only_before": 0,
+    "cards_only_after": 0,
     "before_version": BEFORE_T08,
     "after_version": FINGERPRINT_VERSION,
     "clusters_before": 5,
@@ -246,12 +253,29 @@ def test_counts_compares_a_saved_table_with_the_one_the_store_holds_now(
         assert counts == EXPECTED_COUNTS
 
 
-def test_a_table_that_covers_other_cards_is_refused(data_dir: Path) -> None:
+def test_cards_in_only_one_table_are_counted_and_left_out_of_the_comparison(
+    data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A pull between the saved table and the rebuild adds sources. The second source's two cards
+    are missing from the saved table here: the ferry card, and the orchard cut that had joined the
+    first source's. Three cards remain, and one earlier cluster joined another among them."""
     saved = _rebuilt_under_todays_rules(data_dir)
-    lines = saved.read_text(encoding="utf-8").splitlines()
-    saved.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
-    with pytest.raises(SystemExit, match="cover different cards"):
+    kept = [
+        line
+        for line in saved.read_text(encoding="utf-8").splitlines()
+        if json.loads(line)["source_sha256"] == _SOURCES["one"]
+    ]
+    assert len(kept) == 3
+    saved.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    assert (
         script.main(["--data-dir", str(data_dir), "counts", "--caselist", CASELIST, "--before", str(saved)])
+        == 0
+    )
+    counts = json.loads(capsys.readouterr().out)[CASELIST]
+    assert (counts["cards"], counts["cards_only_before"], counts["cards_only_after"]) == (3, 0, 2)
+    assert (counts["clusters_before"], counts["clusters_after"]) == (3, 2)
+    assert counts["clusters_merged_into_another"] == 1
 
 
 def test_one_pair_is_offered_for_each_cluster_that_joined_another(data_dir: Path) -> None:

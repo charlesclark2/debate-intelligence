@@ -442,6 +442,8 @@ def test_a_short_body_is_inside_another_but_for_one_word(short: list[str], long:
         (replaced(LIBRARY[:10], 5, "inn"), LIBRARY),
         # Its opening is nowhere in the other body.
         (numbered("unrelated", 19), LIBRARY),
+        # Fewer than five words: no opening to look for.
+        (LIBRARY[:4], LIBRARY),
     ],
 )
 def test_a_short_body_is_not_inside_another_but_for_one_word(short: list[str], long: list[str]) -> None:
@@ -523,10 +525,10 @@ def test_a_body_too_large_to_join_still_makes_a_short_body_ambiguous() -> None:
     assert len(set(clustered(card, section, fragment))) == 3
 
 
-def templated(count: int) -> list[list[str]]:
+def templated(count: int, middle: int = 20) -> list[list[str]]:
     """`count` different bodies that all open with the same five words and close with the same five."""
     return [
-        [*numbered("opens", 5), *numbered(f"body{index}x", 20), *numbered("closes", 5)]
+        [*numbered("opens", 5), *numbered(f"body{index}x", middle), *numbered("closes", 5)]
         for index in range(count)
     ]
 
@@ -545,6 +547,18 @@ def test_a_short_body_that_opens_and_closes_like_many_others_is_left_alone() -> 
 
     left_alone = clustered(*many, copy)
     assert len(set(left_alone)) == MAX_CONTAINER_CLUSTERS + 2
+
+
+def test_a_cluster_with_one_body_too_common_to_compare_joins_nothing() -> None:
+    """Two near-identical short copies are one cluster by Jaccard, and both open and close like
+    nine other cards. The first is left alone, and so is the cluster when the second comes up."""
+    many = templated(MAX_CONTAINER_CLUSTERS + 2, middle=49)
+    copy = replaced(many[0], 30, "changed")
+    assert jaccard(frozenset(word_shingles(many[0])), frozenset(word_shingles(copy))) >= 0.8
+
+    clusters = clustered(*many, copy)
+    assert clusters[-1] == clusters[0]
+    assert len(set(clusters)) == MAX_CONTAINER_CLUSTERS + 2
 
 
 def test_a_long_bodys_cut_is_still_left_to_the_banding() -> None:

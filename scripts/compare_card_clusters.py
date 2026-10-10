@@ -56,6 +56,7 @@ __all__ = [
     "ClusterChange",
     "Joined",
     "Placement",
+    "common_cards",
     "compare",
     "joined_pairs",
     "main",
@@ -92,6 +93,9 @@ class ClusterChange:
     """What changed between two placements of the same card positions. Counts only."""
 
     cards: int
+    """Card positions in both placements: everything else here is over these."""
+    cards_only_before: int
+    cards_only_after: int
     before_version: str
     after_version: str
     clusters_before: int
@@ -216,13 +220,22 @@ def _band(count: int) -> str:
     raise ValueError(count)
 
 
+def common_cards(
+    before: Mapping[CardKey, Placement], after: Mapping[CardKey, Placement]
+) -> tuple[dict[CardKey, Placement], dict[CardKey, Placement]]:
+    """Both placements, kept to the card positions they share.
+
+    A pull between the saved table and the rebuild adds sources, and a removal takes them away.
+    What changed for a card is only meaningful where it is in both.
+    """
+    shared = before.keys() & after.keys()
+    return {key: before[key] for key in shared}, {key: after[key] for key in shared}
+
+
 def compare(before: Mapping[CardKey, Placement], after: Mapping[CardKey, Placement]) -> ClusterChange:
-    """What moved between two placements of the same card positions."""
-    if before.keys() != after.keys():
-        raise SystemExit(
-            f"the two placements cover different cards: {len(before.keys() - after.keys())} only before, "
-            f"{len(after.keys() - before.keys())} only after. A source was added or removed between them."
-        )
+    """What moved between two placements, over the card positions both cover."""
+    only_before, only_after = len(before.keys() - after.keys()), len(after.keys() - before.keys())
+    before, after = common_cards(before, after)
     old, new = _members(before), _members(after)
     made_of = {cluster: {before[key].cluster_id for key in keys} for cluster, keys in new.items()}
     spread = {cluster: {after[key].cluster_id for key in keys} for cluster, keys in old.items()}
@@ -255,6 +268,8 @@ def compare(before: Mapping[CardKey, Placement], after: Mapping[CardKey, Placeme
     largest_after, texts_after = largest(new, after)
     return ClusterChange(
         cards=len(after),
+        cards_only_before=only_before,
+        cards_only_after=only_after,
         before_version=", ".join(sorted({placement.fingerprint_version for placement in before.values()})),
         after_version=", ".join(sorted({placement.fingerprint_version for placement in after.values()})),
         clusters_before=len(old),
@@ -284,7 +299,8 @@ def joined_pairs(before: Mapping[CardKey, Placement], after: Mapping[CardKey, Pl
     the host and each of the others joined it. The pair is the first card of each.
     """
     pairs: list[Joined] = []
-    for cluster, keys in sorted(_members(after).items()):
+    before, after = common_cards(before, after)
+    for _, keys in sorted(_members(after).items()):
         parts: defaultdict[str, list[CardKey]] = defaultdict(list)
         for key in keys:
             parts[before[key].cluster_id].append(key)
@@ -298,7 +314,6 @@ def joined_pairs(before: Mapping[CardKey, Placement], after: Mapping[CardKey, Pl
             abbreviated = sum(after[key].completeness != "FULL" for key in (joiner, hosted))
             kind = ("full with full", "abbreviated with full", "abbreviated with abbreviated")[abbreviated]
             pairs.append(Joined(kind=kind, joiner=joiner, host=hosted))
-        del cluster
     return pairs
 
 

@@ -354,6 +354,18 @@ def test_a_cut_alone_is_still_its_own_unlinked_cluster() -> None:
     assert place(lone) == [(card_fingerprint(lone).exact_fingerprint, ClusterMembership.UNLINKED)]
 
 
+def test_a_cut_with_no_short_cite_has_no_key_and_goes_where_its_text_goes() -> None:
+    """Identical text is one exact fingerprint and never splits: a copy the parser read no short
+    cite from cannot be grouped by key, and follows the copies of its text that can."""
+    no_cite = abbreviated(FILE_C, ORCHARD_CUT, None)
+    lone = place(no_cite)
+    assert lone == [(card_fingerprint(no_cite).exact_fingerprint, ClusterMembership.UNLINKED)]
+
+    placed = place(abbreviated(FILE_A, ORCHARD_CUT), abbreviated(FILE_B, ORCHARD_OTHER_CUT), no_cite)
+    assert len(set(placed)) == 1
+    assert placed[2][1] is ClusterMembership.ABBREVIATED_LINK
+
+
 def test_one_text_under_two_short_cites_joins_neither_authors_group() -> None:
     """Identical text is one exact fingerprint whatever its cite, so it could carry one author's
     group into another's. It stays a cluster of its own, as it was, and so do the cuts beside it."""

@@ -475,6 +475,8 @@ def test_abbreviated_cuts_of_one_card_with_no_full_copy_are_grouped() -> None:
         # The same words under another author, and under the same author a year off.
         unmatched("Shaded orchards on … by two degrees on August nights.", short_cite="Quenby 26"),
         unmatched("Shaded orchards on … by two degrees on August nights.", short_cite="Tamsin 25"),
+        # The same opening words and the same last four, closing differently before that.
+        unmatched("Shaded orchards on … by three degrees on August nights."),
         # Consistent at both ends, but only three words shared at each: no whole shingle.
         ORCHARD_THREE_THREE,
         # The same three opening and three closing words, then different ones: another card.

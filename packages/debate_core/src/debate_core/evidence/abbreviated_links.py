@@ -76,7 +76,8 @@ key meant to be hard to satisfy by accident:
   stays unlinked, each card a cluster of its own.
 
 Only keys read from a marker in the body take part. A key read from the cite line opens with cite
-text of unknown length, so its opening words cannot be compared. A grouped card is recorded as
+text of unknown length, and may hold no opening words of its card at all, so two of them could
+agree on a cite and a closing phrase and nothing else. A grouped card is recorded as
 :attr:`~debate_core.domain.card_occurrence.ClusterMembership.ABBREVIATED_LINK`, and its cluster id
 is the smallest exact fingerprint in its group, which no full card's cluster can share.
 """
@@ -280,9 +281,10 @@ def _shared_words(left: AbbreviationAnchor, right: AbbreviationAnchor) -> tuple[
 
 
 def _same_card_by_key(left: AbbreviationAnchor, right: AbbreviationAnchor) -> bool:
-    """Same cite, consistent at both ends, a whole shingle shared at one of them."""
-    if left.short_cite_key != right.short_cite_key:
-        return False
+    """Consistent at both ends, with a whole shingle shared at one of them.
+
+    For two keys with the same short-cite key: the caller only ever compares those.
+    """
     shared = _shared_words(left, right)
     return shared is not None and min(shared) >= MIN_ANCHOR_WORDS and max(shared) >= SHINGLE_SIZE
 

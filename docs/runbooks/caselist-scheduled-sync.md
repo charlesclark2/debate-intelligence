@@ -13,6 +13,7 @@ schedule around it is `ops/launchd/`.
 | Agent label | `com.debate-intelligence.caselist-sync` |
 | Logs | `~/Library/Logs/debate-research/caselist-sync.jsonl` and `…err.log` |
 | Run summaries | `<data_dir>/caselist-sync-runs/<run id>.json` |
+| Pending-work file | `<data_dir>/caselist-sync-pending.json`, only while a publish is owed. See [The pending-work file](#the-pending-work-file) |
 
 ## Weekly is not a preference
 
@@ -311,7 +312,7 @@ One JSON object per run on stdout. The fields to read first:
 | `openev_downloaded` | Camp files fetched |
 | `files_imported`, `blobs_stored` | What the importers filed, and how much of it was new |
 | `objects_published` | What reached the bucket |
-| `pending_publish` | Snapshots waiting for an AWS session |
+| `pending_publish` | Every snapshot this Mac has imported that the bucket had not confirmed complete when the publish stage ended: what [the pending-work file](#the-pending-work-file) holds after the run. Whether that waits for a login or for something else is the `publish` stage's outcome, not this list |
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
 | `full_archive` | What the complete-archive rotation decided and why (`reason`), what the weeklies left of the day's allowance, and for a complete archive imported, its `bytes` and its `withdrawn` and `superseded` counts. See [The complete archive](#the-complete-archive) |
 | `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
@@ -363,6 +364,8 @@ Which failure is which:
 | A zip cannot be read | `UNREADABLE_ARCHIVE` | `1` |
 | A copy of the suppression list has a line nobody can read | `UNREADABLE_APPEND_ONLY_RECORD` | `1` |
 | A source's bytes in the bucket are not the ones its key names | `CHECKSUM_MISMATCH` | `1` |
+| The pending-work file names a snapshot this Mac holds no manifest for | `NOTHING_TO_PUBLISH` | `1`, once: the snapshot leaves the file, because no run here can publish it |
+| The pending-work file cannot be read | `PENDING_WORK_UNREADABLE` | `1`, with a `hint`. The file is left as it is. See [The pending-work file](#the-pending-work-file) |
 | `--full-archive` cannot be covered by the day's allowance | none: the run is refused before any stage, with `error.code` `FULL_ARCHIVE_REFUSED` | `1` |
 | Anything with a code that is on neither list, or with no code | for example `INTERNAL_ERROR` | `1` |
 
@@ -371,8 +374,9 @@ cannot be read is not fixed by the bucket coming back. A failure that ends the r
 records it, such as OpenCaselist not answering the listing, exits as it does in every other command:
 `3` for a store or a provider that did not answer, with that failure's own `error.code`.
 
-**A `hint` on a failed stage is the fix that applies, and it is never a login.** Two refusals have
-one, and they are told apart by where the refusal came from:
+**A `hint` on a failed stage is the fix that applies, and it is never a login.** The pending-work
+file has one when it cannot be read ([The pending-work file](#the-pending-work-file)). Two refusals
+have one, and they are told apart by where the refusal came from:
 
 * *This Mac refused a folder.* The hint names the folder by what it is for ("the blob directory",
   "the manifest directory") and the setting `storage.data_dir`. Check that the user the agent runs
@@ -540,6 +544,88 @@ judges the inbox as a removal left it.
 
 Measure the inbox before and after with `du -sh <data_dir>/inbox`.
 
+## The pending-work file
+
+`<data_dir>/caselist-sync-pending.json` is the list of publishes this Mac owes (`v1-e34-t18`).
+
+**What it holds.** Every snapshot this Mac has imported that the bucket has not confirmed
+complete, and nothing else. It does not matter what ended the publish stage: an expired session, a
+bucket that refused or did not answer, an upload that failed, or the Mac shutting down part-way.
+A run writes the file before its first upload and again when the publish stage ends, so a run
+that is killed has already written down what it owes. After a killed run the file can name a
+snapshot the bucket does hold; the next run finds it complete and takes it off.
+
+**When it is there.** Only while something is owed. A run that owes nothing removes it, so no
+file means nothing is owed.
+
+**Its shape.** One object with one list. Each entry is a target `caselist publish` would take: a
+week, a complete archive (`full/<date>`), or a camp release under `openev`.
+
+```json
+{
+  "publish": [
+    {"caselist": "hsld26", "snapshot": "2026-10-07"},
+    {"caselist": "hsld26", "snapshot": "full/2026-10-07"},
+    {"caselist": "openev", "snapshot": "2026-policy"}
+  ]
+}
+```
+
+**What takes a snapshot off it.** The bucket confirming it complete: every source's checksum read
+back from the bucket, then the manifest. Being attempted is not enough. One other thing does: a
+snapshot this Mac holds no manifest for can never be published from here, so the run that finds
+it reports it (`NOTHING_TO_PUBLISH`, exit `1`) and drops it, where it used to fail every run
+after.
+
+**Checking it is empty after a retry.** Run these as the agent's user, with the agent's
+`DEBATE_ENV`. The first line asks the installed build where its data directory is.
+
+```bash
+PENDING="$(debate-research --json config show | jq -r '.data.settings["storage.data_dir"]')/caselist-sync-pending.json"
+ls -l "${PENDING}"
+```
+
+`No such file or directory` is the answer you want: nothing is owed. If the file is listed,
+something still is, and this shows what:
+
+```bash
+jq . "${PENDING}"
+```
+
+The retry's own summary says the same thing in `pending_publish`, which is `[]` when the file is
+gone.
+
+**If the file cannot be read.** The publish stage fails with `PENDING_WORK_UNREADABLE` and exit
+`1`, and the run leaves the file exactly as it found it. A run never writes over a file it could
+not read, because the file may name snapshots nothing else remembers. What that run imported
+itself is still published; if the bucket did not confirm some of it, the stage's `reason` ends
+with `not recorded as owed:` and their names. To repair it:
+
+1. Look at it with `cat "${PENDING}"`. A file cut short usually still shows which snapshots it
+   named.
+2. Write it again in the shape above, with those snapshots and any the stage's `reason` listed.
+   Then drain it and check it is gone, as above:
+
+   ```bash
+   debate-research caselist pull --publish-pending
+   ```
+
+3. If it cannot be made out at all, move it aside and ask the bucket instead. `caselist status`
+   names every snapshot this Mac holds that the bucket does not, one caselist at a time, and
+   `caselist publish` publishes them. Use `--caselist openev` for the camp releases, and add
+   `--confirm-prod` to the publish in prod.
+
+   ```bash
+   mv "${PENDING}" "${PENDING}.unreadable"
+   debate-research caselist status --caselist hsld26
+   debate-research caselist publish --caselist hsld26
+   debate-research caselist status --caselist hsld26
+   ```
+
+The sync writes the file to a second file beside it and renames that into place, so a run that
+dies while writing cannot be what cut it short. Something else did: an editor, a restore, a full
+disk at the wrong moment for another tool.
+
 ## When something goes wrong
 
 **`pending_publish` is not empty, and `publish` is `pending`.** The SSO session expired. Log in
@@ -549,6 +635,11 @@ and drain it:
 aws sso login --profile debate-prod-evidence
 debate-research caselist pull --publish-pending
 ```
+
+The retry takes a snapshot off the list only once the bucket has confirmed it. If the session
+expires again part-way, what was confirmed is off the list and the rest is still on it; log in and
+run the same command again. [The pending-work file](#the-pending-work-file) says how to check that
+nothing is left.
 
 **`pending_publish` is not empty, and `publish` is `failed`.** The snapshots are imported and still
 owed, and logging in is not the fix. If the stage has a `hint`, a store refused it: make the fix the
@@ -560,6 +651,10 @@ drain them now:
 ```bash
 debate-research caselist pull --publish-pending
 ```
+
+**`publish` is `failed` with `PENDING_WORK_UNREADABLE`.** The file that lists what is owed could not
+be read, and the run left it alone. This is exit `1` and no later run fixes it by itself. Follow
+[The pending-work file](#the-pending-work-file).
 
 **`report: failed` with a `hint`, and exit `0`.** Everything was published, and the comparison that
 confirms it was refused. Nothing is lost and nothing waits for a login, but nothing leaves the inbox

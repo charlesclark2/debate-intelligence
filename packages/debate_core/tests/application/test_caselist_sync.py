@@ -80,7 +80,6 @@ from debate_core.application.caselist_sync import (
     LandscapeStageResult,
     NoCaselistsConfigured,
     ParseStageResult,
-    PendingWork,
     RunLock,
     SelectionDecision,
     StageOutcome,
@@ -1893,14 +1892,6 @@ async def test_a_caselist_whose_event_this_build_does_not_know_is_not_imported_u
     assert not any(one.startswith(SYNTHETIC_CASELIST) for one in summary.snapshots_imported)
     assert not summary.succeeded
     assert summary.archives_downloaded == 2, "the bytes are in the inbox either way"
-
-
-def test_an_unreadable_pending_work_file_reads_as_nothing_owed(tmp_path: Path) -> None:
-    """A state file this module wrote and something else corrupted must not stop a run."""
-    path = tmp_path / PENDING_WORK_FILENAME
-    path.write_text("{not json at all", encoding="utf-8")
-
-    assert PendingWork(path).read() == ()
 
 
 # ------------------------------------------------------------------------------------------------

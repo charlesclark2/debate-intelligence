@@ -159,6 +159,10 @@ retryable, so nothing exits 3 because nobody classified it. The retryable codes 
   captured is safe and the next run finishes it. A session that is signed in and *refused* is not
   pending: the stage fails, exits 3, and its `hint` names the fix, a permission under
   `storage.data_dir` or a grant the profile lacks, never `aws sso login`.
+  Whatever ended the publish stage, the pending-work file under `storage.data_dir` then holds every
+  snapshot the bucket did not confirm complete, and `--publish-pending` takes one off only when the
+  bucket has (`v1-e34-t18`). A pending-work file that cannot be read fails the stage with
+  `PENDING_WORK_UNREADABLE`, exit 1, and is never written over.
 
 ## `debate-research doctor`
 

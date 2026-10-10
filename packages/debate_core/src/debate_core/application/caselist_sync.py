@@ -250,6 +250,38 @@ is signed in and lacks a grant. Each fails its stage, with the fix that applies 
 not answer (:class:`~debate_core.application.errors.StoreUnavailable`) fails the publish stage the
 same way, and for the same reason the snapshots stay owed: the next run publishes them.
 
+## What the pending-work file holds
+
+Every snapshot this machine has imported and the bucket has not confirmed complete: nothing more
+is promised of it, and nothing less (`v1-e34-t18`). One function says what that is,
+:func:`snapshots_still_owed`, and the publish stage writes its answer down however the stage ends:
+completed, failed on a code, stopped by a refusal or an outage, or pending on an expired session.
+No ending keeps a rule of its own. Before this, the expired-session ending wrote only the snapshots
+it had not reached, so one left incomplete earlier in the same stage was owed by nothing, and one
+owed from before that the stage had just published stayed in the file.
+
+* **Owed before it is attempted.** The stage writes the file before its first upload, with
+  everything it is about to publish, and again when it ends. A run that is killed in between, as
+  one is when the Mac shuts down under it, has therefore already written down what it owes. The
+  file may then name a snapshot the bucket did confirm; the next run finds it complete and takes
+  it off. It names too much for a week, never too little.
+* **Confirmed means the publisher's word and no weaker one**:
+  :attr:`~debate_core.application.caselist.publish_service.PublishReport.succeeded`, which is every
+  source's digest read back from the bucket and the manifest after them. A snapshot that was
+  attempted is not thereby confirmed.
+* **A snapshot this machine holds no manifest for is not owed**
+  (:class:`~debate_core.application.caselist.publish_service.NothingToPublish`). No run here can
+  ever publish it, so owing it would fail every run from then on. The stage reports it, with its
+  code, in the run that finds it, and it leaves the file.
+* **A file that cannot be read is never written over** (:class:`PendingWorkUnreadable`). It may
+  name snapshots nothing else remembers, and a run that took it for empty would replace it. The
+  publish stage fails on it, with a hint naming the file by what it is for, and leaves it for a
+  person. What the run itself imported needs nothing from the file and is published all the same;
+  anything of that the bucket did not confirm is named in the stage's reason, because it could be
+  written nowhere. Every state file here is written to a second file in the same directory and
+  renamed into place (:func:`_write_json`), so a run that dies while writing cannot be what cut it
+  short.
+
 ## What a failed stage records
 
 A sentence, for a person, and **the error code of each failure**, for the command
@@ -340,10 +372,12 @@ from debate_core.application.caselist.openev_import_service import (
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
 from debate_core.application.caselist.publish_plan import (
+    InvalidPublishTarget,
     full_archive_date,
     full_archive_snapshot,
     manifest_prefix,
     snapshot_of_manifest_key,
+    validate_publish_target,
 )
 from debate_core.application.caselist.publish_service import (
     CaselistPublishService,
@@ -414,7 +448,9 @@ __all__ = [
     "OpenEvDelivery",
     "OpenEvSelection",
     "ParseStageResult",
+    "PendingSnapshot",
     "PendingWork",
+    "PendingWorkUnreadable",
     "PulledRun",
     "RetentionDecision",
     "RunSummary",
@@ -431,6 +467,7 @@ __all__ = [
     "inbox_files",
     "openev_id_of_inbox_name",
     "run_pull",
+    "snapshots_still_owed",
     "weekly_archive_of_inbox_name",
     "within_daily_budget",
 ]
@@ -1184,6 +1221,24 @@ class ManifestsNotWritable(DomainError):
         )
 
 
+class PendingWorkUnreadable(DomainError):
+    """The pending-work file is there, and is not what this module writes.
+
+    Never read as nothing owed, and never written over (`v1-e34-t18`): the file may name snapshots
+    that nothing else remembers, and the run that replaced it would lose them. Names the file by
+    what it is for and never by where it is. A verdict, not something a retry cures: the file is
+    the same next week, and a person has to look at it.
+    """
+
+    def __init__(self, problem: str) -> None:
+        self.problem = problem
+        """What is wrong with it, in words that quote nothing the file holds."""
+        super().__init__(
+            f"the pending-work file under storage.data_dir could not be read ({problem}), "
+            "so it was left as it is"
+        )
+
+
 # ------------------------------------------------------------------------------------------------
 # Small pieces of durable state
 # ------------------------------------------------------------------------------------------------
@@ -1244,52 +1299,96 @@ class PendingSnapshot:
 
 
 class PendingWork:
-    """The publishes a run could not do because the AWS session had expired.
+    """The publishes this machine still owes: imported here, not yet confirmed complete in the bucket.
 
     A small JSON file rather than a queue: what is owed is a handful of `(caselist, snapshot)`
-    pairs, publishing is idempotent, and a file an operator can read and delete is the right
-    weight for something that exists because somebody's SSO session timed out.
+    pairs, publishing is idempotent, and a file an operator can read is the right weight for
+    something that usually exists because somebody's SSO session timed out. What belongs in it is
+    :func:`snapshots_still_owed`'s to say; see "What the pending-work file holds" in this module's
+    docstring.
+
+    The file is `{"publish": [{"caselist": "<slug>", "snapshot": "<name>"}, ...]}`, each entry a
+    target `caselist publish` would accept: a week (`2026-09-01`), a complete archive
+    (`full/2026-09-15`) or a camp release (`openev`, `2026-policy`). There is no file when nothing
+    is owed.
     """
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
 
     def read(self) -> tuple[PendingSnapshot, ...]:
-        """What is owed, in the order it was recorded. A malformed file reads as nothing owed."""
-        if not self.path.is_file():
+        """What is owed, in the order it was recorded; nothing when there is no file.
+
+        Raises :class:`PendingWorkUnreadable` for a file that is there and is not, in every entry,
+        what :meth:`write` writes. Reading around the part that cannot be read would be the same
+        loss one entry at a time: the next write would leave it out.
+        """
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
             return ()
-        body = _read_json_object(self.path)
-        if body is None:
-            logger.warning("caselist sync: the pending-work file could not be read; treating it as empty")
-            return ()
-        entries = body.get("publish")
+        except (OSError, UnicodeDecodeError) as failed:
+            raise PendingWorkUnreadable(type(failed).__name__) from failed
+        try:
+            body: object = json.loads(text)
+        except ValueError:
+            raise PendingWorkUnreadable("it is not JSON") from None
+        entries = cast("dict[str, object]", body).get("publish") if isinstance(body, dict) else None
         if not isinstance(entries, list):
-            return ()
+            raise PendingWorkUnreadable('it has no "publish" list')
         owed: list[PendingSnapshot] = []
-        for entry in cast("list[object]", entries):
-            if not isinstance(entry, dict):
-                continue
-            caselist = cast("dict[str, object]", entry).get("caselist")
-            snapshot = cast("dict[str, object]", entry).get("snapshot")
-            if isinstance(caselist, str) and isinstance(snapshot, str):
-                owed.append(PendingSnapshot(caselist=caselist, snapshot=snapshot))
+        for number, entry in enumerate(cast("list[object]", entries), start=1):
+            fields = cast("dict[str, object]", entry) if isinstance(entry, dict) else {}
+            caselist, snapshot = fields.get("caselist"), fields.get("snapshot")
+            if not isinstance(caselist, str) or not isinstance(snapshot, str):
+                raise PendingWorkUnreadable(f"entry {number} does not name a caselist and a snapshot")
+            try:
+                validate_publish_target(caselist, snapshot)
+            except InvalidPublishTarget:
+                raise PendingWorkUnreadable(
+                    f"entry {number} names a caselist or a snapshot that has no place in the store"
+                ) from None
+            owed.append(PendingSnapshot(caselist=caselist, snapshot=snapshot))
         return tuple(owed)
 
     def write(self, owed: Sequence[PendingSnapshot]) -> None:
-        """Record exactly `owed`, removing the file when nothing is left to do."""
+        """Record exactly `owed`, removing the file when nothing is left to do.
+
+        Only ever called with what :func:`snapshots_still_owed` returned, by a caller that has read
+        the file: one that cannot be read is not this method's to replace.
+        """
         if not owed:
             self.path.unlink(missing_ok=True)
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         _write_json(self.path, {"publish": [one.as_json() for one in owed]})
 
-    def add(self, owed: Iterable[PendingSnapshot]) -> None:
-        """Merge `owed` into what is already recorded, keeping each pair once and in order."""
-        merged: list[PendingSnapshot] = list(self.read())
-        for one in owed:
-            if one not in merged:
-                merged.append(one)
-        self.write(merged)
+
+def snapshots_still_owed(
+    previously_owed: Iterable[PendingSnapshot],
+    targets: Iterable[PendingSnapshot],
+    *,
+    confirmed: Iterable[PendingSnapshot],
+    without_local_manifest: Iterable[PendingSnapshot],
+) -> tuple[PendingSnapshot, ...]:
+    """What the pending-work file must hold: the one rule, for every way a publish stage ends.
+
+    Everything owed before the stage and everything it set out to publish, less what the bucket
+    confirmed complete. So a snapshot that ended incomplete is owed, one the stage never reached is
+    owed, and one owed from before that nobody attempted is still owed, without any of them having
+    to be listed: a snapshot is owed until something says otherwise, and only two things do.
+
+    Args:
+        previously_owed: What the file held when the stage began. These keep their place.
+        targets: What the stage set out to publish, attempted or not. Those not owed before follow.
+        confirmed: The targets whose publish the publisher reported complete in this run
+            (:attr:`~debate_core.application.caselist.publish_service.PublishReport.succeeded`).
+        without_local_manifest: The targets the publisher found no manifest for on this machine
+            (:class:`~debate_core.application.caselist.publish_service.NothingToPublish`). No run
+            here can publish them, so they are not owed; the stage reports them instead.
+    """
+    settled = {*confirmed, *without_local_manifest}
+    return tuple(dict.fromkeys(one for one in (*previously_owed, *targets) if one not in settled))
 
 
 class DownloadLedger:
@@ -1551,9 +1650,11 @@ def _is_sha256(value: object) -> bool:
 def _read_json_object(path: Path) -> dict[str, object] | None:
     """The JSON object at `path`, or `None` when there is none, or it is not readable as one.
 
-    A state file this module wrote and something else corrupted is not a reason to fail a run:
-    the pending-work file and the download ledger are both recoverable from what the bucket and
-    the server say, so an unreadable one is treated as saying nothing.
+    A state file this module wrote and something else corrupted is not a reason to fail a run
+    when the worst it costs is a download: the ledger and the delivery record are recoverable from
+    what the server and the manifests say, so an unreadable one is treated as saying nothing. The
+    pending-work file is not read with this (`v1-e34-t18`): what it names may be remembered nowhere
+    else, so :meth:`PendingWork.read` refuses one it cannot read.
     """
     if not path.is_file():
         return None
@@ -1565,7 +1666,13 @@ def _read_json_object(path: Path) -> dict[str, object] | None:
 
 
 def _write_json(path: Path, body: Mapping[str, object]) -> None:
-    """Write `body` to `path` atomically, so a killed run never leaves half a state file."""
+    """Write `body` to `path` atomically, so a killed run never leaves half a state file.
+
+    To a second file in the same directory, renamed over `path` once it is complete: a rename
+    within one directory replaces the name in one step, so a reader finds the old file or the new
+    one and never part of either. It is what lets :meth:`PendingWork.read` refuse a file cut short
+    without ever having been the cause of one.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.incoming")
     temporary.write_text(json.dumps(body, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -2078,17 +2185,22 @@ class CaselistSyncService:
 
         What `caselist pull --publish-pending` runs after `aws sso login`. It takes the same lock,
         so it cannot overlap a scheduled run, and it drains the pending-work file: each snapshot
-        that publishes completely is removed from it, and anything that fails stays owed.
+        the bucket confirms complete is removed from it, and everything else stays owed, whatever
+        ended the stage (:func:`snapshots_still_owed`). A file that cannot be read is left as it
+        is, and the publish stage fails on it (:class:`PendingWorkUnreadable`).
         """
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
             tally = _RunTally()
-            owed = self._pending.read()
-            tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, f"{len(owed)} snapshot(s) owed")
+            try:
+                selected = f"{len(self._pending.read())} snapshot(s) owed"
+            except PendingWorkUnreadable:
+                # The publish stage reads it again and is the one that fails on it, with the fix.
+                selected = "what is owed could not be read"
+            tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, selected)
             for stage in (SyncStage.DOWNLOAD, SyncStage.IMPORT):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending does no fetching or importing")
-            tally.publish_targets = list(owed)
-            await self._publish_stage(tally, drain_pending=True)
+            await self._publish_stage(tally)
             for stage in (SyncStage.PARSE, SyncStage.LANDSCAPE):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending runs no derived stages")
             await self._report_stage(tally)
@@ -2545,7 +2657,7 @@ class CaselistSyncService:
         fallbacks = self._suppression_fallbacks()
         await self._import_stage(tally)
         self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
-        await self._publish_stage(tally, drain_pending=True)
+        await self._publish_stage(tally)
         await self._parse_stage(plan, tally)
         await self._landscape_stage(plan, tally)
         await self._report_stage(tally)
@@ -2899,25 +3011,36 @@ class CaselistSyncService:
             )
         ]
 
-    async def _publish_stage(self, tally: _RunTally, *, drain_pending: bool) -> None:
-        """Publish what was imported, plus anything an earlier run deferred.
+    async def _publish_stage(self, tally: _RunTally) -> None:
+        """Publish what was imported, plus everything an earlier run left owed.
 
-        An expired AWS session is not a failure of the run: every target still owed is written to
-        the pending-work file, the stage is `PENDING`, and the next run — or
-        `caselist pull --publish-pending` — completes it. Everything already captured is on this
-        machine either way.
+        An expired AWS session is not a failure of the run: the stage is `PENDING`, and the next
+        run — or `caselist pull --publish-pending` — completes it. Everything already captured is
+        on this machine either way.
 
         A store that refused, or did not answer, is a failure of the stage and nothing else
         (`v1-e34-t13`): it records the store's error code, and for a refusal the fix that applies,
         which is never a login. It would be true of every snapshot still to go, so the stage stops
-        there, and those snapshots stay owed like any whose publish did not complete: the run after
-        the fix, or after the outage, publishes them without importing anything again.
+        there.
+
+        **However it ends, the pending-work file then holds what :func:`snapshots_still_owed`
+        says** (`v1-e34-t18`): every snapshot owed before or imported by this run that the bucket
+        did not confirm complete, so the run after the login, the fix or the outage publishes them
+        without importing anything again. The same is written before the first upload, with nothing
+        yet confirmed, for the run that is killed and never reaches an ending. See "What the
+        pending-work file holds" in the module docstring, which also says why a snapshot with no
+        manifest here is reported and not owed, and what happens when the file cannot be read.
         """
-        targets = list(tally.publish_targets)
-        if drain_pending:
-            for owed in self._pending.read():
-                if owed not in targets:
-                    targets.append(owed)
+        unreadable: _StageFailure | None = None
+        try:
+            previously_owed = self._pending.read()
+        except PendingWorkUnreadable as cannot_read:
+            previously_owed = ()
+            unreadable = self._failure(cannot_read)
+        targets = list(dict.fromkeys((*tally.publish_targets, *previously_owed)))
+        if unreadable is not None and (not targets or self._publisher is None):
+            tally.fail(SyncStage.PUBLISH, unreadable.sentence, [unreadable])
+            return
         if not targets:
             tally.record(SyncStage.PUBLISH, StageOutcome.SKIPPED, "nothing new to publish")
             return
@@ -2925,36 +3048,46 @@ class CaselistSyncService:
             tally.record(SyncStage.PUBLISH, StageOutcome.SKIPPED, _NO_BUCKET)
             return
 
+        without_local_manifest: list[PendingSnapshot] = []
+
+        def record_what_is_owed() -> tuple[PendingSnapshot, ...]:
+            """The one place the stage decides what is owed, and the one place it writes it down."""
+            owed = snapshots_still_owed(
+                previously_owed,
+                targets,
+                confirmed=tally.published,
+                without_local_manifest=without_local_manifest,
+            )
+            tally.pending_publish = list(owed)
+            if unreadable is None:
+                self._pending.write(owed)
+            return owed
+
+        # Owed before it is attempted: a run killed part-way never reaches the line that follows
+        # the loop, and what it imported would otherwise be written down nowhere.
+        record_what_is_owed()
         published = 0
         incomplete: list[_StageFailure] = []
-        unfinished: list[PendingSnapshot] = []
         stopped: _StageFailure | None = None
+        expired: StoreCredentialsExpired | None = None
         left = 0
         for index, target in enumerate(targets):
             named = f"{target.caselist} {target.snapshot}"
             try:
                 plan = await self._publisher.plan(target.caselist, target.snapshot)
                 report = await self._publisher.execute(plan)
-            except StoreCredentialsExpired as expired:
-                tally.pending_publish = targets[index:]
-                self._pending.add(tally.pending_publish)
-                tally.objects_published = published
-                tally.record(
-                    SyncStage.PUBLISH,
-                    StageOutcome.PENDING,
-                    f"{published} object(s) published, {len(tally.pending_publish)} snapshot(s) "
-                    f"left for a later run: {expired}",
-                )
-                return
+            except StoreCredentialsExpired as no_session:
+                expired = no_session
+                break
             except (StoreAccessDenied, StoreUnavailable) as refused:
                 stopped = self._failure(refused)
                 left = len(targets) - index
-                unfinished.extend(targets[index:])
                 break
             except NothingToPublish as nothing:
                 incomplete.append(
                     _StageFailure(f"{named}: no local manifest", (reported_error_code(nothing),))
                 )
+                without_local_manifest.append(target)
                 continue
             published += report.count(SourceResult.UPLOADED)
             if report.succeeded:
@@ -2963,20 +3096,35 @@ class CaselistSyncService:
             incomplete.append(
                 _StageFailure(f"{named}: " + ", ".join(report.failed_sha256), report.failure_codes)
             )
-            unfinished.append(target)
         tally.objects_published = published
-        # What finished is no longer owed; what did not is owed whether or not it was owed before,
-        # so that a snapshot whose upload failed is retried next week rather than quietly dropped.
-        still_owed = [owed for owed in self._pending.read() if owed not in tally.published]
-        for owed in unfinished:
-            if owed not in still_owed:
-                still_owed.append(owed)
-        self._pending.write(still_owed)
+        owed = record_what_is_owed()
+
+        reason = f"{published} object(s) published"
+        if incomplete:
+            reason += "; incomplete: " + "; ".join(one.sentence for one in incomplete)
+        if unreadable is not None:
+            # Not pending even when the session had expired: pending means written down for a
+            # later run, and nothing could be. The reason names what is owed and is in no file.
+            if expired is not None:
+                reason += f"; nothing more was attempted: {expired}"
+            if stopped is not None:
+                reason += f"; {left} snapshot(s) not attempted: {stopped.sentence}"
+            if owed:
+                reason += "; not recorded as owed: " + ", ".join(
+                    f"{one.caselist} {one.snapshot}" for one in owed
+                )
+            failures = [*incomplete, *([stopped] if stopped is not None else []), unreadable]
+            tally.fail(SyncStage.PUBLISH, f"{reason}; {unreadable.sentence}", failures)
+            return
+        if expired is not None:
+            tally.record(
+                SyncStage.PUBLISH,
+                StageOutcome.PENDING,
+                f"{reason}{'; ' if incomplete else ', '}{len(owed)} snapshot(s) left for a later run: "
+                f"{expired}",
+            )
+            return
         if incomplete or stopped is not None:
-            tally.pending_publish = unfinished
-            reason = f"{published} object(s) published"
-            if incomplete:
-                reason += "; incomplete: " + "; ".join(one.sentence for one in incomplete)
             failures = list(incomplete)
             if stopped is not None:
                 reason += f"; {left} snapshot(s) left for a later run: {stopped.sentence}"
@@ -3857,6 +4005,13 @@ _MISSING_GRANT_FIX: Final = (
     "each profile is granted"
 )
 
+_UNREADABLE_PENDING_WORK_FIX: Final = (
+    "Open the pending-work file under storage.data_dir: it lists the snapshots this machine has "
+    "imported and not yet published, and this run left it untouched because it could not be read. "
+    "docs/runbooks/caselist-scheduled-sync.md gives its name and its shape, and says what to do "
+    "when it cannot be repaired. It is not the AWS session."
+)
+
 
 def _fix_for(error: BaseException) -> str | None:
     """The fix a refused store calls for, or `None` for a failure with no fix a sentence can state.
@@ -3874,6 +4029,8 @@ def _fix_for(error: BaseException) -> str | None:
         )
     if isinstance(error, StoreAccessDenied):
         return f"The bucket refused {error.operation}: {_MISSING_GRANT_FIX}."
+    if isinstance(error, PendingWorkUnreadable):
+        return _UNREADABLE_PENDING_WORK_FIX
     return None
 
 

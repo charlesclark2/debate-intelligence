@@ -74,11 +74,17 @@ from debate_core.application.ports.suppression import SuppressionList, Suppressi
 from debate_core.domain import Sha256Hex
 
 __all__ = [
+    "CASELIST_DRIFT",
     "CaselistStatusReport",
     "CaselistStatusService",
     "NoCaselistEvidence",
     "SnapshotStatus",
 ]
+
+CASELIST_DRIFT: Final = "CASELIST_DRIFT"
+"""The code of a comparison that found the two sides differ: `caselist status`'s `error.code`, and
+what the report stage of `caselist pull` records for a snapshot not in sync (`v1-e34-t13`). An
+outcome's code, not an exception's: the comparison ran, and running it again gives the same answer."""
 
 _DEFAULT_CONCURRENCY: Final = 8
 

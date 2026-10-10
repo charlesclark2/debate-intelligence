@@ -1246,7 +1246,7 @@ async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it
     summary = await service.run([SYNTHETIC_CASELIST])
     written = json.loads(service.summary_path(summary).read_text(encoding="utf-8"))
 
-    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 3
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 4
     assert written["bulk_download_window_start"] == "2026-09-15T06:00:00+00:00"
     assert written["bulk_downloads_spent_in_window"] == 2
     assert written["bulk_downloads_allowed"] == 3
@@ -1678,7 +1678,7 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
     assert body["objects_published"] == 0
     assert body["reports_written"] == 2
     assert body["duration_seconds"] == 0.0
-    assert set(body["stages"][0]) == {"stage", "outcome", "reason"}
+    assert set(body["stages"][0]) == {"stage", "outcome", "reason", "error_codes", "hint"}
 
     text = written.read_text(encoding="utf-8")
     for forbidden in ("Maple Grove", "Cedar Hollow", "Northgate Prep", "Riverbend Academy", "ZaLu"):

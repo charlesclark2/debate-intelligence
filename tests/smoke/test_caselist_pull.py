@@ -45,6 +45,7 @@ from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired, StoreUnavailable
 from debate_core.integrations.local import BLOB_DIRECTORY
 from debate_core.integrations.s3 import S3EvidenceObjectStore
@@ -358,16 +359,22 @@ def expire_the_session(
     *,
     only: str | None = None,
     error: type[Exception] = StoreCredentialsExpired,
+    while_set: dict[str, bool] | None = None,
 ) -> None:
     """Make the S3 adapter refuse as it does once the operator's SSO session has expired.
 
-    With `only`, just a read of that key refuses (and with `error`, refuses that way); everything
-    else still reaches moto.
+    With `only`, just a read of that key refuses (and with `error`, refuses that way: a missing
+    grant, or a bucket that does not answer); everything else still reaches moto. With `while_set`,
+    it refuses only while `while_set["expired"]` is true, so a test can log back in.
     """
 
     def refuse(*_: object) -> None:
+        if while_set is not None and not while_set["expired"]:
+            return
         if error is StoreAccessDenied:
             raise StoreAccessDenied("GetObject", only or "the bucket", hint="a grant is missing")
+        if error is StoreUnavailable:
+            raise StoreUnavailable("GetObject", only or "the bucket", "simulated 503 SlowDown")
         raise StoreCredentialsExpired(hint=f"aws sso login --profile {AWS_PROFILE_NAME}")
 
     original = S3EvidenceObjectStore.get_file
@@ -380,11 +387,19 @@ def expire_the_session(
     monkeypatch.setattr(S3EvidenceObjectStore, "get_file", get_file)
     if only is None:
         for name in ("list_objects", "head", "put_file"):
+            monkeypatch.setattr(
+                S3EvidenceObjectStore, name, _refusing(getattr(S3EvidenceObjectStore, name), refuse)
+            )
 
-            async def refused(self: S3EvidenceObjectStore, *arguments: object) -> Any:
-                refuse()
 
-            monkeypatch.setattr(S3EvidenceObjectStore, name, refused)
+def _refusing(original: Any, refuse: Any) -> Any:
+    """`original`, a method of the S3 adapter, behind `refuse`, which raises when the session is out."""
+
+    async def method(self: S3EvidenceObjectStore, *arguments: object) -> Any:
+        refuse()
+        return await original(self, *arguments)
+
+    return method
 
 
 def list_two_new_camp_files(camp_files: dict[str, tuple[dict[str, Any], bytes]]) -> None:
@@ -454,36 +469,61 @@ def test_an_expired_session_still_imports_and_what_was_removed_here_stays_out(
     assert not any(row["sha256"] == removed or "openev-513-" in row["path"] for row in rows)
     assert any("openev-514-" in row["path"] for row in rows)
     assert stages["publish"]["outcome"] == "pending"
+    # Pending is not failed: no error code, and the exit code above is 0 (v1-e34-t13).
+    assert stages["publish"]["error_codes"] == []
+    assert "aws sso login" in stages["publish"]["reason"]
     assert "aws sso login" in data["suppression_list_local_copy_only"]
     assert "this machine's copy of the suppression list alone" in stages["import"]["reason"]
 
 
-@pytest.mark.parametrize("failure", ["access_denied", "torn_line"])
-def test_a_bucket_copy_that_is_refused_or_torn_still_fails_the_import_closed(
+@pytest.mark.parametrize(
+    ("failure", "exit_code", "error_code"),
+    [
+        # A grant is not a login, and neither is an outage: both fail the import, on the store.
+        ("access_denied", ExitCode.RETRIEVAL_FAILURE, "STORE_ACCESS_DENIED"),
+        ("unavailable", ExitCode.RETRIEVAL_FAILURE, "STORE_UNAVAILABLE"),
+        # A line nobody can read is the same line next week: a verdict.
+        ("torn_line", ExitCode.DOMAIN_FAILURE, "UNREADABLE_APPEND_ONLY_RECORD"),
+    ],
+)
+def test_a_bucket_copy_that_is_refused_unavailable_or_torn_still_fails_the_import_closed(
     installation: Path,
     bucket: S3Client,
     site: respx.MockRouter,
     camp_files: dict[str, tuple[dict[str, Any], bytes]],
     monkeypatch: pytest.MonkeyPatch,
     failure: str,
+    exit_code: ExitCode,
+    error_code: str,
 ) -> None:
-    """Only missing or expired credentials fall back. A denial or an unreadable list is not a login
-    that timed out, and importing past it could bring a removed file back."""
+    """Only missing or expired credentials fall back. A denial, an outage or an unreadable list is
+    not a login that timed out, and importing past it could bring a removed file back.
+
+    The import stage records what stopped it, and the exit code follows (v1-e34-t13): `3` when the
+    bucket refused or did not answer, which a later run may not meet, and `1` for the torn line.
+    """
     assert run("caselist", "pull")["exit_code"] == ExitCode.OK
     list_two_new_camp_files(camp_files)
     if failure == "access_denied":
         expire_the_session(monkeypatch, only=SUPPRESSION_LIST_KEY, error=StoreAccessDenied)
+    elif failure == "unavailable":
+        expire_the_session(monkeypatch, only=SUPPRESSION_LIST_KEY, error=StoreUnavailable)
     else:
         bucket.put_object(Bucket=BUCKET, Key=SUPPRESSION_LIST_KEY, Body=b'{"schema_version":1,"act')
 
     again = run("caselist", "pull")
 
-    assert again["exit_code"] != ExitCode.OK, again
+    assert again["exit_code"] == exit_code, again
+    assert again["error"]["code"] == "CASELIST_PULL_INCOMPLETE"
     data = run_summary(again)
     stages = {one["stage"]: one for one in data["stages"]}
     assert stages["import"]["outcome"] == "failed", stages["import"]
+    assert stages["import"]["error_codes"] == [error_code]
     assert data["blobs_stored"] == 0
     assert data.get("suppression_list_local_copy_only") is None
+    if failure == "access_denied":
+        assert "docs/runbooks/evidence-store.md" in again["error"]["hint"]
+        assert "aws sso login" not in json.dumps(again["error"])
 
 
 @pytest.mark.live
@@ -516,36 +556,159 @@ def test_a_live_dry_run_lists_the_operators_own_caselist() -> None:
 # ------------------------------------------------------------------------------------------------
 
 
-def test_a_bucket_listing_that_does_not_answer_ends_the_run_with_three(
+def test_a_bucket_listing_that_does_not_answer_fails_publish_with_three_and_the_next_run_publishes(
     installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The publish stage's plan lists the bucket first; a 503 there escapes the run as a store failure."""
+    """The publish stage's plan lists the bucket first, and it answers 503.
+
+    v1-e01-t20 let that escape the run as a `3`, with no summary, and nothing recorded the snapshots
+    it had imported as owed: no later pull would have published them. It is now the publish stage
+    failing on a store that did not answer. Still a `3`, with every week imported and owed, and the
+    next run, once the bucket answers, publishes them without fetching anything again.
+    """
+    outage = {"on": True}
+    list_objects = S3EvidenceObjectStore.list_objects
 
     async def unavailable(self: S3EvidenceObjectStore, prefix: str) -> Any:
-        raise StoreUnavailable("ListObjectsV2", prefix, "simulated 503 SlowDown")
+        if outage["on"]:
+            raise StoreUnavailable("ListObjectsV2", prefix, "simulated 503 SlowDown")
+        return await list_objects(self, prefix)
 
     monkeypatch.setattr(S3EvidenceObjectStore, "list_objects", unavailable)
 
     pulled = run("caselist", "pull")
 
     assert pulled["exit_code"] == ExitCode.RETRIEVAL_FAILURE, pulled
-    assert pulled["error"]["code"] == "STORE_UNAVAILABLE"
+    assert pulled["error"]["code"] == "CASELIST_PULL_INCOMPLETE"
+    data = run_summary(pulled)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["import"]["outcome"] == "completed"
+    assert (stages["publish"]["outcome"], stages["publish"]["error_codes"]) == (
+        "failed",
+        ["STORE_UNAVAILABLE"],
+    )
+    assert stages["report"]["outcome"] == "skipped"
+    # Three weeklies, the complete archive and the camp release: all five imported, all five owed.
+    assert len(data["snapshots_imported"]) == 5
+    assert sorted(data["pending_publish"]) == sorted(data["snapshots_imported"])
+    assert not bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/").get("Contents")
+    downloads = len(site.calls)
+
+    outage["on"] = False
+    again = run("caselist", "pull")
+
+    assert again["exit_code"] == ExitCode.OK, again
+    data = run_summary(again)
+    assert {one["stage"]: one["outcome"] for one in data["stages"]}["publish"] == "completed"
+    assert data["pending_publish"] == []
+    assert data["archives_downloaded"] == 0 and data["openev_downloaded"] == 0
+    assert not any(
+        call.request.url.host == "files.opencaselist.example.invalid" for call in site.calls[downloads:]
+    )
+    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    assert f"manifests/{SYNTHETIC_CASELIST}/{SNAPSHOTS[-1].snapshot.isoformat()}.jsonl" in published
 
 
 @needs_permissions
-def test_an_unreadable_blob_directory_fails_the_import_stage_and_names_its_role(
+def test_an_unreadable_blob_directory_fails_the_import_stage_with_three_and_names_its_role(
     installation: Path, bucket: S3Client, site: respx.MockRouter
 ) -> None:
-    """The import stage folds the refusal into its own outcome, so the run is the `1` an import
-    that did not complete has always been; before v1-e01-t20 it escaped as exit 70, "a bug"."""
+    """The import stage folds the refusal into its own outcome and records what it was: a store
+    that refused, which is the `3` it is in every other command. Before v1-e01-t20 it escaped as
+    exit 70, "a bug"; from then until v1-e34-t13 it was a `1`, like a refused archive."""
     blobs = installation / "data" / BLOB_DIRECTORY
     blobs.mkdir(parents=True)
 
     with refused(blobs):
         pulled = run("caselist", "pull")
 
-    assert pulled["exit_code"] == ExitCode.DOMAIN_FAILURE, pulled
+    assert pulled["exit_code"] == ExitCode.RETRIEVAL_FAILURE, pulled
     stages = {one["stage"]: one for one in run_summary(pulled)["stages"]}
     assert stages["import"]["outcome"] == "failed"
+    assert stages["import"]["error_codes"] == ["STORE_ACCESS_DENIED"]
     assert "not allowed to read the blob directory" in stages["import"]["reason"]
-    assert str(installation) not in stages["import"]["reason"]
+    assert "the blob directory" in stages["import"]["hint"]
+    assert "storage.data_dir" in pulled["error"]["hint"]
+    assert str(installation) not in json.dumps([stages["import"], pulled["error"]["hint"]])
+
+
+# ------------------------------------------------------------------------------------------------
+# A refusal is not an expired login (v1-e34-t13)
+# ------------------------------------------------------------------------------------------------
+
+
+def stage_text(envelope: dict[str, Any]) -> str:
+    """Everything the stages and the command's own hint say, as one string to search."""
+    error = envelope["error"] or {}
+    return json.dumps([run_summary(envelope)["stages"], error.get("message"), error.get("hint")])
+
+
+@needs_permissions
+def test_a_local_refusal_in_publish_fails_it_with_the_data_directory_fix_and_is_never_pending(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The weekly run imports with the session expired, so its publish is owed. The operator logs
+    in and drains it, and this machine's blob directory cannot be read. That used to be reported as
+    sources missing from this machine, and after a translation would have been "waiting for an AWS
+    login". It is a failed publish whose fix is a permission on this machine."""
+    session = {"expired": True}
+    expire_the_session(monkeypatch, while_set=session)
+    first = run("caselist", "pull")
+    assert first["exit_code"] == ExitCode.OK, first
+    owed = run_summary(first)["pending_publish"]
+    assert len(owed) == 5
+
+    session["expired"] = False
+    with refused(installation / "data" / "blobs"):
+        drained = run("caselist", "pull", "--publish-pending")
+
+    assert drained["exit_code"] == ExitCode.RETRIEVAL_FAILURE, drained
+    data = run_summary(drained)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["publish"]["outcome"] == "failed"
+    assert stages["publish"]["error_codes"] == ["STORE_ACCESS_DENIED"]
+    assert "the blob directory" in stages["publish"]["hint"]
+    assert "storage.data_dir" in stages["publish"]["hint"]
+    assert drained["error"]["hint"].startswith(stages["publish"]["hint"])
+    assert stages["report"]["outcome"] == "skipped"
+    assert sorted(data["pending_publish"]) == sorted(owed), "still owed, for the run after the fix"
+    assert data["run_record"]["outcome"] == "failed"
+    assert "aws sso login" not in stage_text(drained)
+    assert str(installation) not in stage_text(drained)
+    assert str(Path.home()) not in stage_text(drained)
+
+    fixed = run("caselist", "pull", "--publish-pending")
+
+    assert fixed["exit_code"] == ExitCode.OK, fixed
+    assert run_summary(fixed)["pending_publish"] == []
+
+
+def test_a_missing_grant_in_report_fails_it_with_the_grant_fix_and_is_never_pending(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Everything publishes, and the comparison that confirms it is refused: the profile is signed
+    in and lacks a grant. The report stage fails and names that. Nothing waits for a login, and the
+    run's exit code is still the `0` of a run whose bytes all reached the bucket: the report stage
+    is not one of the stages that decide it."""
+
+    async def refuse(
+        self: CaselistStatusService, caselist: str | None = None, snapshot: str | None = None
+    ) -> Any:
+        raise StoreAccessDenied("HeadObject", f"s3://{BUCKET}/manifests/{caselist}/{snapshot}.jsonl")
+
+    monkeypatch.setattr(CaselistStatusService, "status", refuse)
+
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.OK, pulled
+    data = run_summary(pulled)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["publish"]["outcome"] == "completed"
+    assert stages["report"]["outcome"] == "failed"
+    assert stages["report"]["error_codes"] == ["STORE_ACCESS_DENIED"]
+    assert "lacks a grant" in stages["report"]["hint"]
+    assert "docs/runbooks/evidence-store.md" in stages["report"]["hint"]
+    assert data["pending_publish"] == []
+    assert data["run_record"]["outcome"] == "incomplete"
+    assert "aws sso login" not in stage_text(pulled)
+    assert str(installation) not in stage_text(pulled)

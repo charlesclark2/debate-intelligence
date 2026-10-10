@@ -24,6 +24,12 @@ Nothing in this module can remove a line, and nothing else in the platform write
 Reading a list that does not exist yet is an empty list, and creates nothing: `caselist import`
 reads it on every run and must leave no new directory behind in an environment that has never had
 a removal.
+
+A suppression directory the operating system refuses is
+:class:`~debate_core.application.errors.LocalStoreAccessDenied` naming "the suppression directory",
+never a raw `PermissionError` and never the file's path
+(:mod:`debate_core.integrations.local.refusals`, `v1-e34-t13`). A list that cannot be read is not an
+empty one: nothing may be imported or published against it.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from pathlib import Path
 from typing import Final
 
 from debate_core.application.ports.suppression import AppendOnlyViolation, UnreadableAppendOnlyRecord
+from debate_core.integrations.local.refusals import refused_as_access_denied, role_of
 
 __all__ = [
     "REMOVAL_LOG_FILENAME",
@@ -53,6 +60,9 @@ SUPPRESSION_FILE_MODE: Final = 0o600
 """Owner read and write. The list names no one, but it is the operator's record and nobody else's."""
 
 _APPEND_FLAGS: Final = os.O_WRONLY | os.O_APPEND | os.O_CREAT
+
+#: What a refusal names instead of the file's path.
+_ROLE: Final = role_of(SUPPRESSION_DIRECTORY.name)
 
 
 def local_suppression_list_file(data_dir: Path) -> LocalAppendOnlyFile:
@@ -80,9 +90,10 @@ class LocalAppendOnlyFile:
         return str(self._path)
 
     async def read_lines(self) -> tuple[str, ...]:
-        if not self._path.is_file():
-            return ()
-        data = self._path.read_bytes()
+        with refused_as_access_denied("read", _ROLE):
+            if not self._path.is_file():
+                return ()
+            data = self._path.read_bytes()
         if not data:
             return ()
         if not data.endswith(b"\n"):
@@ -103,18 +114,19 @@ class LocalAppendOnlyFile:
                 raise AppendOnlyViolation(self.location, "a line to append contains a line break")
         await self.read_lines()  # refuses a torn last line before anything is added after it
         payload = "".join(f"{line}\n" for line in lines).encode("utf-8")
-        created = not self._path.exists()
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor = os.open(self._path, _APPEND_FLAGS, SUPPRESSION_FILE_MODE)
-        try:
-            written = 0
-            while written < len(payload):
-                written += os.write(descriptor, payload[written:])
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        if created:
-            _sync_directory(self._path.parent)
+        with refused_as_access_denied("write", _ROLE):
+            created = not self._path.exists()
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor = os.open(self._path, _APPEND_FLAGS, SUPPRESSION_FILE_MODE)
+            try:
+                written = 0
+                while written < len(payload):
+                    written += os.write(descriptor, payload[written:])
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            if created:
+                _sync_directory(self._path.parent)
 
 
 def _sync_directory(directory: Path) -> None:

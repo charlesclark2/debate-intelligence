@@ -24,11 +24,14 @@ from debate_core.application.caselist.removal_service import (
     RemovalReport,
     TakedownPreflightFailed,
 )
+from debate_core.application.caselist_sync import DailyDownloadLimitReached
 from debate_core.application.errors import (
+    UNMODELLED_ERROR_CODE,
     AlreadyExists,
     ArchiveTooLarge,
     BlobIntegrityError,
     DomainError,
+    LocalStoreAccessDenied,
     NotFound,
     ProviderRateLimited,
     ProviderUnavailable,
@@ -38,7 +41,10 @@ from debate_core.application.errors import (
     StoreAccessDenied,
     StoreCredentialsExpired,
     StoreUnavailable,
+    UnreadableArchive,
+    reported_error_code,
 )
+from debate_core.application.ports.caselist_source import ArchiveUnavailable, CaselistAuthExpired
 
 ENVELOPE_KEYS = {"schema_version", "status", "command", "data", "error"}
 ERROR_KEYS = {"code", "message", "exit_code", "details", "hint"}
@@ -340,6 +346,8 @@ RETRYABLE_STORE_FAILURES = [
         "STORE_CREDENTIALS_EXPIRED",
     ),
     (StoreAccessDenied("read", "the blob directory"), "STORE_ACCESS_DENIED"),
+    # The filesystem adapters' subclass (v1-e34-t13): the same failure to a program, the same code.
+    (LocalStoreAccessDenied("list", "the manifest directory"), "STORE_ACCESS_DENIED"),
 ]
 
 #: Answers that a second run gives again, so they stay `1` however close to a store they arise.
@@ -437,12 +445,73 @@ def test_a_removal_that_completed_unlogged_is_not_retried_whatever_refused_the_l
         (["BLOB_INTEGRITY_ERROR"], ExitCode.DOMAIN_FAILURE),
         (["NOT_FOUND"], ExitCode.DOMAIN_FAILURE),
         (["STORE_UNAVAILABLE", None], ExitCode.DOMAIN_FAILURE),
+        # What a stage of `caselist pull` records (v1-e34-t13): a provider that did not answer is
+        # retryable beside a store that did not, and one verdict among them decides.
+        (["PROVIDER_UNAVAILABLE"], ExitCode.RETRIEVAL_FAILURE),
+        (["PROVIDER_RATE_LIMITED", "STORE_UNAVAILABLE"], ExitCode.RETRIEVAL_FAILURE),
+        (["PROVIDER_UNAVAILABLE", "UNREADABLE_ARCHIVE"], ExitCode.DOMAIN_FAILURE),
+        (["ARCHIVE_UNAVAILABLE"], ExitCode.DOMAIN_FAILURE),
+        (["ARCHIVE_TOO_LARGE"], ExitCode.DOMAIN_FAILURE),
+        (["CASELIST_AUTH_EXPIRED"], ExitCode.DOMAIN_FAILURE),
+        (["DAILY_DOWNLOAD_LIMIT_REACHED"], ExitCode.DOMAIN_FAILURE),
+        (["FULL_ARCHIVE_REFUSED"], ExitCode.DOMAIN_FAILURE),
+        # Nothing reaches 3 because nobody classified it.
+        (["INTERNAL_ERROR"], ExitCode.DOMAIN_FAILURE),
+        (["A_CODE_NOBODY_MAPPED"], ExitCode.DOMAIN_FAILURE),
+        (["PROVIDER_ERROR"], ExitCode.DOMAIN_FAILURE),
+        (["STORE_ERROR"], ExitCode.DOMAIN_FAILURE),
     ],
 )
 def test_a_run_of_item_failures_is_a_three_only_when_every_one_is_a_store_failure(
     codes: list[str | None], expected: ExitCode
 ) -> None:
     assert exit_code_for_failure_codes(codes) is expected
+
+
+#: Failures a stage of `caselist pull` records instead of raising, and the code each is recorded
+#: under, written by hand from the class name.
+RECORDED_FAILURES = [
+    (StoreUnavailable("PutObject", "s3://b/k", "503"), "STORE_UNAVAILABLE"),
+    (StoreCredentialsExpired(hint="aws sso login"), "STORE_CREDENTIALS_EXPIRED"),
+    (StoreAccessDenied("PutObject", "s3://b/k"), "STORE_ACCESS_DENIED"),
+    (LocalStoreAccessDenied("read", "the blob directory"), "STORE_ACCESS_DENIED"),
+    (ProviderUnavailable("opencaselist", "HTTP 503"), "PROVIDER_UNAVAILABLE"),
+    (ProviderRateLimited("opencaselist", retry_after_seconds=30.0), "PROVIDER_RATE_LIMITED"),
+    (
+        DailyDownloadLimitReached(ProviderRateLimited("opencaselist", retry_after_seconds=86_400.0)),
+        "DAILY_DOWNLOAD_LIMIT_REACHED",
+    ),
+    (ArchiveUnavailable("hsld26-weekly-2026-09-15.zip", 404), "ARCHIVE_UNAVAILABLE"),
+    (CaselistAuthExpired(401, "download OpenEv file 512"), "CASELIST_AUTH_EXPIRED"),
+    (UnreadableArchive("the download", "not a readable zip file"), "UNREADABLE_ARCHIVE"),
+    (PermissionError(13, "Permission denied"), "INTERNAL_ERROR"),
+    (OSError(28, "No space left on device"), "INTERNAL_ERROR"),
+]
+
+
+@pytest.mark.parametrize(("failure", "code"), RECORDED_FAILURES, ids=lambda value: str(value)[:28])
+def test_a_recorded_failure_has_the_code_the_cli_reports_the_same_exception_under(
+    failure: BaseException, code: str
+) -> None:
+    """One vocabulary (v1-e34-t13): what a stage records for a failure is what `error.code` would
+    have been had that failure ended the command."""
+    assert reported_error_code(failure) == code
+    assert error_code_for(failure) == code
+
+
+def test_the_unmodelled_code_is_the_name_of_the_internal_error_exit_status() -> None:
+    """`debate_core` cannot import the CLI's exit codes, so it spells the word itself; this is what
+    keeps the two spellings one."""
+    assert ExitCode.INTERNAL_ERROR.name == UNMODELLED_ERROR_CODE
+
+
+def test_the_daily_limit_is_a_verdict_and_never_a_retrieval_failure() -> None:
+    """It arrives as a rate limit and is deliberately not a provider failure: were it to end a
+    command, it would end it with `1`."""
+    daily = DailyDownloadLimitReached(ProviderRateLimited("opencaselist", retry_after_seconds=86_400.0))
+
+    assert exit_code_for(daily) is ExitCode.DOMAIN_FAILURE
+    assert exit_code_for_failure_codes([error_code_for(daily)]) is ExitCode.DOMAIN_FAILURE
 
 
 def test_a_run_with_no_failures_has_no_failure_exit_code() -> None:

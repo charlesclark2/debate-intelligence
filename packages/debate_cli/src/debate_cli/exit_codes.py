@@ -37,12 +37,15 @@ V1 example, and it reports that outcome through
 :meth:`~debate_cli.output.CliOutput.failure` and then exits with `DOMAIN_FAILURE`.
 
 `debate_core` never imports this module: an exit code is a property of a command-line surface, not
-of the domain.
+of the domain. The dependency runs the other way for **error codes**: the word a failure is
+reported under is defined once, in :mod:`debate_core.application.errors`
+(:func:`~debate_core.application.errors.error_code_of`), because the services that record a
+failure's code and this module, which turns recorded codes into an exit status
+(:func:`exit_code_for_failure_codes`), have to mean the same thing by it (`v1-e34-t13`).
 """
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from enum import IntEnum
 
@@ -52,12 +55,17 @@ from debate_core.application.caselist.removal_service import RemovalIncomplete, 
 from debate_core.application.errors import (
     DomainError,
     ProviderError,
+    ProviderRateLimited,
+    ProviderUnavailable,
     StoreAccessDenied,
     StoreCredentialsExpired,
     StoreUnavailable,
+    error_code_of,
+    error_code_of_class,
 )
 
 __all__ = [
+    "RETRYABLE_PROVIDER_FAILURES",
     "RETRYABLE_STORE_FAILURES",
     "STOPPED_BY_A_STORE",
     "ExitCode",
@@ -78,6 +86,17 @@ Named one by one rather than as their base class, so that the list is the decisi
 `StoreError` subclass is mapped when someone decides it belongs here, not by inheritance. Nothing
 deterministic is on it — :class:`~debate_core.application.errors.NotFound` is an answer, and so are
 a refused manifest and an `UNVERIFIED` card.
+"""
+
+RETRYABLE_PROVIDER_FAILURES: tuple[type[ProviderError], ...] = (ProviderUnavailable, ProviderRateLimited)
+"""The provider failures a run records by code and a retry may cure (`v1-e34-t13`).
+
+A provider failure that ends a command is a `RETRIEVAL_FAILURE` whatever its class
+(:func:`exit_code_for`). These two are the ones a run can record instead: a download stage of
+`caselist pull` that met a 5xx, a timeout, or a rate limit that outlasted the client's bounded
+retries. Named one by one, like the store failures, so that a code is on the list because someone
+decided it is. OpenCaselist's *daily* limiter is not here although it arrives as a rate limit: the
+sync records it under a code of its own, because it is a verdict for the day.
 """
 
 STOPPED_BY_A_STORE: tuple[type[DomainError], ...] = (TakedownPreflightFailed, RemovalIncomplete)
@@ -132,18 +151,22 @@ def is_retryable_store_failure(exception: BaseException | None) -> bool:
 
 
 def exit_code_for_failure_codes(codes: Iterable[str | None]) -> ExitCode:
-    """The exit code for a run that recorded these per-item failures by error code.
+    """The exit code for a run that recorded these failures by error code instead of raising them.
 
     `store sync` and `caselist publish` carry on past one object's failure and report each by its
-    error code (`STORE_UNAVAILABLE`, `CHECKSUM_MISMATCH`, …). The run is a `RETRIEVAL_FAILURE` only
-    when every failure is a store failure a retry may cure; one deterministic failure among them —
-    or a failure with no code — makes the whole run a `DOMAIN_FAILURE`, because running it again
-    cannot succeed. No failures at all is not a call this function answers.
+    error code (`STORE_UNAVAILABLE`, `CHECKSUM_MISMATCH`, …), and a stage of `caselist pull`
+    records the code of each failure that failed it (`v1-e34-t13`). The run is a
+    `RETRIEVAL_FAILURE` only when every failure is one a retry may cure: a code of
+    :data:`RETRYABLE_STORE_FAILURES` or :data:`RETRYABLE_PROVIDER_FAILURES`. One deterministic
+    failure among them makes the whole run a `DOMAIN_FAILURE`, because running it again cannot
+    succeed, and so does a failure with no code or with a code this list does not name: nothing
+    reaches `3` because nobody classified it. No failures at all is not a call this function
+    answers.
     """
     recorded = list(codes)
     if not recorded:
         raise ValueError("a run with no failures has no failure exit code")
-    if all(code in _RETRYABLE_STORE_ERROR_CODES for code in recorded):
+    if all(code in _RETRYABLE_ERROR_CODES for code in recorded):
         return ExitCode.RETRIEVAL_FAILURE
     return ExitCode.DOMAIN_FAILURE
 
@@ -153,11 +176,12 @@ def error_code_for(exception: BaseException) -> str:
 
     This is the `error.code` a `--json` consumer branches on. For a
     :class:`~debate_core.application.errors.DomainError` it is the class name in upper snake case,
-    so the code a script sees and the class a developer reads are the same word; for everything
-    else it is the name of the exit code.
+    so the code a script sees and the class a developer reads are the same word
+    (:func:`~debate_core.application.errors.error_code_of`, which a service recording the failure
+    instead uses too); for everything else it is the name of the exit code.
     """
     if isinstance(exception, DomainError):
-        return _upper_snake_case(type(exception).__name__)
+        return error_code_of(exception)
     return exit_code_for(exception).name
 
 
@@ -169,12 +193,7 @@ def _known_exit_code(value: int) -> ExitCode:
         return ExitCode.INTERNAL_ERROR
 
 
-def _upper_snake_case(class_name: str) -> str:
-    """`"RevisionMismatch"` → `"REVISION_MISMATCH"`."""
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).upper()
-
-
-#: The error codes :data:`RETRYABLE_STORE_FAILURES` are reported under, e.g. `STORE_UNAVAILABLE`.
-_RETRYABLE_STORE_ERROR_CODES = frozenset(
-    _upper_snake_case(kind.__name__) for kind in RETRYABLE_STORE_FAILURES
+#: The error codes the two lists are reported under, e.g. `STORE_UNAVAILABLE`, `PROVIDER_UNAVAILABLE`.
+_RETRYABLE_ERROR_CODES = frozenset(
+    error_code_of_class(kind) for kind in (*RETRYABLE_STORE_FAILURES, *RETRYABLE_PROVIDER_FAILURES)
 )

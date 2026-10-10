@@ -142,13 +142,12 @@ from debate_core.application.caselist.openev_import_service import OpenEvImportR
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimport
 from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
-from debate_core.application.caselist.publish_service import (
-    ManifestOutcome,
-    PublishReport,
-    SnapshotOutcome,
-    SourceResult,
+from debate_core.application.caselist.publish_service import PublishReport, SourceResult
+from debate_core.application.caselist.status_service import (
+    CASELIST_DRIFT,
+    CaselistStatusReport,
+    SnapshotStatus,
 )
-from debate_core.application.caselist.status_service import CaselistStatusReport, SnapshotStatus
 from debate_core.application.caselist_sync import full_archive_of_inbox_name
 from debate_core.application.settings import ConfigurationError, Environment, Settings
 from debate_core.domain.caselist import Event
@@ -471,7 +470,7 @@ def status(
     drifted = report.drifted
     cli.output.failure(
         CommandFailure(
-            code="CASELIST_DRIFT",
+            code=CASELIST_DRIFT,
             message=(
                 f"{len(drifted)} snapshot(s) differ between this machine and the bucket: "
                 + ", ".join(f"{entry.caselist} {entry.snapshot}" for entry in drifted)
@@ -559,6 +558,10 @@ def publish_summary(report: PublishReport, settings: Settings) -> dict[str, Json
     anything was uploaded; per snapshot, a dry run carries its `planned` action counts and an
     applied run its `results`; `failed_sha256` is the list a retry would be about. Digests and keys
     only: nothing from inside a manifest.
+
+    `manifest_error` is the sentence for a person; `manifest_error_code` is the code of a manifest
+    that failed on its own (`v1-e34-t13`). Until then the code was written at the front of the
+    sentence, `"STORE_UNAVAILABLE: …"`, and read back out of it.
     """
     outcomes = report.snapshots if report.applied else (None,) * len(report.plan.snapshots)
     snapshots: list[JsonValue] = []
@@ -578,6 +581,7 @@ def publish_summary(report: PublishReport, settings: Settings) -> dict[str, Json
                 for failure in outcome.failed
             ]
             entry["manifest_error"] = outcome.manifest_error
+            entry["manifest_error_code"] = outcome.manifest_error_code
         snapshots.append(entry)
     return {
         "environment": settings.environment.value,
@@ -705,7 +709,10 @@ def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> Co
 
     A plan that cannot be carried out (`PUBLISH_BLOCKED`) is `1`. An applied run that left a
     snapshot incomplete is `3` when every failure behind it is the store not answering, and `1` as
-    soon as one is not (:func:`_failure_codes`, `v1-e01-t20`).
+    soon as one is not (`v1-e01-t20`). The codes are the publish result's own
+    (:attr:`~debate_core.application.caselist.publish_service.PublishReport.failure_codes`): each
+    failed source's, and a failed manifest's from its structured `manifest_error_code`, never from
+    the text of its message (`v1-e34-t13`).
     """
     failed = report.failed_sha256
     if not report.applied:
@@ -728,28 +735,10 @@ def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> Co
     return CommandFailure(
         code="PUBLISH_INCOMPLETE",
         message=f"{len(incomplete)} snapshot(s) not complete in the bucket, manifest {withheld}{named}",
-        exit_code=exit_code_for_failure_codes(_failure_codes(incomplete)),
+        exit_code=exit_code_for_failure_codes(report.failure_codes),
         details=payload,
         hint="Re-run the same command: every confirmed source is skipped and the manifests follow.",
     )
-
-
-def _failure_codes(incomplete: list[SnapshotOutcome]) -> list[str | None]:
-    """The error code behind every failure that left these snapshots incomplete.
-
-    A withheld manifest is the consequence of its failed sources, whose codes are counted. A manifest
-    that failed on its own carries its code at the front of `manifest_error`, as
-    `"STORE_UNAVAILABLE: …"`. A snapshot that is incomplete for neither reason contributes `None`,
-    which is never a retryable code, so a case nobody anticipated is reported as `1`, not `3`.
-    """
-    codes: list[str | None] = []
-    for outcome in incomplete:
-        codes.extend(source.error_code for source in outcome.failed)
-        if outcome.manifest is ManifestOutcome.FAILED:
-            codes.append((outcome.manifest_error or "").partition(": ")[0] or None)
-        elif not outcome.failed:
-            codes.append(None)
-    return codes
 
 
 def _snapshot_date(value: str) -> date:

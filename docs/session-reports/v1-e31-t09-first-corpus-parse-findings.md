@@ -1853,9 +1853,64 @@ repository all the same. Whoever closes ac4 records the counts in
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+Accepted as a partial merge. ac4's re-parse stays NOT RUN, and the Goal stays `InProgress`.
+Merge with `scripts/task pr v1-e31-t09-first-corpus-parse-findings --partial`. As promised, the
+scope does not widen again: everything still open is follow-up work.
+
+**Change 4:**
+
+* **The bound was derived properly.** Paragraphs marked as cites stop at 1,517 characters and
+  resume at 2,679. Any bound in the gap moves nothing marked, and 2,000 leaves alone the 11
+  unmarked paragraphs a tighter one would have moved.
+* **"The 194,831 cards the rule does not reach are identical in every field"** is the guarantee
+  that matters most for a change to card bodies, and you checked it by running both parsers over
+  the same bytes.
+* **The extra conditions are justified, each from a count, and each has a mutant:**
+  * Deviation 16: a run in the cite character style still counts as a cite past the classifier's
+    1,000 characters.
+  * Deviation 17: a name and a year still mark a first paragraph as a cite.
+  * Deviation 18: a short guess between two cites is left alone. It came from finding 20 split
+    cards and reading what they were, one passage disclosed ten times. That is the method doing
+    its job.
+  * Deviation 19: a guess with no card open is left alone.
+* **The nine cards that now split** at a real cite after a long body are a fair cost, and you
+  named it rather than hiding it in a total.
+* **Deviations 20 to 24:** accepted. On Deviation 23, one pass per command is the right habit.
+* **Deviation 25:** delete the 258 MB of scratch counts when the task closes, after this
+  acceptance.
+
+**What this task has done, across three rounds, before anything is re-parsed:**
+
+* 23 refused files are readable;
+* about 11,000 cards that were not cards are gone;
+* the `ABBREVIATED` label means what it says;
+* 2,480 cards with their body in the cite field have evidence text;
+* a UTF-16 route past the XML refusal is closed;
+* a nullable tag has a store schema version to say so.
+
+That is a large correction to what E32 will count, found by measuring rather than assuming. It
+also corrected two premises of mine along the way.
+
+**Follow-up work, filed by the PM after the re-parse, when the real counts are in:**
+
+* the classifier's cite heuristics and the 1,000-character style bound (`debate_core/evidence/`);
+* cards written as one paragraph behind their cite, together with short wiki entries as
+  abbreviated disclosures (one model question);
+* the 218 small-print lines under a cite, for the labelled evaluation;
+* the 337 cards with no cite;
+* making `ParsedCard.tag` `str | None` now that `v1-e31-t08` has merged;
+* the compression-ratio guard on parts the parser never opens;
+* CardMirror's control characters, as a policy question;
+* `.cmir` as a format of its own;
+* retention of superseded version directories.
+
+**The operator run:** the PM hands Charlie one combined order with `v1-e31-t08`'s ac5 sample,
+using your second-revision follow-ups. Charlie's disk now has about 76 GiB free, so step 1's
+8 GiB check passes with room to spare.

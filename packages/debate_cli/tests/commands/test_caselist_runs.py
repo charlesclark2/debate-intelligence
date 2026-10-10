@@ -170,6 +170,40 @@ def test_runs_last_5_shows_the_five_newest_with_every_column(installation: Path)
     assert "1 of 2" in table, "a deferred run shows downloaded against wanted"
 
 
+STORED_RUN_LOG = (
+    Path(__file__).resolve().parents[3]
+    / "debate_core/tests/application/caselist/stored_run_records/run_log_written_by_a_schema_3_build.jsonl"
+)
+"""One run-log line as a build before `v1-e34-t13` wrote it, kept as written: a pull against the
+synthetic caselist whose download of week three failed on a burst rate limit. The installed weekly
+agent runs such a build, in the data directory a newer build reads, until it is reinstalled."""
+
+
+def test_runs_still_reads_the_run_log_a_schema_3_build_wrote(installation: Path) -> None:
+    """`v1-e34-t13` moved the run *summary* to schema 4 and left the run log's record alone, so the
+    log the installed agent writes reads as it did. Every expected value is read off the stored
+    line by hand: 2 of 3 wanted weeks downloaded, none deferred, the download stage failed."""
+    installation.mkdir(parents=True)
+    (installation / SYNC_RUN_LOG_FILENAME).write_bytes(STORED_RUN_LOG.read_bytes())
+
+    envelope = as_json("caselist", "runs", "--last", "5")
+
+    assert envelope["exit_code"] == ExitCode.OK, envelope
+    [run] = envelope["data"]["runs"]
+    assert (run["run_id"], run["outcome"], run["environment"]) == ("20260916T060000Z", "failed", "dev")
+    assert (run["archives_wanted"], run["archives_downloaded"], run["archives_deferred"]) == (3, 2, 0)
+    assert [(one["stage"], one["outcome"]) for one in run["stages"]][:3] == [
+        ("select", "completed"),
+        ("download", "failed"),
+        ("import", "completed"),
+    ]
+    assert all(sorted(one) == ["outcome", "reason", "stage"] for one in run["stages"])
+
+    table = " ".join(invoke("caselist", "runs", "--last", "5").stdout.split())
+    # Nothing was deferred by the cap, so the table shows the downloads as a plain count.
+    assert "20260916T060000Z │ 2026-09-16 06:00 │ failed │ 2 │ 0 │ 0" in table
+
+
 def test_runs_with_nothing_recorded_says_so_and_is_overdue(installation: Path) -> None:
     envelope = as_json("caselist", "runs")
 

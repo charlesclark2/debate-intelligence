@@ -462,6 +462,7 @@ __all__ = [
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "camp_path_of_manifest_row",
     "decide_full_archives",
     "full_archive_of_inbox_name",
     "inbox_files",
@@ -4230,6 +4231,23 @@ def _comparable_components(path: str) -> tuple[str, ...]:
     )
 
 
+def camp_path_of_manifest_row(path: str) -> tuple[int | None, tuple[str, ...]]:
+    """The OpenEv id a release-manifest row names, if it names one, and its camp path as names.
+
+    A row the sync wrote is named `openev-<id>-<file name>`. With that prefix off, what is left is
+    compared as names, component by component (:func:`_comparable_components`): the same for every
+    upload of one camp file, whichever id it was given. This is how a revision is matched to the
+    row it revises (:func:`_match_listed_openev`, `v1-e34-t08`), and how a removal finds a later
+    upload at a removed camp file's path among a release's rows (`v1-e30-t11`). A row that names no
+    id, a hand import, cannot say which upload it came from.
+    """
+    *folders, name = _PATH_SEPARATORS.split(path)
+    prefixed = _OPENEV_INBOX_PREFIX.match(name)
+    if prefixed is None:
+        return None, _comparable_components(path)
+    return int(prefixed.group(1)), _comparable_components("/".join([*folders, name[prefixed.end() :]]))
+
+
 @dataclass(frozen=True, slots=True)
 class _ReleaseMatch:
     """What a release manifest's rows say about the release's listed camp files."""
@@ -4278,16 +4296,10 @@ def _match_listed_openev(
     held: set[int] = set()
     revised: dict[int, set[int]] = {}
     for path in recorded_paths:
-        *folders, name = _PATH_SEPARATORS.split(path)
-        prefixed = _OPENEV_INBOX_PREFIX.match(name)
-        named: int | None = None
-        if prefixed is not None:
-            named = int(prefixed.group(1))
-            if named in ids:
-                held.add(named)
-                continue
-            name = name[prefixed.end() :]
-        components = _comparable_components("/".join([*folders, name]))
+        named, components = camp_path_of_manifest_row(path)
+        if named is not None and named in ids:
+            held.add(named)
+            continue
         if not components:
             continue
         shared = [

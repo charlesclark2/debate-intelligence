@@ -393,11 +393,25 @@ class CaselistRemovalService:
     # --------------------------------------------------------------------------------------
 
     async def plan(
-        self, selector: RemovalSelector, *, request_id: str, reason: ReasonCode, include_shared: bool = False
+        self,
+        selector: RemovalSelector,
+        *,
+        request_id: str,
+        reason: ReasonCode,
+        include_shared: bool = False,
+        only_named: bool = False,
     ) -> RemovalPlan:
-        """The dry run. Reads only, with the everyday profile only."""
+        """The dry run. Reads only, with the everyday profile only.
+
+        The plan includes the later uploads the store holds at each removed path unless
+        `only_named` (`v1-e30-t11`); :meth:`execute` carries out whichever plan it is given.
+        """
         return await self.planner.plan(
-            selector, request_id=request_id, reason=reason, include_shared=include_shared
+            selector,
+            request_id=request_id,
+            reason=reason,
+            include_shared=include_shared,
+            only_named=only_named,
         )
 
     async def execute(self, plan: RemovalPlan) -> RemovalReport:

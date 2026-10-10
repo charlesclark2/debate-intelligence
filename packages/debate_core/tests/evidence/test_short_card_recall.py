@@ -496,13 +496,51 @@ AFTER_SPLIT_TOLERANT_LINKING_MISSES: Final[dict[str, dict[Miss, int]]] = AFTER_S
     "extended set, abbreviated with abbreviated": {Miss.NO_FULL_COPY: 8},
 }
 
+#: After abbreviations with no full copy are grouped by link key (mechanism 3), worked out by hand
+#: before the run.
+#:
+#: * t06's two orphan cuts share three opening and five closing words: one group, its last miss.
+#: * Three of the four Quill towpath cuts form one group (3 pairs). The fourth is the minimum cut,
+#:   three words at each end, which shares no whole shingle with any of them: its 3 pairs stay
+#:   apart. That is the cost of a key a stock opening and closing cannot satisfy.
+#: * The Sable 4 ... 6 cut is consistent with its own card's longer cut and with a different card's.
+#:   The three are one connected set that disagrees with itself, so none is grouped: 1 pair apart.
+AFTER_GROUPING_UNMATCHED_TABLE: Final[dict[str, tuple[int, int, int]]] = (
+    AFTER_SPLIT_TOLERANT_LINKING_TABLE
+    | {
+        "short-card set, all pairs": (81, 0, 0),
+        "short-card set, abbreviated with abbreviated": (12, 0, 0),
+        "extended set, all pairs": (104, 0, 12),
+        "extended set, abbreviated with abbreviated": (16, 0, 4),
+    }
+)
+
+AFTER_GROUPING_UNMATCHED_MISSES: Final[dict[str, dict[Miss, int]]] = AFTER_SPLIT_TOLERANT_LINKING_MISSES | {
+    "short-card set, all pairs": {},
+    "short-card set, abbreviated with abbreviated": {},
+    "extended set, all pairs": {Miss.CONFIRMATION: 4, Miss.SPLIT_FULL_COPIES: 4, Miss.NO_FULL_COPY: 4},
+    "extended set, abbreviated with abbreviated": {Miss.NO_FULL_COPY: 4},
+}
+
 BASELINE_TABLE: Final = T06_TABLE | BASELINE_EXTENDED_TABLE
 """Every row against the code as t06 left it: what each fix is measured from."""
 
-EXPECTED_TABLE: Final = AFTER_SPLIT_TOLERANT_LINKING_TABLE
+EXPECTED_TABLE: Final = AFTER_GROUPING_UNMATCHED_TABLE
 """What the code under test should measure today. Each fix replaces the rows it changes."""
 
-EXPECTED_MISSES: Final = AFTER_SPLIT_TOLERANT_LINKING_MISSES
+EXPECTED_MISSES: Final = AFTER_GROUPING_UNMATCHED_MISSES
+
+#: Goal criterion ac1's recall targets, by the rows they are read from. Precision is 1.000 or the
+#: task has failed, whatever the recall.
+REQUIRED_RECALL: Final[dict[str, float]] = {
+    "short-card set, full short cards": 0.90,
+    "short-card set, abbreviated with a full copy": 0.75,
+    "short-card set, abbreviated with abbreviated": 0.75,
+    "extended set, full short cards": 0.90,
+    "extended set, abbreviated with a full copy": 0.75,
+    "extended set, abbreviated with abbreviated": 0.75,
+    "variant set, pairs with a short card": 0.90,
+}
 
 
 def test_the_table_is_as_expected_row_for_row(measured: dict[str, Row]) -> None:
@@ -512,6 +550,14 @@ def test_the_table_is_as_expected_row_for_row(measured: dict[str, Row]) -> None:
 
 def test_every_miss_comes_from_one_of_t06s_three_mechanisms(measured: dict[str, Row]) -> None:
     assert {name: row.by_mechanism for name, row in measured.items()} == EXPECTED_MISSES
+
+
+def test_recall_reaches_the_targets_with_precision_held(measured: dict[str, Row]) -> None:
+    """Goal criterion ac1, on t06's rows and on the extended set."""
+    for name, required in REQUIRED_RECALL.items():
+        counts = measured[name].counts
+        assert counts.precision == 1.0, name
+        assert counts.recall >= required, name
 
 
 def test_no_row_is_worse_than_before_the_fixes(measured: dict[str, Row]) -> None:
@@ -526,8 +572,6 @@ def test_no_row_is_worse_than_before_the_fixes(measured: dict[str, Row]) -> None
 # ------------------------------------------------------------------------------------------------
 # One fixture case per mechanism (ac2), and the hard negatives
 # ------------------------------------------------------------------------------------------------
-
-NOT_YET: Final = "v1-e31-t08 baseline: fails against the code as t06 left it; the fix removes this mark"
 
 
 @pytest.mark.parametrize(
@@ -567,7 +611,6 @@ def test_mechanism_2_an_abbreviation_links_although_its_full_copies_are_split(
     assert extended_clusters[abbreviation] == extended_clusters[original]
 
 
-@pytest.mark.xfail(strict=True, reason=NOT_YET)
 @pytest.mark.parametrize(
     ("left", "right"),
     [
@@ -596,6 +639,21 @@ def test_an_abbreviation_links_once_one_changed_word_no_longer_splits_its_full_c
 ) -> None:
     """t06's own 33 misses of this kind: the split was mechanism 1's, so mechanism 1's fix heals it."""
     assert extended_clusters[abbreviation] == extended_clusters[original]
+
+
+def test_the_minimum_cut_of_an_orphan_is_not_grouped(extended_clusters: dict[str, str]) -> None:
+    """Three words at each end share no whole shingle with any other cut. A known miss, kept."""
+    for other in ("a-q1-six-six", "a-q1-four-eight", "a-q1-five-four-brackets"):
+        assert extended_clusters["a-q1-three-three"] != extended_clusters[other]
+
+
+def test_a_cut_two_different_orphans_both_open_and_close_with_groups_with_neither(
+    extended_clusters: dict[str, str],
+) -> None:
+    """Consistent with its own card's longer cut and with another card's: the set disagrees with
+    itself, so all three stay clusters of their own."""
+    cuts = ("a-t1-eight-seven", "a-t1-four-six", "a-t2-eight-seven")
+    assert len({extended_clusters[cut] for cut in cuts}) == 3
 
 
 def test_the_copies_two_typos_split_off_stay_split(extended_clusters: dict[str, str]) -> None:

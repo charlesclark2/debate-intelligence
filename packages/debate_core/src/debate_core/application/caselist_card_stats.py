@@ -58,9 +58,12 @@ from debate_core.domain.card_occurrence import CardOccurrence, ClusterMembership
 from debate_core.domain.caselist import Disclosure
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
 from debate_core.evidence.abbreviated_links import (
+    AbbreviationAnchor,
     FullCardWords,
     abbreviation_anchor,
+    group_unmatched_abbreviations,
     link_abbreviated,
+    matching_full_cards,
     short_cite_key,
 )
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint, extract_cutter_mark
@@ -276,23 +279,51 @@ class CaselistCardStatsService:
                         copies[(fingerprint, key)],
                     )
 
+        # An abbreviated card links to a full card's cluster, or failing that is grouped with the
+        # other abbreviated cards that matched no full card, or failing that is its own cluster.
+        linked: dict[int, str] = {}
+        keys: defaultdict[str, set[AbbreviationAnchor]] = defaultdict(set)
+        not_grouped: set[str] = set()
+        for position, (card, fingerprint) in enumerate(zip(cards, fingerprints, strict=True)):
+            if card.completeness is CardCompleteness.FULL:
+                continue
+            anchor = abbreviation_anchor(card, self._markers)
+            if anchor is None:
+                continue
+            matches = matching_full_cards(anchor, full_by_cite[anchor.short_cite_key].values())
+            cluster = link_abbreviated(anchor, matches)
+            if cluster is not None:
+                linked[position] = cluster
+                continue
+            keys[fingerprint].add(anchor)
+            if matches:
+                not_grouped.add(fingerprint)  # it matched full cards, of two different cards
+        groups = group_unmatched_abbreviations(
+            {
+                fingerprint: next(iter(anchors))
+                for fingerprint, anchors in keys.items()
+                # One text under two short cites could join two authors' groups: it joins neither.
+                if len(anchors) == 1 and fingerprint not in not_grouped
+            }
+        )
+
         placed: list[CardPlacement] = []
-        for card, fingerprint in zip(cards, fingerprints, strict=True):
+        for position, (card, fingerprint) in enumerate(zip(cards, fingerprints, strict=True)):
             if card.completeness is CardCompleteness.FULL:
                 placed.append(
                     CardPlacement(card, fingerprint, clusters[fingerprint], ClusterMembership.NEAR_DUPLICATE)
                 )
-                continue
-            anchor = abbreviation_anchor(card, self._markers)
-            linked = (
-                link_abbreviated(anchor, full_by_cite[anchor.short_cite_key].values())
-                if anchor is not None
-                else None
-            )
-            if linked is None:
-                placed.append(CardPlacement(card, fingerprint, fingerprint, ClusterMembership.UNLINKED))
+            elif position in linked:
+                placed.append(
+                    CardPlacement(card, fingerprint, linked[position], ClusterMembership.ABBREVIATED_LINK)
+                )
+            elif fingerprint in groups:
+                # Every unlinked card with this text goes with it, so identical text never splits.
+                placed.append(
+                    CardPlacement(card, fingerprint, groups[fingerprint], ClusterMembership.ABBREVIATED_LINK)
+                )
             else:
-                placed.append(CardPlacement(card, fingerprint, linked, ClusterMembership.ABBREVIATED_LINK))
+                placed.append(CardPlacement(card, fingerprint, fingerprint, ClusterMembership.UNLINKED))
         return placed
 
     async def _disclosures(self, caselist: str, snapshot: date | None) -> dict[str, list[Disclosure]]:

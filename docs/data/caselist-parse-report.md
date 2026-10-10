@@ -120,11 +120,25 @@ which cards share a cluster (`card-fingerprint-v2`; the exact fingerprints are t
 `Clusters` columns change when the aggregates are next rebuilt. Sources, parsed counts, cards and
 occurrence rows do not: nothing is parsed again.
 
-**Status: not rebuilt yet.** The rebuild in dev and prod, and the by-eye sample of 20 newly joined
-pairs, are that task's operator follow-up (its criterion ac5), and the figures are recorded here
-when it has run. The one measurement taken so far is a read-only preview of openev on 2026-10-10,
-which places the stored cards in memory and writes nothing: 7,288 cards, 5,467 clusters before
-and 5,466 after, the largest cluster 21 cards before and after, and no exact fingerprint changed.
+**Status: not rebuilt yet.** The by-eye sample of 20 newly joined pairs is that task's operator
+follow-up (its criterion ac5), and it waits for `v1-e31-t09`'s re-parse under `2026.10.10-docx-2`,
+which rebuilds the aggregates under `card-fingerprint-v2` in the same run. The figures are recorded
+here when it has run.
+
+**A provisional preview, 2026-10-10.** Read-only: the stored cards of this report's
+`2026.09.20-docx-1` store placed in memory under the new rules, and compared with the occurrence
+table. Provisional because `v1-e31-t09` found that most cards this parse marked `ABBREVIATED` are
+whole cards, which the re-parse will reclassify and cluster.
+
+| Caselist | Cards | Clusters, `v1` | Clusters, `v2` | Clusters merged into another | Clusters divided | Largest cluster, `v1` | Largest cluster, `v2` | Exact fingerprints changed |
+|---|---|---|---|---|---|---|---|---|
+| hsld26 | 67,914 | 12,102 | 12,107 | 37 | 17 | 620 | 620 | 0 |
+| hspf26 | 44,298 | 9,828 | 9,835 | 18 | 20 | 541 | 541 | 0 |
+| hspolicy26 | 87,556 | 18,366 | 18,326 | 49 | 9 | 1,165 | 1,164 | 0 |
+| openev | 7,288 | 5,467 | 5,466 | 1 | 0 | 21 | 21 | 0 |
+
+No new cluster is made of more than four earlier ones. What each column means, and what the
+figures do and do not show, is in that task's session report under "Corpus-scale check".
 
 ## What the run settled, and what it raised
 

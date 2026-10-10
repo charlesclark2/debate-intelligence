@@ -31,7 +31,7 @@ from debate_core.domain.debate_files import (
     ParsedDocument,
 )
 from debate_core.domain.style_profile import StyleMatchSource
-from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
+from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
 from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 from debate_core.testing.fakes import InMemoryCaselistRepository
 
@@ -312,6 +312,119 @@ def test_linked_abbreviated_card_counts_toward_the_full_cards_cluster() -> None:
 # ------------------------------------------------------------------------------------------------
 # Cutter marks: recorded verbatim, never repr'd, never in statistics
 # ------------------------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------------------------
+# Abbreviated cards with no full copy (`v1-e31-t08`)
+# ------------------------------------------------------------------------------------------------
+
+ORCHARD_CUT = "Shaded orchards on the … two degrees on August nights."
+ORCHARD_OTHER_CUT = "Shaded orchards on … by two degrees on August nights."
+
+
+def abbreviated(source: str, body: str, short_cite: str | None = "Tamsin 26") -> ParsedCard:
+    return card(
+        source,
+        0,
+        body,
+        short_cite=short_cite,
+        full_cite=f"{short_cite or ''} (Invented Author, Fictional Review, 2026)",
+        completeness=CardCompleteness.ABBREVIATED,
+    )
+
+
+def place(*cards: ParsedCard) -> list[tuple[str, ClusterMembership]]:
+    service = CaselistCardStatsService(InMemoryCaselistRepository(), ellipsis_markers=("…",))
+    return [(placement.cluster_id, placement.membership) for placement in service.place(cards)]
+
+
+def test_two_cuts_of_a_card_nobody_disclosed_in_full_are_one_cluster() -> None:
+    first, second = place(abbreviated(FILE_A, ORCHARD_CUT), abbreviated(FILE_B, ORCHARD_OTHER_CUT))
+    assert first == second
+    assert first[1] is ClusterMembership.ABBREVIATED_LINK
+    fingerprints = sorted(
+        card_fingerprint(abbreviated(FILE_A, body)).exact_fingerprint
+        for body in (ORCHARD_CUT, ORCHARD_OTHER_CUT)
+    )
+    assert first[0] == fingerprints[0]
+
+
+def test_a_cut_alone_is_still_its_own_unlinked_cluster() -> None:
+    lone = abbreviated(FILE_A, ORCHARD_CUT)
+    assert place(lone) == [(card_fingerprint(lone).exact_fingerprint, ClusterMembership.UNLINKED)]
+
+
+def test_a_cut_with_no_short_cite_has_no_key_and_goes_where_its_text_goes() -> None:
+    """Identical text is one exact fingerprint and never splits: a copy the parser read no short
+    cite from cannot be grouped by key, and follows the copies of its text that can."""
+    no_cite = abbreviated(FILE_C, ORCHARD_CUT, None)
+    lone = place(no_cite)
+    assert lone == [(card_fingerprint(no_cite).exact_fingerprint, ClusterMembership.UNLINKED)]
+
+    placed = place(abbreviated(FILE_A, ORCHARD_CUT), abbreviated(FILE_B, ORCHARD_OTHER_CUT), no_cite)
+    assert len(set(placed)) == 1
+    assert placed[2][1] is ClusterMembership.ABBREVIATED_LINK
+
+
+def test_one_text_under_two_short_cites_joins_neither_authors_group() -> None:
+    """Identical text is one exact fingerprint whatever its cite, so it could carry one author's
+    group into another's. It stays a cluster of its own, as it was, and so do the cuts beside it."""
+    shared_text_tamsin = abbreviated(FILE_A, ORCHARD_CUT, "Tamsin 26")
+    shared_text_quenby = abbreviated(FILE_B, ORCHARD_CUT, "Quenby 25")
+    tamsin_cut = abbreviated(FILE_C, ORCHARD_OTHER_CUT, "Tamsin 26")
+    quenby_cut = abbreviated(
+        FILE_D, "Shaded orchards on the south … by two degrees on August nights.", "Quenby 25"
+    )
+
+    placed = place(shared_text_tamsin, shared_text_quenby, tamsin_cut, quenby_cut)
+    assert placed[0] == placed[1]
+    assert len({cluster for cluster, _ in placed}) == 3
+    assert {membership for _, membership in placed} == {ClusterMembership.UNLINKED}
+    # Without the second cite on that text, the Tamsin cuts are one card.
+    assert len({cluster for cluster, _ in place(shared_text_tamsin, tamsin_cut)}) == 1
+
+
+def test_an_unmatched_cut_never_joins_a_cut_that_linked_to_a_full_card() -> None:
+    """Grouping is among cards that matched no full card. One that opens and closes like another
+    card's linked cut is not carried into that card's cluster."""
+    full = card(
+        FILE_A,
+        0,
+        "Shaded orchards on the valley floor cooled the town by two degrees on August nights.",
+        short_cite="Tamsin 26",
+    )
+    linked_cut = abbreviated(FILE_B, "Shaded orchards on … on August nights.")
+    other_card_cut = abbreviated(FILE_C, "Shaded orchards on every terrace … frost damage on August nights.")
+
+    placed = place(full, linked_cut, other_card_cut)
+    assert placed[1] == (placed[0][0], ClusterMembership.ABBREVIATED_LINK)
+    assert placed[2][1] is ClusterMembership.UNLINKED
+    assert placed[2][0] != placed[0][0]
+
+
+def test_a_cut_that_matches_two_different_full_cards_is_not_grouped_with_a_third_cards_cut() -> None:
+    """It is a cut of one of the two full cards and nobody can say which. A longer cut that matches
+    neither is some third card, and grouping the two would settle the first by a guess."""
+    valley = card(
+        FILE_A,
+        0,
+        "Shaded orchards on the south slope of the valley cooled the town by two degrees on August nights.",
+    )
+    ridge = card(
+        FILE_B,
+        0,
+        "Shaded orchards on the south slope of the ridge lost their fruit to frost on August nights.",
+    )
+    either = abbreviated(FILE_C, "Shaded orchards on the south … on August nights.", "Pellam 26")
+    third = abbreviated(
+        FILE_D, "Shaded orchards on the south bank … the harvest on August nights.", "Pellam 26"
+    )
+
+    placed = place(valley, ridge, either, third)
+    assert len({cluster for cluster, _ in placed}) == 4
+    assert placed[2][1] is placed[3][1] is ClusterMembership.UNLINKED
+    # The same two cuts with no full card between them are consistent, and share five opening words.
+    assert len({cluster for cluster, _ in place(either, third)}) == 1
 
 
 def test_cutter_mark_is_recorded_on_the_occurrence_and_nowhere_else() -> None:

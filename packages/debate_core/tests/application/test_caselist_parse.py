@@ -31,7 +31,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import pytest
 from tests.fixtures.caselist.publish_expectations import FICTIONAL_IDENTIFIERS
@@ -47,6 +47,7 @@ from tests.fixtures.parse_pipeline.build_parse_world import (
     import_weeks,
 )
 
+from debate_core.application import caselist_parse as caselist_parse_module
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.manifest import full_archive_manifest_key
 from debate_core.application.caselist.parse_workers import (
@@ -59,7 +60,7 @@ from debate_core.application.caselist.parse_workers import (
 from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.caselist.suppression import RecordedSuppressionList
-from debate_core.application.caselist_card_stats import CaselistCardStatsService
+from debate_core.application.caselist_card_stats import CardPlacement, CaselistCardStatsService
 from debate_core.application.caselist_parse import CaselistParseService, ParseRunReport
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.parsed_store import (
@@ -73,8 +74,10 @@ from debate_core.application.ports.suppression import (
     SuppressionEntry,
     disclosure_digest,
 )
+from debate_core.domain.card_occurrence import ClusterMembership
 from debate_core.domain.caselist import SnapshotDate, SourceDocument
-from debate_core.domain.debate_files import ParsedDocument, ParseFailure
+from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument, ParseFailure
+from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
@@ -495,6 +498,149 @@ async def test_every_record_the_run_writes_carries_the_six_fields(world: World) 
 # ------------------------------------------------------------------------------------------------
 # ac3: failures
 # ------------------------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------------------------
+# A change of fingerprint version (`v1-e31-t08`)
+# ------------------------------------------------------------------------------------------------
+
+FINGERPRINTS_BEFORE_T08: Final = "card-fingerprint-v1"
+
+#: A 33-word card and its copy with one word misspelled (`short_cards.jsonl`, `s1-original` and
+#: `s1-typo`). `card-fingerprint-v1` put them in two clusters, which is the first row of
+#: `v1-e31-t06`'s short-card table; from `card-fingerprint-v2` they are one.
+SENSORS: Final = (
+    "Coastal councils that installed tidal sensors in 2024 reported flood warnings arriving forty "
+    "minutes earlier on average, and the earlier warnings let crews close storm gates before the "
+    "surge reached the harbour road."
+)
+SENSORS_TYPO: Final = SENSORS.replace("forty", "fourty")
+
+
+class RewritingParser(CountingParser):
+    """The real parser, with chosen sources' one card given a body the test wrote."""
+
+    def __init__(self, bodies: dict[str, str]) -> None:
+        super().__init__()
+        self._bodies = bodies
+
+    def parse(
+        self,
+        content: bytes,
+        source: SourceDocument,
+        *,
+        source_path: str,
+        snapshot: SnapshotDate | None = None,
+        camp: str | None = None,
+    ) -> ParsedDocument | ParseFailure:
+        result = super().parse(content, source, source_path=source_path, snapshot=snapshot, camp=camp)
+        if not isinstance(result, ParsedDocument) or source.sha256 not in self._bodies:
+            return result
+        (card,) = result.cards
+        rewritten = card.model_copy(
+            update={
+                "evidence_text": self._bodies[source.sha256],
+                "formatting_spans": (),
+                "font_size_spans": (),
+            }
+        )
+        return result.model_copy(update={"cards": (rewritten,)})
+
+
+def placed_as_card_fingerprint_v1_did(cards: Sequence[ParsedCard]) -> list[CardPlacement]:
+    """What `card-fingerprint-v1` did with this test's cards, written out: each its own cluster.
+
+    The two full cards differ by one word in 33, under v1's containment threshold, and the wiki
+    file's abbreviated cards match neither.
+    """
+    return [
+        CardPlacement(
+            card,
+            fingerprint := card_fingerprint(card).exact_fingerprint,
+            fingerprint,
+            ClusterMembership.NEAR_DUPLICATE
+            if card.completeness is CardCompleteness.FULL
+            else ClusterMembership.UNLINKED,
+        )
+        for card in cards
+    ]
+
+
+def names_a_fingerprint_or_a_cluster(value: object) -> bool:
+    """Whether a record holds anything fingerprint-dependent, at any depth, besides its stamp."""
+    if isinstance(value, dict):
+        fields = cast("dict[str, object]", value)
+        return any(
+            (key != "fingerprint_version" and ("fingerprint" in key or "cluster" in key))
+            or names_a_fingerprint_or_a_cluster(item)
+            for key, item in fields.items()
+        )
+    if isinstance(value, list):
+        return any(names_a_fingerprint_or_a_cluster(item) for item in cast("list[object]", value))
+    return False
+
+
+@pytest.mark.anyio
+async def test_a_rebuild_after_the_fingerprint_version_changed_leaves_no_old_stamp_on_a_new_cluster_id(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The store as `card-fingerprint-v1` left it, then one run under today's rules.
+
+    Nothing is parsed again, because the skip key has no fingerprint version in it. Every record
+    that carries a cluster id is rewritten under the new version. The records that still say v1 are
+    the per-source ones and the index rows copied from them, which hold nothing a fingerprint
+    version decides.
+    """
+    verbatim, cardmirror = digest_of("verbatim"), digest_of("cardmirror")
+    parser = RewritingParser({verbatim: SENSORS, cardmirror: SENSORS_TYPO})
+
+    with monkeypatch.context() as as_it_was:
+        as_it_was.setattr(caselist_parse_module, "FINGERPRINT_VERSION", FINGERPRINTS_BEFORE_T08)
+        v1_service = CaselistParseService(
+            local=world.local,
+            store=world.store,
+            parser=parser,
+            runner=InProcessParseRunner(),
+            suppression=world.suppression,
+            place_cards=placed_as_card_fingerprint_v1_did,
+            failure_rate_threshold=0.5,
+        )
+        await v1_service.run(await v1_service.plan(CASELIST))
+    as_v1_left_it = world.tree()
+    old_rows = world.lines("occurrences.jsonl")
+    assert {row["fingerprint_version"] for row in old_rows} == {FINGERPRINTS_BEFORE_T08}
+    old_clusters = {row["source_sha256"]: row["cluster_id"] for row in old_rows}
+    assert old_clusters[verbatim] != old_clusters[cardmirror]
+
+    assert FINGERPRINT_VERSION != FINGERPRINTS_BEFORE_T08
+    report = await world.run(parser)
+
+    assert report.attempted == 0
+    assert parser.parsed.count(verbatim) == 1
+    new_rows = world.lines("occurrences.jsonl")
+    new_clusters = {row["source_sha256"]: row["cluster_id"] for row in new_rows}
+    assert new_clusters[verbatim] == new_clusters[cardmirror]
+    assert {row["exact_fingerprint"] for row in new_rows} == {row["exact_fingerprint"] for row in old_rows}
+
+    now = world.tree()
+    carrying_a_cluster_id = still_stamped_v1 = 0
+    for name, content in now.items():
+        for line in content.decode("utf-8").splitlines():
+            record = json.loads(line)
+            if "cluster_id" in record:
+                carrying_a_cluster_id += 1
+                assert record["fingerprint_version"] == FINGERPRINT_VERSION, name
+            if record["fingerprint_version"] == FINGERPRINTS_BEFORE_T08:
+                still_stamped_v1 += 1
+                assert record["record"] in {"source", "document"}, name
+                assert not names_a_fingerprint_or_a_cluster(record), name
+    assert carrying_a_cluster_id == len(new_rows) == len(old_rows) > 0
+    assert still_stamped_v1 > 0
+
+    per_source = {name for name in now if name not in AGGREGATE_NAMES}
+    assert per_source
+    assert {name: now[name] for name in per_source} == {name: as_v1_left_it[name] for name in per_source}
+    assert now["occurrences.jsonl"] != as_v1_left_it["occurrences.jsonl"]
 
 
 @pytest.mark.anyio

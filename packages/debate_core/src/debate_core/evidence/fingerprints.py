@@ -6,7 +6,7 @@ other kept the publisher's line breaks; both wrote their own tag and highlighted
 The exact fingerprint is the SHA-256 of the card body after a normalization that erases exactly
 those differences and no others, so any change to the *words* of the evidence still changes it.
 
-## The fingerprint normalization (version :data:`FINGERPRINT_VERSION`)
+## The fingerprint normalization (unchanged since `card-fingerprint-v1`)
 
 Applied in this order, by :func:`normalize_for_matching`:
 
@@ -45,9 +45,23 @@ exact copy.
 
 ## Changing the rules
 
-Any change to the normalization changes digests, so it bumps :data:`FINGERPRINT_VERSION`, and every
-fingerprint carries the version it was computed under. A consumer that compares fingerprints of two
-versions is comparing two different functions.
+:data:`FINGERPRINT_VERSION` names the matching rules as a whole: this normalization, and the
+clustering and linking rules built on it (:mod:`debate_core.evidence.near_duplicates`,
+:mod:`debate_core.evidence.abbreviated_links`) that decide which cards share a cluster id. A change
+to any of them bumps it, and every fingerprint and every stored occurrence carries the version it
+was computed under.
+
+* **`card-fingerprint-v1`** (`v1-e31-t04`). The normalization above, MinHash/LSH clusters and
+  abbreviated links.
+* **`card-fingerprint-v2`** (`v1-e31-t08`). Short bodies matched as cuts of the one card that
+  contains them, a link that survives a split among a card's full copies, and abbreviations with no
+  full copy grouped among themselves. **Exact fingerprints unchanged; cluster ids changed.**
+
+The normalization has not changed since `v1`, so an exact fingerprint computed under `v1` is the
+same digest under `v2`, and anything keyed on one (a suppression, a recipe, a cache) still holds.
+Cluster ids are not comparable across versions: under `v2` more cards share one. A consumer that
+compares cluster ids of two versions is comparing two different functions; one that compares exact
+fingerprints of two versions must check this list says they did not change.
 """
 
 from __future__ import annotations
@@ -72,8 +86,9 @@ __all__ = [
     "normalize_for_matching",
 ]
 
-FINGERPRINT_VERSION: Final = "card-fingerprint-v1"
-"""Version of the normalization rules above. Bumped by any change that can change a digest."""
+FINGERPRINT_VERSION: Final = "card-fingerprint-v2"
+"""Version of the matching rules: the normalization above and the clustering and linking built on
+it. Bumped by any change that can change a digest or move a card to another cluster."""
 
 _SINGLE_QUOTES: Final = "\u2018\u2019\u201a\u201b\u2032\u2035`\u00b4\u02bc\uff07"
 _DOUBLE_QUOTES: Final = "\u201c\u201d\u201e\u201f\u2033\u2036\u00ab\u00bb\uff02"

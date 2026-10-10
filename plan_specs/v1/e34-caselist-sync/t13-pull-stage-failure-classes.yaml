@@ -68,7 +68,7 @@ spec:
         v1-e01-t20's consumer table is brought up to date for every changed code, and each
         new guard is mutated and shown caught.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

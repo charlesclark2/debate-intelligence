@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 39 | 33 | 214 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 40 | 30 | 296 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 44 | 31 | 308 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -172,6 +172,8 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Importer metadata defects found by the backfill](plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml) `v1-e30-t08-import-metadata-defects` | Succeeded | 3 | 7.0 |
 | [A removal leaves no removed bytes in the inbox](plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml) `v1-e30-t09-removal-purges-inbox` | Succeeded | 2 | 6.0 |
 | [caselist status reports noncurrent versions a removal left behind](plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml) `v1-e30-t10-removal-docstrings-and-residue` | Pending | 1 | 2.0 |
+| [A removal also takes down later uploads at the removed path](plan_specs/v1/e30-caselist-ingestion/t11-removal-covers-later-uploads.yaml) `v1-e30-t11-removal-covers-later-uploads` | Pending | 2 | 3.0 |
+| [caselist status tells a manifest mismatch from a source mismatch](plan_specs/v1/e30-caselist-ingestion/t12-status-names-manifest-mismatch.yaml) `v1-e30-t12-status-names-manifest-mismatch` | Pending | 1 | 1.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -184,6 +186,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Parser accuracy evaluation](plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) `v1-e31-t05-parser-eval` | InProgress | 1 | 16.0 |
 | [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | Pending | 5 | 12.0 |
 | [Labeling worksheets survive a spreadsheet round trip](plan_specs/v1/e31-debate-file-parsing/t07-worksheet-round-trip.yaml) `v1-e31-t07-worksheet-round-trip` | Succeeded | 1 | 4.0 |
+| [Near-duplicate matching finds short cards and abbreviated disclosures](plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml) `v1-e31-t08-short-card-recall` | Pending | 1 | 5.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -192,7 +195,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [OpenCaselist API client](plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml) `v1-e34-t01-caselist-api-client` | Succeeded | 2 | 11.0 |
 | [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Succeeded | 3 | 11.0 |
 | [Sync run log and staleness warnings](plan_specs/v1/e34-caselist-sync/t03-sync-monitoring.yaml) `v1-e34-t03-sync-monitoring` | Succeeded | 1 | 9.0 |
-| [Periodic full-archive refresh](plan_specs/v1/e34-caselist-sync/t04-full-archive-refresh.yaml) `v1-e34-t04-full-archive-refresh` | Pending | 2 | 6.5 |
+| [Periodic full-archive refresh](plan_specs/v1/e34-caselist-sync/t04-full-archive-refresh.yaml) `v1-e34-t04-full-archive-refresh` | Succeeded | 2 | 6.5 |
 | [Install and enable the weekly agent](plan_specs/v1/e34-caselist-sync/t05-enable-schedule.yaml) `v1-e34-t05-enable-schedule` | Pending | 6 | 1.5 |
 | [Defects found by operating the sync](plan_specs/v1/e34-caselist-sync/t06-sync-defects.yaml) `v1-e34-t06-sync-defects` | Succeeded | 1 | 7.0 |
 | [The sync does not re-download a file it has been told to remove](plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml) `v1-e34-t07-suppressed-downloads` | Succeeded | 2 | 7.0 |
@@ -205,6 +208,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A camp file already in the inbox is held if its path was removed](plan_specs/v1/e34-caselist-sync/t14-removed-path-hold-for-inbox-copies.yaml) `v1-e34-t14-removed-path-hold-for-inbox-copies` | Succeeded | 1 | 1.5 |
 | [A camp release of junk alone leaves the inbox once it is handled](plan_specs/v1/e34-caselist-sync/t15-junk-release-leaves-inbox.yaml) `v1-e34-t15-junk-release-leaves-inbox` | Pending | 1 | 1.0 |
 | [The dry run's download plan names no path on the operator's machine](plan_specs/v1/e34-caselist-sync/t16-dry-run-names-no-home-path.yaml) `v1-e34-t16-dry-run-names-no-home-path` | Pending | 1 | 0.5 |
+| [The weekly pull parses the sources it imported](plan_specs/v1/e34-caselist-sync/t17-pull-parses-new-sources.yaml) `v1-e34-t17-pull-parses-new-sources` | Pending | 2 | 3.0 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -229,7 +233,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 |---|---|---|---|
 | [Topic position taxonomies](plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml) `v1-e32-t01-position-taxonomy` | Pending | 1 | 14.0 |
 | [Position classification](plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml) `v1-e32-t02-position-classification` | Pending | 3 | 15.0 |
-| [Weekly landscape report](plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) `v1-e32-t03-landscape-report` | Pending | 2 | 12.0 |
+| [Weekly landscape report](plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) `v1-e32-t03-landscape-report` | Pending | 3 | 12.0 |
 | [Trends and per-school views](plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml) `v1-e32-t04-trend-and-school-views` | Pending | 1 | 9.0 |
 | [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | Pending | 3 | 10.0 |
 

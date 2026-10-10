@@ -1,0 +1,98 @@
+# TASK v1-e31-t09-first-corpus-parse-findings - Parser findings from the first full-corpus parse
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t09-first-corpus-parse-findings
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "Parser findings from the first full-corpus parse"
+spec:
+  # Filed by the PM, 2026-10-10, from v1-e31-t06's ac5 run (docs/data/caselist-parse-report.md) and the operator's sample check.
+  description: >-
+    The first full-corpus parse (v1-e31-t06 ac5, 2026-10-10) refused 23 DOCX files as
+    `FORBIDDEN_XML_CONSTRUCT` (19 in hspolicy26, 3 in the OpenEv release, 1 in hspf26), 5 as
+    `MALFORMED_XML`, 1 as `NOT_A_ZIP` and 1 as `COMPRESSION_RATIO_EXCEEDED`. The operator's
+    sample check found 1 file in 5 whose stored cards included two with an empty tag (one
+    `ABBREVIATED`, one `CITE_ONLY`) where the document has none. Find out what each is, by
+    counts and construct names only: which XML construct the 23 files carry (a DOCTYPE, an
+    entity declaration, a processing instruction) and from which part, and whether it can be
+    accepted without weakening the protection the refusal exists for. Count cards with an empty
+    tag across the parsed store, per caselist and completeness, and find the rule that produces
+    them. Fix what is a parser defect. Leave what is a genuine refusal, and say why. A parser
+    change bumps `parser_version`, and t06's pipeline re-parses into a new version directory,
+    which the operator runs. Out of scope: PDF and legacy `.doc` (unsupported by design), and
+    near-duplicate matching (v1-e31-t08).
+  priority: 2
+  constraints:
+    packages: [debate_core.integrations.docx_parser, debate_core.domain, packages/debate_core/tests, tests/fixtures, docs/data]
+    forbidden:
+      - Accepting an XML entity declaration or external reference that the refusal guards against
+      - Committing, quoting or logging any real disclosed file, tag, cite or card text (fixtures reproduce a construct synthetically)
+      - A school, team code, path or file name in any document or report; files are named by sha256 prefix in the session only, never committed
+  context:
+    - kind: TaskRef
+      name: v1-e31-t06-parse-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A read-only diagnosis of the real refusals, counts and construct names only, run by
+        the session against the dev data directory and recorded in the report: for each
+        refusal reason, which construct or defect, in which part, and how many files.
+    - id: ac2
+      description: >-
+        Every construct judged safe to accept has a synthetic fixture parsed after the
+        change and refused before it, shown failing first. Every construct still refused has
+        a fixture showing the refusal stays.
+    - id: ac3
+      description: >-
+        Cards with an empty tag are counted per caselist and completeness. The rule that
+        produces them is identified on a synthetic fixture that reproduces the shape, and
+        either fixed (shown failing first) or justified as correct output.
+    - id: ac4
+      description: >-
+        If the parser changes, `parser_version` is bumped. Operator-run: a re-parse in dev
+        writes a new version directory, and the report records the refusal counts and
+        empty-tag counts before and after.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t09-first-corpus-parse-findings-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Diagnose the refusals and empty tags on the real store read-only, reproduce each
+    synthetically, fix the parser defects, and re-parse.
+  goalRef:
+    name: v1-e31-t09-first-corpus-parse-findings
+  graph:
+    nodes:
+      - id: corpus-findings
+        kind: Task
+        name: Refusals and empty tags diagnosed and fixed
+        description: >-
+          The diagnosis, the fixtures, any parser fix with its version bump, and the
+          operator's re-parse.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parser tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations]
+status:
+  phase: Pending

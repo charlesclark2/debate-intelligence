@@ -49,6 +49,17 @@ spec:
     - id: ac3
       description: >-
         docs/runbooks/caselist-removal.md says what to do when the report shows residue.
+    - id: ac4
+      description: >-
+        Added by the PM, 2026-10-10, from v1-e31-t06's revision (Follow-up work 9). The
+        opening paragraph of `debate_core/application/caselist/import_service.py`'s module
+        docstring says OpenCaselist "republishes everything every week" and that each weekly
+        archive contains almost all of the one before. That is wrong, and it misled a PM
+        review: a weekly archive is a window of about a week's editing (the backfill report,
+        "Weekly archives are adjacent windows, not cumulative copies", and the same
+        docstring's own "First seen" section). The complete archive (`v1-e34-t04`) is the
+        cumulative copy. The paragraph is rewritten to say so, consistent with the rest of
+        the docstring, with no change to code.
 status:
   phase: Pending
 ---

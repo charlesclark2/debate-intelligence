@@ -1,0 +1,93 @@
+# TASK v2-e15-t07-pdf-disclosure-parsing - Parse PDF disclosures into the parsed card store
+# Epic: E15 Search Index & Hybrid Retrieval | Release: v2.2 | Major: V2
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v2-e15-t07-pdf-disclosure-parsing
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+  annotations:
+    debate/title: "Parse PDF disclosures into the parsed card store"
+spec:
+  # Filed by the PM, 2026-10-10, from v1-e31-t06's ac5 run and Charlie's request for PDF parsing (post-V1).
+  description: >-
+    The parser reads DOCX only. In the first full-corpus parse, 1,320 sources were PDF and
+    recorded as unsupported, 1,240 of them in hspf26: about a third of PF's disclosures. Charlie
+    wants PDF parsing, and it does not need to be V1. Add a PDF adapter behind the same
+    `DebateFileParser` port, with its own `parser_version`, producing the same `ParsedDocument`
+    and `ParsedCard` shapes. Tags, cites and evidence are found from layout and font signals
+    where the PDF has a text layer. A PDF with no text layer stays unsupported with its own
+    reason, and no OCR is done in this task. The parsed store and its aggregates take PDF
+    sources as they take DOCX ones, so the search index this epic builds covers them. Out of
+    scope: OCR, highlighting and underlining fidelity beyond what the text layer carries, and
+    any change to how DOCX is parsed.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations, debate_core.application, packages/debate_core/tests, tests/fixtures, docs/data]
+    forbidden:
+      - OCR or any model call on PDF content
+      - Committing, quoting or logging any real disclosed PDF or its text (fixtures are synthetic)
+      - Changing the DOCX parser's output or its parser_version
+  context:
+    - kind: TaskRef
+      name: v1-e31-t06-parse-pipeline
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t05-parser-eval
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A synthetic PDF fixture set (text layer, with and without cite lines, multi-column,
+        no text layer) parses to hand-written expected cards, and a PDF with no text layer
+        is recorded as unsupported with its own reason.
+    - id: ac2
+      description: >-
+        The parse pipeline treats a PDF source like a DOCX one: skip key, version directory
+        and aggregates. PDFs stop counting as unsupported once the adapter ships.
+    - id: ac3
+      description: >-
+        Accuracy is measured on a labelled PDF sample in the style of v1-e31-t05 and
+        reported beside the DOCX figures.
+    - id: ac4
+      description: >-
+        Operator-run: a parse over the real PDFs in dev records per-caselist counts (parsed,
+        still unsupported, failed) in docs/data/caselist-parse-report.md.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v2-e15-t07-pdf-disclosure-parsing-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v2
+    debate/release: v2.2
+    debate/epic: v2-e15-search-index
+spec:
+  description: >-
+    A PDF adapter behind the parser port, measured like the DOCX parser, run over the real PDFs.
+  goalRef:
+    name: v2-e15-t07-pdf-disclosure-parsing
+  graph:
+    nodes:
+      - id: pdf-adapter
+        kind: Task
+        name: PDF disclosures parse into the store
+        description: >-
+          The adapter, the fixtures, the accuracy measurement, and the operator's run.
+        estimatedEffort: 8h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parser tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations]
+status:
+  phase: Pending

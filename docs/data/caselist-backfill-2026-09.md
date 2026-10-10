@@ -433,3 +433,42 @@ a noncurrent version for its retention window: 30 days in dev, 365 in prod.
 dev status (openev, hsld26, hspolicy26, hspf26): in sync
 
 prod status: in sync
+
+## First complete archive, hsld26, 2026-10-10 (`v1-e34-t04`)
+
+This is the measurement that [Withdrawals against the complete archive](#withdrawals-against-the-complete-archive)
+deferred. The operator fetched hsld26's complete archive on demand on 2026-10-10
+(`caselist pull --caselist hsld26 --full-archive hsld26`, from the task branch after PM review).
+It was imported as its own snapshot, `full/2026-10-06`, and published to dev by the same run and
+to prod afterwards.
+
+| | |
+|---|---|
+| Archive date | 2026-10-06 |
+| Size | 571,706,321 bytes |
+| Files held | 4,232 |
+| Earlier snapshots compared | 13 |
+| Withdrawn (no path it was held at is in the archive) | 204 |
+| Superseded (a path it was held at now has other bytes) | 25 |
+| Files only the complete archive holds | 0 |
+
+The figures agree with each other. The weekly series holds 4,461 distinct hsld26 sources, and
+4,461 − 204 − 25 = 4,232, the files the complete archive holds. So every file in the complete
+archive was already captured by the weekly series, and for hsld26 the weekly backfill missed
+nothing. *Withdrawn* includes files a team re-uploaded under a new name, so it overstates genuine
+withdrawals.
+
+Policy 1.5 records what happens to them: a file a team later deletes or replaces stays part of
+its round's record and is kept, coming down only through removal.
+
+| Command | Environment | Result |
+|---|---|---|
+| `caselist pull --caselist hsld26 --full-archive hsld26` | dev | `succeeded: true`; select, download, import, publish, report and retention completed |
+| `caselist status --caselist hsld26` | dev | **Every snapshot agrees**: 15 snapshots including `full/2026-10-06` (4,232/4,232) |
+| `caselist publish --caselist hsld26 --dry-run` | prod | 0 uploads planned; `full/2026-10-06` manifest `upload`, the 14 weekly manifests `verify` |
+| `caselist publish --caselist hsld26 --confirm-prod` | prod | 0 sources uploaded, 4,232 skipped; manifest `uploaded`; 15 of 15 snapshots complete |
+| `caselist status --caselist hsld26` | prod | **Every snapshot agrees**: 15 snapshots |
+
+hspolicy26 and hspf26 get their first complete archives when the weekly agent runs the rotation.
+That waits for the maintainer's confirmation that the complete archive is covered by clause 12;
+until then the agent runs with `caselist.full_archive_rotation` off.

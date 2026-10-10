@@ -7,20 +7,23 @@ every one of those disclosures is kept, because the occurrence table records eac
 
 ## Which manifests count: the weekly series and the OpenEv releases, and nothing else
 
-:func:`series_snapshot` is the rule, and it is deliberately narrow. A caselist's manifest counts
-when its key is exactly `manifests/<slug>/<YYYY-MM-DD>.jsonl`, and a camp release's when it is
-exactly `manifests/openev/<year>-<event>.jsonl`. Everything else under the prefix is left out, by
-name and not by accident:
+The rule is :func:`~debate_core.application.caselist.publish_plan.snapshot_of_manifest_key` with its
+default, the one rule every manifest reader shares for what counts as a snapshot. A caselist's
+manifest counts when its key is exactly `manifests/<slug>/<YYYY-MM-DD>.jsonl`, and a camp release's
+when it is exactly `manifests/openev/<year>-<event>.jsonl`. Everything else under the prefix is left
+out, by name and not by accident:
 
-* **The full-archive namespace.** `v1-e34-t04` imports a caselist's complete archive as a snapshot
-  namespace of its own beside the weekly series (its ac0), under the caselist's manifest directory.
-  Every source in it is a copy of a digest the weeklies already hold, and its "disclosures" are the
-  whole corpus re-listed under one date. Counting them would make every card in the corpus look
-  disclosed again on the day of each monthly refresh. Whatever the namespace ends up called, a key
-  that is not a dated weekly manifest is not enumerated; the tests plant the forms already
-  discussed (`full/`, `all/`, a dated name with a suffix) and check each is left out of the parse
-  and of the occurrence table.
+* **The complete archives.** `v1-e34-t04` imports a caselist's complete archive as a snapshot of its
+  own, `full/<date>`, with its manifest at `manifests/<slug>/full/<date>.jsonl`. Every source in it
+  is a copy of a digest the weeklies already hold, and its "disclosures" are the whole corpus
+  re-listed under one date. Counting them would make every card in the corpus look disclosed again
+  on the day of each refresh. `caselist parse` never passes `full_archives=True`; the tests plant
+  t04's own key and four other shapes (`all/`, `archive/`, a dated name with a suffix) and check
+  each is left out of the parse and of the occurrence table.
 * **The suppression records** under `manifests/_suppression/`, which are not a caselist.
+
+Until `v1-e34-t04` this module had a rule of its own, `series_snapshot`. It was replaced when t04
+merged; on 229 keys of every shape above, in three caselists, the two agreed on every one.
 
 ## What this does not decide
 
@@ -32,7 +35,6 @@ because every aggregate the service builds consults the list itself.
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -44,6 +46,7 @@ from debate_core.application.caselist.publish_plan import (
     OPENEV,
     UnreadableManifest,
     manifest_prefix,
+    snapshot_of_manifest_key,
     validate_publish_target,
 )
 from debate_core.application.ports.evidence_store import ObjectKey
@@ -54,37 +57,10 @@ __all__ = [
     "Disclosed",
     "EnumeratedSource",
     "enumerate_sources",
-    "series_snapshot",
 ]
 
-_SUFFIX: Final = ".jsonl"
-_WEEKLY = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
-_RELEASE = re.compile(r"^[0-9]{4}-[a-z0-9][a-z0-9-]*$")
 _STORED: Final = frozenset(str(classification) for classification in STORED_CLASSIFICATIONS)
 _FORMATS: Final = {str(source_format): source_format for source_format in SourceFormat}
-
-
-def series_snapshot(caselist: str, key: ObjectKey) -> str | None:
-    """The snapshot a manifest key names when it is part of the weekly series or a camp release.
-
-    `None` for every other key: the full-archive namespace, a nested path of any name, a name that
-    is not a date (or for `openev`, not `<year>-<event>`), another suffix. The explicit rule for
-    what `caselist parse` reads; see this module's docstring.
-    """
-    prefix = manifest_prefix(caselist)
-    if not key.startswith(prefix) or not key.endswith(_SUFFIX):
-        return None
-    name = key[len(prefix) : -len(_SUFFIX)]
-    if "/" in name:
-        return None
-    if caselist == OPENEV:
-        return name if _RELEASE.match(name) else None
-    if _WEEKLY.match(name) is None:
-        return None
-    try:
-        return name if date.fromisoformat(name).isoformat() == name else None
-    except ValueError:
-        return None
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -143,7 +119,7 @@ async def enumerate_sources(local: LocalEvidence, caselist: str) -> tuple[Enumer
     validate_publish_target(caselist)
     rows: dict[str, list[tuple[Disclosed, int, SourceFormat, str | None]]] = {}
     for info in await local.objects.list_objects(manifest_prefix(caselist)):
-        snapshot = series_snapshot(caselist, info.key)
+        snapshot = snapshot_of_manifest_key(caselist, info.key)
         if snapshot is None:
             continue
         async with local_file(local.objects, local.object_path_for, info.key) as path:

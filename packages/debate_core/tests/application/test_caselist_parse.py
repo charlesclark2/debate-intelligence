@@ -48,6 +48,7 @@ from tests.fixtures.parse_pipeline.build_parse_world import (
 )
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.caselist.manifest import full_archive_manifest_key
 from debate_core.application.caselist.parse_workers import (
     InProcessParseRunner,
     LoadableJob,
@@ -616,6 +617,7 @@ def test_a_pool_with_nothing_to_do_starts_no_worker() -> None:
 # ------------------------------------------------------------------------------------------------
 
 FULL_ARCHIVE_KEYS: Final = (
+    full_archive_manifest_key(CASELIST, date(2026, 10, 6)),
     "manifests/testcl26/full/2026-09-15.jsonl",
     "manifests/testcl26/all/2026-09-15.jsonl",
     "manifests/testcl26/archive/2026-09-15.jsonl",
@@ -631,8 +633,12 @@ async def test_the_full_archive_namespace_is_neither_parsed_nor_in_the_occurrenc
 ) -> None:
     """`v1-e34-t04` files a complete archive beside the weekly series. Its copies are not disclosures.
 
-    The planted manifest names a file the weeklies hold (verbatim) and one they do not (direct),
-    whose blob is on this machine, as it would be after a full-archive import.
+    The first key is t04's own, from `full_archive_manifest_key`, dated as a refresh after the weeklies;
+    the other five are the shapes planted before t04 merged, kept so that a rename of its namespace is
+    still caught.
+
+        The planted manifest names a file the weeklies hold (verbatim) and one they do not (direct),
+        whose blob is on this machine, as it would be after a full-archive import.
     """
     blob = world.local.blob_path_for
     assert blob is not None

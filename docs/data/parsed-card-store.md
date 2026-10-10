@@ -44,6 +44,15 @@ beside it, and neither touches the old one:
 The current directory of a caselist is the newest generation of the parser version the reader
 runs. Nothing ever writes into an older one again; the local adapter refuses to.
 
+A parser version is bumped whenever what the parser emits changes, and also when the only change
+is that a file once refused is now read: a refusal is a recorded entry like any other, so under the
+same version the skip key below would pass that file over for good.
+
+| Parser version | What it read | Differs from the one before |
+|---|---|---|
+| `2026.09.20-docx-1` | The first full corpus, 2026-10-10 ([caselist-parse-report.md](caselist-parse-report.md)) | |
+| `2026.10.10-docx-2` | Written by the next `caselist parse` | Reads 23 files refused for the words `system "` and `public '` in card text. Keeps a body paragraph guessed to be a cite in its card. Does not take a blank line in a heading style for a heading. Writes "no tag" as `null` (`v1-e31-t09`) |
+
 ## The skip key
 
 A source is parsed once per **(source sha256, parser_version, profile_version)**. A run skips every
@@ -95,7 +104,7 @@ and its `source_format` says which.
 | `TOO_LARGE`, `TOO_MANY_ENTRIES`, `COMPRESSION_RATIO_EXCEEDED` | Oversized, or shaped like a zip bomb |
 | `MACRO_ENABLED` | A Word package carrying a VBA project |
 | `ENCRYPTED` | Password-protected |
-| `FORBIDDEN_XML_CONSTRUCT` | A DTD or an entity declaration |
+| `FORBIDDEN_XML_CONSTRUCT` | A part that declares a document type (`<!DOCTYPE`) or an entity, in any encoding. The words `SYSTEM` and `PUBLIC` in card text are not one |
 | `TIMEOUT` | Still parsing at the per-file time limit |
 | `WORKER_CRASHED` | The worker process died while parsing it |
 | `PARSER_ERROR` | The parser raised instead of returning a failure: a parser bug |
@@ -124,6 +133,36 @@ text, formatting and font-size spans as offsets into that text, completeness, ma
 confidence, rule ids, `UNVERIFIED` status and `FILE_IMPORT` provenance with its element range. A
 reader in Python calls `DocumentRecord.to_parsed_document(path)` with a path from the manifests and
 gets a validated `ParsedDocument` back.
+
+#### A card with no tag
+
+A file may give a card no tag. In a record that is **`"tag": null`**, and from `2026.10.10-docx-2`
+on it is never an empty string. In Python, ask `card.has_tag`.
+
+`null` is not a parser failure to work around. What it means depends on the card's `completeness`:
+
+| `tag` | `completeness` | What the file holds there | How to treat it |
+|---|---|---|---|
+| `null` | `CITE_ONLY` | A citation on its own: a source is named, with no claim and no text | A citation the file lists. Not an argument, and nothing to match a body against |
+| `null` | `FULL` or `ABBREVIATED` | Evidence with a cite and no claim line above it | Either the file is written that way, or it is a second card under the tag of the card before it. Its `rule_ids` say which rule read its cite; a first rule beginning `heuristic-` was a guess |
+
+In `2026.09.20-docx-1` the same thing was written as `"tag": ""`, and `to_parsed_document` reads
+both. That directory also holds 15,528 such cards against 4,446 expected in the next, because
+about 11,000 of them were not cards the file holds: a paragraph inside a card's body had been
+read as the cite of a new one. A card whose `rule_ids` include
+`assembly-cite-guess-inside-card-body:…` kept such a paragraph in its body.
+
+A heading in a card's `section_path` is never an empty string either. In `2026.09.20-docx-1`,
+1,847 cards carry one, from a blank line in a heading style.
+
+#### What `ABBREVIATED` means today
+
+A card is `ABBREVIATED` when its body or its cite holds an ellipsis marker (`…`, `...`, `[…]`,
+`[...]` or `***`) anywhere. That is wider than "first and last words only". Of the 22,443
+`ABBREVIATED` cards in `2026.09.20-docx-1`, 176 have a body of 300 characters or fewer and 21,278
+have one longer than 1,000: whole cards whose source text holds an ellipsis. Do not read
+`ABBREVIATED` as "a disclosure that gives only the first and last words" until the rule is
+narrowed, which is filed as follow-up work from `v1-e31-t09`.
 
 ### `occurrence`: a line of `occurrences.jsonl`
 
@@ -238,6 +277,14 @@ A source's file is written as its parse finishes, and every file is written to a
 renamed into place. A run stopped part-way leaves whole per-source files that the next run skips,
 and aggregates that are either the previous run's or the next one's.
 
+## A directory this machine refuses
+
+If the operating system will not let this user read or write `<data_dir>/parsed`, or any directory
+under the caselist and version a command asked for, the command stops with exit 3 and
+`STORE_ACCESS_DENIED`, names "the parsed card store" and points at `storage.data_dir`. It never
+treats a directory it could not read as holding nothing: a run that did would count every source
+filed there as never parsed (`v1-e31-t09`). Another caselist's unreadable directory stops nothing.
+
 ## After a removal
 
 `caselist remove --execute` deletes, locally and in the bucket with every noncurrent version:
@@ -273,6 +320,13 @@ jq -r '.fingerprint_version' ~/.debate-research/dev/parsed/hsld26/2026.09.20-doc
 
 The last line prints one version and the number of rows. Two versions would mean a half-written
 file, which the atomic rename rules out.
+
+Cards with no tag, by completeness, in a `2026.10.10-docx-2` directory (about a minute for a
+caselist, because it reads every card):
+
+```bash
+find ~/.debate-research/dev/parsed/hsld26/2026.10.10-docx-2/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r 'select(.record == "document") | .document.cards[] | select(.tag == null) | .completeness' | sort | uniq -c
+```
 
 `caselist parse --caselist hsld26 --failures` lists the failures with their disclosure paths, read
 from the manifests. Those paths name schools and team codes: that listing is for the terminal, and

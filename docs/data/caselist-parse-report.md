@@ -154,3 +154,122 @@ figures do and do not show, is in that task's session report under "Corpus-scale
 * **Each parser version is a full copy.** A version bump writes a new 5.8 GB directory beside the
   old one, locally and in both buckets. Retention of superseded version directories is noted for a
   later task.
+
+## What the refusals and the empty tags were (`v1-e31-t09`)
+
+Diagnosed on 2026-10-10 by reading the dev data directory's blobs and parsed store in place,
+read-only, with scratch scripts that wrote nothing there. Counts and construct names only. The fixes
+are in parser version `2026.10.10-docx-2`; the store this report describes is unchanged until the
+operator re-parses, and the "after" columns below are what that parser produced over the same
+sources in a read-only run, not what a store holds yet.
+
+### The 30 failures, by reason
+
+| Reason | Caselist | Files | The construct or defect | Part | Verdict |
+|---|---|---|---|---|---|
+| `FORBIDDEN_XML_CONSTRUCT` | hspolicy26 | 19 | The words `system "` (16 files) or `system '` (3) in a paragraph's text. No `DOCTYPE`, no entity declaration, no external reference | `word/document.xml`, inside `w:t` | Parser defect. Read from `2026.10.10-docx-2` |
+| `FORBIDDEN_XML_CONSTRUCT` | openev | 3 | The words `public '` (2 files), or `system '` and `system "` (1), in a paragraph's text | `word/document.xml`, inside `w:t` | Parser defect. Read from `2026.10.10-docx-2` |
+| `FORBIDDEN_XML_CONSTRUCT` | hspf26 | 1 | The words `public '` in a paragraph's text | `word/document.xml`, inside `w:t` | Parser defect. Read from `2026.10.10-docx-2` |
+| `MALFORMED_XML` | hsld26 | 3 | Four U+0001 control characters written raw into the text. XML 1.0 forbids them, so the part is not well-formed | `word/document.xml`, inside `w:t` | Genuinely broken. Still refused |
+| `MALFORMED_XML` | hsld26 | 2 | One U+0002 control character and 26 U+FFFE noncharacters written raw into the text | `word/document.xml`, inside `w:t` | Genuinely broken. Still refused |
+| `NOT_A_ZIP` | hsld26 | 1 | A gzip stream holding a JSON document, 44 KB, disclosed as a DOCX. That is the shape of CardMirror's native `.cmir` format, not a Word package | The whole file | Genuinely not a DOCX. Still refused |
+| `COMPRESSION_RATIO_EXCEEDED` | openev | 1 | One entry expands 278-fold against a limit of 200: a 1.9 MB page thumbnail stored as 7 KB | `docProps/thumbnail.emf` | The guard working as set. Still refused; see below |
+
+**The 23.** The refusal's scan looked for a document type or entity declaration, and also for the
+words `SYSTEM` or `PUBLIC` followed by a quotation mark anywhere in a part, in any letter case.
+Those words are markup only inside a declaration. In a paragraph they are prose, such as a card
+that says a system "works". All 23 document parts are well-formed UTF-8, none declares a document
+type, and every match is inside the text of a `w:t` element. No other part of the 23 packages
+matched. The scan now looks for `<!DOCTYPE` and `<!ENTITY` only, which is the one place XML allows
+an external identifier, and a part that carries a document type in any encoding is refused after
+parsing. Across the 9,738 distinct DOCX sources that open as a zip, every document part is UTF-8
+and none begins with a document type declaration.
+
+**The 5 malformed files** are all exports of one program. Each package has the same eight parts,
+with `docProps/custom.xml` and no `docProps/app.xml`, and its custom properties name CardMirror's
+document id. 2,703 sources share that shape and 2,691 of them parse. In these five the exporter
+wrote a character into the text that XML does not allow, so no conforming XML parser reads the
+part. The three files with U+0001 are well-formed once those four characters are taken out, which
+shows the characters are the whole defect there. Taking them out would be editing evidence text,
+which the parser never does.
+
+**The compression ratio.** Of the 9,738 distinct DOCX sources that open as a zip, 9,732 have no
+entry above 50-fold, five have one between 50 and 100, and this file is the only one above 100.
+The refused entry is the page thumbnail Word saves beside a document, which the parser never
+opens. The file is ordinary, but 278 against 200 is not a small margin, and nothing else in the
+corpus comes within half of the limit, so the limit is left where it is.
+
+### Counts before and after, from the same sources
+
+| Caselist | DOCX sources | Parsed before | Parsed after | Failed before | Failed after | Cards before | Cards after |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 4,360 | 4,354 | 4,354 | 6 | 6 | 67,914 | 64,675 |
+| hspf26 | 2,650 | 2,649 | 2,650 | 1 | 0 | 44,298 | 42,902 |
+| hspolicy26 | 2,629 | 2,610 | 2,629 | 19 | 0 | 87,556 | 82,563 |
+| openev | 102 | 98 | 101 | 4 | 1 | 7,288 | 8,056 |
+| **Total** | 9,741 | 9,711 | 9,734 | 30 | 7 | 207,056 | 198,196 |
+
+The 23 newly read files hold 2,212 cards (328 in hspf26, 807 in hspolicy26, 1,077 in openev). The
+seven failures left are the five `MALFORMED_XML` and the `NOT_A_ZIP` in hsld26 and the
+`COMPRESSION_RATIO_EXCEEDED` in openev.
+
+### Cards with an empty tag
+
+The store holds 15,528 cards with an empty tag, 7.5% of its cards. Every one is the empty string;
+none is whitespace.
+
+| Caselist | `FULL` | `ABBREVIATED` | `CITE_ONLY` | Empty tags | Of cards |
+|---|---|---|---|---|---|
+| hsld26 | 1,554 | 2,227 | 821 | 4,602 | 6.8% |
+| hspf26 | 2,688 | 585 | 372 | 3,645 | 8.2% |
+| hspolicy26 | 2,995 | 3,192 | 695 | 6,882 | 7.9% |
+| openev | 231 | 112 | 56 | 399 | 5.5% |
+| **Total** | 7,468 | 6,116 | 1,944 | 15,528 | 7.5% |
+
+5,947 of the 9,711 parsed sources hold at least one. Three rules produced them:
+
+| Rule | Empty-tag cards | What happened |
+|---|---|---|
+| A cite that arrives after a body starts a new card with no tag | 14,387 | A paragraph inside a card's body was classified as a cite, by `heuristic-cite-line-author-year` (6,826), `heuristic-wiki-cite-entry` (6,182), `verbatim-cite-run-style` (1,243) or a cite paragraph style (136). The card was closed there and the rest stored as another with no tag |
+| A cite with no card open above it starts one with no tag | 1,102 | A cite straight after a block, hat or pocket heading, an analytic, or loose text. The file gives it no tag |
+| A blank line in `Heading 4` opens a card with an empty tag | 39 | The blank heading also demoted the real tag above it to an analytic, so the card lost a tag the document has |
+
+The first is the operator's sample. Its second and third stored cards were the middle and the end
+of the first card's body: two paragraphs of small print that each hold an ellipsis and a name with
+a year, which the wiki cite-entry heuristic takes for a cite entry. The document has one card
+there, not three.
+
+In `2026.10.10-docx-2` a cite the classifier *guessed*, arriving inside an open body, stays in that
+body when it is formatted as body (small print throughout, or highlighted) and does not open with a
+bold name. 11,872 paragraphs are re-read that way. A blank line in any heading, tag, cite, analytic
+or undertag style is `OTHER`: 7,986 paragraphs. Expected after a re-parse:
+
+| Caselist | `FULL` | `ABBREVIATED` | `CITE_ONLY` | Cards with no tag | Of cards |
+|---|---|---|---|---|---|
+| hsld26 | 869 | 198 | 286 | 1,353 | 2.1% |
+| hspf26 | 1,566 | 170 | 167 | 1,903 | 4.4% |
+| hspolicy26 | 532 | 204 | 356 | 1,092 | 1.3% |
+| openev | 59 | 20 | 19 | 98 | 1.2% |
+| **Total** | 3,026 | 592 | 828 | 4,446 | 2.2% |
+
+Those 4,446 are written as `"tag": null`, never as an empty string. They are cards whose cite came
+from a cite style (1,653), from the cite-line heuristic and looked like a cite (2,394), or from the
+wiki heuristic outside small print (399). Whether each is a second card under one tag or one more
+split is for the labelled evaluation to say; [parsed-card-store.md](parsed-card-store.md#a-card-with-no-tag)
+says how a reader should treat them.
+
+What the change did not touch: of the cards stored now, 186,642 have the same paragraph range under
+the new parser, and every one of those has the same evidence text, the same cite, the same tag and
+the same completeness. 1,630 of them have a different section path, because 1,847 stored cards
+carry an empty string in their path from a blank heading line, and none does afterwards.
+
+### Two things this raised that it did not change
+
+* **`ABBREVIATED` marks whole cards.** A card is `ABBREVIATED` when its body or cite holds an
+  ellipsis marker anywhere. Of the 22,443 stored, 176 have a body of 300 characters or fewer and
+  21,278 one longer than 1,000. The operator's sample shows it: its first card, read whole, is
+  `ABBREVIATED` because its source text holds an ellipsis. `v1-e31-t08` measures abbreviated
+  disclosures by this field.
+* **The labelled evaluation cannot yet arbitrate.** Two of its 30 files are corrected by a person,
+  both team files with no untagged card. On those 60 paragraphs the blank-line rule raised tag
+  precision from 0.714 to 1.000 and left every card boundary where it was.

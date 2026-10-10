@@ -32,8 +32,8 @@ classifier does not make, because each needs something the classifier cannot see
   source's own prose that holds an ellipsis and a name with a year, or that opens *In 2019*,
   comes back from the classifier's two cite heuristics as a cite. The classifier cannot see that
   a card is already open with its body under way. Taking the guess at its word cut the card short
-  there and stored the rest as a card with no tag: 12,000 of the 15,528 empty tags in the first
-  parse of the corpus. So when the paragraph is small print or highlighted, which is what a
+  there and stored the rest as a card with no tag: about 11,000 of the 15,528 empty tags in the
+  first parse of the corpus. So when the paragraph is small print or highlighted, which is what a
   debater does to evidence, and does not open with a bold name, which is how a cite is written,
   it is the card's next body paragraph (`v1-e31-t09`). A cite *style* is never second-guessed,
   and neither is a guess that arrives when no body is open.

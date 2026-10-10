@@ -738,3 +738,524 @@ merges first, run `scripts/task sync` before your report and re-run everything, 
 **When you resubmit:** append a revision section with the evidence for Changes 1 to 3, re-run the
 full suite and the gates, and add a new empty PM review after this one. ac4's re-parse stays NOT
 RUN, and the Goal stays `InProgress`.
+
+## Revision 2026-10-10: the changes the PM review requested
+
+| | |
+|---|---|
+| Session status | PARTIAL: Changes 1 to 3 are done; the operator's re-parse (ac4) is still NOT RUN and the Goal is `InProgress` |
+| Commits | `93269b5`, `4b22b2a`, `df19af7`, `451db9e`, `8fce88d`, `6a6fa3e`, `7e04604`, and the report commit |
+| Synced | Onto `origin/dev` at `7ca98e0`, which has `v1-e31-t08-short-card-recall` (#215) |
+
+Everything above this section is the first report as reviewed, left unchanged. Where it gives a
+figure this section changes (the completeness split, the operator's expected counts), **this
+section is current.** Its operator follow-ups replace the earlier ones.
+
+**Read first:**
+
+1. **After the fix, no card in the corpus is `ABBREVIATED`.** Not one of the 198,196. That is the
+   measurement, not a fault in the rule: no body in the corpus has the shape of a first-and-last-
+   words disclosure. All 21,382 cards the old rule would mark become `FULL`, and none moves the
+   other way. `v1-e31-t08`'s abbreviation linking will have nothing to link by that route after the
+   re-parse, which its sample should expect.
+2. **A new finding, raised and not fixed: body text stored as the card's cite.** 2,902 of the
+   4,731 `CITE_ONLY` cards are whole cards whose body sits in the cite field, with no evidence
+   text. It is the same heuristic as the empty tags, one step earlier in the card. I measured it
+   while looking for where a real disclosure would be. It is under
+   [Follow-up work added](#follow-up-work-added-in-this-revision), with a proposed rule, because
+   you may want it in the same re-parse.
+3. **Change 2 has one line more than you asked for.** A version-2 document that says "no tag" as
+   `""` is refused by the record model. It is what makes "2" a promise a reader can rely on.
+4. **Synced onto t08, and everything was run again.** One conflict, in `parsed-card-store.md`, where
+   both tasks added to the same section; both sides are kept. t08 changed no parser, classifier or
+   profile file, and the corpus pass after the sync is identical, card for card, to the one before.
+5. **The `ABBREVIATED` fixtures could not fail first**, since the old rule marks them too. A mutant
+   is their proof.
+
+### Change 1: `ABBREVIATED` from the disclosure's shape (ac6)
+
+**The measurement.** Read-only, numbers only: a scratch pass ran the branch's parser over the
+9,741 DOCX sources and kept, for each card, word counts, marker counts and fragment sizes. No text
+left the process. The full tables are in
+[`docs/data/caselist-parse-report.md`](../data/caselist-parse-report.md#abbreviated-by-shape).
+
+Of the 198,196 cards, 19,402 hold a marker in the body and 1,980 more only in the cite.
+
+| Body words | 1 marker | 2 | 3 to 5 | 6 or more | All |
+|---|---|---|---|---|---|
+| 20 or fewer | 0 | 0 | 0 | 0 | 0 |
+| 21 to 30 | 6 | 0 | 1 | 0 | 7 |
+| 31 to 60 | 31 | 0 | 0 | 0 | 31 |
+| 61 to 100 | 51 | 2 | 7 | 0 | 60 |
+| 101 to 200 | 305 | 39 | 15 | 1 | 360 |
+| 201 to 500 | 2,360 | 416 | 135 | 28 | 2,939 |
+| 501 to 1,000 | 3,565 | 643 | 459 | 69 | 4,736 |
+| Over 1,000 | 5,432 | 1,915 | 2,513 | 1,409 | 11,269 |
+| **All** | 11,750 | 3,015 | 3,130 | 1,507 | 19,402 |
+
+* **How many markers:** 11,750 bodies hold one, 7,652 two or more.
+* **Where the marker sits**, in the one-marker bodies, by the share of words before it: 554, 970,
+  1,600, 1,389, 1,414, 1,572, 928, 977, 1,147 and 1,199 across the ten deciles. Anywhere, as an
+  omission in running text does. In 57 it opens or closes the body.
+* **The fragments either side**, in the 11,693 one-marker bodies with words on both sides, by the
+  longer side, cumulative:
+
+| Longer side, at most | 12 | 15 | 20 | 30 | 40 | 50 | 60 | 80 | 100 | 150 | 200 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Cards | 0 | 0 | 6 | 14 | 38 | 55 | 59 | 109 | 185 | 454 | 806 |
+
+**It does not separate, and I am saying so.** There is no second population. A body with a marker
+is longer than one without: 0.5% are 100 words or fewer, against 6.1% of the 174,063 bodies with no
+marker. The shortest longer side anywhere is 17 words. The 37 one-marker bodies of 60 words or
+fewer are a handful of texts disclosed several times each.
+
+**The rule, on the conservative side.** A body is `ABBREVIATED` when it holds exactly one marker,
+has words on both sides of it, and no more than twelve on either side. A marker in the cite decides
+nothing. `MAXIMUM_DISCLOSED_FRAGMENT_WORDS = 12` is a constant in `parser.py`; the marker
+spellings are still the profile's.
+
+* **Why twelve.** It is the middle of the only gap there is: above the disclosures we have a model
+  of (three to nine words a side in the profile's examples) and below everything the corpus holds
+  (17 and up). Any bound from 9 to 16 gives the same result on this corpus. At 20 it would mark 6
+  cards, at 30 14, at 50 55, and nothing tells those from any other short card.
+* **Why exactly one marker.** One joins a beginning to an end. 7,652 bodies hold two or more, and
+  7,639 of those are over 120 words.
+* **What it costs.** A disclosure that quoted thirteen words a side would be called whole. That is
+  the safe way to be wrong, and the corpus holds no such body.
+
+**Fixtures** (`TestAbbreviatedIsADisclosuresShape`, 39 tests, in
+`test_first_corpus_parse_findings.py`). Written and committed before the rule (`93269b5`: 21
+failed, 15 passed).
+
+| Yours | Test | Before | After |
+|---|---|---|---|
+| A full card with one omission mid-body is `FULL` | `test_a_whole_card_with_one_omission_is_full` (77 words) | `ABBREVIATED` | `FULL` |
+| A full card with several omissions is `FULL` | `…with_several_omissions_is_full`; `…of_several_paragraphs_with_an_omission_in_each…` | `ABBREVIATED` | `FULL` |
+| First words, a marker, last words is `ABBREVIATED`, in each spelling | `test_first_words_a_marker_and_last_words_is_abbreviated` ×5; `…written_against_the_words_either_side…` ×5 | `ABBREVIATED` | `ABBREVIATED` |
+| A short body with no marker is `FULL` | `test_a_short_body_with_no_marker_is_full` | `FULL` | `FULL` |
+| A cite with a marker and a full body is `FULL` | `test_a_marker_in_the_cite_does_not_abbreviate_a_whole_body`; `…a_short_body_either` ×5 | `ABBREVIATED` | `FULL` |
+| `CITE_ONLY` is unchanged | `test_a_cite_with_a_marker_and_no_body_is_still_cite_only` | `CITE_ONLY` | `CITE_ONLY` |
+| The strict xfail passes and is no longer one | `test_the_first_card_is_a_full_card` | `ABBREVIATED` | `FULL`, an ordinary test |
+
+Mine, for the edges of the rule: a whole card of one sentence (21 words, a marker, 8 words) is
+`FULL`; twelve words a side is `ABBREVIATED` in each spelling and thirteen on either side is
+`FULL`; a marker that opens or closes a body is `FULL`; two markers, however short the body, are
+`FULL`; and a disclosure broken over two lines is still one.
+
+Three of your rows cannot fail first, and I am not claiming they did: the disclosure, the short
+body and `CITE_ONLY` have the same answer under both rules. The mutant "nothing is ever
+abbreviated" fails 19 tests, and "a body with no text is abbreviated" fails 38.
+
+The revision's final test set against the first submission's source, checked out over the clean
+tip and restored (`git status --porcelain` empty, `git diff --quiet HEAD`): **25 failed, 1,037
+passed, 1 skipped**. 21 are Change 1 and 4 are Change 2.
+
+**The corpus, before and after.** `2026.10.10-docx-2`, kept: nothing has written it.
+
+| Caselist | Stored: `FULL` | `ABBREVIATED` | `CITE_ONLY` | After: `FULL` | `ABBREVIATED` | `CITE_ONLY` |
+|---|---|---|---|---|---|---|
+| hsld26 | 57,057 | 8,418 | 2,439 | 62,769 | 0 | 1,906 |
+| hspf26 | 40,319 | 2,972 | 1,007 | 42,053 | 0 | 849 |
+| hspolicy26 | 74,902 | 10,524 | 2,130 | 80,756 | 0 | 1,807 |
+| openev | 6,563 | 529 | 196 | 7,887 | 0 | 169 |
+| **Total** | 178,841 | 22,443 | 5,772 | 193,465 | 0 | 4,731 |
+
+The totals differ between the halves (207,056 and 198,196) because of the empty-tag fix, as in the
+first report; card totals and the 4,446 cards with no tag do not change in this revision. The
+completeness rule on its own, both rules applied to the new parser's cards:
+
+| Caselist | `ABBREVIATED` to `FULL` | `FULL` to `ABBREVIATED` |
+|---|---|---|
+| hsld26 | 7,908 | 0 |
+| hspf26 | 3,026 | 0 |
+| hspolicy26 | 9,837 | 0 |
+| openev | 611 | 0 |
+| **Total** | 21,382 | 0 |
+
+19,402 of the 21,382 held a marker in the body and 1,980 only in the cite. `CITE_ONLY` is untouched
+at 4,731. Among the 186,642 stored cards with the same paragraph range under the new parser, 15,781
+go from `ABBREVIATED` to `FULL` and no other completeness changes.
+
+**The two corrected evaluation files:** completeness is right on **4 of 4** matched cards, as
+before; boundaries 4 of 5, as before. Every unit score is what the first report gives for
+`2026.10.10-docx-2`.
+
+**Mutation.** The same driver and rules as before: a clean committed tree, a fresh
+`HYPOTHESIS_STORAGE_DIRECTORY` each run, restore and check. 1,063 tests across the same six paths,
+7 to 8 seconds a run, two batches of about 65 seconds, on the final tree. Sixteen mutants, sixteen
+caught, all by assertion failures. Yours first:
+
+| Mutant | Caught | Tests failing |
+|---|---|---|
+| **The marker-anywhere rule restored** (any marker in the body) | yes | 15 |
+| The marker-anywhere rule restored, the cite included | yes | 21 |
+| **The length bound removed** | yes | 5 |
+| **A marker in the cite counted** | yes | 6 |
+| Several markers allowed | yes | 2 |
+| A marker at either end allowed | yes | 4 |
+| The bound one word higher | yes | 3 |
+| The bound one word lower | yes | 5 |
+| The bound held on one side only | yes | 7 |
+| Nothing is ever abbreviated | yes | 19 |
+| A body with no text is abbreviated, not cite-only | yes | 38 |
+
+A seventeenth, **the marker spellings tried shortest first, was not caught**, and it was right not
+to be. I had sorted the spellings longest first so that `[...]` would be one marker. A regular
+expression takes the match that starts first, and the bracketed spelling starts at the bracket, so
+the order changes nothing for these five spellings. I deleted the sort (`6a6fa3e`), by working
+agreement 8, and the twelve-word bound is now tested in every spelling.
+
+### Change 2: `PARSED_STORE_SCHEMA_VERSION` is 2
+
+* **Version 2:** a stored card's `tag` is a string or `null`, never `""`. Every record written now
+  says 2: source, document and occurrence.
+* **Version 1 stays.** A record keeps the version it was written with. `StoreRecord.schema_version`
+  takes 1 or 2, and refuses anything else.
+* **A stored version-1 store, written by the old build.** With the start commit's source checked
+  out, I wrote a small store through `LocalParsedStore` from three synthetic sources, and committed
+  it as `tests/fixtures/parsed_store/written_by_schema_version_1/`: ten records, each
+  `"schema_version": 1`, parser `2026.09.20-docx-1`, one card with `"tag": ""`. It is what the
+  first corpus parse's directories look like. It is never regenerated: no later build can write it.
+* **Readers take both**, shown on those bytes (`test_parsed_store_schema_versions.py`, 10 tests,
+  written first: 4 failed, 6 passed at `df19af7`). `LocalParsedStore` lists the directory, reads
+  every entry, the index, the failures, the occurrences and the document; the document's empty tag
+  reads back as no tag; and a version-1 entry carried into a rebuilt aggregate is byte-identical,
+  not re-stamped.
+* **`parsed-card-store.md`** has a "Schema versions" section saying what changed, and that nothing
+  else did.
+
+| Mutant | Caught | Tests failing |
+|---|---|---|
+| The version left at 1 | yes | 4 |
+| Readers take version 2 only | yes | 4 |
+| Readers take version 1 only | yes | 82 |
+| A version-2 document may say no tag as `""` | yes | 1 |
+| A version-1 document may not say no tag as `""` | yes | 2 |
+
+"Readers take version 1 only" also errors 17 tests in fixtures that write a record. Collection
+succeeds under that mutant, so none of its 82 failures is a collection error.
+
+### Change 3: the operator follow-ups
+
+Rewritten below as [Operator follow-ups, revised](#operator-follow-ups-revised). What changed:
+
+* every expected count that Change 1 moves: the completeness split per caselist, and the no-tag
+  table by completeness. Card totals do not move;
+* one command now prints completeness and tag together, so both tables come from one pass;
+* the fingerprint version expected is `card-fingerprint-v2`, in the dry run and in the new
+  directory's occurrence rows;
+* the record version expected is 2 in the new directory and 1 in the old;
+* the 8 GiB check sits before step 3 with what to do if it fails;
+* step 6 expects the first card to read `FULL`;
+* one line before step 7 for t08's sample.
+
+### The sync with `v1-e31-t08`
+
+`scripts/task sync` after t08 merged. Nothing was pushed: the branch has no remote.
+
+* **One conflict**, in `docs/data/parsed-card-store.md`, "Reading it from a shell": t08 added a
+  line and a sentence about fingerprint versions, I had added the no-tag command. Both are kept.
+* **The rebase stopped once before that** with "local changes would be overwritten" on two test
+  files, with a clean tree when I looked. `git rebase --continue` went on from there. I do not know
+  what touched them; the result is checked below.
+* **t08 changed no file the parser reads through:** `git diff --stat f5ad52b 7ca98e0` over
+  `integrations/`, `style_classifier.py`, `style_profiles/`, `debate_files.py` and
+  `style_profile.py` is empty. Its change to `parsed_store.py` is a docstring and a field
+  description, and merged with mine cleanly.
+* **Re-run after the sync:** the corpus pass (five runs, the longest 64 seconds), whose output is
+  identical line for line to the pass before the sync; the evaluation check; all sixteen mutants;
+  the failing-first run; the suite and the gates.
+
+### Acceptance criteria, as they stand
+
+Results are from `7e04604`, the tip before this report.
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| ac1, ac2, ac3, ac5 | PASS | As in the first report. Their tests pass on the synced tree. |
+| ac4, first half: `parser_version` bumped | PASS | Still `2026.10.10-docx-2`, as you ruled. |
+| ac4, second half: the operator's re-parse | **NOT RUN** | [Operator follow-ups, revised](#operator-follow-ups-revised). |
+| **ac6**: `ABBREVIATED` from the disclosure's shape, derived from the corpus by read-only counts; the fixtures, each shown failing first; the xfail an ordinary test; completeness 4 of 4; the same parser version | PASS, with the three rows that cannot fail first named above | `uv run pytest packages/debate_core/tests/integrations/docx_parser/test_first_corpus_parse_findings.py -k TestAbbreviated` → `39 passed`. The whole file: 130 passed, no xfail. |
+| Node: `uv run pytest packages/debate_core/tests/integrations` | PASS | `783 passed in 4.13s` |
+| Default suite, two commands | PASS | `packages`: `4026 passed in 55.95s`. `tests`: `1256 passed, 1 skipped, 1 warning in 45.15s`. The skip and the warning are the same two as before. Slow parser timing test: `1 passed`. |
+| Static checks and gates | PASS | `pyright` 0 errors; `lint-imports` 12 kept; `ruff check` and `ruff format --check` clean, 581 files; `check_thin_handlers.py`, `check_links.py`, `check_command_blocks.py --base origin/dev`, `docs_index.py --check-descriptions`, `export_schemas.py --check` all OK. |
+| t03's structural fixtures | PASS | Unchanged by this revision: the wiki fixture's first-and-last-words card has eight and nine words a side and is still `ABBREVIATED`. Ten lines differ from the start commit, each `parser_version`. |
+| `uv run scripts/validate_specs.py` | PASS | `OK: 327 files, 38 epics, 269 tasks, 20 releases`. Phase `InProgress`. |
+
+### Files changed in this revision
+
+- `packages/debate_core/src/debate_core/integrations/docx_parser/parser.py`: `_completeness` reads
+  the body alone; `_is_first_and_last_words`; `MAXIMUM_DISCLOSED_FRAGMENT_WORDS`.
+- `packages/debate_core/src/debate_core/domain/debate_files.py`: what `ABBREVIATED` and `FULL` mean,
+  in the enum's docstrings.
+- `packages/debate_core/src/debate_core/application/ports/parsed_store.py` (authorised): the
+  version, `ReadableSchemaVersion`, and the version-2 check on a stored document.
+- Tests: 39 in `test_first_corpus_parse_findings.py`; `test_parsed_store_schema_versions.py` (10).
+- `tests/fixtures/parsed_store/`: the stored version-1 store and a README saying where it came from.
+- Docs: `parsed-card-store.md` (schema versions; what `ABBREVIATED` means) and
+  `caselist-parse-report.md` (the histogram, the rule, before and after, and what the measurement
+  raised).
+
+### Deviations added in this revision
+
+11. **The record model refuses a version-2 document with `"tag": ""`.** You authorised the bump in
+    `application/ports`; this check is a second edit there. Without it "2" is a label, and with it
+    a reader can rely on what the label says.
+12. **`ABBREVIATED` is empty on the corpus.** ac6 asks that a first-and-last-words disclosure be
+    `ABBREVIATED`, which a fixture shows. It does not ask that the corpus contain one, and it
+    contains none in a card's body. I chose the bound that calls no whole card abbreviated over one
+    that would keep the label in use.
+13. **The corpus pass ran as five commands**, hspolicy26 in two halves, so that none passed two
+    minutes after the 126-second run you noted. The longest was 94 seconds.
+14. **Three more read-only passes than you asked for**, to measure cite paragraphs, once I saw the
+    disclosure shape was not in the bodies. They are what Read first, point 2, rests on.
+15. **Scratch files of numbers exist outside the repository:** per card, word and marker counts
+    with a caselist and nothing else, in the session's scratch directory. No text, digest or path.
+
+### Operator follow-ups, revised
+
+These replace the earlier **Operator follow-ups**. They close ac4, and they run only after:
+
+1. the PM accepts this revision;
+2. the branch merges with `scripts/task pr v1-e31-t09-first-corpus-parse-findings --partial`;
+3. `scripts/task finish v1-e31-t09-first-corpus-parse-findings --partial` closes it out.
+
+**The PM hands over one combined order with `v1-e31-t08`'s steps.** t08's by-eye sample runs
+between step 5 and step 7 here. Don't run any of this while `caselist pull` is running.
+
+**What to know before starting.**
+
+- **Disk.** Each version directory is about 5.8 GB on this Mac and in each bucket. The re-parse
+  writes a second one beside the first. **The old one stays where it is**, here and in both
+  buckets; whether and when it goes is a PM follow-up, not a step here.
+- **`v1-e31-t08` is merged.** This one re-parse covers both tasks: the new directory's occurrence
+  rows are built under `card-fingerprint-v2`.
+- **A weekly pull since 2026-10-10** adds sources. "Sources" and "to parse" then rise by what it
+  imported, and the other counts with them.
+
+**1. Start in the main checkout, on an updated `dev`** (seconds):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+git branch --show-current
+git status --short
+git pull --ff-only origin dev
+git log --oneline -1 --grep='^v1-e31-t09-first-corpus-parse-findings:'
+git log --oneline -1 --grep='^v1-e31-t08-short-card-recall:'
+export DEBATE_ENV=dev
+uv run debate-research caselist runs --last 1
+df -h ~/.debate-research
+```
+
+Expected: `dev`; `git status` prints nothing; each `git log` prints one line; the last pull run has
+finished; `df` shows **at least 8 GiB available**.
+
+* **Either `git log` prints nothing:** that merge is not on `dev` yet. Stop.
+* **Less than 8 GiB available:** stop. **Delete nothing**, the old version directory least of all.
+  Send the `df` line; freeing space is the PM's decision.
+
+**2. The dry run, and a fingerprint of the old directories** (about a minute; writes nothing under
+the data directory; needs no AWS session):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+export DEBATE_ENV=dev
+for c in hsld26 hspolicy26 hspf26 openev; do uv run debate-research --json caselist parse --caselist ${c} --dry-run | jq -c '.data | {caselist, version, new_version, superseded, fingerprint_version, to_parse, skipped, suppressed}'; done
+find ~/.debate-research/dev/parsed/*/2026.09.20-docx-1 -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 > ~/parsed-old-version-before.txt
+cat ~/parsed-old-version-before.txt
+```
+
+Expected for each caselist: `version` `2026.10.10-docx-2`, `new_version` true, `superseded`
+`2026.09.20-docx-1`, `fingerprint_version` `card-fingerprint-v2`, `skipped` 0 and `suppressed` 0.
+`to_parse` is 4,461 for hsld26, 2,657 for hspolicy26, 3,906 for hspf26 and 102 for openev, as the
+store stood on 2026-10-10. Any other `version` or `fingerprint_version` means the build is not
+this one: stop and paste the four lines back.
+
+**3. The dev re-parse and publish** (about 30 minutes in all; the first full parse measured 518 s
+for hsld26, 747 s for hspolicy26, 352 s for hspf26 and 106 s for openev). One caselist at a time.
+Run it only if step 1 showed 8 GiB available.
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+aws sso login --profile debate-dev-evidence
+export DEBATE_ENV=dev
+uv run debate-research --json caselist parse --caselist hsld26 --publish > ~/reparse-dev-hsld26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspolicy26 --publish > ~/reparse-dev-hspolicy26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspf26 --publish > ~/reparse-dev-hspf26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist openev --publish > ~/reparse-dev-openev.json; echo "exit $?"
+```
+
+Expected: `exit 0` each time.
+
+* **`exit 1` with `PARSE_FAILURE_RATE_EXCEEDED`:** not expected for any caselist. Send the counts.
+* **`PARSED_PUBLISH_INCOMPLETE`:** something was not confirmed in the bucket. Run the same line
+  again.
+* **`exit 3` with `STORE_ACCESS_DENIED`:** this Mac refused a directory under the data directory.
+  The message says which store; fix the permission and run the same line again.
+
+**4. The counts to paste back** (about 3 minutes; prints counts, versions and sizes only):
+
+```zsh
+for c in hsld26 hspolicy26 hspf26 openev; do jq -c '(.data // .error.details) | {caselist, version, superseded, fingerprint_version, sources, parsed, cards, unsupported, failed, failure_rate, store, elapsed_seconds, publish: .publish.counts}' ~/reparse-dev-${c}.json; done
+for c in hsld26 hspolicy26 hspf26 openev; do echo ${c}; find ~/.debate-research/dev/parsed/${c}/2026.10.10-docx-2/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r 'select(.record == "document") | .document.cards[] | "\(.completeness) \(if .tag == null then "no-tag" else "tagged" end)"' | sort | uniq -c; done
+for c in hsld26 hspolicy26 hspf26 openev; do jq -r '"\(.schema_version) \(.fingerprint_version)"' ~/.debate-research/dev/parsed/${c}/2026.10.10-docx-2/occurrences.jsonl | sort | uniq -c; done
+head -1 ~/.debate-research/dev/parsed/hsld26/2026.09.20-docx-1/index.jsonl | jq -c '{schema_version, parser_version}'
+grep -rlF '"tag":""' ~/.debate-research/dev/parsed/*/2026.10.10-docx-2/sha256 | wc -l
+find ~/.debate-research/dev/parsed/*/2026.09.20-docx-1 -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | diff - ~/parsed-old-version-before.txt && echo "old directories unchanged"
+ls -d ~/.debate-research/dev/parsed/*/*
+du -sh ~/.debate-research/dev/parsed
+```
+
+Expected, if no weekly pull has run since 2026-10-10. The first loop:
+
+| Caselist | Sources | Parsed | Unsupported | Failed, by reason | Failure rate | Cards | Uploaded |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 4,461 | 4,354 | 101 | 6: `MALFORMED_XML` 5, `NOT_A_ZIP` 1 | 0.14% | 64,675 | 4,464 |
+| hspolicy26 | 2,657 | 2,629 | 28 | 0 | 0% | 82,563 | 2,660 |
+| hspf26 | 3,906 | 2,650 | 1,256 | 0 | 0% | 42,902 | 3,909 |
+| openev | 102 | 101 | 0 | 1: `COMPRESSION_RATIO_EXCEEDED` | 0.98% | 8,056 | 105 |
+| **Total** | 11,126 | 9,734 | 1,385 | 7 | | 198,196 | 11,138 |
+
+No `FORBIDDEN_XML_CONSTRUCT` anywhere: it was 23. The second loop prints four lines for each
+caselist, and **no line beginning `ABBREVIATED`**:
+
+| Caselist | `FULL tagged` | `FULL no-tag` | `CITE_ONLY tagged` | `CITE_ONLY no-tag` | Cards | With no tag |
+|---|---|---|---|---|---|---|
+| hsld26 | 61,702 | 1,067 | 1,620 | 286 | 64,675 | 1,353 |
+| hspolicy26 | 80,020 | 736 | 1,451 | 356 | 82,563 | 1,092 |
+| hspf26 | 40,317 | 1,736 | 682 | 167 | 42,902 | 1,903 |
+| openev | 7,808 | 79 | 150 | 19 | 8,056 | 98 |
+| **Total** | 189,847 | 3,618 | 3,903 | 828 | 198,196 | 4,446 |
+
+The completeness split is the sum of each pair: `FULL` 62,769, 80,756, 42,053 and 7,887;
+`CITE_ONLY` 1,906, 1,807, 849 and 169; `ABBREVIATED` 0. In the stored `2026.09.20-docx-1` it is
+`ABBREVIATED` 8,418, 10,524, 2,972 and 529.
+
+* **The third loop** prints one line for each caselist, `2 card-fingerprint-v2`, with the number of
+  occurrence rows. Occurrence and cluster counts are t08's to expect, not predicted here.
+* **The `head` line** prints `{"schema_version":1,"parser_version":"2026.09.20-docx-1"}`: the old
+  directory is as it was.
+* **The `grep` line** prints 0: no record says `"tag":""`.
+* **The `diff` line** prints "old directories unchanged".
+* **`ls`** shows two directories for each caselist, and **`du`** about 11.6 GB.
+
+These figures come from running this branch's parser over the same sources, read-only, on
+2026-10-10, before and after the sync with t08. A count that differs with no pull in between is
+worth sending back before prod. A few `ABBREVIATED` lines after a pull are not a fault: a real
+first-and-last-words disclosure would be one.
+
+**5. The second run, which must parse and upload nothing** (about 18 minutes in all; it is the
+rebuild, which measured 348, 460, 214 and 60 s):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+export DEBATE_ENV=dev
+for c in hsld26 hspolicy26 hspf26 openev; do uv run debate-research --json caselist parse --caselist ${c} --publish | jq -c '.data | {caselist, version, attempted, skipped, elapsed_seconds, uploaded: .publish.counts.uploaded}'; done
+uv run debate-research store ls parsed/hsld26/2026.10.10-docx-2/index.jsonl
+```
+
+Expected: `attempted` 0, `skipped` equal to the sources, and `uploaded` 0 for each caselist;
+`store ls` lists 1 object.
+
+**6. The sample again** (about 5 minutes, by eye). The source the first sample check found wrong.
+Its digest prefix is in the kickoff, not here: put it into `P`.
+
+```zsh
+cd ~/.debate-research/dev/parsed/hsld26/2026.10.10-docx-2
+P=paste-the-sample-digest-prefix-here
+D=$(jq -r --arg p "${P}" 'select(.source_sha256 | startswith($p)) | .source_sha256' index.jsonl)
+jq -r --arg d "${D}" 'select(.source_sha256 == $d) | "\(.outcome) \(.cards)"' index.jsonl
+cp -f ~/.debate-research/dev/blobs/sha256/${D:0:2}/${D:2:2}/${D} /tmp/parse-sample.docx
+open /tmp/parse-sample.docx
+sed -n 2p sha256/${D:0:2}/${D:2:2}/${D}.jsonl | jq -r '.document.cards[:5][] | "\(.completeness)  \(.tag)"'
+```
+
+Expected: `PARSED 10`, where it was 12. The five lines are the document's first five cards, each
+with its tag, and **each reads `FULL`, the first included**. In the first parse the second and
+third stored cards had no tag; they were the rest of the first card's body, and are in it now. The
+other four files tallied as right before should still be. Record tallies only; the file and the
+tags are real disclosures. Then:
+
+```zsh
+rm -f /tmp/parse-sample.docx
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+```
+
+**Before step 7: `v1-e31-t08`'s ac5 sample runs here, between the dev re-parse and the prod
+publish. A "different card" verdict in that sample stops the prod publish.** Do not run step 7
+until that sample is done and clean.
+
+**7. The prod publish**, from the same dev data directory, only after dev looks right and t08's
+sample is clean (about 15 minutes; nothing is parsed again; the first measured 279, 370, 202 and
+55 s):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+aws sso login --profile debate-prod-evidence
+export DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev"
+uv run debate-research --json caselist parse --caselist hsld26 --dry-run | jq -c '.data | {caselist, version, fingerprint_version, to_parse, skipped}'
+uv run debate-research --json caselist parse --caselist hsld26 --publish --confirm-prod > ~/reparse-prod-hsld26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspolicy26 --publish --confirm-prod > ~/reparse-prod-hspolicy26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspf26 --publish --confirm-prod > ~/reparse-prod-hspf26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist openev --publish --confirm-prod > ~/reparse-prod-openev.json; echo "exit $?"
+uv run debate-research store ls parsed/hsld26/2026.10.10-docx-2/index.jsonl
+unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
+```
+
+* **`DEBATE_STORAGE__DATA_DIR` is the point of this block.** Without it the prod profile reads an
+  empty `~/.debate-research/prod` and publishes nothing.
+* **The dry run** must show `version` `2026.10.10-docx-2`, `fingerprint_version`
+  `card-fingerprint-v2`, `to_parse` 0 and `skipped` 4,461. If `to_parse` is not 0, the data
+  directory is wrong: stop.
+* **Each publish** should exit 0 and upload what dev's did: 4,464, 2,660, 3,909 and 105.
+* **Paste back** the first loop of step 4 with `reparse-prod-` in place of `reparse-dev-`.
+* **The `unset` at the end matters.** A shell left on prod with the dev data directory is how the
+  next command would write to prod unchecked.
+* **Prod's `parsed/<caselist>/2026.09.20-docx-1/` prefixes stay**, as dev's do.
+
+The JSON summaries hold counts, digests and keys, and no names or paths. Keep them out of the
+repository all the same. Whoever closes ac4 records the counts in
+`docs/data/caselist-parse-report.md` and sets the Goal to `Succeeded` in a small spec PR.
+
+### Follow-up work added in this revision
+
+- **Body text stored as the card's cite (E31, and worth deciding before the re-parse).**
+  `heuristic-wiki-cite-entry` takes any paragraph with an ellipsis and a name with a year for a
+  cite, at any length. My rule from the first submission keeps such a paragraph in its card when a
+  body is already open. The *first* body paragraph has no body open before it, so it is still
+  filed as cite text.
+  - **Size, under `2026.10.10-docx-2`:** 3,515 cite paragraphs from that heuristic are longer than
+    100 words, and 2,058 longer than 1,000. A cite read from a cite style is longer than 200 words
+    in 35 cases out of about 140,000. 2,652 of the 3,515 follow another cite paragraph in the same
+    card; 863 are the first cite paragraph the card has.
+  - **What it does to cards:** 2,902 of the 4,731 `CITE_ONLY` cards hold a cite paragraph of more
+    than 100 words. They are whole cards, 2,713 of them with a tag, whose body is in `full_cite`
+    and whose `evidence_text` is empty, so nothing fingerprints or clusters them. Another 3,440
+    cards have a body and also hold a cite paragraph over 100 words. Across all 6,342 such cards,
+    2,846 of the long paragraphs come from a cite character style and may simply be long cites.
+  - **A rule that would reach most of it,** in the assembly again: a cite *guessed* after the card
+    already has a cite, and formatted as body, opens the body. That is my existing rule with "has
+    a body" widened to "has a cite or a body". It would not reach the 863 with no cite before
+    them, which need a length bound on what a cite entry can be. I have not written or measured
+    either: it is a change to card bodies, and you accepted the empty-tag fix as it stands.
+  - **Cost of leaving it:** a third parser version later, and another 5.8 GB re-parse.
+- **Where a real first-and-last-words disclosure would be.** In a cite paragraph, not a body: the
+  wiki heuristic reads "name, year, first words … last words" as one cite, and the card is
+  `CITE_ONLY`. At most 84 cite paragraphs from that heuristic are 40 words or fewer. If such
+  entries should count as abbreviated cards, the entry has to be split into its cite and its
+  words, which is a model question for E31 and bears on what t08's abbreviation linking has to
+  work with.
+- **The classifier's cite heuristics**, from the first report, now have a measured cost in three
+  places: split cards, cards with no tag, and bodies in the cite field.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

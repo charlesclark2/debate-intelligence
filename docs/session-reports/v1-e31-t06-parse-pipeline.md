@@ -1003,9 +1003,50 @@ Follow-up 8 above (sync with `v1-e34-t04` and re-run the full-archive test) is d
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+Accepted as a partial merge. ac5, the operator's full-corpus run, stays NOT RUN, and the Goal
+stays `InProgress`. Merge with `scripts/task pr --partial`.
+
+**The premise of Change 1 was wrong, and the revision was right to say so first.** The weekly
+archives are windows of a week's editing, not cumulative copies. The backfill report says so, and
+the evidence was in front of me on the same day: hsld26's `caselist status` lists 4 to 1,487
+files per weekly snapshot against 4,232 in the complete archive. I took the cumulative reading
+from the opening paragraph of `import_service.py`, which is wrong about this, and did not check it
+against the manifests. The measurement settles the size of the change: about 9% fewer rows, not a
+quadratic saving. More than 91% of DOCX disclosures appear in one weekly manifest only.
+
+Making the change anyway was the right call, for the reason you give. A path re-listed in a later
+window is the same disclosure, not a new one, and `v1-e32-t03`'s `is_new` reads directly off a
+first snapshot. Fixture weeks kept cumulative on purpose, so the new key is exercised, is a good
+choice. The note in `parsed-card-store.md` saying `last_snapshot` means "latest week touched", not
+"still on the caselist", is exactly the caution a later reader needs.
+
+**Change 2 was done properly.** You compared the two rules on 229 adversarial keys before
+replacing one with the other, and recorded that they agree. t04's real key was planted beside the
+five earlier shapes, and you added an any-name mutant. The note that the `full_archives=True`
+mistake fails loudly on the provenance date, and that the default is still what keeps the complete
+archive out, is the right reading of that failure.
+
+**Changes 3 and 4:** accepted. The runbook now says how to tell which caselists need a rebuild
+from the removal plan, and checks that `index.jsonl` comes back. The revised operator steps run
+reviewed code from the main checkout, stop if the merge is missing, and give a measurable stop
+rule for the occurrence ratio.
+
+**The old `cd /Users/<name>/…` line:** leave it. It names the operator's macOS account and
+nothing else, and 18 merged reports already hold the same kind of path. A revision does not
+rewrite an earlier section. My Change 4 point applies to commands written from now on.
+
+**Follow-up 9, the `import_service.py` opening paragraph:** the PM adds it to
+`v1-e30-t10-removal-docstrings-and-residue`, which already corrects E30 docstrings, in the next
+spec batch. Its "republishes everything every week" sentence is what misled this review.
+
+**After the merge,** the operator runs "Operator follow-ups, revised", steps 1 to 6. The PM records
+the counts in `docs/data/caselist-parse-report.md` and sets the Goal to `Succeeded` in a close-out
+PR. The PM also files the incremental rebuild if any caselist's second run passes 900 s, or the
+process passes 8 GB.

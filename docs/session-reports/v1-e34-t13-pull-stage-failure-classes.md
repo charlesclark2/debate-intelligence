@@ -46,7 +46,8 @@ translate `PermissionError`, a listing of an unreadable tree raises instead of l
 
 ## Acceptance criteria
 
-Results are from the branch tip `d377c52`, rebased onto `origin/dev` at `a1cb396`, plus this report.
+Results are from `d377c52`, the branch tip before this report, rebased onto `origin/dev` at
+`a1cb396`. The start commit after the rebase is `1446bbc`.
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
@@ -57,7 +58,7 @@ Results are from the branch tip `d377c52`, rebased onto `origin/dev` at `a1cb396
 | Node `stage-classes`: `uv run pytest packages/debate_core/tests/application/caselist packages/debate_cli/tests` | PASS | `1022 passed in 48.80s` |
 | Forbidden: mapping a deterministic outcome to exit 3 | PASS | The retryable codes are an allow-list of five store and provider classes. `test_the_exit_code_is_three_only_when_every_required_failure_is_retryable` (10 hand-written cases) and 12 new cases of `exit_code_for_failure_codes`. A code on no list, an unmodelled error and a failed stage with no code all exit 1. |
 | Forbidden: reporting a local refusal or a missing grant as waiting for an AWS login | PASS | Publish and report pend only on `StoreCredentialsExpired`. The report stage pends only when publish is pending. Both "routed back to pending" mutants are caught. |
-| Forbidden: a path, camp title or inbox file name in a stage reason, error code or hint | PASS | `assert_names_nothing_of_this_machine` runs in 14 of the core scenarios. It searches every stage's reason, codes and hint for the data directory, the temporary directory, the home directory, a probe camp title and two inbox names. `test_a_torn_local_suppression_list_…` shows the one message that did carry the data directory's path. |
+| Forbidden: a path, camp title or inbox file name in a stage reason, error code or hint | PASS | `assert_names_nothing_of_this_machine` runs in 13 of the core scenarios. It searches every stage's reason, codes and hint for the data directory, the temporary directory, the home directory, a probe camp title and two inbox names. `test_a_torn_local_suppression_list_…` shows the one message that did carry the data directory's path. |
 | The run summary: schema bumped from 3, and schema-3 records still read | PASS | `RUN_SUMMARY_SCHEMA_VERSION` is 4. The run log's record schema is unchanged. Three tests read a stored record written by the build at the start commit, and pass on that source and on the branch: `test_runs_still_reads_the_run_log_a_schema_3_build_wrote` (CLI), `test_the_run_monitor_still_reads_…` and `test_the_stored_summary_is_a_schema_3_one` → `3 passed` both times. |
 | Default suite, in two commands so each stays under two minutes | PASS | `uv run pytest -m "not slow and not live" packages --no-cov -q` → `3748 passed in 57.52s`. The same over `tests` → `1244 passed, 1 skipped, 1 warning in 47.30s`. The skip is the parser eval waiting on human corrections; the warning is the smoke harness's blocked-socket check. |
 | Static checks | PASS | `ruff format --check .` 573 files formatted; `ruff check .` all passed; `pyright` 0 errors; `lint-imports` 12 kept, 0 broken; `check_thin_handlers.py` OK, 21 handlers; `check_links.py` OK; `docs_index.py --check-descriptions` OK. |
@@ -82,7 +83,7 @@ task adds. On the branch all of them pass.
 | Store outage in publish → 3 (the uploads) | core `test_uploads_the_bucket_did_not_take_…` | publish `failed` with no code, report `pending`, a notification naming `aws sso login` | `STORE_UNAVAILABLE`, report `skipped`, one notification |
 | Download 5xx after retries → 3 | CLI `test_a_download_answered_503_past_the_retries_…` | exit 1 | exit 3, `PROVIDER_UNAVAILABLE`, two requests, next run fetches the one week |
 | One retryable and one deterministic → 1 | CLI `test_one_retryable_and_one_deterministic_failure_exit_one` | exit 1 already; failed on `KeyError: 'error_codes'` | exit 1, both codes recorded |
-| Local refusal in publish → failed, data-directory hint | smoke `test_a_local_refusal_in_publish_…` | exit 1, every source "missing from this machine", no hint | exit 3, `STORE_ACCESS_DENIED`, hint, still owed |
+| Local refusal in publish → failed, data-directory hint | smoke `test_a_local_refusal_in_publish_…` | exit 1, every manifest withheld for sources "missing" from this machine, no hint | exit 3, `STORE_ACCESS_DENIED`, hint, still owed |
 | S3 `AccessDenied` in report → failed, grant hint | smoke and core `test_a_missing_grant_in_report_…` | report `pending` | report `failed`, hint |
 | Expired session → pending, exit 0 | core `test_an_expired_session_still_leaves_…`, smoke `test_an_expired_session_still_imports_…` | `pending` and exit 0 already; failed only on the missing `error_codes` | unchanged, `error_codes` `[]` |
 
@@ -111,8 +112,9 @@ a run. The 33 mutants ran in 9 batches, the longest 1 min 45 s.
 All 33 were caught by assertion failures, none by a collection error. No catching test is
 property-based, so Hypothesis generated nothing for them and there are no statistics to report.
 
-The runs below were made at `e91101d`, after the rebase. The four later commits add tests only;
-`git diff e91101d d377c52 -- 'packages/*/src' ops docs` is empty.
+The runs below were made at `e91101d`, after the rebase. The four later commits add tests and set
+the phase; `git diff e91101d d377c52 -- 'packages/*/src' ops docs` is empty. An earlier pass at
+the pre-rebase tree caught the same mutants.
 
 | Mutant | Caught | Tests failing | Examples |
 |---|---|---|---|

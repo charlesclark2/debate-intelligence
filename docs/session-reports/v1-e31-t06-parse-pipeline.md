@@ -623,3 +623,352 @@ and expect it to merge before this branch.
 **When you resubmit:** append a revision section with the evidence for Changes 1 to 4, re-run the
 full suite and the gates, and add a new empty PM review after this one. ac5 stays NOT RUN and
 the Goal stays `InProgress`.
+
+## Revision 2026-10-10: the changes the PM review requested
+
+| | |
+|---|---|
+| Session status | PARTIAL: Changes 1, 3 and 4 done; Change 2 waits for `v1-e34-t04` to merge (its spec is still `Pending` on `origin/dev` today); ac5 NOT RUN |
+| Goal | `InProgress` |
+| Commits | `a5dd71d` (the PM's review and spec fix, committed as written), `dbcb172` (Change 1), `7a5c0fe` (Change 3), `f125908` (the store document), and this section |
+
+**Read this first: the weekly manifests are not cumulative, so Change 1 removes about 9% of rows,
+not most of them.** The review's premise was that each weekly snapshot re-lists every file still
+on the caselist. That holds for `v1-e34-t04`'s complete archives, which this pipeline excludes, but
+not for the weekly series. A weekly archive is a window of about a week's editing activity. The
+backfill report already records this ("Weekly archives are adjacent windows, not cumulative
+copies", [caselist-backfill-2026-09.md](../data/caselist-backfill-2026-09.md)), and so do the
+manifests: in hsld26's 10-06 manifest, 982 rows are `NEW`, 56 `UNCHANGED` and 763 `REMOVED`. The
+opening paragraph of `import_service.py`'s docstring says the opposite ("OpenCaselist republishes
+**everything** every week"); its own "First seen" section corrects that further down. That opener
+is the likely source of the premise (Follow-up work below). Change 1 is made as specified anyway.
+It is the right key: a re-listed path is one disclosure, and `v1-e32-t03`'s `is_new` reads more
+simply off a first snapshot. But the quadratic growth the review describes does not happen in this
+corpus.
+
+### Change 1: one occurrence row per disclosure
+
+**The measurement** (read-only, counts only). The stored rows of each caselist's series manifests,
+selected by `series_snapshot` as the pipeline selects them, against the distinct (path, sha256)
+pairs, counted on 2026-10-09's dev data directory by a scratch script (not committed). A DOCX row
+is the only kind that can yield cards, so the factor is over DOCX rows.
+
+| Caselist | Manifests | Stored rows | Disclosures | DOCX rows | DOCX disclosures | DOCX sources | Rows per disclosure (removed) | Disclosures per DOCX source (rows per card, new) | Rows per DOCX source (rows per card, old) |
+|---|---|---|---|---|---|---|---|---|---|
+| hsld26 | 14 | 5,647 | 5,152 | 5,499 | 5,015 | 4,360 | 1.10 (8.8%) | 1.15 | 1.26 |
+| hspf26 | 13 | 5,347 | 5,006 | 3,638 | 3,340 | 2,650 | 1.09 (8.2%) | 1.26 | 1.37 |
+| hspolicy26 | 13 | 3,465 | 3,173 | 3,431 | 3,140 | 2,629 | 1.09 (8.5%) | 1.19 | 1.31 |
+| openev | 1 | 105 | 105 | 105 | 105 | 102 | 1.00 (0%) | 1.00 | 1.00 |
+
+91.5% (hsld26), 92.5% (hspf26) and 91.6% (hspolicy26) of DOCX disclosures are listed in one weekly
+manifest only, and none in more than five. openev is one release, and a camp file was already one
+row per card per release, so nothing changes there.
+
+**What changed:**
+
+* **The record.** `OccurrenceRecord` gained `last_snapshot`. `snapshot` is now the first snapshot
+  listing the disclosure, so ac2's six fields still hold. A validator refuses `last_snapshot` before
+  `snapshot`, a malformed date, and a camp row whose two differ.
+* **The key.** `_occurrence_rows` keys a row by (source, card, disclosure digest). It takes the span
+  from a new `_disclosure_spans`, which still consults the suppression list for every disclosure.
+* **Camp files** are one row per card per release, as before.
+* **The schema version stays 1.** Nothing has been published yet (ac5 has not run), so no reader
+  has seen the old shape.
+
+**The hand-derived expectations** in `build_parse_world.py`, rewritten from its table. The fixture's
+weeks stay cumulative on purpose, so every file is re-listed and the new key is exercised. Its
+docstring now says real weeklies are windows.
+
+| | Before | After | Derivation |
+|---|---|---|---|
+| after 09-08 | 9 | 6 | verbatim 1 card × 3 paths, wiki 2 × 1, cardmirror 1 × 1 |
+| after 09-15 | 16 | 7 | the same, plus direct 1 × 1 |
+| after the shared team's removal | 14 | 6 | verbatim loses R5 |
+
+**Tests:**
+
+* `test_the_occurrence_table_has_a_row_per_card_per_disclosure_named_by_its_digest` now checks the
+  verbatim file under three paths over two weeks. It expects one row per path: R1 (09-01 to 09-08),
+  its `(1)` copy (09-08 to 09-08) and R5 (09-08 to 09-08).
+* New: `test_a_later_week_listing_the_same_disclosures_moves_their_span_and_adds_no_row`.
+* New in the adapter tests: `test_an_occurrence_spans_its_first_to_its_latest_snapshot` (three
+  refusals).
+* New in the adapter tests: `test_no_record_has_a_field_for_a_path_school_team_tournament_or_round`,
+  for the Deviation 1 ruling below.
+
+**Mutation, each run on a fresh `HYPOTHESIS_STORAGE_DIRECTORY`, every run under 6 s.** The new
+mutant `occurrences-per-snapshot` restores per-snapshot rows by putting the snapshot back in the
+span key. It was caught: 11 failed, 30 passed. The first failure is `assert (6, 4, 9) == (6, 4, 6)`,
+so the mutant reproduces the old behaviour's 9 rows exactly. That is the new expectations shown
+failing against the old code. Every earlier mutant was re-run against the new code. The
+suppression mutant for the occurrence table was re-pointed at `_disclosure_spans`, where the check
+now lives.
+
+| Mutant | Result |
+|---|---|
+| first-ac1-no-skip | caught, 1 failed |
+| first-ac3-parser-error-aborts | caught, 1 failed |
+| first-ac4-no-checksum-skip | caught, 1 failed |
+| skip-key-without-profile | caught, 2 failed |
+| reparse-into-old-directory | caught, 3 failed |
+| reparse-into-old-directory-unguarded | caught, 2 failed |
+| unsupported-counted-as-failure | caught, 3 failed |
+| full-archive-enumerated | caught, 5 failed |
+| index-ignores-suppression | caught, 1 failed |
+| failures-ignores-suppression | caught, 1 failed |
+| occurrences-ignore-suppression (re-pointed) | caught, 1 failed |
+| removal-keeps-aggregates | caught, 2 failed |
+| **occurrences-per-snapshot (new)** | caught, 11 failed |
+
+The tree was clean after each.
+
+**`docs/data/parsed-card-store.md`:**
+
+* Gives the new row and field.
+* Says what the span means. In a windowed corpus, `last_snapshot` is the latest week a team uploaded
+  or touched the file, not proof that the file is still on the caselist. A gap between the two
+  snapshots is still one row.
+
+### Change 2: sync with `v1-e34-t04`, not done yet
+
+t04 is not on `origin/dev` today, so there is nothing to sync with. What is left, for the session
+after it merges:
+
+* `scripts/task sync`.
+* Replace `series_snapshot` with t04's `snapshot_of_manifest_key(caselist, key, *,
+  full_archives=False)`. If the two differ for `openev` or any other name, keep this one and pin
+  the difference in a test, with the reason.
+* Keep the five planted shapes and add t04's real key, built with `full_archive_manifest_key`.
+* Re-run the mutants and the suite.
+
+`dev` already has a `snapshot_of_manifest_key(caselist, key)` without the keyword. On seven sample
+keys it agrees with `series_snapshot`: a weekly date, a camp release, a date under `openev`, a dated
+name with a suffix, a malformed date, an impossible date, and a release name under a caselist. The comparison that counts
+is with t04's version, which may change it.
+
+### Change 3: the removal runbook (authorised outside the packages)
+
+`docs/runbooks/caselist-removal.md` now covers the rebuild:
+
+* **Step 5**, after the dev execute: rebuild the parsed aggregates. Which caselists to rebuild is
+  read off the plan's `parsed/<caselist>/<version>/index.jsonl` lines under *WILL BE REMOVED*. If
+  there are none, the store was never built in that environment.
+* **Step 6** gains a check that each listed `index.jsonl` is back.
+* **Step 7**, after prod: the same rebuild against the dev data directory with `--confirm-prod`.
+  The variables are set on the command line, so no shell is left pointing at prod.
+
+Deviation 11 below records the edit.
+
+### Change 4: the operator follow-ups
+
+The section below, [Operator follow-ups, revised](#operator-follow-ups-revised), replaces the
+earlier **Operator follow-ups**. It runs from the main checkout on an updated `dev`, after the
+partial merge, with `~` paths. The earlier section is left as it was, because a revision does not
+overwrite the report. It still holds one `cd /Users/<name>/…` line (the worktree path, in its first
+block). If that should go from the public repository, it is a one-line edit for the PM to approve.
+
+### The rulings, applied
+
+* **Deviation 1, confirmed.** `parsed-card-store.md` now says the store must never gain a path,
+  school, team code, tournament or round field, and says why. It points at two tests:
+  * the existing scan of every written file, `test_no_file_names_the_disclosure_path_or_anything_in_it`;
+  * the new check of field names, `test_no_record_has_a_field_for_a_path_school_team_tournament_or_round`.
+* **Deviation 10.** The PM's spec fix is committed as written and not reverted.
+
+### Deviations added in this revision
+
+11. **`docs/runbooks/caselist-removal.md` edited**, outside `constraints.packages`, authorised by the
+    PM review's Change 3.
+
+### Evidence
+
+| Check | Result |
+|---|---|
+| Full suite | 4,836 passed, 1 skipped (the parser eval waiting for corrected labels, as before), in 72 s. The one warning is `test_pytests_own_process_has_no_network_in_an_offline_check`, which tries the network on purpose to prove it is blocked |
+| Parse pipeline tests (service, adapter, removal, CLI, smoke) | 87 passed |
+| `pyright` | 0 errors |
+| `lint-imports` | 12 kept, 0 broken |
+| `ruff check`, `ruff format --check` | clean |
+| `scripts/check_thin_handlers.py` | OK, 21 handlers |
+| `scripts/check_command_blocks.py`, `scripts/check_links.py` | OK |
+| `uv run scripts/validate_specs.py` | OK: 319 files |
+
+### Operator follow-ups, revised
+
+These replace the earlier **Operator follow-ups**, and they run only after this sequence:
+
+1. `v1-e34-t04` merges.
+2. A session makes Change 2.
+3. The PM accepts.
+4. The branch merges with `scripts/task pr v1-e31-t06-parse-pipeline --partial`, and
+   `scripts/task finish v1-e31-t06-parse-pipeline --partial` closes it out.
+
+That way the corpus is parsed by reviewed code. Don't run them while `caselist pull` is running.
+
+**1. Start in the main checkout, on an updated `dev`** (seconds):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+git branch --show-current
+git status --short
+git pull --ff-only origin dev
+git log --oneline -1 --grep='^v1-e31-t06-parse-pipeline:'
+export DEBATE_ENV=dev
+uv run debate-research caselist runs --last 1
+```
+
+Expected: `dev`; `git status` prints nothing; the `git log` line is this task's squash-merge commit;
+the last pull run has finished. If `git log` prints nothing, the merge is not on `dev` yet: stop.
+
+**2. The dry run** (seconds; writes nothing; needs no AWS session):
+
+```zsh
+export DEBATE_ENV=dev
+uv run debate-research caselist parse --caselist hsld26 --dry-run
+uv run debate-research caselist parse --caselist hspolicy26 --dry-run
+uv run debate-research caselist parse --caselist hspf26 --dry-run
+uv run debate-research caselist parse --caselist openev --dry-run
+```
+
+Expected: version `2026.09.20-docx-1`, with skipped 0 and suppressed 0 for each caselist. "To
+parse" is 4,461 for hsld26, 2,657 for hspolicy26, 3,906 for hspf26 and 102 for openev. These
+counts were taken on 2026-10-09; a weekly pull since then raises them. A smaller count, or a larger
+one with no pull since, means stop and paste the tables back.
+
+**3. The dev parse and publish** (45 to 80 minutes in all: hsld26 15 to 25, hspolicy26 10 to 20,
+hspf26 15 to 30, openev 2 to 5). Run one caselist at a time. Keep Activity Monitor open on the
+`python` processes: if one grows past about 8 GB, press Ctrl-C and send the size.
+
+```zsh
+aws sso login --profile debate-dev-evidence
+export DEBATE_ENV=dev
+uv run debate-research --json caselist parse --caselist hsld26 --publish > ~/parse-dev-hsld26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspolicy26 --publish > ~/parse-dev-hspolicy26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspf26 --publish > ~/parse-dev-hspf26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist openev --publish > ~/parse-dev-openev.json; echo "exit $?"
+```
+
+Expected: `exit 0` each time.
+
+* **`exit 1` with `PARSE_FAILURE_RATE_EXCEEDED`:** more than 5% of the DOCX sources failed. The
+  store and the publish are still complete. Send the counts before anyone raises the threshold.
+* **`PARSED_PUBLISH_INCOMPLETE`:** something was not confirmed in the bucket. Run the same line
+  again.
+
+Then paste back the output of this, which prints counts and sizes only:
+
+```zsh
+for c in hsld26 hspolicy26 hspf26 openev; do jq -c '(.data // .error.details) | {caselist, version, sources, parsed, cards, unsupported, failed, failure_rate, store, elapsed_seconds, publish: .publish.counts}' ~/parse-dev-${c}.json; done
+ls -lh ~/.debate-research/dev/parsed/*/2026.09.20-docx-1/occurrences.jsonl
+du -sh ~/.debate-research/dev/parsed
+```
+
+**What to expect of `occurrences.jsonl`.** Each row is about 0.7 KB. The ratio
+`store.occurrences / store.cards` should be close to the disclosures per DOCX source measured above.
+The size range assumes 30 to 150 cards per parsed DOCX, which has not been measured on this corpus.
+The ratio is the check that matters.
+
+| Caselist | Expected occurrences per card | Rows at 30 to 150 cards per DOCX | Size |
+|---|---|---|---|
+| hsld26 | about 1.15 | 150,000 to 750,000 | 100 to 500 MiB |
+| hspf26 | about 1.26 | 100,000 to 500,000 | 67 to 333 MiB |
+| hspolicy26 | about 1.19 | 94,000 to 471,000 | 63 to 313 MiB |
+| openev | 1.00 | 3,000 to 15,000 | 2 to 10 MiB |
+
+A ratio above 1.5 for any weekly caselist means the occurrence table is not one row per disclosure:
+stop and send the counts.
+
+**4. The second run, which must parse and upload nothing** (a few minutes each). Its
+`elapsed_seconds` is the rebuild alone. The PM files the incremental rebuild if any caselist's
+passes 900 s (15 minutes).
+
+```zsh
+export DEBATE_ENV=dev
+uv run debate-research --json caselist parse --caselist hsld26 --publish | jq -c '.data | {caselist, attempted, skipped, elapsed_seconds, uploaded: .publish.counts.uploaded}'
+uv run debate-research --json caselist parse --caselist hspolicy26 --publish | jq -c '.data | {caselist, attempted, skipped, elapsed_seconds, uploaded: .publish.counts.uploaded}'
+uv run debate-research --json caselist parse --caselist hspf26 --publish | jq -c '.data | {caselist, attempted, skipped, elapsed_seconds, uploaded: .publish.counts.uploaded}'
+uv run debate-research --json caselist parse --caselist openev --publish | jq -c '.data | {caselist, attempted, skipped, elapsed_seconds, uploaded: .publish.counts.uploaded}'
+uv run debate-research store ls parsed/hsld26/2026.09.20-docx-1/index.jsonl
+```
+
+Expected: `attempted` 0, `skipped` equal to the sources, and `uploaded` 0 for each caselist; `store
+ls` lists 1 object.
+
+**5. A sample check** (about 10 minutes, by eye). Five random parsed hsld26 sources, each opened in
+Word beside the cards the store holds for it. First, the five digests and their card counts:
+
+```zsh
+cd ~/.debate-research/dev/parsed/hsld26/2026.09.20-docx-1
+jq -r 'select(.outcome == "PARSED" and .cards > 0) | "\(.source_sha256) \(.cards)"' index.jsonl | sort -R | head -5
+```
+
+Then, for each digest, put it into `D` and run the block. It opens the file in Word and prints the
+first five tags the store holds:
+
+```zsh
+D=paste-one-digest-here
+cp -f ~/.debate-research/dev/blobs/sha256/${D:0:2}/${D:2:2}/${D} /tmp/parse-sample.docx
+open /tmp/parse-sample.docx
+sed -n 2p sha256/${D:0:2}/${D:2:2}/${D}.jsonl | jq -r '.document.cards[:5][] | "\(.completeness)  \(.tag)"'
+```
+
+For each file, check that the card count is roughly what the document holds and that the five tags
+are its first five cards' tags. Record tallies only (looks right / doubtful / wrong). The file and
+the tags are real disclosures: nothing from them goes into a message, an issue or a file. Then
+close Word and run:
+
+```zsh
+rm -f /tmp/parse-sample.docx
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+```
+
+**6. The prod publish**, from the same dev data directory, only after dev looks right (20 to 40
+minutes; nothing is parsed again, only rebuilt and published):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+aws sso login --profile debate-prod-evidence
+export DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev"
+uv run debate-research caselist parse --caselist hsld26 --dry-run
+uv run debate-research --json caselist parse --caselist hsld26 --publish --confirm-prod > ~/parse-prod-hsld26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspolicy26 --publish --confirm-prod > ~/parse-prod-hspolicy26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist hspf26 --publish --confirm-prod > ~/parse-prod-hspf26.json; echo "exit $?"
+uv run debate-research --json caselist parse --caselist openev --publish --confirm-prod > ~/parse-prod-openev.json; echo "exit $?"
+uv run debate-research store ls parsed/hsld26/2026.09.20-docx-1/index.jsonl
+unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
+```
+
+* **`DEBATE_STORAGE__DATA_DIR` is the point of this block.** Without it the prod profile reads an
+  empty `~/.debate-research/prod` and publishes nothing.
+* **The dry run** must show "To parse" 0 and "Skipped" equal to the sources. If "To parse" is not
+  0, the data directory is wrong: stop.
+* **Each publish** should exit 0, uploading the same number of objects the dev publish did for that
+  caselist.
+* **Paste back** the jq loop from step 3, with `parse-prod-` in place of `parse-dev-`.
+* **The `unset` at the end matters.** A shell left on prod with the dev data directory is how the
+  next command would write to prod unchecked.
+
+The JSON summaries hold counts, digests and keys, and no names or paths. Keep them out of the
+repository all the same. The session that closes ac5 records them in
+`docs/data/caselist-parse-report.md`, sets the Goal to `Succeeded` in a small spec PR, and files
+the incremental rebuild if step 3 or 4 crossed the PM's limits.
+
+### Follow-up work added in this revision
+
+9. **`import_service.py`'s opening paragraph (E30).** It says OpenCaselist "republishes
+   **everything** every week" and that each archive "contains almost all of" the one before. The
+   same docstring's "First seen" section, the backfill report and the manifests all say a weekly
+   archive is a week's window. A one-paragraph docstring fix in E30's module, left for the PM to
+   assign rather than edited here.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

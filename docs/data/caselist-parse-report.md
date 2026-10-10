@@ -117,7 +117,7 @@ afterwards.
 
 * **No incremental rebuild yet.** The slowest rebuild was 460 s (hspolicy26). This will be
   revisited when `v1-e34-t17` puts the parse inside the weekly run.
-* **The failure-rate threshold and small caselists.** openev's four failures out of 102 are 3.9%.
+* **The failure-rate threshold and small caselists.** openev's four failures out of 102 are just under 4%.
   One more bad file in a release that size crosses 5%. `v1-e34-t17` takes a minimum number of
   sources tried before the rate is judged.
 * **23 files refused as `FORBIDDEN_XML_CONSTRUCT`**, mostly in policy, and 5 as `MALFORMED_XML`.

@@ -76,7 +76,7 @@ spec:
         Added by the PM, 2026-10-10, from v1-e31-t06's first corpus run. The parse failure
         rate is judged only once a run has tried at least a configurable minimum number of
         sources that are not unsupported. Below it, failures are reported but do not fail the
-        stage. The reason: openev's release reached 3.9% from 4 failures out of 102, and a
+        stage. The reason: openev's release reached just under 4% from 4 failures out of 102, and a
         weekly pull tries only that week's new sources, so one bad file in a small week would
         otherwise cross 5%. The default and the reasoning are documented. Tests cover the
         boundary on both sides, and a small run over the minimum still fails on the rate,

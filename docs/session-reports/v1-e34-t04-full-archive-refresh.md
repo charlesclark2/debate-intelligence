@@ -259,6 +259,15 @@ because it states the rule rather than leaning on string order.
    DEBATE_ENV=dev uv run debate-research caselist pull --caselist hsld26 --full-archive hsld26 --dry-run
    ```
 
+   **Done 2026-10-10, before PM review** (read-only: nothing downloaded or written). Exit 0 on
+   this branch. `select` listed 15 archives and 498 OpenEv files, with 1 to fetch: the complete
+   archive alone, so hsld26's weeklies are up to date. It spent 0 of the day's 5 bulk downloads,
+   and the rotation said `hsld26: fetched this run (never refreshed)`, interval 30 days, 5 left
+   after the weeklies. Download, import, publish and report were `planned`, parse and landscape
+   `skipped` (not shipped), and retention `skipped` because the inbox is empty. The caption ended
+   `Complete archive: hsld26's would be fetched; 5 bulk download(s) left after the weeklies.`
+   The real fetch below waits for the PM's verdict.
+
    Then the fetch, printing only what the session needs. Success is `succeeded: true`, every
    stage `completed` or `skipped`, and one entry under `full_archive.imported` with its `bytes`,
    `withdrawn`, `superseded` and `earlier_snapshots`. Paste that object back: it holds counts

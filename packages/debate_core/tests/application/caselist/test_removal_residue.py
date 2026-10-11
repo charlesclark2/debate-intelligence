@@ -311,6 +311,34 @@ class TestWhatIsResidue:
         assert [one.sha256 for one in caselist.files] == sorted([REMOVED, KEPT])
         assert [one.sha256_prefix for one in caselist.files] == sorted([REMOVED[:12], KEPT[:12]])
 
+    async def test_a_file_left_only_under_parsed_is_listed_in_digest_order_with_the_rest(
+        self,
+        local: LocalEvidence,
+        bucket: S3EvidenceObjectStore,
+        versions: RecordingVersions,
+        s3_client: S3Client,
+        evidence_bucket: str,
+    ) -> None:
+        """`raw/` is listed before `parsed/`. The file with the lower digest has only a parsed object
+        left, so it is met second, and is still listed first."""
+        low, high = sorted([REMOVED, KEPT])
+        raw = f"raw/caselist/{SYNTHETIC_CASELIST}/sha256/{low[0:2]}/{low[2:4]}/{low}"
+        s3_client.delete_object(
+            Bucket=evidence_bucket,
+            Key=raw,
+            VersionId=s3_client.head_object(Bucket=evidence_bucket, Key=raw)["VersionId"],
+        )
+        parsed = f"parsed/{SYNTHETIC_CASELIST}/2026.09.20-docx-1/sha256/{low[0:2]}/{low[2:4]}/{low}.jsonl"
+        s3_client.put_object(Bucket=evidence_bucket, Key=parsed, Body=b"one parse\n")
+
+        report = await status(local, bucket, versions, listing(entry(REMOVED), entry(KEPT)))
+
+        (caselist,) = report.residue
+        assert caselist.files == (
+            ResidueFile(sha256=low, current_objects=1, noncurrent_versions=0, delete_markers=0),
+            ResidueFile(sha256=high, current_objects=1, noncurrent_versions=0, delete_markers=0),
+        )
+
 
 # ------------------------------------------------------------------------------------------------
 # Read-only, with the everyday profile's grant, and only when asked

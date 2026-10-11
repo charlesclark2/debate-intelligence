@@ -90,7 +90,7 @@ spec:
         otherwise. The pull's parse stage records those codes. Shown failing first for a
         bucket that does not answer.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

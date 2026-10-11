@@ -1,8 +1,9 @@
 """Writes `stored_run_records/written_by_the_start_commit/`: what a build before `v1-e34-t19` wrote.
 
 Not collected: its name is not a test module's, and it is only ever run by its path, against the
-source of the commit this task started from (`ccc5153`), so that what it stores was written by that
-build's code and not by this one's. `stored_run_records/README.md` gives the command.
+source of the commit on `dev` this task started from (`0a9c1e6`), so that what it stores was
+written by that build's code and not by this one's. `stored_run_records/README.md` gives the
+command.
 
 For each scenario in `run_record_scenarios.py` it keeps two things, byte for byte: the run log the
 build left on this machine, and every object it put under the bucket prefix records live under.

@@ -364,8 +364,9 @@ class PlannedSource:
     """`(caselist, path)` of the copies a withdrawal takes: the requesting team's, from records and
     manifests alike, or for a later upload the removed paths it is held at."""
     other_teams: int
-    """Other teams that disclosed these bytes, before the removal. For a later upload, the teams
-    holding it at a path the removal does not take it from."""
+    """Other teams that disclosed these bytes, before the removal: other than the requesting team,
+    or for a `--source` removal other than the one team whose file it is. For a later upload, the
+    teams holding it at a path the removal does not take it from."""
     camp_file_holders: int
     """OpenEv camp files holding these bytes, before the removal. For a later upload, the releases
     holding it at a camp path the removal does not take it from."""
@@ -955,7 +956,9 @@ class RemovalPlanner:
             others = len(set(holdings.teams) - {requester})
             shared = others > 0 or bool(holdings.releases)
         else:
-            others = len(holdings.teams)
+            # No requesting team: one holding team's file is the one removed, and the rest are the
+            # others. Counting all of them called a file one team holds "also held by 1 other team".
+            others = max(len(holdings.teams) - 1, 0)
             shared = len(holdings.teams) + len(holdings.releases) > 1
 
         if (state.suppresses_source(digest) and finishing) or not shared or include_shared:

@@ -125,6 +125,7 @@ from debate_core.application.caselist.suppression import (
 )
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_parse import CaselistParseService
+from debate_core.application.caselist_pull_parse import PullParseStage
 from debate_core.application.caselist_sync import CaselistSyncService, FullArchiveRotation
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
@@ -399,9 +400,14 @@ class ServiceContainer:
         `parse` settings group, for a laptop that is doing other things.
         """
         name = "caselist_parse_publishing" if with_bucket else "caselist_parse"
-        return self.singleton(name, lambda: self._build_caselist_parse(with_bucket=with_bucket))
+        return self.singleton(
+            name,
+            lambda: self._build_caselist_parse(
+                self.suppression_list() if with_bucket else self.local_suppression_list()
+            ),
+        )
 
-    def _build_caselist_parse(self, *, with_bucket: bool) -> CaselistParseService:
+    def _build_caselist_parse(self, suppression: SuppressionList) -> CaselistParseService:
         # Imported here, not at module scope: lxml is loaded only by a command that parses.
         from debate_core.integrations.docx_parser import DebateDocxParser
 
@@ -415,9 +421,10 @@ class ServiceContainer:
                 workers=parse.worker_count(os.cpu_count()),
                 timeout_seconds=parse.per_file_timeout_seconds,
             ),
-            suppression=self.suppression_list() if with_bucket else self.local_suppression_list(),
+            suppression=suppression,
             place_cards=self.caselist_card_stats().place,
             failure_rate_threshold=parse.failure_rate_threshold,
+            failure_rate_minimum_sources=parse.failure_rate_minimum_sources,
         )
 
     def parsed_publisher(self) -> ParsedStorePublisher:
@@ -761,8 +768,12 @@ class ServiceContainer:
         The publisher and the status check are `None` when this environment names no bucket, which
         is what `test` is and what a half-configured installation is. The run then records its
         publish stage as skipped, with the reason, instead of failing: the archives are already on
-        this machine and `caselist publish` completes them later. Parse (`v1-e31-t06`) and
-        landscape (`v1-e32-t05`) are `None` because neither service exists yet.
+        this machine and `caselist publish` completes them later.
+
+        The parse stage (`v1-e34-t17`) is the pipeline `caselist parse` runs, built over the pull's
+        own suppression list and, with a bucket, the parsed store's publisher. It is `None` when
+        `caselist.parse_imported_sources` is off, and the run then records the stage as skipped
+        with that setting's name. Landscape (`v1-e32-t05`) is `None` because it does not exist yet.
 
         Raises :class:`~debate_core.application.ports.caselist_source.CaselistApiDisabled` unless
         the operator has turned the API on, which is the data-use policy's E34 gate.
@@ -809,6 +820,15 @@ class ServiceContainer:
             suppression=suppression,
             publisher=publisher,
             status=status,
+            # The pipeline over the very list above, so that a read of it that fell back to this
+            # machine's copy is one the run sees, and the parsed store's publisher only where the
+            # run publishes at all.
+            parse=PullParseStage(
+                parse=self._build_caselist_parse(suppression),
+                publisher=self.parsed_publisher() if settings.storage.s3.bucket else None,
+            )
+            if caselist.parse_imported_sources
+            else None,
             openev_event=caselist.openev_event,
             openev_year=caselist.openev_year,
             bulk_downloads_per_day=caselist.bulk_downloads_per_day,

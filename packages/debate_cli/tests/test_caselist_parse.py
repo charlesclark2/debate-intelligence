@@ -30,7 +30,10 @@ from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.errors import StoreUnavailable
+from debate_core.application.ports.evidence_store import ObjectInfo
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
+from debate_core.integrations.s3 import S3EvidenceObjectStore
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -163,14 +166,55 @@ def test_a_second_run_parses_nothing_and_reports_every_source_skipped(imported: 
 def test_a_failure_rate_above_the_threshold_exits_non_zero_with_the_counts(
     imported: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """One failure in the four sources tried, in a run just large enough for its rate to be judged."""
     monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_THRESHOLD", "0.2")
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_MINIMUM_SOURCES", "4")
     result = invoke("--json", "caselist", "parse", "--caselist", CASELIST)
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE
     error = envelope_of(result)["error"]
     assert error["code"] == "PARSE_FAILURE_RATE_EXCEEDED"
     assert error["details"]["failure_rate"] == 0.25
+    assert error["details"]["failure_rate_judged"] is True
     assert error["details"]["parsed"] == EXPECTED["after_0908"]["parsed"]
+
+
+def test_a_run_too_small_for_its_rate_to_be_judged_reports_its_failure_and_exits_zero(
+    imported: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`v1-e34-t17` ac6: four sources tried is far under the default minimum, so one bad file is an
+    outcome and not a failed run, however far over the threshold 25% is. It is still reported."""
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_THRESHOLD", "0.2")
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    data = envelope_of(result)["data"]
+    assert data["failed"] == EXPECTED["after_0908"]["failed"]
+    assert data["failure_rate"] == 0.25
+    assert data["failure_rate_minimum_sources"] == 100
+    assert (data["failure_rate_judged"], data["threshold_exceeded"]) == (False, False)
+
+
+@pytest.mark.parametrize(
+    ("minimum", "judged", "exit_code"),
+    [
+        (5, False, ExitCode.OK),  # four tried, one short of the minimum: reported, not judged
+        (4, True, ExitCode.DOMAIN_FAILURE),  # exactly the minimum: judged, and 25% is over 20%
+        (3, True, ExitCode.DOMAIN_FAILURE),  # a small run over the minimum still fails on the rate
+    ],
+)
+def test_the_rate_is_judged_from_the_minimum_number_of_sources_tried_and_not_below_it(
+    imported: Path, monkeypatch: pytest.MonkeyPatch, minimum: int, judged: bool, exit_code: ExitCode
+) -> None:
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_THRESHOLD", "0.2")
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_MINIMUM_SOURCES", str(minimum))
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST)
+
+    assert result.exit_code == exit_code, result.stdout
+    envelope = envelope_of(result)
+    data = envelope["data"] if exit_code is ExitCode.OK else envelope["error"]["details"]
+    assert data["failure_rate_judged"] is judged
+    assert data["failed"] == EXPECTED["after_0908"]["failed"]
 
 
 def test_a_dry_run_counts_and_writes_nothing(imported: Path) -> None:
@@ -245,6 +289,61 @@ def test_publish_uploads_the_store_and_a_rerun_uploads_nothing(imported: Path, b
     assert (second["counts"]["uploaded"], second["counts"]["skipped"]) == (0, len(files))
     assert first["prefix"] == f"parsed/{CASELIST}/{DOCX_PARSER_VERSION}/"
     assert "Contents" not in buckets.list_objects_v2(Bucket=PROD_BUCKET)
+
+
+def test_a_publish_the_bucket_did_not_take_exits_three_and_names_the_code(
+    imported: Path, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`v1-e34-t17` ac7: every upload answers 503. Each failure is one a retry may cure, so the run
+    exits 3 as `caselist publish` does, where it used to exit 1 for any incomplete publish."""
+
+    async def unavailable(self: S3EvidenceObjectStore, key: str, source: Path) -> ObjectInfo:
+        raise StoreUnavailable("PutObject", key, "simulated 503 SlowDown")
+
+    monkeypatch.setattr(S3EvidenceObjectStore, "put_file", unavailable)
+
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish")
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "PARSED_PUBLISH_INCOMPLETE"
+    publish = error["details"]["publish"]
+    assert publish["failure_codes"] == ["STORE_UNAVAILABLE"]
+    assert publish["aggregates"] == "withheld"
+    assert len(publish["failed_keys"]) == EXPECTED["after_0908"]["sources"]
+    assert "Contents" not in buckets.list_objects_v2(Bucket=DEV_BUCKET)
+
+
+def test_a_publish_with_a_mismatch_among_its_failures_stays_exit_one(
+    imported: Path, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One source file already in the bucket with other bytes is a verdict, and one verdict among any
+    number of transient failures keeps the run a 1 (`exit_code_for_failure_codes`)."""
+    assert invoke("--json", "caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+    [stored] = (imported / "parsed" / CASELIST / DOCX_PARSER_VERSION).rglob(f"{digest_of('verbatim')}.*")
+    buckets.put_object(
+        Bucket=DEV_BUCKET,
+        Key=stored.relative_to(imported).as_posix(),
+        Body=b'{"not": "what this machine parsed"}',
+        ChecksumAlgorithm="SHA256",
+    )
+    real_put = S3EvidenceObjectStore.put_file
+
+    async def unavailable_for_the_wiki_file(
+        self: S3EvidenceObjectStore, key: str, source: Path
+    ) -> ObjectInfo:
+        if digest_of("wiki") in key:
+            raise StoreUnavailable("PutObject", key, "simulated 503 SlowDown")
+        return await real_put(self, key, source)
+
+    monkeypatch.setattr(S3EvidenceObjectStore, "put_file", unavailable_for_the_wiki_file)
+
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "PARSED_PUBLISH_INCOMPLETE"
+    assert sorted(error["details"]["publish"]["failure_codes"]) == ["CHECKSUM_MISMATCH", "STORE_UNAVAILABLE"]
 
 
 def test_publishing_to_prod_needs_confirm_prod_and_writes_nothing_without_it(

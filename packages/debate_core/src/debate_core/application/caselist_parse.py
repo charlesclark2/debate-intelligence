@@ -27,6 +27,13 @@ command's exit code is decided by :attr:`ParseRunReport.exceeds_threshold`: the 
 this run tried to read that `FAILED`. Unsupported formats count on neither side of that fraction,
 because PF alone discloses hundreds of PDFs and a threshold that counted them would fail every run.
 
+**The rate is judged only in a run large enough for it to mean something** (`v1-e34-t17`): one that
+tried at least `parse.failure_rate_minimum_sources` sources. Below that the failures are counted
+and reported like any others, and the run is not a failure because of them
+(:attr:`ParseRunReport.rate_is_judged`). A weekly pull tries only that week's new sources, which
+out of season is a handful, and one unreadable file among five is 20% of nothing in particular.
+The setting's description gives the measured reasons for its default.
+
 ## Removal: rebuilt, never carried forward
 
 The aggregates are rebuilt from scratch on every run and never read back, and each of them consults
@@ -85,6 +92,7 @@ from debate_core.domain.debate_files import ParsedCard, ParsedDocument, ParseFai
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
+    "PARSE_FAILURE_RATE_EXCEEDED",
     "CaselistParseService",
     "FailureListing",
     "FailureRow",
@@ -97,6 +105,12 @@ logger = logging.getLogger(__name__)
 
 #: How many characters of a SHA-256 a failure listing shows.
 SHA256_PREFIX_LENGTH: Final = 12
+
+PARSE_FAILURE_RATE_EXCEEDED: Final = "PARSE_FAILURE_RATE_EXCEEDED"
+"""The error code of a run whose failure rate is over the threshold: the one `caselist parse` has
+always reported, and the one the parse stage of `caselist pull` records for the same thing
+(`v1-e34-t17`). A verdict, on nobody's list of failures a retry may cure: the same sources fail the
+same way next time."""
 
 PlaceCards = Callable[[Sequence[ParsedCard]], Sequence[CardPlacement]]
 
@@ -159,6 +173,9 @@ class ParseRunReport:
     applied: bool
     threshold: float
     workers: int
+    minimum_sources: int = 1
+    """How many sources a run must have tried before its failure rate is judged
+    (`parse.failure_rate_minimum_sources`). One, here, judges every run that tried anything."""
     parsed: int = 0
     cards: int = 0
     unsupported: dict[str, int] = field(default_factory=dict[str, int])
@@ -174,14 +191,27 @@ class ParseRunReport:
         return len(self.plan.to_parse) if self.applied else 0
 
     @property
+    def tried(self) -> int:
+        """Sources this run tried to read: those handed to the parser, less the unsupported formats."""
+        return self.attempted - sum(self.unsupported.values())
+
+    @property
     def failure_rate(self) -> float:
         """Failed sources over the sources this run tried to read; unsupported formats in neither."""
-        tried = self.attempted - sum(self.unsupported.values())
-        return sum(self.failed.values()) / tried if tried else 0.0
+        return sum(self.failed.values()) / self.tried if self.tried else 0.0
+
+    @property
+    def rate_is_judged(self) -> bool:
+        """Whether this run tried enough sources for its failure rate to decide anything.
+
+        At least :attr:`minimum_sources`. Below that the rate is still reported, and
+        :attr:`exceeds_threshold` is false whatever it is (`v1-e34-t17`).
+        """
+        return self.tried >= self.minimum_sources
 
     @property
     def exceeds_threshold(self) -> bool:
-        return self.failure_rate > self.threshold
+        return self.rate_is_judged and self.failure_rate > self.threshold
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,6 +262,9 @@ class CaselistParseService:
         place_cards: The `v1-e31-t04` fingerprinting and clustering,
             :meth:`~debate_core.application.caselist_card_stats.CaselistCardStatsService.place`.
         failure_rate_threshold: The `parse.failure_rate_threshold` setting.
+        failure_rate_minimum_sources: The `parse.failure_rate_minimum_sources` setting: how many
+            sources a run must have tried before its failure rate is judged. Required, with no
+            default here, so that the one default is the setting's.
     """
 
     def __init__(
@@ -244,8 +277,11 @@ class CaselistParseService:
         suppression: SuppressionList,
         place_cards: PlaceCards,
         failure_rate_threshold: float,
+        failure_rate_minimum_sources: int,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        if failure_rate_minimum_sources < 1:
+            raise ValueError("failure_rate_minimum_sources must be at least 1")
         if local.blob_path_for is None:
             raise ValueError(
                 "the parse pipeline reads sources from files: give LocalEvidence a blob_path_for"
@@ -257,6 +293,7 @@ class CaselistParseService:
         self._suppression = suppression
         self._place_cards = place_cards
         self._threshold = failure_rate_threshold
+        self._minimum_sources = failure_rate_minimum_sources
         self._clock = clock
 
     # -- planning -----------------------------------------------------------------------------
@@ -327,7 +364,11 @@ class CaselistParseService:
     def dry_run(self, plan: ParsePlan) -> ParseRunReport:
         """The report a `--dry-run` prints: the plan's counts, nothing parsed or written."""
         return ParseRunReport(
-            plan=plan, applied=False, threshold=self._threshold, workers=self._runner.workers
+            plan=plan,
+            applied=False,
+            threshold=self._threshold,
+            workers=self._runner.workers,
+            minimum_sources=self._minimum_sources,
         )
 
     async def run(self, plan: ParsePlan) -> ParseRunReport:
@@ -357,6 +398,7 @@ class CaselistParseService:
             applied=True,
             threshold=self._threshold,
             workers=self._runner.workers,
+            minimum_sources=self._minimum_sources,
             parsed=parsed,
             cards=cards,
             unsupported=dict(sorted(unsupported.items())),
@@ -640,7 +682,7 @@ def _log_run(report: ParseRunReport) -> None:
     totals = report.store
     logger.info(
         "caselist parse %s %s: %d in scope, %d skipped, %d suppressed, %d parsed, %d unsupported, "
-        "%d failed (rate %.4f, threshold %.4f); store %d sources, %d cards, %d clusters, "
+        "%d failed (rate %.4f, threshold %.4f, %s); store %d sources, %d cards, %d clusters, "
         "%d occurrences; %.1f s",
         plan.caselist,
         plan.version,
@@ -652,6 +694,7 @@ def _log_run(report: ParseRunReport) -> None:
         sum(report.failed.values()),
         report.failure_rate,
         report.threshold,
+        "judged" if report.rate_is_judged else f"not judged under {report.minimum_sources} tried",
         totals.sources if totals else 0,
         totals.cards if totals else 0,
         totals.clusters if totals else 0,

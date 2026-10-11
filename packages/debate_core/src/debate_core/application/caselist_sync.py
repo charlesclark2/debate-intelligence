@@ -20,9 +20,9 @@ Three stages are irreversible and therefore mandatory: **download**, **import** 
 They put the bytes somewhere durable — the inbox, the local evidence store, the bucket — and every
 later stage is a derivation that can be recomputed from them. **Parse** (`v1-e31-t06`) and
 **landscape** (`v1-e32-t05`) are therefore optional: each runs when its service was wired in and is
-otherwise *skipped with a recorded reason*. Neither exists yet, so the skip is the normal path, not
-an edge case, and neither a missing stage nor a failing one can fail a run whose bytes are already
-safe.
+otherwise *skipped with a recorded reason*. Parse is wired in unless a setting turns it off
+(`v1-e34-t17`; see "The parse stage" below); landscape does not exist yet. Neither a missing stage
+nor a failing one can fail a run whose bytes are already safe.
 
 The order is download, import, publish, parse, landscape, report, retention. Goal criterion ac1 lists parsing
 before publishing; the spec's own description ("the run still completes download, import and
@@ -233,6 +233,60 @@ left where it is, for retention and removal to decide about, and after `caselist
 next run imports it from the inbox. If the data-use policy is read the other way, that decision
 becomes a download; after `caselist unsuppress` it is one.
 
+## The parse stage
+
+After the publish stage, the run parses what it imported (`v1-e34-t17`), through
+:class:`CaselistParseStage`, which
+:class:`~debate_core.application.caselist_pull_parse.PullParseStage` implements over the parse
+pipeline `caselist parse` runs. A run that imported nothing parses nothing and rebuilds nothing.
+
+**Which caselists.** Each caselist a weekly archive or a camp release was imported into, once
+(:func:`caselists_to_parse`). A complete archive names none: its sources are outside the namespaces
+the pipeline enumerates, so a run that imported only one parses nothing.
+
+**The whole caselist is planned, and its skip key finds what is new.** The stage hands the pipeline
+a caselist, never a snapshot. Every source already parsed under the running parser and profile
+versions is skipped, so in a steady week what is parsed is that week's new sources, and anything an
+earlier run left unparsed with them. The other choice, parsing only the imported snapshot's
+sources, breaks after a parser-version bump: the new version's directory would hold one week's
+sources and aggregates built from them alone, published as the current store. So:
+
+* A caselist whose current version directory holds nothing — never parsed, or the first run after a
+  parser or profile version changed — is parsed **in full**, minutes rather than seconds. The
+  summary counts it (`full_parses`), so a full parse is never mistaken for a large week. The runbook
+  has the operator run `caselist parse` by hand after a release that bumps the parser version, so
+  that this does not happen unattended.
+* A directory a killed run left partly filled is completed: what it recorded is skipped, the rest
+  is parsed, and the aggregates are rebuilt from all of it.
+* A caselist the run did not import into is not touched, whatever its directory holds.
+
+**Published where the pull publishes.** With a bucket, each caselist's version directory is then
+copied to it by the publisher `caselist parse --publish` uses, which uploads whatever the bucket
+lacks of the whole directory, so a caselist a previous run could not publish is caught up by the
+next run that imports into it. It is not attempted once a login is known to be missing: the publish
+stage pended on one, or the aggregates were just rebuilt from this machine's copy of the suppression
+list alone, which must never be what is published.
+
+**What a parse stage cannot do is touch what came before it.** The import and the raw publish are
+finished, and written down, before the stage starts, and the stage writes nothing to the
+pending-work file. Every way it can go wrong is a line in the summary:
+
+* *Failed*, with the code of each failure (`error_codes`): a caselist whose failure rate is over the
+  threshold in a run large enough for the rate to be judged
+  (:data:`~debate_core.application.caselist_parse.PARSE_FAILURE_RATE_EXCEEDED`), a store that did
+  not answer or refused, an object the bucket did not confirm (the code `caselist publish` reports
+  it under), and anything the pipeline raised, a bug included, which is recorded by its class alone.
+  The other caselists are still parsed.
+* *Pending*, when the only thing missing is a login for the parsed store's publish. Unlike the
+  publish stage's, this is in no file: the pending-work file holds snapshots, a parsed store is a
+  version directory, and what is owed is whatever the bucket lacks of the directory on this machine,
+  which the publisher works out again each time. `caselist parse --caselist <slug> --publish`
+  finishes it, as does the next pull that imports into that caselist with a session;
+  `caselist pull --publish-pending` does not.
+
+The stage is not in :data:`REQUIRED_STAGES`, so by `v1-e34-t13`'s rule none of this changes the
+command's exit status: the run captured everything.
+
 ## Credentials, and stages that come back later
 
 The local stages need no AWS session. If the operator's SSO session has expired, the S3 adapter
@@ -390,6 +444,7 @@ from debate_core.application.caselist.status_service import (
     NoCaselistEvidence,
 )
 from debate_core.application.caselist.suppression import LocalFallbackSuppressionList, load_suppression_state
+from debate_core.application.caselist_parse import PARSE_FAILURE_RATE_EXCEEDED
 from debate_core.application.errors import (
     UNMODELLED_ERROR_CODE,
     DomainError,
@@ -447,10 +502,12 @@ __all__ = [
     "OpenEvDeliveries",
     "OpenEvDelivery",
     "OpenEvSelection",
-    "ParseStageResult",
+    "ParseStageCounts",
+    "ParsedCaselist",
     "PendingSnapshot",
     "PendingWork",
     "PendingWorkUnreadable",
+    "PublishedParsedStore",
     "PulledRun",
     "RetentionDecision",
     "RunSummary",
@@ -463,6 +520,7 @@ __all__ = [
     "UndatedArchive",
     "UnknownSyncEvent",
     "camp_path_of_manifest_row",
+    "caselists_to_parse",
     "decide_full_archives",
     "full_archive_of_inbox_name",
     "inbox_files",
@@ -513,7 +571,7 @@ BULK_DOWNLOAD_WINDOW: Final = timedelta(hours=24)
 
 DOWNLOAD_LEDGER_SCHEMA_VERSION: Final = 1
 
-RUN_SUMMARY_SCHEMA_VERSION: Final = 4
+RUN_SUMMARY_SCHEMA_VERSION: Final = 5
 """The shape of :meth:`RunSummary.as_json`.
 
 Version 2 (`v1-e34-t06`) reports the download window as `bulk_download_window_start` and
@@ -537,6 +595,12 @@ from, so a reader has to be able to tell a summary that has no failure codes fro
 there were any. Nothing reads a summary back, of any version. What `caselist runs` and the run
 monitor read is the run log (:mod:`debate_core.application.sync_runs`), whose record schema this
 does not touch, so a newer build and the installed agent's older one read each other's records.
+
+Version 5 (`v1-e34-t17`) replaces `cards_parsed` and `parse_failures` with one object, `parse`: the
+parse stage's counts (:class:`ParseStageCounts`), or `null` when the stage parsed nothing. Two keys
+removed, so the version moves; no stage ever filled them, and both were `0` in every summary
+written. The run log's record schema is untouched again: the stage's counts reach `caselist runs`
+in the parse stage's `reason`, which every build reads.
 """
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
@@ -561,7 +625,7 @@ class SyncStage(StrEnum):
     """Sources and manifests to the evidence bucket. Needs an AWS session."""
 
     PARSE = "parse"
-    """Optional (`v1-e31-t06`). Skipped with a reason when no parse pipeline was wired in."""
+    """Optional (`v1-e31-t06`, wired by `v1-e34-t17`). Skipped with a reason when it is turned off."""
 
     LANDSCAPE = "landscape"
     """Optional (`v1-e32-t05`). Skipped with a reason when no landscape service was wired in."""
@@ -595,6 +659,9 @@ class StageOutcome(StrEnum):
 
     That and nothing else (`v1-e34-t13`): a store that refused the request, on this machine or in
     the bucket, is :attr:`FAILED`, because logging in again does not fix it.
+
+    The parse stage is pending on the same cause and is in no file (`v1-e34-t17`): what it owes is
+    its parsed store's publish, which the next publish of that store works out from the bucket.
     """
 
     FAILED = "failed"
@@ -1117,12 +1184,85 @@ def _listed(names: Sequence[str]) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class ParseStageResult:
-    """What an incremental parse of the newly imported sources did (`v1-e31-t06`)."""
+class ParsedCaselist:
+    """What parsing one caselist's unparsed sources and rebuilding its aggregates did. Counts only."""
 
-    files_parsed: int = 0
-    cards_parsed: int = 0
-    failures: int = 0
+    version: str
+    """The version directory the run wrote: the one to publish."""
+
+    attempted: int = 0
+    """Sources handed to the parser."""
+
+    skipped: int = 0
+    """Sources already parsed under the running parser and profile versions, and not parsed again."""
+
+    unsupported: int = 0
+    """Of those attempted, the ones in a format V1 does not read: an outcome, not a failure."""
+
+    failed: int = 0
+    cards: int = 0
+    """Cards in the sources this run parsed, not in the whole store."""
+
+    tried: int = 0
+    """Attempted, less the unsupported: what the failure rate is a share of."""
+
+    full_parse: bool = False
+    """The version directory held nothing, so every source of the caselist was parsed: a first
+    parse, or the first after a parser or profile version changed."""
+
+    failure_rate_exceeded: bool = False
+    """The share of `tried` that `failed` is over the threshold, in a run large enough to be judged
+    (:attr:`~debate_core.application.caselist_parse.ParseRunReport.exceeds_threshold`)."""
+
+
+@dataclass(frozen=True, slots=True)
+class PublishedParsedStore:
+    """What copying one caselist's version directory to the bucket did."""
+
+    uploaded: int = 0
+    failure_codes: tuple[str, ...] = ()
+    """The error code of each object the bucket did not confirm; empty when the store is complete
+    there (:attr:`~debate_core.application.caselist.parsed_publish.ParsedPublishReport.failure_codes`)."""
+
+
+@dataclass(frozen=True, slots=True)
+class ParseStageCounts:
+    """What the parse stage did, over every caselist it parsed. Integers and nothing else.
+
+    This is the whole of what a run summary says about the stage (`v1-e34-t17` ac3): no caselist,
+    no version, no digest. The stage's `reason` names the caselists a person has to act on.
+    """
+
+    caselists: int = 0
+    """Caselists the stage parsed: those a weekly archive or a camp release was imported into."""
+
+    full_parses: int = 0
+    """Of those, the ones parsed in full because their version directory held nothing."""
+
+    attempted: int = 0
+    skipped: int = 0
+    unsupported: int = 0
+    failed: int = 0
+    cards: int = 0
+    uploaded: int = 0
+    """Objects of the parsed store this run put in the bucket: per-source files and aggregates."""
+
+    not_published: int = 0
+    """Caselists whose parsed store this run did not publish complete, in an environment that
+    publishes. Zero where there is no bucket."""
+
+    def as_json(self) -> dict[str, int]:
+        return {
+            "caselists": self.caselists,
+            "full_parses": self.full_parses,
+            "attempted": self.attempted,
+            "skipped": self.skipped,
+            "unsupported": self.unsupported,
+            "failed": self.failed,
+            "cards": self.cards,
+            "uploaded": self.uploaded,
+            "not_published": self.not_published,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -1133,9 +1273,23 @@ class LandscapeStageResult:
 
 
 class CaselistParseStage(Protocol):
-    """The parse pipeline, as this run needs it. Implemented by `v1-e31-t06` when it ships."""
+    """The parse pipeline, as this run needs it: one caselist at a time, parse and publish apart.
 
-    async def parse_new_sources(self, *, caselists: Sequence[str]) -> ParseStageResult: ...
+    Implemented by :class:`~debate_core.application.caselist_pull_parse.PullParseStage`
+    (`v1-e34-t17`). Apart, because the run decides between the two whether a publish may follow, and
+    because a publish that fails must not cost the counts of a parse that did not. It must be built
+    over the suppression list this run was built with, as the importers are: the run reads that
+    list's fallback count to know that the aggregates it is about to publish were rebuilt from every
+    copy of the list.
+    """
+
+    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+        """Parse whatever of `caselist` is not parsed yet, and rebuild its aggregates."""
+        ...
+
+    async def publish(self, caselist: str, version: str) -> PublishedParsedStore:
+        """Copy `caselist`'s version directory `version` to the bucket. Called only where there is one."""
+        ...
 
 
 class LandscapeStage(Protocol):
@@ -1715,8 +1869,9 @@ class RunSummary:
 
     blobs_stored: int = 0
     """Distinct files the blob store did not already have. Zero on a re-run with nothing new."""
-    cards_parsed: int = 0
-    parse_failures: int = 0
+    parse: ParseStageCounts | None = None
+    """The parse stage's counts, or `None` when it parsed nothing: turned off, or nothing imported."""
+
     objects_published: int = 0
     reports_written: int = 0
     snapshots_imported: tuple[str, ...] = ()
@@ -1847,8 +2002,7 @@ class RunSummary:
             "files_duplicate": self.files_duplicate,
             "files_skipped": self.files_skipped,
             "blobs_stored": self.blobs_stored,
-            "cards_parsed": self.cards_parsed,
-            "parse_failures": self.parse_failures,
+            "parse": self.parse.as_json() if self.parse is not None else None,
             "objects_published": self.objects_published,
             "reports_written": self.reports_written,
             "snapshots_imported": list(self.snapshots_imported),
@@ -1906,8 +2060,7 @@ class _RunTally:
     files_duplicate: int = 0
     files_skipped: int = 0
     blobs_stored: int = 0
-    cards_parsed: int = 0
-    parse_failures: int = 0
+    parse: ParseStageCounts | None = None
     objects_published: int = 0
     reports_written: int = 0
     snapshots_imported: list[str] = field(default_factory=lambda: list[str]())
@@ -1927,9 +2080,14 @@ class _RunTally:
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
 
-    def fail(self, stage: SyncStage, reason: str, failures: Sequence[_StageFailure]) -> None:
-        """Record `stage` as failed on `failures`: every code once, and each distinct fix."""
-        hints = list(dict.fromkeys(one.hint for one in failures if one.hint))
+    def fail(
+        self, stage: SyncStage, reason: str, failures: Sequence[_StageFailure], *, fix: str | None = None
+    ) -> None:
+        """Record `stage` as failed on `failures`: every code once, and each distinct fix.
+
+        `fix` is one that belongs to how the stage ended and to no single failure; it comes last.
+        """
+        hints = list(dict.fromkeys(hint for hint in (*(one.hint for one in failures), fix) if hint))
         self.stages.append(
             StageRecord(
                 stage=stage,
@@ -2017,7 +2175,8 @@ class CaselistSyncService:
             so the skip and the importers' refusal can never read two different lists.
         publisher: The S3 publisher (`v1-e30-t05`), or `None` for an environment with no bucket.
         status: The local-against-bucket comparison used by the report stage, or `None`.
-        parse: The parse pipeline (`v1-e31-t06`), or `None` — the normal case today.
+        parse: The parse stage (`v1-e34-t17`), built over this same `suppression`, or `None` when
+            `caselist.parse_imported_sources` turns it off.
         landscape: Landscape regeneration (`v1-e32-t05`), or `None` — the normal case today.
         openev_event: The event to file OpenEv files under when their own tags do not say.
         openev_year: The OpenEv release year to list, or `None` for the API's current year.
@@ -2634,7 +2793,12 @@ class CaselistSyncService:
         tally.record(
             SyncStage.PARSE,
             StageOutcome.PLANNED if self._parse is not None else StageOutcome.SKIPPED,
-            "would parse the newly imported sources" if self._parse is not None else _NO_PARSE_PIPELINE,
+            (
+                "would parse the sources the imported snapshots add and rebuild their caselists' aggregates"
+                + (", and publish the parsed store" if self._publisher is not None else "")
+            )
+            if self._parse is not None
+            else _PARSE_TURNED_OFF,
         )
         tally.record(
             SyncStage.LANDSCAPE,
@@ -2659,7 +2823,7 @@ class CaselistSyncService:
         await self._import_stage(tally)
         self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
         await self._publish_stage(tally)
-        await self._parse_stage(plan, tally)
+        await self._parse_stage(tally)
         await self._landscape_stage(plan, tally)
         await self._report_stage(tally)
 
@@ -3138,28 +3302,128 @@ class CaselistSyncService:
             f"{published} object(s) uploaded across {len(targets)} snapshot(s)",
         )
 
-    async def _parse_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
-        """Parse the newly imported sources, when a parse pipeline exists. It usually does not."""
+    async def _parse_stage(self, tally: _RunTally) -> None:
+        """Parse what this run imported, and publish the parsed store where the run publishes.
+
+        See "The parse stage" in this module's docstring. Nothing here can undo or withhold what the
+        stages before it did (`v1-e34-t17`): they are finished and written down, this stage writes
+        nothing to the pending-work file, and whatever the pipeline raises is caught, a bug
+        included, and recorded as a failure of this stage. One caselist's failure does not stop the
+        others from being parsed.
+        """
         if self._parse is None:
-            tally.record(SyncStage.PARSE, StageOutcome.SKIPPED, _NO_PARSE_PIPELINE)
+            tally.record(SyncStage.PARSE, StageOutcome.SKIPPED, _PARSE_TURNED_OFF)
             return
-        if not tally.snapshots_imported:
-            tally.record(SyncStage.PARSE, StageOutcome.SKIPPED, "nothing new was imported")
+        caselists = caselists_to_parse(tally.publish_targets)
+        if not caselists:
+            tally.record(
+                SyncStage.PARSE,
+                StageOutcome.SKIPPED,
+                _ONLY_COMPLETE_ARCHIVES if tally.publish_targets else "nothing new was imported",
+            )
             return
-        try:
-            result = await self._parse.parse_new_sources(caselists=plan.caselists)
-        except (DomainError, OSError) as failed:
-            failure = self._failure(failed)
-            tally.fail(SyncStage.PARSE, failure.sentence, [failure])
-            return
-        tally.cards_parsed = result.cards_parsed
-        tally.parse_failures = result.failures
-        tally.record(
-            SyncStage.PARSE,
-            StageOutcome.COMPLETED,
-            f"{result.files_parsed} file(s) parsed into {result.cards_parsed} card(s), "
-            f"{result.failures} failure(s)",
+        publishing = self._publisher is not None
+        # Why no login is to be had, once that is known: nothing more is sent to the bucket then.
+        no_session = (
+            "the publish stage found no AWS session"
+            if tally.outcome_of(SyncStage.PUBLISH) is StageOutcome.PENDING
+            else None
         )
+        stopped: _StageFailure | None = None
+        failures: list[_StageFailure] = []
+        not_published: list[str] = []
+        parsed_caselists: list[ParsedCaselist] = []
+        uploaded = 0
+        before_the_stage = self._suppression_fallbacks()
+        for caselist in caselists:
+            fallbacks = self._suppression_fallbacks()
+            try:
+                parsed = await self._parse.parse_new_sources(caselist)
+            except Exception as failed:
+                failures.append(self._failure(failed, about=caselist))
+                not_published += [caselist] if publishing else []
+                continue
+            parsed_caselists.append(parsed)
+            if parsed.failure_rate_exceeded:
+                failures.append(
+                    _StageFailure(
+                        f"{caselist}: {parsed.failed} of the {parsed.tried} source(s) tried failed, "
+                        "over the failure-rate threshold",
+                        (PARSE_FAILURE_RATE_EXCEEDED,),
+                        _FAILURE_RATE_FIX,
+                    )
+                )
+            if not publishing:
+                continue
+            if self._suppression_fallbacks() != fallbacks:
+                # These aggregates were rebuilt from this machine's copy of the list alone. They
+                # stay on this machine until a run that read every copy rebuilds them.
+                no_session = no_session or "the suppression list's bucket copy needed an AWS login"
+            if no_session is not None or stopped is not None:
+                not_published.append(caselist)
+                continue
+            try:
+                published = await self._parse.publish(caselist, parsed.version)
+            except StoreCredentialsExpired as expired:
+                no_session = str(expired)
+                not_published.append(caselist)
+                continue
+            except (StoreAccessDenied, StoreUnavailable) as refused:
+                # True of every caselist still to publish, so none of them is tried.
+                stopped = self._failure(refused)
+                not_published.append(caselist)
+                continue
+            except Exception as failed:
+                failures.append(self._failure(failed, about=caselist))
+                not_published.append(caselist)
+                continue
+            uploaded += published.uploaded
+            if published.failure_codes:
+                failures.append(
+                    _StageFailure(
+                        f"{caselist}: {len(published.failure_codes)} object(s) of the parsed store not "
+                        "confirmed in the bucket",
+                        tuple(dict.fromkeys(published.failure_codes)),
+                    )
+                )
+                not_published.append(caselist)
+
+        tally.parse = ParseStageCounts(
+            caselists=len(parsed_caselists),
+            full_parses=sum(one.full_parse for one in parsed_caselists),
+            attempted=sum(one.attempted for one in parsed_caselists),
+            skipped=sum(one.skipped for one in parsed_caselists),
+            unsupported=sum(one.unsupported for one in parsed_caselists),
+            failed=sum(one.failed for one in parsed_caselists),
+            cards=sum(one.cards for one in parsed_caselists),
+            uploaded=uploaded,
+            not_published=len(not_published),
+        )
+        reason = _parse_stage_sentence(tally.parse, publishing=publishing)
+        named = ", ".join(not_published)
+        if stopped is not None:
+            failures.append(stopped)
+        if failures:
+            reason += "; " + "; ".join(one.sentence for one in failures)
+            if not_published:
+                reason += f"; the parsed store of {named} is not published"
+                reason += f" ({no_session})" if no_session is not None else ""
+            tally.fail(
+                SyncStage.PARSE,
+                reason,
+                failures,
+                fix=_UNPUBLISHED_PARSED_STORE_FIX if not_published else None,
+            )
+        elif not_published:
+            tally.record(
+                SyncStage.PARSE,
+                StageOutcome.PENDING,
+                f"{reason}; the parsed store of {named} is not published, for want of an AWS login "
+                f"({no_session}): {_UNPUBLISHED_PARSED_STORE_FIX}",
+            )
+        else:
+            tally.record(SyncStage.PARSE, StageOutcome.COMPLETED, reason)
+        self._note_local_copy_only(tally, SyncStage.PARSE, since=before_the_stage)
 
     async def _landscape_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
         """Regenerate the landscape reports, when that service exists. It does not yet."""
@@ -3507,7 +3771,7 @@ class CaselistSyncService:
         tally.suppression_list_local_copy_only = reason
         tally.add_to_reason(stage, f"this machine's copy of the suppression list alone was read: {reason}")
 
-    def _failure(self, error: DomainError | OSError, *, about: str | None = None) -> _StageFailure:
+    def _failure(self, error: Exception, *, about: str | None = None) -> _StageFailure:
         """One failure as a stage records it: a sentence, the error's code, and its fix if it has one.
 
         The sentence is the error's own message when this project wrote it, and its class alone
@@ -3560,8 +3824,7 @@ class CaselistSyncService:
             files_duplicate=tally.files_duplicate,
             files_skipped=tally.files_skipped,
             blobs_stored=tally.blobs_stored,
-            cards_parsed=tally.cards_parsed,
-            parse_failures=tally.parse_failures,
+            parse=tally.parse,
             objects_published=tally.objects_published,
             reports_written=tally.reports_written,
             snapshots_imported=tuple(tally.snapshots_imported),
@@ -3681,8 +3944,49 @@ _NO_BUCKET: Final = "this environment names no evidence bucket, so nothing is pu
 _NOTHING_TO_CONFIRM_AGAINST: Final = (
     "this environment names no evidence bucket, so no publish can be confirmed and nothing leaves the inbox"
 )
-_NO_PARSE_PIPELINE: Final = "no parse pipeline is installed (v1-e31-t06 has not shipped)"
+_PARSE_TURNED_OFF: Final = (
+    "the parse stage is turned off (caselist.parse_imported_sources); `caselist parse` does it by hand"
+)
+_ONLY_COMPLETE_ARCHIVES: Final = "only a complete archive was imported, and complete archives are not parsed"
+_FAILURE_RATE_FIX: Final = (
+    "`debate-research caselist parse --caselist <slug> --failures` lists the sources that failed, "
+    "with their reasons."
+)
+_UNPUBLISHED_PARSED_STORE_FIX: Final = (
+    "`debate-research caselist parse --caselist <slug> --publish` publishes a caselist's parsed "
+    "store: it parses nothing already parsed, rebuilds the aggregates and uploads what the bucket "
+    "lacks. The next pull that imports into that caselist does the same; "
+    "`caselist pull --publish-pending` does not."
+)
 _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not shipped)"
+
+
+def caselists_to_parse(imported: Iterable[PendingSnapshot]) -> tuple[str, ...]:
+    """The caselists a run that imported these snapshots parses, each once, in the order imported.
+
+    A caselist and not its snapshots: the parse pipeline plans over the whole caselist, and its
+    skip key finds what is new (see "The parse stage" in this module's docstring). A camp release is
+    the caselist `openev`. A complete archive (`full/<date>`) names nothing to parse: its sources are
+    outside the namespaces the pipeline enumerates (`v1-e31-t06`), and parsing its caselist would
+    rebuild every aggregate to change none.
+    """
+    return tuple(dict.fromkeys(one.caselist for one in imported if full_archive_date(one.snapshot) is None))
+
+
+def _parse_stage_sentence(counts: ParseStageCounts, *, publishing: bool) -> str:
+    """The parse stage's counts as one sentence: what `caselist runs` shows of the stage."""
+    sentence = (
+        f"{counts.caselists} caselist(s) parsed: {counts.attempted} source(s) attempted, "
+        f"{counts.skipped} skipped as parsed already, {counts.unsupported} unsupported, "
+        f"{counts.failed} failed, {counts.cards} card(s)"
+    )
+    if counts.full_parses:
+        sentence += (
+            f"; {counts.full_parses} of them parsed in full, into a version directory that held nothing"
+        )
+    if publishing:
+        sentence += f"; {counts.uploaded} object(s) of the parsed store uploaded"
+    return sentence
 
 
 def _decide_archive(

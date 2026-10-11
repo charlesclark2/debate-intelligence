@@ -321,11 +321,20 @@ state (`v1-e34-t04`) after the download window, and with three caselists that pa
 characters. Like retention's, only the length allowed is longer: every earlier build reads it."""
 
 
+_MAX_PARSE_REASON_CHARACTERS: Final = 2000
+"""The parse stage's reason is where its counts reach `caselist runs` (`v1-e34-t17`): the record has
+no field for them, and adding one would be a record an older build refuses. After the counts it
+names each caselist that failed and why, and what publishes a parsed store that was not. As for the
+select stage, only the length allowed is longer."""
+
+
 def _reason_limit(stage: SyncStage) -> int:
     if stage is SyncStage.RETENTION:
         return _MAX_RETENTION_REASON_CHARACTERS
     if stage is SyncStage.SELECT:
         return _MAX_SELECT_REASON_CHARACTERS
+    if stage is SyncStage.PARSE:
+        return _MAX_PARSE_REASON_CHARACTERS
     return _MAX_MESSAGE_CHARACTERS
 
 
@@ -423,6 +432,9 @@ def _backlog_growing(
 AUTH_LOGIN_COMMAND: Final = "debate-research caselist auth login"
 PULL_COMMAND: Final = "debate-research caselist pull"
 PUBLISH_PENDING_COMMAND: Final = "debate-research caselist pull --publish-pending"
+PARSE_COMMAND: Final = "debate-research caselist parse --caselist <slug> --publish"
+"""What finishes a parse stage that failed (`v1-e34-t17`). Running the pull again does not: a pull
+that imports nothing parses nothing. The stage's reason in `caselist runs` names the caselists."""
 
 
 def notifications_for(
@@ -458,13 +470,18 @@ def notifications_for(
     if failed:
         required = {str(stage) for stage in REQUIRED_STAGES}
         only_publish = set(failed) == {str(SyncStage.PUBLISH)}
+        only_parse = set(failed) == {str(SyncStage.PARSE)}
         sent.append(
             Notification(
                 title="caselist pull failed"
                 if required.intersection(failed)
                 else "caselist pull finished with a failed stage",
                 message=f"{where}: the {', '.join(failed)} stage failed. What was captured is kept.",
-                fix_command=PUBLISH_PENDING_COMMAND if only_publish else PULL_COMMAND,
+                fix_command=PUBLISH_PENDING_COMMAND
+                if only_publish
+                else PARSE_COMMAND
+                if only_parse
+                else PULL_COMMAND,
             )
         )
     if credentials_expired:

@@ -46,6 +46,15 @@ SSO session expired, because in both cases nothing was lost and the next run con
 landscape, report or retention stage that failed is reported in the table and does not change the
 exit code — the captured bytes are safe and the rest can be recomputed.
 
+## The parse stage
+
+Unless `caselist.parse_imported_sources` is off, the run parses the sources it imported, rebuilds
+the aggregates of the caselists they belong to, and publishes the parsed store where it publishes
+at all (`v1-e34-t17`). The summary's `parse` holds the stage's counts and nothing else, and the
+stage's row says the same in a sentence. A failed parse stage records the code of each failure
+(`PARSE_FAILURE_RATE_EXCEEDED`, `STORE_UNAVAILABLE`, …) and, by the rule above, leaves the exit code
+alone; `caselist parse --caselist <slug> --publish` is what finishes it.
+
 When a download, an import or a publish failed, the exit code comes from **what they failed on**
 (`v1-e34-t13`). Each failed stage records the error code of every failure behind it, and
 :func:`~debate_cli.exit_codes.exit_code_for_failure_codes` reads those of the stages that had to

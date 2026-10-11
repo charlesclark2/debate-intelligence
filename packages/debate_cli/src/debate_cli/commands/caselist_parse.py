@@ -17,9 +17,19 @@ Every decision is :class:`~debate_core.application.caselist_parse.CaselistParseS
 ## Exit code
 
 0 unless the share of the sources this run tried to read that failed is above
-`parse.failure_rate_threshold` (`PARSE_FAILURE_RATE_EXCEEDED`), or a `--publish` left something
-unconfirmed in the bucket (`PARSED_PUBLISH_INCOMPLETE`). A PDF or a legacy `.doc` is an outcome,
-not a failure, and counts on neither side of the rate.
+`parse.failure_rate_threshold` (`PARSE_FAILURE_RATE_EXCEEDED`, exit `1`), or a `--publish` left
+something unconfirmed in the bucket (`PARSED_PUBLISH_INCOMPLETE`). A PDF or a legacy `.doc` is an
+outcome, not a failure, and counts on neither side of the rate.
+
+The rate is judged only in a run that tried at least `parse.failure_rate_minimum_sources` sources
+(`v1-e34-t17`). A smaller run reports its failures, says `failure_rate_judged: false`, and exits 0
+however many of its few sources failed.
+
+An incomplete publish exits by what it failed on, as `caselist publish` does
+(:func:`~debate_cli.exit_codes.exit_code_for_failure_codes`, `v1-e34-t17`): `3` when every object
+the bucket did not confirm failed on something a retry may cure, such as a bucket that did not
+answer, and `1` as soon as one is a verdict, such as a checksum mismatch. The envelope's `publish`
+carries the codes.
 
 ## `--publish`
 
@@ -48,12 +58,16 @@ from debate_cli.commands.caselist import (
 )
 from debate_cli.commands.store import CONFIRM_PROD_FLAG
 from debate_cli.context import cli_context, command_name
-from debate_cli.exit_codes import ExitCode
+from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode, TableSpec
 from debate_core.application.caselist.parsed_publish import ParsedPublishReport
 from debate_core.application.caselist.publish_plan import validate_publish_target
 from debate_core.application.caselist.publish_service import SourceResult
-from debate_core.application.caselist_parse import FailureListing, ParseRunReport
+from debate_core.application.caselist_parse import (
+    PARSE_FAILURE_RATE_EXCEEDED,
+    FailureListing,
+    ParseRunReport,
+)
 from debate_core.application.settings import Settings
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
@@ -159,6 +173,8 @@ def parse_summary(
         "failed": dict(report.failed),
         "failure_rate": round(report.failure_rate, 4),
         "failure_rate_threshold": report.threshold,
+        "failure_rate_minimum_sources": report.minimum_sources,
+        "failure_rate_judged": report.rate_is_judged,
         "threshold_exceeded": report.exceeds_threshold,
         "store": None
         if store is None
@@ -183,6 +199,7 @@ def _publish_summary(published: ParsedPublishReport, settings: Settings) -> dict
         "counts": {result.value: published.count(result) for result in SourceResult},
         "aggregates": "withheld" if published.aggregates_withheld else "published",
         "failed_keys": list(published.failed_keys),
+        "failure_codes": list(dict.fromkeys(published.failure_codes)),
     }
 
 
@@ -214,7 +231,7 @@ def _failure(
 ) -> CommandFailure | None:
     if report.exceeds_threshold:
         return CommandFailure(
-            code="PARSE_FAILURE_RATE_EXCEEDED",
+            code=PARSE_FAILURE_RATE_EXCEEDED,
             message=(
                 f"{sum(report.failed.values())} of the {report.attempted - sum(report.unsupported.values())} "
                 f"source(s) this run tried to read failed ({report.failure_rate:.1%}), above the "
@@ -231,7 +248,7 @@ def _failure(
                 f"{len(published.failed_keys)} object(s) not confirmed in the bucket"
                 + ("; the aggregates were withheld" if published.aggregates_withheld else "")
             ),
-            exit_code=ExitCode.DOMAIN_FAILURE,
+            exit_code=exit_code_for_failure_codes(published.failure_codes),
             details=payload,
             hint="Run it again to retry; a checksum mismatch needs a person.",
         )
@@ -258,7 +275,7 @@ def _parse_table(
             ["Cards parsed", str(report.cards)],
             ["Unsupported", _counts(report.unsupported)],
             ["Failed", _counts(report.failed)],
-            ["Failure rate", f"{report.failure_rate:.1%} (threshold {report.threshold:.1%})"],
+            ["Failure rate", _failure_rate(report)],
         ]
     if store is not None:
         rows += [
@@ -302,6 +319,14 @@ def _failures_table(listing: FailureListing) -> TableSpec:
         title=f"{listing.caselist} {listing.version}: {len(rows)} source(s) with no document",
         caption=FAILURES_NOTICE,
     )
+
+
+def _failure_rate(report: ParseRunReport) -> str:
+    """The rate beside its threshold, and whether this run was large enough for it to be judged."""
+    rate = f"{report.failure_rate:.1%} (threshold {report.threshold:.1%})"
+    if report.rate_is_judged:
+        return rate
+    return f"{rate}; not judged: {report.tried} source(s) tried, under the {report.minimum_sources} it takes"
 
 
 def _counts(counts: dict[str, int]) -> str:

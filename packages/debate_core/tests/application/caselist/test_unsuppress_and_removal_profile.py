@@ -162,7 +162,8 @@ class TestUnsuppress:
 
 
 class EverydayProfileVersions:
-    """What AWS answers the EvidenceOperator profile: no ListBucketVersions, no DeleteObjectVersion."""
+    """What AWS answers the EvidenceOperator profile where the `v1-e29-t06` grant is not applied:
+    no ListBucketVersions, no DeleteObjectVersion."""
 
     def __init__(self, bucket: str) -> None:
         self.location = f"s3://{bucket}"
@@ -178,7 +179,7 @@ class EverydayProfileVersions:
 
 
 class ListsButCannotDelete(EverydayProfileVersions):
-    """A profile that may list versions and may not delete them."""
+    """A profile that may list versions and may not delete them: EvidenceOperator since `v1-e29-t06`."""
 
     def __init__(self, inner: S3EvidenceVersionStore, bucket: str) -> None:
         super().__init__(bucket)

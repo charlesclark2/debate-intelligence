@@ -844,7 +844,8 @@ async def test_a_torn_local_suppression_list_fails_the_import_without_naming_its
     installation: Installation,
 ) -> None:
     """This machine's copy of the list is a file under the data directory, and the error for a line
-    nobody can read names the copy it is in. The stage's reason names the file, not where it is."""
+    nobody can read names the copy it is in. The stage's reason names the copy by its role, not where
+    it is (`v1-e30-t10`; until then it named the file)."""
     copy = local_suppression_list_file(installation.data_dir)
     copy.path.parent.mkdir(parents=True)
     copy.path.write_bytes(b'{"schema_version":1,"act')
@@ -856,7 +857,9 @@ async def test_a_torn_local_suppression_list_fails_the_import_without_naming_its
     imported = stage(summary, SyncStage.IMPORT)
     assert imported["outcome"] == "failed"
     assert imported.get("error_codes") == ["UNREADABLE_APPEND_ONLY_RECORD"]
-    assert "suppression-list.jsonl line 1 is not readable" in str(imported["reason"])
+    assert "the local suppression list under storage.data_dir line 1 is not readable" in str(
+        imported["reason"]
+    )
     assert summary.failure_codes == ("UNREADABLE_APPEND_ONLY_RECORD",)
     assert_names_nothing_of_this_machine(summary, installation)
 

@@ -7,10 +7,13 @@ composition root twice, for two different credentials, and the difference matter
 * With the **`EvidenceRemoval`** profile (`DEBATE_REMOVAL_PROFILE`): `ListObjectVersions`,
   `GetObject` by version and `DeleteObject` by version are all granted under the five removable
   prefixes. This is what `caselist remove --execute` deletes with.
-* With the everyday **`EvidenceOperator`** profile: none of them is granted, and :meth:`list_versions`
-  raises :class:`~debate_core.application.errors.StoreAccessDenied`. A dry run builds one anyway,
-  so that it counts versions the moment the operator profile is granted `s3:ListBucketVersions`
-  and says "not counted" until then (the session report's proposal for `v1-e29-t03`).
+* With the everyday **`EvidenceOperator`** profile: `ListObjectVersions` is granted, read-only, under
+  the same five prefixes (`v1-e29-t06`, applied in dev and prod on 2026-10-08), and `DeleteObject`
+  is not granted at all. A removal's dry run lists with it to count the versions it would delete,
+  and `caselist status` lists with it to report what a removal left (`v1-e30-t10`). In an
+  environment where that grant is not applied, :meth:`list_versions` raises
+  :class:`~debate_core.application.errors.StoreAccessDenied`: the dry run then says "versions not
+  counted" and the status report says "not checked". Neither reads a refusal as an empty listing.
 
 Deletes are one `DeleteObject` per version, with the version id, which is the only form of delete
 that removes a version rather than hiding it behind a delete marker. A takedown deletes tens of

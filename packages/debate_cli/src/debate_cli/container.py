@@ -612,13 +612,28 @@ class ServiceContainer:
         )
 
     def caselist_status(self) -> CaselistStatusService:
-        """Build the comparison between this machine's caselist snapshots and the bucket's."""
-        return self.singleton(
-            "caselist_status",
-            lambda: CaselistStatusService(
-                local=self._local_evidence(),
-                remote=self._evidence_bucket(),
-                suppression=self.suppression_list(),
+        """Build the comparison between this machine's caselist snapshots and the bucket's.
+
+        It can also list object versions, for the removal-residue check `caselist status` asks for
+        (`v1-e30-t10`). That client is built with the everyday evidence profile, like the bucket's:
+        the takedown profile is never read here.
+        """
+        return self.singleton("caselist_status", self._build_caselist_status)
+
+    def _build_caselist_status(self) -> CaselistStatusService:
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.s3 import S3EvidenceVersionStore, build_s3_client
+
+        storage = self.settings.storage
+        bucket = self._evidence_bucket()
+        return CaselistStatusService(
+            local=self._local_evidence(),
+            remote=bucket,
+            suppression=self.suppression_list(),
+            versions=S3EvidenceVersionStore(
+                bucket=str(storage.s3.bucket),
+                profile=storage.s3.aws_profile,
+                client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
             ),
         )
 
@@ -646,7 +661,8 @@ class ServiceContainer:
             local_blobs=FsEvidenceVersionStore(data_dir / BLOB_DIRECTORY.parent),
             local_parsed=FsEvidenceVersionStore(data_dir / PARSED_DIRECTORY),
             remote=bucket,
-            # The everyday profile, which may not list versions today: the plan then says so.
+            # The everyday profile, which may list versions under the removable prefixes
+            # (v1-e29-t06). Where that grant is not applied, the plan says they were not counted.
             remote_versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,

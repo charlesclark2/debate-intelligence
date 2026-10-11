@@ -1,9 +1,19 @@
 """Turning one weekly archive into records, and saying exactly what changed since last week.
 
-OpenCaselist republishes **everything** every week. The 15 September archive contains almost all
-of the 8 September archive, which contains almost all of the 1 September archive, and a naive
-importer would therefore store the same file three times and report three times as much evidence
-as the circuit actually disclosed. Deduplication is not a refinement here; it is the job.
+A weekly archive is **not** a copy of the whole caselist. It is a window of about a week's
+editing: the files teams added or changed that week, and little else. Adjacent windows overlap
+only a little, so the 15 September archive holds mostly what the 8 September one did not
+(`docs/data/caselist-backfill-2026-09.md`, "Weekly archives are adjacent windows, not cumulative
+copies": three adjacent HS LD weeks held 2,374 members and 2,107 distinct files). The cumulative
+copy is the **complete** archive, `<slug>-all-<date>.zip`, which holds everything on the caselist
+that day and is filed as its own snapshot beside the weekly series (`v1-e34-t04`; "A complete
+archive", below).
+
+The same bytes still arrive more than once: carried from one window into the next, uploaded again
+under a browser's `(1)` name, disclosed by a second team, or held by the complete archive as well as
+the week that first brought them. A file is stored once by its digest however many archives hold
+it. What an import reports is how this window differs from the one before, which is not what is new
+to the caselist ("First seen", below).
 
 So every member of an archive is classified against the archive imported for the week before, and
 the answer is one of six things:
@@ -24,13 +34,15 @@ the answer is one of six things:
     These bytes are already stored, but this path is new: a re-upload under a browser's `(1)`
     name, or another team disclosing the same file. One source document, a second disclosure.
 `REMOVED`
-    The previous archive had this path and this one does not. The team took it down. Reported so
-    an operator can see it; the bytes are not deleted, because the file was disclosed and a card
-    may already be cut from it. Deleting is :mod:`v1-e30-t07`'s deliberate act.
+    The previous archive had this path and this one does not. That is not a takedown: a window
+    leaves out every file nobody touched that week, and a file uploaded again changes path. What
+    a team withdrew is read from the complete archive (below). Reported so an operator can see
+    it; the bytes are not deleted, because the file was disclosed and a card may already be cut
+    from it. Deleting is :mod:`v1-e30-t07`'s deliberate act.
 `SUPPRESSED`
     The file's SHA-256 is on the removal suppression list — or this one disclosure of it is — so it
-    is not stored, not disclosed and given no manifest row, however many more times the cumulative
-    archives republish it. Only the count survives. The list is a required constructor argument,
+    is not stored, not disclosed and given no manifest row, however many later archives, weekly
+    or complete, hold it. Only the count survives. The list is a required constructor argument,
     not a per-call option: an import cannot be run without it (`v1-e30-t07`).
 
 ## What the previous archive is

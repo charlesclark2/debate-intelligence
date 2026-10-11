@@ -19,7 +19,9 @@ than 404, which is how the first real-dev `--execute` stopped (2026-10-01).
 Before the first change, :func:`preflight` proves the takedown credential can do what the removal
 needs: it writes a probe object under `manifests/_suppression/preflight/`, lists its versions,
 deletes them, and checks they are gone. An unset profile, an expired session, or the everyday profile
-named by mistake all fail there, with nothing deleted and nothing appended (spec ac6).
+named by mistake all fail there, with nothing deleted and nothing appended (spec ac6). Since
+`v1-e29-t06` the everyday profile may list versions, so it gets as far as writing the probe and is
+refused at the delete: the error names the probe object it left.
 
 ## The order is the safety
 
@@ -276,10 +278,16 @@ def refuse_protected_versions(versions: Sequence[ObjectVersion]) -> None:
 async def preflight(access: TakedownAccess) -> None:
     """Prove the takedown credential can write, list and delete versions, before any real change.
 
-    Lists versions first — the one grant the everyday profile lacks, so the commonest mistake, naming
-    that profile, fails before anything is written — then writes a few bytes under
-    :data:`PREFLIGHT_PREFIX`, lists their versions, deletes every one and checks none is left. Raises
-    :class:`TakedownPreflightFailed` naming the step that failed.
+    Lists versions, then writes a few bytes under :data:`PREFLIGHT_PREFIX`, lists their versions,
+    deletes every one and checks none is left. Raises :class:`TakedownPreflightFailed` naming the
+    step that failed.
+
+    Until `v1-e29-t06` the first listing was the one grant the everyday profile lacked, so naming
+    that profile by mistake failed before anything was written. With that grant applied (dev and
+    prod, 2026-10-08) the everyday profile lists and writes like the takedown's, and is refused only
+    at the delete, which it has never been able to do. Nothing of the evidence is touched either
+    way, but the probe is then left in the bucket, and the error names its key. In an environment
+    without the grant the mistake still stops at the first listing.
     """
     key = f"{PREFLIGHT_PREFIX}{uuid.uuid4().hex}.txt"
     step = "list object versions"

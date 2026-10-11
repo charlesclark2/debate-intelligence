@@ -29,8 +29,19 @@ have taken and did not: a local manifest with a stored row the list stops
 source prefix whose digest is suppressed (:attr:`CaselistStatusReport.suppressed_objects`). That
 makes `caselist status` the check an operator runs after a removal (`caselist-removal.md`, step 6):
 clean means every manifest and every current source object agrees, and nothing suppressed is left.
-Noncurrent versions are not visible to the everyday credential's listing; `caselist remove` lists
-and deletes those itself.
+
+## What a removal left behind
+
+A plain listing shows current objects only. Asked to (`residue=True`, which the command does), the
+service also lists object versions and reports, per caselist, what the bucket still holds of files
+the list says were removed whole: current objects, noncurrent versions and delete markers
+(:attr:`CaselistStatusReport.residue`, :mod:`debate_core.application.caselist.removal_residue`,
+`v1-e30-t10`). The everyday `EvidenceOperator` profile may list versions under `raw/` and `parsed/`
+(`v1-e29-t06`, applied in dev and prod on 2026-10-08), so this needs no takedown profile, and it
+deletes nothing. Anything found is drift. In an environment where that grant is not applied the
+listing is refused, and the caselist is reported as *not checked*, which is not a finding of none
+and does not by itself make the comparison fail. `caselist pull` asks for the comparison alone, so
+its runs list no versions.
 
 Checksums are the bucket's *recorded* digests, read with one `HeadObject` per listed source — the
 listing states none (`debate_core.application.ports.evidence_store`). Nothing is downloaded: a
@@ -67,14 +78,17 @@ from debate_core.application.caselist.publish_plan import (
     suppressed_rows,
     validate_publish_target,
 )
+from debate_core.application.caselist.removal_residue import CaselistResidue, removal_residue
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
+from debate_core.application.ports.evidence_versions import EvidenceVersionStore
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
 
 __all__ = [
     "CASELIST_DRIFT",
+    "REMOVAL_RESIDUE",
     "CaselistStatusReport",
     "CaselistStatusService",
     "NoCaselistEvidence",
@@ -85,6 +99,11 @@ CASELIST_DRIFT: Final = "CASELIST_DRIFT"
 """The code of a comparison that found the two sides differ: `caselist status`'s `error.code`, and
 what the report stage of `caselist pull` records for a snapshot not in sync (`v1-e34-t13`). An
 outcome's code, not an exception's: the comparison ran, and running it again gives the same answer."""
+
+REMOVAL_RESIDUE: Final = "REMOVAL_RESIDUE"
+"""The code of a comparison in which every snapshot agrees and the bucket still holds versions of a
+file the suppression list says was removed: `caselist status`'s `error.code` then. An outcome's
+code, like :data:`CASELIST_DRIFT`, and as deterministic: only a removal run again changes it."""
 
 _DEFAULT_CONCURRENCY: Final = 8
 
@@ -147,15 +166,36 @@ class CaselistStatusReport:
     snapshots: tuple[SnapshotStatus, ...]
     suppressed_objects: tuple[ObjectKey, ...] = ()
     """Current source objects in the bucket whose digest is suppressed. A removal leftover."""
+    residue: tuple[CaselistResidue, ...] = ()
+    """Per caselist compared, what a version listing shows of its removed files. Empty when the
+    caller did not ask for the check."""
 
     @property
     def in_sync(self) -> bool:
-        """True only when every snapshot agrees and nothing suppressed is left; what exits 0."""
-        return all(snapshot.in_sync for snapshot in self.snapshots) and not self.suppressed_objects
+        """True only when every snapshot agrees and nothing suppressed is left; what exits 0.
+
+        A caselist whose residue could not be checked does not make this false: it is reported as
+        not checked (:attr:`residue_not_checked`).
+        """
+        return (
+            all(snapshot.in_sync for snapshot in self.snapshots)
+            and not self.suppressed_objects
+            and not self.residue_found
+        )
 
     @property
     def drifted(self) -> tuple[SnapshotStatus, ...]:
         return tuple(snapshot for snapshot in self.snapshots if not snapshot.in_sync)
+
+    @property
+    def residue_found(self) -> bool:
+        """Whether a version listing showed anything left of a removed file."""
+        return any(one.found for one in self.residue)
+
+    @property
+    def residue_not_checked(self) -> tuple[str, ...]:
+        """The caselists whose version listing was refused."""
+        return tuple(one.caselist for one in self.residue if not one.checked)
 
 
 class CaselistStatusService:
@@ -165,6 +205,8 @@ class CaselistStatusService:
         local: This machine's manifests and blobs.
         remote: The environment's evidence bucket.
         suppression: The removal suppression list. Required.
+        versions: The bucket's object versions through the everyday profile, for the residue check.
+            Listed only, and only when :meth:`status` is asked for residue.
         concurrency: `HeadObject` calls in flight at once.
     """
 
@@ -174,6 +216,7 @@ class CaselistStatusService:
         local: LocalEvidence,
         remote: EvidenceObjectStore,
         suppression: SuppressionList,
+        versions: EvidenceVersionStore | None = None,
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
@@ -181,13 +224,22 @@ class CaselistStatusService:
         self._local = local
         self._remote = remote
         self._suppression = suppression
+        self._versions = versions
         self._semaphore_size = concurrency
 
-    async def status(self, caselist: str | None = None, snapshot: str | None = None) -> CaselistStatusReport:
+    async def status(
+        self, caselist: str | None = None, snapshot: str | None = None, *, residue: bool = False
+    ) -> CaselistStatusReport:
         """Compare one caselist, or every caselist either side holds a manifest for.
+
+        With `residue`, also list object versions and report what is left of each compared
+        caselist's removed files, whichever snapshot was asked about: see "What a removal left
+        behind" in the module docstring.
 
         Raises :class:`NoCaselistEvidence` when neither side holds anything that was asked about.
         """
+        if residue and self._versions is None:
+            raise ValueError("the residue check needs a version store; this service was built without one")
         if caselist is None:
             if snapshot is not None:
                 raise ValueError("a snapshot is only meaningful with a caselist")
@@ -204,15 +256,18 @@ class CaselistStatusService:
         compared: list[SnapshotStatus] = []
         leftovers: list[ObjectKey] = []
         for name in caselists:
-            statuses, residue = await self._caselist_status(
+            statuses, suppressed_objects = await self._caselist_status(
                 name, snapshot, local_blobs, semaphore, suppression
             )
             compared.extend(statuses)
-            leftovers.extend(residue)
+            leftovers.extend(suppressed_objects)
         if not compared:
             raise NoCaselistEvidence(caselist, snapshot)
+        left: list[CaselistResidue] = []
+        if residue and self._versions is not None:
+            left = [await removal_residue(self._versions, name, suppression) for name in caselists]
         return CaselistStatusReport(
-            snapshots=tuple(compared), suppressed_objects=tuple(sorted(set(leftovers)))
+            snapshots=tuple(compared), suppressed_objects=tuple(sorted(set(leftovers))), residue=tuple(left)
         )
 
     async def _caselist_status(

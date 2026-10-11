@@ -324,8 +324,12 @@ class RemovalLogEntry(DomainModel):
 class UnreadableAppendOnlyRecord(DomainError):
     """A copy of the suppression list or removal log holds a line this build cannot read.
 
-    Names the copy and the line number, never the line. Nothing is repaired: a list that cannot be
-    read cannot be honoured, and a list that was "fixed" is no longer the record of what was asked.
+    Names the copy and the line number, never the line. The copy is named as its
+    :attr:`AppendOnlyRecord.location` names it: this machine's by its role, "the local suppression
+    list under storage.data_dir", and the bucket's by its `s3://` key. Never an absolute path, which
+    would put the operator's home directory in the message and the `--json` envelope
+    (`v1-e30-t10`). Nothing is repaired: a list that cannot be read cannot be honoured, and a list
+    that was "fixed" is no longer the record of what was asked.
     """
 
     def __init__(self, location: str, line_number: int, reason: str) -> None:
@@ -353,7 +357,8 @@ class AppendOnlyRecord(Protocol):
 
     @property
     def location(self) -> str:
-        """Where this copy lives, for messages: a path, or `s3://bucket/key`. Never its contents."""
+        """What a message calls this copy: its role for this machine's ("the local suppression list
+        under storage.data_dir"), or `s3://bucket/key`. Never a local path, and never its contents."""
         ...
 
     async def read_lines(self) -> tuple[str, ...]:

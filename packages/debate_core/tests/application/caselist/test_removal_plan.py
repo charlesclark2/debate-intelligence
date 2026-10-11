@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import DOCUMENT_BODIES, SYNTHETIC_CASELIST
+from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP_BODIES
 
 from debate_core.application.caselist.removal_plan import (
     Disposition,
@@ -222,8 +223,59 @@ class TestSharedFiles:
 
         (skipped,) = plan.sources
         assert skipped.disposition is Disposition.SKIP_SHARED
-        assert skipped.other_teams == 2 and skipped.camp_file_holders == 1
+        assert skipped.camp_file_holders == 1
         assert plan.nothing_to_do
+
+    async def test_a_source_removal_of_a_file_two_teams_hold_counts_one_other_team(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """Maple Grove/QX and Cedar Hollow/ZaLu hold it: two holding teams, so one *other* team.
+
+        Until `v1-e30-t10` a `--source` plan counted every holding team as "other", the one whose
+        file is being removed included, and this read 2.
+        """
+        for include_shared in (False, True):
+            plan = await removal_world.planner().plan(
+                SourceSelector(SHARED),
+                request_id=REQUEST,
+                reason=ReasonCode.REQUESTED_BY_SITE_ADMIN,
+                include_shared=include_shared,
+            )
+
+            (shared,) = plan.sources
+            assert shared.other_teams == 1
+            assert shared.shared
+
+    async def test_a_source_removal_of_a_file_one_team_holds_counts_no_other_team(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """Only Maple Grove/QX holds the Bayview semis negative, in one snapshot at one path."""
+        plan = await removal_world.planner().plan(
+            SourceSelector(digest("bayview-semis-neg")),
+            request_id=REQUEST,
+            reason=ReasonCode.REQUESTED_BY_TEAM,
+        )
+
+        (removed,) = plan.sources
+        assert removed.disposition is Disposition.REMOVE
+        assert removed.other_teams == 0
+        assert not removed.shared
+
+    async def test_a_source_removal_of_a_file_no_team_holds_counts_no_other_team(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """A camp file no team disclosed, and a digest the store has never held: no team either way."""
+        camp_only = hashlib.sha256(CAMP_BODIES["orchard-kritik"]).hexdigest()
+        held_nowhere = hashlib.sha256(b"synthetic bytes nothing in the fixture holds").hexdigest()
+
+        for sha256, camp_files in ((camp_only, 1), (held_nowhere, 0)):
+            plan = await removal_world.planner().plan(
+                SourceSelector(sha256), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_CAMP
+            )
+
+            (source,) = plan.sources
+            assert source.disposition is Disposition.REMOVE
+            assert (source.other_teams, source.camp_file_holders) == (0, camp_files)
 
     async def test_junk_that_shadows_a_removed_file_goes_even_when_its_team_stays(
         self, removal_world: RemovalWorld
@@ -272,7 +324,7 @@ class TestSharedFiles:
 
 
 class OperatorCredentialVersions:
-    """The everyday profile's view of versions: `s3:ListBucketVersions` is not granted."""
+    """The everyday profile's view of versions where the `v1-e29-t06` grant is not applied."""
 
     location = "s3://denied"
 

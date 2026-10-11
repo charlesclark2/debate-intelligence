@@ -520,3 +520,310 @@ def test_the_plans_json_names_no_school_team_path_or_file(
     executed = raw_json(*REMOVE_FIRST_VERSION, "--execute")
     assert json.loads(executed)["data"]["applied"] is True
     assert not [name for name in IDENTIFYING if name in executed]
+
+
+# ------------------------------------------------------------------------------------------------
+# A --source plan counts only the other teams (v1-e30-t10)
+# ------------------------------------------------------------------------------------------------
+
+#: The Round 1 affirmative: Maple Grove/QX discloses it and, from 09-08, so does Cedar Hollow/ZaLu.
+#: Two holding teams, so one other than the one whose file is removed.
+HELD_BY_TWO_TEAMS = hashlib.sha256(DOCUMENT_BODIES["grove-round-1-aff"]).hexdigest()
+#: The keys of one source in the plan's JSON, as `v1-e30-t11` settled them.
+SOURCE_KEYS = {
+    "sha256", "inclusion", "disposition", "byte_size", "format", "other_teams", "camp_file_holders",
+    "kept_in", "already_suppressed", "disclosures", "camp_files", "withdrawn_disclosures", "local_blob",
+    "deletes_source_record",
+}  # fmt: skip
+
+
+def test_a_source_plan_for_a_file_one_team_holds_says_nothing_about_other_teams(
+    installation: Path, bucket: S3Client, published: dict[date, Path]
+) -> None:
+    remove = ("caselist", "remove", "--source", BAYVIEW, *LATER_UPLOADS_REQUEST)
+
+    shown = runner.invoke(create_app(), list(remove)).stdout
+    planned = run(*remove)
+
+    (line,) = [line for line in shown.splitlines() if BAYVIEW in line and line.lstrip().startswith("1.")]
+    assert "other team" not in line and "also held" not in line, line
+    assert "other team" not in shown
+    (source,) = planned["data"]["sources"]
+    assert source["other_teams"] == 0
+    assert set(source) == SOURCE_KEYS
+
+
+def test_a_source_plan_for_a_file_two_teams_hold_counts_one_other_team(
+    installation: Path, bucket: S3Client, published: dict[date, Path]
+) -> None:
+    remove = ("caselist", "remove", "--source", HELD_BY_TWO_TEAMS, *LATER_UPLOADS_REQUEST)
+
+    shown = runner.invoke(create_app(), list(remove)).stdout
+    planned = run(*remove)
+
+    (line,) = [
+        line for line in shown.splitlines() if HELD_BY_TWO_TEAMS in line and line.lstrip().startswith("1.")
+    ]
+    assert line.endswith("; also held by 1 other team(s))"), line
+    (source,) = planned["data"]["sources"]
+    assert source["disposition"] == "skip_shared"
+    assert source["other_teams"] == 1
+    assert set(source) == SOURCE_KEYS
+
+
+# ------------------------------------------------------------------------------------------------
+# What a removal left behind, in `caselist status` (v1-e30-t10)
+# ------------------------------------------------------------------------------------------------
+
+#: `caselist status` with the everyday profile only. The takedown profile names nothing that exists,
+#: so a status that built a client with it would fail instead of reporting.
+NO_SUCH_PROFILE = "debate-no-such-profile"
+NOTHING_LEFT = {
+    "caselist": SYNTHETIC_CASELIST,
+    "checked": True,
+    "not_checked_reason": None,
+    "current_objects": 0,
+    "noncurrent_versions": 0,
+    "delete_markers": 0,
+    "files": [],
+}
+
+
+def raw_key(sha: str) -> str:
+    return f"raw/caselist/{SYNTHETIC_CASELIST}/sha256/{sha[0:2]}/{sha[2:4]}/{sha}"
+
+
+def every_version(client: S3Client) -> list[tuple[str, str, str]]:
+    """Every data version and delete marker in the bucket."""
+    listed = client.list_object_versions(Bucket=BUCKET)
+    return sorted(
+        [(str(v.get("Key")), str(v.get("VersionId")), "version") for v in listed.get("Versions", [])]
+        + [(str(m.get("Key")), str(m.get("VersionId")), "marker") for m in listed.get("DeleteMarkers", [])]
+    )
+
+
+def status_as_a_person_reads_it() -> str:
+    result = runner.invoke(create_app(), ["caselist", "status"], terminal_width=200)
+    return " ".join((result.stdout + result.stderr).split())
+
+
+@pytest.fixture
+def removed_with_its_later_upload(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first version removed by `--source`, and the revision with it as a later upload."""
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*REMOVE_FIRST_VERSION, "--execute")
+    assert done["exit_code"] == ExitCode.OK, done
+    assert json.loads(done["data"]["log_entry"])["removed_sha256"] == sorted([FIRST_VERSION, REVISION])
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", NO_SUCH_PROFILE)
+
+
+@pytest.fixture
+def versions_left_under_a_delete_marker(removed_with_its_later_upload: None, bucket: S3Client) -> None:
+    """Two versions of the later upload put back at its key, then hidden by a delete with no version id.
+
+    What a delete that is not the takedown's leaves: no plain listing shows the key, and both
+    versions can be restored.
+    """
+    for body in (b"one version", b"another version"):
+        bucket.put_object(Bucket=BUCKET, Key=raw_key(REVISION), Body=body)
+    bucket.delete_object(Bucket=BUCKET, Key=raw_key(REVISION))
+
+
+def test_status_after_a_complete_removal_says_it_checked_and_nothing_is_left(
+    installation: Path, bucket: S3Client, removed_with_its_later_upload: None
+) -> None:
+    status = run("caselist", "status")
+
+    assert status["exit_code"] == ExitCode.OK, status
+    assert status["data"]["removal_residue"] == [NOTHING_LEFT]
+    assert "No version of a removed file is left under raw/ or parsed/" in status_as_a_person_reads_it()
+
+
+def test_versions_of_a_later_upload_left_under_a_delete_marker_fail_status_by_prefix_and_count(
+    installation: Path, bucket: S3Client, versions_left_under_a_delete_marker: None
+) -> None:
+    """The later upload, not the file the request named: the report works from the suppression list."""
+    before = every_version(bucket)
+
+    status = run("caselist", "status")
+    shown = status_as_a_person_reads_it()
+
+    assert status["exit_code"] == ExitCode.DOMAIN_FAILURE, status
+    error = status["error"]
+    assert error["code"] == "REMOVAL_RESIDUE"
+    assert all(entry["in_sync"] for entry in error["details"]["snapshots"]), "no snapshot differs"
+    assert error["details"]["in_sync"] is False
+    assert error["details"]["removal_residue"] == [
+        {
+            "caselist": SYNTHETIC_CASELIST,
+            "checked": True,
+            "not_checked_reason": None,
+            "current_objects": 0,
+            "noncurrent_versions": 2,
+            "delete_markers": 1,
+            "files": [
+                {
+                    "sha256_prefix": REVISION[:12],
+                    "current_objects": 0,
+                    "noncurrent_versions": 2,
+                    "delete_markers": 1,
+                }
+            ],
+        }
+    ]
+    assert error["message"] == (
+        f"the bucket still holds versions of 1 removed file(s): {SYNTHETIC_CASELIST}: 0 current object(s), "
+        f"2 noncurrent version(s) and 1 delete marker(s) of 1 file(s) (sha256 {REVISION[:12]})"
+    )
+    assert "docs/runbooks/caselist-removal.md" in error["hint"]
+    assert f"sha256 {REVISION[:12]}" in shown and "2 noncurrent version(s)" in shown
+    # Digest prefixes and counts only: no whole digest, and nothing a manifest row holds.
+    reported = json.dumps([error["details"]["removal_residue"], error["message"], error["hint"]]) + shown
+    assert REVISION not in reported and FIRST_VERSION not in reported
+    for identifying in IDENTIFYING:
+        assert identifying not in reported, identifying
+    assert every_version(bucket) == before, "status changed the bucket"
+
+
+def test_a_refused_version_listing_says_not_checked_and_never_that_nothing_is_left(
+    installation: Path,
+    bucket: S3Client,
+    versions_left_under_a_delete_marker: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The versions are there. A profile without the grant cannot see them, and says so."""
+    from debate_core.application.errors import StoreAccessDenied
+    from debate_core.integrations.s3 import S3EvidenceVersionStore
+
+    async def refused(self: S3EvidenceVersionStore, prefix: str) -> tuple[Any, ...]:
+        raise StoreAccessDenied("ListObjectVersions", f"s3://{BUCKET}/{prefix}")
+
+    monkeypatch.setattr(S3EvidenceVersionStore, "list_versions", refused)
+
+    status = run("caselist", "status")
+    shown = status_as_a_person_reads_it()
+
+    assert status["exit_code"] == ExitCode.OK, status
+    assert status["data"]["removal_residue"] == [
+        {
+            "caselist": SYNTHETIC_CASELIST,
+            "checked": False,
+            "not_checked_reason": "STORE_ACCESS_DENIED",
+            "current_objects": None,
+            "noncurrent_versions": None,
+            "delete_markers": None,
+            "files": None,
+        }
+    ]
+    assert f"Removal residue NOT CHECKED for {SYNTHETIC_CASELIST}" in shown
+    assert "No version of a removed file is left" not in shown
+
+
+def test_status_reports_residue_with_the_everyday_profile_and_never_deletes_or_downloads_a_version(
+    installation: Path,
+    bucket: S3Client,
+    versions_left_under_a_delete_marker: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from debate_core.integrations.s3 import S3EvidenceVersionStore
+
+    profiles: list[str | None] = []
+    listing = S3EvidenceVersionStore.list_versions
+
+    async def recorded(self: S3EvidenceVersionStore, prefix: str) -> tuple[Any, ...]:
+        profiles.append(self.profile)
+        return await listing(self, prefix)
+
+    async def forbidden(self: S3EvidenceVersionStore, *_: Any) -> Any:
+        raise AssertionError("caselist status deleted or downloaded an object version")
+
+    monkeypatch.setattr(S3EvidenceVersionStore, "list_versions", recorded)
+    monkeypatch.setattr(S3EvidenceVersionStore, "delete_versions", forbidden)
+    monkeypatch.setattr(S3EvidenceVersionStore, "get_version_file", forbidden)
+    assert os.environ["DEBATE_REMOVAL_PROFILE"] == NO_SUCH_PROFILE
+
+    status = run("caselist", "status")
+
+    assert status["exit_code"] == ExitCode.DOMAIN_FAILURE, status
+    assert status["error"]["code"] == "REMOVAL_RESIDUE"
+    assert profiles and set(profiles) == {OPERATOR_PROFILE}
+
+
+def test_a_takedown_stopped_among_a_later_uploads_versions_shows_in_status_until_the_rerun(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The runbook's loop: a run stops, `caselist status` says what is left, the same command finishes it.
+
+    The later upload's object has three versions. The run deletes the named file's object, then the
+    first, current, version of the later upload's, and loses the bucket. S3 makes the next version
+    current, so one current object and one noncurrent version are left, of the later upload alone.
+    """
+    from debate_core.application.errors import StoreUnavailable
+    from debate_core.integrations.s3 import S3EvidenceVersionStore
+
+    for body in (b"a second version", b"a third version"):
+        bucket.put_object(Bucket=BUCKET, Key=raw_key(REVISION), Body=body)
+    deleting = S3EvidenceVersionStore.delete_versions
+
+    async def loses_the_bucket(self: S3EvidenceVersionStore, versions: Any) -> int:
+        if not any(REVISION in version.key for version in versions):
+            return await deleting(self, versions)
+        await deleting(self, versions[:1])
+        raise StoreUnavailable("DeleteObject", f"s3://{BUCKET}/{versions[0].key}", "the connection dropped")
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    with monkeypatch.context() as stopped:
+        stopped.setattr(S3EvidenceVersionStore, "delete_versions", loses_the_bucket)
+        incomplete = run(*REMOVE_FIRST_VERSION, "--execute")
+    assert incomplete["exit_code"] == ExitCode.RETRIEVAL_FAILURE, incomplete
+
+    left = run("caselist", "status")
+
+    assert left["exit_code"] == ExitCode.DOMAIN_FAILURE
+    # The run stopped before any manifest was rewritten, so the snapshots differ too, and that is
+    # the code. The residue is in the details beside them.
+    assert left["error"]["code"] == "CASELIST_DRIFT"
+    (residue,) = left["error"]["details"]["removal_residue"]
+    assert residue["files"] == [
+        {"sha256_prefix": REVISION[:12], "current_objects": 1, "noncurrent_versions": 1, "delete_markers": 0}
+    ]
+
+    finished = run(*REMOVE_FIRST_VERSION, "--execute")
+    assert finished["exit_code"] == ExitCode.OK, finished
+
+    clean = run("caselist", "status")
+    assert clean["exit_code"] == ExitCode.OK, clean
+    assert clean["data"]["removal_residue"] == [NOTHING_LEFT]
+
+
+def test_residue_a_completed_removal_left_is_cleared_by_naming_the_file_under_the_same_request(
+    installation: Path,
+    bucket: S3Client,
+    versions_left_under_a_delete_marker: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The runbook's other loop: every snapshot agrees, and the version listing still shows a file.
+
+    The original command finds nothing left to do, because nothing shows the later upload at the
+    removed path any more. Naming the file by its own sha256, under the same request, plans its
+    three versions (two data versions and the delete marker) and removes them.
+    """
+    assert "Nothing is left to remove" in runner.invoke(create_app(), list(REMOVE_FIRST_VERSION)).stdout
+    name_it = ("caselist", "remove", "--source", REVISION, *LATER_UPLOADS_REQUEST)
+
+    shown = runner.invoke(create_app(), list(name_it), terminal_width=200).stdout
+
+    assert "already suppressed by this request: finishing what a previous run left" in shown
+    assert f"{raw_key(REVISION)}  (3 version(s))" in shown
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*name_it, "--execute")
+    assert done["exit_code"] == ExitCode.OK, done
+    assert not bucket_holds(bucket, REVISION)
+    assert not any(REVISION in key for key, _, _ in every_version(bucket)), "the delete marker went too"
+
+    clean = run("caselist", "status")
+    assert clean["exit_code"] == ExitCode.OK, clean
+    assert clean["data"]["removal_residue"] == [NOTHING_LEFT]

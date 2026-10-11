@@ -9,11 +9,14 @@ suppression entry it would append. :class:`~debate_core.application.caselist.rem
 CaselistRemovalService` executes exactly that plan — the manifests it writes are the ones planned
 here, line for line — so what the operator reads before `--execute` is what happens.
 
-It reads only. The dry run needs nothing but the everyday evidence profile: bucket listings, heads
-and manifest downloads. Counting *noncurrent versions* needs `s3:ListBucketVersions`, which the
-everyday profile does not have today; the plan then says the versions were not counted
-(:attr:`RemovalPlan.versions_counted`), and `--execute` — which lists and deletes them with the
-takedown profile — reports how many it deleted.
+It reads only. The dry run needs nothing but the everyday evidence profile: bucket listings, heads,
+manifest downloads and a listing of object versions. Counting *noncurrent versions* needs
+`s3:ListBucketVersions`, which the everyday profile has, read-only, under the prefixes a takedown
+removes from (`v1-e29-t06`, applied in dev and prod on 2026-10-08), so the plan gives each object's
+version count. In an environment where that grant is not applied the listing is refused, and the
+plan then says the versions were not counted (:attr:`RemovalPlan.versions_counted`); everything
+else in it is the same. Either way `--execute` lists every version again with the takedown profile,
+deletes them, and reports how many it deleted.
 
 ## Three things can happen to a source
 
@@ -364,8 +367,9 @@ class PlannedSource:
     """`(caselist, path)` of the copies a withdrawal takes: the requesting team's, from records and
     manifests alike, or for a later upload the removed paths it is held at."""
     other_teams: int
-    """Other teams that disclosed these bytes, before the removal. For a later upload, the teams
-    holding it at a path the removal does not take it from."""
+    """Other teams that disclosed these bytes, before the removal: other than the requesting team,
+    or for a `--source` removal other than the one team whose file it is. For a later upload, the
+    teams holding it at a path the removal does not take it from."""
     camp_file_holders: int
     """OpenEv camp files holding these bytes, before the removal. For a later upload, the releases
     holding it at a camp path the removal does not take it from."""
@@ -955,7 +959,9 @@ class RemovalPlanner:
             others = len(set(holdings.teams) - {requester})
             shared = others > 0 or bool(holdings.releases)
         else:
-            others = len(holdings.teams)
+            # No requesting team: one holding team's file is the one removed, and the rest are the
+            # others. Counting all of them called a file one team holds "also held by 1 other team".
+            others = max(len(holdings.teams) - 1, 0)
             shared = len(holdings.teams) + len(holdings.releases) > 1
 
         if (state.suppresses_source(digest) and finishing) or not shared or include_shared:

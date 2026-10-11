@@ -737,6 +737,25 @@ async def test_a_missing_grant_in_publish_fails_the_stage_and_names_the_grant(
     assert_names_nothing_of_this_machine(watched.summary, installation)
 
 
+async def test_a_refusal_that_carries_no_hint_is_given_none_by_the_sync(
+    installation: Installation,
+) -> None:
+    """The fix for a bucket's refusal is the adapter's to write (`v1-e29-t07`). A refusal that
+    arrives without one fails the stage on its code all the same, and the sync invents nothing:
+    in particular not a login."""
+    source = FakeSource(installation.archives, weeks=[WEEK_1])
+    refusing = RefusingBucket(StoreAccessDenied("ListObjectsV2", BUCKET_KEY))
+
+    watched = await pull(installation, installation.sync(source, publish_to=refusing))
+
+    published = stage(watched.summary, SyncStage.PUBLISH)
+    assert published["outcome"] == "failed"
+    assert published.get("error_codes") == ["STORE_ACCESS_DENIED"]
+    assert published.get("hint") is None
+    assert owed(installation) == ["testcl26 2026-09-01"]
+    assert "aws sso login" not in watched.notified
+
+
 async def test_a_profile_the_aws_config_lacks_fails_publish_and_nothing_waits_for_a_login(
     installation: Installation,
 ) -> None:

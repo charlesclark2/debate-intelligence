@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 39 | 33 | 214 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 63 | 38 | 371 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 63 | 39 | 371 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -156,7 +156,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [S3 blob-store adapter](plan_specs/v1/e29-cloud-evidence-store/t04-s3-blob-store.yaml) `v1-e29-t04-s3-blob-store` | Succeeded | 2 | 11.0 |
 | [`debate-research store` sync commands](plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml) `v1-e29-t05-evidence-sync-cli` | Succeeded | 3 | 11.5 |
 | [Removal grants: the scope is tested, and a plan can count versions](plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml) `v1-e29-t06-removal-grant-scope-test` | Succeeded | 1 | 8.0 |
-| [A profile missing from the AWS config is a configuration error, not an expired session](plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml) `v1-e29-t07-missing-profile-not-retryable` | Pending | 1 | 1.0 |
+| [A profile missing from the AWS config is a configuration error, not an expired session](plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml) `v1-e29-t07-missing-profile-not-retryable` | Succeeded | 1 | 1.0 |
 | [The takedown preflight refuses the everyday profile before it writes anything](plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml) `v1-e29-t08-takedown-preflight-identity` | Pending | 1 | 2.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)

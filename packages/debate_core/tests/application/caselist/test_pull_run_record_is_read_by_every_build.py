@@ -38,7 +38,7 @@ import logging
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import jsonschema
 import pytest
@@ -87,7 +87,12 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
         {
             "run_id": FIRST_RUN_ID,
             "stages": [
-                {"stage": "publish", "error_codes": ["STORE_UNAVAILABLE"], "hint": None, "earlier_findings": []}
+                {
+                    "stage": "publish",
+                    "error_codes": ["STORE_UNAVAILABLE"],
+                    "hint": None,
+                    "earlier_findings": [],
+                }
             ],
             "failure_codes": ["STORE_UNAVAILABLE"],
             "hint": None,
@@ -119,7 +124,12 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
         {
             "run_id": FIRST_RUN_ID,
             "stages": [
-                {"stage": "import", "error_codes": ["UNREADABLE_ARCHIVE"], "hint": None, "earlier_findings": []}
+                {
+                    "stage": "import",
+                    "error_codes": ["UNREADABLE_ARCHIVE"],
+                    "hint": None,
+                    "earlier_findings": [],
+                }
             ],
             "failure_codes": ["UNREADABLE_ARCHIVE"],
             "hint": None,
@@ -134,7 +144,12 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
         {
             "run_id": FIRST_RUN_ID,
             "stages": [
-                {"stage": "publish", "error_codes": [], "hint": None, "earlier_findings": ["CHECKSUM_MISMATCH"]}
+                {
+                    "stage": "publish",
+                    "error_codes": [],
+                    "hint": None,
+                    "earlier_findings": ["CHECKSUM_MISMATCH"],
+                }
             ],
             "failure_codes": [],
             "hint": None,
@@ -151,7 +166,13 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
         }
     ],
     "a_run_stopped_by_an_error_nobody_modelled": [
-        {"run_id": FIRST_RUN_ID, "stages": [], "failure_codes": ["INTERNAL_ERROR"], "hint": None, "parse": None}
+        {
+            "run_id": FIRST_RUN_ID,
+            "stages": [],
+            "failure_codes": ["INTERNAL_ERROR"],
+            "hint": None,
+            "parse": None,
+        }
     ],
     "two_weeks_imported_and_parsed": [
         {
@@ -184,7 +205,9 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture
-def world(tmp_path: Path, s3_client: S3Client, evidence_bucket: str, monkeypatch: pytest.MonkeyPatch) -> World:
+def world(
+    tmp_path: Path, s3_client: S3Client, evidence_bucket: str, monkeypatch: pytest.MonkeyPatch
+) -> World:
     def set_clock(moment: datetime) -> None:
         monkeypatch.setattr(inbox_retention, "RUN_CLOCK", moment)
 
@@ -209,7 +232,8 @@ def older_builds_schema(build: str) -> dict[str, Any]:
 def read_as_an_older_build_reads(record: object) -> None:
     """Validate `record` as the older builds do: their model's schema, which forbids unknown fields."""
     for build in ("start_commit", "installed_build"):
-        jsonschema.Draft202012Validator(older_builds_schema(build)).validate(record)
+        validator = jsonschema.Draft202012Validator(older_builds_schema(build))
+        validator.validate(record)  # pyright: ignore[reportUnknownMemberType]
 
 
 def stored_lines(name: str) -> list[str]:
@@ -265,9 +289,10 @@ def test_the_stored_schemas_forbid_an_unknown_field_in_a_record_and_in_a_stage()
 def what_a_record_must_be(schema: object) -> object:
     """A schema less its prose: the docstrings a model's schema quotes validate nothing."""
     if isinstance(schema, dict):
-        return {key: what_a_record_must_be(value) for key, value in schema.items() if key != "description"}  # pyright: ignore[reportUnknownVariableType]
+        fields = cast("dict[str, object]", schema)
+        return {key: what_a_record_must_be(value) for key, value in fields.items() if key != "description"}
     if isinstance(schema, list):
-        return [what_a_record_must_be(one) for one in schema]  # pyright: ignore[reportUnknownVariableType]
+        return [what_a_record_must_be(one) for one in cast("list[object]", schema)]
     return schema
 
 
@@ -334,7 +359,9 @@ async def test_a_run_log_an_older_build_wrote_is_read_whole_and_written_back_byt
 
     assert [one.model_dump_json() for one in records] == stored_lines(name)
     assert caplog.records == []
-    history = sync_runs.SyncRunHistory(log=SyncRunLog(log), remote=None, scratch_dir=tmp_path, overdue_after_days=8)
+    history = sync_runs.SyncRunHistory(
+        log=SyncRunLog(log), remote=None, scratch_dir=tmp_path, overdue_after_days=8
+    )
     runs = await history.recent_runs(5)
     assert [one.record for one in runs] == list(reversed(records))
     assert [one.details for one in runs] == [None] * len(records), "an older build wrote no details"

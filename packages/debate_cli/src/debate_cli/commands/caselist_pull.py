@@ -80,6 +80,24 @@ being built and so ends the run before it starts (`v1-e29-t07`).
 
 The envelope's `error.code` for a failed stage is `CASELIST_PULL_INCOMPLETE` whichever it is; the
 exit status and each stage's `error_codes` say which.
+
+## The notification says the same thing
+
+A failed run notifies the operator that the next scheduled run should retry it, or that a person
+should look (`v1-e34-t19`). That is this command's exit status again, `3` or anything else, decided
+by the same function: the composition root hands the run monitor
+:func:`~debate_cli.exit_codes.codes_exit_as_a_retrieval_failure`. The notification also carries a
+failed stage's `hint`. A publish left `pending` by an expired session exits `0` as before; what it
+had found first is on its stage as `earlier_findings`, which this command's exit status never
+reads.
+
+## What an unreadable file on this machine does
+
+A manifest file the operating system will not open or let be written fails the stage that needed
+it, as `STORE_ACCESS_DENIED` with the data-directory `hint`, and exits `3`; at the selection, which
+has no stage to fail, the run stops on the same error and exits `3` (`v1-e34-t19`). A weekly or
+complete archive in the inbox that cannot be read fails its own import as `UNREADABLE_ARCHIVE`,
+exit `1`, and the run's other archives are imported. Neither is exit `70` any longer.
 """
 
 from __future__ import annotations
@@ -102,7 +120,7 @@ from debate_core.application.caselist_sync import (
     run_pull,
 )
 from debate_core.application.settings import Settings
-from debate_core.application.sync_runs import SyncRunRecord
+from debate_core.application.sync_runs import SyncRunDetails, SyncRunRecord
 
 __all__ = ["pull", "pull_summary"]
 
@@ -164,7 +182,7 @@ def pull(
         )
     )
     summary = pulled.summary
-    payload = pull_summary(summary, settings, pulled.summary_path, pulled.record)
+    payload = pull_summary(summary, settings, pulled.summary_path, pulled.record, pulled.details)
     display = _pull_table(summary, settings, pulled.record)
     if summary.succeeded:
         cli.output.success(command_name(ctx), payload, display=display)
@@ -192,7 +210,11 @@ class ConflictingPullMode(typer.BadParameter):
 
 
 def pull_summary(
-    summary: RunSummary, settings: Settings, written_to: Any = None, record: SyncRunRecord | None = None
+    summary: RunSummary,
+    settings: Settings,
+    written_to: Any = None,
+    record: SyncRunRecord | None = None,
+    details: SyncRunDetails | None = None,
 ) -> dict[str, JsonValue]:
     """The `--json` envelope's `data`: the run summary, plus where it was written.
 
@@ -209,6 +231,9 @@ def pull_summary(
     body["summary_written_to"] = str(written_to) if written_to is not None else None
     # The run log's record of this run (v1-e34-t03), or `None` for a dry run, which records nothing.
     body["run_record"] = cast("JsonValue", record.model_dump(mode="json")) if record is not None else None
+    # What is kept beside the record, because the record's shape is frozen (v1-e34-t19): each
+    # failed stage's codes and hint, and the parse stage's counts. `None` for a dry run too.
+    body["run_details"] = cast("JsonValue", details.model_dump(mode="json")) if details is not None else None
     return body
 
 

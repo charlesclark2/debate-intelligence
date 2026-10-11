@@ -231,7 +231,9 @@ async def test_a_pull_that_cannot_write_a_manifest_fails_the_import_on_the_store
 
     assert again.succeeded, again.stages
     assert again.snapshots_imported == ("testcl26 2026-09-08",)
-    assert source.archive_fetches == [weekly_name(WEEK_2)], "the week is imported from the inbox, not fetched twice"
+    assert source.archive_fetches == [weekly_name(WEEK_2)], (
+        "the week is imported from the inbox, not fetched twice"
+    )
 
 
 @needs_permissions
@@ -432,8 +434,12 @@ def pulling_two_caselists(installation: Installation, source: FakeSource) -> Cas
     service = installation.sync(source)
     # The installation builds the pull for its one caselist; this is the same pull with the
     # composition root's table one slug longer.
-    service._event_for_caselist = lambda _: Event.LD  # pyright: ignore[reportPrivateUsage]
+    service._event_for_caselist = every_caselist_debates_ld  # pyright: ignore[reportPrivateUsage]
     return service
+
+
+def every_caselist_debates_ld(caselist: str) -> Event:
+    return Event.LD
 
 
 @needs_permissions
@@ -537,7 +543,7 @@ async def test_an_operating_system_error_that_is_not_the_archives_fails_its_impo
     """The disk fills while one caselist's manifest is written. That is not an archive that cannot
     be read, and it is not a refusal: nobody modelled it, so it is recorded as the CLI reports any
     such error, by its class and never by its message, which quotes the path. The run goes on."""
-    write_manifest = sync_module.write_manifest
+    write_manifest = manifest_module.write_manifest
 
     def disk_full_for_one(report: Any, destination: Path) -> Path:
         if report.caselist == CASELIST:

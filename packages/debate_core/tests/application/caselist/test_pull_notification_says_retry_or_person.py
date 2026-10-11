@@ -130,7 +130,9 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture
-def world(tmp_path: Path, s3_client: S3Client, evidence_bucket: str, monkeypatch: pytest.MonkeyPatch) -> World:
+def world(
+    tmp_path: Path, s3_client: S3Client, evidence_bucket: str, monkeypatch: pytest.MonkeyPatch
+) -> World:
     def set_clock(moment: datetime) -> None:
         monkeypatch.setattr(inbox_retention, "RUN_CLOCK", moment)
 
@@ -179,9 +181,7 @@ async def test_a_run_failed_only_on_what_a_retry_may_cure_says_the_next_schedule
 
     notification = the_one_notification(world)
     assert notification.title == RETRY_TITLE
-    assert notification.message == (
-        f"{WHERE}: the publish stage failed on STORE_UNAVAILABLE. {RETRY} {KEPT}"
-    )
+    assert notification.message == (f"{WHERE}: the publish stage failed on STORE_UNAVAILABLE. {RETRY} {KEPT}")
     assert notification.hint is None
     assert notification.fix_command == "debate-research caselist pull --publish-pending"
     assert_names_no_path(world, notification)
@@ -374,9 +374,7 @@ async def test_a_parse_over_the_failure_rate_carries_the_command_that_lists_what
 
     notification = the_one_notification(world)
     assert notification.title == "caselist pull finished with a failed stage"
-    assert notification.message == (
-        f"{WHERE}: the parse stage failed on PARSE_FAILURE_RATE_EXCEEDED. {KEPT}"
-    )
+    assert notification.message == (f"{WHERE}: the parse stage failed on PARSE_FAILURE_RATE_EXCEEDED. {KEPT}")
     assert notification.hint == LIST_WHAT_FAILED_TO_PARSE
 
 
@@ -544,5 +542,7 @@ def test_the_runbook_shows_both_wordings_and_they_are_the_ones_the_notification_
         "A person should look as well: before the session expired a snapshot ended incomplete on "
         "CHECKSUM_MISMATCH, which the login will not fix." in section
     )
-    assert THIS_MACHINE_REFUSED_THE_MANIFESTS.replace("the manifest directory", "the blob directory") in section
+    assert (
+        THIS_MACHINE_REFUSED_THE_MANIFESTS.replace("the manifest directory", "the blob directory") in section
+    )
     assert "debate-research caselist parse --caselist <slug> --publish" in section

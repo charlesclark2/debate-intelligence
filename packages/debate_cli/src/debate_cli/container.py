@@ -105,6 +105,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
+from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.caselist.evidence_listing import LocalEvidence, digests_in_earlier_manifests
 from debate_core.application.caselist.import_service import CaselistImportService, EarlierManifestDigests
 from debate_core.application.caselist.inbox_purge import CaselistInbox
@@ -887,6 +888,11 @@ class ServiceContainer:
         The run log lives in this environment's data directory, and the record goes to its bucket
         when it names one. The caselist_token, when it is in the settings, is registered as a
         secret to scrub from every message, as a backstop to messages that never carry it.
+
+        The monitor is handed the command's own rule for which failures a retry may cure
+        (:func:`~debate_cli.exit_codes.codes_exit_as_a_retrieval_failure`), so that a failed run's
+        notification says "the next run retries it" exactly when the command exits `3`
+        (`v1-e34-t19`). `debate_core` never decides that for itself.
         """
         return self.singleton("caselist_sync_monitor", self._build_caselist_sync_monitor)
 
@@ -901,6 +907,7 @@ class ServiceContainer:
             aws_login_command=self._aws_login_command(),
             secrets=lambda: [token.get_secret_value()] if token is not None else [],
             clock=self.clock(),
+            may_succeed_on_retry=codes_exit_as_a_retrieval_failure,
         )
 
     def caselist_sync_history(self) -> SyncRunHistory:

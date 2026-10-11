@@ -769,7 +769,8 @@ def notifications_for(
         only_parse = set(failed) == {str(SyncStage.PARSE)}
         said = [details.stage(stage) for stage in failed]
         named = "; ".join(
-            f"the {stage} stage failed" + (f" on {', '.join(one.error_codes)}" if one and one.error_codes else "")
+            f"the {stage} stage failed"
+            + (f" on {', '.join(one.error_codes)}" if one and one.error_codes else "")
             for stage, one in zip(failed, said, strict=True)
         )
         hints = list(dict.fromkeys(one.hint for one in said if one is not None and one.hint))
@@ -989,7 +990,9 @@ async def read_remote_records(
 
     Run ids sort as their start times do, and so do the keys, so the newest are the last keys.
     """
-    return [one.record for one in await _read_remote(store, last=last, scratch_dir=scratch_dir, details=False)]
+    return [
+        one.record for one in await _read_remote(store, last=last, scratch_dir=scratch_dir, details=False)
+    ]
 
 
 async def read_remote_runs(store: EvidenceObjectStore, *, last: int, scratch_dir: Path) -> list[RecordedRun]:
@@ -1288,7 +1291,8 @@ class SyncRunHistory:
         if not remote:
             beside = self._details.read()
             return [
-                RecordedRun(record=record, details=beside.get(record.run_id)) for record in self._log.last(last)
+                RecordedRun(record=record, details=beside.get(record.run_id))
+                for record in self._log.last(last)
             ]
         if self._remote is None:
             raise NoRemoteRunLog

@@ -179,6 +179,15 @@ this run did not obtain (the cap deferred it, or its download failed). Everythin
 inbox for a later run. Importing past a gap would give the newer week a manifest, the older week
 would then no longer be newer than the latest manifest, and no run would ever fetch or import it.
 
+**One archive's failure is that archive's** (`v1-e34-t19`). Whatever an import raises fails that
+import and nothing else: the caselist stops at the gap, and the other caselists' weeks, the camp
+files and the complete archive are still imported. That includes an `OSError`, which used to end
+the run for a weekly or a complete archive. An archive in the inbox that the operating system will
+not open, or that fails part-way through a read, is :class:`~debate_core.application.errors.
+UnreadableArchive`, the code a download whose bytes cannot be hashed already had
+(:func:`_entries_of`); any other `OSError` in an import, a full disk under the blob store say, is
+recorded by its class alone under the code of an error nobody modelled.
+
 ## A camp file that was removed
 
 A removal (`caselist remove`, `v1-e30-t07`) puts the file's sha256 on the suppression list and
@@ -303,6 +312,26 @@ is signed in and lacks a grant. Each fails its stage, with the fix that applies 
 `hint`, and the snapshots not yet published stay owed for the run after the fix. A bucket that did
 not answer (:class:`~debate_core.application.errors.StoreUnavailable`) fails the publish stage the
 same way, and for the same reason the snapshots stay owed: the next run publishes them.
+
+**A manifest file is this machine's store too** (`v1-e34-t19`). A manifest is read and written by
+the path the store names for it, and a `PermissionError` there is the same
+:class:`~debate_core.application.errors.LocalStoreAccessDenied`, naming the manifest directory
+(:mod:`debate_core.application.caselist.manifest`). In an import or in retention it fails the
+stage, with the data-directory fix in its hint. In the selection there is no stage to fail and
+nothing safe to go on with, so it stops the run before anything is fetched, exactly as an
+unreadable manifest directory does.
+
+**What the publisher raises instead of reporting fails the stage, not the run** (`v1-e34-t19`). A
+local manifest with a line nobody can read is refused when the publish is planned
+(:class:`~debate_core.application.caselist.publish_plan.UnreadableManifest`), outside the
+publisher's own per-object accounting. It is that snapshot's failure, under that error's code: the
+snapshot is not confirmed, so it stays owed, the snapshots after it are still published, and the
+run goes on to its summary, its record and its notification.
+
+**A pending stage keeps what it found first** (`v1-e34-t19`). When a snapshot has ended incomplete
+on a code and the session then expires, the stage is pending and carries no error code, as ever.
+The code is kept on the stage as an *earlier finding* (:attr:`StageRecord.earlier_findings`),
+which the exit status never reads, so that the run can say a login alone will not finish the job.
 
 ## What the pending-work file holds
 
@@ -2366,8 +2395,9 @@ class CaselistSyncService:
         has captured bytes worth recording — the exceptions being an expired OpenCaselist token
         (policy E34 gate 5: the run stops and the operator is told), a store this machine cannot
         write manifests to, a manifest directory the operating system will not let the selection
-        read (:class:`~debate_core.application.errors.LocalStoreAccessDenied`, raised before
-        anything is fetched, because a run that cannot see what it holds would fetch it all again),
+        read, or a manifest file in one (:class:`~debate_core.application.errors.LocalStoreAccessDenied`,
+        raised before anything is fetched, because a run that cannot see what it holds would fetch
+        it all again),
         and a `full_archive` (`--full-archive <slug>`) the run cannot fetch,
         :class:`FullArchiveRefused`, raised before anything is downloaded. A dry run reports that
         refusal in its summary instead of raising it.
@@ -3244,6 +3274,11 @@ class CaselistSyncService:
         (`v1-e34-t13`): it records the store's error code, and for a refusal the fix that applies,
         which is never a login. It would be true of every snapshot still to go, so the stage stops
         there.
+
+        Anything else the publisher raises for one snapshot, a manifest it cannot read when it
+        plans for one, is that snapshot's failure under the error's own code, and the stage goes on
+        to the next (`v1-e34-t19`). A stage that ends pending keeps the codes of what ended
+        incomplete before the session expired as its earlier findings, and no error code.
 
         **However it ends, the pending-work file then holds what :func:`snapshots_still_owed`
         says** (`v1-e34-t18`): every snapshot owed before or imported by this run that the bucket

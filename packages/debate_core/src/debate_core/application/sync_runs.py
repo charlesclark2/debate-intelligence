@@ -526,10 +526,12 @@ characters. Like retention's, only the length allowed is longer: every earlier b
 
 
 _MAX_PARSE_REASON_CHARACTERS: Final = 2000
-"""The parse stage's reason is where its counts reach `caselist runs` (`v1-e34-t17`): the record has
-no field for them, and adding one would be a record an older build refuses. After the counts it
-names each caselist that failed and why, and what publishes a parsed store that was not. As for the
-select stage, only the length allowed is longer."""
+"""The parse stage's reason is where its counts reach an older build's `caselist runs`
+(`v1-e34-t17`): the record has no field for them, and adding one would be a record an older build
+refuses. This build keeps the counts themselves beside the record (:class:`ParseCounts`,
+`v1-e34-t19`) and still writes the sentence, for those builds and for the caption. After the counts
+it names each caselist that failed and why, and what publishes a parsed store that was not. As for
+the select stage, only the length allowed is longer."""
 
 
 def _reason_limit(stage: SyncStage) -> int:

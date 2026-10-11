@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import boto3
+import jsonschema
 import pytest
 import respx
 from moto import mock_aws
@@ -48,6 +49,13 @@ runner = CliRunner()
 pytestmark = pytest.mark.in_process
 
 BUCKET = "debate-dev-evidence-runs-moto"
+
+INSTALLED_BUILDS_RECORD = (
+    Path(__file__).resolve().parents[2]
+    / "packages/debate_core/tests/application/caselist/stored_run_records"
+    / "record_schema_of_the_installed_build.json"
+)
+"""The run record's schema as the build installed for the weekly agent (0.1.0.dev60) printed it."""
 AWS_PROFILE_NAME = "debate-dev-evidence"
 API = "https://api.opencaselist.example.invalid/v1"
 FILE_HOST = "https://files.opencaselist.example.invalid"
@@ -163,3 +171,37 @@ def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
     assert remote["data"]["source"] == "bucket"
     key = f"reports/sync-runs/{run_id[:4]}/{run_id}.json"
     assert bucket.head_object(Bucket=BUCKET, Key=key)["ContentLength"] > 0
+
+    # What the record cannot hold is beside it, on this machine and in the bucket, and both
+    # listings give it with the run: the parse stage's counts, the same nine the pull printed
+    # (v1-e34-t19). The record in the bucket is still one a build installed before that reads.
+    counted = pulled["data"]["parse"]
+    assert sorted(counted) == [
+        "attempted",
+        "cards",
+        "caselists",
+        "failed",
+        "full_parses",
+        "not_published",
+        "skipped",
+        "unsupported",
+        "uploaded",
+    ]
+    assert counted["attempted"] > 0
+    for listed in (local, remote):
+        [record] = listed["data"]["runs"]
+        assert record["details"]["run_id"] == run_id
+        assert record["details"]["parse"] == counted
+        assert record["details"]["failure_codes"] == []
+    beside = f"reports/sync-run-details/{run_id[:4]}/{run_id}.json"
+    assert json.loads(bucket.get_object(Bucket=BUCKET, Key=beside)["Body"].read())["parse"] == counted
+    stored = json.loads(bucket.get_object(Bucket=BUCKET, Key=key)["Body"].read())
+    jsonschema.Draft202012Validator(json.loads(INSTALLED_BUILDS_RECORD.read_text("utf-8"))).validate(stored)  # pyright: ignore[reportUnknownMemberType]
+    under_the_records = bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/sync-runs/")["Contents"]
+    assert [one["Key"] for one in under_the_records] == [key], "an older build lists this prefix"
+
+    rendered = runner.invoke(create_app(), ["caselist", "runs"], env={"COLUMNS": "200"})
+    table = " ".join(rendered.stdout.split())
+    assert "Parse stage" in table
+    assert f"{counted['caselists']} caselist(s), {counted['full_parses']} in full" in table
+    assert f"{counted['cards']} card(s)" in table

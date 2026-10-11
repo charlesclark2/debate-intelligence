@@ -46,11 +46,15 @@ from tests.fixtures.permissions import needs_permissions, refused
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
+from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired, StoreUnavailable
+from debate_core.application.ports.caselist_source import ArchiveListing, DownloadedFile
+from debate_core.application.ports.notifier import RecordingNotifier
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.local import BLOB_DIRECTORY
+from debate_core.integrations.opencaselist import OpenCaselistClient
 from debate_core.integrations.s3 import S3Call, S3EvidenceObjectStore, translate_s3_error
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -996,3 +1000,245 @@ def test_a_profile_setting_that_names_no_profile_in_the_aws_config_ends_the_pull
     # cannot be built either. Nothing is fetched, and no run is recorded (the runbook says so).
     assert len(site.calls) == 0
     assert not (installation / "data").exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# Unreadable local files, and what the notification says (v1-e34-t19)
+# ------------------------------------------------------------------------------------------------
+
+RETRY_TITLE = "caselist pull failed: will be retried"
+PERSON_TITLE = "caselist pull failed: needs a person"
+"""The two banners of a failed run, by hand, as `docs/runbooks/caselist-scheduled-sync.md` gives them."""
+
+
+@pytest.fixture
+def notified(monkeypatch: pytest.MonkeyPatch) -> RecordingNotifier:
+    """What the run monitor would have shown: the profile here says `none`, so nothing is shown."""
+    notifier = RecordingNotifier()
+    monkeypatch.setattr(ServiceContainer, "sync_notifier", lambda _: notifier)
+    return notifier
+
+
+def everything_said(envelope: dict[str, Any], notified: RecordingNotifier) -> str:
+    """The stages, the command's own error and every notification, as one string to search."""
+    return stage_text(envelope) + json.dumps(
+        [[one.title, one.message, one.hint, one.fix_command] for one in notified.sent]
+    )
+
+
+@needs_permissions
+def test_a_manifest_this_mac_will_not_let_be_written_fails_the_import_with_three_and_the_fix(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, notified: RecordingNotifier
+) -> None:
+    """The caselist's manifest folder can be read and not written. Each week's import and the
+    complete archive's reach the point of writing a manifest and are refused. That was a
+    `PermissionError` and exit 70, "a bug", with no summary. It is the import stage failing on a
+    refusal by this Mac: exit `3`, the data-directory fix in the stage's hint and on the banner,
+    and the camp file, whose manifest is in another folder, imported and published all the same."""
+    manifests = installation / "data" / "objects" / "manifests" / SYNTHETIC_CASELIST
+    manifests.mkdir(parents=True)
+    manifests.chmod(0o500)
+    try:
+        pulled = run("caselist", "pull")
+    finally:
+        manifests.chmod(0o700)
+
+    assert pulled["exit_code"] == ExitCode.RETRIEVAL_FAILURE, pulled
+    assert pulled["error"]["code"] == "CASELIST_PULL_INCOMPLETE"
+    data = run_summary(pulled)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["import"]["outcome"] == "failed"
+    assert stages["import"]["error_codes"] == ["STORE_ACCESS_DENIED"]
+    assert "not allowed to write the manifest directory" in stages["import"]["reason"]
+    assert "the manifest directory" in stages["import"]["hint"]
+    assert "storage.data_dir" in stages["import"]["hint"]
+    assert pulled["error"]["hint"].startswith(stages["import"]["hint"])
+    assert data["snapshots_imported"] == [f"openev {OPENEV_YEAR}-policy"]
+    assert stages["publish"]["outcome"] == "completed"
+    [notification] = notified.sent
+    assert notification.title == RETRY_TITLE
+    assert notification.hint == stages["import"]["hint"]
+    assert "aws sso login" not in everything_said(pulled, notified)
+    assert str(installation) not in everything_said(pulled, notified)
+    assert str(Path.home()) not in everything_said(pulled, notified)
+
+    fixed = run("caselist", "pull")
+
+    assert fixed["exit_code"] == ExitCode.OK, fixed
+    assert len(run_summary(fixed)["snapshots_imported"]) == 4, "three weeks and the complete archive"
+    assert run_summary(fixed)["archives_downloaded"] == 0, "imported from the inbox, not fetched again"
+
+
+@needs_permissions
+def test_a_manifest_file_this_mac_will_not_open_stops_the_run_with_three_and_never_seventy(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, notified: RecordingNotifier
+) -> None:
+    """After a good run, one week's manifest file cannot be opened. The selection reads it to know
+    what this Mac holds, so the run stops before fetching anything, as it does for a manifest
+    folder it cannot list (v1-e34-t13). The command's exit is `3` with the store's own code, not
+    the `70` of a `PermissionError`, and the banner says the next run retries it and what to fix."""
+    assert run("caselist", "pull")["exit_code"] == ExitCode.OK
+    downloads = len(site.calls)
+    manifest = installation / "data" / "objects" / "manifests" / SYNTHETIC_CASELIST / "2026-09-08.jsonl"
+    manifest.chmod(0)
+    notified.sent.clear()
+
+    stopped = run("caselist", "pull")
+
+    assert stopped["exit_code"] == ExitCode.RETRIEVAL_FAILURE, stopped
+    assert stopped["error"]["code"] == "STORE_ACCESS_DENIED"
+    assert "not allowed to read the manifest directory" in stopped["error"]["message"]
+    assert "storage.data_dir" in stopped["error"]["message"]
+    assert not any(
+        call.request.url.host == "files.opencaselist.example.invalid" for call in site.calls[downloads:]
+    )
+    [notification] = notified.sent
+    assert notification.title == RETRY_TITLE
+    assert "stopped with LocalStoreAccessDenied" in notification.message
+    assert notification.hint is not None and "the manifest directory" in notification.hint
+    said = json.dumps([stopped["error"], notification.title, notification.message, notification.hint])
+    assert str(installation) not in said
+    assert str(Path.home()) not in said
+
+
+@needs_permissions
+def test_a_weekly_archive_this_mac_cannot_read_fails_its_own_import_with_one_and_the_rest_import(
+    installation: Path,
+    bucket: S3Client,
+    site: respx.MockRouter,
+    notified: RecordingNotifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first week lands in the inbox and cannot be opened. That ended the run on a
+    `PermissionError`, exit 70. It now fails that archive's import, as an archive that cannot be
+    read: exit `1` by v1-e34-t13's rule, the two newer weeks waiting behind it, and the camp file
+    and the complete archive imported and published. Readable again, the next run imports all
+    three weeks from the inbox without a download."""
+    unreadable = weekly_name(SNAPSHOTS[0].snapshot)
+    download_archive = OpenCaselistClient.download_archive
+
+    async def lands_unreadable(
+        self: OpenCaselistClient, archive: ArchiveListing, inbox: Path
+    ) -> DownloadedFile:
+        downloaded = await download_archive(self, archive, inbox)
+        if archive.name == unreadable:
+            downloaded.path.chmod(0)
+        return downloaded
+
+    monkeypatch.setattr(OpenCaselistClient, "download_archive", lands_unreadable)
+
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.DOMAIN_FAILURE, pulled
+    data = run_summary(pulled)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["import"]["outcome"] == "failed"
+    assert stages["import"]["error_codes"] == ["UNREADABLE_ARCHIVE"]
+    assert f"{unreadable} cannot be read as an archive" in stages["import"]["reason"]
+    assert "2 archive(s) in the inbox held back for a later run" in stages["import"]["reason"]
+    assert sorted(data["snapshots_imported"]) == [
+        f"openev {OPENEV_YEAR}-policy",
+        f"{SYNTHETIC_CASELIST} full/2026-09-15",
+    ]
+    assert stages["publish"]["outcome"] == "completed"
+    [notification] = notified.sent
+    assert notification.title == PERSON_TITLE
+    assert "the import stage failed on UNREADABLE_ARCHIVE" in notification.message
+    assert str(installation) not in everything_said(pulled, notified)
+    assert str(Path.home()) not in everything_said(pulled, notified)
+
+    (installation / "data" / "inbox" / unreadable).chmod(0o600)
+    again = run("caselist", "pull")
+
+    assert again["exit_code"] == ExitCode.OK, again
+    assert run_summary(again)["snapshots_imported"] == [
+        f"{SYNTHETIC_CASELIST} {week.snapshot.isoformat()}" for week in SNAPSHOTS
+    ]
+    assert run_summary(again)["archives_downloaded"] == 0
+
+
+def test_a_manifest_the_publisher_cannot_read_fails_publish_with_one_and_the_run_still_reports(
+    installation: Path,
+    bucket: S3Client,
+    site: respx.MockRouter,
+    notified: RecordingNotifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Five snapshots are owed from a run whose session had expired, and one week's manifest then
+    gains a line nobody can read. `--publish-pending` used to end on `UnreadableManifest` with no
+    summary and nothing published. It is the publish stage failing on that code: exit `1`, the
+    summary written, the run recorded, the other four published, and the file holding the one."""
+    session = {"expired": True}
+    expire_the_session(monkeypatch, while_set=session)
+    assert run("caselist", "pull")["exit_code"] == ExitCode.OK
+    assert len(owed_in_the_file(installation)) == 5
+    torn = installation / "data" / "objects" / "manifests" / SYNTHETIC_CASELIST / "2026-09-01.jsonl"
+    with torn.open("a", encoding="utf-8") as stream:
+        stream.write('{"kind": "member", "classification": "NEW", "sha2\n')
+    session["expired"] = False
+    notified.sent.clear()
+
+    drained = run("caselist", "pull", "--publish-pending")
+
+    assert drained["exit_code"] == ExitCode.DOMAIN_FAILURE, drained
+    assert drained["error"]["code"] == "CASELIST_PULL_INCOMPLETE"
+    data = run_summary(drained)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["publish"]["outcome"] == "failed"
+    assert stages["publish"]["error_codes"] == ["UNREADABLE_MANIFEST"]
+    assert data["pending_publish"] == [f"{SYNTHETIC_CASELIST} 2026-09-01"]
+    assert owed_in_the_file(installation) == [f"{SYNTHETIC_CASELIST} 2026-09-01"]
+    assert Path(data["summary_written_to"]).is_file()
+    assert data["run_record"]["outcome"] == "failed"
+    assert data["run_record"]["error_class"] is None
+    assert stages["report"]["outcome"] == "completed"
+    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-08.jsonl" in published
+    assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" not in published
+    assert [one.title for one in notified.sent] == [PERSON_TITLE]
+
+
+def test_a_mismatch_and_then_an_expired_session_exits_zero_and_says_a_person_is_needed_too(
+    installation: Path,
+    bucket: S3Client,
+    site: respx.MockRouter,
+    notified: RecordingNotifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v1-e34-t18's shape, with a verdict in place of its 503: the bucket already holds other bytes
+    under one of the first week's keys, and the session expires on the second week's manifest.
+    Publish is pending and the exit is `0`, exactly as before: a pending stage carries no code for
+    the exit. What changed is that the mismatch is no longer invisible until the retry: it is on
+    the stage as an earlier finding, and the login banner says a person has to look as well."""
+    week_one_only = digest_of_body("grove-round-2-neg-first")
+    key = f"raw/caselist/{SYNTHETIC_CASELIST}/sha256/{week_one_only[:2]}/{week_one_only[2:4]}/{week_one_only}"
+    bucket.put_object(Bucket=BUCKET, Key=key, Body=b"other bytes")
+    session = {"expired": False}
+    expire_the_session(monkeypatch, while_set=session)
+    put_file = S3EvidenceObjectStore.put_file
+
+    async def put(self: S3EvidenceObjectStore, key: str, source: Path) -> Any:
+        if key == f"manifests/{SYNTHETIC_CASELIST}/2026-09-08.jsonl":
+            session["expired"] = True
+        return await put_file(self, key, source)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(S3EvidenceObjectStore, "put_file", put)
+
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.OK, pulled
+    data = run_summary(pulled)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["publish"]["outcome"] == "pending", stages["publish"]
+    assert stages["publish"]["error_codes"] == []
+    assert stages["publish"]["earlier_findings"] == ["CHECKSUM_MISMATCH"]
+    assert data["run_details"]["failure_codes"] == []
+    assert data["run_details"]["stages"] == [
+        {"stage": "publish", "error_codes": [], "hint": None, "earlier_findings": ["CHECKSUM_MISMATCH"]}
+    ]
+    [notification] = notified.sent
+    assert notification.title == "caselist publish waiting for an AWS login"
+    assert (
+        "A person should look as well: before the session expired a snapshot ended incomplete on "
+        "CHECKSUM_MISMATCH, which the login will not fix." in notification.message
+    )

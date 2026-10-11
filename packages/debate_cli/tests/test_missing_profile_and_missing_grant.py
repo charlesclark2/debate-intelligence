@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -139,6 +140,15 @@ def import_the_first_week(installation: Path) -> None:
     assert exit_code == ExitCode.OK, envelope
 
 
+def every_version_in(client: S3Client) -> list[tuple[str, str]]:
+    """Every (key, version id) in the bucket, delete markers included."""
+    listed = client.list_object_versions(Bucket=BUCKET)
+    return sorted(
+        (str(entry.get("Key")), str(entry.get("VersionId")))
+        for entry in [*listed.get("Versions", []), *listed.get("DeleteMarkers", [])]
+    )
+
+
 def everything_under(root: Path) -> dict[str, bytes]:
     return {
         path.relative_to(root).as_posix(): path.read_bytes()
@@ -207,7 +217,12 @@ class TestAProfileTheAwsConfigLacks:
     ) -> None:
         """A takedown reads with the everyday profile and deletes with the one
         `DEBATE_REMOVAL_PROFILE` names. That variable is the one to correct, and the error must not
-        send the operator to the everyday profile's setting instead."""
+        send the operator to the everyday profile's setting instead.
+
+        It is the takedown's own refusal, as an expired session is (`v1-e29-t08`): what an operator
+        who has just typed `--execute` needs to read first is that nothing was deleted. The
+        adapter's error, bare, said nothing of the removal. Still a configuration error, so still 1.
+        """
         import_the_first_week(installation)
         assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)[0] == ExitCode.OK
         monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", MISSPELT_PROFILE)
@@ -218,10 +233,20 @@ class TestAProfileTheAwsConfigLacks:
 
         exit_code, envelope = run(*REMOVE, "--execute")
 
-        assert_a_profile_that_is_not_configured(
-            exit_code, envelope, setting=TAKEDOWN_SETTING, installation=installation
-        )
-        assert EVERYDAY_SETTING not in json.dumps(envelope)
+        assert exit_code == ExitCode.DOMAIN_FAILURE, envelope
+        error = envelope["error"]
+        assert error["code"] == "TAKEDOWN_PREFLIGHT_FAILED"
+        assert "nothing was deleted" in error["message"]
+        assert "STORE_PROFILE_NOT_CONFIGURED" in error["message"]
+        assert MISSPELT_PROFILE in error["message"] and TAKEDOWN_SETTING in error["message"]
+        assert TAKEDOWN_SETTING in error["hint"] and RUNBOOK in error["hint"]
+        assert error["details"] == {"profile": MISSPELT_PROFILE, "step": "start an AWS session"}
+        said = json.dumps(envelope)
+        assert EVERYDAY_SETTING not in said
+        assert "aws sso login" not in said and "signed in" not in said, "no login cures it"
+        assert "aws configure" not in said
+        assert str(installation) not in said and AWS_CONFIG_NAME not in said
+        assert str(Path.home()) not in said
         after = (
             everything_under(installation / "data"),
             bucket.list_object_versions(Bucket=BUCKET).get("Versions"),
@@ -248,6 +273,71 @@ class TestAProfileTheAwsConfigLacks:
         exit_code, envelope = run("store", "sync")
 
         assert exit_code == ExitCode.OK, envelope
+
+
+# ------------------------------------------------------------------------------------------------
+# A takedown that names the everyday profile
+# ------------------------------------------------------------------------------------------------
+
+
+class TestATakedownThatNamesTheEverydayProfile:
+    """`DEBATE_REMOVAL_PROFILE` set to the everyday profile, by mistake (`v1-e29-t08`).
+
+    Through the real composition root and the real STS adapter: moto answers `GetCallerIdentity`
+    with the role each profile assumed in the `bucket` fixture. Moto enforces no grant, so its
+    bucket would let the everyday profile carry out the whole removal. What stops it is who it is.
+    """
+
+    def test_it_is_refused_before_anything_is_written_and_told_which_profile_to_name(
+        self, installation: Path, bucket: S3Client, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import_the_first_week(installation)
+        assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)[0] == ExitCode.OK
+        monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", EVERYDAY_PROFILE)
+        before = (everything_under(installation / "data"), every_version_in(bucket))
+
+        exit_code, envelope = run(*REMOVE, "--execute")
+
+        assert exit_code == ExitCode.DOMAIN_FAILURE, envelope
+        error = envelope["error"]
+        assert error["code"] == "TAKEDOWN_PREFLIGHT_FAILED"
+        assert "NOT_THE_TAKEDOWN_ROLE" in error["message"]
+        assert "nothing was deleted" in error["message"]
+        assert "DebateDevEvidenceOperator" in error["message"], "what the profile is signed in as"
+        assert "DebateDevEvidenceRemoval" in error["message"], "what a takedown runs as"
+        assert TAKEDOWN_SETTING in error["hint"] and TAKEDOWN_PROFILE in error["hint"]
+        assert "aws sso login" not in json.dumps(envelope), "it is signed in; a login changes nothing"
+        assert (everything_under(installation / "data"), every_version_in(bucket)) == before, (
+            "nothing written here or in the bucket: no probe, no suppression entry"
+        )
+
+    def test_the_refusal_carries_nothing_of_the_account_but_the_roles_names(
+        self, installation: Path, bucket: S3Client, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """STS answers with the account and the caller's full identifier. Neither is passed on."""
+        import_the_first_week(installation)
+        monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", EVERYDAY_PROFILE)
+
+        result = runner.invoke(create_app(), ["--json", *REMOVE, "--execute"])
+
+        said = result.stdout + result.stderr
+        assert "TAKEDOWN_PREFLIGHT_FAILED" in said
+        assert "arn:" not in said and "assumed-role" not in said
+        assert re.search(r"\d{12}", said) is None, "no account"
+        assert EVERYDAY_ROLE not in said, "the permission set's name is enough; the suffix is the account's"
+
+    def test_the_takedown_profile_is_not_refused(
+        self, installation: Path, bucket: S3Client, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The control: the same command with the profile that is the takedown role."""
+        import_the_first_week(installation)
+        assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)[0] == ExitCode.OK
+        monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", TAKEDOWN_PROFILE)
+
+        exit_code, envelope = run(*REMOVE, "--execute")
+
+        assert exit_code == ExitCode.OK, envelope
+        assert [key for key, _ in every_version_in(bucket) if "/preflight/" in key] == []
 
 
 # ------------------------------------------------------------------------------------------------

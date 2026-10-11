@@ -313,17 +313,43 @@ def test_a_removal_profile_missing_from_the_aws_config_is_refused_with_nothing_c
 
     # A configuration error, not an expired session: exit 1, and what it names is the variable to
     # correct (v1-e29-t07). Until then the adapter called it StoreCredentialsExpired, the run ended
-    # 3, "a retry may succeed", and the hint was a command that wrote to the AWS config.
+    # 3, "a retry may succeed", and the hint was a command that wrote to the AWS config. It is the
+    # takedown's own refusal, so that it says nothing was deleted (v1-e29-t08).
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE
-    assert refused["error"]["code"] == "STORE_PROFILE_NOT_CONFIGURED"
-    assert (
-        "'debate-dev-evidence-removal-typo', named by DEBATE_REMOVAL_PROFILE," in refused["error"]["message"]
-    )
+    assert refused["error"]["code"] == "TAKEDOWN_PREFLIGHT_FAILED"
+    assert "STORE_PROFILE_NOT_CONFIGURED" in refused["error"]["message"]
+    assert "debate-dev-evidence-removal-typo" in refused["error"]["message"]
+    assert "DEBATE_REMOVAL_PROFILE" in refused["error"]["message"]
+    assert "nothing was deleted" in refused["error"]["message"]
     assert "DEBATE_REMOVAL_PROFILE" in refused["error"]["hint"]
     assert "aws sso login" not in json.dumps(refused["error"])
     assert "aws configure" not in json.dumps(refused["error"])
     assert str(installation) not in json.dumps(refused["error"])
     assert (tree(installation / "dev"), versions(bucket)) == before, "nothing was deleted"
+
+
+def test_the_everyday_profile_named_for_a_takedown_is_refused_before_anything_is_written(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`DEBATE_REMOVAL_PROFILE` naming the everyday profile, which is easy to do: one suffix apart.
+
+    The takedown asks the account which role the profile is signed in as before it lists or writes
+    (v1-e29-t08). Moto's bucket would let this profile run the whole removal, so the unchanged
+    bucket below is the command's doing and not a refused request's.
+    """
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", OPERATOR_PROFILE)
+    before = (tree(installation / "dev"), versions(bucket))
+
+    refused = run(*REMOVE, "--execute")
+
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, "a setting to correct, not something to retry"
+    assert refused["error"]["code"] == "TAKEDOWN_PREFLIGHT_FAILED"
+    assert "NOT_THE_TAKEDOWN_ROLE" in refused["error"]["message"]
+    assert "DebateDevEvidenceOperator" in refused["error"]["message"]
+    assert "nothing was deleted" in refused["error"]["message"]
+    assert REMOVAL_PROFILE in refused["error"]["hint"]
+    assert "aws sso login" not in json.dumps(refused["error"])
+    assert (tree(installation / "dev"), versions(bucket)) == before, "no probe, no entry, nothing deleted"
 
 
 def test_a_removal_that_completes_but_cannot_be_logged_says_it_completed(

@@ -311,7 +311,9 @@ is the operating system refusing a directory under this machine's data directory
 is signed in and lacks a grant. Each fails its stage, with the fix that applies in the stage's
 `hint`, and the snapshots not yet published stay owed for the run after the fix. A bucket that did
 not answer (:class:`~debate_core.application.errors.StoreUnavailable`) fails the publish stage the
-same way, and for the same reason the snapshots stay owed: the next run publishes them.
+same way, and for the same reason the snapshots stay owed: the next run publishes them. A profile
+the AWS config does not define (:class:`~debate_core.application.errors.StoreProfileNotConfigured`)
+fails the stage with `STORE_PROFILE_NOT_CONFIGURED` and is not pending (`v1-e29-t07`).
 
 **A manifest file is this machine's store too** (`v1-e34-t19`). A manifest is read and written by
 the path the store names for it, and a `PermissionError` there is the same
@@ -3273,7 +3275,8 @@ class CaselistSyncService:
         A store that refused, or did not answer, is a failure of the stage and nothing else
         (`v1-e34-t13`): it records the store's error code, and for a refusal the fix that applies,
         which is never a login. It would be true of every snapshot still to go, so the stage stops
-        there.
+        there. A profile the AWS config does not define fails the stage the same way, with
+        `STORE_PROFILE_NOT_CONFIGURED`, and is not pending (`v1-e29-t07`).
 
         Anything else the publisher raises for one snapshot, a manifest it cannot read when it
         plans for one, is that snapshot's failure under the error's own code, and the stage goes on

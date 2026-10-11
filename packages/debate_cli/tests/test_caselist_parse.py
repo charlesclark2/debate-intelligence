@@ -231,6 +231,9 @@ def test_a_dry_run_counts_and_writes_nothing(imported: Path) -> None:
         EXPECTED["after_0908"]["sources"],
         0,
     )
+    # A dry run reports the setting it would be judged by, and judges nothing: it tried nothing.
+    assert data["failure_rate_minimum_sources"] == 100
+    assert (data["failure_rate_judged"], data["threshold_exceeded"]) == (False, False)
     assert not (imported / "parsed").exists()
 
 

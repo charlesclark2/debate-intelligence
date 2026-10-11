@@ -66,6 +66,7 @@ from debate_core.application.caselist_sync import (
 from debate_core.application.errors import StoreCredentialsExpired, StoreUnavailable
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
+from debate_core.application.ports.parsed_store import version_directory_name
 from debate_core.application.ports.suppression import SuppressionEntry, SuppressionList
 from debate_core.application.sync_runs import PARSE_COMMAND, SyncRunOutcome
 from debate_core.domain.caselist import SnapshotDate, SourceDocument
@@ -731,6 +732,34 @@ async def test_after_a_parser_version_bump_the_caselist_is_parsed_in_full_and_th
     assert parsed_keys() == set(as_the_old_parser_left_it) | set(parsed_tree(installation, BUMPED_PARSER))
 
 
+async def test_a_caselist_reparsed_into_a_second_generation_is_parsed_and_published_there(
+    installation: Installation, parsed_keys: Any
+) -> None:
+    """`caselist parse --reparse` starts a new generation of the same parser version.
+
+    The pull's stage writes to the newest generation, as `caselist parse` does, and publishes that
+    directory, not the first: the directory's name is not the parser version's.
+    """
+    source = FakeSource(installation.archives, weeks=[WEEK_1, WEEK_2])
+    await installation.sync(source, parse=parse_stage(installation)).run([CASELIST])
+    first_generation = set(parsed_keys())
+    by_hand = parse_service(installation)
+    await by_hand.run(await by_hand.plan(CASELIST, reparse=True))
+    second = version_directory_name(DOCX_PARSER_VERSION, 2)
+    parser = CountingParser()
+    source.weeks = [WEEK_1, WEEK_2, WEEK_3]
+
+    summary = await installation.sync(source, parse=parse_stage(installation, parser)).run([CASELIST])
+
+    assert parser.asked == [digest_of("direct")]
+    assert counts(summary)["full_parses"] == 0
+    assert len(aggregate(installation, "index.jsonl", second)) == 7
+    assert len(aggregate(installation, "index.jsonl")) == 6, "the first generation is never written again"
+    # Seven source files and three aggregates, none of which the bucket held for this generation.
+    assert counts(summary)["uploaded"] == 10
+    assert parsed_keys() == first_generation | set(parsed_tree(installation, second))
+
+
 async def test_a_version_directory_a_killed_run_left_partly_filled_is_completed(
     installation: Installation,
 ) -> None:
@@ -812,6 +841,11 @@ async def test_with_no_session_the_stage_parses_here_sends_nothing_and_is_pendin
     [notification] = watched.notifier.sent
     assert notification.title == "caselist publish waiting for an AWS login"
     assert PARSE_COMMAND in notification.message
+    # The run log keeps the stage's whole sentence, which is where `caselist runs` reads the counts
+    # and the command from: it is longer than the 500 characters other stages are cut to.
+    [recorded] = [one for one in watched.pulled.record.stages if one.stage == "parse"]
+    assert recorded.reason == parse["reason"]
+    assert len(recorded.reason) > 500
 
 
 async def test_a_session_that_expires_during_the_parsed_stores_publish_leaves_the_raw_publish_whole(

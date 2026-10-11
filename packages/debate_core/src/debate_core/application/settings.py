@@ -651,7 +651,7 @@ class CaselistSettings(SettingsGroup):
         description=(
             "Whether `caselist pull` parses the sources it imported, rebuilds the aggregates of the "
             "caselists they belong to and, where it publishes, publishes the parsed store too. On "
-            "by default: launchd sets the weekly agent no time limit, and the stage's measured 18 "
+            "by default: launchd sets the weekly agent no time limit, and the stage's roughly 20 "
             "minutes (29 after a parser-version bump) is a small part of every bound a run does "
             "have; docs/runbooks/caselist-scheduled-sync.md gives the arithmetic. Off, the stage is "
             "skipped with this setting's name as the reason, and `caselist parse` does the same "

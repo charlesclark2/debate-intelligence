@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import DOCUMENT_BODIES, SYNTHETIC_CASELIST
+from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP_BODIES
 
 from debate_core.application.caselist.removal_plan import (
     Disposition,
@@ -259,6 +260,22 @@ class TestSharedFiles:
         assert removed.disposition is Disposition.REMOVE
         assert removed.other_teams == 0
         assert not removed.shared
+
+    async def test_a_source_removal_of_a_file_no_team_holds_counts_no_other_team(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """A camp file no team disclosed, and a digest the store has never held: no team either way."""
+        camp_only = hashlib.sha256(CAMP_BODIES["orchard-kritik"]).hexdigest()
+        held_nowhere = hashlib.sha256(b"synthetic bytes nothing in the fixture holds").hexdigest()
+
+        for sha256, camp_files in ((camp_only, 1), (held_nowhere, 0)):
+            plan = await removal_world.planner().plan(
+                SourceSelector(sha256), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_CAMP
+            )
+
+            (source,) = plan.sources
+            assert source.disposition is Disposition.REMOVE
+            assert (source.other_teams, source.camp_file_holders) == (0, camp_files)
 
     async def test_junk_that_shadows_a_removed_file_goes_even_when_its_team_stays(
         self, removal_world: RemovalWorld

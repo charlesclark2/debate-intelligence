@@ -24,7 +24,7 @@ from datetime import date
 from pathlib import Path
 
 from debate_core.application.caselist.import_service import FullArchiveBaseline
-from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY
+from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY, read_manifest_file
 from debate_core.application.caselist.publish_plan import (
     InvalidPublishTarget,
     LocalSnapshot,
@@ -97,7 +97,8 @@ async def read_local_snapshots(
         if named is None or (snapshot is not None and named != snapshot):
             continue
         async with local_file(local.objects, local.object_path_for, info.key) as path:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            # By its path, so through the one reader that says a refused file is a refusal.
+            lines = read_manifest_file(path)
         found.append(
             LocalSnapshot(
                 caselist=caselist,

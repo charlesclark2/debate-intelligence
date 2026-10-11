@@ -398,7 +398,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -2942,7 +2942,10 @@ class CaselistSyncService:
                     await self._import_archive(
                         selection, self._downloaded(tally, selection.name, path), tally
                     )
-                except DomainError as refused:
+                except (DomainError, OSError) as refused:
+                    # One archive's failure is that archive's (`v1-e34-t19`): the caselist stops at
+                    # this gap, and the other caselists, the camp files and the complete archive
+                    # are still imported.
                     failures.append(self._failure(refused, about=selection.name))
                     held_back += len(queue.ready) - position - 1 + queue.waiting
                     break
@@ -2961,7 +2964,7 @@ class CaselistSyncService:
                 await self._import_full_archive(
                     full_selection, self._downloaded(tally, full_selection.name, path), tally
                 )
-            except DomainError as refused:
+            except (DomainError, OSError) as refused:
                 failures.append(self._failure(refused, about=full_selection.name))
         withdrawals = "".join(f"; {one.sentence()}" for one in tally.full_archive_imports)
         waiting = (
@@ -3050,7 +3053,7 @@ class CaselistSyncService:
             self._local, selection.caselist, selection.archive_date
         )
         report = await self._archives.import_full_archive(
-            self._read_full_archive(downloaded.path),
+            _entries_of(self._read_full_archive, downloaded.path),
             caselist=selection.caselist,
             archive_date=selection.archive_date,
             event=event,
@@ -3106,7 +3109,7 @@ class CaselistSyncService:
         if selection.archive_date is None:  # pragma: no cover - never selected for download
             raise UndatedArchive(selection.name)
         report = await self._archives.import_archive(
-            self._read_archive(downloaded.path),
+            _entries_of(self._read_archive, downloaded.path),
             caselist=selection.caselist,
             snapshot=selection.archive_date,
             event=event,
@@ -3254,6 +3257,13 @@ class CaselistSyncService:
                     _StageFailure(f"{named}: no local manifest", (reported_error_code(nothing),))
                 )
                 without_local_manifest.append(target)
+                continue
+            except (DomainError, OSError) as failed:
+                # Anything else the publisher raises instead of reporting (`v1-e34-t19`): a local
+                # manifest with a line nobody can read, when it plans, for one. It is this
+                # snapshot's failure, under its own code. The snapshot is not confirmed, so it
+                # stays owed, and the ones after it are still published.
+                incomplete.append(self._failure(failed, about=named))
                 continue
             published += report.count(SourceResult.UPLOADED)
             if report.succeeded:
@@ -4667,6 +4677,24 @@ def _inbox_file(path: Path) -> DownloadedFile:
     return DownloadedFile(
         path=path, sha256=digest, byte_size=size, source_name=path.name, already_present=True
     )
+
+
+def _entries_of(read: ArchiveReader, archive: Path) -> Iterator[ArchiveEntry]:
+    """A weekly or complete archive's entries, an `OSError` while reading it being the archive's own.
+
+    An archive in the inbox that the operating system will not open, or that fails part-way through
+    a read, is an archive that cannot be read: the code :func:`_inbox_file` already gives a download
+    whose bytes cannot be hashed, and the one the runbook has the operator's answer for. Translated
+    here, around the reader alone, so that an `OSError` from anything else an import does (a full
+    disk under the blob store, say) is not mistaken for it. The reason gives the error's class and
+    never its message, which quotes the path (`v1-e34-t19`).
+    """
+    try:
+        yield from read(archive)
+    except OSError as unreadable:
+        raise UnreadableArchive(
+            archive.name, f"the file in the inbox could not be read ({type(unreadable).__name__})"
+        ) from unreadable
 
 
 def _parsed_date(value: str) -> date | None:

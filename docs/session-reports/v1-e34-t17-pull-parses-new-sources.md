@@ -426,9 +426,63 @@ hspolicy26 and hspf26.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-11
 
 **Notes:**
+
+Accepted as a partial merge. ac5 is NOT RUN, and the Goal stays `InProgress`. I have added the
+2026-10-11 figures to the spec's comment in this branch, as you asked.
+
+**The default.** Finding that the agent has no time limit, rather than assuming one, is what made
+the default arguable. The table of bounds argues it properly. On is right, and you stated its three
+limits in the runbook.
+
+**Rulings:**
+
+* **Deviation 1, a failed parse stage exits 0:** accepted. It is `v1-e34-t13`'s rule as written,
+  and it matches the report-stage precedent that I amended into t13's ac2 myself. Making parse a
+  required stage would mark a run that captured everything as not succeeded. The notification is
+  what tells the operator.
+* **Deviation 2, ac6's rule in the pipeline's own report:** accepted. One rule in one place, so
+  that the by-hand command that finishes a stage cannot fail a run the stage let pass.
+* **Deviations 3 to 5:** accepted. Recording a pending parse as `publish_pending` rather than
+  `completed` is the kind of promise-keeping I want, and the read-only looks stayed within what the
+  brief allowed.
+* **Decision 1, the plan over the touched caselists:** accepted, including `full_parses` and the
+  sentence that keeps a full parse from being read as a large week.
+* **Decision 2, a stated by-hand step and no schema change:** accepted for this task. The guard on
+  aggregates rebuilt from the local list alone is the important part, and it is mutated.
+* **Decision 3, a minimum of 100:** accepted. Of the two values your data supports, it is the one
+  that has already been tested by a real batch of five.
+
+**Your Decision 2 and Follow-up 1 together are the operational cost of this task.** In the usual
+week the session has expired, so the aggregates are built from the local list. They then need a
+rebuild under the full list after login, and that rebuild is the cost Follow-up 1 says is growing.
+I am filing both at p2 so they are worked on together.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **Your 1, the incremental rebuild (E31, p2).** Measure how the rebuild scales with the store
+  first, then make the weekly rebuild cost track the week's new sources rather than the whole store.
+  On your figures hspolicy26 reaches 900 s within about four weeks.
+* **Your 2 and 7, finishing the parsed store's publish after login (E34, p2).** The design I want
+  considered first: record which state of the suppression list the aggregates were built from.
+  After login, if the bucket's list adds nothing to it, publish the directory without a rebuild.
+  Only rebuild when it does. `--publish-pending` then covers the parsed store for the caselists the
+  run names, and a failed parse stage is retried there too.
+* **Your 3, the bounds (E34, p2 for the lock and p3 for the time budget).** `caselist parse` takes
+  the run lock, because the runbook now tells the operator to run it by hand, and Wednesday's run
+  could be writing the same directory. A time budget or `ExitTimeOut` is p3.
+* **Your 4, retrying a timeout or a dead worker (E31, p3).**
+* **Your 5:** folded into `v1-e34-t19`, which already changes the run record compatibly.
+  `v1-e34-t19` starts after this merges, since both change `sync_runs.py`'s notifications.
+* **Your 6, two data directories publishing one store (E31, p3).**
+* **Your 8 is my error from the 2026-10-10 close-out.** Five failures in 102 is 4.9%, so it takes
+  two more, not one. I am correcting `caselist-parse-report.md` in the next close-out.
+* **Your 9:** the first scheduled run's figures go into `caselist-sync-runs.md` when ac5 is run.
+
+**ac5 runs after Wednesday's check closes `v1-e34-t05`.** It is the reinstall that also carries
+`v1-e34-t23`'s follow-up, using your steps 1 to 3.

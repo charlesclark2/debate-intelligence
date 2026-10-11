@@ -57,7 +57,7 @@ from .run_record_scenarios import (
     SECOND_RUN,
     World,
     a_publish_left_for_a_login_and_then_drained,
-    a_publish_the_bucket_refused,
+    a_publish_the_bucket_refused_with_the_adapters_fix,
     a_week_imported_and_published,
 )
 from .test_inbox_retention import WEEK_1, ExpiredBucket, FakeSource, Installation
@@ -79,6 +79,13 @@ DETAILS_PREFIX = "reports/sync-run-details/"
 
 FIRST_RUN_ID = "20260916T060000Z"
 SECOND_RUN_ID = "20260923T060000Z"
+
+THE_ADAPTERS_FIX = (
+    "The bucket refused ListObjectsV2: the AWS profile debate-dev-evidence is signed in and lacks a "
+    "grant for this; it is not an expired session, and logging in again changes nothing. "
+    "docs/runbooks/evidence-store.md lists what each profile is granted."
+)
+"""The fix the bucket's adapter writes into its refusal (`v1-e29-t07`), as the publish stage gives it."""
 
 NO_DETAILS_TO_SPEAK_OF: dict[str, Any] = {"stages": [], "failure_codes": [], "hint": None, "parse": None}
 
@@ -107,12 +114,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                 {
                     "stage": "publish",
                     "error_codes": ["STORE_ACCESS_DENIED"],
-                    "hint": (
-                        "The bucket refused ListObjectsV2: the AWS profile this run uses is signed in "
-                        "and lacks a grant for it; this is not an expired session, and logging in "
-                        "again changes nothing. docs/runbooks/evidence-store.md lists what each "
-                        "profile is granted."
-                    ),
+                    "hint": None,
                     "earlier_findings": [],
                 }
             ],
@@ -341,6 +343,30 @@ async def test_the_bucket_prefix_an_older_build_lists_holds_only_records_it_read
     assert not DETAILS_PREFIX.startswith(RECORDS_PREFIX)
 
 
+async def test_a_refusal_that_carries_the_adapters_fix_is_still_a_record_the_older_builds_read(
+    world: World,
+) -> None:
+    """`v1-e29-t07` put the fix into the refusal, and a stage's reason quotes the refusal, so this
+    run's record says more than the start commit's did for the same run. It says it in the same
+    field: the record is the stored one but for the words of the publish stage's reason, and the
+    older builds read it, from the log and from the bucket."""
+    await a_publish_the_bucket_refused_with_the_adapters_fix(world)
+
+    [written] = world.run_log().decode("utf-8").splitlines()
+    [stored] = stored_lines("a_publish_the_bucket_refused")
+    [(key, in_the_bucket)] = world.records_in_the_bucket().items()
+    assert [key] == list(stored_bucket_objects("a_publish_the_bucket_refused"))
+    for ours in (json.loads(written), json.loads(in_the_bucket)):
+        read_as_an_older_build_reads(ours)
+        theirs = json.loads(stored)
+        assert list(ours) == list(theirs), "the same keys in the same order"
+        [reason] = [one.pop("reason") for one in ours["stages"] if one["stage"] == "publish"]
+        [stored_reason] = [one.pop("reason") for one in theirs["stages"] if one["stage"] == "publish"]
+        assert ours == theirs
+        assert reason.startswith(stored_reason.removesuffix("[redacted]"))
+        assert "lacks a grant" in reason and reason != stored_reason
+
+
 # ------------------------------------------------------------------------------------------------
 # This build reads what the older builds wrote
 # ------------------------------------------------------------------------------------------------
@@ -413,10 +439,11 @@ async def test_the_codes_and_the_parse_counts_travel_beside_the_record_keyed_by_
 
 
 async def test_a_stages_hint_beside_the_record_is_the_fix_the_summary_gives(world: World) -> None:
-    await a_publish_the_bucket_refused(world)
+    await a_publish_the_bucket_refused_with_the_adapters_fix(world)
 
     [pulled] = world.pulled
     [details] = details_written(world)
+    assert details["stages"][0]["hint"] == THE_ADAPTERS_FIX
     assert details["stages"][0]["hint"] == stage(pulled.summary, SyncStage.PUBLISH)["hint"]
     assert pulled.details is not None
     assert pulled.details.model_dump(mode="json") == details
@@ -713,7 +740,7 @@ def test_a_hint_is_kept_as_written_apart_from_a_secret_or_an_absolute_path() -> 
 
 
 async def test_nothing_beside_a_record_names_a_path_on_this_machine(world: World) -> None:
-    await a_publish_the_bucket_refused(world)
+    await a_publish_the_bucket_refused_with_the_adapters_fix(world)
 
     text = details_file(world).read_text("utf-8") + json.dumps(objects_under(world, DETAILS_PREFIX))
     for forbidden in (str(world.installation.data_dir), str(world.scratch), str(Path.home())):

@@ -782,7 +782,7 @@ async def test_a_profile_the_aws_config_lacks_fails_publish_and_nothing_waits_fo
     assert stage(watched.summary, SyncStage.REPORT)["outcome"] == "skipped"
     assert watched.pulled.record is not None
     assert watched.pulled.record.outcome is SyncRunOutcome.FAILED
-    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed"]
+    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed: needs a person"]
     assert "aws sso login" not in json.dumps(stages_of(watched.summary))
     assert "aws sso login" not in watched.notified
     assert_names_nothing_of_this_machine(watched.summary, installation)

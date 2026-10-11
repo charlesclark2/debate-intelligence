@@ -23,6 +23,7 @@ from tests.fixtures.caselist.publish_expectations import expected_source_key
 from tests.fixtures.parse_pipeline.build_parse_world import build_week_zips
 
 from debate_core.application.caselist_sync import CaselistSyncService, PulledRun, run_pull
+from debate_core.application.errors import StoreAccessDenied
 from debate_core.application.ports.caselist_source import ArchiveListing, CaselistAuthExpired
 from debate_core.application.ports.notifier import RecordingNotifier
 from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, SyncRunMonitor
@@ -33,7 +34,12 @@ from .retry_rule import the_commands_retry_rule
 from .test_inbox_retention import CASELIST, WEEK_1, WEEK_2, ExpiredBucket, FakeSource, Installation
 from .test_pending_work_owes_every_unpublished_snapshot import NEW_IN_WEEK_2, ONLY_IN_WEEK_1, Session
 from .test_pull_parses_new_sources import parse_stage
-from .test_pull_stage_failure_codes import RefusingBucket, every_upload_answers_503, missing_grant
+from .test_pull_stage_failure_codes import (
+    BUCKET_KEY,
+    RefusingBucket,
+    every_upload_answers_503,
+    missing_grant,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -139,7 +145,24 @@ async def a_publish_the_bucket_did_not_take(world: World) -> None:
 
 
 async def a_publish_the_bucket_refused(world: World) -> None:
-    """The profile lacks a grant: a failed publish whose stage carries a hint."""
+    """The profile lacks a grant: a failed publish.
+
+    The refusal is the one the start commit's tests raised, which says what was refused and gives
+    no fix of its own, so both builds are given the same error and their records can be compared
+    field for field. `v1-e29-t07` has since had the bucket's adapter write the fix into the
+    refusal; `a_publish_the_bucket_refused_with_the_adapters_fix` is that run.
+    """
+    source = FakeSource(world.installation.archives, weeks=[WEEK_1])
+    refused = StoreAccessDenied("ListObjectsV2", BUCKET_KEY)
+    await world.pull(world.installation.sync(source, publish_to=RefusingBucket(refused)))
+
+
+async def a_publish_the_bucket_refused_with_the_adapters_fix(world: World) -> None:
+    """The same run as the bucket's adapter raises it today: the refusal carries the fix.
+
+    Not one of `SCENARIOS`: the start commit's adapter wrote no fix, so that build cannot be given
+    this error, and nothing it wrote is stored for it.
+    """
     source = FakeSource(world.installation.archives, weeks=[WEEK_1])
     await world.pull(world.installation.sync(source, publish_to=RefusingBucket(missing_grant())))
 

@@ -51,7 +51,7 @@ from .run_record_scenarios import (
     World,
     a_mismatch_and_then_an_expiry,
     a_publish_the_bucket_did_not_take,
-    a_publish_the_bucket_refused,
+    a_publish_the_bucket_refused_with_the_adapters_fix,
     a_run_stopped_by_an_error_nobody_modelled,
     a_run_stopped_by_an_expired_token,
     a_week_that_cannot_be_read,
@@ -74,7 +74,13 @@ from .test_pending_work_owes_every_unpublished_snapshot import (
     pending_file,
 )
 from .test_pull_parses_new_sources import parse_stage
-from .test_pull_stage_failure_codes import RefusingBucket, SourceThatFails, outage, stage
+from .test_pull_stage_failure_codes import (
+    RefusingBucket,
+    SourceThatFails,
+    outage,
+    profile_not_configured,
+    stage,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -93,10 +99,17 @@ PERSON = "A person should look: at least one failure here will be the same on th
 KEPT = "What was captured is kept."
 
 THE_BUCKET_LACKS_A_GRANT = (
-    "The bucket refused ListObjectsV2: the AWS profile this run uses is signed in and lacks a grant "
-    "for it; this is not an expired session, and logging in again changes nothing. "
+    "The bucket refused ListObjectsV2: the AWS profile debate-dev-evidence is signed in and lacks a "
+    "grant for this; it is not an expired session, and logging in again changes nothing. "
     "docs/runbooks/evidence-store.md lists what each profile is granted."
 )
+"""The fix the bucket's adapter writes into its refusal (`v1-e29-t07`), as the stage gives it."""
+THE_AWS_CONFIG_LACKS_THE_PROFILE = (
+    "The bucket was never reached: set storage.s3.aws_profile to a profile this machine's AWS config "
+    "defines, or add the profile to it: docs/runbooks/evidence-store.md lists the evidence profiles "
+    "and how they are added. It is not an expired session, and logging in changes nothing."
+)
+"""The fix the adapter writes for a profile the AWS config does not define (`v1-e29-t07`)."""
 THIS_MACHINE_REFUSED_THE_MANIFESTS = (
     "This machine refused the manifest directory: check that this user can read and write it, under "
     "the environment's data directory (storage.data_dir). It is a permission on this machine, not "
@@ -289,7 +302,7 @@ async def test_an_expired_token_keeps_the_notification_it_always_had(world: Worl
 async def test_a_refusal_by_the_bucket_says_retry_and_carries_the_grant_to_fix_first(world: World) -> None:
     """A refusal exits `3`, so the wording is the first one, and it holds with a hint present: the
     hint is what has to be done before the retry can help."""
-    await a_publish_the_bucket_refused(world)
+    await a_publish_the_bucket_refused_with_the_adapters_fix(world)
 
     [pulled] = world.pulled
     notification = the_one_notification(world)
@@ -298,6 +311,28 @@ async def test_a_refusal_by_the_bucket_says_retry_and_carries_the_grant_to_fix_f
         f"{WHERE}: the publish stage failed on STORE_ACCESS_DENIED. {RETRY} {KEPT}"
     )
     assert notification.hint == THE_BUCKET_LACKS_A_GRANT
+    assert notification.hint == stage(pulled.summary, SyncStage.PUBLISH)["hint"], "the fix the summary gives"
+    assert "aws sso login" not in notification.text
+    assert_names_no_path(world, notification)
+
+
+async def test_a_profile_the_aws_config_lacks_says_a_person_and_carries_the_setting_to_correct(
+    world: World,
+) -> None:
+    """`v1-e29-t07`'s failure, which no later run meets differently: the setting names a profile
+    this machine's AWS config does not define. The second wording, with the adapter's own fix."""
+    source = FakeSource(world.installation.archives, weeks=[WEEK_1])
+    unconfigured = RefusingBucket(profile_not_configured())
+
+    await world.pull(world.installation.sync(source, publish_to=unconfigured))
+
+    [pulled] = world.pulled
+    notification = the_one_notification(world)
+    assert notification.title == PERSON_TITLE
+    assert notification.message == (
+        f"{WHERE}: the publish stage failed on STORE_PROFILE_NOT_CONFIGURED. {PERSON} {KEPT}"
+    )
+    assert notification.hint == THE_AWS_CONFIG_LACKS_THE_PROFILE
     assert notification.hint == stage(pulled.summary, SyncStage.PUBLISH)["hint"], "the fix the summary gives"
     assert "aws sso login" not in notification.text
     assert_names_no_path(world, notification)

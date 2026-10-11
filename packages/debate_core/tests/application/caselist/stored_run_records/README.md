@@ -15,8 +15,18 @@ are ones an installed build reads, and the reverse.
 | `written_by_the_start_commit/<scenario>.bucket.json` | The source at `ccc5153` | Every object that build put under `reports/sync-runs/`, key to body |
 | `run_log_written_by_a_schema_3_build.jsonl`, `run_summary_schema_3.json` | A build before `v1-e34-t13` | Kept by that task; see `test_pull_stage_failure_codes.py` |
 
-The scenarios are the functions of `run_record_scenarios.py`, which names nothing a later task
-added, so the same file runs against either source.
+The scenarios are the functions of `run_record_scenarios.py`, which gives each build the same
+run to record, so the same file runs against either source. Two things keep that true after
+`v1-e29-t07`, which merged while this task was in review:
+
+* The refused publish raises the refusal the start commit's tests raised, with no fix written into
+  it. The bucket's adapter now writes one, and the start commit's adapter cannot be given it. That
+  run is `a_publish_the_bucket_refused_with_the_adapters_fix`: it is not stored, and a test shows
+  its record is the stored one but for the words of one stage's reason.
+* A test module the scenarios borrow their installation from now imports an error class the start
+  commit lacks. `write_stored_run_records.py` supplies that one name before it imports them, in
+  memory only. No scenario raises it. Run again on 2026-10-11 after the rebase onto `7a2b869`, the
+  command below rewrote all 18 files and changed none.
 
 ## How they were written
 

@@ -18,11 +18,27 @@ from typing import TYPE_CHECKING
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import build_snapshot_zips
 
+from debate_core.application import errors
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
-from . import test_inbox_retention as inbox_retention
-from .run_record_scenarios import SCENARIOS, World, stored_bucket_text
-from .test_inbox_retention import Installation
+
+class _AnErrorTheStartCommitLacks(errors.StoreError):
+    """Stands in for an error class a later task added, so that a module naming it still imports."""
+
+    def __init__(self, *described: object, **named: object) -> None:
+        Exception.__init__(self, "an error the start commit's source does not have")
+
+
+if not hasattr(errors, "StoreProfileNotConfigured"):
+    # `v1-e29-t07` added this error after the start commit, and a test module the scenarios borrow
+    # their installation from imports it by name and builds one for a test of its own. No scenario
+    # raises it and the start commit's source never looks for it: the name is supplied so that
+    # those modules import, and nothing of that source is changed on disk.
+    errors.StoreProfileNotConfigured = _AnErrorTheStartCommitLacks  # type: ignore[attr-defined]
+
+from . import test_inbox_retention as inbox_retention  # noqa: E402
+from .run_record_scenarios import SCENARIOS, World, stored_bucket_text  # noqa: E402
+from .test_inbox_retention import Installation  # noqa: E402
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client

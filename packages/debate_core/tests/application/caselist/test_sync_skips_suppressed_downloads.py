@@ -391,7 +391,7 @@ async def test_a_removal_recorded_only_in_the_buckets_copy_is_honoured(world: Re
     await pull(world, source)
     await remove_source(world, ESTUARY_SHA256)
     local_copy = local_suppression_list_file(world.data_dir)
-    Path(local_copy.location).unlink()
+    local_copy.path.unlink()
     assert await local_copy.read_lines() == ()
     inbox_copy(world, ESTUARY).unlink()
 

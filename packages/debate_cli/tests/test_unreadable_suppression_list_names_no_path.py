@@ -17,7 +17,11 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from tests.fixtures.caselist.build_synthetic_archives import SNAPSHOTS, SYNTHETIC_CASELIST, build_snapshot_zips
+from tests.fixtures.caselist.build_synthetic_archives import (
+    SNAPSHOTS,
+    SYNTHETIC_CASELIST,
+    build_snapshot_zips,
+)
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -33,7 +37,9 @@ TORN_LIST = '{"action":"SUPPRESS"}\n{"action":"SUPP'
 NOT_AN_ENTRY = '{"action":"SUPPRESS"}\n'
 #: Each unreadable list, the line the error names and the reason it gives.
 UNREADABLE = [
-    pytest.param(TORN_LIST, 2, "the last line has no newline (a write was interrupted)", id="a torn last line"),
+    pytest.param(
+        TORN_LIST, 2, "the last line has no newline (a write was interrupted)", id="a torn last line"
+    ),
     pytest.param(NOT_AN_ENTRY, 1, "Field required", id="not an entry"),
 ]
 
@@ -61,10 +67,8 @@ def probe_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[
 def import_first_week(tmp_path: Path, *prefix: str) -> Result:
     week = SNAPSHOTS[0].snapshot
     archive = build_snapshot_zips(tmp_path / "archives")[week]
-    return runner.invoke(
-        create_app(),
-        [*prefix, "caselist", "import", str(archive), "--caselist", SYNTHETIC_CASELIST, "--snapshot", week.isoformat()],
-    )  # fmt: skip
+    target = ("--caselist", SYNTHETIC_CASELIST, "--snapshot", week.isoformat())
+    return runner.invoke(create_app(), [*prefix, "caselist", "import", str(archive), *target])
 
 
 def write_list(data_dir: Path, text: str) -> Path:
@@ -115,4 +119,3 @@ def test_nothing_was_imported_and_the_list_is_as_it_was(probe_data_dir: Path, tm
     assert result.exit_code == ExitCode.DOMAIN_FAILURE
     assert torn.read_text(encoding="utf-8") == TORN_LIST
     assert not (probe_data_dir / "blobs").exists() and not (probe_data_dir / "objects").exists()
-

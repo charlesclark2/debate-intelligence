@@ -593,10 +593,11 @@ fail the stage. **The default is 100**, for two measured reasons:
 * The most unreadable files any one week has delivered is 5, all exports of one program, in
   hsld26's week of 2026-09-15. Five is over 5% of any run of fewer than 100 sources, and exactly
   5%, so not over it, of a run of 100.
-* A weekly pull tries only that week's new sources. Of the 39 caselist-weeks in the store, 19 had
-  fewer than 20 new DOCX sources and 5 more had 20 to 99; one unreadable file in a week of ten is
-  10%. The 15 weeks of 100 or more hold 9,305 of the 9,639 DOCX sources, 97%, and every failure
-  recorded so far fell in a week of 300 or more, so the rate is still judged where the files are.
+* A weekly pull tries only that week's new sources. Of the 39 caselist-weeks that brought the
+  store a new source, 19 had fewer than 20 new DOCX sources and 5 more had 20 to 99; one unreadable
+  file in a week of ten is 10%. The 15 weeks of 100 or more hold 9,305 of the 9,639 DOCX sources,
+  96.5%, and every failure recorded so far fell in a week of 300 or more, so the rate is still
+  judged where the files are.
   A camp release, the smallest run the rate has been read from, is 102 sources.
 
 A run under the minimum that fails outright, every source, is still not a failed stage. Its `failed`

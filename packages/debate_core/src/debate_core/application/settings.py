@@ -809,10 +809,11 @@ class ParseSettings(SettingsGroup):
         description=(
             "The failure rate is judged only in a run that tried at least this many sources, "
             "unsupported formats not counted. In a smaller run the failures are reported and never "
-            "fail it. 100, from the first full parse (docs/data/caselist-parse-report.md): the most "
-            "unreadable files one week has delivered is 5, all exports of one program, which is "
-            "over 5% of any run under 100 sources and exactly 5%, so not above it, of one of 100; "
-            "and 100 is the size of a camp release, the smallest run the rate has been read from. "
+            "fail it. 100, from the store the first full parse left "
+            "(docs/runbooks/caselist-scheduled-sync.md, The parse stage): the most unreadable "
+            "files one week has delivered is 5, all exports of one program, which is over 5% of "
+            "any run under 100 sources and exactly 5%, so not above it, of one of 100; and 100 is "
+            "the size of a camp release, the smallest run the rate has been read from. "
             "Raise it with the threshold if the threshold is lowered: at a threshold `t`, a run of "
             "fewer than `1/t` sources fails on one file."
         ),

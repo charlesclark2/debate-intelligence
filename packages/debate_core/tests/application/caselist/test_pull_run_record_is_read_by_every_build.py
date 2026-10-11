@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any, cast
 import jsonschema
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import build_snapshot_zips
+from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket
 
 from debate_core.application import errors, sync_runs
 from debate_core.application.caselist_sync import SyncStage
@@ -465,6 +466,38 @@ async def test_a_record_left_owed_by_an_expired_session_is_published_with_its_de
         f"{DETAILS_PREFIX}2026/{FIRST_RUN_ID}.json",
         f"{DETAILS_PREFIX}2026/{SECOND_RUN_ID}.json",
     ]
+
+
+async def test_a_record_does_not_reach_the_bucket_ahead_of_its_details(world: World) -> None:
+    """The bucket takes everything but the details. The record is then not sent either: the run
+    stays owed as a whole, so that when the bucket takes both, both go up, and a record in the
+    bucket is never one whose details were left behind. This machine's log has the record
+    regardless."""
+    bucket = world.installation.bucket
+    assert isinstance(bucket, S3EvidenceObjectStore)
+
+    def will_not_take_details(key: str, _: int) -> None:
+        if key.startswith(DETAILS_PREFIX):
+            raise errors.StoreUnavailable("PutObject", key, "simulated 503 SlowDown")
+
+    source = FakeSource(world.installation.archives, weeks=[WEEK_1])
+    world.installation.bucket = ScriptedBucket(bucket, will_not_take_details)
+    await world.pull(world.installation.sync(source))
+
+    assert world.records_in_the_bucket() == {}
+    assert objects_under(world, DETAILS_PREFIX) == {}
+    assert len(world.run_log().splitlines()) == 1
+    owed = json.loads((world.installation.data_dir / "caselist-sync-records-pending.json").read_text("utf-8"))
+    assert owed == {"run_ids": [FIRST_RUN_ID]}
+
+    world.installation.bucket = bucket
+    world.set_clock(SECOND_RUN)
+    await world.pull(world.installation.sync(source))
+
+    assert sorted(key.removeprefix(RECORDS_PREFIX) for key in world.records_in_the_bucket()) == sorted(
+        key.removeprefix(DETAILS_PREFIX) for key in objects_under(world, DETAILS_PREFIX)
+    )
+    assert len(world.records_in_the_bucket()) == 2
 
 
 async def test_details_that_cannot_be_written_never_cost_the_run_its_record(

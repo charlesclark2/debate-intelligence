@@ -29,8 +29,8 @@ Four things for the PM to look at first:
 3. **In the usual week the parsed store will not reach the bucket unattended.** The code's own
    docstring says a weekly run usually finds the SSO session expired. The stage then parses here
    and is `pending`, and `--publish-pending` does not finish it. See Decision 2.
-4. **The rebuild is about four weeks from the PM's 900 s line** for hspolicy26, at the last three
-   weeks' growth, if rebuild time is proportional to the store. See Follow-up 1.
+4. **The rebuild is a little under four weeks from the PM's 900 s line** for hspolicy26, at the
+   last three weeks' growth, if rebuild time is proportional to the store. See Follow-up 1.
 
 ## Plan nodes
 
@@ -73,30 +73,40 @@ has no `ExitTimeOut` and no `TimeOut`. `run-caselist-sync.sh` ends in `exec` wit
 2026-10-11, has neither key: it is `DEBATE_ENV=dev`, three caselists (hsld26, hspolicy26, hspf26),
 Wednesday 06:00, `ProcessType` `Background`, `LowPriorityIO`.
 
-**What the stage costs**, from `v1-e31-t06`'s operator run (2026-10-10, 11,126 sources, a terminal,
-six workers):
+**What the stage costs.** Two operator runs, both from a terminal. The PM gave the second on
+2026-10-11, after this report's first version, and said to use it and cite both. The rebuild alone,
+a `caselist parse --publish` that parsed and uploaded nothing:
 
-| | hsld26 | hspf26 | hspolicy26 | openev | All four | The agent's three |
+| Measured | hsld26 | hspf26 | hspolicy26 | openev | All four | The agent's three |
 |---|---|---|---|---|---|---|
-| Rebuild and publish check, nothing new | 348 s | 214 s | 460 s | 60 s | 1,082 s (18.0 min) | 1,022 s (17.0 min) |
-| First parse of everything | 518 s | 352 s | 747 s | 106 s | 1,723 s (28.7 min) | 1,617 s (27.0 min) |
+| 2026-10-11, parser `2026.10.10-docx-2`, `card-fingerprint-v2` (this build) | 314 s | 193 s | 473 s | 71 s | 1,051 s (17.5 min) | 980 s (16.3 min) |
+| 2026-10-10, parser `2026.09.20-docx-1` (`v1-e31-t06`) | 348 s | 214 s | 460 s | 60 s | 1,082 s (18.0 min) | 1,022 s (17.0 min) |
 
-* Parsing and uploading: 1,723 − 1,082 = 641 s for 9,741 DOCX sources, so at most 0.066 s each.
+A first parse of everything: about 30 minutes on 2026-10-11 (the PM's figure, not broken down by
+caselist), and 518 + 352 + 747 + 106 = 1,723 s (28.7 min) on 2026-10-10.
+
+* One new source, parsed and uploaded. 2026-10-10: 1,723 − 1,082 = 641 s for 9,741 DOCX sources,
+  0.066 s each. 2026-10-11: about 1,800 − 1,051 = 749 s, 0.077 s each if it read the same 9,741.
+  The second rests on a rounded figure. I use it because it is the larger.
 * A week's new sources, three caselists: 2,884 in the largest week (2026-09-15), 2,471 in the
-  latest (2026-10-06). At 0.066 s: 190 s and 163 s.
-* An ordinary scheduled run: 1,022 + 163 = **1,185 s, 19.7 min**. The largest week: 1,212 s,
-  20.2 min. With a camp file, 60 s more. After a parser-version bump, all four: **1,723 s, 28.7 min**.
+  latest (2026-10-06). At 0.077 s: 222 s and 190 s.
+* An ordinary scheduled run: 980 + 190 = **1,170 s, 19.5 min**. The largest week: 1,202 s,
+  20.0 min. With a camp file, 71 s more. After a parser-version bump, all four: **about 1,800 s,
+  30 min**.
 
-The spec's "roughly 18 minutes" is the rebuild alone. The week's parsing adds about three.
+On the first version's figures the same lines were 1,185 s (19.7 min), 1,212 s and 1,723 s. The two
+rebuild runs differ by 3% in total and by up to 18% for one caselist (openev, 60 s and 71 s), so
+the new figures move no conclusion. The spec's "roughly 18 minutes" is the rebuild alone, now 17.5
+for all four. The week's parsing adds about three.
 
 **Against each bound a run has:**
 
-| Bound | Size | The stage, at 20 and 29 min |
+| Bound | Size | The stage, at 20 and 30 min |
 |---|---|---|
 | A time limit on the agent | None | Nothing to exceed |
 | The next scheduled run | 10,080 min | 0.2% and 0.3% |
-| The operator's AWS session (`session_duration = "PT8H"`), which only the publish needs | 480 min | 4.2% and 6.0% |
-| The PM's line for an incremental rebuild, 900 s for one caselist | 900 s | hspolicy26's 460 s is 51% |
+| The operator's AWS session (`session_duration = "PT8H"`), which only the publish needs | 480 min | 4.2% and 6.3% |
+| The PM's line for an incremental rebuild, 900 s for one caselist | 900 s | hspolicy26's 473 s is 53% |
 
 **Default: on.** There is no limit to fit inside, and the stage is a small share of each bound that
 exists. Three limits on that conclusion, all in the runbook:
@@ -236,7 +246,7 @@ not answer is `failed`, with its code.
 **What I considered and left for the follow-up.** The owed raw snapshots already name the caselists
 whose parsed store is unpublished, so `--publish-pending` could infer it with no schema change. It
 covers only an expiry before the raw publish, it would need a rebuild under the full suppression
-list before publishing aggregates rebuilt hours earlier (the 18 minutes again), and it changes a
+list before publishing aggregates rebuilt hours earlier (the 17.5 minutes again), and it changes a
 command documented to run no derived stage. Follow-up 2.
 
 ### 3. The default for ac6's minimum: 100
@@ -369,9 +379,10 @@ hspolicy26 and hspf26.
 
 ## Follow-up work
 
-1. **The incremental rebuild is now on a clock (E31).** hspolicy26's rebuild was 460 s over 2,629
-   DOCX sources. It gained 816, 300 and 807 sources in the last three weeks, 641 a week. If the
-   rebuild is proportional to the store it reaches the PM's 900 s line in about four weeks, and
+1. **The incremental rebuild is now on a clock (E31).** hspolicy26's rebuild was 473 s on
+   2026-10-11 (460 s the day before) over 2,629 DOCX sources. It gained 816, 300 and 807 sources in
+   the last three weeks, 641 a week. If the rebuild is proportional to the store it reaches the
+   PM's 900 s line at about 5,000 sources, 3.7 weeks away, and
    `v1-e31-t06` noted it can be worse than proportional. Every scheduled run now pays it.
 2. **`--publish-pending` should finish the parsed store's publish (E34).** Since a weekly run
    usually finds the session expired, the bucket's parsed store will usually trail this machine's

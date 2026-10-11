@@ -507,34 +507,49 @@ After it has published, a run parses what it imported (`v1-e34-t17`). It is the 
 The agent has no time limit to fit inside. `ops/launchd/com.debate-intelligence.caselist-sync.plist.template`
 sets no `ExitTimeOut` and no `TimeOut`, the wrapper `exec`s the command with no timeout, and the
 installed plist, read on 2026-10-11, has neither key. So the stage is sized against the bounds a
-run does have. The figures are the operator's run of 2026-10-10
-([`caselist-parse-report.md`](../data/caselist-parse-report.md)), over 11,126 sources, in a
-terminal, with six workers:
+run does have. The figures come from two operator runs, both from a terminal.
 
-| | hsld26 | hspf26 | hspolicy26 | openev | All four | The agent's three |
+**The rebuild alone.** A `caselist parse --publish` that found nothing to parse and nothing to
+upload: the rebuild and the publish's checksum checks, which is what each caselist a pull imports
+into adds to that pull.
+
+| Measured | hsld26 | hspf26 | hspolicy26 | openev | All four | The agent's three |
 |---|---|---|---|---|---|---|
-| Rebuild and publish check, nothing new to parse | 348 s | 214 s | 460 s | 60 s | 1,082 s (18.0 min) | 1,022 s (17.0 min) |
-| First parse of everything, as after a parser-version bump | 518 s | 352 s | 747 s | 106 s | 1,723 s (28.7 min) | 1,617 s (27.0 min) |
+| 2026-10-11, parser `2026.10.10-docx-2` and `card-fingerprint-v2`, which is this build | 314 s | 193 s | 473 s | 71 s | 1,051 s (17.5 min) | 980 s (16.3 min) |
+| 2026-10-10, parser `2026.09.20-docx-1` ([`caselist-parse-report.md`](../data/caselist-parse-report.md), `v1-e31-t06`) | 348 s | 214 s | 460 s | 60 s | 1,082 s (18.0 min) | 1,022 s (17.0 min) |
 
-The difference, 1,723 − 1,082 = 641 s, is the parsing and uploading of 9,741 DOCX sources: at most
-0.066 s each. The largest week so far (2026-09-15) brought 2,884 new sources to the three weekly
-caselists, which at that rate is 190 s; the latest (2026-10-06) brought 2,471, which is 163 s. So:
+The arithmetic below uses the 2026-10-11 row. The two runs differ by 3% in total and by up to 18%
+for one caselist (openev), so read any one figure as good to about that.
+
+**A first parse of everything**, as after a parser-version bump:
+
+| Measured | All four |
+|---|---|
+| 2026-10-11, parser `2026.10.10-docx-2` | about 30 minutes, 1,800 s |
+| 2026-10-10, parser `2026.09.20-docx-1` | 518 + 352 + 747 + 106 = 1,723 s (28.7 min) |
+
+**One new source.** A first parse less the rebuild is the parsing and uploading. On 2026-10-10
+that was 1,723 − 1,082 = 641 s for 9,741 DOCX sources, 0.066 s each. The 2026-10-11 run is known
+only as "about 30 minutes", which gives about 1,800 − 1,051 = 749 s, 0.077 s each if it read
+the same 9,741 sources. The arithmetic uses the larger, 0.077 s. The largest week so far (2026-09-15) brought
+2,884 new sources to the three weekly caselists, which at that rate is 222 s; the latest
+(2026-10-06) brought 2,471, which is 190 s. So:
 
 | A scheduled run that | Costs | In minutes |
 |---|---|---|
-| imports all three weekly caselists in an ordinary week | 1,022 + 163 = 1,185 s | 19.7 |
-| does so in the largest week on record | 1,022 + 190 = 1,212 s | 20.2 |
-| also imports a camp file | add 60 s | 20.7 to 21.2 |
-| is the first after a parser-version bump, all four caselists | 1,723 s | 28.7 |
+| imports all three weekly caselists in an ordinary week | 980 + 190 = 1,170 s | 19.5 |
+| does so in the largest week on record | 980 + 222 = 1,202 s | 20.0 |
+| also imports a camp file | add 71 s | 20.7 to 21.2 |
+| is the first after a parser-version bump, all four caselists | about 1,800 s | about 30 |
 
 Against each bound:
 
-| Bound | Where it is set | Size | The stage's share, at 20 and at 29 minutes |
+| Bound | Where it is set | Size | The stage's share, at 20 and at 30 minutes |
 |---|---|---|---|
 | A time limit on the agent | The plist template and the wrapper | None | Nothing to exceed |
 | The next scheduled run | `StartCalendarInterval`, weekly | 10,080 min | 0.2% and 0.3% |
-| The AWS session, which only the publish needs | `session_duration` of the operator permission set, `infrastructure/modules/evidence_bucket/operator_access.tf` | 480 min | 4.2% and 6.0% |
-| The PM's line for building an incremental rebuild | `v1-e31-t06`'s review: 900 s for one caselist's rebuild | 900 s | The slowest rebuild, hspolicy26's 460 s, is 51% |
+| The AWS session, which only the publish needs | `session_duration` of the operator permission set, `infrastructure/modules/evidence_bucket/operator_access.tf` | 480 min | 4.2% and 6.3% |
+| The PM's line for building an incremental rebuild | `v1-e31-t06`'s review: 900 s for one caselist's rebuild | 900 s | The slowest rebuild, hspolicy26's 473 s, is 53% |
 
 Three things these figures do not cover:
 
@@ -542,8 +557,8 @@ Three things these figures do not cover:
   `LowPriorityIO`, which macOS gives less of the machine. The scheduled figure is not known until
   the first scheduled run with this build records it.
 * **The rebuild grows with the store.** hspolicy26 has gained about 640 sources a week over the
-  last three weeks, on a store of 2,629 DOCX sources. If its rebuild grows in step, it reaches the
-  900 s line in about four weeks.
+  last three weeks, on a store of 2,629 DOCX sources. If its rebuild grows in step from 473 s, it
+  reaches the 900 s line at about 5,000 sources, a little under four weeks away.
 * **Nothing stops a stage that runs long.** With no time limit, a rebuild that takes hours holds
   the run's lock for hours, and `caselist remove` and any other pull are refused meanwhile. The
   sign is `caselist runs` showing no record for the week.
@@ -607,7 +622,7 @@ count says so, and the next week of 100 or more is judged.
 
 The stage parses whatever is not parsed under the build's versions. A new parser version starts a
 new version directory, which holds nothing, so the first scheduled run after such a release would
-parse every imported caselist in full: about 29 minutes where it takes 20, with `full_parses` above
+parse every imported caselist in full: about 30 minutes where it takes 20, with `full_parses` above
 `0`. A caselist that run does not import into, `openev` in most weeks, would stay on the old version
 until a camp file arrives.
 
@@ -620,8 +635,9 @@ day other than Wednesday morning, or boot the agent out first ([Disabling it](#d
    DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --dry-run
    ```
 
-2. Parse and publish each caselist, one at a time, with no pull running. About 29 minutes for all
-   four at the 2026-10-10 size (518 s, 352 s, 747 s and 106 s).
+2. Parse and publish each caselist, one at a time, with no pull running. About 30 minutes for all
+   four: that is the 2026-10-11 parse under `2026.10.10-docx-2`, and the 2026-10-10 one took 518 s,
+   352 s, 747 s and 106 s, 28.7 minutes.
 
    ```bash
    aws sso login --profile debate-dev-evidence

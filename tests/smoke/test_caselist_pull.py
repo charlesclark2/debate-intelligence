@@ -47,6 +47,7 @@ from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired, StoreUnavailable
+from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.local import BLOB_DIRECTORY
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
@@ -121,6 +122,9 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         # The floor the settings allow. What this check is about is the run, not the pacing, and
         # six paced requests at the 1s default would put it over five seconds for nothing.
         "min_request_interval_seconds = 0.5\n"
+        # The parse stage is on, as it is for the agent (`v1-e34-t17`). One worker, so that each
+        # pull here starts one process and not the machine's cores less one.
+        "[parse]\nworkers = 1\n"
         f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
@@ -196,6 +200,11 @@ def site(
         yield router
 
 
+def keys_in(bucket: S3Client) -> set[str]:
+    """Every key the moto bucket holds."""
+    return {str(item.get("Key")) for item in bucket.list_objects_v2(Bucket=BUCKET).get("Contents", [])}
+
+
 def run(*arguments: str) -> dict[str, Any]:
     """Run one command asking for JSON, and return its envelope with the exit code on it."""
     result: Result = runner.invoke(create_app(), ["--json", *arguments])
@@ -253,8 +262,30 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
 
     assert stages["publish"]["outcome"] == "completed"
     assert stages["report"]["outcome"] == "completed"
-    assert stages["parse"]["outcome"] == "skipped", "v1-e31-t06 has not shipped; it must skip, not fail"
     assert stages["landscape"]["outcome"] == "skipped"
+
+    # The parse stage (`v1-e34-t17`), by hand from the fixtures. Two caselists are parsed: the
+    # weeklies', and `openev` for the camp file; the complete archive names none. The synthetic
+    # weeks hold fourteen distinct bodies, of which one is a PDF and one a legacy `.doc`, and the
+    # camp file is a fifteenth source. Nothing was parsed before, so both are full parses. The
+    # documents are plain paragraphs, which hold no cards. The parsed store is one file per source
+    # and three aggregates per caselist: (14 + 3) + (1 + 3) objects.
+    assert stages["parse"]["outcome"] == "completed", stages["parse"]
+    assert data["parse"] == {
+        "caselists": 2,
+        "full_parses": 2,
+        "attempted": 15,
+        "skipped": 0,
+        "unsupported": 2,
+        "failed": 0,
+        "cards": 0,
+        "uploaded": 21,
+        "not_published": 0,
+    }
+    parsed = {key for key in keys_in(bucket) if key.startswith("parsed/")}
+    assert len(parsed) == 21
+    for caselist in (SYNTHETIC_CASELIST, "openev"):
+        assert f"parsed/{caselist}/{DOCX_PARSER_VERSION}/index.jsonl" in parsed
 
     keys = {str(item.get("Key")) for item in bucket.list_objects_v2(Bucket=BUCKET).get("Contents", [])}
     for week in SNAPSHOTS:
@@ -271,6 +302,10 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     assert again["data"]["nothing_new"] is True
     assert again["data"]["archives_downloaded"] == 0
     assert again["data"]["openev_downloaded"] == 0
+    # A pull that imports nothing parses nothing, and sends nothing more to the bucket.
+    assert again["data"]["parse"] is None
+    assert {one["stage"]: one for one in again["data"]["stages"]}["parse"]["outcome"] == "skipped"
+    assert {key for key in keys_in(bucket) if key.startswith("parsed/")} == parsed
 
 
 def test_a_weekly_run_fetches_one_complete_archive_after_its_weeklies_and_says_why(

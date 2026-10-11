@@ -520,3 +520,52 @@ def test_the_plans_json_names_no_school_team_path_or_file(
     executed = raw_json(*REMOVE_FIRST_VERSION, "--execute")
     assert json.loads(executed)["data"]["applied"] is True
     assert not [name for name in IDENTIFYING if name in executed]
+
+
+# ------------------------------------------------------------------------------------------------
+# A --source plan counts only the other teams (v1-e30-t10)
+# ------------------------------------------------------------------------------------------------
+
+#: The Round 1 affirmative: Maple Grove/QX discloses it and, from 09-08, so does Cedar Hollow/ZaLu.
+#: Two holding teams, so one other than the one whose file is removed.
+HELD_BY_TWO_TEAMS = hashlib.sha256(DOCUMENT_BODIES["grove-round-1-aff"]).hexdigest()
+#: The keys of one source in the plan's JSON, as `v1-e30-t11` settled them.
+SOURCE_KEYS = {
+    "sha256", "inclusion", "disposition", "byte_size", "format", "other_teams", "camp_file_holders",
+    "kept_in", "already_suppressed", "disclosures", "camp_files", "withdrawn_disclosures", "local_blob",
+    "deletes_source_record",
+}  # fmt: skip
+
+
+def test_a_source_plan_for_a_file_one_team_holds_says_nothing_about_other_teams(
+    installation: Path, bucket: S3Client, published: dict[date, Path]
+) -> None:
+    remove = ("caselist", "remove", "--source", BAYVIEW, *LATER_UPLOADS_REQUEST)
+
+    shown = runner.invoke(create_app(), list(remove)).stdout
+    planned = run(*remove)
+
+    (line,) = [line for line in shown.splitlines() if BAYVIEW in line and line.lstrip().startswith("1.")]
+    assert "other team" not in line and "also held" not in line, line
+    assert "other team" not in shown
+    (source,) = planned["data"]["sources"]
+    assert source["other_teams"] == 0
+    assert set(source) == SOURCE_KEYS
+
+
+def test_a_source_plan_for_a_file_two_teams_hold_counts_one_other_team(
+    installation: Path, bucket: S3Client, published: dict[date, Path]
+) -> None:
+    remove = ("caselist", "remove", "--source", HELD_BY_TWO_TEAMS, *LATER_UPLOADS_REQUEST)
+
+    shown = runner.invoke(create_app(), list(remove)).stdout
+    planned = run(*remove)
+
+    (line,) = [
+        line for line in shown.splitlines() if HELD_BY_TWO_TEAMS in line and line.lstrip().startswith("1.")
+    ]
+    assert line.endswith("; also held by 1 other team(s))"), line
+    (source,) = planned["data"]["sources"]
+    assert source["disposition"] == "skip_shared"
+    assert source["other_teams"] == 1
+    assert set(source) == SOURCE_KEYS

@@ -222,8 +222,43 @@ class TestSharedFiles:
 
         (skipped,) = plan.sources
         assert skipped.disposition is Disposition.SKIP_SHARED
-        assert skipped.other_teams == 2 and skipped.camp_file_holders == 1
+        assert skipped.camp_file_holders == 1
         assert plan.nothing_to_do
+
+    async def test_a_source_removal_of_a_file_two_teams_hold_counts_one_other_team(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """Maple Grove/QX and Cedar Hollow/ZaLu hold it: two holding teams, so one *other* team.
+
+        Until `v1-e30-t10` a `--source` plan counted every holding team as "other", the one whose
+        file is being removed included, and this read 2.
+        """
+        for include_shared in (False, True):
+            plan = await removal_world.planner().plan(
+                SourceSelector(SHARED),
+                request_id=REQUEST,
+                reason=ReasonCode.REQUESTED_BY_SITE_ADMIN,
+                include_shared=include_shared,
+            )
+
+            (shared,) = plan.sources
+            assert shared.other_teams == 1
+            assert shared.shared
+
+    async def test_a_source_removal_of_a_file_one_team_holds_counts_no_other_team(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """Only Maple Grove/QX holds the Bayview semis negative, in one snapshot at one path."""
+        plan = await removal_world.planner().plan(
+            SourceSelector(digest("bayview-semis-neg")),
+            request_id=REQUEST,
+            reason=ReasonCode.REQUESTED_BY_TEAM,
+        )
+
+        (removed,) = plan.sources
+        assert removed.disposition is Disposition.REMOVE
+        assert removed.other_teams == 0
+        assert not removed.shared
 
     async def test_junk_that_shadows_a_removed_file_goes_even_when_its_team_stays(
         self, removal_world: RemovalWorld

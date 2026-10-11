@@ -37,8 +37,11 @@ from tests.fixtures.parse_pipeline.build_parse_world import CASELIST, WEEKS, bui
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
+from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.parse_workers import InProcessParseRunner
+from debate_core.application.caselist_pull_parse import PullParseStage
+from debate_core.application.settings import load_settings
 from debate_core.domain.caselist import SnapshotDate, SourceDocument
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser
@@ -313,6 +316,28 @@ def test_a_dry_run_says_it_would_parse_and_parses_nothing(
     assert stage(envelope, "parse")["outcome"] == "planned"
     assert asked == []
     assert not (installation / "parsed").exists()
+
+
+def test_the_composition_root_builds_the_stage_over_the_pulls_own_suppression_list(
+    installation: Path,
+) -> None:
+    """The stage's pipeline holds the very list the pull holds, and the settings' two defaults.
+
+    The same object, not an equal one: the run tells that the list was read from this machine's
+    copy alone by that object's fallback count, and a pipeline built over another list would never
+    move it. No bucket in `test`, so the stage has no publisher.
+    """
+    container = ServiceContainer(settings_loader=load_settings)
+
+    sync = container.caselist_sync(event_for_caselist=lambda _: None)
+
+    stage_built = sync._parse  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(stage_built, PullParseStage)
+    pipeline = stage_built._parse  # pyright: ignore[reportPrivateUsage]
+    assert pipeline._suppression is sync._suppression  # pyright: ignore[reportPrivateUsage]
+    assert stage_built._publisher is None  # pyright: ignore[reportPrivateUsage]
+    assert pipeline._threshold == 0.05  # pyright: ignore[reportPrivateUsage]
+    assert pipeline._minimum_sources == 100  # pyright: ignore[reportPrivateUsage]
 
 
 # ------------------------------------------------------------------------------------------------

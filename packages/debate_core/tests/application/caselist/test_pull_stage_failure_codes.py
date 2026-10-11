@@ -874,16 +874,18 @@ download on a burst rate limit, against the synthetic caselist. The installed we
 such a build until it is reinstalled, in the data directory a newer build also reads."""
 
 
-async def test_the_summary_schema_is_version_4_and_every_stage_carries_the_new_fields(
+async def test_from_summary_schema_version_4_every_stage_carries_the_new_fields(
     installation: Installation,
 ) -> None:
-    """`error_codes` and `hint` are new on every stage, so the version moves (PM decision)."""
+    """`error_codes` and `hint` were new on every stage in version 4, so the version moved (PM
+    decision). `v1-e34-t17` moved it again, to 5, for the parse stage's counts; the stages kept
+    both fields."""
     source = FakeSource(installation.archives, weeks=[WEEK_1])
 
     summary = await installation.sync(source).run([CASELIST])
 
-    assert RUN_SUMMARY_SCHEMA_VERSION == 4
-    assert summary.as_json()["schema_version"] == 4
+    assert RUN_SUMMARY_SCHEMA_VERSION >= 4
+    assert summary.as_json()["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION
     for one in stages_of(summary):
         assert sorted(one) == ["error_codes", "hint", "outcome", "reason", "stage"]
         assert one["error_codes"] == []

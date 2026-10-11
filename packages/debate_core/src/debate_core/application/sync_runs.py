@@ -368,6 +368,9 @@ def _outcome_of(summary: RunSummary) -> SyncRunOutcome:
         return SyncRunOutcome.FAILED
     if summary.pending_publish or _stage_is(summary, SyncStage.PUBLISH, StageOutcome.PENDING):
         return SyncRunOutcome.PUBLISH_PENDING
+    if _stage_is(summary, SyncStage.PARSE, StageOutcome.PENDING):
+        # The parsed store's publish is a publish, and it waits for the same login (`v1-e34-t17`).
+        return SyncRunOutcome.PUBLISH_PENDING
     if any(record.outcome is StageOutcome.FAILED for record in summary.stages):
         return SyncRunOutcome.INCOMPLETE
     if summary.archives_deferred:
@@ -486,12 +489,23 @@ def notifications_for(
         )
     if credentials_expired:
         owed = len(record.pending_publish)
+        # `--publish-pending` publishes snapshots and run records, never a parsed store, so a parse
+        # stage waiting on the same login is named with the command that does (`v1-e34-t17`).
+        parse_waits = any(
+            entry.stage == str(SyncStage.PARSE) and entry.outcome == str(StageOutcome.PENDING)
+            for entry in record.stages
+        )
         sent.append(
             Notification(
                 title="caselist publish waiting for an AWS login",
                 message=(
                     f"{where} kept everything it fetched; {owed} snapshot(s) and the run record "
                     "wait to be published."
+                    + (
+                        f" The parsed store waits too; after the login: {PARSE_COMMAND}"
+                        if parse_waits
+                        else ""
+                    )
                 ),
                 fix_command=f"{aws_login_command} && {PUBLISH_PENDING_COMMAND}",
             )
@@ -712,8 +726,9 @@ class SyncRunMonitor:
             secrets=self._secret_values(),
             growth_runs=self._growth_runs,
         )
-        publish_pending = _stage_is(summary, SyncStage.PUBLISH, StageOutcome.PENDING) or _stage_is(
-            summary, SyncStage.REPORT, StageOutcome.PENDING
+        publish_pending = any(
+            _stage_is(summary, stage, StageOutcome.PENDING)
+            for stage in (SyncStage.PUBLISH, SyncStage.REPORT, SyncStage.PARSE)
         )
         notifications, published = await self._finish(record, publish_pending_stage=publish_pending)
         return MonitoredRun(

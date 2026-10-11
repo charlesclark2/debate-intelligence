@@ -29,9 +29,13 @@ from tests.fixtures.permissions import refused as refused_directory
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
+from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist.suppression import LocalFallbackSuppressionList
+from debate_core.application.caselist_pull_parse import PullParseStage
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.ports.evidence_store import ObjectInfo
+from debate_core.application.settings import load_settings
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
@@ -344,6 +348,27 @@ def test_a_publish_with_a_mismatch_among_its_failures_stays_exit_one(
     error = envelope_of(result)["error"]
     assert error["code"] == "PARSED_PUBLISH_INCOMPLETE"
     assert sorted(error["details"]["publish"]["failure_codes"]) == ["CHECKSUM_MISMATCH", "STORE_UNAVAILABLE"]
+
+
+def test_with_a_bucket_the_pulls_parse_stage_shares_its_fallback_list_and_has_a_publisher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`v1-e34-t17`: in an environment that publishes, the composition root gives the pull's parse
+    stage the pull's own suppression list, the one that falls back to this machine's copy when the
+    bucket's needs a login, and the parsed store's publisher. The run reads that object's fallback
+    count to know whether aggregates were rebuilt from every copy of the list before publishing."""
+    monkeypatch.setenv("DEBATE_ALLOW_NETWORK", "true")
+    monkeypatch.setenv("DEBATE_CASELIST__API_ENABLED", "true")
+    monkeypatch.setenv("DEBATE_PROVIDERS__CASELIST_TOKEN", "fixture-token-for-wiring")
+    container = ServiceContainer(settings_loader=load_settings)
+
+    sync = container.caselist_sync(event_for_caselist=lambda _: None)
+
+    stage = sync._parse  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(stage, PullParseStage)
+    assert isinstance(sync._suppression, LocalFallbackSuppressionList)  # pyright: ignore[reportPrivateUsage]
+    assert stage._parse._suppression is sync._suppression  # pyright: ignore[reportPrivateUsage]
+    assert stage._publisher is container.parsed_publisher()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_publishing_to_prod_needs_confirm_prod_and_writes_nothing_without_it(

@@ -82,6 +82,10 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         # The counts in this module were written by hand for the weeklies alone. The complete-archive
         # rotation, on by default (`v1-e34-t04`), is turned back on by the tests at the end of it.
         "DEBATE_CASELIST__FULL_ARCHIVE_ROTATION": "false",
+        # The parse stage, on by default (`v1-e34-t17`), has a module of its own beside this one,
+        # `test_caselist_pull_parses.py`. Here it would start a pool of worker processes in every
+        # test that imports, to parse documents that hold no cards.
+        "DEBATE_CASELIST__PARSE_IMPORTED_SOURCES": "false",
     }.items():
         monkeypatch.setenv(name, value)
     yield data
@@ -214,7 +218,7 @@ def test_the_publish_and_report_stages_say_why_they_were_skipped(
     assert stages["publish"]["outcome"] == "skipped"
     assert "no evidence bucket" in stages["publish"]["reason"]
     assert stages["parse"]["outcome"] == "skipped"
-    assert "v1-e31-t06" in stages["parse"]["reason"]
+    assert "caselist.parse_imported_sources" in stages["parse"]["reason"]
     assert stages["landscape"]["outcome"] == "skipped"
     assert envelope["exit_code"] == ExitCode.OK
 

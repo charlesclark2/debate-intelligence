@@ -845,7 +845,7 @@ async def test_with_no_session_the_stage_parses_here_sends_nothing_and_is_pendin
     # and the command from: it is longer than the 500 characters other stages are cut to.
     [recorded] = [one for one in watched.pulled.record.stages if one.stage == "parse"]
     assert recorded.reason == parse["reason"]
-    assert len(recorded.reason) > 500
+    assert recorded.reason is not None and len(recorded.reason) > 500
 
 
 async def test_a_session_that_expires_during_the_parsed_stores_publish_leaves_the_raw_publish_whole(

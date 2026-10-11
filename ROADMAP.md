@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 39 | 33 | 214 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 47 | 36 | 317 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 63 | 38 | 371 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -157,6 +157,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [`debate-research store` sync commands](plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml) `v1-e29-t05-evidence-sync-cli` | Succeeded | 3 | 11.5 |
 | [Removal grants: the scope is tested, and a plan can count versions](plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml) `v1-e29-t06-removal-grant-scope-test` | Succeeded | 1 | 8.0 |
 | [A profile missing from the AWS config is a configuration error, not an expired session](plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml) `v1-e29-t07-missing-profile-not-retryable` | Pending | 1 | 1.0 |
+| [The takedown preflight refuses the everyday profile before it writes anything](plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml) `v1-e29-t08-takedown-preflight-identity` | Pending | 1 | 2.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 
@@ -174,6 +175,11 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [caselist status reports noncurrent versions a removal left behind](plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml) `v1-e30-t10-removal-docstrings-and-residue` | Succeeded | 1 | 2.0 |
 | [A removal also takes down later uploads at the removed path](plan_specs/v1/e30-caselist-ingestion/t11-removal-covers-later-uploads.yaml) `v1-e30-t11-removal-covers-later-uploads` | Succeeded | 2 | 3.0 |
 | [caselist status tells a manifest mismatch from a source mismatch](plan_specs/v1/e30-caselist-ingestion/t12-status-names-manifest-mismatch.yaml) `v1-e30-t12-status-names-manifest-mismatch` | Pending | 1 | 1.0 |
+| [A removed caselist path holds the uploads that arrive after the removal](plan_specs/v1/e30-caselist-ingestion/t13-removed-path-holds-caselist-uploads.yaml) `v1-e30-t13-removed-path-holds-caselist-uploads` | Pending | 1 | 4.0 |
+| [A camp file is identified by its upstream record, and a camp path can be withdrawn on its own](plan_specs/v1/e30-caselist-ingestion/t14-camp-path-identity.yaml) `v1-e30-t14-camp-path-identity` | Pending | 1 | 3.0 |
+| [caselist status reports manifest and aggregate versions older than a removal](plan_specs/v1/e30-caselist-ingestion/t15-manifest-and-aggregate-residue.yaml) `v1-e30-t15-manifest-and-aggregate-residue` | Pending | 1 | 3.0 |
+| [The removal plan names holders correctly in every case](plan_specs/v1/e30-caselist-ingestion/t16-removal-output-names-holders.yaml) `v1-e30-t16-removal-output-names-holders` | Pending | 1 | 2.0 |
+| [No text calls a weekly archive cumulative, and import ordering is checked against the window model](plan_specs/v1/e30-caselist-ingestion/t17-weekly-window-wording-and-ordering.yaml) `v1-e30-t17-weekly-window-wording-and-ordering` | Pending | 1 | 3.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -186,8 +192,16 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Parser accuracy evaluation](plan_specs/v1/e31-debate-file-parsing/t05-parser-eval.yaml) `v1-e31-t05-parser-eval` | InProgress | 1 | 16.0 |
 | [Incremental parse pipeline](plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml) `v1-e31-t06-parse-pipeline` | Succeeded | 5 | 12.0 |
 | [Labeling worksheets survive a spreadsheet round trip](plan_specs/v1/e31-debate-file-parsing/t07-worksheet-round-trip.yaml) `v1-e31-t07-worksheet-round-trip` | Succeeded | 1 | 4.0 |
-| [Near-duplicate matching finds short cards and abbreviated disclosures](plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml) `v1-e31-t08-short-card-recall` | InProgress | 1 | 5.0 |
-| [Parser findings from the first full-corpus parse](plan_specs/v1/e31-debate-file-parsing/t09-first-corpus-parse-findings.yaml) `v1-e31-t09-first-corpus-parse-findings` | InProgress | 1 | 4.0 |
+| [Near-duplicate matching finds short cards and abbreviated disclosures](plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml) `v1-e31-t08-short-card-recall` | Succeeded | 1 | 5.0 |
+| [Parser findings from the first full-corpus parse](plan_specs/v1/e31-debate-file-parsing/t09-first-corpus-parse-findings.yaml) `v1-e31-t09-first-corpus-parse-findings` | Succeeded | 1 | 4.0 |
+| [The weekly aggregate rebuild costs what the week added, not the whole store](plan_specs/v1/e31-debate-file-parsing/t10-incremental-aggregate-rebuild.yaml) `v1-e31-t10-incremental-aggregate-rebuild` | Pending | 1 | 6.0 |
+| [Copies split apart by the short-body rule, and long bodies merged through a fragment](plan_specs/v1/e31-debate-file-parsing/t11-long-card-splits-and-fragment-merges.yaml) `v1-e31-t11-long-card-splits-and-fragment-merges` | Pending | 2 | 5.0 |
+| [Cites the parser misses or misreads](plan_specs/v1/e31-debate-file-parsing/t12-cite-detection.yaml) `v1-e31-t12-cite-detection` | Pending | 1 | 5.0 |
+| [Split a cite from its words when a card or wiki entry is one paragraph](plan_specs/v1/e31-debate-file-parsing/t13-one-paragraph-cards-and-wiki-entries.yaml) `v1-e31-t13-one-paragraph-cards-and-wiki-entries` | Pending | 1 | 6.0 |
+| [A card with no tag has no tag in memory and in every output](plan_specs/v1/e31-debate-file-parsing/t14-card-tag-optional.yaml) `v1-e31-t14-card-tag-optional` | Pending | 2 | 2.0 |
+| [The zip guard judges only the parts it reads, and exporter quirks are decided](plan_specs/v1/e31-debate-file-parsing/t15-zip-guard-and-exporter-quirks.yaml) `v1-e31-t15-zip-guard-and-exporter-quirks` | Pending | 1 | 2.0 |
+| [Superseded parsed-store version directories are retired, locally and in both buckets](plan_specs/v1/e31-debate-file-parsing/t16-version-directory-retention.yaml) `v1-e31-t16-version-directory-retention` | Pending | 1 | 3.0 |
+| [A transient parse failure is retried, and one data directory publishes a bucket's parsed store](plan_specs/v1/e31-debate-file-parsing/t17-parse-retries-and-one-publisher.yaml) `v1-e31-t17-parse-retries-and-one-publisher` | Pending | 1 | 2.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -212,6 +226,8 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The weekly pull parses the sources it imported](plan_specs/v1/e34-caselist-sync/t17-pull-parses-new-sources.yaml) `v1-e34-t17-pull-parses-new-sources` | InProgress | 2 | 3.0 |
 | [A publish stopped by an expired session still owes every snapshot it did not finish](plan_specs/v1/e34-caselist-sync/t18-publish-owes-every-unpublished-snapshot.yaml) `v1-e34-t18-publish-owes-every-unpublished-snapshot` | Succeeded | 1 | 2.0 |
 | [Unreadable local files fail a stage, and a notification says whether a failure is transient](plan_specs/v1/e34-caselist-sync/t19-unreadable-local-files-and-notification-codes.yaml) `v1-e34-t19-unreadable-local-files-and-notification-codes` | Pending | 1 | 3.0 |
+| [After a login, the parsed store publishes without a second rebuild when nothing was removed](plan_specs/v1/e34-caselist-sync/t20-parsed-store-publish-after-login.yaml) `v1-e34-t20-parsed-store-publish-after-login` | Pending | 2 | 4.0 |
+| [The parse stage holds the run lock and has a time budget](plan_specs/v1/e34-caselist-sync/t21-parse-stage-bounds.yaml) `v1-e34-t21-parse-stage-bounds` | Pending | 1 | 2.0 |
 
 
 ### v1.2 — Argument landscape & file building

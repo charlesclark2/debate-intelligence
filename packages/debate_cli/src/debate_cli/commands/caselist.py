@@ -105,7 +105,9 @@ with the failed sha256 values in the message and every count in `error.details` 
 refused to start; `3` when the store did not answer: an expired SSO session or a refused request,
 which end the run at once, before any further manifest, or an applied run whose every failure was
 the store being unavailable (`v1-e01-t20`). An expired session is reported with the
-`aws sso login --profile …` line the adapter built.
+`aws sso login --profile …` line the adapter built, and a refused request with the adapter's hint
+that the profile lacks a grant. A profile the AWS config does not define is neither: it exits `1`
+as `STORE_PROFILE_NOT_CONFIGURED`, naming the setting to correct (`v1-e29-t07`).
 
 ## `caselist status`
 

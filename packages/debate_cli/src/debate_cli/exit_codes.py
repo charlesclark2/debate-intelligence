@@ -86,6 +86,11 @@ Named one by one rather than as their base class, so that the list is the decisi
 `StoreError` subclass is mapped when someone decides it belongs here, not by inheritance. Nothing
 deterministic is on it — :class:`~debate_core.application.errors.NotFound` is an answer, and so are
 a refused manifest and an `UNVERIFIED` card.
+
+:class:`~debate_core.application.errors.StoreProfileNotConfigured` is a `StoreError` and is
+deliberately not here (`v1-e29-t07`): a profile the AWS config does not define is defined by
+nobody's retry, so it ends a command with `DOMAIN_FAILURE` (1), and a run that recorded its code,
+`STORE_PROFILE_NOT_CONFIGURED`, is a 1 whatever else it recorded.
 """
 
 RETRYABLE_PROVIDER_FAILURES: tuple[type[ProviderError], ...] = (ProviderUnavailable, ProviderRateLimited)

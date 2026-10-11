@@ -67,13 +67,16 @@ finish:
   so the next run, or the same command, finishes the job.
 * `1` as soon as one is a verdict: an archive that cannot be read or is over the size ceiling, one
   the file host no longer serves, an expired OpenCaselist token (never retried, by policy), the
-  site's daily download cap on a camp file, a checksum mismatch. So is any failure with a code
-  nobody put on the retryable list.
+  site's daily download cap on a camp file, a checksum mismatch, a profile the AWS config does not
+  define (`STORE_PROFILE_NOT_CONFIGURED`, `v1-e29-t07`). So is any failure with a code nobody put on
+  the retryable list.
 
 `1` also when a guard refused to start: an expired OpenCaselist token, an API this installation has
 not turned on, no caselist to pull, another run already holding the lock, or a `--full-archive` the
 day's allowance cannot cover. A failure that ends the run before any stage records it exits as that
-exception does in every other command: `3` for a store or provider failure (`v1-e01-t20`).
+exception does in every other command: `3` for a store or provider failure (`v1-e01-t20`), and `1`
+for a profile setting that names no profile in the AWS config, which stops the bucket's adapter
+being built and so ends the run before it starts (`v1-e29-t07`).
 
 The envelope's `error.code` for a failed stage is `CASELIST_PULL_INCOMPLETE` whichever it is; the
 exit status and each stage's `error_codes` say which.

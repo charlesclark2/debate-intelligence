@@ -990,3 +990,7 @@ def test_a_profile_setting_that_names_no_profile_in_the_aws_config_ends_the_pull
     assert_names_the_setting_and_nothing_of_this_machine(json.dumps(pulled["error"]), installation)
     assert not bucket.list_objects_v2(Bucket=BUCKET).get("Contents"), "nothing reached the bucket"
     assert owed_in_the_file(installation) == []
+    # The run never starts: its monitor publishes run records through the same profile, so it
+    # cannot be built either. Nothing is fetched, and no run is recorded (the runbook says so).
+    assert len(site.calls) == 0
+    assert not (installation / "data").exists()

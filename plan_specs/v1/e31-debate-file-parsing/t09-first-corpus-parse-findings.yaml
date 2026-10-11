@@ -99,7 +99,9 @@ spec:
         paragraph of any length stays a cite. It ships under the same parser version,
         `2026.10.10-docx-2`.
 status:
-  phase: InProgress
+  # Set by the PM, 2026-10-11, at close-out: ac4's re-parse recorded in
+  # docs/data/caselist-parse-report.md (operator-run, dev then prod, 2026-10-11).
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

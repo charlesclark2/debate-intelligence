@@ -385,5 +385,105 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t12-status-names-manifest-mismatch
+    - id: t13
+      kind: Task
+      name: 'A removed caselist path holds the uploads that arrive after the removal'
+      description: >-
+        A caselist revision at a removed path is refused on import and covered in the inbox,
+        so a removal holds whatever arrives after it.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t13-removed-path-holds-caselist-uploads.yaml
+        goalRef: v1-e30-t13-removed-path-holds-caselist-uploads
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t13-removed-path-holds-caselist-uploads reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t13-removed-path-holds-caselist-uploads
+    - id: t14
+      kind: Task
+      name: 'A camp file is identified by its upstream record, and a camp path can be withdrawn on its own'
+      description: >-
+        Camp files are matched by their upstream record in both environments, and one camp
+        path can be withdrawn on its own.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t14-camp-path-identity.yaml
+        goalRef: v1-e30-t14-camp-path-identity
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t14-camp-path-identity reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t14-camp-path-identity
+    - id: t15
+      kind: Task
+      name: 'caselist status reports manifest and aggregate versions older than a removal'
+      description: >-
+        Old manifest and aggregate versions that still hold a removed row are reported from
+        the listing alone.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t15-manifest-and-aggregate-residue.yaml
+        goalRef: v1-e30-t15-manifest-and-aggregate-residue
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t15-manifest-and-aggregate-residue reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t15-manifest-and-aggregate-residue
+    - id: t16
+      kind: Task
+      name: 'The removal plan names holders correctly in every case'
+      description: >-
+        Every removal plan line names holders correctly, and a withdrawal records the
+        caselist it took a file from.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t16-removal-output-names-holders.yaml
+        goalRef: v1-e30-t16-removal-output-names-holders
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t16-removal-output-names-holders reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t16-removal-output-names-holders
+    - id: t17
+      kind: Task
+      name: 'No text calls a weekly archive cumulative, and import ordering is checked against the window model'
+      description: >-
+        Every text describes weekly archives as windows, and import ordering is checked and
+        fixed under that model.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t17-weekly-window-wording-and-ordering.yaml
+        goalRef: v1-e30-t17-weekly-window-wording-and-ordering
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t17-weekly-window-wording-and-ordering reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t17-weekly-window-wording-and-ordering
 status:
   phase: Pending

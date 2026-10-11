@@ -282,8 +282,13 @@ DEBATE_ENV=prod uv run debate-research caselist remove --team 'hsld26/<school>/<
 aws sso login --profile debate-prod-evidence-removal
 DEBATE_ENV=prod DEBATE_REMOVAL_PROFILE=debate-prod-evidence-removal uv run debate-research caselist remove \
     --team 'hsld26/<school>/<team>' --request RM-2026-01 --reason REQUESTED_BY_TEAM --execute --confirm-prod
-DEBATE_ENV=prod uv run debate-research caselist status
+DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research caselist status
 ```
+
+**In prod, compare against the dev data directory**, as the parse below does. With prod's own data
+directory, which holds no manifests, every snapshot reads as drift and the command exits 1 whatever
+the bucket holds. The line under the table about removal residue is right either way. (Measured on
+2026-10-11: prod's own directory reported every snapshot as drift; the dev directory, in sync.)
 
 - [ ] The prod dry-run plan matches the dev one (a difference means the two environments had
       drifted — investigate before executing). The *DOWNLOAD INBOX* section may differ: each
@@ -292,8 +297,9 @@ DEBATE_ENV=prod uv run debate-research caselist status
       says *matched by file name alone* where dev named the delivery record. That is expected, and
       it is why the sha256 values are what you compare. Pass `--only-named` in prod if you passed
       it in dev.
-- [ ] `caselist status` is clean afterwards, and says *No version of a removed file is left under
-      raw/ or parsed/*. Residue is reported per environment, so a clean dev says nothing about prod.
+- [ ] `caselist status`, run against the dev data directory as above, is clean afterwards, and says
+      *No version of a removed file is left under raw/ or parsed/*. Residue is reported per
+      environment, so a clean dev says nothing about prod.
 
 Then rebuild prod's parsed aggregates, for the same caselists as in step 5. The parsed store is
 built on this machine in the dev data directory and published to both buckets from there, so this
@@ -462,7 +468,10 @@ list.
 **Who runs it:** the operator, as for the removal itself. Residue is reported per environment, so
 clear it in the environment whose `caselist status` showed it, dev before prod if both do. The
 commands below are dev's. For prod use `DEBATE_ENV=prod`, the `debate-prod-evidence-removal`
-profile and `--confirm-prod`.
+profile and `--confirm-prod`, and run every `caselist status` with
+`DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev"`, as in step 7. Against prod's own data
+directory every snapshot reads as drift, so steps 2 and 3 below cannot be read from it: every status
+would say `CASELIST_DRIFT` and none would exit 0.
 
 1. **Find the request.** Look the twelve characters up in that environment's suppression list.
    The line it prints holds the whole sha256, the request id and the reason code:

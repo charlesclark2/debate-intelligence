@@ -11,6 +11,12 @@ directory with the merged pipeline (#207), publishing to dev and then to prod. E
 from that run's `--json` summary. The steps are in the task's session report under "Operator
 follow-ups, revised". The PM recorded the figures at close-out.
 
+**Re-parsed on 2026-10-11 under `2026.10.10-docx-2` and `card-fingerprint-v2`**, in dev and prod,
+for `v1-e31-t09` (the parser's fixes) and `v1-e31-t08` (short-card matching). The sections down to
+[What the refusals and the empty tags were](#what-the-refusals-and-the-empty-tags-were-v1-e31-t09)
+describe the first parse and are kept as its record. The current figures are in
+[The re-parse, 2026-10-11](#the-re-parse-2026-10-11).
+
 ## Versions
 
 | | |
@@ -120,10 +126,9 @@ which cards share a cluster (`card-fingerprint-v2`; the exact fingerprints are t
 `Clusters` columns change when the aggregates are next rebuilt. Sources, parsed counts, cards and
 occurrence rows do not: nothing is parsed again.
 
-**Status: not rebuilt yet.** The by-eye sample of 20 newly joined pairs is that task's operator
-follow-up (its criterion ac5), and it waits for `v1-e31-t09`'s re-parse under `2026.10.10-docx-2`,
-which rebuilds the aggregates under `card-fingerprint-v2` in the same run. The figures are recorded
-here when it has run.
+**Status: rebuilt on 2026-10-11** by `v1-e31-t09`'s re-parse. The counts and the by-eye samples
+(that task's criterion ac5) are in [After `card-fingerprint-v2`, measured](#after-card-fingerprint-v2-measured).
+The preview below is kept as the record of what the old store suggested.
 
 **A provisional preview, 2026-10-10.** Read-only: the stored cards of this report's
 `2026.09.20-docx-1` store placed in memory under the new rules, and compared with the occurrence
@@ -142,11 +147,13 @@ figures do and do not show, is in that task's session report under "Corpus-scale
 
 ## What the run settled, and what it raised
 
-* **No incremental rebuild yet.** The slowest rebuild was 460 s (hspolicy26). This will be
-  revisited when `v1-e34-t17` puts the parse inside the weekly run.
+* **No incremental rebuild yet.** The slowest rebuild was 460 s (hspolicy26). `v1-e34-t17` put
+  the parse inside the weekly run, so every scheduled run now pays it; `v1-e31-t10` makes it
+  incremental.
 * **The failure-rate threshold and small caselists.** openev's four failures out of 102 are just under 4%.
-  One more bad file in a release that size crosses 5%. `v1-e34-t17` takes a minimum number of
-  sources tried before the rate is judged.
+  Two more bad files in a release that size cross 5% (six of 102 is 5.9%; five is 4.9%). An
+  earlier version of this line said one more, which was the PM's arithmetic error. `v1-e34-t17`
+  judges the rate only once a run has tried at least 100 sources.
 * **23 files refused as `FORBIDDEN_XML_CONSTRUCT`**, mostly in policy, and 5 as `MALFORMED_XML`.
   Which construct, and whether it is safe to accept, is `v1-e31-t09`'s to find out.
 * **A third of PF is PDF** (1,240 of 3,906 sources), so PF's parsed store covers two thirds of its
@@ -499,3 +506,129 @@ body open one paragraph earlier, the empty-tag rule takes 40 more guesses that f
   both team files with no untagged card. On those 60 paragraphs the blank-line rule raised tag
   precision from 0.714 to 1.000, every card boundary stayed where it was, and completeness is
   right on 4 of 4 matched cards before and after each of the three rules.
+
+## The re-parse, 2026-10-11
+
+Run by the operator from the dev data directory on 2026-10-11, after `v1-e31-t08` and `v1-e31-t09`
+merged: one re-parse covers both. It wrote a new version directory and published it to dev, then to
+prod. Counts only, as everywhere in this report.
+
+| | |
+|---|---|
+| Parser | `2026.10.10-docx-2` |
+| Fingerprints | `card-fingerprint-v2` |
+| Parsed-store schema | 2 (a card with no tag is `null`) |
+| Version directory | `2026.10.10-docx-2` (first generation) |
+| Superseded | `2026.09.20-docx-1`, schema 1, byte for byte unchanged by the run |
+
+**The dry run reads oddly, and is right.** For a new parser version it shows `new_version: false`
+and `superseded: null`. Both fields describe a new generation of the same parser version
+(`--reparse`, or a profile change), not a new parser version, which starts a directory of its own.
+`v1-e31-t16` makes the dry run say a new directory will be started and which it supersedes.
+
+### Dev
+
+Every run exited 0. Wall-clock is the run's `elapsed_seconds`: parse, rebuild and publish.
+
+| Caselist | Sources | Parsed | Unsupported | Failed | Failure rate | Cards | Occurrences | Clusters | Uploaded | Wall-clock |
+|---|---|---|---|---|---|---|---|---|---|---|
+| hsld26 | 4,461 | 4,354 | 101 | 6 | 0.14% | 64,678 | 73,743 | 10,712 | 4,464 | 492 s |
+| hspf26 | 3,906 | 2,650 | 1,256 | 0 | 0% | 42,906 | 52,156 | 9,327 | 3,909 | 277 s |
+| hspolicy26 | 2,657 | 2,629 | 28 | 0 | 0% | 82,565 | 94,422 | 16,562 | 2,660 | 611 s |
+| openev | 102 | 101 | 0 | 1 | 0.98% | 8,056 | 8,056 | 5,864 | 105 | 86 s |
+| **Total** | 11,126 | 9,734 | 1,385 | 7 | | 198,205 | 228,377 | 42,465 | 11,138 | 1,465 s |
+
+* **Failures: 30 before, 7 now.** hsld26's 5 `MALFORMED_XML` and 1 `NOT_A_ZIP`, and openev's 1
+  `COMPRESSION_RATIO_EXCEEDED`, which `v1-e31-t09` found genuine. The 23
+  `FORBIDDEN_XML_CONSTRUCT` refusals are gone: hspf26 and hspolicy26 parse every DOCX source.
+* **Unsupported** is unchanged: 1,320 PDF and 65 other, by format as in the first parse.
+* **Cards: 207,056 before, 198,205 now**, with the cards `v1-e31-t09` found were not cards the
+  documents hold gone.
+* **Every occurrence row** is schema 2 and `card-fingerprint-v2`. No record in the new directory
+  holds `"tag":""`.
+
+**Completeness and tags.** No card is `ABBREVIATED`: `v1-e31-t09` decides it from the disclosure's
+shape, and no card in the corpus has that shape. Every figure matches the session's read-only
+prediction.
+
+| Caselist | `FULL`, tagged | `FULL`, no tag | `CITE_ONLY`, tagged | `CITE_ONLY`, no tag | `ABBREVIATED` |
+|---|---|---|---|---|---|
+| hsld26 | 62,863 | 1,086 | 459 | 270 | 0 |
+| hspf26 | 40,751 | 1,755 | 248 | 152 | 0 |
+| hspolicy26 | 80,790 | 739 | 681 | 355 | 0 |
+| openev | 7,888 | 79 | 70 | 19 | 0 |
+| **Total** | 192,292 | 3,659 | 1,458 | 796 | 0 |
+
+Cards with no tag: 4,455, against 15,528 cards with an empty tag in the first parse.
+
+**The second run**, which must parse and upload nothing, did neither: `attempted` 0, `skipped`
+equal to the source count, `uploaded` 0 for each caselist. Its elapsed time is the rebuild alone
+under this parser and fingerprint, and it is the figure `v1-e34-t17` sized the weekly parse stage
+from.
+
+| Caselist | Elapsed, 2026-10-11 | Elapsed, first parse's second run (2026-10-10) |
+|---|---|---|
+| hsld26 | 314 s | 348 s |
+| hspf26 | 193 s | 214 s |
+| hspolicy26 | 473 s | 460 s |
+| openev | 71 s | 60 s |
+| **Total** | 1,051 s | 1,082 s |
+
+**Sample check, by eye.** The hsld26 file whose second and third stored cards were wrong in the
+first parse's check now holds 10 cards, the first five `FULL`. All five tags match the document:
+5 of 5 right.
+
+### Prod
+
+Published on 2026-10-11 from the same dev data directory (`DEBATE_ENV=prod`,
+`DEBATE_STORAGE__DATA_DIR` set to the dev directory, `--confirm-prod`). The dry run showed nothing
+to parse and all 4,461 hsld26 sources skipped. Every publish exited 0 with nothing parsed again, and
+the shell's variables were unset afterwards.
+
+| Caselist | Store sources | Store parsed | Store cards | Store occurrences | Store clusters | Uploaded | Failed |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 4,461 | 4,354 | 64,678 | 73,743 | 10,712 | 4,464 | 0 |
+| hspf26 | 3,906 | 2,650 | 42,906 | 52,156 | 9,327 | 3,909 | 0 |
+| hspolicy26 | 2,657 | 2,629 | 82,565 | 94,422 | 16,562 | 2,660 | 0 |
+| openev | 102 | 101 | 8,056 | 8,056 | 5,864 | 105 | 0 |
+
+Every figure equals dev's.
+
+### After `card-fingerprint-v2`, measured
+
+`scripts/compare_card_clusters.py counts` with `--before-rules` at the commit before
+`v1-e31-t08`: the same stored cards placed by the matching rules before and after that task. Run
+read-only on the dev data directory on 2026-10-11.
+
+| Caselist | Cards | Clusters before | Clusters after | Merged into another | Divided | Most absorbed by one | Largest before | Largest after | Exact fingerprints changed | Newly linked to a full card |
+|---|---|---|---|---|---|---|---|---|---|---|
+| hsld26 | 64,678 | 10,676 | 10,712 | 9 | 21 | 3 | 620 | 620 | 0 | 0 |
+| hspf26 | 42,906 | 9,310 | 9,327 | 6 | 18 | 2 | 543 | 543 | 0 | 0 |
+| hspolicy26 | 82,565 | 16,566 | 16,562 | 16 | 11 | 2 | 1,173 | 1,172 | 0 | 0 |
+| openev | 8,056 | 5,865 | 5,864 | 2 | 1 | 2 | 22 | 22 | 0 | 0 |
+
+* **No sign of a false merge.** No cluster absorbed more than three others, no exact fingerprint
+  changed, and every card is in both placements. The largest clusters are unchanged except
+  hspolicy26's, which shed one card and one distinct text.
+* **No abbreviated card newly links, because none exists.** With no card `ABBREVIATED`,
+  `v1-e31-t08`'s linking rules have nothing to act on in the real corpus, and their gain is proven
+  on the labelled sets alone. Real abbreviations may sit in one-paragraph wiki entries
+  (`v1-e31-t13`).
+* **More clusters were divided than merged.** Short bodies that the old rules joined through the
+  banding now join only when every longer body holding them is in one cluster.
+
+**By-eye samples**, judged by the operator one pair at a time, tallies only:
+
+| Sample | Pairs | Same card | Different card | Unsure |
+|---|---|---|---|---|
+| Newly in one cluster (ac5) | 20 | 17 | 0 | 3 |
+| Divided (`--divided`), of 81 divided pairs | 10 | 9 | 0 | 1 |
+
+* **ac5 is met.** No newly joined pair is two different cards. A first draw of 20 was judged, but
+  its tally was not kept; the table is a second draw from the same saved comparison. One of the
+  first draw's unsure pairs was a card whose only paragraph is a cite, read as body text and stored
+  `FULL` (`v1-e31-t12`).
+* **Most divisions were wrong.** In 9 of 10 sampled divided pairs the two cards are the same card,
+  so the short-body rule costs recall where the longer copies are themselves split. On the real
+  corpus `card-fingerprint-v2` gains a few groupings and loses about as many, all small.
+  `v1-e31-t11` diagnoses the 81 divided pairs and the largest clusters.

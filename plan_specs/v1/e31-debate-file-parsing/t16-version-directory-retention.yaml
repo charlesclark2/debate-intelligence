@@ -1,0 +1,89 @@
+# TASK v1-e31-t16-version-directory-retention - Superseded parsed-store version directories are retired, locally and in both buckets
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t16-version-directory-retention
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "Superseded parsed-store version directories are retired, locally and in both buckets"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e31-t06's and v1-e31-t09's Follow-up work, and the 2026-10-11 re-parse.
+  description: >-
+    A parser or profile version change writes a new version directory and leaves the old one.
+    After the 2026-10-11 re-parse `2026.09.20-docx-1` (about 5.8 GB per place) is superseded.
+    The operator deleted it from the dev data directory by hand; copies remain in the dev and
+    prod buckets. Define and build retention: which directory is current, how long a superseded
+    one is kept, and a command that lists and, with confirmation, removes superseded directories
+    locally and in a bucket, respecting the data-use policy's retention section. The dry run of
+    `caselist parse` for a new parser version also reports `new_version: false` and `superseded:
+    null`, which read as if nothing new were starting: make the dry run say a new version
+    directory will be started and which it supersedes. Out of scope: removal requests, which
+    delete every version already.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.local, debate_core.integrations.s3, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/data]
+    forbidden:
+      - Removing the current version directory, or any directory without a dry run and a confirmation
+      - Using the takedown profile for retention
+  context:
+    - kind: TaskRef
+      name: v1-e31-t06-parse-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A retention rule is written in docs/data/parsed-card-store.md, consistent with the
+        data-use policy's retention section, and the command lists superseded directories in
+        a dry run.
+    - id: ac2
+      description: >-
+        With confirmation the command removes a superseded directory locally and from a
+        bucket, and refuses the current one, by test against moto.
+    - id: ac3
+      description: >-
+        The dry run for a new parser version says a new directory will be started and names
+        the one it supersedes, shown failing first.
+    - id: ac4
+      description: >-
+        Operator-run: the dev and prod buckets' `2026.09.20-docx-1` directories listed and
+        retired under the rule, counts recorded.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t16-version-directory-retention-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    A retention rule and command for superseded version directories, and an honest dry run.
+  goalRef:
+    name: v1-e31-t16-version-directory-retention
+  graph:
+    nodes:
+      - id: retention
+        kind: Task
+        name: Version directories retired
+        description: >-
+          The rule, the command, the dry-run wording and the operator's retirement.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parse tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, parse or retention]
+status:
+  phase: Pending

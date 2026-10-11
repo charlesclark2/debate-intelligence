@@ -553,5 +553,46 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t19-unreadable-local-files-and-notification-codes
+    - id: t20
+      kind: Task
+      name: 'After a login, the parsed store publishes without a second rebuild when nothing was removed'
+      description: >-
+        A login finishes the parsed store's publish, without a second rebuild unless the
+        bucket's suppression list changed.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t20-parsed-store-publish-after-login.yaml
+        goalRef: v1-e34-t20-parsed-store-publish-after-login
+      dependsOn:
+      - t17
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t20-parsed-store-publish-after-login reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t20-parsed-store-publish-after-login
+    - id: t21
+      kind: Task
+      name: 'The parse stage holds the run lock and has a time budget'
+      description: >-
+        A by-hand parse and a scheduled pull cannot write at once, and the parse stage stops
+        at a budget.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t21-parse-stage-bounds.yaml
+        goalRef: v1-e34-t21-parse-stage-bounds
+      dependsOn:
+      - t17
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t21-parse-stage-bounds reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t21-parse-stage-bounds
 status:
   phase: Pending

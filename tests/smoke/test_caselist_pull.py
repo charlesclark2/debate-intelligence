@@ -770,6 +770,8 @@ def test_a_missing_grant_in_report_fails_it_with_the_grant_fix_and_is_never_pend
     assert stages["report"]["error_codes"] == ["STORE_ACCESS_DENIED"]
     assert "lacks a grant" in stages["report"]["hint"]
     assert "docs/runbooks/evidence-store.md" in stages["report"]["hint"]
+    # The adapter's own sentence, which names the profile: the sync writes none (v1-e29-t07).
+    assert f"the AWS profile {AWS_PROFILE_NAME} is signed in" in stages["report"]["hint"]
     assert data["pending_publish"] == []
     assert data["run_record"]["outcome"] == "incomplete"
     assert "aws sso login" not in stage_text(pulled)

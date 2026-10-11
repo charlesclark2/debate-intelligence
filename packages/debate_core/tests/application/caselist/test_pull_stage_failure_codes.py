@@ -698,6 +698,7 @@ async def test_a_missing_grant_in_report_fails_the_stage_and_names_the_grant(
     assert isinstance(hint, str)
     assert "grant" in hint
     assert "docs/runbooks/evidence-store.md" in hint
+    assert str(missing_grant().hint) in hint, "the adapter's sentence, not one written here"
     assert "storage.data_dir" not in hint
     # Report is not a stage that puts bytes anywhere, so it decides no exit code.
     assert watched.summary.succeeded
@@ -725,6 +726,8 @@ async def test_a_missing_grant_in_publish_fails_the_stage_and_names_the_grant(
     assert isinstance(hint, str)
     assert "grant" in hint
     assert "docs/runbooks/evidence-store.md" in hint
+    assert str(missing_grant().hint) in hint, "the adapter's sentence, not one written here"
+    assert "debate-dev-evidence" in hint, "the profile, which only the adapter was told"
     assert watched.summary.failure_codes == ("STORE_ACCESS_DENIED",)
     assert owed(installation) == ["testcl26 2026-09-01"]
     assert stage(watched.summary, SyncStage.REPORT)["outcome"] == "skipped"
@@ -751,6 +754,7 @@ async def test_a_profile_the_aws_config_lacks_fails_publish_and_nothing_waits_fo
     hint = published.get("hint")
     assert isinstance(hint, str)
     assert PROFILE_SETTING in hint
+    assert str(getattr(profile_not_configured(), "hint", None)) in hint, "the adapter's sentence"
     assert not watched.summary.succeeded
     assert watched.summary.failure_codes == ("STORE_PROFILE_NOT_CONFIGURED",)
     assert owed(installation) == ["testcl26 2026-09-01"], "still owed, for the run after the fix"

@@ -142,7 +142,9 @@ Three notes on those results:
 
 ### Checks CI runs
 
-On the synced branch, with the report and the phase change uncommitted:
+On the synced branch, with the report and the phase change uncommitted. Three test doubles'
+docstrings changed after these runs; their two files were run again (`33 passed`), with pyright
+and ruff:
 
 | Command | Result |
 |---|---|

@@ -90,6 +90,7 @@ from debate_core.application.errors import (
     StoreCredentialsExpired,
     StoreError,
 )
+from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
@@ -262,6 +263,8 @@ class TakedownAccess:
     """Every version, listed and deleted."""
     objects: EvidenceObjectStore
     """The same bucket by name, for appending under `manifests/_suppression/`."""
+    caller: CallerIdentity
+    """Which role the credential is signed in as: what :func:`preflight` asks before anything else."""
     profile: str | None
     bucket: str
 

@@ -34,6 +34,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
+from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -105,11 +106,16 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
 
 
 @pytest.fixture
-def bucket() -> Iterator[S3Client]:
+def bucket(installation: Path) -> Iterator[S3Client]:
     with mock_aws():
         client: S3Client = boto3.client("s3", region_name="us-east-1")  # pyright: ignore[reportUnknownMemberType]
         client.create_bucket(Bucket=BUCKET)
         client.put_bucket_versioning(Bucket=BUCKET, VersioningConfiguration={"Status": "Enabled"})
+        # Each profile is the role its name says: a takedown asks before it does anything (v1-e29-t08).
+        sign_in(
+            installation / "aws-credentials",
+            {EVERYDAY_PROFILE: EVERYDAY_ROLE, TAKEDOWN_PROFILE: TAKEDOWN_ROLE},
+        )
         yield client
 
 

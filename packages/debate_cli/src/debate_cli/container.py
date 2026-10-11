@@ -733,7 +733,12 @@ class ServiceContainer:
         return self.singleton("takedown_access", self._build_takedown_access)
 
     def _build_takedown_access(self) -> TakedownAccess:
-        from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore, build_s3_client
+        from debate_core.integrations.s3 import (
+            S3EvidenceObjectStore,
+            S3EvidenceVersionStore,
+            StsCallerIdentity,
+            build_s3_client,
+        )
 
         settings = self.settings
         storage = settings.storage
@@ -758,6 +763,14 @@ class ServiceContainer:
                 profile=profile,
                 profile_setting=_REMOVAL_PROFILE_SETTING,
                 multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
+            ),
+            # Asked first, before the profile lists or writes anything (v1-e29-t08): built from the
+            # same profile name as the client above, so it answers for the role that would delete.
+            caller=StsCallerIdentity(
+                bucket=str(storage.s3.bucket),
+                profile=profile,
+                profile_setting=_REMOVAL_PROFILE_SETTING,
+                region=storage.s3.region,
             ),
             profile=profile,
             bucket=str(storage.s3.bucket),

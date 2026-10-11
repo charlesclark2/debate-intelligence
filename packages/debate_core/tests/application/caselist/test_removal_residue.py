@@ -51,7 +51,7 @@ from debate_core.application.ports.suppression import (
 from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore
 from debate_core.testing.fakes import InMemoryAppendOnlyRecord, empty_suppression_list
 
-from .conftest import REQUEST, RemovalWorld
+from .conftest import REQUEST, TAKEDOWN_ROLE, RemovalWorld, SignedInAs
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -520,6 +520,7 @@ class TestATakedownThatStoppedOnALaterUpload:
             return TakedownAccess(
                 versions=LosesTheBucketAmongTheVersionsOf(real, REVISION),
                 objects=world.bucket,
+                caller=SignedInAs(TAKEDOWN_ROLE),
                 profile="debate-dev-evidence-removal",
                 bucket=world.bucket_name,
             )

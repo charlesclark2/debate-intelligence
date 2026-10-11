@@ -230,8 +230,12 @@ class TestTheRemovalProfile:
 
         def refusing() -> TakedownAccess:
             return TakedownAccess(
-                versions=versions, objects=real.objects, profile="debate-dev-evidence", bucket=real.bucket
-            )  # type: ignore[arg-type]
+                versions=versions,  # type: ignore[arg-type]
+                objects=real.objects,
+                caller=real.caller,
+                profile="debate-dev-evidence",
+                bucket=real.bucket,
+            )
 
         service = removal_world.service(takedown=refusing)
         plan = await service.plan(SourceSelector(BAYVIEW), request_id="RM-2026-03", reason=ReasonCode.POLICY)

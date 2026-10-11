@@ -283,6 +283,7 @@ async def test_a_run_cut_short_in_the_bucket_is_finished_by_the_same_command_lat
                 S3EvidenceVersionStore(bucket=world.bucket_name, client=world.client), 1
             ),  # type: ignore[arg-type]
             objects=access.objects,
+            caller=access.caller,
             profile=access.profile,
             bucket=access.bucket,
         )

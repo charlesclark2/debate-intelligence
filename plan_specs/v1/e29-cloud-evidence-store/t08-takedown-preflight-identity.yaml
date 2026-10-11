@@ -59,7 +59,7 @@ spec:
         of the listing grant. The comment change is docs-only, and `terraform plan` shows no
         change (operator-run).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -1,0 +1,224 @@
+{
+  "$defs": {
+    "StageEntry": {
+      "additionalProperties": false,
+      "description": "One stage of the run: its name, how it ended, and its (redacted) one-line reason.",
+      "properties": {
+        "outcome": {
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "outcome"
+      ],
+      "title": "StageEntry",
+      "type": "object"
+    },
+    "SyncRunOutcome": {
+      "description": "How one run ended, as a single word for `caselist runs`. The fields hold the detail.",
+      "enum": [
+        "completed",
+        "nothing_new",
+        "cap_deferred",
+        "publish_pending",
+        "incomplete",
+        "failed"
+      ],
+      "title": "SyncRunOutcome",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One `caselist pull`, as the run log and the bucket keep it.\n\nCounts, slugs, dates, stage outcomes and error classes. See the module docstring for what may\nnever be in one, and :func:`redact` for how messages are made safe.",
+  "properties": {
+    "archives_deferred": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Archives Deferred",
+      "type": "integer"
+    },
+    "archives_downloaded": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Archives Downloaded",
+      "type": "integer"
+    },
+    "archives_seen": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Archives Seen",
+      "type": "integer"
+    },
+    "archives_wanted": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Archives Wanted",
+      "type": "integer"
+    },
+    "backlog_carried": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Backlog Carried"
+    },
+    "backlog_growing": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Backlog Growing",
+      "type": "array"
+    },
+    "caselists": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Caselists",
+      "type": "array"
+    },
+    "deferred_by_caselist": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Deferred By Caselist",
+      "type": "object"
+    },
+    "environment": {
+      "title": "Environment",
+      "type": "string"
+    },
+    "error_class": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Class"
+    },
+    "error_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Message"
+    },
+    "files_imported": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Files Imported",
+      "type": "integer"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "title": "Finished At",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "run",
+        "publish_pending"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "objects_published": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Objects Published",
+      "type": "integer"
+    },
+    "openev_downloaded": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Openev Downloaded",
+      "type": "integer"
+    },
+    "outcome": {
+      "$ref": "#/$defs/SyncRunOutcome"
+    },
+    "pending_publish": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Pending Publish",
+      "type": "array"
+    },
+    "run_id": {
+      "pattern": "^\\d{8}T\\d{6}Z$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "snapshots_imported": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Snapshots Imported",
+      "type": "array"
+    },
+    "stages": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/StageEntry"
+      },
+      "title": "Stages",
+      "type": "array"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "environment",
+    "mode",
+    "started_at",
+    "finished_at",
+    "outcome"
+  ],
+  "title": "SyncRunRecord",
+  "type": "object"
+}

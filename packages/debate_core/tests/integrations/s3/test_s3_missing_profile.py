@@ -111,6 +111,13 @@ def raising_profile_not_found(client: S3Client, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(type(client), "_make_api_call", no_such_profile)
 
 
+@pytest.fixture
+def anyio_backend() -> str:
+    """asyncio, the backend the CLI, the API and the workers run on."""
+    return "asyncio"
+
+
+@pytest.mark.anyio
 class TestAnAdapterCarriesTheSettingToItsCalls:
     """Each adapter is told the setting its profile's name came from, and says so wherever the
     failure arrives. A call cannot meet this on a real machine once the client is built, but the

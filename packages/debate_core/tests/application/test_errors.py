@@ -23,6 +23,10 @@ from debate_core.application.errors import (
     RevisionMismatch,
     SnapshotIntegrityCheck,
     SnapshotIntegrityError,
+    StoreCredentialsExpired,
+    StoreError,
+    StoreProfileNotConfigured,
+    error_code_of,
 )
 
 EVERY_ERROR = (
@@ -102,3 +106,32 @@ def test_a_snapshot_integrity_error_names_the_check_and_both_values() -> None:
     assert (error.expected, error.actual) == ("a" * 64, "b" * 64)
     assert "normalized_text_hash" in str(error)
     assert not isinstance(error, BlobIntegrityError), "a damaged blob and snapshot are reported apart"
+
+
+def test_a_profile_that_is_not_configured_names_its_setting_and_is_not_an_expired_session() -> None:
+    """Its own class and its own code, so that nothing that waits for a login catches it (`v1-e29-t07`)."""
+    error = StoreProfileNotConfigured(
+        "debate-dev-evidence-typo", setting="storage.s3.aws_profile", hint="correct the setting"
+    )
+
+    assert isinstance(error, StoreError)
+    assert not isinstance(error, StoreCredentialsExpired)
+    assert error_code_of(error) == "STORE_PROFILE_NOT_CONFIGURED"
+    assert str(error) == (
+        "AWS profile 'debate-dev-evidence-typo', named by storage.s3.aws_profile, is not defined in "
+        "this machine's AWS config: correct the setting"
+    )
+    assert (error.profile, error.setting, error.hint) == (
+        "debate-dev-evidence-typo",
+        "storage.s3.aws_profile",
+        "correct the setting",
+    )
+
+
+def test_a_profile_that_is_not_configured_invents_no_name_and_no_setting() -> None:
+    assert (
+        str(StoreProfileNotConfigured(None)) == "the AWS profile is not defined in this machine's AWS config"
+    )
+    assert str(StoreProfileNotConfigured("debate-dev-evidence")) == (
+        "AWS profile 'debate-dev-evidence' is not defined in this machine's AWS config"
+    )

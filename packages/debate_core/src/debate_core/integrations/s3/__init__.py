@@ -60,7 +60,12 @@ from debate_core.integrations.s3.client import (
     build_s3_client,
     build_transfer_config,
 )
-from debate_core.integrations.s3.errors import S3Call, mapped_s3_errors, translate_s3_error
+from debate_core.integrations.s3.errors import (
+    GRANTS_ARE_LISTED_IN,
+    S3Call,
+    mapped_s3_errors,
+    translate_s3_error,
+)
 from debate_core.integrations.s3.object_store import S3EvidenceObjectStore
 from debate_core.integrations.s3.snapshot_store import (
     BLOB_KEY_SEGMENT,
@@ -73,6 +78,7 @@ __all__ = [
     "BLOB_KEY_SEGMENT",
     "DEFAULT_MULTIPART_PART_SIZE_BYTES",
     "DEFAULT_MULTIPART_THRESHOLD_BYTES",
+    "GRANTS_ARE_LISTED_IN",
     "MINIMUM_PART_SIZE_BYTES",
     "SHA256_METADATA_NAME",
     "S3Call",

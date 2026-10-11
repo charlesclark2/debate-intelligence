@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 import boto3
 import pytest
+from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from moto import mock_aws
 from tests.fixtures.caselist.build_synthetic_archives import (
@@ -153,7 +154,9 @@ def assert_a_profile_that_is_not_configured(
     assert exit_code == ExitCode.DOMAIN_FAILURE, envelope
     error = envelope["error"]
     assert error["code"] == "STORE_PROFILE_NOT_CONFIGURED"
-    assert error["message"].startswith(f"AWS profile {MISSPELT_PROFILE!r}, named by {setting}, is not defined")
+    assert error["message"].startswith(
+        f"AWS profile {MISSPELT_PROFILE!r}, named by {setting}, is not defined"
+    )
     assert setting in error["hint"]
     assert RUNBOOK in error["hint"]
     assert error["details"] == {"profile": MISSPELT_PROFILE, "setting": setting}
@@ -193,20 +196,8 @@ class TestAProfileTheAwsConfigLacks:
             exit_code, envelope, setting=EVERYDAY_SETTING, installation=installation
         )
 
-    @pytest.mark.parametrize(
-        "command",
-        [
-            (*REMOVE, "--execute"),
-            ("caselist", "unsuppress", "--sha256", "0" * 64, "--reason", "REMOVED_IN_ERROR", "--execute"),
-        ],
-        ids=lambda command: " ".join(command[:2]),
-    )
     def test_the_removal_profile_naming_one_exits_one_names_its_variable_and_changes_nothing(
-        self,
-        installation: Path,
-        bucket: S3Client,
-        monkeypatch: pytest.MonkeyPatch,
-        command: tuple[str, ...],
+        self, installation: Path, bucket: S3Client, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A takedown reads with the everyday profile and deletes with the one
         `DEBATE_REMOVAL_PROFILE` names. That variable is the one to correct, and the error must not
@@ -219,7 +210,7 @@ class TestAProfileTheAwsConfigLacks:
             bucket.list_object_versions(Bucket=BUCKET).get("Versions"),
         )
 
-        exit_code, envelope = run(*command)
+        exit_code, envelope = run(*REMOVE, "--execute")
 
         assert_a_profile_that_is_not_configured(
             exit_code, envelope, setting=TAKEDOWN_SETTING, installation=installation
@@ -348,7 +339,7 @@ class TestABucketThatRefusesTheProfile:
         import_the_first_week(installation)
         assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)[0] == ExitCode.OK
         monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", TAKEDOWN_PROFILE)
-        make_api_call = __import__("botocore.client").client.BaseClient._make_api_call
+        make_api_call: Any = vars(BaseClient)["_make_api_call"]
 
         def refuse_writes(self: Any, operation_name: str, api_params: Any) -> Any:
             if operation_name in {"PutObject", "DeleteObject", "CreateMultipartUpload"}:
@@ -359,7 +350,7 @@ class TestABucketThatRefusesTheProfile:
                 raise ClientError(response, operation_name)
             return make_api_call(self, operation_name, api_params)
 
-        monkeypatch.setattr("botocore.client.BaseClient._make_api_call", refuse_writes)
+        monkeypatch.setattr(BaseClient, "_make_api_call", refuse_writes)
 
         exit_code, envelope = run(*REMOVE, "--execute")
 

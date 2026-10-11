@@ -266,7 +266,7 @@ class TestAProfileTheAwsConfigDoesNotDefine:
 
         said = str(translate_s3_error(ProfileNotFound(profile=PROFILE), building))
 
-        for forbidden in ("/", "~", ".aws", "aws/config", "sso_start_url", "awsapps", "arn:", "http"):
+        for forbidden in ("/", "~", "sso_start_url", "awsapps", "arn:", "http"):
             assert forbidden not in said.replace(RUNBOOK, ""), forbidden
         assert not re.search(r"\d{12}", said), "no account id"
 

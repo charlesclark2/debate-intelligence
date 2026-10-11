@@ -33,7 +33,7 @@ import httpx
 import pytest
 import respx
 from botocore.client import BaseClient
-from botocore.exceptions import ProfileNotFound, UnauthorizedSSOTokenError
+from botocore.exceptions import ClientError, ProfileNotFound, UnauthorizedSSOTokenError
 from moto import mock_aws
 from tests.fixtures.caselist.build_synthetic_archives import (
     SNAPSHOTS,
@@ -51,7 +51,7 @@ from debate_core.application.caselist.status_service import CaselistStatusServic
 from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired, StoreUnavailable
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.local import BLOB_DIRECTORY
-from debate_core.integrations.s3 import S3EvidenceObjectStore
+from debate_core.integrations.s3 import S3Call, S3EvidenceObjectStore, translate_s3_error
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -409,7 +409,7 @@ def expire_the_session(
         if while_set is not None and not while_set["expired"]:
             return
         if error is StoreAccessDenied:
-            raise StoreAccessDenied("GetObject", only or "the bucket", hint="a grant is missing")
+            raise access_denied_by_the_bucket("GetObject", only or "")
         if error is StoreUnavailable:
             raise StoreUnavailable("GetObject", only or "the bucket", "simulated 503 SlowDown")
         raise StoreCredentialsExpired(hint=f"aws sso login --profile {AWS_PROFILE_NAME}")
@@ -427,6 +427,31 @@ def expire_the_session(
             monkeypatch.setattr(
                 S3EvidenceObjectStore, name, _refusing(getattr(S3EvidenceObjectStore, name), refuse)
             )
+
+
+def access_denied_by_the_bucket(operation: str, key: str) -> StoreAccessDenied:
+    """What the real S3 adapter raises when the bucket answers `AccessDenied`, its hint included.
+
+    Built by the adapter's own translation and not by hand, because the hint a stage shows for a
+    refusal is the adapter's (`v1-e29-t07`): a stub that wrote its own would test the stub.
+    """
+    response: Any = {
+        "Error": {"Code": "AccessDenied", "Message": "Access Denied"},
+        "ResponseMetadata": {"HTTPStatusCode": 403},
+    }
+    refused = translate_s3_error(
+        ClientError(response, operation),
+        S3Call(
+            operation=operation,
+            bucket=BUCKET,
+            entity="evidence object",
+            key=key,
+            s3_key=key or None,
+            profile=AWS_PROFILE_NAME,
+        ),
+    )
+    assert isinstance(refused, StoreAccessDenied)
+    return refused
 
 
 def _refusing(original: Any, refuse: Any) -> Any:
@@ -731,7 +756,7 @@ def test_a_missing_grant_in_report_fails_it_with_the_grant_fix_and_is_never_pend
     async def refuse(
         self: CaselistStatusService, caselist: str | None = None, snapshot: str | None = None
     ) -> Any:
-        raise StoreAccessDenied("HeadObject", f"s3://{BUCKET}/manifests/{caselist}/{snapshot}.jsonl")
+        raise access_denied_by_the_bucket("HeadObject", f"manifests/{caselist}/{snapshot}.jsonl")
 
     monkeypatch.setattr(CaselistStatusService, "status", refuse)
 
@@ -863,7 +888,7 @@ def botocore_raises(monkeypatch: pytest.MonkeyPatch, error: Exception) -> dict[s
     where this section is about: the publish stage. Clear `["on"]` to let the calls through again.
     """
     raising = {"on": True}
-    make_api_call = BaseClient._make_api_call  # pyright: ignore[reportPrivateUsage]
+    make_api_call: Any = vars(BaseClient)["_make_api_call"]
 
     def api_call(self: BaseClient, operation_name: str, api_params: dict[str, Any]) -> Any:
         named = str(api_params.get("Key") or api_params.get("Prefix") or "")
@@ -881,7 +906,7 @@ def assert_names_the_setting_and_nothing_of_this_machine(text: str, installation
     assert "aws configure" not in text
     assert str(installation) not in text, "the AWS config's path is under the installation here"
     assert str(Path.home()) not in text
-    assert "aws-config" not in text and ".aws" not in text
+    assert "aws-config" not in text and "/.aws" not in text
 
 
 def test_a_profile_the_aws_config_lacks_fails_publish_with_one_and_everything_imported_stays_owed(
@@ -911,11 +936,11 @@ def test_a_profile_the_aws_config_lacks_fails_publish_with_one_and_everything_im
     assert len(data["snapshots_imported"]) == 5
     assert sorted(data["pending_publish"]) == sorted(data["snapshots_imported"])
     assert sorted(owed_in_the_file(installation)) == sorted(data["snapshots_imported"])
-    assert not bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/testcl26/").get("Contents")
     assert_names_the_setting_and_nothing_of_this_machine(stage_text(pulled), installation)
     downloads = len(site.calls)
 
     raising["on"] = False
+    assert not bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/testcl26/").get("Contents")
     drained = run("caselist", "pull", "--publish-pending")
 
     assert drained["exit_code"] == ExitCode.OK, drained

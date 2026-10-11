@@ -24,9 +24,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
+from botocore.exceptions import ClientError, ProfileNotFound
 from tests.fixtures.caselist.build_synthetic_archives import build_snapshot_zips
 from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket
 from tests.fixtures.caselist.publish_expectations import expected_publish, expected_source_key
@@ -73,7 +74,7 @@ from debate_core.application.sync_runs import (
 )
 from debate_core.integrations.local.macos_notifier import MacOsNotifier
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
-from debate_core.integrations.s3 import S3EvidenceObjectStore
+from debate_core.integrations.s3 import S3Call, S3EvidenceObjectStore, translate_s3_error
 
 from . import test_inbox_retention as inbox_retention
 from .test_inbox_retention import (
@@ -161,8 +162,49 @@ def outage() -> StoreUnavailable:
 
 
 def missing_grant() -> StoreAccessDenied:
-    """What the S3 adapter raises for an `AccessDenied` on a key: valid credentials, no grant."""
-    return StoreAccessDenied("ListObjectsV2", BUCKET_KEY)
+    """What the S3 adapter raises for an `AccessDenied` on a key: valid credentials, no grant.
+
+    Built by the adapter's own translation, hint and all, because the fix a stage gives for a
+    refusal is the adapter's (`v1-e29-t07`). A refusal written by hand here would carry no hint,
+    or one this module made up, and the stage would be tested against that instead.
+    """
+    answered: Any = {
+        "Error": {"Code": "AccessDenied", "Message": "Access Denied"},
+        "ResponseMetadata": {"HTTPStatusCode": 403},
+    }
+    refused = translate_s3_error(
+        ClientError(answered, "ListObjectsV2"),
+        S3Call(
+            operation="ListObjectsV2",
+            bucket="debate-test-evidence-moto",
+            entity="evidence object",
+            key="manifests/testcl26/",
+            s3_key="manifests/testcl26/",
+            profile="debate-dev-evidence",
+        ),
+    )
+    assert isinstance(refused, StoreAccessDenied)
+    assert refused.resource == BUCKET_KEY
+    return refused
+
+
+PROFILE_SETTING = "storage.s3.aws_profile"
+
+
+def profile_not_configured() -> DomainError:
+    """What the S3 adapter raises when botocore answers `ProfileNotFound`, built by the adapter."""
+    return translate_s3_error(
+        ProfileNotFound(profile="debate-dev-evidence"),
+        S3Call(
+            operation="ListObjectsV2",
+            bucket="debate-test-evidence-moto",
+            entity="evidence object",
+            key="manifests/testcl26/",
+            s3_key="manifests/testcl26/",
+            profile="debate-dev-evidence",
+            profile_setting=PROFILE_SETTING,
+        ),
+    )
 
 
 class UnansweringSuppressionList:
@@ -686,6 +728,35 @@ async def test_a_missing_grant_in_publish_fails_the_stage_and_names_the_grant(
     assert watched.summary.failure_codes == ("STORE_ACCESS_DENIED",)
     assert owed(installation) == ["testcl26 2026-09-01"]
     assert stage(watched.summary, SyncStage.REPORT)["outcome"] == "skipped"
+    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed"]
+    assert "aws sso login" not in json.dumps(stages_of(watched.summary))
+    assert "aws sso login" not in watched.notified
+    assert_names_nothing_of_this_machine(watched.summary, installation)
+
+
+async def test_a_profile_the_aws_config_lacks_fails_publish_and_nothing_waits_for_a_login(
+    installation: Installation,
+) -> None:
+    """Until `v1-e29-t07` the adapter called this an expired session, so the publish was pending,
+    the run succeeded, and the notification asked for `aws sso login` every week. It is a failed
+    publish on a configuration error, with the setting to correct, and the snapshot stays owed."""
+    source = FakeSource(installation.archives, weeks=[WEEK_1])
+    unconfigured = RefusingBucket(profile_not_configured())
+
+    watched = await pull(installation, installation.sync(source, publish_to=unconfigured))
+
+    published = stage(watched.summary, SyncStage.PUBLISH)
+    assert published["outcome"] == "failed"
+    assert published.get("error_codes") == ["STORE_PROFILE_NOT_CONFIGURED"]
+    hint = published.get("hint")
+    assert isinstance(hint, str)
+    assert PROFILE_SETTING in hint
+    assert not watched.summary.succeeded
+    assert watched.summary.failure_codes == ("STORE_PROFILE_NOT_CONFIGURED",)
+    assert owed(installation) == ["testcl26 2026-09-01"], "still owed, for the run after the fix"
+    assert stage(watched.summary, SyncStage.REPORT)["outcome"] == "skipped"
+    assert watched.pulled.record is not None
+    assert watched.pulled.record.outcome is SyncRunOutcome.FAILED
     assert [one.title for one in watched.notifier.sent] == ["caselist pull failed"]
     assert "aws sso login" not in json.dumps(stages_of(watched.summary))
     assert "aws sso login" not in watched.notified

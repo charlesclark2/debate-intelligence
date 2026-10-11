@@ -76,8 +76,13 @@ Checked when an adapter is constructed rather than discovered when an upload fai
 """
 
 
-def build_s3_client(*, region: str | None = None, profile: str | None = None) -> S3Client:
+def build_s3_client(
+    *, region: str | None = None, profile: str | None = None, profile_setting: str | None = None
+) -> S3Client:
     """Return an S3 client for `region`, using `profile` from the shared AWS config when given.
+
+    `profile_setting` is the name of the setting `profile` came from (`"storage.s3.aws_profile"`,
+    `"DEBATE_REMOVAL_PROFILE"`), which is what the error for a profile the config lacks names.
 
     A new :class:`boto3.session.Session` per call rather than the module-level default session, so
     that two adapters built for two profiles — an everyday one and the takedown one from
@@ -87,14 +92,20 @@ def build_s3_client(*, region: str | None = None, profile: str | None = None) ->
     *Credentials* are resolved lazily by botocore, so an expired session surfaces at the adapter's
     first call rather than here. The *profile* is not: naming one that is not in the shared AWS
     config raises `ProfileNotFound` from this constructor, which is why the construction is wrapped
-    too. Either way the caller gets
-    :class:`~debate_core.application.errors.StoreCredentialsExpired` with the command that fixes it
-    (`aws configure sso --profile debate-dev-evidence`), and no botocore exception leaves this
-    package — the promise :mod:`debate_core.integrations.s3.errors` exists to keep, which a
-    constructor outside the translation would have quietly excepted itself from.
+    too. The caller gets :class:`~debate_core.application.errors.StoreProfileNotConfigured`, a
+    configuration error naming `profile_setting` and never a login (`v1-e29-t07`), and no botocore
+    exception leaves this package — the promise :mod:`debate_core.integrations.s3.errors` exists to
+    keep, which a constructor outside the translation would have quietly excepted itself from.
     """
     with mapped_s3_errors(
-        S3Call(operation="CreateSession", bucket="", entity="AWS session", key="", profile=profile)
+        S3Call(
+            operation="CreateSession",
+            bucket="",
+            entity="AWS session",
+            key="",
+            profile=profile,
+            profile_setting=profile_setting,
+        )
     ):
         session = boto3.session.Session(profile_name=profile, region_name=region)
         # `Session.client` is overloaded once per AWS service, and boto3-stubs only types the services

@@ -11,6 +11,7 @@ response code nobody has written a translation for.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -32,6 +33,7 @@ from debate_core.application.errors import (
     StoreAccessDenied,
     StoreCredentialsExpired,
     StoreUnavailable,
+    error_code_of,
 )
 from debate_core.integrations.s3 import S3Call, mapped_s3_errors, translate_s3_error
 
@@ -39,6 +41,7 @@ BUCKET = "debate-test-evidence-moto"
 BLOB_KEY = "ab" * 32
 S3_KEY = f"raw/caselist/hsld26/sha256/ab/ab/{BLOB_KEY}"
 PROFILE = "debate-dev-evidence"
+RUNBOOK = "docs/runbooks/evidence-store.md"
 
 
 @pytest.fixture
@@ -102,6 +105,37 @@ class TestARefusedRequest:
         assert refused.operation == "GetObject"
         assert refused.resource == f"s3://{BUCKET}/{S3_KEY}"
 
+    @pytest.mark.parametrize("code", ["AccessDenied", "403", "AllAccessDisabled", "InvalidAccessKeyId"])
+    def test_a_denial_says_the_profile_lacks_a_grant_and_where_the_grants_are_listed(
+        self, code: str, call: S3Call
+    ) -> None:
+        """Every command that reaches the bucket shows this, because the adapter is where it is
+        said (`v1-e29-t07` ac4): the profile is signed in and may not do this. Not a login."""
+        refused = translate_s3_error(client_error(code, status=403), call)
+
+        assert isinstance(refused, StoreAccessDenied)
+        assert refused.hint is not None
+        assert "lacks a grant" in refused.hint
+        assert PROFILE in refused.hint, "which profile matters: a takedown holds two"
+        assert RUNBOOK in refused.hint
+        assert_offers_no_login(refused)
+        assert error_code_of(refused) == "STORE_ACCESS_DENIED"
+
+    def test_a_denial_with_no_profile_still_says_a_grant_is_missing(self) -> None:
+        """A role on an instance or a task has no profile; the hint must not name an empty one."""
+        no_profile = S3Call(
+            operation="GetObject", bucket=BUCKET, entity="snapshot blob", key=BLOB_KEY, s3_key=S3_KEY
+        )
+
+        refused = translate_s3_error(client_error("AccessDenied", status=403), no_profile)
+
+        assert isinstance(refused, StoreAccessDenied)
+        assert refused.hint is not None
+        assert "lack a grant" in refused.hint
+        assert "None" not in refused.hint
+        assert RUNBOOK in refused.hint
+        assert_offers_no_login(refused)
+
     def test_a_kms_denial_says_the_key_is_the_problem_and_not_the_bucket(self, call: S3Call) -> None:
         """The buckets are encrypted with a customer-managed key, so this is a real and confusing case."""
         refused = translate_s3_error(client_error("KMS.AccessDeniedException", status=403), call)
@@ -109,6 +143,8 @@ class TestARefusedRequest:
         assert isinstance(refused, StoreAccessDenied)
         assert refused.hint is not None
         assert "kms:Decrypt" in refused.hint
+        assert RUNBOOK in refused.hint
+        assert_offers_no_login(refused)
 
     def test_a_denied_listing_says_listing_is_granted_per_prefix(self) -> None:
         """Listing the bucket root is denied by design (`v1-e29-t03`); the grant is per prefix."""
@@ -119,6 +155,8 @@ class TestARefusedRequest:
         assert isinstance(refused, StoreAccessDenied)
         assert refused.hint is not None
         assert "per prefix" in refused.hint
+        assert RUNBOOK in refused.hint
+        assert_offers_no_login(refused)
 
 
 class TestASessionThatIsNoLongerUsable:
@@ -151,12 +189,6 @@ class TestASessionThatIsNoLongerUsable:
         assert isinstance(refused, StoreCredentialsExpired)
         assert refused.hint == f"aws sso login --profile {PROFILE}"
 
-    def test_a_missing_profile_is_reported_with_the_command_that_creates_it(self, call: S3Call) -> None:
-        refused = translate_s3_error(ProfileNotFound(profile=PROFILE), call)
-
-        assert isinstance(refused, StoreCredentialsExpired)
-        assert refused.hint == f"aws configure sso --profile {PROFILE}"
-
     def test_without_a_profile_the_hint_still_says_something_actionable(self) -> None:
         """A role on an instance or a task has no profile; the message must not name an empty one."""
         no_profile = S3Call(operation="GetObject", bucket=BUCKET, entity="snapshot blob", key=BLOB_KEY)
@@ -166,6 +198,84 @@ class TestASessionThatIsNoLongerUsable:
         assert isinstance(refused, StoreCredentialsExpired)
         assert refused.hint is not None
         assert "AWS_PROFILE" in refused.hint
+
+
+class TestAProfileTheAwsConfigDoesNotDefine:
+    """A configuration error, not a session: no login and no retry makes the name resolve
+    (`v1-e29-t07`). Until then it was reported as an expired session, with exit 3."""
+
+    def test_it_is_its_own_error_and_not_an_expired_session(self, call: S3Call) -> None:
+        refused = translate_s3_error(ProfileNotFound(profile=PROFILE), call)
+
+        assert not isinstance(refused, StoreCredentialsExpired)
+        assert error_code_of(refused) == "STORE_PROFILE_NOT_CONFIGURED"
+        assert_offers_no_login(refused)
+
+    @pytest.mark.parametrize("setting", ["storage.s3.aws_profile", "DEBATE_REMOVAL_PROFILE"])
+    def test_its_message_and_its_hint_name_the_setting_that_holds_the_profiles_name(
+        self, setting: str
+    ) -> None:
+        building = S3Call(
+            operation="CreateSession",
+            bucket="",
+            entity="AWS session",
+            key="",
+            profile=PROFILE,
+            profile_setting=setting,
+        )
+
+        refused = translate_s3_error(ProfileNotFound(profile=PROFILE), building)
+
+        assert str(refused).startswith(f"AWS profile {PROFILE!r}, named by {setting}, is not defined")
+        hint = getattr(refused, "hint", None)
+        assert isinstance(hint, str)
+        assert setting in hint
+        assert RUNBOOK in hint
+        assert vars(refused)["profile"] == PROFILE
+        assert vars(refused)["setting"] == setting
+
+    def test_a_profile_botocore_chose_itself_names_the_variable_botocore_read(self) -> None:
+        """No profile was passed, so the name came from botocore's own chain: `AWS_PROFILE`."""
+        no_profile = S3Call(operation="CreateSession", bucket="", entity="AWS session", key="")
+
+        refused = translate_s3_error(ProfileNotFound(profile="a-name-from-the-shell"), no_profile)
+
+        assert error_code_of(refused) == "STORE_PROFILE_NOT_CONFIGURED"
+        assert "'a-name-from-the-shell', named by AWS_PROFILE," in str(refused)
+        assert "None" not in str(refused)
+
+    def test_a_profile_passed_without_its_setting_claims_no_setting(self, call: S3Call) -> None:
+        """An adapter built by something other than the composition root: nothing is invented."""
+        refused = translate_s3_error(ProfileNotFound(profile=PROFILE), call)
+
+        assert str(refused).startswith(f"AWS profile {PROFILE!r} is not defined")
+        assert "named by" not in str(refused)
+        assert "None" not in str(refused)
+
+    @pytest.mark.parametrize("setting", ["storage.s3.aws_profile", None])
+    def test_it_names_no_path_no_account_and_no_sso_address(self, setting: str | None) -> None:
+        """botocore's own message is not passed on, and nothing else here could carry one."""
+        building = S3Call(
+            operation="CreateSession",
+            bucket="",
+            entity="AWS session",
+            key="",
+            profile=PROFILE,
+            profile_setting=setting,
+        )
+
+        said = str(translate_s3_error(ProfileNotFound(profile=PROFILE), building))
+
+        for forbidden in ("/", "~", ".aws", "aws/config", "sso_start_url", "awsapps", "arn:", "http"):
+            assert forbidden not in said.replace(RUNBOOK, ""), forbidden
+        assert not re.search(r"\d{12}", said), "no account id"
+
+
+def assert_offers_no_login(refused: DomainError) -> None:
+    """Neither the message nor the hint sends anyone to a login, which fixes none of these."""
+    said = f"{refused} {getattr(refused, 'hint', '')}"
+    assert "aws sso login" not in said
+    assert "aws configure" not in said
 
 
 class TestAStoreThatDidNotAnswer:

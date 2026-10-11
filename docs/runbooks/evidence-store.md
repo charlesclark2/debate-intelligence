@@ -544,6 +544,20 @@ ones step 5 lists for that change.
   the account: stop and send the output rather than provisioning by hand. If it is there and the
   call is still refused ten minutes after the apply, run `aws sso login --sso-session debate`,
   retry once, and then stop and send the error. Use `DebateProdEvidenceOperator` for prod.
+* **`caselist remove --execute` says `NOT_THE_TAKEDOWN_ROLE` with the takedown profile.** The
+  command asks the account which role the profile in `DEBATE_REMOVAL_PROFILE` is signed in as and
+  expects the role of `DebateDevEvidenceRemoval` (`DebateProdEvidenceRemoval` in prod). The error
+  names the permission set it found. If that is another set, the profile's `sso_role_name` in
+  your AWS config is wrong: compare it with step 4. If the error says *no role at all*, the
+  profile is not an Identity Center profile. To see the role name the account reports, read-only:
+
+  ```bash
+  aws sts get-caller-identity --profile debate-dev-evidence-removal --query Arn --output text | cut -d/ -f2
+  ```
+
+  It should print `AWSReservedSSO_DebateDevEvidenceRemoval_` followed by letters and digits and
+  nothing else. If it does and the command still refuses, stop and send the role name's shape, not
+  the name: the command reads the permission set out of that shape.
 * **An `allowed` where a deny was expected.** Do not carry on to prod. The inline policies are in
   `infrastructure/modules/evidence_bucket/operator_access.tf` and their assertions are in
   `tests/evidence_bucket.tftest.hcl`; add the case that was missed to the tests first, then fix

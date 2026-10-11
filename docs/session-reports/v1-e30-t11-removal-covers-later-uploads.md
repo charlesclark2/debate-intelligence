@@ -344,6 +344,54 @@ data directory.
    the only one included, and the text calls them "other". It predates this task. I saw it in the
    output and left it.
 
+## After the PM review: synced onto dev
+
+Written by the session on 2026-10-11, after the verdict below. Nothing the PM reviewed changed: no
+source file, test or runbook line is different. What changed is the branch's base.
+
+- **The PM's review and spec amendments are committed as written** (`482064d`): the verdict, ac3
+  and ac5 as amended, and the phase `Succeeded`.
+- **`v1-e31-t09-first-corpus-parse-findings` had merged** (#218, then the generated-files refresh
+  #219), so `scripts/task pr` would have refused the branch. I ran
+  `scripts/task sync v1-e30-t11-removal-covers-later-uploads`. The branch was not on origin, so it
+  rebased and pushed nothing. The rebase was clean: the two sides have no file in common. The
+  branch is now on `origin/dev` at `5a05711`.
+- **The commit ids quoted above are from before the rebase.** The same commits, in order, are now:
+
+  | Before | After | Commit |
+  |---|---|---|
+  | `9882817` | `7318478` | The fixture and the outcome tests, red |
+  | `b550004` | `04be988` | The planner change |
+  | `0fc95c5` | `9abf910` | The command: sections, count, `--only-named`, JSON |
+  | `23d28bc` | `f5ff0d9` | The plan, ordering, camp and re-run tests |
+  | `c7873ac` | `e4a4487` | Runbook and smoke checks |
+  | `fa17a16` | `2361601` | Hand-built plan tests |
+  | `c1729cf` | `35a9f1f` | The tests the surviving mutants called for |
+  | `c9abe0f` | `c17952f` | The report |
+
+- **Everything was run again on the synced branch**, as the brief asked if `v1-e31-t09` merged.
+  That task changed `ports/parsed_store.py` and the local parsed store, which the removal tests
+  read.
+
+  | Command | Result |
+  |---|---|
+  | `uv run pytest packages/debate_core/tests -k "removal or remove"` (the node's criterion) | `234 passed in 31.57s` |
+  | `uv run --frozen pytest -n auto --cov -m "not slow and not live" packages/debate_core` | `3733 passed in 81.99s` |
+  | `uv run --frozen pytest -n auto --cov -m "not slow and not live" --ignore=packages/debate_core` | `5462 passed, 1 skipped, 1 warning in 125.25s`, 126.75 s wall clock |
+  | `uv run --frozen pyright` | `0 errors, 0 warnings, 0 informations` |
+  | `uv run --frozen ruff check .` / `ruff format --check .` | `All checks passed!` / `592 files already formatted` |
+  | `uv run --frozen lint-imports` | `Contracts: 12 kept, 0 broken.` |
+  | `uv run scripts/check_thin_handlers.py` | `OK: 21 CLI command and API route handlers within 25 statements` |
+  | `uv run scripts/validate_specs.py --require-succeeded v1-e30-t11-removal-covers-later-uploads` | `Succeeded` |
+
+- **The second half was not a half.** I meant to run the suite in two halves, as the PM ruled.
+  `--ignore=packages/debate_core` excluded nothing, so that command ran the whole selection: 5462
+  of the 5463 tests collected passed and one skipped, which is CI's own result, but it took 126.75 s
+  in one command. The second half should name its paths: `packages/debate_cli/tests
+  packages/debate_api/tests packages/debate_workers/tests tests`.
+- **The mutation runs were not repeated.** The rebase changed none of the three files the mutants
+  edit, and the tests that caught them pass on the synced branch.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

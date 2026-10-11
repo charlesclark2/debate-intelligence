@@ -803,11 +803,11 @@ def notifications_for(
             entry.stage == str(SyncStage.PARSE) and entry.outcome == str(StageOutcome.PENDING)
             for entry in record.stages
         )
-        # What a pending stage had already found that no later run cures by itself.
+        # What a stage had already found when the session expired that no later run cures by
+        # itself. Only a pending stage records an earlier finding, so there is no outcome to ask.
         found_first = dict.fromkeys(
             code
-            for entry in record.stages
-            if entry.outcome == str(StageOutcome.PENDING) and (one := details.stage(entry.stage)) is not None
+            for one in details.stages
             for code in one.earlier_findings
             if not may_succeed_on_retry([code])
         )

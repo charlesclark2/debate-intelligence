@@ -43,7 +43,7 @@ from typing import TYPE_CHECKING, Any, cast
 import jsonschema
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import build_snapshot_zips
-from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket
+from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket, SimulatedKill
 
 from debate_core.application import errors, sync_runs
 from debate_core.application.caselist_sync import SyncStage
@@ -516,6 +516,25 @@ async def test_details_that_cannot_be_written_never_cost_the_run_its_record(
     assert world.raised == []
     assert len(world.run_log().splitlines()) == 1
     assert len(world.records_in_the_bucket()) == 1
+    assert not details_file(world).exists()
+
+
+async def test_the_record_is_in_the_log_before_the_details_are_written(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The process dies as the details are appended. The record is already in the run log: it is
+    written first, because it is what a run is, and a run with no details still reads as a run."""
+
+    def killed(self: object, details: object) -> None:
+        raise SimulatedKill
+
+    monkeypatch.setattr(sync_runs.SyncRunDetailsLog, "append", killed)
+
+    with pytest.raises(SimulatedKill):
+        await a_week_imported_and_published(world)
+
+    [record] = SyncRunLog(world.installation.data_dir / SYNC_RUN_LOG_FILENAME).read()
+    assert record.run_id == FIRST_RUN_ID
     assert not details_file(world).exists()
 
 

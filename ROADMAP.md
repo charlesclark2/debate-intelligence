@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 39 | 33 | 214 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 47 | 34 | 317 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 47 | 35 | 317 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -172,7 +172,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Importer metadata defects found by the backfill](plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml) `v1-e30-t08-import-metadata-defects` | Succeeded | 3 | 7.0 |
 | [A removal leaves no removed bytes in the inbox](plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml) `v1-e30-t09-removal-purges-inbox` | Succeeded | 2 | 6.0 |
 | [caselist status reports noncurrent versions a removal left behind](plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml) `v1-e30-t10-removal-docstrings-and-residue` | Pending | 1 | 2.0 |
-| [A removal also takes down later uploads at the removed path](plan_specs/v1/e30-caselist-ingestion/t11-removal-covers-later-uploads.yaml) `v1-e30-t11-removal-covers-later-uploads` | Pending | 2 | 3.0 |
+| [A removal also takes down later uploads at the removed path](plan_specs/v1/e30-caselist-ingestion/t11-removal-covers-later-uploads.yaml) `v1-e30-t11-removal-covers-later-uploads` | Succeeded | 2 | 3.0 |
 | [caselist status tells a manifest mismatch from a source mismatch](plan_specs/v1/e30-caselist-ingestion/t12-status-names-manifest-mismatch.yaml) `v1-e30-t12-status-names-manifest-mismatch` | Pending | 1 | 1.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)

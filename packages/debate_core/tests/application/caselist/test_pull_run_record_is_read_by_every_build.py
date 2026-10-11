@@ -538,6 +538,87 @@ def test_details_this_build_cannot_read_are_no_details_and_never_a_lost_run(
     assert sync_runs.SyncRunDetailsLog(tmp_path / "no-such-file.jsonl").read() == {}
 
 
+def test_a_details_file_that_cannot_be_read_at_all_is_no_details_and_blank_lines_are_passed_over(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    unreadable = tmp_path / "not-text" / DETAILS_FILE
+    unreadable.parent.mkdir()
+    unreadable.write_bytes(b"\xff\xfe\x00 not text in any encoding this reads")
+    spaced = tmp_path / DETAILS_FILE
+    spaced.write_text('\n{"schema_version": 1, "run_id": "20260916T060000Z"}\n\n', encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        assert sync_runs.SyncRunDetailsLog(unreadable).read() == {}
+        assert sorted(sync_runs.SyncRunDetailsLog(spaced).read()) == ["20260916T060000Z"]
+
+    assert [one.getMessage() for one in caplog.records] == [
+        "caselist run details: could not be read (UnicodeDecodeError)"
+    ]
+    assert str(tmp_path) not in caplog.text
+
+
+class DetailsGoneSinceTheyWereListed:
+    """The bucket, with every details object deleted between the listing and the read."""
+
+    def __init__(self, inner: S3EvidenceObjectStore) -> None:
+        self.inner = inner
+
+    async def list_objects(self, prefix: str) -> Any:
+        return await self.inner.list_objects(prefix)
+
+    async def head(self, key: str) -> Any:
+        return await self.inner.head(key)
+
+    async def put_file(self, key: str, source: Path) -> Any:
+        return await self.inner.put_file(key, source)
+
+    async def get_file(self, key: str, destination: Path) -> Any:
+        if key.startswith(DETAILS_PREFIX):
+            raise errors.NotFound("evidence object", key)
+        return await self.inner.get_file(key, destination)
+
+
+async def test_what_the_bucket_holds_that_this_build_cannot_read_costs_no_run_that_it_can(
+    world: World, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Two runs are in the bucket with their details. Then the details of one are replaced by
+    something that is not details, and an object that is not a record is put beside the records.
+    Both runs are still listed: the first without details, which is how a run nobody kept details
+    for reads. The same when the details vanish between the listing and the read."""
+    await a_publish_left_for_a_login_and_then_drained(world)
+    bucket = world.installation.bucket
+    assert isinstance(bucket, S3EvidenceObjectStore)
+    world.s3_client.put_object(
+        Bucket=world.bucket_name,
+        Key=f"{DETAILS_PREFIX}2026/{FIRST_RUN_ID}.json",
+        Body=b'{"schema_version": 2}',
+    )
+    world.s3_client.put_object(
+        Bucket=world.bucket_name,
+        Key=f"{RECORDS_PREFIX}2026/20260930T060000Z.json",
+        Body=b'{"not": "a record"}',
+    )
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        runs = await sync_runs.read_remote_runs(bucket, last=5, scratch_dir=tmp_path)
+    warned = [one.getMessage() for one in caplog.records]
+    gone = await sync_runs.read_remote_runs(
+        DetailsGoneSinceTheyWereListed(bucket), last=5, scratch_dir=tmp_path
+    )
+
+    assert [one.record.run_id for one in runs] == [SECOND_RUN_ID, FIRST_RUN_ID]
+    assert [one.details.run_id if one.details else None for one in runs] == [SECOND_RUN_ID, None]
+    assert warned == [
+        "caselist run log: reports/sync-runs/2026/20260930T060000Z.json in the bucket is not a valid "
+        "run record; skipped",
+        f"caselist run details: {DETAILS_PREFIX}2026/{FIRST_RUN_ID}.json in the bucket is not details "
+        "this build reads; skipped",
+    ]
+    assert [one.record.run_id for one in gone] == [SECOND_RUN_ID, FIRST_RUN_ID]
+    assert [one.details for one in gone] == [None, None]
+
+
 # ------------------------------------------------------------------------------------------------
 # Forbidden: a path in a record
 # ------------------------------------------------------------------------------------------------
@@ -575,6 +656,8 @@ def test_a_hint_is_kept_as_written_apart_from_a_secret_or_an_absolute_path() -> 
         secrets=("hunter2-token",),
     )
     assert leaked == "Look in [redacted] and [redacted] with token [redacted]"
+    long = sync_runs.hint_for_a_record("Fix it. " * 400)
+    assert len(long) == 1200 and long.endswith("…"), "a hint is a sentence or two, never a page"
 
 
 async def test_nothing_beside_a_record_names_a_path_on_this_machine(world: World) -> None:

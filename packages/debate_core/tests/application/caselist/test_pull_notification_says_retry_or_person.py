@@ -408,6 +408,16 @@ def test_the_operators_mac_is_shown_the_verdict_first_and_the_whole_hint(hint: s
     )
 
 
+def test_the_title_and_the_command_are_still_held_to_a_line_and_the_body_to_its_own_limit() -> None:
+    """The body grew to hold a hint; nothing else did, and the body is still not a log."""
+    notification = Notification(title="t" * 500, message="m" * 5000, fix_command="c" * 500)
+
+    body, title, subtitle = shown(notification)
+
+    assert (len(title), len(subtitle), len(body)) == (240, 240, 1500)
+    assert title.endswith("…") and subtitle.endswith("…") and body.endswith("…")
+
+
 def test_a_notification_with_no_hint_reads_as_it_always_did() -> None:
     notification = Notification(title="a title", message="A sentence.", fix_command="a command")
 

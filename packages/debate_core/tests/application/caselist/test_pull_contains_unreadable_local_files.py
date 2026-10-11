@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import os
 from collections.abc import Mapping, Sequence
 from datetime import date
 from pathlib import Path
@@ -303,6 +304,27 @@ async def test_a_release_manifest_file_retention_cannot_read_fails_retention_and
     assert_names_nothing_of_this_machine(summary, installation)
 
 
+def test_a_manifest_write_that_fails_for_another_reason_is_left_as_the_error_it_is(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only a refusal is translated. A disk that fills as the manifest takes its name is not one:
+    the `OSError` is raised as it is, the second file is cleaned up, and the manifest held stays."""
+    held = tmp_path / "manifests" / "testcl26" / "2026-09-01.jsonl"
+    manifest_module.write_manifest_lines(['{"kind": "summary"}'], held)
+
+    def disk_full(source: object, destination: object) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(os, "replace", disk_full)
+    with pytest.raises(OSError, match="No space left on device") as failed:
+        manifest_module.write_manifest_lines(['{"kind": "summary", "rewritten": true}'], held)
+    monkeypatch.undo()
+
+    assert type(failed.value) is OSError
+    assert held.read_text(encoding="utf-8") == '{"kind": "summary"}\n'
+    assert sorted(one.name for one in held.parent.iterdir()) == ["2026-09-01.jsonl"]
+
+
 # ------------------------------------------------------------------------------------------------
 # ac1: every other reader of a manifest file by its path
 # ------------------------------------------------------------------------------------------------
@@ -562,6 +584,44 @@ async def test_an_operating_system_error_that_is_not_the_archives_fails_its_impo
     assert summary.snapshots_imported == ("othercl26 2026-09-01",)
     assert summary.failure_codes == ("INTERNAL_ERROR",)
     assert_names_nothing_of_this_machine(summary, installation)
+
+
+def test_only_an_operating_system_error_from_the_reader_itself_is_the_archive_being_unreadable(
+    tmp_path: Path,
+) -> None:
+    """The translation is around the reader and nothing else, whether the reader fails when it is
+    called or part-way through. An error of this project's own passes through as it is, and so does
+    an archive that reads cleanly."""
+    archive = tmp_path / "testcl26-weekly-2026-09-01.zip"
+    entries_of = sync_module._entries_of  # pyright: ignore[reportPrivateUsage]
+
+    def refuses_when_called(path: Path) -> Any:
+        raise PermissionError(13, "Permission denied", str(path))
+
+    def fails_part_way(path: Path) -> Any:
+        yield "one entry"
+        raise OSError(errno.EIO, "Input/output error", str(path))
+
+    def refuses_by_name(path: Path) -> Any:
+        raise errors.ArchiveTooLarge(measured="archive", actual_bytes=9, limit_bytes=8, source=path.name)
+
+    with pytest.raises(errors.UnreadableArchive) as at_the_call:
+        entries_of(refuses_when_called, archive)
+    read: list[object] = []
+    with pytest.raises(errors.UnreadableArchive) as part_way:
+        for entry in entries_of(fails_part_way, archive):
+            read.append(entry)
+    with pytest.raises(errors.ArchiveTooLarge):
+        entries_of(refuses_by_name, archive)
+
+    assert str(at_the_call.value) == (
+        "testcl26-weekly-2026-09-01.zip cannot be read as an archive: the file in the inbox could "
+        "not be read (PermissionError)"
+    )
+    assert read == ["one entry"]
+    assert str(part_way.value).endswith("the file in the inbox could not be read (OSError)")
+    assert str(tmp_path) not in str(at_the_call.value) + str(part_way.value)
+    assert list(entries_of(lambda _: iter(["a", "b"]), archive)) == ["a", "b"]  # pyright: ignore[reportArgumentType]
 
 
 # ------------------------------------------------------------------------------------------------

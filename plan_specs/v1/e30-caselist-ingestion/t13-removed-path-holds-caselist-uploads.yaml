@@ -1,0 +1,99 @@
+# TASK v1-e30-t13-removed-path-holds-caselist-uploads - A removed caselist path holds the uploads that arrive after the removal
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t13-removed-path-holds-caselist-uploads
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "A removed caselist path holds the uploads that arrive after the removal"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e30-t11's Follow-up work 1 and the PM's amendment of its ac5.
+  description: >-
+    v1-e30-t11 takes down the later uploads at a removed path that the store already holds. A
+    caselist revision that is not yet imported is covered by nothing: one waiting in the
+    download inbox when the removal runs, or one the team publishes at the same path after it.
+    For a camp file, v1-e34-t14's hold catches a new OpenEv id at a removed camp path; caselist
+    files have no such hold. Give a whole-file removal by `--source` a suppression entry for the
+    removed path, so the importer refuses a new sha256 at that path in that caselist and records
+    it as suppressed under the same request. Make the removal plan look in the inbox for an
+    archive that holds a revision at the path, and cover it as it covers a later upload the
+    store holds. `--only-named` writes no path entry. The suppression list's format may change
+    for this; it stays append-only and readable by the build installed today. Out of scope: camp
+    files (v1-e34-t14 covers them), and a withdrawal from one team's path of a file others still
+    hold.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - A school, team code or file name in a suppression entry; a path entry names the path by a digest, as the removal plan does
+      - A suppression list the build installed today cannot read
+      - A path entry for a removal run with `--only-named`, or for a withdrawal that leaves the file with another holder
+  context:
+    - kind: TaskRef
+      name: v1-e30-t11-removal-covers-later-uploads
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A whole-file `--source` removal writes a path entry, and an import of a new sha256
+        at that path in that caselist, in a later weekly or complete archive, is refused and
+        recorded as suppressed under the removal's request. Shown failing first.
+    - id: ac2
+      description: >-
+        A revision at the removed path held in an archive in the download inbox is in the
+        plan, and the executed removal leaves no copy of it in the inbox, by test.
+    - id: ac3
+      description: >-
+        `--only-named` writes no path entry, and a later upload at that path imports, by
+        test.
+    - id: ac4
+      description: >-
+        A suppression list written by this build is read by the build at the start commit,
+        and the reverse, with stored files from each.
+    - id: ac5
+      description: >-
+        docs/runbooks/caselist-removal.md replaces the manual check v1-e30-t11 left for a
+        caselist revision with what the path entry does, and the data-use policy's `What
+        removal does` names the hold.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t13-removed-path-holds-caselist-uploads-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    A suppression entry for a removed path, consulted by the importer, plus the inbox in the
+    removal plan.
+  goalRef:
+    name: v1-e30-t13-removed-path-holds-caselist-uploads
+  graph:
+    nodes:
+      - id: path-hold
+        kind: Task
+        name: A removed path holds later caselist uploads
+        description: >-
+          The path entry, the importer check, the inbox in the plan, compatibility and the
+          runbook.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal and import tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, removal or suppress or import]
+status:
+  phase: Pending

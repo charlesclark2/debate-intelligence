@@ -1,0 +1,94 @@
+# TASK v1-e31-t12-cite-detection - Cites the parser misses or misreads
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t12-cite-detection
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "Cites the parser misses or misreads"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e31-t09's Follow-up work (both revisions) and the operator's t08 sample.
+  description: >-
+    What v1-e31-t09 found about cites and left for the classifier and the labelled evaluation.
+    (1) `heuristic-cite-line-author-year` takes any capitalised word followed by two or four
+    digits, so "In 2019" is an author; `heuristic-wiki-cite-entry` has no length bound. 2,793
+    cards with no tag start at one of them. (2) A cite in the cite character style past 1,000
+    characters is let go by the style rule: 53 of the 69 first wiki cites between 1,001 and
+    1,500 characters carry the style; one without an ellipsis becomes body text. (3) 337 cards
+    have no cite; it may be on the tag line or missing from the file. (4) In the operator's
+    2026-10-11 sample a bracketed cite that ends in the cutter's initials after the closing
+    bracket was read as body text, both in a full card and in a card that is only that cite,
+    which was stored `FULL` rather than `CITE_ONLY`. (5) 218 short small-print lines directly
+    under a cite are read as the body's first line; some may be second lines of cites. Settle
+    each against labelled examples, fix what is a defect, and leave what is right, with the
+    reason. A parser change bumps `parser_version`. Out of scope: one-paragraph cards and wiki
+    entries (a model question, filed separately).
+  priority: 2
+  constraints:
+    packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, tests/fixtures, tests/evals, docs/data]
+    forbidden:
+      - Real disclosed text in any fixture, log, commit or report; each shape is reproduced synthetically
+      - A school, team code, path or file name anywhere
+  context:
+    - kind: TaskRef
+      name: v1-e31-t09-first-corpus-parse-findings
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        For each of (1) to (5), counts from the dev store, read-only, and at least ten
+        labelled examples added to the evaluation set (synthetic or person-corrected, never
+        committed real text). The report says which are defects.
+    - id: ac2
+      description: >-
+        Each defect has a synthetic fixture shown failing first, and the fix does not lower
+        tag or cite precision on the labelled evaluation.
+    - id: ac3
+      description: >-
+        A card whose only paragraph is a cite is `CITE_ONLY`, whatever the cite's bracket
+        and initials form, by fixture.
+    - id: ac4
+      description: >-
+        If the parser changes, `parser_version` is bumped. Operator-run: the re-parse's cite
+        and completeness counts before and after, recorded in
+        docs/data/caselist-parse-report.md.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t12-cite-detection-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Label, count and fix the cite shapes t09 and the t08 sample found.
+  goalRef:
+    name: v1-e31-t12-cite-detection
+  graph:
+    nodes:
+      - id: cite-detection
+        kind: Task
+        name: Cite shapes settled
+        description: >-
+          Counts, labels, fixtures, fixes and the operator's re-parse.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parser tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations, packages/debate_core/tests/evidence]
+status:
+  phase: Pending

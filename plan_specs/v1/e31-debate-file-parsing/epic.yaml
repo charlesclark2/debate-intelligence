@@ -100,6 +100,14 @@ spec:
       inputs:
         goalRef: v1-e30-t06-initial-backfill
         specRef: plan_specs/v1/e30-caselist-ingestion/t06-initial-backfill.yaml
+    - id: ext-v1-e34-t17-pull-parses-new-sources
+      kind: External
+      name: 'Prerequisite from E34: The weekly pull parses the sources it imported'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t17-pull-parses-new-sources
+        specRef: plan_specs/v1/e34-caselist-sync/t17-pull-parses-new-sources.yaml
     - id: t01
       kind: Task
       name: CardMirror evaluation and editor decision
@@ -292,5 +300,164 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t09-first-corpus-parse-findings
+    - id: t10
+      kind: Task
+      name: 'The weekly aggregate rebuild costs what the week added, not the whole store'
+      description: >-
+        The weekly rebuild costs what the week added, proven equal to a full rebuild.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t10-incremental-aggregate-rebuild.yaml
+        goalRef: v1-e31-t10-incremental-aggregate-rebuild
+      dependsOn:
+      - ext-v1-e34-t17-pull-parses-new-sources
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t10-incremental-aggregate-rebuild reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t10-incremental-aggregate-rebuild
+    - id: t11
+      kind: Task
+      name: 'Copies split apart by the short-body rule, and long bodies merged through a fragment'
+      description: >-
+        Copies of one card are not split by the short-body rule, and long cards are not
+        merged through a shared fragment.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t11-long-card-splits-and-fragment-merges.yaml
+        goalRef: v1-e31-t11-long-card-splits-and-fragment-merges
+      dependsOn:
+      - t08
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t11-long-card-splits-and-fragment-merges reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t11-long-card-splits-and-fragment-merges
+    - id: t12
+      kind: Task
+      name: 'Cites the parser misses or misreads'
+      description: >-
+        The cite shapes the first corpus parse got wrong are labelled, counted and fixed.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t12-cite-detection.yaml
+        goalRef: v1-e31-t12-cite-detection
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t12-cite-detection reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t12-cite-detection
+    - id: t13
+      kind: Task
+      name: 'Split a cite from its words when a card or wiki entry is one paragraph'
+      description: >-
+        Cards and wiki entries written as one paragraph are split into cite and words, and
+        real abbreviated disclosures found.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t13-one-paragraph-cards-and-wiki-entries.yaml
+        goalRef: v1-e31-t13-one-paragraph-cards-and-wiki-entries
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t13-one-paragraph-cards-and-wiki-entries reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t13-one-paragraph-cards-and-wiki-entries
+    - id: t14
+      kind: Task
+      name: 'A card with no tag has no tag in memory and in every output'
+      description: >-
+        A card with no tag is null in memory and in every output.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t14-card-tag-optional.yaml
+        goalRef: v1-e31-t14-card-tag-optional
+      dependsOn:
+      - t09
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t14-card-tag-optional reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t14-card-tag-optional
+    - id: t15
+      kind: Task
+      name: 'The zip guard judges only the parts it reads, and exporter quirks are decided'
+      description: >-
+        The zip guard reads what the parser opens, and CardMirror and .cmir files are
+        handled as decided.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t15-zip-guard-and-exporter-quirks.yaml
+        goalRef: v1-e31-t15-zip-guard-and-exporter-quirks
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t15-zip-guard-and-exporter-quirks reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t15-zip-guard-and-exporter-quirks
+    - id: t16
+      kind: Task
+      name: 'Superseded parsed-store version directories are retired, locally and in both buckets'
+      description: >-
+        Superseded parsed-store version directories are retired by rule, and the dry run
+        says when a new one starts.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t16-version-directory-retention.yaml
+        goalRef: v1-e31-t16-version-directory-retention
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t16-version-directory-retention reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t16-version-directory-retention
+    - id: t17
+      kind: Task
+      name: 'A transient parse failure is retried, and one data directory publishes a bucket''s parsed store'
+      description: >-
+        Transient parse failures are retried, and a bucket's parsed store has one publishing
+        data directory.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t17-parse-retries-and-one-publisher.yaml
+        goalRef: v1-e31-t17-parse-retries-and-one-publisher
+      dependsOn:
+      - ext-v1-e34-t17-pull-parses-new-sources
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t17-parse-retries-and-one-publisher reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t17-parse-retries-and-one-publisher
 status:
   phase: Pending

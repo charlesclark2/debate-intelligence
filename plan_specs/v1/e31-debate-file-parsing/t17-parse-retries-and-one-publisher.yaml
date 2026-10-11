@@ -1,0 +1,80 @@
+# TASK v1-e31-t17-parse-retries-and-one-publisher - A transient parse failure is retried, and one data directory publishes a bucket's parsed store
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t17-parse-retries-and-one-publisher
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "A transient parse failure is retried, and one data directory publishes a bucket's parsed store"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e34-t17's Follow-up work 4 and 6.
+  description: >-
+    Two loose ends in the parse pipeline. (1) A timeout or a dead worker is never tried again:
+    `SourceEntry.retried_next_run` is true for `SOURCE_MISSING` alone, so a source whose worker
+    died once in an unattended run stays `FAILED` under its skip key until a `--reparse`. (2)
+    Two data directories publishing one bucket's parsed store replace each other's aggregates.
+    Prod is published by hand from the dev directory today, which is consistent, and the
+    runbooks say so; nothing enforces it. Out of scope: the failure-rate rule.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.local, debate_core.integrations.s3, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Retrying a deterministic refusal (a malformed or forbidden file) on every run
+  context:
+    - kind: TaskRef
+      name: v1-e34-t17-pull-parses-new-sources
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A source that failed on a timeout or a dead worker is parsed again by the next run,
+        and a malformed one is not, each shown failing first.
+    - id: ac2
+      description: >-
+        A publish from a data directory other than the one that last published a bucket's
+        parsed store is refused unless forced, naming the directory by role, never by path,
+        by test against moto.
+    - id: ac3
+      description: >-
+        The runbooks' publish steps say which directory publishes each environment.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t17-parse-retries-and-one-publisher-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Retry transient parse failures, and guard a bucket's parsed store against a second
+    publisher.
+  goalRef:
+    name: v1-e31-t17-parse-retries-and-one-publisher
+  graph:
+    nodes:
+      - id: parse-loose-ends
+        kind: Task
+        name: Retries and one publisher
+        description: >-
+          The retry rule and the publisher guard.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parse tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, parse or publish]
+status:
+  phase: Pending

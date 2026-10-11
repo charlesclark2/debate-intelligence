@@ -49,6 +49,12 @@ spec:
       description: >-
         The JSON output gives each mismatch its kind, and docs/runbooks/caselist-backfill.md
         drops the sentence that works around the old hint.
+    - id: ac4
+      description: >-
+        Added by the PM, 2026-10-11, from v1-e30-t10's Follow-up work 6. `caselist status`
+        shows each snapshot's `suppressed_rows` and `suppressed_objects`, in the table and in
+        the JSON. A snapshot whose only difference is a current suppressed object says so,
+        rather than "0 snapshot(s) differ". Shown failing first. Exit codes unchanged.
 status:
   phase: Pending
 ---

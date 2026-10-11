@@ -240,5 +240,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e29-t07-missing-profile-not-retryable
+    - id: t08
+      kind: Task
+      name: 'The takedown preflight refuses the everyday profile before it writes anything'
+      description: >-
+        Naming the everyday profile for a takedown fails before anything is written, as it
+        did before the listing grant.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml
+        goalRef: v1-e29-t08-takedown-preflight-identity
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t08-takedown-preflight-identity reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t08-takedown-preflight-identity
 status:
   phase: Pending

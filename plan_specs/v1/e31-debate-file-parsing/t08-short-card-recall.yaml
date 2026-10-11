@@ -79,7 +79,9 @@ spec:
         cluster or link on the real corpus, drawn at random, are checked by eye and recorded
         as tallies only (same card / different card / unsure).
 status:
-  phase: InProgress
+  # Set by the PM, 2026-10-11, at close-out: ac5 recorded in docs/data/caselist-parse-report.md
+  # (operator-run counts and by-eye samples after v1-e31-t09's re-parse, 2026-10-11).
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

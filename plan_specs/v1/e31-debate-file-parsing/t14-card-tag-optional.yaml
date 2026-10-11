@@ -1,0 +1,81 @@
+# TASK v1-e31-t14-card-tag-optional - A card with no tag has no tag in memory and in every output
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t14-card-tag-optional
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "A card with no tag has no tag in memory and in every output"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e31-t09's Deviation 3 and Follow-up work.
+  description: >-
+    Since v1-e31-t09 the parsed store records "no tag" as `null`, but `ParsedCard.tag` is still
+    a string in memory, with `has_tag` as the way to ask. `caselist_card_stats.py` sorts and
+    compares the tag as text, `CardOccurrence.tag` and `caselist cards --json` still say `""`
+    for a card with no tag. Make the attribute `str | None` and carry `null` through every
+    output, with a schema note where a record or the JSON changes. Out of scope: how a tag is
+    found.
+  priority: 3
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.evidence, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data]
+    forbidden:
+      - A stored record an earlier reader cannot read; a change of record shape bumps its schema version as v1-e31-t09 did
+  context:
+    - kind: TaskRef
+      name: v1-e31-t09-first-corpus-parse-findings
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t08-short-card-recall
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `ParsedCard.tag` is `str | None`, and pyright passes with no ignore added for it.
+    - id: ac2
+      description: >-
+        `CardOccurrence.tag` and `caselist cards --json` give `null` for a card with no tag,
+        shown failing first, and parsed-card-store.md says what changed.
+    - id: ac3
+      description: >-
+        The aggregates' ordering is unchanged for tagged cards, by a test that rebuilds a
+        store before and after.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t14-card-tag-optional-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Make the tag optional in memory and carry null through every output.
+  goalRef:
+    name: v1-e31-t14-card-tag-optional
+  graph:
+    nodes:
+      - id: tag-optional
+        kind: Task
+        name: Optional tag everywhere
+        description: >-
+          The type change, the outputs and the ordering test.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Card tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, card or tag or occurrence]
+status:
+  phase: Pending

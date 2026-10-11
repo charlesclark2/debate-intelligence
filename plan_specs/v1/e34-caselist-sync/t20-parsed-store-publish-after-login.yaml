@@ -1,0 +1,96 @@
+# TASK v1-e34-t20-parsed-store-publish-after-login - After a login, the parsed store publishes without a second rebuild when nothing was removed
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t20-parsed-store-publish-after-login
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "After a login, the parsed store publishes without a second rebuild when nothing was removed"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e34-t17's Decision 2 and Follow-up work 2 and 7.
+  description: >-
+    In the usual week the weekly run finds the SSO session expired. Since v1-e34-t17 its parse
+    stage then rebuilds the aggregates from this machine's suppression list alone, and does not
+    publish them, because the bucket's list may hold a removal made elsewhere. The operator must
+    run `caselist parse --publish` per caselist after logging in, which rebuilds again (about 16
+    minutes for three caselists, and growing). Record with the parsed store which state of the
+    suppression list the aggregates were built from (a digest of its entries). After a login, if
+    the bucket's list adds nothing to that state, publish the directory as it is; only when it
+    does, rebuild first. Make `caselist pull --publish-pending` finish the parsed store's
+    publish for the caselists the run named, and retry a failed parse stage there too, so a
+    caselist not imported into for weeks (openev) is not left behind. Out of scope: the
+    exit-code rule, and the parse pipeline's own behaviour.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - Publishing aggregates built from a suppression list that lacks an entry the bucket's list holds
+      - A pending-work file or run record the build installed today cannot read
+  context:
+    - kind: TaskRef
+      name: v1-e34-t17-pull-parses-new-sources
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t19-unreadable-local-files-and-notification-codes
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The parsed store records the suppression-list state its aggregates were built from.
+        After a login, a publish with no new bucket entries uploads without a rebuild, and
+        one with a new entry rebuilds first, each shown failing first against moto.
+    - id: ac2
+      description: >-
+        `caselist pull --publish-pending` finishes the parsed store's publish for every
+        caselist a pending run named, and retries a failed parse stage, by test including an
+        expiry part-way through.
+    - id: ac3
+      description: >-
+        Files written by this build are read by the build at the start commit, and the
+        reverse.
+    - id: ac4
+      description: >-
+        docs/runbooks/caselist-scheduled-sync.md replaces the by-hand `caselist parse
+        --publish` step after a login with the new behaviour, and says when a rebuild still
+        happens.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t20-parsed-store-publish-after-login-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Record the suppression-list state behind the aggregates, publish without a rebuild when it
+    is current, and let --publish-pending finish the job.
+  goalRef:
+    name: v1-e34-t20-parsed-store-publish-after-login
+  graph:
+    nodes:
+      - id: publish-after-login
+        kind: Task
+        name: Parsed store published after login
+        description: >-
+          The state record, the publish decision, --publish-pending and the runbook.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pull tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, pull or pending or parse]
+status:
+  phase: Pending

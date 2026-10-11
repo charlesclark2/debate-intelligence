@@ -1,0 +1,91 @@
+# TASK v1-e30-t14-camp-path-identity - A camp file is identified by its upstream record, and a camp path can be withdrawn on its own
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t14-camp-path-identity
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "A camp file is identified by its upstream record, and a camp path can be withdrawn on its own"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e30-t11's Follow-up work 2 and 3.
+  description: >-
+    Two gaps v1-e30-t11 found in how a camp file is identified. (1) Prod matches a camp file's
+    later uploads by file name alone, because prod's manifests do not carry the OpenEv delivery
+    record dev's do, so the prod plan says "matched by file name alone" and the runbook asks the
+    operator to compare sha256 values with dev's by hand. (2) A camp path cannot be withdrawn on
+    its own: a removal takes a camp file out of every release that holds it, or leaves it
+    everywhere. Carry the upstream identity (the OpenEv id and camp path, pseudonymised as the
+    manifests already require) in every manifest row for a camp file, in both environments, and
+    let a removal withdraw one camp path while another holder keeps the bytes. Out of scope:
+    caselist files.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks, docs/data]
+    forbidden:
+      - A camp title, school or file name in a manifest row or a plan line
+      - A manifest the build installed today cannot read
+  context:
+    - kind: TaskRef
+      name: v1-e30-t11-removal-covers-later-uploads
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A camp file's manifest row carries its upstream identity in both environments, and
+        the prod removal plan matches a later upload by it. The plan no longer says it
+        matched by file name alone. Shown failing first.
+    - id: ac2
+      description: >-
+        A removal can withdraw one camp path, leaving the file for the release that still
+        holds it, with the suppression entry scoped as v1-e30-t11's withdrawal of a caselist
+        path is. By test.
+    - id: ac3
+      description: >-
+        Manifests written by this build are read by the build at the start commit, and the
+        reverse.
+    - id: ac4
+      description: >-
+        The removal runbook's step 7 drops the by-hand comparison of a camp file's later
+        uploads.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t14-camp-path-identity-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Upstream identity in camp manifest rows, used by the prod plan and by a camp-path
+    withdrawal.
+  goalRef:
+    name: v1-e30-t14-camp-path-identity
+  graph:
+    nodes:
+      - id: camp-identity
+        kind: Task
+        name: Camp files carry their upstream identity
+        description: >-
+          The manifest field, the plan's matching, the withdrawal, compatibility and the
+          runbook.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, removal or camp]
+status:
+  phase: Pending

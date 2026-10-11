@@ -1,0 +1,94 @@
+# TASK v1-e30-t15-manifest-and-aggregate-residue - caselist status reports manifest and aggregate versions older than a removal
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t15-manifest-and-aggregate-residue
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "caselist status reports manifest and aggregate versions older than a removal"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e30-t10's Deviation 1 and Follow-up work 1, as ruled by the PM.
+  description: >-
+    v1-e30-t10's residue report covers objects named by a file's digest under `raw/` and
+    `parsed/`. It does not see two things a removal also cleans. A removal rewrites each
+    manifest that held the file and purges that manifest's older versions, so a noncurrent
+    version older than the removal still holds the removed row, the most identifying thing in
+    the bucket. And the parsed store's aggregates (`index.jsonl`, `failures.jsonl`,
+    `occurrences.jsonl`) are deleted by a removal; `caselist_card_stats` writes card tags into
+    them, so an older version can hold a removed card's tag. The PM's ruling: `caselist status`
+    still downloads nothing. Any noncurrent version of a manifest or aggregate whose
+    last-modified time is earlier than the completion of a removal that touched that caselist is
+    residue; a newer one is an ordinary later write. Confirm that model against how the takedown
+    purges and how publishes write, then report such versions by key role and count, from the
+    listing and the removal log alone. Out of scope: deleting anything.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.s3, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - A download from the bucket, or any use of the takedown profile, from `caselist status`
+      - A school, team code or file name in the report; it names key roles, caselists and counts
+  context:
+    - kind: TaskRef
+      name: v1-e30-t10-removal-docstrings-and-residue
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The report states the model it relies on (a removal's purge leaves no manifest or
+        aggregate version older than its completion), and a test against moto shows the
+        takedown's behaviour that makes it true.
+    - id: ac2
+      description: >-
+        A noncurrent manifest version and a noncurrent aggregate version older than a
+        completed removal are reported per caselist, by role and count. Versions written
+        after it are not. Shown failing first.
+    - id: ac3
+      description: >-
+        A caselist no removal has touched reports nothing, whatever versions it has. Listing
+        refused is reported as not checked, never as none, as v1-e30-t10 does.
+    - id: ac4
+      description: >-
+        The clean line drops 'noncurrent manifest versions are not read', and
+        docs/runbooks/caselist-removal.md's `What the report does not see` is rewritten to
+        match.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t15-manifest-and-aggregate-residue-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Compare the listing's last-modified times with the removal log's completion times, with no
+    download.
+  goalRef:
+    name: v1-e30-t15-manifest-and-aggregate-residue
+  graph:
+    nodes:
+      - id: older-versions
+        kind: Task
+        name: Manifest and aggregate residue reported
+        description: >-
+          The model, its test, the report and the runbook.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal and status tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, removal or status or residue]
+status:
+  phase: Pending

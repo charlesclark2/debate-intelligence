@@ -582,6 +582,7 @@ class TestClearingWhatACompletedRemovalLeft:
             ResidueFile(sha256=REVISION, current_objects=0, noncurrent_versions=2, delete_markers=1),
         )
         assert left.drifted == (), "every snapshot agrees: only the version listing shows it"
+        assert left.suppressed_objects == () and not left.in_sync, "and that alone fails the status"
 
         again = await service.plan(original, request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM)
         assert again.source(REVISION) is None and again.nothing_to_do

@@ -21,7 +21,9 @@ operator read back.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -32,6 +34,8 @@ from debate_core.application.caselist.removal_service import (
     CaselistRemovalService,
     TakedownAccess,
     TakedownPreflightFailed,
+    permission_set_of,
+    takedown_permission_set,
 )
 from debate_core.application.errors import (
     StoreCredentialsExpired,
@@ -348,3 +352,65 @@ class TestTheTakedownRole:
         report = await service.execute(await a_plan(service))
 
         assert report.completed
+
+
+# ------------------------------------------------------------------------------------------------
+# The name itself
+# ------------------------------------------------------------------------------------------------
+
+OPERATOR_ACCESS = (
+    Path(__file__).parents[5] / "infrastructure" / "modules" / "evidence_bucket" / "operator_access.tf"
+)
+"""Where the takedown permission set is named. The application repeats the name; this is its source."""
+
+
+class TestTheTakedownRolesName:
+    @pytest.mark.parametrize(
+        ("environment", "permission_set"),
+        [("dev", "DebateDevEvidenceRemoval"), ("prod", "DebateProdEvidenceRemoval")],
+    )
+    def test_it_is_the_name_the_runbook_has_the_operator_configure(
+        self, environment: str, permission_set: str
+    ) -> None:
+        """Written out here by hand, from `docs/runbooks/evidence-store.md`'s table of the two sets."""
+        assert takedown_permission_set(environment) == permission_set
+
+    @pytest.mark.parametrize("environment", ["dev", "prod"])
+    def test_it_is_the_name_the_terraform_module_gives_the_permission_set(self, environment: str) -> None:
+        """If the module renames the set, this fails here and not at the next takedown."""
+        defined = re.search(
+            r'^\s*removal_permission_set_name\s*=\s*"(?P<name>[^"]+)"\s*$',
+            OPERATOR_ACCESS.read_text(encoding="utf-8"),
+            flags=re.MULTILINE,
+        )
+        assert defined is not None, "operator_access.tf no longer defines removal_permission_set_name"
+        template = defined.group("name")
+        assert "${title(var.environment)}" in template, "the module builds the name some other way now"
+
+        rendered = template.replace("${title(var.environment)}", environment.title())
+
+        assert "$" not in rendered, "something else is interpolated into the name"
+        assert takedown_permission_set(environment) == rendered
+
+    @pytest.mark.parametrize(
+        ("role_name", "permission_set"),
+        [
+            ("AWSReservedSSO_DebateDevEvidenceRemoval_0123456789abcdef", "DebateDevEvidenceRemoval"),
+            ("AWSReservedSSO_DebateDevEvidenceOperator_fedcba9876543210", "DebateDevEvidenceOperator"),
+            ("AWSReservedSSO_A_Set_With_Underscores_0123456789abcdef", "A_Set_With_Underscores"),
+            ("AWSReservedSSO_DebateDevEvidenceRemoval_", None),
+            ("AWSReservedSSO_DebateDevEvidenceRemoval", None),
+            ("AWSReservedSSO__0123456789abcdef", None),
+            ("AWSReservedSSO_DebateDevEvidenceRemoval_0123-4567", None),
+            ("XAWSReservedSSO_DebateDevEvidenceRemoval_0123456789abcdef", None),
+            ("awsreservedsso_DebateDevEvidenceRemoval_0123456789abcdef", None),
+            ("AWSReservedSSO_DebateDevEvidenceRemoval_0123456789abcdef\n", None),
+            ("DebateDevEvidenceRemoval", None),
+            ("", None),
+            (None, None),
+        ],
+    )
+    def test_a_permission_sets_role_is_read_by_its_shape(
+        self, role_name: str | None, permission_set: str | None
+    ) -> None:
+        assert permission_set_of(role_name) == permission_set

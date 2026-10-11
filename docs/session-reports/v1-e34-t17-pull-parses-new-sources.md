@@ -40,12 +40,13 @@ Four things for the PM to look at first:
 
 ## Acceptance criteria
 
-The full suite was run in two halves at the last code commit (`3041816`), after the rebase onto
-`origin/dev` at `c3f3cb6`: `uv run pytest packages/debate_core/tests -q` → `3766 passed in 73.24s`,
+The full suite was run in two halves at the last code commit (`d1240cf`), after the second rebase,
+onto `origin/dev` at `7c15c7b` (`v1-e30-t11` and `v1-e30-t10`):
+`uv run pytest packages/debate_core/tests -q` → `3790 passed in 58.17s`,
 and `uv run pytest packages/debate_cli/tests packages/debate_api/tests packages/debate_workers/tests tests -q`
-→ `1745 passed, 1 skipped, 1 warning in 76.69s`. Together they are the whole default selection:
-5,511 passed. The skip is `tests/evals/parser/test_parser_eval.py`,
-as on `dev`. `ruff check`, `ruff format --check`, `pyright` (0 errors), `lint-imports` (12 kept),
+→ `1759 passed, 1 skipped, 1 warning in 105.36s`. Together they are the whole default selection:
+5,549 passed. The skip is `tests/evals/parser/test_parser_eval.py`,
+as on `dev`. Before `v1-e30-t10` the same two commands gave 3,766 and 1,745 passed. `ruff check`, `ruff format --check`, `pyright` (0 errors), `lint-imports` (12 kept),
 `scripts/check_thin_handlers.py`, `scripts/check_links.py` and `scripts/check_command_blocks.py` pass.
 
 | Criterion | Status | Evidence (command → result) |
@@ -57,7 +58,7 @@ as on `dev`. `ruff check`, `ruff format --check`, `pyright` (0 errors), `lint-im
 | **ac5** — operator-run: the first scheduled run after the reinstall shows the stage's counts in `caselist runs --last 1` and exits as `v1-e34-t13`'s rule says | NOT RUN | Needs the agent reinstalled with this build, which waits for `v1-e34-t05`'s scheduled-run check on Wednesday. No session can run it. Steps under Operator follow-ups. What it will read is tested: `test_runs_shows_what_the_newest_runs_parse_stage_did` |
 | **ac6** — the rate is judged only from a configurable minimum of sources tried; below it failures are reported and do not fail the stage; default and reasoning documented; boundary both sides; a small run over the minimum still fails, failing first | PASS | `parse.failure_rate_minimum_sources`, default 100. **Failing first**: `test_a_run_too_small_for_its_rate_to_be_judged_reports_its_failure_and_exits_zero` gave exit 1, `1 of the 4 source(s) this run tried to read failed (25.0%), above the 20.0% threshold`. Boundary: minimum 5 not judged, 4 judged, 3 judged and failing, at the report (`test_caselist_parse.py`, core), the command (`test_caselist_parse.py`, CLI) and the stage (`test_the_stage_judges_the_rate_from_the_minimum_number_of_sources_tried`) |
 | **ac7** — `caselist parse --publish` exits by `exit_code_for_failure_codes`; the pull's stage records those codes; failing first for a bucket that does not answer | PASS | **Failing first**: `test_a_publish_the_bucket_did_not_take_exits_three_and_names_the_code` gave `assert <ExitCode.DOMAIN_FAILURE: 1> == <ExitCode.RETRIEVAL_FAILURE: 3>`. Now 3 for uploads answered 503, and 1 with a checksum mismatch among them. The stage: `test_objects_the_bucket_did_not_take_are_recorded_under_the_publishers_codes` → `CHECKSUM_MISMATCH` and `STORE_UNAVAILABLE` |
-| Node: `uv run pytest packages/debate_core/tests/application -k "pull or sync"` | PASS | `285 passed in 13.08s` |
+| Node: `uv run pytest packages/debate_core/tests/application -k "pull or sync"` | PASS | `285 passed in 14.27s` |
 
 **What "failing first" was run against.** The three tests named above ran on the unmodified code
 and failed on their own assertions. The other new command-line tests failed then too, some on an
@@ -74,8 +75,9 @@ has no `ExitTimeOut` and no `TimeOut`. `run-caselist-sync.sh` ends in `exec` wit
 Wednesday 06:00, `ProcessType` `Background`, `LowPriorityIO`.
 
 **What the stage costs.** Two operator runs, both from a terminal. The PM gave the second on
-2026-10-11, after this report's first version, and said to use it and cite both. The rebuild alone,
-a `caselist parse --publish` that parsed and uploaded nothing:
+2026-10-11, after this report's first version, and said to use it and cite both. The spec's comment
+still carries the 2026-10-10 figures: the spec is the PM's to amend, and I did not edit it. The
+rebuild alone, a `caselist parse --publish` that parsed and uploaded nothing:
 
 | Measured | hsld26 | hspf26 | hspolicy26 | openev | All four | The agent's three |
 |---|---|---|---|---|---|---|
@@ -301,7 +303,11 @@ Its `failed` count says so, and the next larger week is judged.
 66 mutants, one at a time against the committed tree, each restored with `git checkout` and the
 file compared with its original. Every run had a new, empty `HYPOTHESIS_STORAGE_DIRECTORY`. **66
 caught, none survived, none errored at collection**: every verdict is a count of failed tests
-beside passed ones. 64 ran before the rebase; six were run again after it and two were added.
+beside passed ones. 64 ran before the first rebase; six were run again after it and two were
+added. After the second rebase (`v1-e30-t10`, which changed `container.py` and the local
+suppression list) eight were run again and caught again: the four on the composition root, the
+default as 20, the container passing 1, publishes after a local-only list, and forgets the publish
+pended.
 
 | Aimed at | Mutants | Caught | Examples |
 |---|---|---|---|
@@ -317,10 +323,15 @@ run's minimum, and the run log keeping the stage's whole sentence.
 
 ## Operator follow-ups
 
-**Before the PR.** Nothing to run. The branch is rebased on `origin/dev` at `c3f3cb6`, which has
-`v1-e30-t11`. `scripts/task sync` stopped twice, in `caselist_sync.py`'s `__all__` and in
-`tests/smoke/README.md`; both sides were kept in each, and the full suite was run after it. The
-merge is `scripts/task pr v1-e34-t17-pull-parses-new-sources --partial`.
+**Before the PR.** Nothing to run. The branch is rebased on `origin/dev` at `7c15c7b`, which has
+`v1-e30-t11` and `v1-e30-t10`. `scripts/task sync` was run twice. The first stopped twice, in
+`caselist_sync.py`'s `__all__` and in `tests/smoke/README.md`; both sides were kept in each. The
+second, for `v1-e30-t10`, stopped once, in `tests/smoke/README.md` again: the remove-smoke row is
+`v1-e30-t10`'s and the pull row is this task's. `v1-e30-t10`'s two changed test lines, the stage
+reason in `test_pull_stage_failure_codes.py` and `.path` in
+`test_sync_skips_suppressed_downloads.py`, merged without a conflict and are as it wrote them. The
+full suite was run after each rebase. The merge is
+`scripts/task pr v1-e34-t17-pull-parses-new-sources --partial`.
 
 **ac5, after `v1-e34-t05`'s Wednesday check and after this build is installed** with
 `scripts/install_channel.sh` and the tag the merge publishes, as the runbook's "Before you install

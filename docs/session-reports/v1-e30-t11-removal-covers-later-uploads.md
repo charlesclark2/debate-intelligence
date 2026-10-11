@@ -349,9 +349,66 @@ data directory.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-10
 
 **Notes:**
+
+Accepted in full. I have amended ac3 and ac5 in this branch and set the phase to `Succeeded`.
+
+**Deviation 1 is my spec's error.** I generalised `v1-e34-t14`'s hold to caselist files, and it
+asks only about a new OpenEv id at a removed camp path. You read the importer to check rather than
+writing the sentence ac5 asked for. A runbook that tells an operator a removal is complete when it
+is not would be worse than no runbook. ac5 now asks for what is true, and the gap is a task of its
+own. The amended ac5 matches what you wrote:
+
+* for a camp file, the hold and the plan cover a later upload either way;
+* for a caselist file, the plan covers what the store holds when it runs, and step 9 gives the
+  manual check.
+
+**The work itself:**
+
+* **The table of what one later upload goes through** is the evidence I asked for. Each step is a
+  test, red against the start commit's source and green now.
+* **"Later" is pinned on a hand-worked fixture,** including the revert case, a complete archive
+  ordered by date, and the same path spelled in another caselist. Mutants 1 to 5 show each rule
+  carries weight.
+* **Two survivors, 30 and 33, found real holes in the tests, and you closed both.** Mutant 33 in
+  particular would have removed a file from a camp release because a team also held it. Mutant 11
+  is properly argued as equivalent, with mutant 12 to show that the test does bite.
+* **Decision 4, a withdrawal scoped to `(caselist, path, sha256)`,** fixes a latent bug: the old
+  rule would have taken an earlier version's row along with it.
+* **Decision 7** found that `--team --include-shared` missed what followed a shared file at the
+  other holders' paths, and fixed it with the same rule.
+* **Decision 8,** re-planning a stopped run's unfinished files, fixes another latent gap.
+* **Sharing `camp_path_of_manifest_row` with the sync,** rather than copying it, means one
+  identity for "the same camp path".
+
+**Rulings:**
+
+* **Deviation 2, the five existing JSON keys:** accepted. The forbidden list applies to the plan's
+  JSON as a whole, and nothing read those keys. Pseudonymous disclosure digests are what the
+  suppression list already uses.
+* **Deviation 3:** accepted, and ac3 is amended to say "the plan's confirmation text".
+* **Deviation 4:** accepted.
+* **Decision 2, including a camp file in prod on a name match:** accepted. On a removal, being
+  wrong by including too much is the safer error. The plan says which match it used, and the
+  runbook says what to compare.
+* **Decision 12, the suite at 122 s:** noted. Sessions run it in two halves from now on.
+
+**Follow-up work, filed by the PM:**
+
+* **Your 1, a caselist revision that is not yet imported (E30, p2):** a removal by `--source`
+  holds future uploads at the removed path. The suppression list gains a path entry for a
+  whole-file removal, and the importer consults it. The plan also notes, and covers, a waiting
+  archive in the inbox. The list's format is in scope there.
+* **Your 2, withdrawing a camp path (E30, p3)** and **your 3, prod matching by name (E34, p3):**
+  filed together as "camp-path identity in manifests".
+* **Your 4:** the policy's "What removal does" gains later uploads in the next PM close-out. It
+  tightens the policy, so it takes effect on merge.
+* **Your 5, "other team(s)" for a file one team holds:** folded into `v1-e30-t10`, which is
+  already in these docstrings and the removal output.
+
+`v1-e30-t10` can start once this merges.

@@ -343,9 +343,67 @@ DEBATE_ENV=prod uv run debate-research caselist status
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-11
 
 **Notes:**
+
+Accepted, with the phase `Succeeded` as you set it.
+
+**Deviation 1: I read ac2 as you do.** It asks for digest prefixes, and only an object named by its
+digest has one. The criterion was written with raw files in mind. You stated the limit in the
+command's clean line and the runbook rather than leaving it to be found, and the gap is a task of
+its own (below).
+
+**The work itself:**
+
+* **The two shapes table is the most useful thing here.** A takedown stopped among a file's versions
+  leaves a current object, because deleting the current version by id promotes the one beneath it.
+  Counting noncurrent versions alone would have read zero over exactly the case the report exists
+  for. Decision 2 and Deviation 5 follow from it, and both stand.
+* **Both runbook instructions are tests.** You found by test, not by reasoning, that re-running the
+  original command does not clear residue a completed removal left. That is the kind of runbook
+  claim I want proven.
+* **Working from the suppression list (Decision 1)** is what lets the report cover t11's later
+  uploads without knowing any request.
+* **Mutation results:** 30 of 30. R8 found a real hole. You also reported your own shadowed-variable
+  bug, which is what made the hand-written counts trustworthy.
+
+**Rulings:**
+
+* **Deviations 2 and 6:** accepted.
+* **Deviation 3, the two pull tests:** accepted. ac5 cannot be met without them, and the pull's
+  source is untouched. `v1-e34-t17` is told to keep these lines when it syncs.
+* **Deviation 4, residue fails status:** accepted. The runbook's check after a removal is "status is
+  clean". An unchecked caselist not failing it is right too.
+* **Decisions 3 and 5:** accepted.
+* **Follow-up 8, residue in the scheduled pull:** no. Residue comes only from a removal, which is
+  operator-run and ends with this status check. The weekly agent should not add version listings to
+  its run. Revisit if removals are ever automated.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **Your 1, manifest and aggregate versions (E30, p2).** My ruling: status still downloads nothing.
+  A removal purges the old versions of each manifest it rewrites, so any noncurrent version of that
+  manifest *older than the removal* is residue, and a newer one is an ordinary later rewrite. The
+  same holds for the aggregates. `caselist_card_stats` writes card tags into them, so an old
+  aggregate version can hold a removed card's tag. The check compares the listing's `LastModified`
+  with the removal log's completion time: listing only, no download. The task confirms that model
+  before building on it.
+* **Your 3, the takedown preflight (E29, p2).** Naming the everyday profile by mistake must fail
+  before anything is written, as it did before `v1-e29-t06`. For example, the first step checks
+  the caller's identity, before any write. The task also covers your 7, the grant's stated purpose.
+* **Your 4, other output that names holders wrongly (E30, p3):** the camp-file "also", "this team's"
+  in a `--source` plan, and `other_teams` at a path the same team holds. The last needs a fixture
+  first.
+* **Your 5, "cumulative" (E30, p2):** the text sent to a requester and the runbook's introduction,
+  plus an investigation of the *Ordering* section and `SnapshotOutOfOrder` under the model of
+  weekly windows. That reasoning may be wrong in behaviour, not only in wording, so it is p2.
+* **Your 6:** added to `v1-e30-t12`, which is already in this command.
+* **Your 2:** filed with your 4.
+* **Your 9:** noted on `v2-e35-t05`.
+
+**The operator check against dev and prod** runs after the parse run that is in progress, from this
+worktree, before `scripts/task finish`.

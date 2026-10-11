@@ -6,14 +6,19 @@ Evidence is removed in exactly one situation — a removal request under
 `docs/policies/caselist-data-use.md` — and when it is, *everything* goes: the object and every
 noncurrent version the bucket kept of it, because "removed" with a restorable version still in the
 bucket is not removed (`v1-e30-t07`, spec forbidden list). This port is that operation and nothing
-else, and the only service built with one is
+else, and the only service that deletes through one is
 :class:`~debate_core.application.caselist.removal_service.CaselistRemovalService`.
 
-In the bucket it is reached through the `EvidenceRemoval` permission set (`DEBATE_REMOVAL_PROFILE`),
-the only credential in the account that can delete evidence or list versions. The everyday
-`EvidenceOperator` credential can do neither: its implementation of :meth:`list_versions` raises
-:class:`~debate_core.application.errors.StoreAccessDenied`, which a dry run reports as "versions not
-counted" rather than failing.
+In the bucket, deleting is reached through the `EvidenceRemoval` permission set
+(`DEBATE_REMOVAL_PROFILE`), the only credential in the account that can delete evidence. The
+everyday `EvidenceOperator` credential cannot delete. It may list versions, read-only, under the
+prefixes a takedown removes from (`v1-e29-t06`, applied in dev and prod on 2026-10-08), which is
+what lets a removal's dry run count them and `caselist status` report what a removal left
+(:mod:`~debate_core.application.caselist.removal_residue`, `v1-e30-t10`); both call
+:meth:`list_versions` and nothing else. In an environment where that grant is not applied,
+:meth:`list_versions` raises :class:`~debate_core.application.errors.StoreAccessDenied`, which the
+dry run reports as "versions not counted" and the status as "not checked", rather than failing or
+reading it as nothing there.
 
 On this machine a file has exactly one version, so the filesystem implementation lists each file as
 one current version with no id, and deleting it unlinks the file.
@@ -45,7 +50,7 @@ class ObjectVersion:
 
 @runtime_checkable
 class EvidenceVersionStore(Protocol):
-    """Lists and deletes every version of evidence objects. Takedowns only."""
+    """Lists and deletes every version of evidence objects. Deleting is for takedowns only."""
 
     @property
     def location(self) -> str:

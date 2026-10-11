@@ -9,11 +9,14 @@ suppression entry it would append. :class:`~debate_core.application.caselist.rem
 CaselistRemovalService` executes exactly that plan — the manifests it writes are the ones planned
 here, line for line — so what the operator reads before `--execute` is what happens.
 
-It reads only. The dry run needs nothing but the everyday evidence profile: bucket listings, heads
-and manifest downloads. Counting *noncurrent versions* needs `s3:ListBucketVersions`, which the
-everyday profile does not have today; the plan then says the versions were not counted
-(:attr:`RemovalPlan.versions_counted`), and `--execute` — which lists and deletes them with the
-takedown profile — reports how many it deleted.
+It reads only. The dry run needs nothing but the everyday evidence profile: bucket listings, heads,
+manifest downloads and a listing of object versions. Counting *noncurrent versions* needs
+`s3:ListBucketVersions`, which the everyday profile has, read-only, under the prefixes a takedown
+removes from (`v1-e29-t06`, applied in dev and prod on 2026-10-08), so the plan gives each object's
+version count. In an environment where that grant is not applied the listing is refused, and the
+plan then says the versions were not counted (:attr:`RemovalPlan.versions_counted`); everything
+else in it is the same. Either way `--execute` lists every version again with the takedown profile,
+deletes them, and reports how many it deleted.
 
 ## Three things can happen to a source
 

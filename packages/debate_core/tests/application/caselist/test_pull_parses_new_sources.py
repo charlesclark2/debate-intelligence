@@ -905,6 +905,7 @@ async def test_publish_pending_does_not_publish_the_parsed_store_and_caselist_pa
         "reason": "publish-pending runs no derived stages",
         "error_codes": [],
         "hint": None,
+        "earlier_findings": [],
     }
     assert parsed_keys() == set()
 

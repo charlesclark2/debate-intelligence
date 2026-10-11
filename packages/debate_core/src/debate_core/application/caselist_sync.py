@@ -332,9 +332,9 @@ owed from before that the stage had just published stayed in the file.
   publish stage fails on it, with a hint naming the file by what it is for, and leaves it for a
   person. What the run itself imported needs nothing from the file and is published all the same;
   anything of that the bucket did not confirm is named in the stage's reason, because it could be
-  written nowhere. Every state file here is written to a second file in the same directory and
-  renamed into place (:func:`_write_json`), so a run that dies while writing cannot be what cut it
-  short.
+  written nowhere. Every state file here is written to a second file in the same directory, put on
+  the disk, and renamed into place (:func:`_write_json`), so neither a run that dies while writing
+  nor a power cut just after it can be what cut it short.
 
 ## What a failed stage records
 
@@ -583,7 +583,8 @@ log (:mod:`debate_core.application.sync_runs`), whose records have neither field
 A key added since leaves the version as it is (`v1-e34-t07`'s rule): it changes no existing key, and
 nothing reads a summary back. Under version 2 these were `note`, `openev_skipped_as_removed`
 (`v1-e34-t07`), `inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of`
-(`v1-e34-t08`).
+(`v1-e34-t08`). Under version 5 it is `earlier_findings` on every entry of `stages` (`v1-e34-t19`):
+unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays.
 
 Version 3 (`v1-e34-t12`) removes an OpenEv selection's `inbox_name`, `openev-<id>-<file name>`,
 because a camp file's name is its title, and adds `inbox_file`, the start of the download's SHA-256
@@ -695,6 +696,18 @@ class StageRecord:
     grant the AWS profile lacks. It names a directory by its role and never by its path.
     """
 
+    earlier_findings: tuple[str, ...] = ()
+    """What a :attr:`StageOutcome.PENDING` stage had already found when the session expired: the
+    error code of each failure it met first, once each, in the order they were met (`v1-e34-t19`).
+
+    A publish that left a snapshot incomplete on a checksum mismatch and then lost its session is
+    pending, and :attr:`error_codes` stays empty: `v1-e34-t13`'s rule that a pending stage carries
+    no failure code for the exit is unchanged, and nothing here is read by
+    :attr:`RunSummary.failure_codes`. But the login alone will not finish that publish, and until
+    the retry reports it this is the only place that says so. Empty for every other outcome: a
+    failed stage's codes are its :attr:`error_codes`.
+    """
+
     def as_json(self) -> dict[str, object]:
         return {
             "stage": str(self.stage),
@@ -702,6 +715,7 @@ class StageRecord:
             "reason": self.reason,
             "error_codes": list(self.error_codes),
             "hint": self.hint,
+            "earlier_findings": list(self.earlier_findings),
         }
 
 
@@ -1822,17 +1836,40 @@ def _read_json_object(path: Path) -> dict[str, object] | None:
 
 
 def _write_json(path: Path, body: Mapping[str, object]) -> None:
-    """Write `body` to `path` atomically, so a killed run never leaves half a state file.
+    """Write `body` to `path` atomically and durably, so no run leaves half a state file.
 
     To a second file in the same directory, renamed over `path` once it is complete: a rename
     within one directory replaces the name in one step, so a reader finds the old file or the new
     one and never part of either. It is what lets :meth:`PendingWork.read` refuse a file cut short
     without ever having been the cause of one.
+
+    **On the disk before it has the name, and the name on the disk after** (`v1-e34-t19`). A rename
+    orders names, not bytes: after a power cut the name can point at a file whose contents never
+    left the page cache, which is a state file cut short by the very write meant to prevent one.
+    So the second file is flushed and fsynced before the rename, and the directory is fsynced after
+    it. This is every state file this module writes: the pending-work file, the download ledger,
+    the OpenEv delivery record and each run's summary.
+
+    An `fsync` that fails is a write that failed: the `OSError` is raised as it is, as a failed
+    write always was here. Before the rename, `path` still holds what it held.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.incoming")
-    temporary.write_text(json.dumps(body, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    with temporary.open("w", encoding="utf-8") as stream:
+        stream.write(json.dumps(body, sort_keys=True, indent=2) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
     os.replace(temporary, path)
+    _fsync_directory(path.parent)
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Put `directory`'s own entries on the disk: the rename that just happened in it."""
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -2080,6 +2117,21 @@ class _RunTally:
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
+
+    def pend(self, stage: SyncStage, reason: str, found_first: Sequence[_StageFailure] = ()) -> None:
+        """Record `stage` as pending on a login, with what it had already found as earlier findings.
+
+        Their codes go to :attr:`StageRecord.earlier_findings` and never to its `error_codes`: a
+        pending stage decides nothing about the exit (`v1-e34-t13`).
+        """
+        self.stages.append(
+            StageRecord(
+                stage=stage,
+                outcome=StageOutcome.PENDING,
+                reason=reason,
+                earlier_findings=tuple(dict.fromkeys(code for one in found_first for code in one.codes)),
+            )
+        )
 
     def fail(
         self, stage: SyncStage, reason: str, failures: Sequence[_StageFailure], *, fix: str | None = None
@@ -3293,11 +3345,13 @@ class CaselistSyncService:
             tally.fail(SyncStage.PUBLISH, f"{reason}; {unreadable.sentence}", failures)
             return
         if expired is not None:
-            tally.record(
+            # Pending, with no failure code for the exit, as ever. What ended incomplete before the
+            # session expired is kept beside it: the login will not publish that (`v1-e34-t19`).
+            tally.pend(
                 SyncStage.PUBLISH,
-                StageOutcome.PENDING,
                 f"{reason}{'; ' if incomplete else ', '}{len(owed)} snapshot(s) left for a later run: "
                 f"{expired}",
+                found_first=incomplete,
             )
             return
         if incomplete or stopped is not None:
@@ -4679,7 +4733,7 @@ def _inbox_file(path: Path) -> DownloadedFile:
     )
 
 
-def _entries_of(read: ArchiveReader, archive: Path) -> Iterator[ArchiveEntry]:
+def _entries_of(read: ArchiveReader, archive: Path) -> Iterable[ArchiveEntry]:
     """A weekly or complete archive's entries, an `OSError` while reading it being the archive's own.
 
     An archive in the inbox that the operating system will not open, or that fails part-way through
@@ -4688,13 +4742,28 @@ def _entries_of(read: ArchiveReader, archive: Path) -> Iterator[ArchiveEntry]:
     here, around the reader alone, so that an `OSError` from anything else an import does (a full
     disk under the blob store, say) is not mistaken for it. The reason gives the error's class and
     never its message, which quotes the path (`v1-e34-t19`).
+
+    The reader is called here and now, as it always was, so one that refuses an archive outright
+    still does so before the import starts; only the reading that follows is deferred.
     """
     try:
-        yield from read(archive)
+        entries = read(archive)
     except OSError as unreadable:
-        raise UnreadableArchive(
-            archive.name, f"the file in the inbox could not be read ({type(unreadable).__name__})"
-        ) from unreadable
+        raise _unreadable_in_the_inbox(archive, unreadable) from unreadable
+    return _reading(entries, archive)
+
+
+def _reading(entries: Iterable[ArchiveEntry], archive: Path) -> Iterator[ArchiveEntry]:
+    try:
+        yield from entries
+    except OSError as unreadable:
+        raise _unreadable_in_the_inbox(archive, unreadable) from unreadable
+
+
+def _unreadable_in_the_inbox(archive: Path, unreadable: OSError) -> UnreadableArchive:
+    return UnreadableArchive(
+        archive.name, f"the file in the inbox could not be read ({type(unreadable).__name__})"
+    )
 
 
 def _parsed_date(value: str) -> date | None:

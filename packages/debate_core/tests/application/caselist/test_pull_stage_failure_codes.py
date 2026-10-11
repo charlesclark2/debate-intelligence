@@ -973,7 +973,8 @@ async def test_from_summary_schema_version_4_every_stage_carries_the_new_fields(
 ) -> None:
     """`error_codes` and `hint` were new on every stage in version 4, so the version moved (PM
     decision). `v1-e34-t17` moved it again, to 5, for the parse stage's counts; the stages kept
-    both fields."""
+    both fields. `v1-e34-t19` added `earlier_findings` beside them, which decides nothing, so by
+    `v1-e34-t07`'s rule the version stayed."""
     source = FakeSource(installation.archives, weeks=[WEEK_1])
 
     summary = await installation.sync(source).run([CASELIST])
@@ -981,9 +982,10 @@ async def test_from_summary_schema_version_4_every_stage_carries_the_new_fields(
     assert RUN_SUMMARY_SCHEMA_VERSION >= 4
     assert summary.as_json()["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION
     for one in stages_of(summary):
-        assert sorted(one) == ["error_codes", "hint", "outcome", "reason", "stage"]
+        assert sorted(one) == ["earlier_findings", "error_codes", "hint", "outcome", "reason", "stage"]
         assert one["error_codes"] == []
         assert one["hint"] is None
+        assert one["earlier_findings"] == []
 
 
 def test_the_stored_summary_is_a_schema_3_one() -> None:

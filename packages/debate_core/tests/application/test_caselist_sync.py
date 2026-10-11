@@ -1703,7 +1703,14 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
     assert body["objects_published"] == 0
     assert body["reports_written"] == 2
     assert body["duration_seconds"] == 0.0
-    assert set(body["stages"][0]) == {"stage", "outcome", "reason", "error_codes", "hint"}
+    assert set(body["stages"][0]) == {
+        "stage",
+        "outcome",
+        "reason",
+        "error_codes",
+        "hint",
+        "earlier_findings",
+    }
 
     text = written.read_text(encoding="utf-8")
     for forbidden in ("Maple Grove", "Cedar Hollow", "Northgate Prep", "Riverbend Academy", "ZaLu"):

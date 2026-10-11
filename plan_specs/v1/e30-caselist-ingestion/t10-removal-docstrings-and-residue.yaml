@@ -69,7 +69,7 @@ spec:
         with a probe data directory shows the path gone from the message and the JSON
         envelope, failing first. The exit code is unchanged.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

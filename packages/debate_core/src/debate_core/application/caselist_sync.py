@@ -471,7 +471,7 @@ from debate_core.application.ports.suppression import SuppressionAction, Suppres
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, Acquisition, Event
 
 if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its types are named only
-    from debate_core.application.sync_runs import SyncRunMonitor, SyncRunRecord
+    from debate_core.application.sync_runs import SyncRunDetails, SyncRunMonitor, SyncRunRecord
 
 __all__ = [
     "BULK_DOWNLOAD_WINDOW",
@@ -523,6 +523,7 @@ __all__ = [
     "camp_path_of_manifest_row",
     "caselists_to_parse",
     "decide_full_archives",
+    "fix_for",
     "full_archive_of_inbox_name",
     "inbox_files",
     "openev_id_of_inbox_name",
@@ -3847,7 +3848,7 @@ class CaselistSyncService:
         message = str(error) if isinstance(error, DomainError) else type(error).__name__
         sentence = f"{about}: {message}" if about else message
         return _StageFailure(
-            self._naming_no_local_directory(sentence), (reported_error_code(error),), _fix_for(error)
+            self._naming_no_local_directory(sentence), (reported_error_code(error),), fix_for(error)
         )
 
     def _camp_failure(self, selection: OpenEvSelection, error: DomainError | OSError) -> _StageFailure:
@@ -3855,7 +3856,7 @@ class CaselistSyncService:
         return _StageFailure(
             self._naming_no_local_directory(_camp_download_refused(selection, error)),
             (reported_error_code(error),),
-            _fix_for(error),
+            fix_for(error),
         )
 
     def _naming_no_local_directory(self, text: str) -> str:
@@ -3928,6 +3929,9 @@ class PulledRun:
     """The run log's record of this run (`v1-e34-t03`), or `None` for a dry run, which records nothing."""
     summary_path: Path | None
     """Where the run's JSON summary was written, or `None` for a dry run, which writes nothing."""
+    details: SyncRunDetails | None = None
+    """What the record cannot hold, kept beside it (`v1-e34-t19`): each failed stage's codes and
+    hint, and the parse stage's counts. `None` for a dry run, like the record."""
 
 
 async def run_pull(
@@ -3958,6 +3962,7 @@ async def run_pull(
     or the monitor raise; the monitor has recorded and announced it first.
     """
     record: SyncRunRecord | None = None
+    details: SyncRunDetails | None = None
     caselists = _with_requested(caselists, full_archive)
     if dry_run:
         # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
@@ -3981,10 +3986,10 @@ async def run_pull(
         monitored = await monitor().watch(
             one_run, caselists=caselists, mode="publish_pending" if publish_pending else "run"
         )
-        summary, record = monitored.summary, monitored.record
+        summary, record, details = monitored.summary, monitored.record, monitored.details
 
     written_to = sync_service().summary_path(summary) if not summary.dry_run else None
-    return PulledRun(summary=summary, record=record, summary_path=written_to)
+    return PulledRun(summary=summary, record=record, summary_path=written_to, details=details)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -4377,7 +4382,7 @@ _UNREADABLE_PENDING_WORK_FIX: Final = (
 )
 
 
-def _fix_for(error: BaseException) -> str | None:
+def fix_for(error: BaseException) -> str | None:
     """The fix a refused store calls for, or `None` for a failure with no fix a sentence can state.
 
     Told apart by the error's type and never by its message (`v1-e34-t13`): the filesystem adapters
@@ -4386,6 +4391,9 @@ def _fix_for(error: BaseException) -> str | None:
     came from the bucket. Neither is fixed by a login, and neither sentence offers one. The
     bucket's refusal, and a profile the AWS config does not define, carry the fix the store's
     adapter wrote, and that is the one given (`v1-e29-t07`).
+
+    Public because the run monitor asks the same question of an error that ended a run before any
+    stage could record it (`v1-e34-t19`): that run's notification carries the same fix.
     """
     if isinstance(error, LocalStoreAccessDenied):
         return (

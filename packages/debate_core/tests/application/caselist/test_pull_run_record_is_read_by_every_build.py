@@ -44,15 +44,13 @@ import jsonschema
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import build_snapshot_zips
 
-from debate_core.application import sync_runs
+from debate_core.application import errors, sync_runs
 from debate_core.application.caselist_sync import SyncStage
-from debate_core.application.errors import StoreAccessDenied
 from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, SyncRunLog, SyncRunRecord
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
 from . import test_inbox_retention as inbox_retention
 from .run_record_scenarios import (
-    FIRST_RUN,
     RECORDS_PREFIX,
     SCENARIOS,
     SECOND_RUN,
@@ -264,13 +262,23 @@ def test_the_stored_schemas_forbid_an_unknown_field_in_a_record_and_in_a_stage()
     assert older_builds_schema("start_commit") == older_builds_schema("installed_build")
 
 
-def test_this_builds_record_model_is_the_one_both_older_builds_read_with() -> None:
-    """Schema for schema. A field added to the record, a type changed, a version moved: each makes
-    this build's records ones an installed build skips, and each fails here."""
-    ours = SyncRunRecord.model_json_schema()
+def what_a_record_must_be(schema: object) -> object:
+    """A schema less its prose: the docstrings a model's schema quotes validate nothing."""
+    if isinstance(schema, dict):
+        return {key: what_a_record_must_be(value) for key, value in schema.items() if key != "description"}  # pyright: ignore[reportUnknownVariableType]
+    if isinstance(schema, list):
+        return [what_a_record_must_be(one) for one in schema]  # pyright: ignore[reportUnknownVariableType]
+    return schema
 
-    assert ours == older_builds_schema("installed_build")
-    assert ours == older_builds_schema("start_commit")
+
+def test_this_builds_record_model_is_the_one_both_older_builds_read_with() -> None:
+    """Schema for schema: every field, type, default, pattern and limit, and that nothing else is
+    allowed. A field added to the record, a type changed, a version moved: each makes this build's
+    records ones an installed build skips, and each fails here."""
+    ours = what_a_record_must_be(SyncRunRecord.model_json_schema())
+
+    assert ours == what_a_record_must_be(older_builds_schema("installed_build"))
+    assert ours == what_a_record_must_be(older_builds_schema("start_commit"))
 
 
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
@@ -508,6 +516,23 @@ def test_details_this_build_cannot_read_are_no_details_and_never_a_lost_run(
 # ------------------------------------------------------------------------------------------------
 
 
+def test_a_run_stopped_by_a_refusal_keeps_the_code_and_the_fix_a_stage_would_have_given() -> None:
+    """A manifest this machine will not let the selection read stops the run before any stage can
+    record it (`v1-e34-t13`). Its details still say what it failed on, and what to do about it."""
+    refusal = errors.LocalStoreAccessDenied("read", "the manifest directory", hint="unused here")
+
+    details = sync_runs.details_for_failure(refusal, run_id="20260916T060000Z")
+
+    assert details.failure_codes == ("STORE_ACCESS_DENIED",)
+    assert details.hint == (
+        "This machine refused the manifest directory: check that this user can read and write it, "
+        "under the environment's data directory (storage.data_dir). It is a permission on this "
+        "machine, not the AWS session."
+    )
+    assert details.stages == ()
+    assert details.parse is None
+
+
 def test_a_hint_is_kept_as_written_apart_from_a_secret_or_an_absolute_path() -> None:
     """Every hint this project writes names a directory by its role, so there is nothing to take
     out, and the runbook it points at survives. This is the backstop for one that did not."""
@@ -516,15 +541,6 @@ def test_a_hint_is_kept_as_written_apart_from_a_secret_or_an_absolute_path() -> 
         "under the environment's data directory (storage.data_dir). docs/runbooks/evidence-store.md "
         "lists what each profile is granted. `debate-research caselist parse --caselist <slug> --publish`"
     )
-    details = sync_runs.details_for_failure(
-        StoreAccessDenied(
-            "read",
-            "the manifest directory",
-            hint="unused",
-        ),
-        run_id="20260916T060000Z",
-    )
-    assert details.failure_codes == ("STORE_ACCESS_DENIED",)
 
     assert sync_runs.hint_for_a_record(kept, secrets=()) == kept
     leaked = sync_runs.hint_for_a_record(
@@ -540,4 +556,3 @@ async def test_nothing_beside_a_record_names_a_path_on_this_machine(world: World
     text = details_file(world).read_text("utf-8") + json.dumps(objects_under(world, DETAILS_PREFIX))
     for forbidden in (str(world.installation.data_dir), str(world.scratch), str(Path.home())):
         assert forbidden not in text
-    assert FIRST_RUN.year == 2026

@@ -12,7 +12,9 @@ something:
   has expired, and published by the next run;
 * a failed stage, an expired caselist_token and an expired SSO session each post one
   :class:`~debate_core.application.ports.notifier.Notification` naming the command that fixes it,
-  as does a backlog of cap-deferred archives that has grown for two runs in a row.
+  as does a backlog of cap-deferred archives that has grown for two runs in a row. A failed run's
+  says whether the next scheduled run should retry it or a person should look, and carries the fix
+  the failed stage's hint gives (`v1-e34-t19`; see :func:`notifications_for`).
 
 :class:`SyncRunMonitor` wraps a pull from the outside. It does not reach into
 :class:`~debate_core.application.caselist_sync.CaselistSyncService`: the run produces its
@@ -37,6 +39,44 @@ Messages are where such a thing could hide, so they get two treatments:
   error classes' docstrings); :func:`redact` is the backstop. It removes the caselist_token and any
   other registered secret, URL query strings, and anything path-shaped — quoted or not — because a
   disclosure's path is exactly `School/TeamCode/School-TeamCode-Side-Tournament-Round.docx`.
+
+## What the record cannot hold: a run's details (`v1-e34-t19`)
+
+**The record's shape is frozen.** :class:`SyncRunRecord` and :class:`StageEntry` forbid a field
+they do not define, and `schema_version` is the literal `1`. That was a safeguard when it was
+written, and it is now a contract with every build already installed: the weekly agent runs the
+build it was installed with until someone reinstalls it, in the data directory and against the
+bucket a newer build also uses. A record with one more key is a line such a build skips, and a
+skipped line is a run that is missing from `caselist runs`, from the backlog history, and from the
+list of records still owed to the bucket, where it would never be published. So nothing is added
+to the record, not even a field left out when it is empty: a failed stage's codes and the parse
+stage's counts are what a record would carry on exactly the runs that matter.
+
+What a newer build knows beyond the record is kept **beside** it, keyed by run id, in
+:class:`SyncRunDetails`:
+
+* each failed stage's error codes and its hint, and a pending stage's earlier findings;
+* the codes the command's exit status was decided from, for a run that returned a summary and for
+  one that stopped on an error;
+* the parse stage's nine counts, or nothing when the stage did not run.
+
+One line a run in :data:`SYNC_RUN_DETAILS_FILENAME`, next to the run log, and one object a run
+under :data:`SYNC_RUN_DETAILS_KEY_PREFIX`, next to the records' prefix and not under it: an older
+build's `caselist runs --remote` lists the records' prefix and reads every `.json` there, so an
+object of another kind under it would be skipped with a warning and would take a record's place
+among the last few. No older build opens either.
+
+**The details are read by the rule the record never had: a reader ignores a key it does not
+know.** A later build adds to the details without a second file. Their `schema_version` moves only
+for a change that alters what an existing key means, and a build that does not know the version
+reads those details as absent, never as a lost run: the run is the record.
+
+The record is written first and is what a run is. Details that cannot be written cost a run its
+codes in `caselist runs`, never its record or its notification; a record with no details is one an
+older build wrote, or one whose details were lost, and is shown as such. In the bucket a run's
+details go up before its record, so a record there is never waiting for its details. The one
+exception is a record an *older* build publishes from the list of records still owed: it knows
+nothing of details, and that run's stay on this machine.
 
 ## The backlog (ac5)
 
@@ -69,31 +109,55 @@ from debate_core.application.caselist_sync import (
     RunSummary,
     StageOutcome,
     SyncStage,
+    fix_for,
 )
-from debate_core.application.errors import DomainError, StoreCredentialsExpired, StoreError
+from debate_core.application.errors import (
+    DomainError,
+    NotFound,
+    StoreCredentialsExpired,
+    StoreError,
+    reported_error_code,
+)
 from debate_core.application.ports.caselist_source import CaselistAuthExpired
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, validate_object_key
 from debate_core.application.ports.notifier import Notification, Notifier
 
 __all__ = [
     "BACKLOG_GROWTH_RUNS",
+    "NEEDS_A_PERSON",
+    "NEEDS_A_PERSON_TITLE",
     "PENDING_RECORDS_FILENAME",
+    "RETRIED_BY_THE_NEXT_RUN",
+    "RETRIED_BY_THE_NEXT_RUN_TITLE",
+    "SYNC_RUN_DETAILS_FILENAME",
+    "SYNC_RUN_DETAILS_KEY_PREFIX",
     "SYNC_RUN_KEY_PREFIX",
     "SYNC_RUN_LOG_FILENAME",
     "MonitoredRun",
     "NoRemoteRunLog",
+    "ParseCounts",
+    "RecordedRun",
+    "RetryRule",
     "RunMode",
+    "StageDetails",
     "StageEntry",
+    "SyncRunDetails",
+    "SyncRunDetailsLog",
     "SyncRunHistory",
     "SyncRunLog",
     "SyncRunMonitor",
     "SyncRunOutcome",
     "SyncRunRecord",
+    "details_for_failure",
+    "details_for_summary",
+    "hint_for_a_record",
     "notifications_for",
     "read_remote_records",
+    "read_remote_runs",
     "record_for_failure",
     "record_for_summary",
     "redact",
+    "sync_run_details_key",
     "sync_run_key",
 ]
 
@@ -104,6 +168,16 @@ SYNC_RUN_LOG_FILENAME: Final = "caselist-sync-runs.jsonl"
 
 SYNC_RUN_KEY_PREFIX: Final = "reports/sync-runs/"
 """Where records go in the evidence bucket: `reports/sync-runs/<yyyy>/<run-id>.json`."""
+
+SYNC_RUN_DETAILS_FILENAME: Final = "caselist-sync-run-details.jsonl"
+"""A run's details, one JSON object per line, beside the run log. See :class:`SyncRunDetails`."""
+
+SYNC_RUN_DETAILS_KEY_PREFIX: Final = "reports/sync-run-details/"
+"""Where details go in the evidence bucket: `reports/sync-run-details/<yyyy>/<run-id>.json`.
+
+Beside :data:`SYNC_RUN_KEY_PREFIX` and deliberately not under it. See "What the record cannot
+hold" in the module docstring.
+"""
 
 PENDING_RECORDS_FILENAME: Final = "caselist-sync-records-pending.json"
 """Run ids whose record is in the local log and not yet in the bucket."""
@@ -117,6 +191,9 @@ the session report's operator follow-ups.
 """
 
 RECORD_SCHEMA_VERSION: Final = 1
+
+DETAILS_SCHEMA_VERSION: Final = 1
+"""The meaning of the keys of :class:`SyncRunDetails`. A key added leaves it as it is."""
 
 _RUN_ID_FORMAT: Final = "%Y%m%dT%H%M%SZ"
 """The run id `CaselistSyncService` gives a run, from its start time in UTC."""
@@ -160,7 +237,12 @@ class SyncRunOutcome(StrEnum):
 
 
 class StageEntry(BaseModel):
-    """One stage of the run: its name, how it ended, and its (redacted) one-line reason."""
+    """One stage of the run: its name, how it ended, and its (redacted) one-line reason.
+
+    **No field is ever added here**, and none to :class:`SyncRunRecord`: every installed build
+    refuses a record with a key it does not define. What else a stage has to say is in
+    :class:`StageDetails`. See "What the record cannot hold" in the module docstring.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -174,6 +256,10 @@ class SyncRunRecord(BaseModel):
 
     Counts, slugs, dates, stage outcomes and error classes. See the module docstring for what may
     never be in one, and :func:`redact` for how messages are made safe.
+
+    **Its fields are frozen** at what the builds already installed read
+    (`v1-e34-t19`): `test_pull_run_record_is_read_by_every_build.py` holds this model to the schema
+    those builds printed. A run's :class:`SyncRunDetails` are where anything new goes.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -227,6 +313,98 @@ def sync_run_key(run_id: str, started_at: datetime) -> str:
     return validate_object_key(f"{SYNC_RUN_KEY_PREFIX}{started_at.astimezone(UTC):%Y}/{run_id}.json")
 
 
+def sync_run_details_key(record_key: str) -> str:
+    """The key of the details of the run whose record is at `record_key`: the same year and run id.
+
+    `reports/sync-run-details/<yyyy>/<run-id>.json`. From the record's own key, so that a record
+    and its details can never be filed under two different years.
+    """
+    return validate_object_key(SYNC_RUN_DETAILS_KEY_PREFIX + record_key.removeprefix(SYNC_RUN_KEY_PREFIX))
+
+
+# ------------------------------------------------------------------------------------------------
+# Beside the record: a run's details
+# ------------------------------------------------------------------------------------------------
+
+
+class StageDetails(BaseModel):
+    """What one stage has to say that its :class:`StageEntry` has no field for."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    stage: str
+    error_codes: tuple[str, ...] = ()
+    """The error code of each failure behind a failed stage
+    (:attr:`~debate_core.application.caselist_sync.StageRecord.error_codes`)."""
+
+    hint: str | None = None
+    """The fix the summary gives for it, when it has one. A directory by its role, never its path."""
+
+    earlier_findings: tuple[str, ...] = ()
+    """What a pending stage had found before the session expired
+    (:attr:`~debate_core.application.caselist_sync.StageRecord.earlier_findings`)."""
+
+
+class ParseCounts(BaseModel):
+    """The parse stage's counts: the nine integers of a run summary's `parse`, and nothing else
+    (:class:`~debate_core.application.caselist_sync.ParseStageCounts`)."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    caselists: int = Field(ge=0)
+    full_parses: int = Field(ge=0)
+    attempted: int = Field(ge=0)
+    skipped: int = Field(ge=0)
+    unsupported: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    cards: int = Field(ge=0)
+    uploaded: int = Field(ge=0)
+    not_published: int = Field(ge=0)
+
+
+class SyncRunDetails(BaseModel):
+    """What one run has to say that its :class:`SyncRunRecord` cannot hold, keyed by its run id.
+
+    See "What the record cannot hold" in the module docstring. Codes, counts and hints: the same
+    rule as the record about what may never be in one.
+
+    `extra="ignore"` is the point of the class. A key this build does not know is one a later build
+    added, and is passed over, so adding to the details never needs another file.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    schema_version: Literal[1] = DETAILS_SCHEMA_VERSION
+    run_id: str = Field(pattern=r"^\d{8}T\d{6}Z$")
+
+    stages: tuple[StageDetails, ...] = ()
+    """One entry for each stage that has something to say, in the run's order; the others are left
+    out, and a stage left out has no codes, no hint and no earlier finding."""
+
+    failure_codes: tuple[str, ...] = ()
+    """The error codes the command's exit status was decided from: those of the failed stages that
+    had to finish (:attr:`~debate_core.application.caselist_sync.RunSummary.failure_codes`), or the
+    code of the error that ended the run. Empty for a run that did not fail."""
+
+    hint: str | None = None
+    """The fix for an error that ended the run before any stage recorded it, when it has one."""
+
+    parse: ParseCounts | None = None
+    """The parse stage's counts, or `None` when the stage did not run."""
+
+    def stage(self, name: str) -> StageDetails | None:
+        return next((one for one in self.stages if one.stage == name), None)
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedRun:
+    """One run as it is read back: its record, and its details when this machine or the bucket
+    holds them. `details` is `None` for a run an older build recorded."""
+
+    record: SyncRunRecord
+    details: SyncRunDetails | None
+
+
 # ------------------------------------------------------------------------------------------------
 # Redaction
 # ------------------------------------------------------------------------------------------------
@@ -256,6 +434,32 @@ def redact(message: str, *, secrets: Iterable[str] = (), limit: int = _MAX_MESSA
     text = " ".join(text.split())
     if len(text) > limit:
         text = text[: limit - 1] + "…"
+    return text
+
+
+_ABSOLUTE_PATH = re.compile(r"""(?<![\w.<>`/~])(?:~/|/)[^\s'"`<>]+""")
+"""Something that starts at `/` or `~/`: a path on a machine, and never the `docs/...` a hint cites."""
+
+_MAX_HINT_CHARACTERS: Final = 1200
+
+
+def hint_for_a_record(hint: str, *, secrets: Iterable[str] = ()) -> str:
+    """`hint` as the details and a notification carry it: as written, less a secret or a machine's path.
+
+    A hint is this project's own sentence and names a directory by its role
+    (:func:`~debate_core.application.caselist_sync.fix_for`), so there is normally nothing to take
+    out. It is not put through :func:`redact`, which removes anything path-shaped and would take
+    the runbook a hint points at with it. This removes the registered secrets and any *absolute*
+    path, which is the only kind that says where something is on the operator's machine.
+    """
+    text = hint
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, REDACTED)
+    text = _ABSOLUTE_PATH.sub(REDACTED, text)
+    text = " ".join(text.split())
+    if len(text) > _MAX_HINT_CHARACTERS:
+        text = text[: _MAX_HINT_CHARACTERS - 1] + "…"
     return text
 
 
@@ -363,6 +567,39 @@ def record_for_failure(
     )
 
 
+def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> SyncRunDetails:
+    """The details of a run that returned a summary: what its record has no field for."""
+    return SyncRunDetails(
+        run_id=summary.run_id,
+        stages=tuple(
+            StageDetails(
+                stage=str(record.stage),
+                error_codes=record.error_codes,
+                hint=hint_for_a_record(record.hint, secrets=secrets) if record.hint else None,
+                earlier_findings=record.earlier_findings,
+            )
+            for record in summary.stages
+            if record.error_codes or record.hint or record.earlier_findings
+        ),
+        failure_codes=summary.failure_codes,
+        parse=ParseCounts(**summary.parse.as_json()) if summary.parse is not None else None,
+    )
+
+
+def details_for_failure(error: BaseException, *, run_id: str, secrets: Sequence[str] = ()) -> SyncRunDetails:
+    """The details of a run that raised instead of returning a summary.
+
+    Its one failure code is the code the CLI reports the error under, and its hint the fix a stage
+    would have given the same error.
+    """
+    hint = fix_for(error)
+    return SyncRunDetails(
+        run_id=run_id,
+        failure_codes=(reported_error_code(error),),
+        hint=hint_for_a_record(hint, secrets=secrets) if hint else None,
+    )
+
+
 def _outcome_of(summary: RunSummary) -> SyncRunOutcome:
     if not summary.succeeded:
         return SyncRunOutcome.FAILED
@@ -440,16 +677,67 @@ PARSE_COMMAND: Final = "debate-research caselist parse --caselist <slug> --publi
 that imports nothing parses nothing. The stage's reason in `caselist runs` names the caselists."""
 
 
+RETRIED_BY_THE_NEXT_RUN_TITLE: Final = "caselist pull failed: will be retried"
+NEEDS_A_PERSON_TITLE: Final = "caselist pull failed: needs a person"
+"""The two titles of a failed run's notification: the verdict is the first thing a banner shows."""
+
+RETRIED_BY_THE_NEXT_RUN: Final = (
+    "The next scheduled run should retry it: every failure here is one a later run may not meet."
+)
+"""A failed run's verdict when every code its exit was decided from is one a retry may cure
+(exit 3). `docs/runbooks/caselist-scheduled-sync.md` quotes it."""
+
+NEEDS_A_PERSON: Final = (
+    "A person should look: at least one failure here will be the same on the next scheduled run."
+)
+"""The verdict in every other case (exit 1, and a bug). The runbook quotes this one too."""
+
+_WHAT_WAS_CAPTURED_IS_KEPT: Final = "What was captured is kept."
+
+type RetryRule = Callable[[Sequence[str]], bool]
+"""Whether a run that failed on exactly these error codes may succeed on a retry.
+
+The command's rule, handed in by the composition root: `debate_cli.exit_codes` decides which codes
+a retry may cure, for the exit status, and the notification asks the same function so that the two
+can never disagree. This package never names a code as retryable (`v1-e34-t13`).
+"""
+
+
+def _no_failure_is_known_to_be_transient(codes: Sequence[str]) -> bool:
+    """The rule of a monitor that was given none: nothing is promised to pass by itself."""
+    return False
+
+
 def notifications_for(
     record: SyncRunRecord,
+    details: SyncRunDetails,
     *,
     aws_login_command: str,
     credentials_expired: bool,
+    may_succeed_on_retry: RetryRule = _no_failure_is_known_to_be_transient,
 ) -> list[Notification]:
     """One notification per condition the operator has to act on, each naming its fix.
 
-    Built from the record's counts, stage names and error class only — never from a message — so
-    nothing a record could not hold reaches the screen.
+    Built from the record's counts, stage names and error class and from the details' codes and
+    hints only, never from a message, so nothing a record could not hold reaches the screen.
+
+    **A failed run says which kind of failure it was** (`v1-e34-t19`). When a download, an import or
+    a publish failed, or the run stopped on an error, the title and the message say either that the
+    next scheduled run should retry it (:data:`RETRIED_BY_THE_NEXT_RUN`) or that a person should
+    look (:data:`NEEDS_A_PERSON`). The first only when `may_succeed_on_retry` says so of the codes
+    the exit status was decided from (:attr:`SyncRunDetails.failure_codes`), which is the command's
+    own rule for exit `3`: the notification and the exit code are one decision. A stage outside
+    those that had to finish, the parse stage for one, decides nothing about the exit and gets
+    neither wording: the next scheduled run does not retry it.
+
+    **A failed stage's hint is on the notification** (:attr:`Notification.hint`), as the summary
+    gives it: the permission to fix on this machine, the grant the profile lacks, the file a person
+    has to repair, the command that publishes a parsed store. Either verdict holds with a hint
+    present; with the first, the hint is what has to be done before the retry helps.
+
+    **A pending publish says what it found first.** A snapshot that ended incomplete on a code the
+    rule does not call transient, before the session expired, is named on the login notification
+    as needing a person: logging in will not publish it.
     """
     where = f"Run {record.run_id} ({record.environment})"
     sent: list[Notification] = []
@@ -462,11 +750,16 @@ def notifications_for(
             )
         )
     elif record.error_class is not None:
+        retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
         sent.append(
             Notification(
-                title="caselist pull failed",
-                message=f"{where} stopped with {record.error_class}.",
+                title=RETRIED_BY_THE_NEXT_RUN_TITLE if retried else NEEDS_A_PERSON_TITLE,
+                message=(
+                    f"{where} stopped with {record.error_class}. "
+                    f"{RETRIED_BY_THE_NEXT_RUN if retried else NEEDS_A_PERSON}"
+                ),
                 fix_command=PULL_COMMAND,
+                hint=details.hint,
             )
         )
     failed = [entry.stage for entry in record.stages if entry.outcome == str(StageOutcome.FAILED)]
@@ -474,17 +767,29 @@ def notifications_for(
         required = {str(stage) for stage in REQUIRED_STAGES}
         only_publish = set(failed) == {str(SyncStage.PUBLISH)}
         only_parse = set(failed) == {str(SyncStage.PARSE)}
+        said = [details.stage(stage) for stage in failed]
+        named = "; ".join(
+            f"the {stage} stage failed" + (f" on {', '.join(one.error_codes)}" if one and one.error_codes else "")
+            for stage, one in zip(failed, said, strict=True)
+        )
+        hints = list(dict.fromkeys(one.hint for one in said if one is not None and one.hint))
+        if required.intersection(failed):
+            retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
+            title = RETRIED_BY_THE_NEXT_RUN_TITLE if retried else NEEDS_A_PERSON_TITLE
+            verdict = f"{RETRIED_BY_THE_NEXT_RUN if retried else NEEDS_A_PERSON} "
+        else:
+            title = "caselist pull finished with a failed stage"
+            verdict = ""
         sent.append(
             Notification(
-                title="caselist pull failed"
-                if required.intersection(failed)
-                else "caselist pull finished with a failed stage",
-                message=f"{where}: the {', '.join(failed)} stage failed. What was captured is kept.",
+                title=title,
+                message=f"{where}: {named}. {verdict}{_WHAT_WAS_CAPTURED_IS_KEPT}",
                 fix_command=PUBLISH_PENDING_COMMAND
                 if only_publish
                 else PARSE_COMMAND
                 if only_parse
                 else PULL_COMMAND,
+                hint=" ".join(hints) or None,
             )
         )
     if credentials_expired:
@@ -495,12 +800,26 @@ def notifications_for(
             entry.stage == str(SyncStage.PARSE) and entry.outcome == str(StageOutcome.PENDING)
             for entry in record.stages
         )
+        # What a pending stage had already found that no later run cures by itself.
+        found_first = dict.fromkeys(
+            code
+            for entry in record.stages
+            if entry.outcome == str(StageOutcome.PENDING) and (one := details.stage(entry.stage)) is not None
+            for code in one.earlier_findings
+            if not may_succeed_on_retry([code])
+        )
         sent.append(
             Notification(
                 title="caselist publish waiting for an AWS login",
                 message=(
                     f"{where} kept everything it fetched; {owed} snapshot(s) and the run record "
                     "wait to be published."
+                    + (
+                        " A person should look as well: before the session expired a snapshot ended "
+                        f"incomplete on {', '.join(found_first)}, which the login will not fix."
+                        if found_first
+                        else ""
+                    )
                     + (
                         f" The parsed store waits too; after the login: {PARSE_COMMAND}"
                         if parse_waits
@@ -525,6 +844,15 @@ def notifications_for(
             )
         )
     return sent
+
+
+def _retried_by_the_next_run(codes: Sequence[str], may_succeed_on_retry: RetryRule) -> bool:
+    """Whether a run that failed on `codes` is one the next scheduled run should retry.
+
+    Never for a failure with no code at all: nothing reaches the first wording because nobody
+    classified it.
+    """
+    return bool(codes) and may_succeed_on_retry(codes)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -577,6 +905,50 @@ class SyncRunLog:
         return None
 
 
+class SyncRunDetailsLog:
+    """The details file beside the run log: one :class:`SyncRunDetails` a line, read back by run id.
+
+    Written like the run log and read more forgivingly, because it is the lesser file: a line this
+    build cannot read, or a file it cannot open, is details that are absent, never a run that is.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+
+    def append(self, details: SyncRunDetails) -> None:
+        """Add `details` as one line, in a single append so concurrent writers cannot interleave."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        line = (details.model_dump_json() + "\n").encode("utf-8")
+        descriptor = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(descriptor, line)
+        finally:
+            os.close(descriptor)
+
+    def read(self) -> dict[str, SyncRunDetails]:
+        """Every run's details, by run id; the last line for a run id is the one kept."""
+        try:
+            lines = self.path.read_text(encoding="utf-8").splitlines()
+        except FileNotFoundError:
+            return {}
+        except (OSError, UnicodeDecodeError) as unreadable:
+            logger.warning("caselist run details: could not be read (%s)", type(unreadable).__name__)
+            return {}
+        found: dict[str, SyncRunDetails] = {}
+        for number, line in enumerate(lines, start=1):
+            if not line.strip():
+                continue
+            try:
+                details = SyncRunDetails.model_validate_json(line)
+            except ValidationError:
+                logger.warning(
+                    "caselist run details: line %d is not details this build reads; skipped", number
+                )
+                continue
+            found[details.run_id] = details
+        return found
+
+
 class _PendingRecords:
     """Run ids whose record the bucket does not have yet. A small JSON file, like `PendingWork`."""
 
@@ -617,19 +989,60 @@ async def read_remote_records(
 
     Run ids sort as their start times do, and so do the keys, so the newest are the last keys.
     """
+    return [one.record for one in await _read_remote(store, last=last, scratch_dir=scratch_dir, details=False)]
+
+
+async def read_remote_runs(store: EvidenceObjectStore, *, last: int, scratch_dir: Path) -> list[RecordedRun]:
+    """The `last` most recent runs in the bucket, newest first, each with its details if it has any.
+
+    One more listing than :func:`read_remote_records`, of the details' own prefix, so that a run
+    an older build recorded costs no request for details it never had.
+    """
+    return await _read_remote(store, last=last, scratch_dir=scratch_dir, details=True)
+
+
+async def _read_remote(
+    store: EvidenceObjectStore, *, last: int, scratch_dir: Path, details: bool
+) -> list[RecordedRun]:
     infos = await store.list_objects(SYNC_RUN_KEY_PREFIX)
     keys = sorted((info.key for info in infos if info.key.endswith(".json")), reverse=True)[: max(last, 0)]
-    records: list[SyncRunRecord] = []
+    with_details = (
+        {info.key for info in await store.list_objects(SYNC_RUN_DETAILS_KEY_PREFIX)}
+        if details and keys
+        else frozenset[str]()
+    )
+    runs: list[RecordedRun] = []
     scratch_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=scratch_dir) as directory:
         for index, key in enumerate(keys):
             destination = Path(directory) / f"{index}.json"
             await store.get_file(key, destination)
             try:
-                records.append(SyncRunRecord.model_validate_json(destination.read_text(encoding="utf-8")))
+                record = SyncRunRecord.model_validate_json(destination.read_text(encoding="utf-8"))
             except ValidationError:
                 logger.warning("caselist run log: %s in the bucket is not a valid run record; skipped", key)
-    return records
+                continue
+            beside = sync_run_details_key(key)
+            found = (
+                await _remote_details(store, beside, Path(directory) / f"{index}.details.json")
+                if beside in with_details
+                else None
+            )
+            runs.append(RecordedRun(record=record, details=found))
+    return runs
+
+
+async def _remote_details(store: EvidenceObjectStore, key: str, destination: Path) -> SyncRunDetails | None:
+    """The details at `key`, or `None` when they are gone or are not details this build reads."""
+    try:
+        await store.get_file(key, destination)
+    except NotFound:  # listed a moment ago and gone now: absent, as for a run that never had any
+        return None
+    try:
+        return SyncRunDetails.model_validate_json(destination.read_text(encoding="utf-8"))
+    except ValidationError:
+        logger.warning("caselist run details: %s in the bucket is not details this build reads; skipped", key)
+        return None
 
 
 # ------------------------------------------------------------------------------------------------
@@ -643,6 +1056,7 @@ class MonitoredRun:
 
     summary: RunSummary
     record: SyncRunRecord
+    details: SyncRunDetails
     notifications: tuple[Notification, ...]
     record_published: bool
 
@@ -669,6 +1083,9 @@ class SyncRunMonitor:
         aws_login_command: The command that renews this environment's AWS session.
         secrets: Values to scrub from every message, e.g. the caselist_token when it is known.
         clock: For the times of a run that raised before it could report its own.
+        may_succeed_on_retry: The command's rule for which error codes a retry may cure
+            (:data:`RetryRule`), which decides a failed run's wording in its notification. Left
+            out, no failure is called transient.
     """
 
     def __init__(
@@ -682,7 +1099,9 @@ class SyncRunMonitor:
         secrets: Callable[[], Sequence[str]] = tuple,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         growth_runs: int = BACKLOG_GROWTH_RUNS,
+        may_succeed_on_retry: RetryRule = _no_failure_is_known_to_be_transient,
     ) -> None:
+        self._may_succeed_on_retry = may_succeed_on_retry
         self._state_dir = Path(state_dir)
         self._environment = environment
         self._notifier = notifier
@@ -692,6 +1111,7 @@ class SyncRunMonitor:
         self._clock = clock
         self._growth_runs = growth_runs
         self.log = SyncRunLog(self._state_dir / SYNC_RUN_LOG_FILENAME)
+        self.details = SyncRunDetailsLog(self._state_dir / SYNC_RUN_DETAILS_FILENAME)
         self._pending = _PendingRecords(self._state_dir / PENDING_RECORDS_FILENAME)
 
     async def watch(
@@ -706,9 +1126,10 @@ class SyncRunMonitor:
         try:
             summary = await pull()
         except Exception as error:
+            run_id = started.astimezone(UTC).strftime(_RUN_ID_FORMAT)
             record = record_for_failure(
                 error,
-                run_id=started.astimezone(UTC).strftime(_RUN_ID_FORMAT),
+                run_id=run_id,
                 started_at=started,
                 finished_at=self._clock(),
                 environment=self._environment,
@@ -716,7 +1137,8 @@ class SyncRunMonitor:
                 caselists=caselists,
                 secrets=self._secret_values(),
             )
-            await self._finish(record, publish_pending_stage=False)
+            stopped = details_for_failure(error, run_id=run_id, secrets=self._secret_values())
+            await self._finish(record, stopped, publish_pending_stage=False)
             raise
         record = record_for_summary(
             summary,
@@ -730,9 +1152,14 @@ class SyncRunMonitor:
             _stage_is(summary, stage, StageOutcome.PENDING)
             for stage in (SyncStage.PUBLISH, SyncStage.REPORT, SyncStage.PARSE)
         )
-        notifications, published = await self._finish(record, publish_pending_stage=publish_pending)
+        details = details_for_summary(summary, secrets=self._secret_values())
+        notifications, published = await self._finish(record, details, publish_pending_stage=publish_pending)
         return MonitoredRun(
-            summary=summary, record=record, notifications=tuple(notifications), record_published=published
+            summary=summary,
+            record=record,
+            details=details,
+            notifications=tuple(notifications),
+            record_published=published,
         )
 
     def pending_record_ids(self) -> list[str]:
@@ -740,28 +1167,45 @@ class SyncRunMonitor:
         return self._pending.read()
 
     async def _finish(
-        self, record: SyncRunRecord, *, publish_pending_stage: bool
+        self, record: SyncRunRecord, details: SyncRunDetails, *, publish_pending_stage: bool
     ) -> tuple[list[Notification], bool]:
         """Log, publish and notify, in that order: the local record exists before anything can fail."""
         self.log.append(record)
+        self._keep(details)
         published, login_hint = await self._publish(record)
         credentials_expired = publish_pending_stage or login_hint is not None
         notifications = notifications_for(
             record,
+            details,
             aws_login_command=login_hint or self._aws_login_command,
             credentials_expired=credentials_expired,
+            may_succeed_on_retry=self._may_succeed_on_retry,
         )
         for notification in notifications:
             self._notifier.notify(notification)
         return notifications, published
 
+    def _keep(self, details: SyncRunDetails) -> None:
+        """Write the run's details beside its record. The record is already written, and stands
+        whatever happens here: the details are the lesser file."""
+        try:
+            self.details.append(details)
+        except OSError as refused:
+            logger.warning(
+                "caselist run details for %s not written: %s", details.run_id, type(refused).__name__
+            )
+
     async def _publish(self, record: SyncRunRecord) -> tuple[bool, str | None]:
-        """Publish this record and any still owed. Returns (this one published, login hint if expired)."""
+        """Publish this record and any still owed. Returns (this one published, login hint if expired).
+
+        Each with its details, when this machine holds them, and the details first.
+        """
         owed = [run_id for run_id in self._pending.read() if run_id != record.run_id] + [record.run_id]
         if self._remote is None:
             self._pending.write([])
             return False, None
         known = self.log.by_run_id()
+        beside = self.details.read()
         left: list[str] = []
         login_hint: str | None = None
         for index, run_id in enumerate(owed):
@@ -769,7 +1213,7 @@ class SyncRunMonitor:
             if to_publish is None:
                 continue
             try:
-                await self._put(self._remote, to_publish)
+                await self._put(self._remote, to_publish, beside.get(run_id))
             except StoreCredentialsExpired as expired:
                 login_hint = expired.hint or self._aws_login_command
                 left.extend(owed[index:])
@@ -780,9 +1224,17 @@ class SyncRunMonitor:
         self._pending.write(left)
         return record.run_id not in left, login_hint
 
-    async def _put(self, remote: EvidenceObjectStore, record: SyncRunRecord) -> None:
+    async def _put(
+        self, remote: EvidenceObjectStore, record: SyncRunRecord, details: SyncRunDetails | None
+    ) -> None:
+        """The record, and its details before it: a record in the bucket never waits for them, and
+        a run whose details did not go up is still owed as a whole."""
         self._state_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=self._state_dir, prefix=".sync-run-") as directory:
+            if details is not None:
+                beside = Path(directory) / f"{record.run_id}.details.json"
+                beside.write_text(details.model_dump_json(indent=2) + "\n", encoding="utf-8")
+                await remote.put_file(sync_run_details_key(record.object_key), beside)
             body = Path(directory) / f"{record.run_id}.json"
             body.write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
             await remote.put_file(record.object_key, body)
@@ -811,8 +1263,11 @@ class SyncRunHistory:
         remote: Callable[[], EvidenceObjectStore] | None,
         scratch_dir: Path,
         overdue_after_days: int,
+        details: SyncRunDetailsLog | None = None,
     ) -> None:
         self._log = log
+        # Beside the run log unless told otherwise: the two files are one run's two halves.
+        self._details = details or SyncRunDetailsLog(log.path.with_name(SYNC_RUN_DETAILS_FILENAME))
         self._remote = remote
         self._scratch_dir = Path(scratch_dir)
         self.overdue_after_days = overdue_after_days
@@ -824,6 +1279,20 @@ class SyncRunHistory:
         if self._remote is None:
             raise NoRemoteRunLog
         return await read_remote_records(self._remote(), last=last, scratch_dir=self._scratch_dir)
+
+    async def recent_runs(self, last: int, *, remote: bool = False) -> list[RecordedRun]:
+        """:meth:`recent`, each record with the details of the same run id when there are any.
+
+        What `caselist runs` shows (`v1-e34-t19`). A run an older build recorded has no details.
+        """
+        if not remote:
+            beside = self._details.read()
+            return [
+                RecordedRun(record=record, details=beside.get(record.run_id)) for record in self._log.last(last)
+            ]
+        if self._remote is None:
+            raise NoRemoteRunLog
+        return await read_remote_runs(self._remote(), last=last, scratch_dir=self._scratch_dir)
 
     def days_since_last_run(self, records: Sequence[SyncRunRecord], now: datetime) -> int | None:
         """Whole days since the newest of `records` started, or `None` when there are none."""

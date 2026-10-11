@@ -10,7 +10,8 @@ the text inside AppleScript source, so a `"` in it ends the string and whatever 
 AppleScript. Escaping would close that, but only as long as the escaping is right. Here the script
 is a fixed constant that reads its text from `argv` (`on run argv`), so the text is never parsed as
 source at all and there is nothing to escape. Control characters are still removed, and the text
-shortened, because a notification is one glance and not a log.
+shortened, because a notification is one glance and not a log: the title and the subtitle to a
+line, the body to what holds a failed stage's hint whole.
 """
 
 from __future__ import annotations
@@ -37,6 +38,12 @@ _SCRIPT: Final = (
 """Fixed AppleScript. The notification's text arrives as `argv`, never as part of this source."""
 
 _MAX_FIELD_CHARACTERS: Final = 240
+"""The title and the subtitle: one line each."""
+
+_MAX_BODY_CHARACTERS: Final = 1500
+"""The body. Long enough for a failed stage's hint whole (`v1-e34-t19`): a hint is the fix, and one
+cut off half-way is worse than none. Notification Centre shows the first lines in the banner and
+the rest when the notification is opened, so the verdict is in the title and the first sentence."""
 _TIMEOUT_SECONDS: Final = 10.0
 
 type CommandRunner = Callable[[Sequence[str]], int]
@@ -69,7 +76,7 @@ class MacOsNotifier:
             arguments.extend(("-e", line))
         arguments.extend(
             (
-                _clean(notification.text),
+                _clean(notification.text, limit=_MAX_BODY_CHARACTERS),
                 _clean(notification.title),
                 _clean(notification.fix_command),
             )
@@ -87,10 +94,10 @@ class MacOsNotifier:
             logger.warning("macOS notification could not be shown: osascript exited %d", status)
 
 
-def _clean(text: str) -> str:
-    """One line of printable text, no longer than a notification shows."""
+def _clean(text: str, *, limit: int = _MAX_FIELD_CHARACTERS) -> str:
+    """One line of printable text, no longer than `limit`."""
     flattened = "".join(character if character.isprintable() else " " for character in text)
     flattened = " ".join(flattened.split())
-    if len(flattened) > _MAX_FIELD_CHARACTERS:
-        return flattened[: _MAX_FIELD_CHARACTERS - 1] + "…"
+    if len(flattened) > limit:
+        return flattened[: limit - 1] + "…"
     return flattened

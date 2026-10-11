@@ -29,6 +29,7 @@ from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, SyncRunMoni
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
 from . import test_inbox_retention as inbox_retention
+from .retry_rule import the_commands_retry_rule
 from .test_inbox_retention import CASELIST, WEEK_1, WEEK_2, ExpiredBucket, FakeSource, Installation
 from .test_pending_work_owes_every_unpublished_snapshot import NEW_IN_WEEK_2, ONLY_IN_WEEK_1, Session
 from .test_pull_parses_new_sources import parse_stage
@@ -77,6 +78,7 @@ class World:
             remote=self.installation.bucket,
             aws_login_command=AWS_LOGIN,
             clock=lambda: inbox_retention.RUN_CLOCK,
+            **the_commands_retry_rule(),
         )
         try:
             self.pulled.append(

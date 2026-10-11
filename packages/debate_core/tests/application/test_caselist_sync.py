@@ -123,6 +123,8 @@ from debate_core.integrations.local.sqlite_caselist_repository import SqliteCase
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.testing.fakes import empty_suppression_list
 
+from .caselist.retry_rule import the_commands_retry_rule
+
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only
     from mypy_boto3_s3.client import S3Client
 
@@ -2075,6 +2077,7 @@ def sync_monitor(data_dir: Path, notifier: RecordingNotifier, remote: object | N
         aws_login_command=DEV_LOGIN,
         secrets=lambda: [FIXTURE_TOKEN],
         clock=lambda: RUN_CLOCK,
+        **the_commands_retry_rule(),
     )
 
 
@@ -2118,7 +2121,8 @@ async def test_a_failed_download_stage_leaves_a_run_record_and_one_notify_naming
     [record] = run_log(data_dir)
     assert record.outcome is SyncRunOutcome.FAILED
     [notification] = notifier.sent
-    assert notification.title == "caselist pull failed"
+    # A burst rate limit that outlasted the client's retries: one the next run may not meet.
+    assert notification.title == "caselist pull failed: will be retried"
     assert "download" in notification.message
     assert notification.fix_command == "debate-research caselist pull"
 

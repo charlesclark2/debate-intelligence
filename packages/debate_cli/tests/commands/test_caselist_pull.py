@@ -759,7 +759,7 @@ def test_no_output_of_a_pull_names_a_camp_file_by_its_title(
         runs = printed(*arguments)
         assert runs.exit_code == ExitCode.OK, runs.output
         assert_no_probe(f"`{' '.join(arguments)}`", runs.output + (runs.stderr or ""))
-    assert [one.title for one in notified.sent] == ["caselist pull failed", "caselist pull failed"]
+    assert [one.title for one in notified.sent] == ["caselist pull failed: needs a person"] * 2
     shown = MacOsNotifier(executable="osascript")
     assert_no_probe("the notifications", " ".join(" ".join(shown.command_for(one)) for one in notified.sent))
 

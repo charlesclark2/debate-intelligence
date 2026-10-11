@@ -191,6 +191,7 @@ class World:
         *,
         runner: Any = None,
         threshold: float = 0.5,
+        minimum: int = 1,
     ) -> CaselistParseService:
         return CaselistParseService(
             local=self.local,
@@ -200,6 +201,7 @@ class World:
             suppression=self.suppression,
             place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
             failure_rate_threshold=threshold,
+            failure_rate_minimum_sources=minimum,
         )
 
     async def run(self, parser: DebateFileParser | None = None, **plan: Any) -> ParseRunReport:
@@ -604,6 +606,7 @@ async def test_a_rebuild_after_the_fingerprint_version_changed_leaves_no_old_sta
             suppression=world.suppression,
             place_cards=placed_as_card_fingerprint_v1_did,
             failure_rate_threshold=0.5,
+            failure_rate_minimum_sources=1,
         )
         await v1_service.run(await v1_service.plan(CASELIST))
     as_v1_left_it = world.tree()
@@ -670,6 +673,56 @@ async def test_unsupported_formats_count_on_neither_side_of_the_failure_rate(wor
     rerun = await above.run(await above.plan(CASELIST, reparse=True))
     assert rerun.failure_rate == 0.25
     assert not rerun.exceeds_threshold
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("minimum", "judged"),
+    [
+        (5, False),  # four tried, one short of the minimum
+        (4, True),  # exactly the minimum
+        (3, True),  # a small run over the minimum still fails on the rate
+    ],
+)
+async def test_the_failure_rate_is_judged_from_the_minimum_number_of_sources_tried_and_not_below_it(
+    world: World, minimum: int, judged: bool
+) -> None:
+    """`v1-e34-t17` ac6: four sources tried, one failed, 25% against a 20% threshold.
+
+    Below the minimum the rate and the failure are reported exactly as above it; only the verdict
+    is withheld.
+    """
+    service = world.service(threshold=0.2, minimum=minimum)
+
+    report = await service.run(await service.plan(CASELIST))
+
+    assert (report.attempted, report.tried) == (6, 4)
+    assert report.failed == {"NOT_A_ZIP": 1}
+    assert report.failure_rate == 0.25
+    assert report.minimum_sources == minimum
+    assert report.rate_is_judged is judged
+    assert report.exceeds_threshold is judged
+
+
+@pytest.mark.anyio
+async def test_a_run_large_enough_to_be_judged_and_under_the_threshold_does_not_exceed_it(
+    world: World,
+) -> None:
+    service = world.service(threshold=0.25, minimum=4)
+
+    report = await service.run(await service.plan(CASELIST))
+
+    assert report.rate_is_judged
+    assert not report.exceeds_threshold
+
+
+@pytest.mark.anyio
+async def test_the_minimum_number_of_sources_is_a_required_argument_and_at_least_one(world: World) -> None:
+    """No default here, so that the one default is the `parse.failure_rate_minimum_sources` setting."""
+    parameter = inspect.signature(CaselistParseService).parameters["failure_rate_minimum_sources"]
+    assert parameter.default is inspect.Parameter.empty
+    with pytest.raises(ValueError, match="at least 1"):
+        world.service(minimum=0)
 
 
 @pytest.mark.anyio

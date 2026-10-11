@@ -14,6 +14,11 @@ is the rendering.
 The caption says how long it has been since the newest run. A failed run leaves a record and a
 notification, but a schedule that has stopped firing leaves nothing — the newest record just gets
 older — so an overdue schedule is called out here, where the operator looks.
+
+It also says what the newest run's parse stage did, in the stage's own sentence: its counts, and
+for a stage that failed or is waiting for a login, which caselists and which command finishes it
+(`v1-e34-t17`). The record has no field for those counts, and gains none, so that an older build
+still reads a newer build's records; the sentence is the stage's `reason`, which every record has.
 """
 
 from __future__ import annotations
@@ -69,7 +74,7 @@ def runs(
             ),
             rows=[_row(record) for record in records],
             title=f"caselist pull runs ({settings.environment.value}, {source}, last {last})",
-            caption=_caption(history, days, overdue),
+            caption=_caption(history, days, overdue) + _parse_sentence(records[0] if records else None),
         ),
     )
 
@@ -88,6 +93,18 @@ def _row(record: SyncRunRecord) -> list[str]:
         str(record.archives_deferred),
         str(len(record.pending_publish)),
     ]
+
+
+def _parse_sentence(newest: SyncRunRecord | None) -> str:
+    """What the newest run's parse stage did, as a leading-space sentence; nothing for one skipped.
+
+    A skipped stage parsed nothing, which is every week with nothing new and every run of a build
+    before `v1-e34-t17`.
+    """
+    stage = next((one for one in newest.stages if one.stage == "parse"), None) if newest else None
+    if newest is None or stage is None or stage.outcome == "skipped" or not stage.reason:
+        return ""
+    return f" Parse stage of the newest run ({newest.run_id}): {stage.outcome}. {stage.reason}."
 
 
 def _caption(history: SyncRunHistory, days: int | None, overdue: bool) -> str:

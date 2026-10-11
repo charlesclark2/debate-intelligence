@@ -321,11 +321,20 @@ state (`v1-e34-t04`) after the download window, and with three caselists that pa
 characters. Like retention's, only the length allowed is longer: every earlier build reads it."""
 
 
+_MAX_PARSE_REASON_CHARACTERS: Final = 2000
+"""The parse stage's reason is where its counts reach `caselist runs` (`v1-e34-t17`): the record has
+no field for them, and adding one would be a record an older build refuses. After the counts it
+names each caselist that failed and why, and what publishes a parsed store that was not. As for the
+select stage, only the length allowed is longer."""
+
+
 def _reason_limit(stage: SyncStage) -> int:
     if stage is SyncStage.RETENTION:
         return _MAX_RETENTION_REASON_CHARACTERS
     if stage is SyncStage.SELECT:
         return _MAX_SELECT_REASON_CHARACTERS
+    if stage is SyncStage.PARSE:
+        return _MAX_PARSE_REASON_CHARACTERS
     return _MAX_MESSAGE_CHARACTERS
 
 
@@ -358,6 +367,9 @@ def _outcome_of(summary: RunSummary) -> SyncRunOutcome:
     if not summary.succeeded:
         return SyncRunOutcome.FAILED
     if summary.pending_publish or _stage_is(summary, SyncStage.PUBLISH, StageOutcome.PENDING):
+        return SyncRunOutcome.PUBLISH_PENDING
+    if _stage_is(summary, SyncStage.PARSE, StageOutcome.PENDING):
+        # The parsed store's publish is a publish, and it waits for the same login (`v1-e34-t17`).
         return SyncRunOutcome.PUBLISH_PENDING
     if any(record.outcome is StageOutcome.FAILED for record in summary.stages):
         return SyncRunOutcome.INCOMPLETE
@@ -423,6 +435,9 @@ def _backlog_growing(
 AUTH_LOGIN_COMMAND: Final = "debate-research caselist auth login"
 PULL_COMMAND: Final = "debate-research caselist pull"
 PUBLISH_PENDING_COMMAND: Final = "debate-research caselist pull --publish-pending"
+PARSE_COMMAND: Final = "debate-research caselist parse --caselist <slug> --publish"
+"""What finishes a parse stage that failed (`v1-e34-t17`). Running the pull again does not: a pull
+that imports nothing parses nothing. The stage's reason in `caselist runs` names the caselists."""
 
 
 def notifications_for(
@@ -458,23 +473,39 @@ def notifications_for(
     if failed:
         required = {str(stage) for stage in REQUIRED_STAGES}
         only_publish = set(failed) == {str(SyncStage.PUBLISH)}
+        only_parse = set(failed) == {str(SyncStage.PARSE)}
         sent.append(
             Notification(
                 title="caselist pull failed"
                 if required.intersection(failed)
                 else "caselist pull finished with a failed stage",
                 message=f"{where}: the {', '.join(failed)} stage failed. What was captured is kept.",
-                fix_command=PUBLISH_PENDING_COMMAND if only_publish else PULL_COMMAND,
+                fix_command=PUBLISH_PENDING_COMMAND
+                if only_publish
+                else PARSE_COMMAND
+                if only_parse
+                else PULL_COMMAND,
             )
         )
     if credentials_expired:
         owed = len(record.pending_publish)
+        # `--publish-pending` publishes snapshots and run records, never a parsed store, so a parse
+        # stage waiting on the same login is named with the command that does (`v1-e34-t17`).
+        parse_waits = any(
+            entry.stage == str(SyncStage.PARSE) and entry.outcome == str(StageOutcome.PENDING)
+            for entry in record.stages
+        )
         sent.append(
             Notification(
                 title="caselist publish waiting for an AWS login",
                 message=(
                     f"{where} kept everything it fetched; {owed} snapshot(s) and the run record "
                     "wait to be published."
+                    + (
+                        f" The parsed store waits too; after the login: {PARSE_COMMAND}"
+                        if parse_waits
+                        else ""
+                    )
                 ),
                 fix_command=f"{aws_login_command} && {PUBLISH_PENDING_COMMAND}",
             )
@@ -695,8 +726,9 @@ class SyncRunMonitor:
             secrets=self._secret_values(),
             growth_runs=self._growth_runs,
         )
-        publish_pending = _stage_is(summary, SyncStage.PUBLISH, StageOutcome.PENDING) or _stage_is(
-            summary, SyncStage.REPORT, StageOutcome.PENDING
+        publish_pending = any(
+            _stage_is(summary, stage, StageOutcome.PENDING)
+            for stage in (SyncStage.PUBLISH, SyncStage.REPORT, SyncStage.PARSE)
         )
         notifications, published = await self._finish(record, publish_pending_stage=publish_pending)
         return MonitoredRun(

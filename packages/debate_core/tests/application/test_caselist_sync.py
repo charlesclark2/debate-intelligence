@@ -79,7 +79,9 @@ from debate_core.application.caselist_sync import (
     DownloadLedger,
     LandscapeStageResult,
     NoCaselistsConfigured,
-    ParseStageResult,
+    ParsedCaselist,
+    ParseStageCounts,
+    PublishedParsedStore,
     RunLock,
     SelectionDecision,
     StageOutcome,
@@ -243,18 +245,29 @@ class ExpiredBucket:
 
 
 class RecordingParseStage:
-    """A parse pipeline that is there, so the skip path is not the only one exercised."""
+    """A parse stage that says what it was asked for, with counts written here by hand.
 
-    def __init__(self, result: ParseStageResult | None = None, failure: Exception | None = None) -> None:
-        self.result = result or ParseStageResult(files_parsed=3, cards_parsed=17, failures=1)
+    The real one, over the real pipeline, is exercised in
+    `caselist/test_pull_parses_new_sources.py`; this is for what the run does around it.
+    """
+
+    def __init__(self, result: ParsedCaselist | None = None, failure: Exception | None = None) -> None:
+        self.result = result or ParsedCaselist(
+            version="2026.10.10-docx-2", attempted=5, skipped=9, unsupported=1, failed=1, cards=17, tried=4
+        )
         self.failure = failure
-        self.calls: list[tuple[str, ...]] = []
+        self.calls: list[str] = []
+        self.published: list[tuple[str, str]] = []
 
-    async def parse_new_sources(self, *, caselists: object) -> ParseStageResult:
-        self.calls.append(tuple(caselists))  # type: ignore[arg-type]
+    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+        self.calls.append(caselist)
         if self.failure is not None:
             raise self.failure
         return self.result
+
+    async def publish(self, caselist: str, version: str) -> PublishedParsedStore:
+        self.published.append((caselist, version))
+        return PublishedParsedStore(uploaded=8)
 
 
 class RecordingLandscapeStage:
@@ -1246,7 +1259,7 @@ async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it
     summary = await service.run([SYNTHETIC_CASELIST])
     written = json.loads(service.summary_path(summary).read_text(encoding="utf-8"))
 
-    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 4
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 5
     assert written["bulk_download_window_start"] == "2026-09-15T06:00:00+00:00"
     assert written["bulk_downloads_spent_in_window"] == 2
     assert written["bulk_downloads_allowed"] == 3
@@ -1673,8 +1686,20 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
     assert body["archives_downloaded"] == 2
     assert body["files_imported"] == 28
     assert body["files_duplicate"] == 2
-    assert body["cards_parsed"] == 17
-    assert body["parse_failures"] == 1
+    # Two caselists parsed, the weekly archives' and `openev` for the camp file, each with the
+    # counts the recording stage gives one: 5 attempted, 9 skipped, 1 unsupported, 1 failed and
+    # 17 cards, twice. No bucket here, so nothing was uploaded and nothing is owed to one.
+    assert body["parse"] == {
+        "caselists": 2,
+        "full_parses": 0,
+        "attempted": 10,
+        "skipped": 18,
+        "unsupported": 2,
+        "failed": 2,
+        "cards": 34,
+        "uploaded": 0,
+        "not_published": 0,
+    }
     assert body["objects_published"] == 0
     assert body["reports_written"] == 2
     assert body["duration_seconds"] == 0.0
@@ -1694,7 +1719,7 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
 async def test_the_optional_stages_are_skipped_with_a_reason_when_they_are_not_installed(
     source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
 ) -> None:
-    """Today's normal path: neither v1-e31-t06 nor v1-e32-t05 exists, and the run is a success."""
+    """Parse turned off by its setting, and no landscape service yet: the run is a success."""
     await import_first_week(data_dir, archives)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
 
@@ -1703,7 +1728,8 @@ async def test_the_optional_stages_are_skipped_with_a_reason_when_they_are_not_i
     parse = summary.stage(SyncStage.PARSE)
     landscape = summary.stage(SyncStage.LANDSCAPE)
     assert parse is not None and parse.outcome is StageOutcome.SKIPPED
-    assert "v1-e31-t06" in (parse.reason or "")
+    assert "caselist.parse_imported_sources" in (parse.reason or "")
+    assert summary.parse is None
     assert landscape is not None and landscape.outcome is StageOutcome.SKIPPED
     assert "v1-e32-t05" in (landscape.reason or "")
     assert summary.succeeded
@@ -1726,8 +1752,13 @@ async def test_an_optional_stage_that_fails_does_not_fail_a_run_whose_bytes_are_
     parsed = summary.stage(SyncStage.PARSE)
     assert parsed is not None and parsed.outcome is StageOutcome.FAILED
     # An error this project did not write is given by its class alone and recorded as unmodelled
-    # (`v1-e34-t13`); an optional stage's codes decide nothing about the exit.
-    assert (parsed.reason, parsed.error_codes) == ("OSError", ("INTERNAL_ERROR",))
+    # (`v1-e34-t13`); an optional stage's codes decide nothing about the exit. The counts come
+    # first, then each caselist the stage failed in: the second is still tried after the first.
+    assert parsed.reason == (
+        "0 caselist(s) parsed: 0 source(s) attempted, 0 skipped as parsed already, 0 unsupported, "
+        f"0 failed, 0 card(s); {SYNTHETIC_CASELIST}: OSError; openev: OSError"
+    )
+    assert parsed.error_codes == ("INTERNAL_ERROR",)
     assert summary.succeeded
     assert summary.failure_codes == ()
     assert summary.files_imported == 28
@@ -1766,10 +1797,13 @@ async def test_the_optional_stages_run_when_they_are_installed(
 
     summary = await service.run([SYNTHETIC_CASELIST])
 
-    assert parse.calls == [(SYNTHETIC_CASELIST,)]
+    # The caselist once, though two of its weeks were imported, then the camp file's `openev`.
+    assert parse.calls == [SYNTHETIC_CASELIST, "openev"]
+    assert parse.published == [], "this environment names no bucket"
     assert landscape.calls == 1
-    assert summary.cards_parsed == 17
-    assert summary.parse_failures == 1
+    assert summary.parse == ParseStageCounts(
+        caselists=2, attempted=10, skipped=18, unsupported=2, failed=2, cards=34
+    )
     assert summary.reports_written == 3
 
 

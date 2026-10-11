@@ -228,7 +228,7 @@ async def test_a_pull_that_fetches_and_imports_a_camp_file_names_it_by_id_and_di
     ]
     assert run.pulled.summary_path is not None
     written = json.loads(run.pulled.summary_path.read_text(encoding="utf-8"))
-    assert written["schema_version"] == 4
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION
     assert written["openev_selections"] == openev_selections(run)
 
 

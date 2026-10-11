@@ -80,6 +80,7 @@ def parse_service(world: RemovalWorld) -> CaselistParseService:
         suppression=world.suppression(),
         place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
         failure_rate_threshold=1.0,
+        failure_rate_minimum_sources=1,
     )
 
 

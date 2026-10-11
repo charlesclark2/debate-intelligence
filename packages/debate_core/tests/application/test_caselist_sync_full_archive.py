@@ -65,12 +65,16 @@ from debate_core.application.caselist.publish_service import CaselistPublishServ
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist_sync import (
     DOWNLOAD_LEDGER_FILENAME,
+    CaselistParseStage,
     CaselistSyncService,
     DownloadLedger,
     FullArchiveRefused,
     FullArchiveRotation,
+    ParsedCaselist,
+    PublishedParsedStore,
     RunSummary,
     SelectionDecision,
+    StageOutcome,
     SyncStage,
     decide_full_archives,
 )
@@ -207,6 +211,7 @@ def build_service(
     rotation: FullArchiveRotation | None = FullArchiveRotation(),  # noqa: B008 - frozen, shared safely
     clock: datetime = RUN_CLOCK,
     bucket: S3EvidenceObjectStore | None = None,
+    parse: CaselistParseStage | None = None,
 ) -> CaselistSyncService:
     database = SqliteDatabase.open(data_dir)
     repository = SqliteCaselistRepository(database)
@@ -225,6 +230,7 @@ def build_service(
         suppression=empty_suppression_list(),
         clock=lambda: clock,
         full_archive_rotation=rotation,
+        parse=parse,
         publisher=CaselistPublishService(
             suppression=empty_suppression_list(), local=local_evidence(data_dir), remote=bucket
         )
@@ -260,6 +266,66 @@ def spend(data_dir: Path, downloads: int, *, at: datetime = RUN_CLOCK - timedelt
     ledger = DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME)
     for _ in range(downloads):
         ledger.record(at)
+
+
+# ------------------------------------------------------------------------------------------------
+# The parse stage and the complete archive (`v1-e34-t17`)
+# ------------------------------------------------------------------------------------------------
+
+
+class StageThatSaysWhatItWasAsked:
+    """A parse stage that records the caselists it was handed and parses nothing."""
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+        self.asked.append(caselist)
+        return ParsedCaselist(version="2026.10.10-docx-2")
+
+    async def publish(self, caselist: str, version: str) -> PublishedParsedStore:  # pragma: no cover
+        raise AssertionError("no bucket in these runs")
+
+
+async def test_a_run_that_imported_only_a_complete_archive_parses_nothing(tmp_path: Path) -> None:
+    """A complete archive's sources are outside what the parse pipeline enumerates.
+
+    Handing its caselist to the stage would rebuild every aggregate to change none, which on the
+    real corpus is minutes. A weekly imported beside it is what names the caselist.
+    """
+    data_dir = tmp_path / "evidence"
+    site = Site(tmp_path / "site")
+    site.weekly(W1)
+    stage = StageThatSaysWhatItWasAsked()
+    earlier = RUN_CLOCK - timedelta(days=3)
+    await build_service(site, data_dir, rotation=None, clock=earlier, parse=stage).run([CASELIST])
+    assert stage.asked == [CASELIST]
+
+    site.full(W2)
+    only_the_complete_archive = await build_service(site, data_dir, parse=stage).run([CASELIST])
+
+    assert only_the_complete_archive.snapshots_imported == (f"{CASELIST} full/{W2.isoformat()}",)
+    assert stage.asked == [CASELIST], "not asked a second time"
+    parse = only_the_complete_archive.stage(SyncStage.PARSE)
+    assert parse is not None and parse.outcome is StageOutcome.SKIPPED
+    assert parse.reason == "only a complete archive was imported, and complete archives are not parsed"
+    assert only_the_complete_archive.parse is None
+
+
+async def test_a_weekly_imported_beside_a_complete_archive_has_its_caselist_parsed_once(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "evidence"
+    site = Site(tmp_path / "site")
+    site.weekly(W1)
+    site.weekly(W2)
+    site.full(W2)
+    stage = StageThatSaysWhatItWasAsked()
+
+    summary = await build_service(site, data_dir, parse=stage).run([CASELIST])
+
+    assert len(summary.snapshots_imported) == 3
+    assert stage.asked == [CASELIST]
 
 
 # ------------------------------------------------------------------------------------------------

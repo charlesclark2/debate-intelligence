@@ -52,6 +52,7 @@ from debate_core.application.caselist.publish_service import (
 )
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import (
+    UNMODELLED_ERROR_CODE,
     BlobIntegrityError,
     DomainError,
     NotFound,
@@ -102,6 +103,22 @@ class ParsedPublishReport:
     def succeeded(self) -> bool:
         """True when every object is confirmed in the bucket or suppressed, aggregates included."""
         return not self.aggregates_withheld and not self.failed_keys
+
+    @property
+    def failure_codes(self) -> tuple[str, ...]:
+        """The error code of every object the bucket did not confirm, in key order; none when complete.
+
+        The codes `caselist publish` reports its failures under, so `caselist parse --publish` and
+        the parse stage of `caselist pull` decide from them as it does (`v1-e34-t17`): the publish
+        is one a retry may cure only when every code here is. A failure with no code contributes
+        :data:`~debate_core.application.errors.UNMODELLED_ERROR_CODE`, which is on no such list.
+        Withheld aggregates add nothing of their own: they are withheld because a source failed.
+        """
+        failed = sorted(
+            (outcome for outcome in self.objects if outcome.result is SourceResult.FAILED),
+            key=lambda outcome: outcome.key,
+        )
+        return tuple(outcome.error_code or UNMODELLED_ERROR_CODE for outcome in failed)
 
 
 class ParsedStorePublisher:

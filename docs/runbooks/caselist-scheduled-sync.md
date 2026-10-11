@@ -14,6 +14,7 @@ schedule around it is `ops/launchd/`.
 | Logs | `~/Library/Logs/debate-research/caselist-sync.jsonl` and `…err.log` |
 | Run summaries | `<data_dir>/caselist-sync-runs/<run id>.json` |
 | Pending-work file | `<data_dir>/caselist-sync-pending.json`, only while a publish is owed. See [The pending-work file](#the-pending-work-file) |
+| Parses | The sources each run imported, into `<data_dir>/parsed/`, unless `caselist.parse_imported_sources` is off. See [The parse stage](#the-parse-stage) |
 
 ## Weekly is not a preference
 
@@ -182,8 +183,10 @@ Exit `3` and exit `1` both mean a download, an import or a publish did not compl
 [What the exit code says](#what-the-exit-code-says) says which is which: `3` is transient and the
 next run retries it, `1` is a verdict someone has to look at. Exit `70` is a bug. The agent never
 retries any of them on its own; the next attempt is next week's run.
-`parse: skipped` and `landscape: skipped` are expected until E31 and E32 ship — those stages are
-optional by design and cannot fail a run whose bytes are already captured.
+`parse: completed` is the normal outcome when the run imported anything, and `parse: skipped` when
+it imported nothing ([The parse stage](#the-parse-stage)). `landscape: skipped` is expected until
+E32 ships. Both stages are optional by design and cannot fail a run whose bytes are already
+captured: a failed parse stage is reported and the exit code stays `0`.
 
 Record the counts in [`docs/data/caselist-sync-runs.md`](../data/caselist-sync-runs.md).
 
@@ -311,13 +314,14 @@ One JSON object per run on stdout. The fields to read first:
 | `bulk_download_window_start`, `bulk_downloads_spent_in_window` | The 24 hours the run counted its downloads against, and what had already been spent in them |
 | `openev_downloaded` | Camp files fetched |
 | `files_imported`, `blobs_stored` | What the importers filed, and how much of it was new |
-| `objects_published` | What reached the bucket |
+| `objects_published` | What reached the bucket from the raw store: sources and manifests |
+| `parse` | The parse stage's counts and nothing else: `caselists`, `full_parses`, `attempted`, `skipped`, `unsupported`, `failed`, `cards`, `uploaded`, `not_published`. `null` when the stage parsed nothing. See [The parse stage](#the-parse-stage) |
 | `pending_publish` | Every snapshot this Mac has imported that the bucket had not confirmed complete when the publish stage ended: what [the pending-work file](#the-pending-work-file) holds after the run. Whether that waits for a login or for something else is the `publish` stage's outcome, not this list |
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
 | `full_archive` | What the complete-archive rotation decided and why (`reason`), what the weeklies left of the day's allowance, and for a complete archive imported, its `bytes` and its `withdrawn` and `superseded` counts. See [The complete archive](#the-complete-archive) |
 | `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
 | `stages[]` | One entry per stage, each with the sentence saying why it ended that way (`reason`). A failed stage also carries `error_codes`, the code of each failure behind it, and, when a store refused it, `hint`, the fix that applies (`v1-e34-t13`). See [What the exit code says](#what-the-exit-code-says) |
-| `schema_version` | `4` since `v1-e34-t13`, which added the two fields above to every stage. A summary written by an older build says `3` and has neither. Nothing reads a summary back; `caselist runs` reads the run log, which builds of both kinds read and write alike |
+| `schema_version` | `5` since `v1-e34-t17`, which replaced `cards_parsed` and `parse_failures` (always `0`; no stage filled them) with `parse`. `4` since `v1-e34-t13`, which added `error_codes` and `hint` to every stage; a summary written before that says `3` and has neither. Nothing reads a summary back; `caselist runs` reads the run log, which builds of every kind read and write alike |
 
 Nothing in that object is a school, a team code, a debater's initials, a disclosure path, a camp
 file's title or the `caselist_token` — the policy forbids all of them in a log, and the summary is
@@ -368,6 +372,13 @@ Which failure is which:
 | The pending-work file cannot be read | `PENDING_WORK_UNREADABLE` | `1`, with a `hint`. The file is left as it is. See [The pending-work file](#the-pending-work-file) |
 | `--full-archive` cannot be covered by the day's allowance | none: the run is refused before any stage, with `error.code` `FULL_ARCHIVE_REFUSED` | `1` |
 | Anything with a code that is on neither list, or with no code | for example `INTERNAL_ERROR` | `1` |
+
+**The parse stage decides nothing here.** It is not one of the stages that had to finish, so a
+failed parse stage leaves the exit code where the four above put it, `0` when they finished. It
+records its codes all the same, in its own `error_codes`: `PARSE_FAILURE_RATE_EXCEEDED`, the codes
+above for a store that did not answer or refused, the code of each object of the parsed store the
+bucket did not confirm, and `INTERNAL_ERROR` for a parse that crashed.
+[The parse stage](#the-parse-stage) says what to do about each.
 
 One failure of the second kind among any number of the first makes the run a `1`: a week that
 cannot be read is not fixed by the bucket coming back. A failure that ends the run before any stage
@@ -472,6 +483,203 @@ with, whose weekly run lists the complete archive and never fetches it. After a 
 build containing `v1-e34-t04` (Step 2), its next run fetches one complete archive if the weeklies
 leave a download, because no caselist has one yet, and the run after that the next caselist.
 `debate-research caselist pull --help` lists `--full-archive` on a build that has it.
+
+## The parse stage
+
+After it has published, a run parses what it imported (`v1-e34-t17`). It is the same pipeline
+`debate-research caselist parse` runs ([`parsed-card-store.md`](../data/parsed-card-store.md)):
+
+* **Which caselists.** Each caselist a weekly archive or a camp file was imported into, once. Camp
+  files are the caselist `openev`. A complete archive names none, because its sources are not
+  parsed. A run that imported nothing parses nothing and rebuilds nothing.
+* **What is parsed.** Every source of that caselist not yet parsed under the build's parser and
+  profile versions. In an ordinary week that is the week's new sources; everything else is
+  `skipped`.
+* **The aggregates.** The caselist's index, failures file and occurrence table are rebuilt from
+  every source it holds. This is most of the stage's time.
+* **Published.** Where the run publishes at all, the caselist's version directory is then copied
+  to `parsed/<caselist>/<version>/` in the bucket: whatever the bucket lacks of the whole directory.
+
+### The setting, its default and the figures behind it
+
+`caselist.parse_imported_sources` turns the stage on or off. **It is on by default.**
+
+The agent has no time limit to fit inside. `ops/launchd/com.debate-intelligence.caselist-sync.plist.template`
+sets no `ExitTimeOut` and no `TimeOut`, the wrapper `exec`s the command with no timeout, and the
+installed plist, read on 2026-10-11, has neither key. So the stage is sized against the bounds a
+run does have. The figures come from two operator runs, both from a terminal.
+
+**The rebuild alone.** A `caselist parse --publish` that found nothing to parse and nothing to
+upload: the rebuild and the publish's checksum checks, which is what each caselist a pull imports
+into adds to that pull.
+
+| Measured | hsld26 | hspf26 | hspolicy26 | openev | All four | The agent's three |
+|---|---|---|---|---|---|---|
+| 2026-10-11, parser `2026.10.10-docx-2` and `card-fingerprint-v2`, which is this build | 314 s | 193 s | 473 s | 71 s | 1,051 s (17.5 min) | 980 s (16.3 min) |
+| 2026-10-10, parser `2026.09.20-docx-1` ([`caselist-parse-report.md`](../data/caselist-parse-report.md), `v1-e31-t06`) | 348 s | 214 s | 460 s | 60 s | 1,082 s (18.0 min) | 1,022 s (17.0 min) |
+
+The arithmetic below uses the 2026-10-11 row. The two runs differ by 3% in total and by up to 18%
+for one caselist (openev), so read any one figure as good to about that.
+
+**A first parse of everything**, as after a parser-version bump:
+
+| Measured | All four |
+|---|---|
+| 2026-10-11, parser `2026.10.10-docx-2` | about 30 minutes, 1,800 s |
+| 2026-10-10, parser `2026.09.20-docx-1` | 518 + 352 + 747 + 106 = 1,723 s (28.7 min) |
+
+**One new source.** A first parse less the rebuild is the parsing and uploading. On 2026-10-10
+that was 1,723 − 1,082 = 641 s for 9,741 DOCX sources, 0.066 s each. The 2026-10-11 run is known
+only as "about 30 minutes", which gives about 1,800 − 1,051 = 749 s, 0.077 s each if it read
+the same 9,741 sources. The arithmetic uses the larger, 0.077 s. The largest week so far (2026-09-15) brought
+2,884 new sources to the three weekly caselists, which at that rate is 222 s; the latest
+(2026-10-06) brought 2,471, which is 190 s. So:
+
+| A scheduled run that | Costs | In minutes |
+|---|---|---|
+| imports all three weekly caselists in an ordinary week | 980 + 190 = 1,170 s | 19.5 |
+| does so in the largest week on record | 980 + 222 = 1,202 s | 20.0 |
+| also imports a camp file | add 71 s | 20.7 to 21.2 |
+| is the first after a parser-version bump, all four caselists | about 1,800 s | about 30 |
+
+Against each bound:
+
+| Bound | Where it is set | Size | The stage's share, at 20 and at 30 minutes |
+|---|---|---|---|
+| A time limit on the agent | The plist template and the wrapper | None | Nothing to exceed |
+| The next scheduled run | `StartCalendarInterval`, weekly | 10,080 min | 0.2% and 0.3% |
+| The AWS session, which only the publish needs | `session_duration` of the operator permission set, `infrastructure/modules/evidence_bucket/operator_access.tf` | 480 min | 4.2% and 6.3% |
+| The PM's line for building an incremental rebuild | `v1-e31-t06`'s review: 900 s for one caselist's rebuild | 900 s | The slowest rebuild, hspolicy26's 473 s, is 53% |
+
+Three things these figures do not cover:
+
+* **They were measured in a terminal.** The agent runs with `ProcessType` `Background` and
+  `LowPriorityIO`, which macOS gives less of the machine. The scheduled figure is not known until
+  the first scheduled run with this build records it.
+* **The rebuild grows with the store.** hspolicy26 has gained about 640 sources a week over the
+  last three weeks, on a store of 2,629 DOCX sources. If its rebuild grows in step from 473 s, it
+  reaches the 900 s line at about 5,000 sources, a little under four weeks away.
+* **Nothing stops a stage that runs long.** With no time limit, a rebuild that takes hours holds
+  the run's lock for hours, and `caselist remove` and any other pull are refused meanwhile. The
+  sign is `caselist runs` showing no record for the week.
+
+**Turning it off for the agent**, without a new build: add the setting to the plist's environment
+and reload the agent ([Step 3](#step-3--enable-it)).
+
+```bash
+/usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:DEBATE_CASELIST__PARSE_IMPORTED_SOURCES string false" ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
+launchctl bootout gui/$UID/com.debate-intelligence.caselist-sync
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
+```
+
+The stage is then `skipped`, with the setting's name as its reason, and `caselist parse` does the
+same work by hand. Running `ops/launchd/install.sh` again writes the plist afresh, without the
+line. `parse_imported_sources = false` under `[caselist]` in a profile does the same for a build
+made from it.
+
+### Reading what it did
+
+The summary's `parse` holds counts only, and the stage's row in the table says the same in a
+sentence. `caselist runs` keeps that sentence and shows it under its table for the newest run,
+unless the stage was skipped:
+
+```bash
+debate-research caselist runs --last 1
+tail -n 1 ~/Library/Logs/debate-research/caselist-sync.jsonl | jq '.data.parse'
+debate-research --json caselist runs --last 1 | jq '.data.runs[0].stages[] | select(.stage == "parse")'
+```
+
+| Count | What it says |
+|---|---|
+| `caselists` | Caselists parsed |
+| `full_parses` | Of those, the ones parsed in full because the build's version directory held nothing. Expect `0`. Anything else is a first parse or a new parser version; see below |
+| `attempted`, `skipped` | Sources handed to the parser, and sources already parsed and left alone |
+| `unsupported` | Of those attempted, PDFs, legacy `.doc` files and other formats V1 does not read. Not failures |
+| `failed` | Of those attempted, the ones that could not be read. `caselist parse --caselist <slug> --failures` lists them |
+| `cards` | Cards in the sources this run parsed |
+| `uploaded` | Objects of the parsed store put in the bucket: a file for each source, and the aggregates that changed |
+| `not_published` | Caselists whose parsed store this run did not publish complete. `0` in a good week |
+
+**The failure rate.** A caselist's parse fails the stage when more than `parse.failure_rate_threshold`
+(5%) of the sources it tried could not be read, but only when it tried at least
+`parse.failure_rate_minimum_sources` of them. Below that, failures are counted in `failed` and never
+fail the stage. **The default is 100**, for two measured reasons:
+
+* The most unreadable files any one week has delivered is 5, all exports of one program, in
+  hsld26's week of 2026-09-15. Five is over 5% of any run of fewer than 100 sources, and exactly
+  5%, so not over it, of a run of 100.
+* A weekly pull tries only that week's new sources. Of the 39 caselist-weeks that brought the
+  store a new source, 19 had fewer than 20 new DOCX sources and 5 more had 20 to 99; one unreadable
+  file in a week of ten is 10%. The 15 weeks of 100 or more hold 9,305 of the 9,639 DOCX sources,
+  96.5%, and every failure recorded so far fell in a week of 300 or more, so the rate is still
+  judged where the files are.
+  A camp release, the smallest run the rate has been read from, is 102 sources.
+
+A run under the minimum that fails outright, every source, is still not a failed stage. Its `failed`
+count says so, and the next week of 100 or more is judged.
+
+### After a release that bumps the parser version
+
+The stage parses whatever is not parsed under the build's versions. A new parser version starts a
+new version directory, which holds nothing, so the first scheduled run after such a release would
+parse every imported caselist in full: about 30 minutes where it takes 20, with `full_parses` above
+`0`. A caselist that run does not import into, `openev` in most weeks, would stay on the old version
+until a camp file arrives.
+
+Do the full parse by hand instead, before the agent meets the new build. Install the build on a
+day other than Wednesday morning, or boot the agent out first ([Disabling it](#disabling-it)).
+
+1. See what is due. `To parse` equal to `Sources` means a full parse.
+
+   ```bash
+   DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --dry-run
+   ```
+
+2. Parse and publish each caselist, one at a time, with no pull running. About 30 minutes for all
+   four: that is the 2026-10-11 parse under `2026.10.10-docx-2`, and the 2026-10-10 one took 518 s,
+   352 s, 747 s and 106 s, 28.7 minutes.
+
+   ```bash
+   aws sso login --profile debate-dev-evidence
+   DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --publish
+   DEBATE_ENV=dev debate-research caselist parse --caselist hspf26 --publish
+   DEBATE_ENV=dev debate-research caselist parse --caselist hspolicy26 --publish
+   DEBATE_ENV=dev debate-research caselist parse --caselist openev --publish
+   ```
+
+3. Reinstall and reload the agent ([Step 2](#step-2--install-the-agent), [Step 3](#step-3--enable-it)).
+
+If this was skipped, nothing is lost: the scheduled run does the full parse itself and says so in
+`full_parses`, and the last line of step 2 catches `openev` up.
+
+### One data directory for each bucket
+
+The aggregates a run publishes are rebuilt from the data directory the run reads. The agent parses
+`~/.debate-research/dev` and publishes to the dev bucket, and the parsed store in prod is published
+by hand from that same directory. Do not point an agent at a bucket whose parsed store another
+data directory publishes: each would replace the other's aggregates with its own.
+
+### When the AWS session has expired
+
+The parse itself needs no session, so the parsed store on this Mac is current either way. Its copy
+in the bucket is not: the stage is `pending`, `not_published` counts the caselists, and the stage's
+reason names them. The import and the raw publish are untouched by this; what they owe is in
+[the pending-work file](#the-pending-work-file) exactly as before.
+
+**`caselist pull --publish-pending` does not publish the parsed store.** The pending-work file
+lists snapshots, and a parsed store is a version directory, which the file cannot name. After the
+login, either leave it, because the next run that imports into the caselist with a session
+publishes the whole directory, or publish it now:
+
+```bash
+aws sso login --profile debate-dev-evidence
+DEBATE_ENV=dev debate-research caselist pull --publish-pending
+DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --publish
+```
+
+The last line parses nothing that is parsed, rebuilds the aggregates and uploads what the bucket
+lacks, so it takes about as long as that caselist's rebuild in the table above. In prod it needs
+`--confirm-prod`. However many weeks were missed, one run per caselist catches up.
 
 ## The download inbox
 
@@ -656,6 +864,34 @@ debate-research caselist pull --publish-pending
 be read, and the run left it alone. This is exit `1` and no later run fixes it by itself. Follow
 [The pending-work file](#the-pending-work-file).
 
+**`parse: pending`, and exit `0`.** The run parsed what it imported and could not publish the
+parsed store for want of an AWS session. See
+[When the AWS session has expired](#when-the-aws-session-has-expired).
+
+**`parse: failed`, and exit `0`.** What was imported and published is kept; the stage's
+`error_codes` say what it failed on, and its reason names each caselist.
+
+* `PARSE_FAILURE_RATE_EXCEEDED`: more than 5% of at least 100 sources a caselist tried could not be
+  read. Look at them before anything else:
+
+  ```bash
+  DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --failures
+  ```
+
+  That listing names schools and teams, so it stays in the terminal. What parsed is in the store
+  and, where the run publishes, in the bucket.
+* `STORE_UNAVAILABLE`, or `STORE_ACCESS_DENIED` with a `hint`: the bucket did not take the parsed
+  store. After the fix the hint names, if there is one, publish it as above with
+  `caselist parse --caselist <slug> --publish`, or leave it to the next run that imports into that
+  caselist.
+* `CHECKSUM_MISMATCH`: the bucket holds a file of the parsed store with other bytes, which the
+  same parser never produces twice. It needs a person; nothing was overwritten.
+* `INTERNAL_ERROR`: the parse crashed. Run `caselist parse --caselist <slug>` by hand to see it,
+  and report it.
+
+Running `caselist pull` again does not retry a parse stage: a pull that imports nothing parses
+nothing.
+
 **`report: failed` with a `hint`, and exit `0`.** Everything was published, and the comparison that
 confirms it was refused. Nothing is lost and nothing waits for a login, but nothing leaves the inbox
 until a run can confirm it. Make the fix the hint names; the next run confirms and clears the inbox.
@@ -745,6 +981,11 @@ the day to revisit it (`v1-e34-t07`, `v1-e30-t07` Deviation 7).
 or `archives_deferred` rising in `caselist runs`). There is more back-catalogue than a weekly
 run will ever catch up on. That is the one-off fetch in `v1-e30-t06`, not a reason to raise the
 ceiling.
+
+**An agent installed before `v1-e34-t17`** runs the build it was installed with, which has no
+parse stage. After a reinstall with a build that has it, the first scheduled run parses what it
+imports. [`caselist-sync-runs.md`](../data/caselist-sync-runs.md) is where that run's duration and
+its `parse` counts are recorded, beside the terminal figures above.
 
 ## Disabling it
 

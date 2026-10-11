@@ -644,6 +644,22 @@ class CaselistSettings(SettingsGroup):
         ),
     )
 
+    # --- Parsing what a pull imported (v1-e34-t17-pull-parses-new-sources) ----------------------
+
+    parse_imported_sources: bool = Field(
+        default=True,
+        description=(
+            "Whether `caselist pull` parses the sources it imported, rebuilds the aggregates of the "
+            "caselists they belong to and, where it publishes, publishes the parsed store too. On "
+            "by default: launchd sets the weekly agent no time limit, and the stage's roughly 20 "
+            "minutes (30 after a parser-version bump) is a small part of every bound a run does "
+            "have; docs/runbooks/caselist-scheduled-sync.md gives the arithmetic. Off, the stage is "
+            "skipped with this setting's name as the reason, and `caselist parse` does the same "
+            "work by hand. DEBATE_CASELIST__PARSE_IMPORTED_SOURCES=false in the agent's plist turns "
+            "it off for the schedule without a new build."
+        ),
+    )
+
     # --- Monitoring the weekly sync (v1-e34-t03-sync-monitoring) ------------------------------
 
     notifier: SyncNotifierKind = Field(
@@ -785,6 +801,21 @@ class ParseSettings(SettingsGroup):
             "`caselist parse` exits non-zero when more than this share of the sources it tried to read "
             "failed. Unsupported formats (PDF, legacy .doc) are an outcome, not a failure, and are "
             "counted in neither the failures nor the sources tried."
+        ),
+    )
+    failure_rate_minimum_sources: int = Field(
+        default=100,
+        ge=1,
+        description=(
+            "The failure rate is judged only in a run that tried at least this many sources, "
+            "unsupported formats not counted. In a smaller run the failures are reported and never "
+            "fail it. 100, from the store the first full parse left "
+            "(docs/runbooks/caselist-scheduled-sync.md, The parse stage): the most unreadable "
+            "files one week has delivered is 5, all exports of one program, which is over 5% of "
+            "any run under 100 sources and exactly 5%, so not above it, of one of 100; and 100 is "
+            "the size of a camp release, the smallest run the rate has been read from. "
+            "Raise it with the threshold if the threshold is lowered: at a threshold `t`, a run of "
+            "fewer than `1/t` sources fails on one file."
         ),
     )
 

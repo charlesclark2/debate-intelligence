@@ -796,3 +796,34 @@ def test_a_takedown_stopped_among_a_later_uploads_versions_shows_in_status_until
     clean = run("caselist", "status")
     assert clean["exit_code"] == ExitCode.OK, clean
     assert clean["data"]["removal_residue"] == [NOTHING_LEFT]
+
+
+def test_residue_a_completed_removal_left_is_cleared_by_naming_the_file_under_the_same_request(
+    installation: Path,
+    bucket: S3Client,
+    versions_left_under_a_delete_marker: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The runbook's other loop: every snapshot agrees, and the version listing still shows a file.
+
+    The original command finds nothing left to do, because nothing shows the later upload at the
+    removed path any more. Naming the file by its own sha256, under the same request, plans its
+    three versions (two data versions and the delete marker) and removes them.
+    """
+    assert "Nothing is left to remove" in runner.invoke(create_app(), list(REMOVE_FIRST_VERSION)).stdout
+    name_it = ("caselist", "remove", "--source", REVISION, *LATER_UPLOADS_REQUEST)
+
+    shown = runner.invoke(create_app(), list(name_it), terminal_width=200).stdout
+
+    assert "already suppressed by this request: finishing what a previous run left" in shown
+    assert f"{raw_key(REVISION)}  (3 version(s))" in shown
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*name_it, "--execute")
+    assert done["exit_code"] == ExitCode.OK, done
+    assert not bucket_holds(bucket, REVISION)
+    assert not any(REVISION in key for key, _, _ in every_version(bucket)), "the delete marker went too"
+
+    clean = run("caselist", "status")
+    assert clean["exit_code"] == ExitCode.OK, clean
+    assert clean["data"]["removal_residue"] == [NOTHING_LEFT]

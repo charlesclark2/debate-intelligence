@@ -523,3 +523,50 @@ class TestATakedownThatStoppedOnALaterUpload:
         )
         assert finished.residue == (CaselistResidue(caselist=SYNTHETIC_CASELIST, checked=True),)
         assert finished.in_sync
+
+
+class TestClearingWhatACompletedRemovalLeft:
+    """What the runbook tells the operator to run, when every snapshot agrees and versions are left."""
+
+    async def test_the_original_command_no_longer_finds_a_later_upload_and_naming_the_file_does(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """The removal completes. Two versions of the later upload are then put back at its key and
+        hidden under a delete marker: two noncurrent versions and one marker.
+
+        Run again, the original command plans nothing for the later upload: no manifest row shows it
+        at the removed path any more and nothing of it is on this machine. Named by its own sha256
+        under the same request, it is planned with all three versions, and executing leaves none.
+        """
+        world = removal_world
+        real = S3EvidenceVersionStore(bucket=world.bucket_name, client=world.client)
+        service = world.service()
+        original = SourceSelector(FIRST_VERSION)
+        await service.execute(
+            await service.plan(original, request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM)
+        )
+        for body in (b"one version", b"another version"):
+            world.client.put_object(Bucket=world.bucket_name, Key=raw_key(REVISION), Body=body)
+        world.client.delete_object(Bucket=world.bucket_name, Key=raw_key(REVISION))
+
+        left = await status(world.local, world.bucket, real, world.suppression(), snapshot=None)
+        assert left.residue[0].files == (
+            ResidueFile(sha256=REVISION, current_objects=0, noncurrent_versions=2, delete_markers=1),
+        )
+        assert left.drifted == (), "every snapshot agrees: only the version listing shows it"
+
+        again = await service.plan(original, request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM)
+        assert again.source(REVISION) is None and again.nothing_to_do
+
+        named = await service.plan(
+            SourceSelector(REVISION), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
+        )
+        (source,) = named.sources
+        assert source.already_suppressed and not named.suppression_entries
+        (planned,) = [one for one in named.objects if one.key == raw_key(REVISION)]
+        assert planned.versions is not None and len(planned.versions) == 3
+        await service.execute(named)
+
+        cleared = await status(world.local, world.bucket, real, world.suppression(), snapshot=None)
+        assert cleared.residue == (CaselistResidue(caselist=SYNTHETIC_CASELIST, checked=True),)
+        assert cleared.in_sync

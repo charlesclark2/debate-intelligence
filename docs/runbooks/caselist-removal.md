@@ -7,7 +7,7 @@
 | Who runs it | The operator (Charlie). Not an agent session, not CI |
 | How long | 15–30 minutes of attention, spread over the 7-day response window |
 | Destructive? | **Yes.** It deletes objects and all of their noncurrent versions in dev and prod |
-| Tooling | `debate-research caselist remove` and `caselist unsuppress` (v1-e30-t07; the download inbox since v1-e30-t09; later uploads at the removed path since v1-e30-t11) |
+| Tooling | `debate-research caselist remove` and `caselist unsuppress` (v1-e30-t07; the download inbox since v1-e30-t09; later uploads at the removed path since v1-e30-t11), and `caselist status`, which reports what a removal left in the bucket (v1-e30-t10) |
 
 Removal is not a negotiation. A team asks, and their disclosure comes out. This runbook exists so
 that it comes out *completely* — local store, both buckets, every noncurrent version, the parsed
@@ -207,7 +207,10 @@ DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal uv run debate-
 
 Before the first change the command proves the takedown profile can list, write and delete a
 probe version under `manifests/_suppression/preflight/`. An unset `DEBATE_REMOVAL_PROFILE`, a
-signed-out session, or the everyday profile named by mistake stops it there, with nothing changed.
+signed-out session, or the everyday profile named by mistake stops it there, with nothing removed
+and nothing appended. The everyday profile may list versions and write (`v1-e29-t06`), so named by
+mistake it is refused at the delete and leaves its probe, a few bytes that name nothing; the error
+gives the probe's key.
 It then appends the suppression entries first, deletes from the bucket, then from this machine — the
 store, then the download inbox (step 8) — and writes one removal-log entry. The `DONE` output says
 how many files the request named and how many later uploads the run covered; the removal log lists
@@ -252,13 +255,19 @@ DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld2
 
 - [ ] `caselist status` is clean (exit 0, no drift). It now also treats as drift any local manifest
       row the suppression list stops, and any current bucket object of a suppressed file.
+- [ ] Under its table it says *No version of a removed file is left under raw/ or parsed/*
+      (`v1-e30-t10`). It lists the bucket's object versions with the everyday profile and counts
+      what is left of every file on the suppression list, the later uploads this removal took down
+      included. If it says *REMOVAL RESIDUE* or *NOT CHECKED* instead, go to
+      [When `caselist status` reports removal residue](#when-caselist-status-reports-removal-residue).
 - [ ] The `DONE` line counts the inbox files deleted and rewritten, and the dry run run again says
       *DOWNLOAD INBOX (…): nothing in it holds a removed file.*
 - [ ] The re-import counts the file as `SUPPRESSED`.
 - [ ] The parse in step 5 exited 0, and each `index.jsonl` key the plan listed is back:
       `DEBATE_ENV=dev uv run debate-research store ls <that key>` lists 1 object.
 - [ ] No `raw/` or `parsed/` object for those sha256 values remains — **including noncurrent
-      versions**. Check with the AWS CLI if you want belt and braces:
+      versions**. The line above is that check for every removed file at once. For one key, with
+      the AWS CLI, if you want belt and braces:
       `aws s3api list-object-versions --bucket debate-dev-evidence-a7508de8 --prefix raw/caselist/hsld26/sha256/<ab>/<cd>/<sha256>`
       returns nothing. The key form is
       [docs/architecture/evidence-store-layout.md](../architecture/evidence-store-layout.md).
@@ -283,7 +292,8 @@ DEBATE_ENV=prod uv run debate-research caselist status
       says *matched by file name alone* where dev named the delivery record. That is expected, and
       it is why the sha256 values are what you compare. Pass `--only-named` in prod if you passed
       it in dev.
-- [ ] `caselist status` is clean afterwards.
+- [ ] `caselist status` is clean afterwards, and says *No version of a removed file is left under
+      raw/ or parsed/*. Residue is reported per environment, so a clean dev says nothing about prod.
 
 Then rebuild prod's parsed aggregates, for the same caselists as in step 5. The parsed store is
 built on this machine in the dev data directory and published to both buckets from there, so this
@@ -414,6 +424,128 @@ holds every other team's disclosures too, and the importer refuses the removed f
       team, their rounds) and anything that was not, with the reason.
 - [ ] Commit the register update. No personal data in the diff or the commit message.
 
+## When `caselist status` reports removal residue
+
+`caselist status` also lists the bucket's object versions and reports, for each caselist, what the
+bucket still holds of files the suppression list says were removed (`v1-e30-t10`). It runs with the
+everyday profile, it only lists, and it never uses the takedown profile. Under its table it says
+one of three things:
+
+- *No version of a removed file is left under raw/ or parsed/ (N caselist(s) checked; noncurrent
+  manifest versions are not read).* Nothing to do.
+- *REMOVAL RESIDUE in `<caselist>`: N current object(s), N noncurrent version(s) and N delete
+  marker(s) of N file(s) (sha256 `<twelve characters>`, …).* The command exits 1. The steps below
+  clear it.
+- *Removal residue NOT CHECKED for `<caselist>`.* The profile was refused the version listing. That
+  is not a finding of none: see [Not checked](#not-checked) below.
+
+Each file is one removed file, named by the first twelve characters of its sha256 and by counts.
+The report prints no school, team code, path or file name, in the text or in `removal_residue` of
+`--json`, so it can be pasted where a plan's text cannot.
+
+| Count | What the bucket holds | How it gets there |
+|---|---|---|
+| current object(s) | An object that is the current version of its key | A takedown that stopped before that object, or among its versions: it deletes each version by id, and S3 then makes the next one current |
+| noncurrent version(s) | A version under a newer one, or hidden under a delete marker | The same, or a delete made some other way than this command |
+| delete marker(s) | A marker hiding an object whose versions are all still there | A delete made without a version id. `caselist remove` never leaves one |
+
+Any of the three can still be read or restored by someone with access to the bucket. The file is
+not removed until all three counts are gone.
+
+**Later uploads are covered.** The report works from the suppression list, not from the request.
+A later upload that the plan listed as *removed everywhere* (step 4) is suppressed whole, so what
+is left of it is reported exactly as the named file's is. A later upload *withdrawn from this path
+only*, or *KEPT*, is still held for its other holder: its object is meant to be in the bucket, and
+it is not reported. Nor is a later upload that `--only-named` left in place, which is not on the
+list.
+
+**Who runs it:** the operator, as for the removal itself. Residue is reported per environment, so
+clear it in the environment whose `caselist status` showed it, dev before prod if both do. The
+commands below are dev's. For prod use `DEBATE_ENV=prod`, the `debate-prod-evidence-removal`
+profile and `--confirm-prod`.
+
+1. **Find the request.** Look the twelve characters up in that environment's suppression list.
+   The line it prints holds the whole sha256, the request id and the reason code:
+
+   ```bash
+   grep '"sha256":"<the twelve characters>' "$HOME/.debate-research/dev/suppression/suppression-list.jsonl"
+   ```
+
+   If it prints nothing, the removal was made from another machine and the entry is only in the
+   bucket's copy, `manifests/_suppression/suppression-list.jsonl`.
+
+2. **Choose the command by what else `caselist status` said.**
+
+   - **Snapshots differ too** (the failure is `CASELIST_DRIFT`, and the request's last line in
+     `removal-log.jsonl` says `INCOMPLETE`). The removal stopped part-way. Run the same command
+     again with the same flags, as step 5 says: the dry run, then `--execute`. It finishes the
+     manifests, this machine and the inbox as well as the bucket.
+   - **Every snapshot agrees** (the failure is `REMOVAL_RESIDUE`). The removal completed, and
+     versions are in the bucket anyway. The original command may now say *Nothing is left to
+     remove*: once a later upload's manifest rows are gone, nothing shows it at the removed path.
+     Name each file the report lists by its own sha256, under the same request id and reason:
+
+     ```bash
+     DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --request RM-2026-01 --reason REQUESTED_BY_TEAM
+     ```
+
+     That is the dry run, and it needs only the everyday profile. Check that it shows the file as
+     *already suppressed by this request: finishing what a previous run left*, with a `bucket` line
+     for each key and its version count (a delete marker counts as a version), and no new
+     suppression entry. If it lists anything else, read it as in step 4 before going on. Then
+     execute with the takedown profile:
+
+     ```bash
+     aws sso login --profile debate-dev-evidence-removal
+     DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal uv run debate-research caselist remove \
+         --source <sha256> --request RM-2026-01 --reason REQUESTED_BY_TEAM --execute
+     ```
+
+   Do not delete the versions by hand with the AWS CLI. The command deletes every version of the
+   key, sweeps the noncurrent manifest versions that still name the file, and writes the removal
+   log entry. A delete by hand does none of that, and one without a version id is how a delete
+   marker gets there.
+
+3. **Confirm it is gone.** Run the status again in that environment, with the everyday profile:
+
+   ```bash
+   DEBATE_ENV=dev uv run debate-research caselist status
+   ```
+
+   - [ ] It exits 0 and says *No version of a removed file is left under raw/ or parsed/*. With
+         `--json`, every entry of `removal_residue` has `"checked": true` and `"files": []`.
+   - [ ] If the plan you executed listed a `parsed/<caselist>/<version>/index.jsonl`, rebuild that
+         caselist's aggregates as in step 5. Any executed removal deletes them.
+   - [ ] The register entry for the request records that residue was found and cleared, with the
+         counts and the date. Counts and codes only.
+
+**What the report does not see.** It lists versions under `raw/` and `parsed/` and matches an
+object by its key, which is the file's sha256. So:
+
+- It does not read manifests. A noncurrent version of a manifest that still holds a removed row is
+  not reported, because its key names no file and the check downloads nothing. Every executed
+  removal sweeps those, a re-run included. The same goes for a noncurrent version of the parsed
+  store's `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`.
+- It does not report a shared file that was withdrawn from one team and kept for another. That file
+  is suppressed for one path, not whole, and the other holder's copy is the same object.
+
+So *No version of a removed file is left* means what it says about `raw/` and `parsed/`, and no
+more. The AWS CLI check in step 6 is still there for one key.
+
+### Not checked
+
+*Removal residue NOT CHECKED* means the everyday profile was refused `ListObjectVersions`. The
+snapshot comparison is unaffected and the exit code does not change, but the residue is unknown,
+not absent. `--json` gives `"checked": false` with `null` counts.
+
+The grant was applied in dev and prod on 2026-10-08
+([evidence-store.md, Later applies](evidence-store.md#later-applies)), so in either of them this
+means something changed: check which profile the command ran with, then
+[evidence-store.md, If something is wrong](evidence-store.md#if-something-is-wrong). In an
+environment where the grant was never applied, every status says this. A `COMPLETED` removal there
+still deleted every version, because `--execute` lists them itself with the takedown profile; what
+is missing is the check afterwards.
+
 ## If you removed the wrong thing
 
 The removal is destructive: noncurrent versions are purged, so there is no S3 version to restore
@@ -473,6 +605,11 @@ register keeps the original one.
   the removed path, and `--only-named`.
 - `plan_specs/v1/e34-caselist-sync/t14-removed-path-hold-for-inbox-copies.yaml` — the pull's hold
   for a later upload that has not been imported.
+- `plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml` — the residue
+  report in `caselist status`.
+- `plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml` — the everyday
+  profile's read-only version listing, which the dry run's version counts and the residue report
+  both use.
 - `plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml` — bucket lifecycle and the
   `EvidenceOperator` and `EvidenceRemoval` permission sets.
 - `plan_specs/v2/e35-debate-tub/t05-tub-access-and-removal.yaml` — the V2 takedown flow built on

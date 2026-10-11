@@ -96,7 +96,7 @@ spec:
         `caselist runs` shows them in its table rather than only in the caption sentence
         v1-e34-t17 added.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

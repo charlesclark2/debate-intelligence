@@ -60,7 +60,7 @@ spec:
         it (every failed required code retryable) or a person should look (any other).
         docs/runbooks/caselist-scheduled-sync.md shows both wordings.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

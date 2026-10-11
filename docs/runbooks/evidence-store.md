@@ -49,14 +49,22 @@ request that is not over TLS. **No lifecycle rule expires a current object versi
 ## The two credentials, and why
 
 `DebateEvidenceOperator` is everyday work: list the documented prefixes, read, publish, use the
-key, and list object versions under the prefixes a takedown removes from, so that a removal's dry
-run can count what it will delete (`v1-e29-t06`). Listing versions is read-only. It has **no
+key, and list object versions under the prefixes a takedown removes from (`v1-e29-t06`). That
+listing has two uses: a removal's dry run counts what it will delete, and `caselist status` reports
+what a removal left behind (`v1-e30-t10`). Listing versions is read-only. It has **no
 `s3:DeleteObject` at all**. `DebateEvidenceRemoval` is the only credential in the
 account that can delete evidence; it is scoped to `raw/`, `parsed/`, `files/`, `manifests/` and
 `quarantine/`, may write only the suppression list under `manifests/_suppression/`, and is
 assigned to one person. A removal purges noncurrent versions too, so there is nothing to restore
 from afterwards ([caselist-removal.md](caselist-removal.md)) — which is why the credential that
 can do it is not the one left signed in all week.
+
+`caselist remove --execute` checks which of the two it was given. Before it lists or writes
+anything it asks the account which role the profile in `DEBATE_REMOVAL_PROFILE` is signed in as,
+and carries on only for the role of this environment's `EvidenceRemoval` permission set
+(`v1-e29-t08`). It goes by the permission set's name, the one in the table above and in step 4's
+`sso_role_name`, so renaming a set in `operator_access.tf` is a code change too, and a test fails
+until both agree.
 
 Note what `debate-dev` is **not**. That profile is `DebateMaintainer`, which holds
 `PowerUserAccess` minus the prod denies, so in dev it can delete an object. The least-privilege

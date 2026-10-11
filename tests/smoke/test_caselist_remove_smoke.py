@@ -782,6 +782,9 @@ def test_a_takedown_stopped_among_a_later_uploads_versions_shows_in_status_until
     left = run("caselist", "status")
 
     assert left["exit_code"] == ExitCode.DOMAIN_FAILURE
+    # The run stopped before any manifest was rewritten, so the snapshots differ too, and that is
+    # the code. The residue is in the details beside them.
+    assert left["error"]["code"] == "CASELIST_DRIFT"
     (residue,) = left["error"]["details"]["removal_residue"]
     assert residue["files"] == [
         {"sha256_prefix": REVISION[:12], "current_objects": 1, "noncurrent_versions": 1, "delete_markers": 0}

@@ -68,13 +68,20 @@ KEPT_KEY = expected_source_key("harbor-aff")
 NOON = datetime(2026, 9, 30, 12, 0, tzinfo=UTC)
 
 
-def entry(sha256: str, *, action: SuppressionAction = SuppressionAction.SUPPRESS, **fields: object) -> str:
+def entry(
+    sha256: str, *, action: SuppressionAction = SuppressionAction.SUPPRESS, disclosure: str | None = None
+) -> str:
     reason = (
         ReasonCode.REQUESTED_BY_TEAM if action is SuppressionAction.SUPPRESS else ReasonCode.REMOVED_IN_ERROR
     )
     return SuppressionEntry(
-        action=action, sha256=sha256, recorded_at=NOON, reason=reason, request_id=REQUEST, **fields
-    ).to_line()  # pyright: ignore[reportArgumentType]
+        action=action,
+        sha256=sha256,
+        disclosure=disclosure,
+        recorded_at=NOON,
+        reason=reason,
+        request_id=REQUEST,
+    ).to_line()
 
 
 def listing(*lines: str) -> RecordedSuppressionList:

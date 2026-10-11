@@ -624,6 +624,33 @@ def test_only_an_operating_system_error_from_the_reader_itself_is_the_archive_be
     assert list(entries_of(lambda _: iter(["a", "b"]), archive)) == ["a", "b"]  # pyright: ignore[reportArgumentType]
 
 
+async def test_an_operating_system_error_that_is_not_a_complete_archives_fails_its_import_alone(
+    installation: Installation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same for the complete archive, which has a loop of its own: the disk fills as its
+    manifest is written, after the weekly's was. The weekly is imported and published, and the
+    complete archive's import fails by the error's class."""
+    write_manifest = manifest_module.write_manifest
+
+    def disk_full_for_the_complete_archive(report: Any, destination: Path) -> Path:
+        if report.full_archive:
+            raise OSError(errno.ENOSPC, "No space left on device", str(destination))
+        return write_manifest(report, destination)
+
+    monkeypatch.setattr(sync_module, "write_manifest", disk_full_for_the_complete_archive)
+    source = TwoCaselists(installation.archives, weeks_of={CASELIST: [WEEK_1]}, complete=[CASELIST])
+
+    summary = await installation.sync(source).run([CASELIST], full_archive=CASELIST)
+
+    imported = stage(summary, SyncStage.IMPORT)
+    assert imported["outcome"] == "failed"
+    assert imported["reason"] == "1 imported; 1 refused: testcl26-all-2026-09-01.zip: OSError"
+    assert imported.get("error_codes") == ["INTERNAL_ERROR"]
+    assert summary.snapshots_imported == ("testcl26 2026-09-01",)
+    assert stage(summary, SyncStage.PUBLISH)["outcome"] == "completed"
+    assert_names_nothing_of_this_machine(summary, installation)
+
+
 # ------------------------------------------------------------------------------------------------
 # ac5: an error the publisher raises outside its per-object loop
 # ------------------------------------------------------------------------------------------------

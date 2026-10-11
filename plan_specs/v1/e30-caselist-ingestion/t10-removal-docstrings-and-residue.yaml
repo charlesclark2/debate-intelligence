@@ -78,7 +78,7 @@ spec:
         failing first, for a one-holder file and a two-holder file, in the plan text and the
         JSON. The JSON keys v1-e30-t11 settled are unchanged.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

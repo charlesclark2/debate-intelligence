@@ -324,7 +324,7 @@ class TestSharedFiles:
 
 
 class OperatorCredentialVersions:
-    """The everyday profile's view of versions: `s3:ListBucketVersions` is not granted."""
+    """The everyday profile's view of versions where the `v1-e29-t06` grant is not applied."""
 
     location = "s3://denied"
 

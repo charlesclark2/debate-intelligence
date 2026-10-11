@@ -99,6 +99,36 @@ class TestTheRoleACredentialIsSignedInAs:
         assert await StsCallerIdentity(bucket=BUCKET, client=client).assumed_role_name() is None
 
 
+class TestAnAdapterBuiltFromAProfile:
+    async def test_it_answers_for_the_role_that_profile_is_signed_in_as(
+        self, moto_account: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """As the composition root builds it: a profile's name and no client. Two profiles in one
+        AWS config, signed in as two roles, and each adapter answers for its own."""
+        everyday_role = "AWSReservedSSO_DebateDevEvidenceOperator_fedcba9876543210"
+        profiles = {"debate-dev-evidence": everyday_role, TAKEDOWN_PROFILE: TAKEDOWN_ROLE}
+        config = tmp_path / "an-aws-config-written-for-this-test"
+        config.write_text("".join(f"[profile {name}]\nregion = us-east-1\n" for name in profiles))
+        credentials = tmp_path / "credentials-written-for-this-test"
+        credentials.write_text(
+            "".join(
+                f"[{name}]\n" + "".join(f"{key} = {value}\n" for key, value in assume(role).items())
+                for name, role in profiles.items()
+            )
+        )
+        monkeypatch.setenv("AWS_CONFIG_FILE", str(config))
+        monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(credentials))
+
+        answered = {
+            name: await StsCallerIdentity(
+                bucket=BUCKET, profile=name, profile_setting=TAKEDOWN_SETTING, region="us-east-1"
+            ).assumed_role_name()
+            for name in profiles
+        }
+
+        assert answered == profiles
+
+
 class _Answers:
     """A client that answers `GetCallerIdentity` with one fixed identifier, or raises."""
 

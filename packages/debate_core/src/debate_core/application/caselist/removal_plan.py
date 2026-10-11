@@ -42,6 +42,34 @@ parser reads a disclosure (:mod:`debate_core.application.caselist.path_parser`).
 drops every row of that team's in every manifest of the caselist — files, junk entries, `REMOVED`
 rows — because each one names the team.
 
+## Later uploads at a removed path
+
+A removal request covers later uploads at the same path (the PM's ruling under `v1-e30-t07`). The
+sync holds back one that has not been imported yet (`v1-e34-t14`); one imported before the removal
+is this module's (`v1-e30-t11`). For every file the selector names and removes or withdraws, the
+planner asks every snapshot it reads, weekly and complete, which other files sit at the paths it
+takes that file from (:mod:`~debate_core.application.caselist.removal_path_versions`, which says
+what "later" and "the same path" mean, for a caselist and for an OpenEv camp file). A later upload
+joins the plan (:attr:`Inclusion.LATER_UPLOAD`) and goes through everything a named file goes
+through:
+
+* held at no other path, it is `REMOVE`d: blob, records, rows, `raw/` and `parsed/` objects with
+  every version, the inbox, and a whole-file suppression;
+* held at another live path too, it is `WITHDRAW`n from the removed paths only: those rows and
+  disclosure records go and each of those paths is suppressed as one disclosure, while the blob and
+  the other path's rows stay. `--include-shared` does not widen this: it is a decision about the
+  files the request names;
+* a camp file's later upload that is held elsewhere too is `SKIP_SHARED`, because the suppression
+  list has no entry that stops one camp path of a file. Naming it with `--include-shared` removes it.
+
+An earlier version at the path is listed (:attr:`RemovalPlan.earlier_versions`) and left alone.
+`only_named` (`--only-named`) plans the named files alone, for a request that is explicitly about
+one version; the later uploads are still listed, as left in place.
+
+A `--team` removal names every file at the team's paths already, earlier and later versions alike
+(:meth:`RemovalPlanner._selected`), so it has later uploads only at the *other* holders' paths of a
+shared file it removes with `--include-shared`.
+
 ## The complete archive
 
 A caselist's complete archive (`v1-e34-t04`) is its own snapshot, with its manifest at
@@ -74,7 +102,9 @@ archive still waiting to be imported is never deleted.
 A removal that failed part-way is finished by running the same command again. The local records
 are deleted last, so a re-run resolves the same sources; and a source whose suppression this
 request already appended is planned again whatever else has gone, so nothing it left in the bucket
-is forgotten.
+is forgotten. For `--source` that is a later upload this request suppressed, once the manifest rows
+that showed it at the removed path have been rewritten: it is planned again while this machine
+still holds a record or the blob of it (:attr:`Inclusion.UNFINISHED`), with or without `--only-named`.
 
 ## What it never puts in a log or an error
 
@@ -112,9 +142,17 @@ from debate_core.application.caselist.publish_plan import (
     CASELIST_SOURCE_PREFIX,
     OPENEV,
     OPENEV_SOURCE_PREFIX,
+    full_archive_snapshot,
     local_blob_key,
     manifest_prefix,
     snapshot_of_manifest_key,
+)
+from debate_core.application.caselist.removal_path_versions import (
+    PathHolding,
+    PathVersion,
+    VersionRelation,
+    other_versions,
+    path_identity,
 )
 from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
@@ -138,7 +176,9 @@ from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, CampFile, Disclos
 
 __all__ = [
     "Disposition",
+    "Inclusion",
     "InvalidRemovalRequest",
+    "LaterUploadOutcome",
     "ManifestRewrite",
     "ObjectKind",
     "ObjectRemoval",
@@ -242,6 +282,30 @@ class Disposition(StrEnum):
     SKIP_SHARED = "skip_shared"
 
 
+class Inclusion(StrEnum):
+    """Why a source is in the plan."""
+
+    NAMED = "named"
+    """The selector names it: the `--source` digest, or a file at one of the `--team`'s paths."""
+    LATER_UPLOAD = "later_upload"
+    """Held at a path the removal takes a named file from, in a later snapshot (`v1-e30-t11`)."""
+    UNFINISHED = "unfinished"
+    """Suppressed by an earlier run of this request, with something of it still on this machine."""
+
+
+class LaterUploadOutcome(StrEnum):
+    """What a plan does about one later upload at one removed path."""
+
+    REMOVED = "removed"
+    """Held at no other path: it goes everywhere."""
+    WITHDRAWN_FROM_THE_PATH = "withdrawn_from_the_path"
+    """Another path holds it too: only its rows and records at the removed path go."""
+    KEPT_SHARED = "kept_shared"
+    """A camp path of a file another holder has too, which cannot be withdrawn on its own."""
+    LEFT_IN_PLACE = "left_in_place"
+    """Not in the plan: `--only-named`."""
+
+
 class Side(StrEnum):
     """Which copy of the evidence store a planned deletion or rewrite is on."""
 
@@ -297,13 +361,16 @@ class PlannedSource:
     camp_files: tuple[CampFileRef, ...]
     """The camp-file records on this machine the removal deletes."""
     requester_paths: tuple[tuple[str, str], ...]
-    """`(caselist, path)` of the requesting team's copies, from records and manifests alike."""
+    """`(caselist, path)` of the copies a withdrawal takes: the requesting team's, from records and
+    manifests alike, or for a later upload the removed paths it is held at."""
     other_teams: int
-    """Other teams that disclosed these bytes, before the removal."""
+    """Other teams that disclosed these bytes, before the removal. For a later upload, the teams
+    holding it at a path the removal does not take it from."""
     camp_file_holders: int
-    """OpenEv camp files holding these bytes, before the removal."""
+    """OpenEv camp files holding these bytes, before the removal. For a later upload, the releases
+    holding it at a camp path the removal does not take it from."""
     kept_in: tuple[str, ...]
-    """Caselists where another team still holds a withdrawn file, so its copy there stays."""
+    """Caselists where another holder still has a withdrawn file, so its copy there stays."""
     delete_source_record: bool
     local_blob: bool
     """Whether this machine holds the blob and the removal deletes it."""
@@ -311,6 +378,7 @@ class PlannedSource:
     """The entries this removal appends for it (none when they are already on the list)."""
     already_suppressed: bool = False
     """The list already carries this removal's suppression of it: a re-run finishing the job."""
+    inclusion: Inclusion = Inclusion.NAMED
 
     @property
     def shared(self) -> bool:
@@ -369,9 +437,49 @@ class RemovalPlan:
     inbox_directory: str = ""
     inbox_exists: bool = False
     """Whether that directory exists. Prod, which does not pull, has none; nothing is then created."""
+    only_named: bool = False
+    """`--only-named`: the later uploads in :attr:`later_uploads` are listed and left in place."""
+    later_uploads: tuple[PathVersion, ...] = ()
+    """Every later upload the store holds at a path the removal takes a named file from, one entry
+    per path. Each is in :attr:`sources` as well, unless :attr:`only_named`."""
+    earlier_versions: tuple[PathVersion, ...] = ()
+    """Earlier versions at those paths, and files whose order the snapshot dates cannot give: listed
+    for the operator, never included."""
 
     def of(self, disposition: Disposition) -> tuple[PlannedSource, ...]:
         return tuple(source for source in self.sources if source.disposition is disposition)
+
+    def included_as(self, inclusion: Inclusion) -> tuple[PlannedSource, ...]:
+        return tuple(source for source in self.sources if source.inclusion is inclusion)
+
+    def source(self, sha256: str) -> PlannedSource | None:
+        """What the plan does to one file, or `None` when it is not in the plan."""
+        return next((source for source in self.sources if source.sha256 == sha256), None)
+
+    def later_upload_outcome(self, version: PathVersion) -> LaterUploadOutcome:
+        """What this plan does about one entry of :attr:`later_uploads`."""
+        source = self.source(version.sha256)
+        if source is None:
+            return LaterUploadOutcome.LEFT_IN_PLACE
+        if source.disposition is Disposition.REMOVE:
+            return LaterUploadOutcome.REMOVED
+        if (version.caselist, version.path) in source.requester_paths:
+            return LaterUploadOutcome.WITHDRAWN_FROM_THE_PATH
+        return LaterUploadOutcome.KEPT_SHARED
+
+    @property
+    def later_uploads_added(self) -> int:
+        """How many files the plan removes or withdraws only because they are later uploads."""
+        return sum(
+            1
+            for source in self.included_as(Inclusion.LATER_UPLOAD)
+            if source.disposition is not Disposition.SKIP_SHARED
+        )
+
+    @property
+    def later_uploads_found(self) -> int:
+        """How many distinct files :attr:`later_uploads` lists, added or not."""
+        return len({version.sha256 for version in self.later_uploads})
 
     @property
     def suppression_entries(self) -> tuple[SuppressionEntry, ...]:
@@ -430,6 +538,11 @@ class _ManifestCopy:
     def full_archive(self) -> bool:
         """Whether this is a complete archive's manifest, `manifests/<slug>/full/<date>.jsonl`."""
         return self.caselist != OPENEV and self.key.count("/") == 3
+
+    @property
+    def snapshot(self) -> str:
+        """The snapshot's own name: `2026-09-15`, `full/2026-09-15`, or a release, `2026-policy`."""
+        return full_archive_snapshot(date.fromisoformat(self.release)) if self.full_archive else self.release
 
 
 @dataclass(slots=True)
@@ -524,8 +637,13 @@ class RemovalPlanner:
         request_id: str,
         reason: ReasonCode,
         include_shared: bool = False,
+        only_named: bool = False,
     ) -> RemovalPlan:
-        """Work out everything removing `selector` would do. Writes nothing anywhere."""
+        """Work out everything removing `selector` would do. Writes nothing anywhere.
+
+        With `only_named` the later uploads at the removed paths are listed and left in place:
+        see "Later uploads at a removed path" in the module docstring.
+        """
         if reason not in REMOVAL_REASONS:
             raise InvalidRemovalRequest(f"--reason must be one of {', '.join(sorted(REMOVAL_REASONS))}")
         if re.match(REQUEST_ID_PATTERN, request_id) is None:
@@ -538,33 +656,94 @@ class RemovalPlanner:
         caselists = await self._known_caselists()
         copies = [copy for caselist in caselists for copy in await self._manifest_copies(caselist)]
 
-        sources: list[PlannedSource] = []
-        for digest in sorted(await self._candidates(selector, copies, state, request_id)):
-            sources.append(
-                await self._plan_source(
-                    digest,
-                    await self._holdings(digest, copies),
-                    selector,
-                    include_shared=include_shared,
-                    state=state,
-                    request_id=request_id,
-                    reason=reason,
-                    recorded_at=recorded_at,
-                )
+        selected = await self._selected(selector, copies)
+        named = [
+            await self._plan_source(
+                digest,
+                await self._holdings(digest, copies),
+                selector,
+                include_shared=include_shared,
+                state=state,
+                request_id=request_id,
+                reason=reason,
+                recorded_at=recorded_at,
             )
+            for digest in sorted(selected)
+        ]
+
+        # Every other file at the paths the named files are taken from, and when it was held there.
+        holdings = _path_holdings(copies)
+        versions = other_versions(
+            holdings,
+            _paths_taken(named),
+            named=selected,
+            upstream_path_digests={
+                openev_id: delivery.path_sha256
+                for openev_id, delivery in self._inbox.deliveries.read().items()
+                if delivery.path_sha256 is not None
+            },
+        )
+        later = tuple(one for one in versions if one.relation is VersionRelation.LATER)
+        added: list[PlannedSource] = []
+        if not only_named:
+            for digest in sorted({one.sha256 for one in later}):
+                added.append(
+                    await self._plan_other_source(
+                        digest,
+                        [one for one in later if one.sha256 == digest],
+                        holdings,
+                        Inclusion.LATER_UPLOAD,
+                        state=state,
+                        request_id=request_id,
+                        reason=reason,
+                        recorded_at=recorded_at,
+                    )
+                )
+
+        # A re-run after a partial failure: whatever this request already suppressed is still its.
+        unfinished: list[PlannedSource] = []
+        planned = selected | {source.sha256 for source in added}
+        for digest in sorted(_suppressed_by(state, request_id) - planned):
+            if isinstance(selector, TeamSelector):
+                unfinished.append(
+                    await self._plan_source(
+                        digest,
+                        await self._holdings(digest, copies),
+                        selector,
+                        include_shared=include_shared,
+                        state=state,
+                        request_id=request_id,
+                        reason=reason,
+                        recorded_at=recorded_at,
+                    )
+                )
+            elif await self._left_on_this_machine(digest, state):
+                unfinished.append(
+                    await self._plan_other_source(
+                        digest,
+                        [],
+                        holdings,
+                        Inclusion.UNFINISHED,
+                        state=state,
+                        request_id=request_id,
+                        reason=reason,
+                        recorded_at=recorded_at,
+                    )
+                )
+        sources = [*sorted([*named, *unfinished], key=lambda source: source.sha256), *added]
 
         after = SuppressionState.from_entries(
             [*existing, *(entry for source in sources for entry in source.suppression)]
         )
         removed = {source.sha256 for source in sources if source.disposition is Disposition.REMOVE}
-        withdrawn_paths = {
-            path
+        withdrawn = {
+            (caselist, path, source.sha256)
             for source in sources
             if source.disposition is Disposition.WITHDRAW
-            for path in source.requester_paths
+            for caselist, path in source.requester_paths
         }
         index = _BucketIndex(self._remote, self._remote_versions)
-        rewrites = await self._manifest_rewrites(copies, selector, removed, withdrawn_paths, after, index)
+        rewrites = await self._manifest_rewrites(copies, selector, removed, withdrawn, after, index)
         objects, counted = await self._objects(sources, caselists, copies, index)
         inbox, team_files_left = plan_inbox(
             self._inbox,
@@ -595,6 +774,9 @@ class RemovalPlanner:
             inbox_team_files_left=team_files_left,
             inbox_directory=str(self._inbox.directory),
             inbox_exists=self._inbox.directory.is_dir(),
+            only_named=only_named,
+            later_uploads=later,
+            earlier_versions=tuple(one for one in versions if one.relation is not VersionRelation.LATER),
         )
 
     # --------------------------------------------------------------------------------------
@@ -664,13 +846,14 @@ class RemovalPlanner:
             await self._remote.get_file(key, staged)
             return tuple(staged.read_text(encoding="utf-8").splitlines())
 
-    async def _candidates(
-        self,
-        selector: RemovalSelector,
-        copies: Sequence[_ManifestCopy],
-        state: SuppressionState,
-        request_id: str,
-    ) -> set[str]:
+    async def _selected(self, selector: RemovalSelector, copies: Sequence[_ManifestCopy]) -> set[str]:
+        """The files the selector itself names: the one digest, or every file at the team's paths.
+
+        For a team that is every digest any record or any row of any snapshot, weekly or complete,
+        on either side, holds under the team's directories: every version of every file of the
+        team's, earlier and later alike. So a `--team` removal needs no search for later uploads
+        at the team's own paths (`v1-e30-t11`).
+        """
         if isinstance(selector, SourceSelector):
             return {selector.sha256}
         found = {disclosure.source_sha256 for disclosure in await self._team_disclosures(selector)}
@@ -679,11 +862,28 @@ class RemovalPlanner:
                 digest, path = row.get("sha256"), row.get("path")
                 if isinstance(digest, str) and isinstance(path, str) and selector.holds(copy.caselist, path):
                     found.add(digest)
-        # A re-run after a partial failure: whatever this request already suppressed is still its.
-        for digest, latest in state.latest.items():
-            if latest.action is SuppressionAction.SUPPRESS and latest.request_id == request_id:
-                found.add(digest)
         return found
+
+    async def _left_on_this_machine(self, digest: str, state: SuppressionState) -> bool:
+        """Whether a file this request already suppressed still has a record or its blob here.
+
+        What a `--source` removal stopped part-way can leave of a later upload once the manifest
+        rows that showed it at the removed path are rewritten: nothing else would find it again.
+        A file with nothing left is not planned again, so a second `--source` under one request id
+        does not list the first.
+        """
+        disclosures = [one async for one in _all_disclosures(self._caselists, source_sha256=digest)]
+        if not state.suppresses_source(digest):
+            return any(
+                state.suppresses(digest, disclosure=disclosure_digest(one.caselist, one.source_path))
+                for one in disclosures
+            )
+        return bool(
+            disclosures
+            or await self._caselists.find_source(digest) is not None
+            or await _all_camp_files(self._caselists, digest)
+            or await self._local_blobs.list_versions(local_blob_key(digest))
+        )
 
     async def _team_disclosures(self, selector: TeamSelector) -> list[Disclosure]:
         """By school, then by the team's directory as well as its recorded code.
@@ -821,6 +1021,112 @@ class RemovalPlanner:
             already_suppressed=finishing,
         )
 
+    async def _plan_other_source(
+        self,
+        digest: str,
+        later: Sequence[PathVersion],
+        holdings: Sequence[PathHolding],
+        inclusion: Inclusion,
+        *,
+        state: SuppressionState,
+        request_id: str,
+        reason: ReasonCode,
+        recorded_at: datetime,
+    ) -> PlannedSource:
+        """Plan a file the selector does not name: a later upload, or one a stopped run left.
+
+        The removal takes it from the paths it is a later upload at (`later`) and from any path of
+        it the list already stops. A path it is held at that is neither is a live path: with one,
+        the bytes stay for that path and only the taken paths' rows and records go; with none, the
+        file goes everywhere, exactly as a named file does. `--include-shared` plays no part: it
+        is the operator's decision about the files the request names.
+        """
+        source = await self._caselists.find_source(digest)
+        disclosures = [
+            disclosure async for disclosure in _all_disclosures(self._caselists, source_sha256=digest)
+        ]
+        camp_files = await _all_camp_files(self._caselists, digest)
+        latest = state.latest.get(digest)
+        finishing = (
+            latest is not None
+            and latest.action is SuppressionAction.SUPPRESS
+            and latest.request_id == request_id
+        )
+
+        rows = [holding for holding in holdings if holding.sha256 == digest]
+        held_at = {(row.caselist, row.path) for row in rows if row.caselist != OPENEV} | {
+            (disclosure.caselist, disclosure.source_path) for disclosure in disclosures
+        }
+        taken = {(one.caselist, one.path) for one in later if one.caselist != OPENEV} | {
+            (caselist, path)
+            for caselist, path in held_at
+            if state.suppresses(digest, disclosure=disclosure_digest(caselist, path))
+        }
+        live_paths = held_at - taken
+        later_camp_paths = {one.identity for one in later if one.caselist == OPENEV}
+        live_releases = {
+            row.snapshot
+            for row in rows
+            if row.caselist == OPENEV and path_identity(row) not in later_camp_paths
+        } | {
+            openev_release_name(camp_file.year, camp_file.event)
+            for camp_file in camp_files
+            if not any(row.caselist == OPENEV for row in rows)
+        }
+        shared = bool(live_paths or live_releases)
+
+        if (state.suppresses_source(digest) and finishing) or not shared:
+            disposition = Disposition.REMOVE
+        elif taken:
+            disposition = Disposition.WITHDRAW
+        else:
+            # Only a camp path of it is removed, and another holder has it: no entry of the list
+            # stops one camp path of a file, so nothing can be done that the next pull would not undo.
+            disposition = Disposition.SKIP_SHARED
+
+        entries: list[SuppressionEntry] = []
+        dropped: list[DisclosureRef] = []
+        dropped_camp: list[CampFileRef] = []
+        requester_paths: tuple[tuple[str, str], ...] = ()
+        local_blob = False
+        if disposition is Disposition.REMOVE:
+            dropped = [_disclosure_ref(disclosure) for disclosure in disclosures]
+            dropped_camp = [_camp_ref(camp_file) for camp_file in camp_files]
+            if not state.suppresses_source(digest):
+                entries.append(_suppression(digest, None, recorded_at, reason, request_id))
+            local_blob = bool(await self._local_blobs.list_versions(local_blob_key(digest)))
+        elif disposition is Disposition.WITHDRAW:
+            dropped = [
+                _disclosure_ref(disclosure)
+                for disclosure in disclosures
+                if (disclosure.caselist, disclosure.source_path) in taken
+            ]
+            requester_paths = tuple(sorted(taken))
+            for caselist, path in requester_paths:
+                digest_of_path = disclosure_digest(caselist, path)
+                if not state.suppresses(digest, disclosure=digest_of_path):
+                    entries.append(_suppression(digest, digest_of_path, recorded_at, reason, request_id))
+
+        return PlannedSource(
+            sha256=digest,
+            disposition=disposition,
+            byte_size=source.byte_size if source is not None else None,
+            source_format=str(source.source_format) if source is not None else None,
+            disclosures=tuple(sorted(dropped, key=lambda ref: (ref.caselist, ref.snapshot, ref.source_path))),
+            camp_files=tuple(sorted(dropped_camp, key=lambda ref: (ref.year, ref.event, ref.file_title))),
+            requester_paths=requester_paths,
+            other_teams=len({(caselist, team_of_path(path)) for caselist, path in live_paths}),
+            camp_file_holders=len(live_releases),
+            kept_in=tuple(sorted({caselist for caselist, _ in live_paths}))
+            if disposition is Disposition.WITHDRAW
+            else (),
+            delete_source_record=disposition is Disposition.REMOVE and source is not None,
+            local_blob=local_blob,
+            suppression=tuple(entries),
+            already_suppressed=finishing,
+            inclusion=inclusion,
+        )
+
     # --------------------------------------------------------------------------------------
     # Manifests
     # --------------------------------------------------------------------------------------
@@ -830,7 +1136,7 @@ class RemovalPlanner:
         copies: Sequence[_ManifestCopy],
         selector: RemovalSelector,
         removed: set[str],
-        withdrawn_paths: set[tuple[str, str]],
+        withdrawn: set[tuple[str, str, str]],
         after: SuppressionState,
         index: _BucketIndex,
     ) -> list[ManifestRewrite]:
@@ -847,7 +1153,7 @@ class RemovalPlanner:
             if copy.summary is None:
                 continue
             dropped = _rows_to_drop(
-                copy, selector, removed, withdrawn_paths, held_removed.get(copy.caselist, set()), after
+                copy, selector, removed, withdrawn, held_removed.get(copy.caselist, set()), after
             )
             if not dropped:
                 continue
@@ -1011,7 +1317,7 @@ def _rows_to_drop(
     copy: _ManifestCopy,
     selector: RemovalSelector,
     removed: set[str],
-    withdrawn_paths: set[tuple[str, str]],
+    withdrawn: set[tuple[str, str, str]],
     held_removed: set[str],
     after: SuppressionState,
 ) -> set[int]:
@@ -1020,7 +1326,7 @@ def _rows_to_drop(
     dropped = {
         index
         for index, (_, row) in enumerate(copy.rows)
-        if _dropped(row, copy.caselist, scope, selector, removed, withdrawn_paths, held_removed, after)
+        if _dropped(row, copy.caselist, scope, selector, removed, withdrawn, held_removed, after)
     }
     real = {
         str(row["path"]): index in dropped
@@ -1045,17 +1351,21 @@ def _dropped(
     scope: str | None,
     selector: RemovalSelector,
     removed: set[str],
-    withdrawn_paths: set[tuple[str, str]],
+    withdrawn: set[tuple[str, str, str]],
     held_removed: set[str],
     after: SuppressionState,
 ) -> bool:
-    """Whether one member row goes, before the junk that shadows dropped files is added."""
+    """Whether one member row goes, before the junk that shadows dropped files is added.
+
+    `withdrawn` is `(caselist, path, sha256)`: a withdrawal takes one file from one path, and an
+    earlier version of another file at that path keeps its row (`v1-e30-t11`).
+    """
     path, digest = row.get("path"), row.get("sha256")
     if not isinstance(path, str):
         return False
     if isinstance(selector, TeamSelector) and selector.holds(caselist, path):
         return True  # every row of the requesting team's, junk and REMOVED rows included
-    if digest in removed or (caselist, path) in withdrawn_paths:
+    if digest in removed or (caselist, path, digest) in withdrawn:
         return True
     if row.get("classification") == str(Classification.REMOVED) and path in held_removed:
         return True  # "this path's file was taken down", where the file was the removed one
@@ -1143,6 +1453,42 @@ def _counts(raw: object) -> dict[str, int]:
 # ------------------------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------------------------
+
+
+def _path_holdings(copies: Sequence[_ManifestCopy]) -> tuple[PathHolding, ...]:
+    """Every stored row of every manifest read, on either side: who holds which bytes at which path."""
+    held: set[PathHolding] = set()
+    for copy in copies:
+        for _, row in copy.rows:
+            digest, path = row.get("sha256"), row.get("path")
+            if row.get("classification") in _STORED and isinstance(digest, str) and isinstance(path, str):
+                held.add(
+                    PathHolding(caselist=copy.caselist, snapshot=copy.snapshot, path=path, sha256=digest)
+                )
+    return tuple(sorted(held, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
+
+
+def _paths_taken(named: Sequence[PlannedSource]) -> dict[str, frozenset[tuple[str, ...]] | None]:
+    """For each named file the removal acts on, the paths it takes it from: `None` for all of them.
+
+    A file left alone (`SKIP_SHARED`) is taken from nowhere, so nothing is a later upload of it.
+    """
+    taken: dict[str, frozenset[tuple[str, ...]] | None] = {}
+    for source in named:
+        if source.disposition is Disposition.REMOVE:
+            taken[source.sha256] = None
+        elif source.disposition is Disposition.WITHDRAW:
+            taken[source.sha256] = frozenset(source.requester_paths)
+    return taken
+
+
+def _suppressed_by(state: SuppressionState, request_id: str) -> set[str]:
+    """The files whose latest entry on the list is this request's suppression."""
+    return {
+        digest
+        for digest, latest in state.latest.items()
+        if latest.action is SuppressionAction.SUPPRESS and latest.request_id == request_id
+    }
 
 
 def _affected_caselists(sources: Sequence[PlannedSource], caselists: Sequence[str]) -> tuple[str, ...]:

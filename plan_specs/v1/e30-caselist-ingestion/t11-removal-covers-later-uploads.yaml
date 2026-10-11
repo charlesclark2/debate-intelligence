@@ -58,18 +58,27 @@ spec:
     - id: ac3
       description: >-
         The limiting flag removes only the named digests, by test. Without it the plan
-        includes later uploads, and the confirmation prompt states how many it adds.
+        includes later uploads, and the plan's confirmation text (above the printed
+        `--execute` command, and on the lines `--execute` prints as it starts and finishes)
+        states how many it adds. Amended by the PM, 2026-10-10: `caselist remove` has no
+        interactive prompt, and adding one was never intended.
     - id: ac4
       description: >-
         For a camp file, a later OpenEv id at the same camp path is included the same way,
         by test on the openev fixture.
     - id: ac5
       description: >-
-        docs/runbooks/caselist-removal.md says what the plan now lists, when to use the
-        limiting flag, and that Step 8's hold and this plan together cover a later upload
-        whether or not it was imported.
+        docs/runbooks/caselist-removal.md says what the plan now lists and when to use the
+        limiting flag. It also says what is covered and what is not. For a camp file, Step 8's
+        hold and this plan together cover a later upload whether or not it was imported. For
+        a caselist file, the plan covers what the store holds when it runs, and a revision
+        that arrives later is not held. The runbook says so and gives the manual check.
+        Amended by the PM, 2026-10-10: as first written this criterion generalised
+        v1-e34-t14's hold, which is for camp files only, to caselist files. The gap is filed
+        as its own task.
 status:
-  phase: Pending
+  # Set to Succeeded by the PM, 2026-10-10, with ac3 and ac5 amended.
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

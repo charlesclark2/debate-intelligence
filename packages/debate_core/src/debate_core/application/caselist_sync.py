@@ -453,6 +453,7 @@ from debate_core.application.errors import (
     StoreAccessDenied,
     StoreCredentialsExpired,
     StoreError,
+    StoreProfileNotConfigured,
     StoreUnavailable,
     UnreadableArchive,
     reported_error_code,
@@ -3244,7 +3245,7 @@ class CaselistSyncService:
             except StoreCredentialsExpired as no_session:
                 expired = no_session
                 break
-            except (StoreAccessDenied, StoreUnavailable) as refused:
+            except (StoreAccessDenied, StoreProfileNotConfigured, StoreUnavailable) as refused:
                 stopped = self._failure(refused)
                 left = len(targets) - index
                 break
@@ -4304,12 +4305,6 @@ def _camp_download_refused(selection: OpenEvSelection, refused: DomainError | OS
     return f"{selection.label}: {message}"
 
 
-_MISSING_GRANT_FIX: Final = (
-    "the AWS profile this run uses is signed in and lacks a grant for it; this is not an expired "
-    "session, and logging in again changes nothing. docs/runbooks/evidence-store.md lists what "
-    "each profile is granted"
-)
-
 _UNREADABLE_PENDING_WORK_FIX: Final = (
     "Open the pending-work file under storage.data_dir: it lists the snapshots this machine has "
     "imported and not yet published, and this run left it untouched because it could not be read. "
@@ -4324,7 +4319,9 @@ def _fix_for(error: BaseException) -> str | None:
     Told apart by the error's type and never by its message (`v1-e34-t13`): the filesystem adapters
     raise :class:`~debate_core.application.errors.LocalStoreAccessDenied`, whose `resource` is the
     directory's role, and any other :class:`~debate_core.application.errors.StoreAccessDenied`
-    came from the bucket. Neither is fixed by a login, and neither sentence offers one.
+    came from the bucket. Neither is fixed by a login, and neither sentence offers one. The
+    bucket's refusal, and a profile the AWS config does not define, carry the fix the store's
+    adapter wrote, and that is the one given (`v1-e29-t07`).
     """
     if isinstance(error, LocalStoreAccessDenied):
         return (
@@ -4332,8 +4329,10 @@ def _fix_for(error: BaseException) -> str | None:
             "under the environment's data directory (storage.data_dir). It is a permission on "
             "this machine, not the AWS session."
         )
-    if isinstance(error, StoreAccessDenied):
-        return f"The bucket refused {error.operation}: {_MISSING_GRANT_FIX}."
+    if isinstance(error, StoreAccessDenied) and error.hint:
+        return f"The bucket refused {error.operation}: {error.hint}."
+    if isinstance(error, StoreProfileNotConfigured) and error.hint:
+        return f"The bucket was never reached: {error.hint}."
     if isinstance(error, PendingWorkUnreadable):
         return _UNREADABLE_PENDING_WORK_FIX
     return None

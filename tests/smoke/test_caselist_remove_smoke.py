@@ -305,12 +305,19 @@ def test_a_removal_profile_missing_from_the_aws_config_is_refused_with_nothing_c
 
     refused = run(*REMOVE, "--execute")
 
-    # The S3 adapter reports a profile missing from the AWS config as StoreCredentialsExpired, so the
-    # preflight failure it causes ends the run as a store failure, 3 (v1-e01-t20).
-    assert refused["exit_code"] == ExitCode.RETRIEVAL_FAILURE
-    assert "debate-dev-evidence-removal-typo" in refused["error"]["message"] + str(refused["error"]["hint"])
-    assert "nothing was deleted" in refused["error"]["message"]
-    assert (tree(installation / "dev"), versions(bucket)) == before
+    # A configuration error, not an expired session: exit 1, and what it names is the variable to
+    # correct (v1-e29-t07). Until then the adapter called it StoreCredentialsExpired, the run ended
+    # 3, "a retry may succeed", and the hint was a command that wrote to the AWS config.
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE
+    assert refused["error"]["code"] == "STORE_PROFILE_NOT_CONFIGURED"
+    assert (
+        "'debate-dev-evidence-removal-typo', named by DEBATE_REMOVAL_PROFILE," in refused["error"]["message"]
+    )
+    assert "DEBATE_REMOVAL_PROFILE" in refused["error"]["hint"]
+    assert "aws sso login" not in json.dumps(refused["error"])
+    assert "aws configure" not in json.dumps(refused["error"])
+    assert str(installation) not in json.dumps(refused["error"])
+    assert (tree(installation / "dev"), versions(bucket)) == before, "nothing was deleted"
 
 
 def test_a_removal_that_completes_but_cannot_be_logged_says_it_completed(

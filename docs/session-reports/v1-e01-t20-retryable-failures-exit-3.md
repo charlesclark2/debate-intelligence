@@ -187,6 +187,30 @@ are unchanged:
 
 The download 5xx and non-daily 429 row is retryable and exits 1. See Follow-up work.
 
+### Updated by `v1-e29-t07-missing-profile-not-retryable` (2026-10-11)
+
+Added by that task's session, as its ac3 asks; nothing above is edited. One code changed: a
+profile the AWS config does not define (`ProfileNotFound`) was `STORE_CREDENTIALS_EXPIRED`, exit 3,
+and is now `STORE_PROFILE_NOT_CONFIGURED`, exit 1. An expired, unavailable or refused store is
+still 3. The consumers above, for that one failure:
+
+| Consumer | What it saw for a missing profile | What it sees now |
+|---|---|---|
+| `ops/launchd/run-caselist-sync.sh` | Passed the command's 3 through. | Passes its 1 through. No code or comment change: 1 was already listed. |
+| launchd, through the agent's plist | Recorded 3 for a pull whose profile setting named no profile. | Records 1. Still no retry on any exit code. |
+| `ops/launchd/install.sh --check-launchd` | Runs only `debate-research --version`; never builds the bucket's adapter. | Unchanged. It does not detect a missing profile, before or after. |
+| Run summary, run record, run log, macOS notifications | Nothing: the pull ends before its monitor is built, because the monitor publishes run records through the same profile. Measured in `tests/smoke/test_caselist_pull.py`: no data directory is created. | Unchanged. A missing profile is still neither recorded nor announced; only the exit code and the error on stdout say so. See that task's Follow-up work. |
+| `caselist runs --remote` | Exit 3. | Exit 1 (tested). |
+| `scripts/validate_dev.py`, `scripts/install_channel.sh`, `.github/workflows/*` | Run no command that builds the bucket's adapter. | Unchanged. |
+| `tests/smoke/test_caselist_remove_smoke.py`, the missing-removal-profile test | Asserted 3, the row above that this report's Decisions questioned. | Asserts 1, `STORE_PROFILE_NOT_CONFIGURED`, and that the message names `DEBATE_REMOVAL_PROFILE` (changed). The error is no longer wrapped in `TakedownPreflightFailed`, so its message no longer says "nothing was deleted"; the test still proves nothing was. |
+| `packages/debate_cli/tests/commands/test_store.py`, `test_retryable_store_failures.py` | The expired-session tests assert 3 with the `aws sso login` hint. | Unchanged, and passing: that task's ac2. |
+| `tests/smoke/test_caselist_pull.py`, the expired-session test | Asserts 0 with publish `pending`. | Unchanged. Two tests beside it are new: botocore's own `UnauthorizedSSOTokenError` still pends, and its `ProfileNotFound` fails the publish stage with 1. |
+| `packages/debate_cli/README.md`, `docs/guides/evidence-store-cli.md`, `docs/runbooks/caselist-scheduled-sync.md` | Listed an expired session, an outage and a refusal under 3; said nothing of a missing profile. | Each says what `STORE_PROFILE_NOT_CONFIGURED` means and that it is a 1. |
+| The `--json` envelope | `error.code` `STORE_CREDENTIALS_EXPIRED`, `hint` `aws configure sso --profile …`. | `error.code` `STORE_PROFILE_NOT_CONFIGURED`, `details.profile` and `details.setting`, and a `hint` naming the setting. A script that branched on `STORE_CREDENTIALS_EXPIRED` to prompt for a login no longer does so for this failure, which is the intent. |
+
+`STORE_ACCESS_DENIED` keeps its code and its exit 3. Only its `hint` changed (that task's ac4), and
+no consumer in this table reads a hint.
+
 ## Files changed
 
 * `packages/debate_core/src/debate_core/integrations/local/`:

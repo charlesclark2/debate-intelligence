@@ -128,7 +128,9 @@ class CommandFailure:
         :class:`~debate_core.application.errors.StoreAccessDenied` exist to do exactly that: the S3
         adapter knows which profile it was built with, so it fills in `aws sso login --profile
         debate-dev-evidence`, and an expired session becomes that one line rather than a wall of
-        botocore traceback (`v1-e29-t05-evidence-sync-cli` ac4). The hint is promoted out of
+        botocore traceback (`v1-e29-t05-evidence-sync-cli` ac4). A refusal's hint says the profile
+        lacks a grant, and a profile the AWS config does not define names the setting to correct;
+        neither offers a login (`v1-e29-t07`). The hint is promoted out of
         `details` so it renders once, in the place a person looks for what to do next.
         """
         carried = getattr(exception, "hint", None)

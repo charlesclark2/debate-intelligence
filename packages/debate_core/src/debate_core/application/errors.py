@@ -25,6 +25,7 @@ The hierarchy::
     │   ├── StoreAccessDenied
     │   │   └── LocalStoreAccessDenied
     │   ├── StoreCredentialsExpired
+    │   ├── StoreProfileNotConfigured
     │   └── StoreUnavailable
     ├── InvalidModelOutput
     └── ProviderError
@@ -71,6 +72,7 @@ __all__ = [
     "StoreAccessDenied",
     "StoreCredentialsExpired",
     "StoreError",
+    "StoreProfileNotConfigured",
     "StoreUnavailable",
     "UnreadableArchive",
     "error_code_of",
@@ -295,7 +297,7 @@ class UnreadableArchive(DomainError):
 class StoreError(DomainError):
     """A store could not be reached or refused the request, whatever it stores things in.
 
-    The three errors below are the conditions a *remote* store adds to the ones a local directory
+    The errors below are the conditions a *remote* store adds to the ones a local directory
     already has, and they exist so that `botocore`'s `ClientError`, `NoCredentialsError` and
     `UnauthorizedSSOTokenError` stop at the adapter's edge
     (:mod:`debate_core.integrations.s3.errors`). They say nothing about AWS: a filesystem store
@@ -360,8 +362,36 @@ class StoreCredentialsExpired(StoreError):
         super().__init__(message + (f": {hint}" if hint else ""))
 
 
+class StoreProfileNotConfigured(StoreError):
+    """The profile a store was to be reached with is not one this machine's AWS config defines.
+
+    A configuration error, not a session (`v1-e29-t07`). An expired session is cured by logging in
+    and a store that did not answer by trying again; a name that is not in the config stays not in
+    it, so this is on no list of failures a retry may cure and ends a command with `1`, where
+    :class:`StoreCredentialsExpired`, which this used to be reported as, ends it with `3`.
+
+    It names the **setting** the profile's name came from, because that is the thing to correct: a
+    misspelt `storage.s3.aws_profile`, or a `DEBATE_REMOVAL_PROFILE` that names the wrong
+    environment's profile. It never names the AWS config's path, and nothing in it comes from the
+    library's own message, which could.
+    """
+
+    def __init__(self, profile: str | None, *, setting: str | None = None, hint: str | None = None) -> None:
+        self.profile = profile
+        """The profile that was asked for, or `None` when the adapter was not told its name."""
+        self.setting = setting
+        """The setting that holds the profile's name, e.g. `"storage.s3.aws_profile"`, when known."""
+        self.hint = hint
+        """One line a CLI can print about what to correct. Never a login, and never a path."""
+        named = f"AWS profile {profile!r}" if profile else "the AWS profile"
+        named_by = f", named by {setting}," if setting else ""
+        super().__init__(
+            f"{named}{named_by} is not defined in this machine's AWS config" + (f": {hint}" if hint else "")
+        )
+
+
 class StoreUnavailable(StoreError):
-    """The store did not complete the request, and the reason is not one of the two above.
+    """The store did not complete the request, and the reason is not one of those above.
 
     A 500 from S3, a throttle, a timeout, a connection that never opened, or a response code this
     adapter has no more specific translation for. It is deliberately one class rather than a

@@ -370,6 +370,7 @@ Which failure is which:
 | A source's bytes in the bucket are not the ones its key names | `CHECKSUM_MISMATCH` | `1` |
 | The pending-work file names a snapshot this Mac holds no manifest for | `NOTHING_TO_PUBLISH` | `1`, once: the snapshot leaves the file, because no run here can publish it |
 | The pending-work file cannot be read | `PENDING_WORK_UNREADABLE` | `1`, with a `hint`. The file is left as it is. See [The pending-work file](#the-pending-work-file) |
+| The AWS profile the run was given is not one this Mac's AWS config defines | `STORE_PROFILE_NOT_CONFIGURED` | `1`, with a `hint`. See [A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define) |
 | `--full-archive` cannot be covered by the day's allowance | none: the run is refused before any stage, with `error.code` `FULL_ARCHIVE_REFUSED` | `1` |
 | Anything with a code that is on neither list, or with no code | for example `INTERNAL_ERROR` | `1` |
 
@@ -397,7 +398,28 @@ have one, and they are told apart by where the refusal came from:
   check it. `aws sso login` does not change a grant.
 
 Before `v1-e34-t13` both were reported as `publish: pending` with a notification naming
-`aws sso login`, and a failed stage exited `1` whatever it failed on.
+`aws sso login`, and a failed stage exited `1` whatever it failed on. The sentence about the grant
+is written by the S3 adapter (`v1-e29-t07`), so `caselist publish`, `caselist status`, `store sync`
+and `caselist remove` show the same one.
+
+### A profile the AWS config does not define
+
+`storage.s3.aws_profile` in the environment's profile names the AWS profile the run publishes with.
+When this Mac's AWS config defines no profile of that name, the run cannot build its connection to
+the bucket at all, and it ends before any stage:
+
+* exit `1`, with `error.code` `STORE_PROFILE_NOT_CONFIGURED`;
+* the message names the profile and the setting it came from, and the `hint` says to correct the
+  setting or add the profile, as [`evidence-store.md`](evidence-store.md) describes;
+* nothing is fetched or imported, the pending-work file is not touched, and **no run is recorded
+  and no notification is sent**, because the run log's own copy in the bucket is built from the
+  same profile. The exit code launchd records and the error in
+  `~/Library/Logs/debate-research/caselist-sync.jsonl` are the only signs. Check them after
+  changing the setting or reinstalling the agent.
+
+It is a configuration error, not an expired session: `aws sso login` does not define a profile, and
+next week's run ends the same way. Until `v1-e29-t07` it was reported as
+`STORE_CREDENTIALS_EXPIRED` with exit `3`, "a retry may succeed".
 
 ## The complete archive
 

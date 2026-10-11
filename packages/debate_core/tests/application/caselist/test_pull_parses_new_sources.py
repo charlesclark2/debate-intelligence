@@ -530,6 +530,7 @@ async def test_a_bucket_that_refuses_the_parsed_store_fails_the_stage_and_names_
     parse = stage(summary, SyncStage.PARSE)
     assert (parse["outcome"], parse["error_codes"]) == ("failed", ["STORE_ACCESS_DENIED"])
     assert "lacks a grant" in str(parse["hint"])
+    assert str(missing_grant().hint) in str(parse["hint"]), "the adapter's sentence, read from the error"
     assert "caselist parse --caselist <slug> --publish" in str(parse["hint"])
     assert_the_import_and_the_raw_publish_stand(installation, summary)
 

@@ -32,6 +32,8 @@ import boto3
 import httpx
 import pytest
 import respx
+from botocore.client import BaseClient
+from botocore.exceptions import ClientError, ProfileNotFound, UnauthorizedSSOTokenError
 from moto import mock_aws
 from tests.fixtures.caselist.build_synthetic_archives import (
     SNAPSHOTS,
@@ -49,7 +51,7 @@ from debate_core.application.caselist.status_service import CaselistStatusServic
 from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired, StoreUnavailable
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.local import BLOB_DIRECTORY
-from debate_core.integrations.s3 import S3EvidenceObjectStore
+from debate_core.integrations.s3 import S3Call, S3EvidenceObjectStore, translate_s3_error
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -407,7 +409,7 @@ def expire_the_session(
         if while_set is not None and not while_set["expired"]:
             return
         if error is StoreAccessDenied:
-            raise StoreAccessDenied("GetObject", only or "the bucket", hint="a grant is missing")
+            raise access_denied_by_the_bucket("GetObject", only or "")
         if error is StoreUnavailable:
             raise StoreUnavailable("GetObject", only or "the bucket", "simulated 503 SlowDown")
         raise StoreCredentialsExpired(hint=f"aws sso login --profile {AWS_PROFILE_NAME}")
@@ -425,6 +427,31 @@ def expire_the_session(
             monkeypatch.setattr(
                 S3EvidenceObjectStore, name, _refusing(getattr(S3EvidenceObjectStore, name), refuse)
             )
+
+
+def access_denied_by_the_bucket(operation: str, key: str) -> StoreAccessDenied:
+    """What the real S3 adapter raises when the bucket answers `AccessDenied`, its hint included.
+
+    Built by the adapter's own translation and not by hand, because the hint a stage shows for a
+    refusal is the adapter's (`v1-e29-t07`): a stub that wrote its own would test the stub.
+    """
+    response: Any = {
+        "Error": {"Code": "AccessDenied", "Message": "Access Denied"},
+        "ResponseMetadata": {"HTTPStatusCode": 403},
+    }
+    refused = translate_s3_error(
+        ClientError(response, operation),
+        S3Call(
+            operation=operation,
+            bucket=BUCKET,
+            entity="evidence object",
+            key=key,
+            s3_key=key or None,
+            profile=AWS_PROFILE_NAME,
+        ),
+    )
+    assert isinstance(refused, StoreAccessDenied)
+    return refused
 
 
 def _refusing(original: Any, refuse: Any) -> Any:
@@ -729,7 +756,7 @@ def test_a_missing_grant_in_report_fails_it_with_the_grant_fix_and_is_never_pend
     async def refuse(
         self: CaselistStatusService, caselist: str | None = None, snapshot: str | None = None
     ) -> Any:
-        raise StoreAccessDenied("HeadObject", f"s3://{BUCKET}/manifests/{caselist}/{snapshot}.jsonl")
+        raise access_denied_by_the_bucket("HeadObject", f"manifests/{caselist}/{snapshot}.jsonl")
 
     monkeypatch.setattr(CaselistStatusService, "status", refuse)
 
@@ -743,6 +770,8 @@ def test_a_missing_grant_in_report_fails_it_with_the_grant_fix_and_is_never_pend
     assert stages["report"]["error_codes"] == ["STORE_ACCESS_DENIED"]
     assert "lacks a grant" in stages["report"]["hint"]
     assert "docs/runbooks/evidence-store.md" in stages["report"]["hint"]
+    # The adapter's own sentence, which names the profile: the sync writes none (v1-e29-t07).
+    assert f"the AWS profile {AWS_PROFILE_NAME} is signed in" in stages["report"]["hint"]
     assert data["pending_publish"] == []
     assert data["run_record"]["outcome"] == "incomplete"
     assert "aws sso login" not in stage_text(pulled)
@@ -841,3 +870,129 @@ def test_a_pending_work_file_that_cannot_be_read_fails_publish_with_one_and_is_l
     assert "aws sso login" not in stage_text(pulled)
     assert str(installation) not in stage_text(pulled)
     assert str(Path.home()) not in stage_text(pulled)
+
+
+# ------------------------------------------------------------------------------------------------
+# A profile the AWS config does not define is a configuration error, not a login (v1-e29-t07)
+# ------------------------------------------------------------------------------------------------
+
+PROFILE_SETTING = "storage.s3.aws_profile"
+"""The setting that holds the everyday profile's name, which the error names instead of a path."""
+
+MISSPELT_PROFILE = "debate-dev-evidence-typo"
+
+
+def botocore_raises(monkeypatch: pytest.MonkeyPatch, error: Exception) -> dict[str, bool]:
+    """Every call botocore makes to the bucket raises `error`, except reads of the suppression list.
+
+    The real S3 adapter then does the translating, as it does on the operator's machine. The
+    suppression list is spared so that the import stage reads every copy and the failure arrives
+    where this section is about: the publish stage. Clear `["on"]` to let the calls through again.
+    """
+    raising = {"on": True}
+    make_api_call: Any = vars(BaseClient)["_make_api_call"]
+
+    def api_call(self: BaseClient, operation_name: str, api_params: dict[str, Any]) -> Any:
+        named = str(api_params.get("Key") or api_params.get("Prefix") or "")
+        if raising["on"] and not named.startswith("manifests/_suppression/"):
+            raise error
+        return make_api_call(self, operation_name, api_params)
+
+    monkeypatch.setattr(BaseClient, "_make_api_call", api_call)
+    return raising
+
+
+def assert_names_the_setting_and_nothing_of_this_machine(text: str, installation: Path) -> None:
+    """The fix is the setting that holds the profile's name: never a login, never a path."""
+    assert "aws sso login" not in text
+    assert "aws configure" not in text
+    assert str(installation) not in text, "the AWS config's path is under the installation here"
+    assert str(Path.home()) not in text
+    assert "aws-config" not in text and "/.aws" not in text
+
+
+def test_a_profile_the_aws_config_lacks_fails_publish_with_one_and_everything_imported_stays_owed(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """botocore answers the publish with its own `ProfileNotFound`. The adapter used to call that
+    an expired session, so the publish stage was *pending*, the run exited 0, and the weekly agent
+    asked for a login that fixes nothing. It is the publish stage failing on a configuration
+    error: exit `1`, with the setting to correct, and every snapshot imported still owed
+    (`v1-e34-t18`), so the run after the fix publishes them without fetching anything again."""
+    raising = botocore_raises(monkeypatch, ProfileNotFound(profile=AWS_PROFILE_NAME))
+
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.DOMAIN_FAILURE, pulled
+    assert pulled["error"]["code"] == "CASELIST_PULL_INCOMPLETE"
+    data = run_summary(pulled)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["import"]["outcome"] == "completed", stages["import"]
+    assert (stages["publish"]["outcome"], stages["publish"]["error_codes"]) == (
+        "failed",
+        ["STORE_PROFILE_NOT_CONFIGURED"],
+    )
+    assert PROFILE_SETTING in stages["publish"]["hint"]
+    assert pulled["error"]["hint"].startswith(stages["publish"]["hint"])
+    assert stages["report"]["outcome"] == "skipped"
+    assert len(data["snapshots_imported"]) == 5
+    assert sorted(data["pending_publish"]) == sorted(data["snapshots_imported"])
+    assert sorted(owed_in_the_file(installation)) == sorted(data["snapshots_imported"])
+    assert_names_the_setting_and_nothing_of_this_machine(stage_text(pulled), installation)
+    downloads = len(site.calls)
+
+    raising["on"] = False
+    assert not bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/testcl26/").get("Contents")
+    drained = run("caselist", "pull", "--publish-pending")
+
+    assert drained["exit_code"] == ExitCode.OK, drained
+    assert run_summary(drained)["pending_publish"] == []
+    assert not (installation / "data" / PENDING_WORK_FILE).exists()
+    assert len(site.calls) == downloads, "nothing is fetched again"
+
+
+def test_an_expired_session_answered_by_botocore_still_leaves_publish_pending_with_the_login(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same run, with botocore's own answer for an expired SSO session instead. Unchanged: the
+    publish is pending and owed, the run exits `0`, no failure code is recorded, and the stage
+    names the login that completes it."""
+    botocore_raises(monkeypatch, UnauthorizedSSOTokenError())
+
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.OK, pulled
+    data = run_summary(pulled)
+    stages = {one["stage"]: one for one in data["stages"]}
+    assert stages["import"]["outcome"] == "completed", stages["import"]
+    assert (stages["publish"]["outcome"], stages["publish"]["error_codes"]) == ("pending", [])
+    assert f"aws sso login --profile {AWS_PROFILE_NAME}" in stages["publish"]["reason"]
+    assert PROFILE_SETTING not in json.dumps(data["stages"])
+    assert stages["report"]["outcome"] == "pending"
+    assert sorted(owed_in_the_file(installation)) == sorted(data["snapshots_imported"])
+    assert data["run_record"]["outcome"] == "publish_pending"
+
+
+def test_a_profile_setting_that_names_no_profile_in_the_aws_config_ends_the_pull_with_one(
+    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What a misspelt profile does on a real installation: boto3 refuses to build a session for a
+    profile the AWS config does not define, so the bucket's adapter cannot be built at all. That
+    used to exit `3`, "a retry may succeed", under the code of an expired session. It is a
+    configuration error: exit `1`, under its own code, naming the setting to correct."""
+    monkeypatch.setenv("DEBATE_STORAGE__S3__AWS_PROFILE", MISSPELT_PROFILE)
+
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.DOMAIN_FAILURE, pulled
+    assert pulled["error"]["code"] == "STORE_PROFILE_NOT_CONFIGURED"
+    assert MISSPELT_PROFILE in pulled["error"]["message"]
+    assert PROFILE_SETTING in pulled["error"]["message"]
+    assert PROFILE_SETTING in pulled["error"]["hint"]
+    assert_names_the_setting_and_nothing_of_this_machine(json.dumps(pulled["error"]), installation)
+    assert not bucket.list_objects_v2(Bucket=BUCKET).get("Contents"), "nothing reached the bucket"
+    assert owed_in_the_file(installation) == []
+    # The run never starts: its monitor publishes run records through the same profile, so it
+    # cannot be built either. Nothing is fetched, and no run is recorded (the runbook says so).
+    assert len(site.calls) == 0
+    assert not (installation / "data").exists()

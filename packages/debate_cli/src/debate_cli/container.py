@@ -71,7 +71,9 @@ through a factory the service calls itself — the `EvidenceRemoval` profile nam
 `DEBATE_REMOVAL_PROFILE` (:attr:`~debate_core.application.settings.Settings.removal_profile`). A dry
 run therefore never builds a takedown client, and an execution with the variable unset stops with
 :class:`~debate_core.application.caselist.removal_service.TakedownNotConfigured` before anything is
-read with it, let alone deleted.
+read with it, let alone deleted. So does one whose variable names a profile the AWS config does not
+define, with :class:`~debate_core.application.errors.StoreProfileNotConfigured` naming the variable
+(`v1-e29-t07`).
 
 ## Why the AWS adapters are imported inside the factory
 
@@ -253,6 +255,15 @@ class _PortIdGenerator:
 
 PARSED_DIRECTORY: Final = Path("parsed")
 """Where E31's parse pipeline keeps parsed cards in the data directory (`v1-e31-t06`)."""
+
+_EVERYDAY_PROFILE_SETTING: Final = "storage.s3.aws_profile"
+_REMOVAL_PROFILE_SETTING: Final = "DEBATE_REMOVAL_PROFILE"
+"""The two settings an AWS profile's name comes from, as an operator would look for them.
+
+Passed to the S3 adapters beside the profile itself, because a profile the AWS config does not
+define is reported by the setting to correct, never by the config's path, and only this module
+knows which setting a name came from (`v1-e29-t07`).
+"""
 
 
 class ServiceContainer:
@@ -557,13 +568,18 @@ class ServiceContainer:
 
         # One client for both keyspaces: one set of credentials, one connection pool, and one
         # profile name in any `aws sso login` hint the adapters raise.
-        client = build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile)
+        client = build_s3_client(
+            region=storage.s3.region,
+            profile=storage.s3.aws_profile,
+            profile_setting=_EVERYDAY_PROFILE_SETTING,
+        )
 
         def bucket_store() -> S3EvidenceObjectStore:
             return S3EvidenceObjectStore(
                 bucket=str(storage.s3.bucket),
                 client=client,
                 profile=storage.s3.aws_profile,
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
                 multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
             )
 
@@ -640,7 +656,12 @@ class ServiceContainer:
             versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
-                client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
+                client=build_s3_client(
+                    region=storage.s3.region,
+                    profile=storage.s3.aws_profile,
+                    profile_setting=_EVERYDAY_PROFILE_SETTING,
+                ),
             ),
         )
 
@@ -673,7 +694,12 @@ class ServiceContainer:
             remote_versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
-                client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
+                client=build_s3_client(
+                    region=storage.s3.region,
+                    profile=storage.s3.aws_profile,
+                    profile_setting=_EVERYDAY_PROFILE_SETTING,
+                ),
             ),
             inbox=self.caselist_inbox(),
             suppression=suppression,
@@ -715,13 +741,21 @@ class ServiceContainer:
             raise TakedownNotConfigured
         if not storage.s3.bucket:
             raise EvidenceStoreNotConfigured(settings.environment)
-        client = build_s3_client(region=storage.s3.region, profile=profile)
+        client = build_s3_client(
+            region=storage.s3.region, profile=profile, profile_setting=_REMOVAL_PROFILE_SETTING
+        )
         return TakedownAccess(
-            versions=S3EvidenceVersionStore(bucket=str(storage.s3.bucket), profile=profile, client=client),
+            versions=S3EvidenceVersionStore(
+                bucket=str(storage.s3.bucket),
+                profile=profile,
+                profile_setting=_REMOVAL_PROFILE_SETTING,
+                client=client,
+            ),
             objects=S3EvidenceObjectStore(
                 bucket=str(storage.s3.bucket),
                 client=client,
                 profile=profile,
+                profile_setting=_REMOVAL_PROFILE_SETTING,
                 multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
             ),
             profile=profile,
@@ -753,8 +787,13 @@ class ServiceContainer:
             raise EvidenceStoreNotConfigured(settings.environment)
         return S3EvidenceObjectStore(
             bucket=str(storage.s3.bucket),
-            client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
+            client=build_s3_client(
+                region=storage.s3.region,
+                profile=storage.s3.aws_profile,
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
+            ),
             profile=storage.s3.aws_profile,
+            profile_setting=_EVERYDAY_PROFILE_SETTING,
             multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
         )
 

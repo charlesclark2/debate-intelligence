@@ -85,6 +85,8 @@ class S3EvidenceObjectStore:
             `evidence_bucket_name` Terraform output, never compiled in.
         region: AWS region, or `None` to take it from the profile or the environment.
         profile: A profile in the shared AWS config — this environment's evidence profile.
+        profile_setting: The setting `profile`'s name came from, e.g. `"storage.s3.aws_profile"`. It is
+            what a profile the AWS config does not define is reported by (`v1-e29-t07`).
         client: An already-built client, so that this store and a snapshot store over the same bucket
             share one. The tests pass moto's.
         kms_key_id: The environment's `evidence_kms_key_arn`, to state the key on each upload instead
@@ -99,6 +101,7 @@ class S3EvidenceObjectStore:
         bucket: str,
         region: str | None = None,
         profile: str | None = None,
+        profile_setting: str | None = None,
         client: S3Client | None = None,
         kms_key_id: str | None = None,
         multipart_threshold_bytes: int = DEFAULT_MULTIPART_THRESHOLD_BYTES,
@@ -106,12 +109,17 @@ class S3EvidenceObjectStore:
     ) -> None:
         self._bucket = bucket
         self._profile = profile
+        self._profile_setting = profile_setting
         self._kms_key_id = kms_key_id
         self._transfer_config = build_transfer_config(
             multipart_threshold_bytes=multipart_threshold_bytes,
             multipart_part_size_bytes=multipart_part_size_bytes,
         )
-        self._client = client if client is not None else build_s3_client(region=region, profile=profile)
+        self._client = (
+            client
+            if client is not None
+            else build_s3_client(region=region, profile=profile, profile_setting=profile_setting)
+        )
 
     @property
     def bucket(self) -> str:
@@ -242,6 +250,7 @@ class S3EvidenceObjectStore:
             key=key,
             s3_key=key or None,
             profile=self._profile,
+            profile_setting=self._profile_setting,
         )
 
 

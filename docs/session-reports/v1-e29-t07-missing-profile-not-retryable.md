@@ -249,9 +249,59 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-11
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`.
+
+**My brief was wrong about today's pull, and you measured rather than built to it.** I said a
+misspelt profile would make the weekly agent report "pending, log in" every week. In fact the run
+ends before any stage, with no run record and no notification. That is worse: it is silent. You
+also corrected my claims that an expired session exits 3 through `caselist pull` (Deviation 3) and
+that today's stage exits "0 or 3" (Deviation 4). Both corrections are right.
+
+**The work itself:**
+
+* **Ten commands are shown red then green.** Each asserts that the test's own AWS config path,
+  file name, installation directory and home directory are absent from the whole envelope.
+* **Passing the setting's name from the composition root (Decision 2)** is the right shape. With
+  an adapter default, a takedown's error would have named the everyday setting.
+* **The survivor was real.** The stage tests could not tell the adapter's sentence from one
+  written in the sync, so a regression to the sync's own sentence would have passed. They now
+  require the adapter's hint verbatim and the profile's name, which only the adapter knows.
+
+**Rulings:**
+
+* **Deviations 1 and 2:** accepted. Adding the class to the publish stage's `except` goes past
+  ac4, and rightly: without it the error would end the run rather than fail the stage.
+* **Deviations 3 and 4:** accepted, as corrections of my brief.
+* **Decision 4, the real misconfiguration still ends the pull before any stage:** accepted for
+  this task. Moving it would touch the run record `v1-e34-t19` is changing. The silence is now the
+  first item below.
+* **Decision 5, `caselist remove --execute` raising the new error unwrapped:** accepted for now.
+  Folded into `v1-e29-t08`, which reworks that preflight anyway.
+* **Decision 6, failing the import closed instead of falling back to the local list:** accepted.
+  The fallback exists because a login is coming. For a missing profile none is, so failing closed
+  is the correct reading of `v1-e34-t07`, not an extension of it.
+* **Decisions 1, 3, 7, 8, 9 and 10:** accepted.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **Your 1, the silent failure (E34, p2).** A run that cannot build its bucket is recorded and
+  announced like the other refusals to start, and `doctor` and `install.sh --check-launchd`
+  confirm that the configured profile is defined. It starts after `v1-e34-t19` merges, because it
+  writes the run record. Until then the operator checks the profile when reinstalling after
+  Wednesday's scheduled run: `caselist runs --remote` in the agent's environment exits 1 with this
+  error if the profile is missing.
+* **Your 2, wrapping the new error in `TakedownPreflightFailed` (E29):** added to `v1-e29-t08`.
+* **Your 3, the two `caselist_sync.py` docstrings:** handed to `v1-e34-t19` to fold in after it
+  syncs.
+* **Your 4, services that re-raise session errors, and your 5, credential faults described as
+  missing grants (E29, p3):** filed as one task.
+* **Your 6:** answered by this task, as you say.
+
+**No operator steps.**

@@ -64,6 +64,9 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         "DEBATE_CASELIST__API_BASE_URL": API,
         "DEBATE_CASELIST__MIN_REQUEST_INTERVAL_SECONDS": "0.5",
         "DEBATE_PROVIDERS__CASELIST_TOKEN": f"fixture-token-{secrets.token_hex(8)}",
+        # The parse stage is on, as it is for the agent (`v1-e34-t17`). One worker, so that a pull
+        # here starts one process and not the machine's cores less one.
+        "DEBATE_PARSE__WORKERS": "1",
     }.items():
         monkeypatch.setenv(name, value)
     yield data
@@ -241,6 +244,32 @@ def test_a_pull_leaves_one_record_that_runs_then_shows(installation: Path, site:
     [record] = SyncRunLog(installation / SYNC_RUN_LOG_FILENAME).read()
     assert record.run_id == pulled["data"]["run_id"]
     assert [one["run_id"] for one in as_json("caselist", "runs")["data"]["runs"]] == [record.run_id]
+
+
+def test_runs_shows_what_the_newest_runs_parse_stage_did(installation: Path, site: respx.MockRouter) -> None:
+    """`v1-e34-t17` ac5's reading: the stage's counts, in `caselist runs --last 1`.
+
+    By hand from the fixture: one caselist, whose three weeklies hold fourteen distinct bodies, of
+    which one is a PDF and one a legacy `.doc`; plain paragraphs, so no cards; nothing parsed
+    before, so a full parse; and no bucket in `test`, so the sentence says nothing of one.
+    """
+    assert invoke("--json", "caselist", "pull", "--caselist", SYNTHETIC_CASELIST).exit_code == ExitCode.OK
+
+    shown = " ".join(invoke("caselist", "runs", "--last", "1").stdout.split())
+
+    assert (
+        "Parse stage of the newest run" in shown
+        and "completed. 1 caselist(s) parsed: 14 source(s) attempted, 0 skipped as parsed already, "
+        "2 unsupported, 0 failed, 0 card(s); 1 of them parsed in full, into a version directory that "
+        "held nothing."
+        in shown
+    ), shown
+    [record] = as_json("caselist", "runs", "--last", "1")["data"]["runs"]
+    assert {one["stage"]: one["outcome"] for one in record["stages"]}["parse"] == "completed"
+
+    # The next run imports nothing, so its parse stage is skipped and the caption is silent on it.
+    assert invoke("--json", "caselist", "pull", "--caselist", SYNTHETIC_CASELIST).exit_code == ExitCode.OK
+    assert "Parse stage" not in " ".join(invoke("caselist", "runs", "--last", "1").stdout.split())
 
 
 def test_a_dry_run_leaves_no_record(installation: Path, site: respx.MockRouter) -> None:

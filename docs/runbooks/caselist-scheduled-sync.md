@@ -565,9 +565,11 @@ made from it.
 ### Reading what it did
 
 The summary's `parse` holds counts only, and the stage's row in the table says the same in a
-sentence, which is also what `caselist runs` keeps:
+sentence. `caselist runs` keeps that sentence and shows it under its table for the newest run,
+unless the stage was skipped:
 
 ```bash
+debate-research caselist runs --last 1
 tail -n 1 ~/Library/Logs/debate-research/caselist-sync.jsonl | jq '.data.parse'
 debate-research --json caselist runs --last 1 | jq '.data.runs[0].stages[] | select(.stage == "parse")'
 ```

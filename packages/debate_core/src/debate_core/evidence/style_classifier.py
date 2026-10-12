@@ -495,12 +495,31 @@ def _wiki_cite_entry_match(
     )
 
 
+def _opens_in_bold(paragraph: ParagraphDescription) -> bool:
+    """Whether the paragraph's first visible run is bold, by its own setting or the paragraph mark's."""
+    visible = paragraph.visible_runs
+    if not visible:
+        return False
+    first = visible[0]
+    return first.bold if first.bold is not None else bool(paragraph.paragraph_bold)
+
+
 def _cite_line_match(paragraph: ParagraphDescription, profile: StyleProfile) -> ParagraphStyleMatch | None:
-    """A short line that opens with a short cite — `Smith 26`, `Smith et al. 2026`."""
+    """A short line that opens with a short cite — `Smith 26`, `Smith et al. 2026`.
+
+    Not a line that opens with a word no author is called: *In 2019*, *Since 2001*, *Figure 12*
+    (:data:`WORDS_THAT_OPEN_A_SENTENCE`). The pattern cannot tell those from a name, and they are
+    how a sentence of evidence begins. A line that opens in bold is left to the pattern all the
+    same: bold is how a cite is written, 279 such lines in the corpus open that way, and what they
+    are cannot be told from here (`v1-e31-t12`).
+    """
     text = paragraph.text.strip()
     if len(text) > MAXIMUM_CITE_LINE_CHARACTERS:
         return None
-    if not _compiled(profile.cite.short_cite_pattern).match(text):
+    short_cite = _compiled(profile.cite.short_cite_pattern).match(text)
+    if short_cite is None:
+        return None
+    if _is_a_sentence_opener(short_cite.group("author")) and not _opens_in_bold(paragraph):
         return None
     return ParagraphStyleMatch(
         unit=StructuralUnit.CITE,

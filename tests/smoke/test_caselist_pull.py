@@ -24,7 +24,7 @@ import hashlib
 import json
 import os
 from collections.abc import Iterator
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -984,12 +984,21 @@ def test_an_expired_session_answered_by_botocore_still_leaves_publish_pending_wi
 
 
 def test_a_profile_setting_that_names_no_profile_in_the_aws_config_ends_the_pull_with_one(
-    installation: Path, bucket: S3Client, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+    installation: Path,
+    bucket: S3Client,
+    site: respx.MockRouter,
+    notified: RecordingNotifier,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """What a misspelt profile does on a real installation: boto3 refuses to build a session for a
     profile the AWS config does not define, so the bucket's adapter cannot be built at all. That
     used to exit `3`, "a retry may succeed", under the code of an expired session. It is a
-    configuration error: exit `1`, under its own code, naming the setting to correct."""
+    configuration error: exit `1`, under its own code, naming the setting to correct.
+
+    And it is no longer silent (`v1-e34-t22`). The run used to end before its monitor could be
+    built, with no record and no notification. It is recorded on this machine as a failed run, its
+    details name the code and the setting, one banner says a person should look, and its record is
+    owed to the bucket."""
     monkeypatch.setenv("DEBATE_STORAGE__S3__AWS_PROFILE", MISSPELT_PROFILE)
 
     pulled = run("caselist", "pull")
@@ -1002,10 +1011,84 @@ def test_a_profile_setting_that_names_no_profile_in_the_aws_config_ends_the_pull
     assert_names_the_setting_and_nothing_of_this_machine(json.dumps(pulled["error"]), installation)
     assert not bucket.list_objects_v2(Bucket=BUCKET).get("Contents"), "nothing reached the bucket"
     assert owed_in_the_file(installation) == []
-    # The run never starts: its monitor publishes run records through the same profile, so it
-    # cannot be built either. Nothing is fetched, and no run is recorded (the runbook says so).
-    assert len(site.calls) == 0
-    assert not (installation / "data").exists()
+    assert len(site.calls) == 0, "nothing is fetched"
+
+    [record] = run_log_of(installation)
+    assert (record["outcome"], record["error_class"]) == ("failed", "StoreProfileNotConfigured")
+    assert record["stages"] == []
+    [details] = run_details_of(installation)
+    assert details["run_id"] == record["run_id"]
+    assert details["failure_codes"] == ["STORE_PROFILE_NOT_CONFIGURED"]
+    assert PROFILE_SETTING in details["hint"]
+    [banner] = notified.sent
+    assert banner.title == PERSON_TITLE
+    assert banner.hint == details["hint"]
+    assert records_owed_to_the_bucket(installation) == [record["run_id"]]
+    assert_names_the_setting_and_nothing_of_this_machine(
+        json.dumps([record, details, banner.title, banner.text]), installation
+    )
+
+
+def test_the_week_after_a_refused_run_the_pull_imports_publishes_and_publishes_the_refused_runs_record(
+    installation: Path,
+    bucket: S3Client,
+    site: respx.MockRouter,
+    notified: RecordingNotifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`v1-e34-t22` ac2, as the weekly agent meets it: one week the setting is wrong and the run is
+    refused, and the setting is corrected before the next. That run fetches, imports and publishes
+    as usual, and the refused run's record and details reach the bucket with its own."""
+    times = iter([datetime(2026, 9, 16, 6, 0, tzinfo=UTC), datetime(2026, 9, 23, 6, 0, tzinfo=UTC)])
+    now = {"at": next(times)}
+    monkeypatch.setattr(ServiceContainer, "clock", lambda _: lambda: now["at"])
+    monkeypatch.setenv("DEBATE_STORAGE__S3__AWS_PROFILE", MISSPELT_PROFILE)
+    refused = run("caselist", "pull")
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
+
+    monkeypatch.delenv("DEBATE_STORAGE__S3__AWS_PROFILE")
+    now["at"] = next(times)
+    pulled = run("caselist", "pull")
+
+    assert pulled["exit_code"] == ExitCode.OK, pulled
+    assert run_summary(pulled)["objects_published"] > 0
+    listed = [
+        str(one.get("Key")) for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/")["Contents"]
+    ]
+    assert sorted(key for key in listed if key.startswith("reports/sync-runs/")) == [
+        "reports/sync-runs/2026/20260916T060000Z.json",
+        "reports/sync-runs/2026/20260923T060000Z.json",
+    ]
+    assert sorted(key for key in listed if key.startswith("reports/sync-run-details/")) == [
+        "reports/sync-run-details/2026/20260916T060000Z.json",
+        "reports/sync-run-details/2026/20260923T060000Z.json",
+    ]
+    in_the_bucket = json.loads(
+        bucket.get_object(Bucket=BUCKET, Key="reports/sync-runs/2026/20260916T060000Z.json")["Body"].read()
+    )
+    assert in_the_bucket == run_log_of(installation)[0]
+    assert in_the_bucket["error_class"] == "StoreProfileNotConfigured"
+    assert records_owed_to_the_bucket(installation) == []
+    assert [one.title for one in notified.sent] == [PERSON_TITLE], "the second run had nothing to say"
+
+
+def run_log_of(installation: Path) -> list[dict[str, Any]]:
+    log = installation / "data" / "caselist-sync-runs.jsonl"
+    return [json.loads(line) for line in log.read_text("utf-8").splitlines()] if log.exists() else []
+
+
+def run_details_of(installation: Path) -> list[dict[str, Any]]:
+    kept = installation / "data" / "caselist-sync-run-details.jsonl"
+    return [json.loads(line) for line in kept.read_text("utf-8").splitlines()] if kept.exists() else []
+
+
+def records_owed_to_the_bucket(installation: Path) -> list[str]:
+    """The run ids whose record the bucket does not have yet; none when the file is gone."""
+    owed = installation / "data" / "caselist-sync-records-pending.json"
+    if not owed.exists():
+        return []
+    listed: list[str] = json.loads(owed.read_text("utf-8"))["run_ids"]
+    return listed
 
 
 # ------------------------------------------------------------------------------------------------

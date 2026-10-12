@@ -43,7 +43,7 @@ SENSORS = (
     "minutes earlier on average, and the earlier warnings let crews close storm gates before the "
     "surge reached the harbour road."
 )
-#: (short cite, completeness, body). What `card-fingerprint-v2` does with them, by hand:
+#: (short cite, completeness, body). What the rules since `card-fingerprint-v2` do with them, by hand:
 #: the one-typo copy joins the sensors card; the two orchard cuts, which no full card matches,
 #: are grouped; the ferry card is alone. Five cards, five clusters before, three after.
 CARDS = (
@@ -395,3 +395,438 @@ def test_the_sample_shows_each_pair_then_clears_it_and_returns_tallies_alone(dat
     assert shown[-1] == script.CLEAR_TERMINAL
     assert shown.count(script.CLEAR_TERMINAL) == len(pairs) + 1
     assert not [word for word in TELLTALE if word in repr(tallies)]
+
+
+# ------------------------------------------------------------------------------------------------
+# Inside one placement: `diagnose`, and `sample` by cluster or by limit (`v1-e31-t11`)
+# ------------------------------------------------------------------------------------------------
+#
+# A second invented store, of numbered made-up words, so every count below is arithmetic: a body
+# of n words has n - 4 shingles. A 330-word card, a 90-word copy from inside it disclosed twice, a
+# 30-word cut from inside the copy, and an unrelated 80-word card.
+
+
+def _numbered(stem: str, count: int) -> list[str]:
+    return [f"{stem}{index}" for index in range(count)]
+
+
+WHOLE = _numbered("word", 330)
+LONG_COPY = WHOLE[100:190]
+CUT = LONG_COPY[10:40]
+ELSEWHERE = _numbered("elsewhere", 80)
+#: Words of those bodies, which output that is meant to hold counts must not contain.
+NUMBERED_TELLTALE = ("word0", "word120", "word150", "elsewhere7")
+
+NESTED_CARDS = {
+    "one": (
+        ("Invented 26", CardCompleteness.FULL, " ".join(WHOLE)),
+        ("Invented 26", CardCompleteness.FULL, " ".join(LONG_COPY)),
+        ("Invented 26", CardCompleteness.FULL, " ".join(CUT)),
+    ),
+    "two": (
+        ("Invented 26", CardCompleteness.FULL, " ".join(LONG_COPY)),
+        ("Other 25", CardCompleteness.FULL, " ".join(ELSEWHERE)),
+    ),
+}
+
+
+def _fingerprint_of(words: list[str]) -> str:
+    """The exact fingerprint of a body of numbered words: they are already normalized."""
+    return hashlib.sha256(" ".join(words).encode("utf-8")).hexdigest()
+
+
+def _write_store(root: Path, documents: list[ParsedDocument], cluster_of: dict[str, str]) -> None:
+    """A store of `documents` whose occurrence table places each exact fingerprint as `cluster_of` says."""
+    store = LocalParsedStore(root)
+    entries: list[SourceEntry] = []
+    rows: list[OccurrenceRecord] = []
+    for document in documents:
+        common = {
+            "caselist": CASELIST,
+            "snapshot": "2026-09-01",
+            "source_sha256": document.source_sha256,
+            "parser_version": document.parser_version,
+            "profile_version": document.profile_version,
+            "fingerprint_version": "card-fingerprint-v2",
+        }
+        entry = SourceEntry.model_validate(
+            {
+                **common,
+                "source_format": SourceFormat.DOCX,
+                "byte_size": 100,
+                "outcome": SourceOutcome.PARSED,
+                "cards": len(document.cards),
+            }
+        )
+        record = DocumentRecord.from_parsed_document(
+            document,
+            caselist=CASELIST,
+            snapshot="2026-09-01",
+            fingerprint_version="card-fingerprint-v2",
+            camp=None,
+        )
+        asyncio.run(store.write_source(CASELIST, document.parser_version, entry, record))
+        entries.append(entry)
+        for card in document.cards:
+            fingerprint = card_fingerprint(card).exact_fingerprint
+            rows.append(
+                OccurrenceRecord.model_validate(
+                    {
+                        **common,
+                        "last_snapshot": "2026-09-01",
+                        "disclosure": "d" * 64,
+                        "first_element_index": card.provenance.first_element_index,
+                        "last_element_index": card.provenance.last_element_index,
+                        "exact_fingerprint": fingerprint,
+                        "cluster_id": cluster_of[fingerprint],
+                        "membership": ClusterMembership.NEAR_DUPLICATE,
+                        "completeness": card.completeness,
+                    }
+                )
+            )
+    asyncio.run(
+        store.write_aggregates(
+            CASELIST, documents[0].parser_version, index=entries, failures=[], occurrences=rows
+        )
+    )
+
+
+@pytest.fixture
+def nested_dir(tmp_path: Path) -> Path:
+    """The nested store as `card-fingerprint-v2` placed it: every text a cluster of its own.
+
+    Written out, not computed: the banding never pairs the copy with the card (`near_duplicates`'
+    own tests check that), the cut is inside both and so joined neither under `v2`, and the fourth
+    body shares no word with any of them.
+    """
+    documents = [_document(name, cards) for name, cards in NESTED_CARDS.items()]
+    alone = {_fingerprint_of(body): _fingerprint_of(body) for body in (WHOLE, LONG_COPY, CUT, ELSEWHERE)}
+    _write_store(tmp_path, documents, alone)
+    return tmp_path
+
+
+def _diagnosed(data_dir: Path, capsys: pytest.CaptureFixture[str], *options: str) -> dict[str, object]:
+    assert script.main(["--data-dir", str(data_dir), "diagnose", "--caselist", CASELIST, *options]) == 0
+    output = capsys.readouterr().out
+    assert not [word for word in (*TELLTALE, *NUMBERED_TELLTALE) if word in output]
+    return json.loads(output)[CASELIST]
+
+
+WITHIN_THE_RULE = "short: one cluster is its witness, within the share, and it is still apart"
+LONG_NEVER_PAIRED = "long: its containers are one cluster the banding never paired it with"
+NESTED_DETAIL = "its containers are nested copies in several clusters"
+SPLIT_BY_THE_BANDING = "pass the thresholds, never paired by the banding"
+
+
+def test_diagnose_says_which_limit_kept_each_cut_out_and_prints_counts_only(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """By hand: five cards, four texts, one of them short. Two bodies have a container outside
+    their cluster. The cut (26 shingles) is inside the copy (86) and the card (326), which are two
+    clusters, and the card holds the copy: nested, three-tenths of the copy, still apart. The copy
+    is 86 of the card's 326 shingles, a long cut the banding never paired with its one container,
+    whose cluster is that one text."""
+    result = _diagnosed(nested_dir, capsys, "--largest-clusters", "1")
+    assert result["placement"] == "the store's table"
+    assert result["fingerprint_version"] == "card-fingerprint-v2"
+    assert (result["cards"], result["clusters"]) == (5, 4)
+    assert (result["full_texts"], result["short_full_texts"]) == (4, 1)
+    assert "divided_pairs" not in result
+
+    cuts = result["cuts"]
+    assert isinstance(cuts, dict)
+    assert cuts["bodies_with_a_container_outside_their_cluster"] == 2
+    assert {name: count for name, count in cuts["by_outcome"].items() if count} == {
+        WITHIN_THE_RULE: 1,
+        LONG_NEVER_PAIRED: 1,
+    }
+    assert cuts["short_with_containers_in_several_clusters"] == {
+        "cuts": 1,
+        "of which the containers are nested": 1,
+        "as one card, split": 1,
+        "as different cards": 0,
+        "one card split, by what kept the copies apart": {SPLIT_BY_THE_BANDING: 1},
+    }
+    assert cuts["short_within_the_rule_and_apart"] == {
+        "cuts": 1,
+        NESTED_DETAIL: 1,
+        "the container first by fingerprint is over the share": 0,
+        "neither: another short body of its cluster points elsewhere": 0,
+    }
+    assert cuts["long_never_paired_by_share"] == {
+        "under a tenth": 0,
+        "a tenth to a quarter": 0,
+        "a quarter to a half": 1,
+        "half or more": 0,
+    }
+    assert cuts["long_with_one_witness_within_the_share"] == {
+        "cuts": 1,
+        "sharing text with every text of the witness's cluster": 1,
+        "of which that cluster is one text": 1,
+        "sharing nothing with at least one text of it": 0,
+    }
+
+    # The largest cluster is the copy's: one text, disclosed twice.
+    (largest,) = result["largest_clusters"]
+    assert "cluster_id" not in largest
+    assert (largest["rank"], largest["cards"], largest["distinct_texts"], largest["pairs"]) == (1, 2, 1, 0)
+    assert (largest["words_smallest"], largest["words_largest"], largest["cards_not_full"]) == (90, 90, 0)
+
+
+def test_diagnose_can_describe_the_largest_clusters_alone_and_name_them(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    result = _diagnosed(
+        nested_dir, capsys, "--only-largest-clusters", "--largest-clusters", "1", "--show-cluster-ids"
+    )
+    assert "cuts" not in result
+    assert (result["cards"], result["clusters"]) == (5, 4)
+    (largest,) = result["largest_clusters"]
+    assert largest["cluster_id"] == _fingerprint_of(LONG_COPY)
+
+
+def test_diagnose_explains_each_divided_pair_from_a_saved_table(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Before: the card, the copy and the cut in one cluster, as the rules before the short-body
+    step left them when the banding paired the cut with both. Now three clusters. The copy's part
+    has the most cards, so it is the host and two parts left it. The cut's part left because the
+    cut was left out; the card's part had been joined to the rest only through the cut."""
+    store = LocalParsedStore(nested_dir)
+    version = script.current_version(store, CASELIST)
+    table = store.root / CASELIST / version / "occurrences.jsonl"
+    together = {_fingerprint_of(body) for body in (WHOLE, LONG_COPY, CUT)}
+    saved = nested_dir / "saved" / f"{CASELIST}.jsonl"
+    saved.parent.mkdir()
+    rows = [json.loads(line) for line in table.read_text(encoding="utf-8").splitlines()]
+    for row in rows:
+        if row["exact_fingerprint"] in together:
+            row["cluster_id"] = min(together)
+        row["fingerprint_version"] = BEFORE_T08
+    saved.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    divided = _diagnosed(nested_dir, capsys, "--before", str(saved), "--largest-clusters", "0")[
+        "divided_pairs"
+    ]
+    assert isinstance(divided, dict)
+    assert divided["pairs"] == 2
+    common = {
+        "pairs": 1,
+        "outcome": WITHIN_THE_RULE,
+        "detail": NESTED_DETAIL,
+        "containers_read": "as one card, split",
+        "copies_kept_apart_by": [SPLIT_BY_THE_BANDING],
+    }
+    assert divided["by_reason"] == [
+        {**common, "kind": "a short cut in this part was left out"},
+        {**common, "kind": "this part was joined only through a short cut elsewhere"},
+    ]
+
+
+def test_diagnose_previews_the_placement_the_checked_out_rules_would_make(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Under the current rules the cut joins the copy: three clusters, nothing divided, and the one
+    body still outside a cluster that holds it is the long copy. The largest cluster is the copy's
+    two cards and the cut: two texts, one pair, the cut wholly inside the copy."""
+    result = _diagnosed(nested_dir, capsys, "--preview", "--largest-clusters", "1")
+    assert result["placement"] == "the checked-out rules, in memory"
+    assert result["fingerprint_version"] == FINGERPRINT_VERSION
+    assert (result["cards"], result["clusters"]) == (5, 3)
+    cuts = result["cuts"]
+    assert isinstance(cuts, dict)
+    assert {name: count for name, count in cuts["by_outcome"].items() if count} == {LONG_NEVER_PAIRED: 1}
+    assert result["divided_pairs"] == {"pairs": 0, "by_reason": []}
+    (largest,) = result["largest_clusters"]
+    assert (largest["cards"], largest["distinct_texts"], largest["short_texts"]) == (3, 2, 1)
+    assert (largest["pairs"], largest["pairs_sharing_half_or_more"], largest["pairs_matching"]) == (1, 1, 1)
+
+
+def _placed_and_cards(
+    data_dir: Path,
+) -> tuple[dict[script.CardKey, script.Placement], dict[script.CardKey, ParsedCard]]:
+    store = LocalParsedStore(data_dir)
+    version = script.current_version(store, CASELIST)
+    placed = script.read_placements(store.root / CASELIST / version / "occurrences.jsonl")
+    return placed, script.read_cards(store, CASELIST, version, placed)
+
+
+def test_bodies_read_as_json_are_the_bodies_the_card_models_hold(nested_dir: Path) -> None:
+    store = LocalParsedStore(nested_dir)
+    version = script.current_version(store, CASELIST)
+    placed, cards = _placed_and_cards(nested_dir)
+    texts = script.read_bodies(store, CASELIST, version, placed)
+    assert texts == {key: card.evidence_text for key, card in cards.items()}
+    assert len(texts) == 5
+
+    (sha256, _element) = next(iter(placed))
+    with pytest.raises(SystemExit, match="1 card positions of the table are in no stored document"):
+        script.read_bodies(store, CASELIST, version, [(sha256, 999)])
+
+
+def test_the_largest_cluster_is_found_by_rank_or_by_the_start_of_its_id(nested_dir: Path) -> None:
+    placed, _ = _placed_and_cards(nested_dir)
+    copy = _fingerprint_of(LONG_COPY)
+    assert script._resolve_cluster(placed, None, 1) == copy
+    assert script._resolve_cluster(placed, copy[:12].upper(), None) == copy
+    assert script._resolve_cluster(placed, copy, None) == copy
+    with pytest.raises(SystemExit, match="4 cluster ids start with what was given"):
+        script._resolve_cluster(placed, "", None)
+    with pytest.raises(SystemExit, match="0 cluster ids start with what was given"):
+        script._resolve_cluster(placed, "not-a-digest", None)
+    for rank in (0, 5):
+        with pytest.raises(SystemExit, match="the placement has 4 clusters"):
+            script._resolve_cluster(placed, None, rank)
+
+
+def test_pairs_inside_a_cluster_are_of_different_texts_one_card_each(nested_dir: Path) -> None:
+    """All five cards as one cluster: four texts, so six pairs of different texts, and the copy's
+    two cards never paired with each other. The three pairs that share nothing are the unrelated
+    card's, and they come first when the least alike are asked for."""
+    placed, cards = _placed_and_cards(nested_dir)
+    keys = sorted(placed)
+    elsewhere = next(key for key in keys if placed[key].exact_fingerprint == _fingerprint_of(ELSEWHERE))
+
+    at_random, available = script.cluster_pairs(cards, placed, keys, count=20, seed=7, least_alike=False)
+    assert (len(at_random), available) == (6, 6)
+    assert {pair.kind for pair in at_random} == {"full with full"}
+    for pair in at_random:
+        assert placed[pair.joiner].exact_fingerprint != placed[pair.host].exact_fingerprint
+    again, _ = script.cluster_pairs(cards, placed, keys, count=20, seed=7, least_alike=False)
+    assert again == at_random
+
+    least_alike, available = script.cluster_pairs(cards, placed, keys, count=3, seed=7, least_alike=True)
+    assert (len(least_alike), available) == (3, 6)
+    assert all(elsewhere in (pair.joiner, pair.host) for pair in least_alike)
+
+
+def test_cuts_are_drawn_by_the_limit_that_keeps_them_apart(nested_dir: Path) -> None:
+    """The store holds one long cut within the share, the copy, whose smallest container is the
+    card. The short cut is within the rule and apart, which is no limit's doing, so no limit draws
+    it."""
+    from debate_core.evidence.cluster_diagnosis import diagnose_cuts
+
+    store = LocalParsedStore(nested_dir)
+    version = script.current_version(store, CASELIST)
+    placed, _ = _placed_and_cards(nested_dir)
+    bodies, clusters = script.full_bodies(script.read_bodies(store, CASELIST, version, placed), placed)
+    findings = diagnose_cuts(bodies, clusters).findings
+    drawn = {limit: script.kept_apart(findings, limit) for limit in script.KEPT_APART_BY}
+    assert drawn.pop("long-cut-within-the-share") == [(_fingerprint_of(LONG_COPY), _fingerprint_of(WHOLE))]
+    assert all(pairs == [] for pairs in drawn.values())
+
+
+def _as_a_terminal(monkeypatch: pytest.MonkeyPatch, answers: list[str]) -> None:
+    """Let `sample` run under pytest: both streams say they are a terminal, and input is scripted."""
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+    replies = iter(answers)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(replies))
+
+
+def test_sample_by_cluster_shows_pairs_from_the_largest_cluster_and_ends_with_tallies(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The store rebuilt under the current rules: the largest cluster is the copy's two cards and
+    the cut, two texts, one pair of different texts. `--cluster` with its id draws the same pair."""
+    _rebuilt_under_todays_rules(nested_dir)
+    cluster_id = min(_fingerprint_of(CUT), _fingerprint_of(LONG_COPY))  # the smallest in the cluster
+    for chosen in (["--largest", "1"], ["--cluster", cluster_id[:16]]):
+        _as_a_terminal(monkeypatch, ["s"])
+        arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, "--seed", "3", *chosen]
+        assert script.main(arguments) == 0
+        shown = capsys.readouterr().out
+        before_the_tallies, _, tallies = shown.rpartition(script.CLEAR_TERMINAL)
+        assert "word120" in before_the_tallies  # the pair was shown, to what says it is a terminal
+        assert "In one cluster now." in before_the_tallies
+        assert not [word for word in NUMBERED_TELLTALE if word in tallies]
+        assert (
+            "Drew 1 of 1 pairs of different texts, at random, from testcl26's cluster of 3 cards and "
+            "2 texts (size rank 1), seed 3." in tallies
+        )
+        assert "full with full: same card: 1" in tallies
+
+
+def test_sample_by_limit_shows_a_cut_beside_the_smallest_body_that_holds_it(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _as_a_terminal(monkeypatch, ["d"])
+    arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, "--seed", "3"]
+    assert script.main([*arguments, "--kept-apart-by", "long-cut-within-the-share"]) == 0
+    shown = capsys.readouterr().out
+    before_the_tallies, _, tallies = shown.rpartition(script.CLEAR_TERMINAL)
+    assert "Apart now. B is the smallest body that holds A." in before_the_tallies
+    assert "--- A: FULL, 90 words" in before_the_tallies
+    assert "--- B: FULL, 330 words" in before_the_tallies
+    assert not [word for word in NUMBERED_TELLTALE if word in tallies]
+    assert "Drew 1 of 1 cuts kept apart by long-cut-within-the-share, seed 3." in tallies
+    assert "long-cut-within-the-share: different card: 1" in tallies
+
+
+@pytest.mark.parametrize(
+    ("options", "refusal"),
+    [
+        (["--largest", "1", "--divided"], "read one placement"),
+        (["--kept-apart-by", "lacking-an-end", "--before-rules", "HEAD"], "read one placement"),
+        (["--least-alike"], "give --cluster or --largest"),
+        (["--largest", "1", "--caselist", "another"], "give --caselist once"),
+    ],
+)
+def test_sample_refuses_options_that_do_not_go_together(
+    nested_dir: Path, monkeypatch: pytest.MonkeyPatch, options: list[str], refusal: str
+) -> None:
+    _as_a_terminal(monkeypatch, [])
+    arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, *options]
+    with pytest.raises(SystemExit, match=refusal):
+        script.main(arguments)
+
+
+@pytest.mark.parametrize("options", [["--largest", "1"], ["--kept-apart-by", "lacking-an-end"]])
+def test_sample_inside_a_placement_also_refuses_anything_but_a_terminal(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str], options: list[str]
+) -> None:
+    arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, *options]
+    assert script.main(arguments) == 2
+    captured = capsys.readouterr()
+    assert "terminal" in captured.err
+    assert not [word for word in NUMBERED_TELLTALE if word in captured.out + captured.err]
+
+
+def test_earlier_rules_place_the_cards_although_the_diagnosis_could_not_import_from_them(
+    data_dir: Path,
+) -> None:
+    """`--before-rules` runs this script against the matching modules of an earlier commit. The
+    diagnosis imports names those modules may not have, so the script must not import it until it
+    diagnoses. Here the handed-over rules are today's with one such name taken away, as a commit
+    before `v1-e31-t11` lacks it: the child still places all five cards."""
+
+    def without_what_the_diagnosis_imports(module: str) -> bytes:
+        source = (script.PACKAGE_SOURCE / "debate_core" / module).read_bytes()
+        return source.replace(b"confirms_a_cut", b"confirms_a_cut_under_another_name")
+
+    assert (
+        b"confirms_a_cut"
+        in (script.PACKAGE_SOURCE / "debate_core" / "evidence" / "near_duplicates.py").read_bytes()
+    )
+    handed_over = script.placements_under_rules(without_what_the_diagnosis_imports, data_dir, CASELIST)
+    assert len(handed_over) == 5
+
+
+def test_diagnose_reads_the_earlier_rules_from_a_git_ref(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With `--before-rules HEAD`, before is the committed rules and after is the store's table,
+    which here is the one `v2` left. So the comparison reads backwards, as it does for `counts`:
+    the committed rules put the cut with the copy, the table has it alone, and that one pair is
+    divided, the cut being a short cut that was left out."""
+    divided = _diagnosed(nested_dir, capsys, "--before-rules", "HEAD", "--largest-clusters", "0")[
+        "divided_pairs"
+    ]
+    assert isinstance(divided, dict)
+    assert divided["pairs"] == 1
+    (reason,) = divided["by_reason"]
+    assert (reason["kind"], reason["outcome"], reason["detail"]) == (
+        "a short cut in this part was left out",
+        WITHIN_THE_RULE,
+        NESTED_DETAIL,
+    )

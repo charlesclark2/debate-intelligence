@@ -36,6 +36,9 @@ needed, so both take seconds on the store's own table:
 * **`sample --cluster ID`** (or `--largest RANK`) draws pairs of different texts from one cluster,
   for a person to say whether a large cluster is one card. `--least-alike` shows the pairs that
   share the least text first, which is where two cards merged into one cluster would be.
+* **`sample --kept-apart-by LIMIT`** draws cuts that `diagnose` counts under one limit, each with
+  the smallest body that holds it, for a person to say whether the limit is keeping copies of one
+  card apart. It is the evidence for moving a limit, taken before the limit is moved.
 
 **Operator-run on the real store.** It writes nothing to the store or the repository.
 `--before-rules` copies source files, never card text, to a temporary directory it removes, and
@@ -85,6 +88,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ABSORBED_BANDS",
+    "KEPT_APART_BY",
     "MATCHING_RULE_MODULES",
     "ClusterChange",
     "Joined",
@@ -96,6 +100,7 @@ __all__ = [
     "diagnose",
     "divided_parts",
     "joined_pairs",
+    "kept_apart",
     "largest_clusters",
     "main",
     "placements_now",
@@ -113,6 +118,19 @@ type CardKey = tuple[str, int]
 ABSORBED_BANDS = ((2, 2), (3, 5), (6, 20), (21, 100), (101, None))
 
 VERDICTS = {"s": "same card", "d": "different card", "u": "unsure"}
+
+#: What `sample --kept-apart-by` can draw: cuts `diagnose` counts as apart from a body that holds
+#: them, by the limit that applies. The long ones are split at the minimum cut share, since a rule
+#: that joined long cuts as the short ones are joined would take the first and leave the second.
+KEPT_APART_BY = (
+    "witnesses-in-several-clusters",
+    "under-the-minimum-share",
+    "ends-held-by-too-many-clusters",
+    "lacking-an-end",
+    "long-cut-within-the-share",
+    "long-cut-under-the-share",
+    "long-cut-in-several-clusters",
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_SOURCE = REPO_ROOT / "packages" / "debate_core" / "src"
@@ -632,6 +650,42 @@ def _divided_tally(
     }
 
 
+def kept_apart(findings: Sequence[CutFinding], limit: str) -> list[tuple[str, str]]:
+    """The cuts among `findings` that `limit` keeps apart, each with the body it is shown beside.
+
+    Pairs of exact fingerprints: the cut, and the smallest body confirmed to hold it (for a cut
+    lacking an end, the first by fingerprint of the bodies holding nine-tenths of it).
+    """
+    from debate_core.evidence.cluster_diagnosis import CutOutcome
+    from debate_core.evidence.near_duplicates import MIN_CUT_SHARE
+
+    long_with_one_witness = (CutOutcome.LONG_NEVER_PAIRED, CutOutcome.LONG_SEVERAL_CLUSTERS)
+    chosen: dict[str, Callable[[CutFinding], bool]] = {
+        "witnesses-in-several-clusters": lambda f: f.outcome is CutOutcome.SEVERAL_CLUSTERS,
+        "under-the-minimum-share": lambda f: f.outcome is CutOutcome.UNDER_MIN_CUT_SHARE,
+        "ends-held-by-too-many-clusters": lambda f: f.outcome is CutOutcome.TOO_MANY_HOLDERS,
+        "lacking-an-end": lambda f: f.outcome is CutOutcome.ENDS_NOT_BOTH_INSIDE,
+        "long-cut-within-the-share": lambda f: (
+            f.outcome in long_with_one_witness
+            and f.has_one_witness
+            and f.share_of_smallest_container >= MIN_CUT_SHARE
+        ),
+        "long-cut-under-the-share": lambda f: (
+            f.outcome in long_with_one_witness
+            and f.has_one_witness
+            and f.share_of_smallest_container < MIN_CUT_SHARE
+        ),
+        "long-cut-in-several-clusters": lambda f: (
+            f.outcome is CutOutcome.LONG_SEVERAL_CLUSTERS and not f.has_one_witness
+        ),
+    }
+    return [
+        (finding.fingerprint, finding.smallest_container or min(finding.containers))
+        for finding in findings
+        if chosen[limit](finding)
+    ]
+
+
 def cluster_pairs(
     cards: Mapping[CardKey, ParsedCard],
     placed: Mapping[CardKey, Placement],
@@ -824,6 +878,42 @@ def _sample_cluster(arguments: argparse.Namespace, store: LocalParsedStore, seed
     return 0
 
 
+def _sample_kept_apart(arguments: argparse.Namespace, store: LocalParsedStore, seed: int) -> int:
+    """`sample --kept-apart-by`: cuts one limit keeps out, each beside the smallest body holding it."""
+    from debate_core.evidence.cluster_diagnosis import diagnose_cuts
+
+    candidates: list[tuple[str, str, Joined]] = []
+    for caselist in arguments.caselist:
+        print(f"Reading {caselist} ...", flush=True)
+        version = current_version(store, caselist)
+        placed = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+        bodies, clusters = full_bodies(read_bodies(store, caselist, version, placed), placed)
+        first: dict[str, CardKey] = {}
+        for key in sorted(placed):
+            if placed[key].completeness == "FULL":
+                first.setdefault(placed[key].exact_fingerprint, key)
+        for cut, holder in kept_apart(diagnose_cuts(bodies, clusters).findings, arguments.kept_apart_by):
+            pair = Joined(kind=arguments.kept_apart_by, joiner=first[cut], host=first[holder])
+            candidates.append((caselist, version, pair))
+    drawn = random.Random(seed).sample(candidates, min(arguments.count, len(candidates)))
+    pairs: list[tuple[str, Joined, ParsedCard, ParsedCard]] = []
+    for caselist, version, pair in drawn:
+        cards = read_cards(store, caselist, version, [pair.joiner, pair.host])
+        pairs.append((caselist, pair, cards[pair.joiner], cards[pair.host]))
+    tallies = run_sample(
+        pairs,
+        ask=input,
+        show=lambda text: print(text, end="", flush=True),
+        change="Apart now. B is the smallest body that holds A.",
+    )
+    print(
+        f"Drew {len(pairs)} of {len(candidates)} cuts kept apart by {arguments.kept_apart_by}, seed {seed}."
+    )
+    for (kind, verdict), count in sorted(tallies.items()):
+        print(f"  {kind}: {verdict}: {count}")
+    return 0
+
+
 def _sample(arguments: argparse.Namespace) -> int:
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         print(
@@ -832,14 +922,18 @@ def _sample(arguments: argparse.Namespace) -> int:
         return 2
     store = LocalParsedStore(arguments.data_dir)
     seed = arguments.seed if arguments.seed is not None else random.SystemRandom().randrange(10**9)
-    if arguments.cluster is not None or arguments.largest is not None:
+    if arguments.least_alike and arguments.cluster is None and arguments.largest is None:
+        raise SystemExit("--least-alike orders the pairs inside one cluster: give --cluster or --largest")
+    inside_one_placement = (arguments.cluster, arguments.largest, arguments.kept_apart_by)
+    if any(option is not None for option in inside_one_placement):
         if arguments.divided or arguments.before is not None or arguments.before_rules is not None:
             raise SystemExit(
-                "--cluster and --largest read one placement: no --before, --before-rules or --divided"
+                "--cluster, --largest and --kept-apart-by read one placement: "
+                "no --before, --before-rules or --divided"
             )
+        if arguments.kept_apart_by is not None:
+            return _sample_kept_apart(arguments, store, seed)
         return _sample_cluster(arguments, store, seed)
-    if arguments.least_alike:
-        raise SystemExit("--least-alike orders the pairs inside one cluster: give --cluster or --largest")
     candidates: list[tuple[str, str, Joined]] = []
     counts: dict[str, dict[str, object]] = {}
     for caselist in arguments.caselist:
@@ -922,6 +1016,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 type=int,
                 metavar="RANK",
                 help="The same, for the cluster with the RANK-th most cards: 1 is the largest.",
+            )
+            inside.add_argument(
+                "--kept-apart-by",
+                choices=KEPT_APART_BY,
+                metavar="LIMIT",
+                help="Draw cuts the store's table keeps out of a cluster that holds them, each with "
+                f"the smallest body holding it. One of: {', '.join(KEPT_APART_BY)}.",
             )
             command.add_argument(
                 "--least-alike",

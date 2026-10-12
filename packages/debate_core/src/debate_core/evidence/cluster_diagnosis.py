@@ -53,11 +53,13 @@ their text are one card is what the operator's by-eye sample decides.
 
 ## A cluster's shape
 
-:func:`cluster_shape` describes one cluster from the inside: how many of its distinct texts share
-nothing at all, and whether it hangs together through single texts (:class:`ClusterShape`). One
-much-read card and its cuts is a cluster whose texts overlap one another. A chain of containment
-merges, or two cards joined through a body that holds both, is a cluster with pairs of texts that
-have no shingle in common and a text whose removal leaves unrelated parts.
+:func:`cluster_shape` describes one cluster from the inside (:class:`ClusterShape`): how many pairs
+of its distinct texts share nothing at all, how many texts hold two smaller texts that share
+nothing, how many are inside two larger texts that share under half, and whether the cluster hangs
+together through single texts. One much-read card and its overlapping cuts is a cluster whose texts
+share text with one another. A chain of containment merges is a cluster with pairs of texts that
+have no shingle in common: joined through a body that holds both, or through a passage both hold.
+Whether such a cluster is one card cut at many extents or several cards is, again, for a person.
 """
 
 from __future__ import annotations
@@ -162,6 +164,18 @@ class CutFinding:
     """For :attr:`CutOutcome.WITHIN_THE_RULE` with one container cluster: the container that sorts
     first by fingerprint there is over the share, although a smaller one is within it. What
     `card-fingerprint-v2` measured the share against."""
+    smallest_container: str | None = None
+    """The smallest confirmed container: the body a rule that joined this cut would join it to."""
+    witness_cluster_texts: int = 0
+    """Distinct bodies in the smallest container's cluster."""
+    witness_cluster_texts_sharing_nothing: int = 0
+    """Of those, the bodies with no shingle in common with this cut: what joining it there would
+    put in one cluster with a text it shares nothing with."""
+
+    @property
+    def has_one_witness(self) -> bool:
+        """One cluster holds it, or several whose containers are nested: not a guess to join."""
+        return len(self.container_clusters) == 1 or self.containers_nested
 
     @property
     def is_short(self) -> bool:
@@ -223,15 +237,16 @@ class ClusterShape:
     cards_sharing_nothing_with_most_read: int
     bridging_texts: int
     """Texts whose removal leaves matching texts in more than one piece."""
-    bridges_between_unrelated_parts: int
-    """Bridging texts whose pieces, once it is removed, have a pair sharing nothing."""
+    bridges_between_parts_sharing_under_half: int
+    """Bridging texts whose pieces, once it is removed, have a pair of texts sharing under half of
+    the smaller: nothing joins those two but the bridge."""
     texts_holding_parts_that_share_nothing: int
     """Texts with two smaller texts nine-tenths inside them that have no shingle in common."""
     texts_inside_texts_that_share_under_half: int
     """Texts nine-tenths inside two larger texts that share under half of the smaller of the two."""
-    unrelated_bridges_that_are_fragments: int
+    such_bridges_that_are_fragments: int
     """Of those, the ones smaller than every text they match: a passage several texts contain."""
-    unrelated_bridges_that_hold_the_parts: int
+    such_bridges_that_hold_the_parts: int
     """Of those, the ones larger than every text they match: one body holding several texts."""
 
     def as_json(self) -> dict[str, object]:
@@ -303,6 +318,10 @@ def diagnose_cuts(
             held.sets[cut], held.sets[holder], held.words[cut], held.words[holder], limits
         )
 
+    members: defaultdict[str, list[str]] = defaultdict(list)
+    for fingerprint in held.fingerprints:
+        members[clusters[fingerprint]].append(fingerprint)
+
     findings: list[CutFinding] = []
     for cut in sorted(ends):
         first, last = ends[cut]
@@ -346,6 +365,13 @@ def diagnose_cuts(
             continue
 
         finding = _finding(held, cut, cluster, outside_holders, confirmed, lacking_an_end, clusters, limits)
+        if finding.smallest_container is not None:
+            beside = members[clusters[finding.smallest_container]]
+            finding = replace(
+                finding,
+                witness_cluster_texts=len(beside),
+                witness_cluster_texts_sharing_nothing=sum(cut_set.isdisjoint(held.sets[b]) for b in beside),
+            )
         if cut in short:
             # Only a short cut's pairing matters: a long pair the banding made would have merged.
             compared = [holder for members in confirmed.values() for holder in _spread(members)]
@@ -402,6 +428,7 @@ def _finding(
             containers=frozenset(everything) | frozenset(lacking_an_end),
             containers_nested=nested,
             share_of_smallest_container=size / held.size(smallest) if smallest is not None else 0.0,
+            smallest_container=smallest,
             copies_read=copies_read,
             kept_apart_by=kept_apart_by,
             first_container_over_the_share=first_container_over_the_share,
@@ -525,6 +552,21 @@ def tally_cuts(findings: Sequence[CutFinding]) -> dict[str, object]:
             "neither: another short body of its cluster points elsewhere": len(within) - nested - first,
         }
 
+    def one_witness_within_the_share(chosen: Sequence[CutFinding]) -> dict[str, int]:
+        """Cuts with one witness and within the share: what a step like the short one would join."""
+        joining = [
+            finding
+            for finding in chosen
+            if finding.has_one_witness and finding.share_of_smallest_container >= MIN_CUT_SHARE
+        ]
+        beside_all = [f for f in joining if f.witness_cluster_texts_sharing_nothing == 0]
+        return {
+            "cuts": len(joining),
+            "sharing text with every text of the witness's cluster": len(beside_all),
+            "of which that cluster is one text": sum(f.witness_cluster_texts == 1 for f in beside_all),
+            "sharing nothing with at least one text of it": len(joining) - len(beside_all),
+        }
+
     short = [finding for finding in findings if finding.is_short]
     banded = [finding for finding in short if finding.banded_with_a_container]
     return {
@@ -537,6 +579,9 @@ def tally_cuts(findings: Sequence[CutFinding]) -> dict[str, object]:
         "short_within_the_rule_and_apart": within_the_rule(short),
         "short_under_the_minimum_share_by_share": shares(CutOutcome.UNDER_MIN_CUT_SHARE),
         "long_never_paired_by_share": shares(CutOutcome.LONG_NEVER_PAIRED),
+        "long_with_one_witness_within_the_share": one_witness_within_the_share(
+            [finding for finding in findings if not finding.is_short]
+        ),
         "short_the_banding_pairs_with_a_container": {
             "cuts": len(banded),
             "by_outcome": dict(sorted(Counter(finding.outcome.value for finding in banded).items())),
@@ -637,7 +682,7 @@ def cluster_shape(
             continue
         bridging += 1
         if any(
-            disjoint[member] & other
+            other - alike[member]
             for position, piece in enumerate(pieces)
             for other in pieces[position + 1 :]
             for member in piece
@@ -686,11 +731,11 @@ def cluster_shape(
         texts_sharing_nothing_with_most_read=len(apart),
         cards_sharing_nothing_with_most_read=sum(copies[text] for text in apart),
         bridging_texts=bridging,
-        bridges_between_unrelated_parts=unrelated,
+        bridges_between_parts_sharing_under_half=unrelated,
         texts_holding_parts_that_share_nothing=holding_unrelated,
         texts_inside_texts_that_share_under_half=inside_unrelated,
-        unrelated_bridges_that_are_fragments=fragments,
-        unrelated_bridges_that_hold_the_parts=holding,
+        such_bridges_that_are_fragments=fragments,
+        such_bridges_that_hold_the_parts=holding,
     )
 
 

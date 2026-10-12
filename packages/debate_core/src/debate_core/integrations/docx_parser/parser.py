@@ -445,6 +445,9 @@ class DebateDocxParser:
         (:func:`~debate_core.evidence.style_classifier.is_a_cite_wholly_in_brackets`), told apart
         only by where it is. A cite stands after a tag, an undertag or another line of the cite,
         before any body. Blank lines, page furniture and lines read as nothing are stepped over.
+        A guessed cite that a body may yet take for itself (:meth:`_is_a_guess_a_body_may_take`)
+        is not such a line: what follows it may be the middle of a body, where a reference in
+        brackets would end the card.
 
         Only what the classifier guessed to be body or nothing is re-read; a paragraph style is
         the file's author saying what the paragraph is. It runs before tags with no card are
@@ -474,11 +477,24 @@ class DebateDocxParser:
                 )
             unit = section.match.unit
             if unit in _UNITS_A_CITE_STANDS_AFTER:
-                a_cite_stands_here = True
+                a_cite_stands_here = not self._is_a_guess_a_body_may_take(section)
             elif unit is not StructuralUnit.OTHER:
                 a_cite_stands_here = False
             reread.append(section)
         return reread
+
+    def _is_a_guess_a_body_may_take(self, section: _ReadSection) -> bool:
+        """Whether a paragraph is a guessed cite that the assembly may yet re-read as body.
+
+        A guess formatted as body, or longer than any cite entry: the two kinds an open body takes
+        for itself (:meth:`_keep_a_guessed_cite_in_its_body`). A cite read from a style is never one.
+        """
+        match = section.match
+        return (
+            match.unit is StructuralUnit.CITE
+            and match.match_source is StyleMatchSource.HEURISTIC
+            and (self._is_formatted_as_body(section.read) or self._is_longer_than_a_cite_entry(section))
+        )
 
     def _demote_tags_with_no_card(self, sections: list[_ReadSection]) -> list[_ReadSection]:
         """Turn a tag with no cite and no evidence under it into an analytic.
@@ -527,12 +543,9 @@ class DebateDocxParser:
         Otherwise the paragraph stays the cite the classifier called it, and starts a card with no
         tag, which is what two cards under one tag look like.
         """
-        match = section.match
         if building is None or not building.has_body:
             return section
-        if match.unit is not StructuralUnit.CITE or match.match_source is not StyleMatchSource.HEURISTIC:
-            return section
-        if not self._is_formatted_as_body(section.read) and not self._is_longer_than_a_cite_entry(section):
+        if not self._is_a_guess_a_body_may_take(section):
             return section
         return _reread_as_body(section, "assembly-cite-guess-inside-card-body")
 
@@ -622,9 +635,8 @@ class DebateDocxParser:
             match = section.match
             if match.unit is StructuralUnit.OTHER:
                 continue
-            a_cite_is_next = match.unit is StructuralUnit.CITE and not (
-                match.match_source is StyleMatchSource.HEURISTIC
-                and (self._is_formatted_as_body(section.read) or self._is_longer_than_a_cite_entry(section))
+            a_cite_is_next = match.unit is StructuralUnit.CITE and not self._is_a_guess_a_body_may_take(
+                section
             )
         return followed
 

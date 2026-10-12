@@ -1094,6 +1094,44 @@ class TestACiteWhollyInsideABracket:
         assert card.evidence_text == "\n".join([first, text, last])
         assert document.sections[3].match.rule_id == "heuristic-shrunk-body-text"
 
+    def test_after_a_guess_that_becomes_the_body_it_is_left_as_it_was(self, parser: DebateDocxParser) -> None:
+        """The paragraph above it is a guessed cite the assembly re-reads as body, so a body is open.
+
+        Read as a cite there, a reference in brackets ended the card and took the rest of its body
+        for a card with no tag: eight cards in the corpus, before this was held.
+        """
+        markup, text = wholly_bracketed(half_points=READING_SIZE)
+        long_body, last = wiki_guess(2_300), prose(240)
+        body = (
+            tag_paragraph()
+            + cite_paragraph()
+            + bold_opening_paragraph(long_body)
+            + markup
+            + body_paragraph(last)
+        )
+
+        document = parse(parser, body)
+
+        (card,) = document.cards
+        assert document.sections[3].unit is OTHER
+        assert card.evidence_text == "\n".join([long_body, last])
+        assert text not in card.full_cite
+
+    def test_under_a_guess_that_stays_the_cards_cite_it_is_a_second_line_of_it(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """A cite line the classifier guessed, at reading size, is a line of the cite like any other."""
+        markup, text = wholly_bracketed(half_points=READING_SIZE)
+        first_line = "Okonkwo 26, Adaeze Okonkwo, invented for this test"
+        body = prose(240)
+
+        (card,) = parse(
+            parser, tag_paragraph() + plain_paragraph(first_line) + markup + body_paragraph(body)
+        ).cards
+
+        assert card.full_cite == first_line + "\n" + text
+        assert card.evidence_text == body
+
     def test_with_no_card_open_it_is_left_as_it_was(self, parser: DebateDocxParser) -> None:
         markup, _ = wholly_bracketed()
 

@@ -47,14 +47,14 @@ rows — because each one names the team.
 
 ## Later uploads at a removed path
 
-A removal request covers later uploads at the same path (the PM's ruling under `v1-e30-t07`). The
-sync holds back one that has not been imported yet (`v1-e34-t14`); one imported before the removal
-is this module's (`v1-e30-t11`). For every file the selector names and removes or withdraws, the
-planner asks every snapshot it reads, weekly and complete, which other files sit at the paths it
-takes that file from (:mod:`~debate_core.application.caselist.removal_path_versions`, which says
-what "later" and "the same path" mean, for a caselist and for an OpenEv camp file). A later upload
-joins the plan (:attr:`Inclusion.LATER_UPLOAD`) and goes through everything a named file goes
-through:
+A removal request covers later uploads at the same path (the PM's ruling under `v1-e30-t07`). For a
+camp file the sync holds back one that has not been imported yet (`v1-e34-t14`); for a caselist
+file the path hold below does. One the store already holds is this module's (`v1-e30-t11`). For
+every file the selector names and removes or withdraws, the planner asks every snapshot it reads,
+weekly and complete, which other files sit at the paths it takes that file from
+(:mod:`~debate_core.application.caselist.removal_path_versions`, which says what "later" and "the
+same path" mean, for a caselist and for an OpenEv camp file). A later upload joins the plan
+(:attr:`Inclusion.LATER_UPLOAD`) and goes through everything a named file goes through:
 
 * held at no other path, it is `REMOVE`d: blob, records, rows, `raw/` and `parsed/` objects with
   every version, the inbox, and a whole-file suppression;
@@ -72,6 +72,34 @@ one version; the later uploads are still listed, as left in place.
 A `--team` removal names every file at the team's paths already, earlier and later versions alike
 (:meth:`RemovalPlanner._selected`), so it has later uploads only at the *other* holders' paths of a
 shared file it removes with `--include-shared`.
+
+## A removed path is held, and the inbox is read as snapshots (`v1-e30-t13`)
+
+The store's manifests show a later upload only once it has been imported. Two more things cover
+one that has not:
+
+**The path hold.** A `--source` removal that removes a file whole plans one
+:class:`~debate_core.application.ports.suppression.PathHoldEntry` for each caselist path it takes
+the file from (:attr:`RemovalPlan.path_holds`), dated by the earliest snapshot that held the file
+there. The executor appends them with the suppression entries, before anything is deleted, and
+from then on the importer refuses a new sha256 at the path in any later snapshot. None is planned
+with `--only-named`, which is a request about one version; for a file the plan withdraws or skips,
+which stays with another holder; for a later upload, whose own paths are the removed ones; or by
+`--team`, which holds no path and finds a team's later files by running again.
+
+**The download inbox.** Every weekly and complete archive in the inbox is read as a snapshot too
+(:func:`~debate_core.application.caselist.inbox_purge.read_inbox`), dated as its name dates it. A
+revision waiting there at a removed path is a later upload by the same rule as one in a manifest:
+it joins the plan, gets its suppression entry under the request, and the inbox step rewrites or
+deletes the archive that holds it. Another path of it in the same archive is a live path, so a
+revision two teams uploaded is withdrawn from the removed path only.
+
+**Running the same removal again** finds what arrived since. The removed file's rows are gone by
+then, so nothing in a manifest says where it was; its path holds do. For each hold of a file the
+selector names, a row or an inbox member at the held path stands in for the removed file there
+(:func:`_recorded_paths`), and everything at that path dated later is a later upload as before:
+one this build refused at import, which is still in its archive in the inbox, and one an older
+build imported, which is in the store.
 
 ## The complete archive
 
@@ -120,7 +148,7 @@ from __future__ import annotations
 import json
 import re
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
@@ -130,9 +158,12 @@ from typing import Final
 from debate_core.application.caselist.evidence_listing import LocalEvidence, local_file
 from debate_core.application.caselist.inbox_purge import (
     CaselistInbox,
+    InboxFile,
+    InboxFileKind,
     InboxFilePlan,
     InboxTeamFilesLeft,
     plan_inbox,
+    read_inbox,
 )
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY, read_manifest_file, render_rows
 from debate_core.application.caselist.openev_manifest import openev_release_name, summary_row
@@ -156,7 +187,9 @@ from debate_core.application.caselist.removal_path_versions import (
     VersionRelation,
     other_versions,
     path_identity,
+    snapshot_date,
 )
+from debate_core.application.caselist.suppression import read_path_holds
 from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
@@ -166,6 +199,7 @@ from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
     REQUEST_ID_PATTERN,
+    PathHoldEntry,
     ReasonCode,
     RemovalSelectorKind,
     SuppressionAction,
@@ -449,6 +483,10 @@ class RemovalPlan:
     earlier_versions: tuple[PathVersion, ...] = ()
     """Earlier versions at those paths, and files whose order the snapshot dates cannot give: listed
     for the operator, never included."""
+    path_holds: tuple[PathHoldEntry, ...] = ()
+    """The path entries this removal appends: one for each caselist path a `--source` removal takes
+    a file from whole (`v1-e30-t13`). None with `--only-named`, none for a file withdrawn or
+    skipped, and none that is already in force."""
 
     def of(self, disposition: Disposition) -> tuple[PlannedSource, ...]:
         return tuple(source for source in self.sources if source.disposition is disposition)
@@ -509,6 +547,7 @@ class RemovalPlan:
             and not self.manifests
             and not self.objects
             and not self.suppression_entries
+            and not self.path_holds
             and not any(source.local_blob for source in self.sources)
             and not self.inbox
         )
@@ -656,7 +695,8 @@ class RemovalPlanner:
             )
         recorded_at = self._clock.now()
         existing = await self._suppression.entries()
-        state = SuppressionState.from_entries(existing)
+        existing_holds = await read_path_holds(self._suppression)
+        state = SuppressionState.from_entries(existing, existing_holds)
         caselists = await self._known_caselists()
         copies = [copy for caselist in caselists for copy in await self._manifest_copies(caselist)]
 
@@ -675,8 +715,17 @@ class RemovalPlanner:
             for digest in sorted(selected)
         ]
 
-        # Every other file at the paths the named files are taken from, and when it was held there.
-        holdings = _path_holdings(copies)
+        # Every other file at the paths the named files are taken from, and when it was held there:
+        # in a manifest, or in an archive in the download inbox, imported or not (v1-e30-t13).
+        inbox_files = read_inbox(self._inbox)
+        held = (*_path_holdings(copies), *_inbox_holdings(inbox_files))
+        path_holds = (
+            _path_holds(named, held, state, recorded_at=recorded_at, reason=reason, request_id=request_id)
+            if isinstance(selector, SourceSelector) and not only_named
+            else ()
+        )
+        # A file this request removed earlier has no row left to say where it was: its holds do.
+        holdings = (*held, *_recorded_paths(state, selected, held))
         versions = other_versions(
             holdings,
             _paths_taken(named),
@@ -737,7 +786,8 @@ class RemovalPlanner:
         sources = [*sorted([*named, *unfinished], key=lambda source: source.sha256), *added]
 
         after = SuppressionState.from_entries(
-            [*existing, *(entry for source in sources for entry in source.suppression)]
+            [*existing, *(entry for source in sources for entry in source.suppression)],
+            [*existing_holds, *path_holds],
         )
         removed = {source.sha256 for source in sources if source.disposition is Disposition.REMOVE}
         withdrawn = {
@@ -758,6 +808,7 @@ class RemovalPlanner:
             team=(selector.caselist, selector.school, selector.team_code)
             if isinstance(selector, TeamSelector)
             else None,
+            files=inbox_files,
         )
         return RemovalPlan(
             selector=selector,
@@ -781,6 +832,7 @@ class RemovalPlanner:
             only_named=only_named,
             later_uploads=later,
             earlier_versions=tuple(one for one in versions if one.relation is not VersionRelation.LATER),
+            path_holds=path_holds,
         )
 
     # --------------------------------------------------------------------------------------
@@ -1472,6 +1524,115 @@ def _path_holdings(copies: Sequence[_ManifestCopy]) -> tuple[PathHolding, ...]:
                     PathHolding(caselist=copy.caselist, snapshot=copy.snapshot, path=path, sha256=digest)
                 )
     return tuple(sorted(held, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
+
+
+def _inbox_holdings(files: Sequence[InboxFile]) -> tuple[PathHolding, ...]:
+    """Every real member of every weekly and complete archive in the inbox, as a snapshot holds it.
+
+    Dated as the archive's name dates it, which is how the sync dates the snapshot it imports it
+    as. An archive that cannot be read holds nothing here; the inbox step reports it. A camp
+    download is not a caselist snapshot: `v1-e34-t14` holds a camp path.
+    """
+    held: set[PathHolding] = set()
+    for file in files:
+        if file.entries is None or file.caselist is None or file.snapshot is None:
+            continue
+        if file.kind is InboxFileKind.WEEKLY_ARCHIVE:
+            snapshot = file.snapshot.isoformat()
+        elif file.kind is InboxFileKind.FULL_ARCHIVE:
+            snapshot = full_archive_snapshot(file.snapshot)
+        else:
+            continue
+        for entry in file.entries:
+            if entry.skip_reason is None and entry.sha256 is not None:
+                held.add(
+                    PathHolding(
+                        caselist=file.caselist,
+                        snapshot=snapshot,
+                        path=entry.path,
+                        sha256=entry.sha256,
+                        inbox=True,
+                    )
+                )
+    return tuple(sorted(held, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
+
+
+def _path_holds(
+    named: Sequence[PlannedSource],
+    held: Sequence[PathHolding],
+    state: SuppressionState,
+    *,
+    recorded_at: datetime,
+    reason: ReasonCode,
+    request_id: str,
+) -> tuple[PathHoldEntry, ...]:
+    """One path entry for each caselist path the removal takes a named file from whole.
+
+    The path is every place the file is held: a stored row, a disclosure record, or a member of an
+    archive in the inbox. The hold is dated by the earliest snapshot that holds it there, which is
+    the date `v1-e30-t11` measures "later" from. A file the plan withdraws or skips stays with
+    another holder and gets none, and neither does a path this file already holds.
+    """
+    entries: list[PathHoldEntry] = []
+    for source in named:
+        if source.disposition is not Disposition.REMOVE:
+            continue
+        first_held: dict[tuple[str, str], date] = {}
+        seen = [
+            (row.caselist, row.path, snapshot_date(row.snapshot))
+            for row in held
+            if row.sha256 == source.sha256 and row.caselist != OPENEV
+        ]
+        seen += [(ref.caselist, ref.source_path, ref.snapshot) for ref in source.disclosures]
+        for caselist, path, held_on in seen:
+            if held_on is not None:
+                first_held[(caselist, path)] = min(held_on, first_held.get((caselist, path), held_on))
+        for (caselist, path), held_on in sorted(first_held.items()):
+            disclosure = disclosure_digest(caselist, path)
+            if any(hold.sha256 == source.sha256 for hold in state.held_paths.get(disclosure, ())):
+                continue
+            entries.append(
+                PathHoldEntry(
+                    caselist=caselist,
+                    disclosure=disclosure,
+                    sha256=source.sha256,
+                    after_snapshot=held_on,
+                    recorded_at=recorded_at,
+                    reason=reason,
+                    request_id=request_id,
+                )
+            )
+    return tuple(entries)
+
+
+def _recorded_paths(
+    state: SuppressionState, named: Collection[str], held: Sequence[PathHolding]
+) -> tuple[PathHolding, ...]:
+    """Where the path holds in force say a named file was, for each such path something is held at.
+
+    A hold keeps the path as a digest, so the path's text comes from whatever is at it now: a row
+    or an inbox member whose caselist and path give the hold's digest. That is every case with
+    something to find. The stand-in is dated by the hold, the earliest snapshot that held the
+    removed file there, so "later" means what it meant when the file was removed.
+    """
+    of_named = {
+        disclosure: [hold for hold in holds if hold.sha256 in named]
+        for disclosure, holds in state.held_paths.items()
+    }
+    if not any(of_named.values()):
+        return ()
+    stand_ins: set[PathHolding] = set()
+    for caselist, path in {(row.caselist, row.path) for row in held if row.caselist != OPENEV}:
+        for hold in of_named.get(disclosure_digest(caselist, path), ()):
+            stand_ins.add(
+                PathHolding(
+                    caselist=caselist,
+                    snapshot=hold.after_snapshot.isoformat(),
+                    path=path,
+                    sha256=hold.sha256,
+                )
+            )
+    return tuple(sorted(stand_ins, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
 
 
 def _paths_taken(named: Sequence[PlannedSource]) -> dict[str, frozenset[tuple[str, ...]] | None]:

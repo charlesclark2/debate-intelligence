@@ -240,6 +240,7 @@ class OpenEvImportService:
             write=write,
             baseline=recorded.baseline,
             disclosure_scope=None,
+            snapshot=None,  # a camp path's hold is the sync's (v1-e34-t14), not a caselist path entry
             dry_run=dry_run,
             report_removed=False,
             find_existing=self._caselists.find_source,

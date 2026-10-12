@@ -4,6 +4,10 @@
 
     <data_dir>/suppression/suppression-list.jsonl   sha256 values that must never be re-imported
     <data_dir>/suppression/removal-log.jsonl        one line per removal or un-suppress
+    <data_dir>/suppression/path-holds.jsonl         the paths whole-file removals hold (`v1-e30-t13`)
+
+The third is the list's own neighbour: a build from before `v1-e30-t13` never opens it, and reads
+the list beside it exactly as before (:mod:`debate_core.application.ports.suppression`).
 
 A sibling of `objects/` and `blobs/`, not a file inside either, for the same reason the sync
 journal is (`debate_core.application.evidence_sync.JOURNAL_DIRECTORY`): `store sync` moves what is
@@ -49,7 +53,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
-from debate_core.application.ports.suppression import AppendOnlyViolation, UnreadableAppendOnlyRecord
+from debate_core.application.ports.suppression import (
+    PATH_HOLDS_FILENAME,
+    AppendOnlyViolation,
+    UnreadableAppendOnlyRecord,
+)
 from debate_core.integrations.local.refusals import refused_as_access_denied, role_of
 
 __all__ = [
@@ -58,6 +66,7 @@ __all__ = [
     "SUPPRESSION_FILE_MODE",
     "SUPPRESSION_LIST_FILENAME",
     "LocalAppendOnlyFile",
+    "local_path_holds_file",
     "local_removal_log_file",
     "local_suppression_list_file",
 ]
@@ -77,6 +86,7 @@ _ROLE: Final = role_of(SUPPRESSION_DIRECTORY.name)
 #: What an error calls each copy: what it is and the setting it is under, never its path.
 _SUPPRESSION_LIST_ROLE: Final = "the local suppression list under storage.data_dir"
 _REMOVAL_LOG_ROLE: Final = "the local removal log under storage.data_dir"
+_PATH_HOLDS_CALLED: Final = "path-hold list"
 
 
 def local_suppression_list_file(data_dir: Path) -> LocalAppendOnlyFile:
@@ -93,6 +103,11 @@ def local_removal_log_file(data_dir: Path) -> LocalAppendOnlyFile:
     )
 
 
+def local_path_holds_file(data_dir: Path) -> LocalAppendOnlyFile:
+    """This environment's copy of the path-hold record: the file beside its suppression list."""
+    return local_suppression_list_file(data_dir).beside(PATH_HOLDS_FILENAME, called=_PATH_HOLDS_CALLED)
+
+
 class LocalAppendOnlyFile:
     """An :class:`~debate_core.application.ports.suppression.AppendOnlyRecord` on a local file.
 
@@ -104,7 +119,17 @@ class LocalAppendOnlyFile:
 
     def __init__(self, path: Path, *, role: str | None = None) -> None:
         self._path = Path(path)
+        self._named_by_role = role is not None
         self._role = role or f"the local record {self._path.name}"
+
+    def beside(self, filename: str, *, called: str) -> LocalAppendOnlyFile:
+        """The file named `filename` in this one's directory, named in messages as this one is.
+
+        A copy named by its role names its neighbour by one: "the local path-hold list under
+        storage.data_dir". A copy named by its file name names its neighbour by its file name.
+        """
+        role = f"the local {called} under storage.data_dir" if self._named_by_role else None
+        return LocalAppendOnlyFile(self._path.parent / filename, role=role)
 
     @property
     def path(self) -> Path:

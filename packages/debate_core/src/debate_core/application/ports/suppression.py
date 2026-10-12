@@ -45,6 +45,28 @@ their disclosure again. The path is stored only as :func:`disclosure_digest`, th
 caselist and path, never as text. Reversing that digest needs the archive in hand, exactly as
 reversing a file's own sha256 does, so it identifies no more than the sha256 values the list was
 always going to hold (Deviation recorded in the session report; spec ac4 amended).
+
+## A third record: the paths a removal holds
+
+`path-holds.jsonl`
+    One :class:`PathHoldEntry` per line, kept beside the suppression list in both places
+    (`v1-e30-t13`). A whole-file removal by `--source` appends one for each caselist path it takes
+    the file from, and from then on an import refuses a **new** sha256 at that path in a snapshot
+    dated after the removed file first appeared there: a removal request covers later uploads at the
+    same path (the PM's ruling under `v1-e30-t07`), and the two scopes above stop only bytes the
+    list already names. The path is stored as :func:`disclosure_digest`, never as text.
+
+It is a file of its own, and not a third kind of line in the list, because of who else reads the
+list. A :class:`SuppressionEntry` forbids unknown keys and pins `schema_version` to `1`, and a
+reader refuses the whole list at the first line it cannot validate
+(:class:`UnreadableAppendOnlyRecord`). So does every build already installed, and an import against
+a list it cannot read fails closed. A new kind of line would have stopped the weekly agent on the
+builds that run it; a file those builds never open cannot. They go on reading the list exactly as
+it was, and do not apply the hold, which is what they did before there was one.
+
+A hold follows the removed file it came from: an un-suppress of that sha256 recorded at or after
+the hold lifts it, as it lifts every suppression of the file (:meth:`SuppressionState.from_entries`).
+Nothing is appended to release one.
 """
 
 from __future__ import annotations
@@ -53,6 +75,7 @@ import hashlib
 import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Final, Literal, Protocol, Self, runtime_checkable
 
@@ -61,8 +84,10 @@ from pydantic import StringConstraints, model_validator
 from debate_core.application.errors import DomainError
 from debate_core.domain import Sha256Hex
 from debate_core.domain.base import DomainModel, UtcDatetime
+from debate_core.domain.caselist import CASELIST_SLUG_PATTERN
 
 __all__ = [
+    "PATH_HOLDS_FILENAME",
     "REINSTATEMENT_REASONS",
     "REMOVAL_REASONS",
     "REQUEST_ID_PATTERN",
@@ -70,6 +95,9 @@ __all__ = [
     "AppendOnlyRecord",
     "AppendOnlyViolation",
     "InboxRewriteRecord",
+    "KeepsRecordsBesideIt",
+    "PathHoldEntry",
+    "PathHoldList",
     "ReasonCode",
     "RemovalLog",
     "RemovalLogEntry",
@@ -88,6 +116,9 @@ __all__ = [
 
 SUPPRESSION_SCHEMA_VERSION: Final = 1
 """Version of a suppression-list or removal-log line. Bumped only by a change an old reader breaks on."""
+
+PATH_HOLDS_FILENAME: Final = "path-holds.jsonl"
+"""The path-hold record's file name, beside the suppression list on this machine and in the bucket."""
 
 REQUEST_ID_PATTERN: Final = r"^RM-[0-9]{4}-[0-9]{2,4}$"
 """`RM-2026-01`: the register id `docs/runbooks/caselist-removal.md` step 1 assigns a request.
@@ -195,6 +226,42 @@ class SuppressionEntry(DomainModel):
         return cls.model_validate_json(line)
 
 
+class PathHoldEntry(DomainModel):
+    """One line of the path-hold record: one caselist path a whole-file removal took a file from.
+
+    An upload at the path is held, whatever its bytes, when its snapshot is dated after
+    :attr:`after_snapshot`. An earlier snapshot holds an earlier version, which a removal request
+    does not cover (`v1-e30-t11`). No field can hold a school, a team code or a file name: the path
+    is a digest, and the rest are a slug, two digests, dates, a code and a request id.
+    """
+
+    schema_version: Literal[1] = SUPPRESSION_SCHEMA_VERSION
+    caselist: Annotated[str, StringConstraints(pattern=CASELIST_SLUG_PATTERN)]
+    disclosure: Sha256Hex
+    """:func:`disclosure_digest` of the caselist and the removed file's path there."""
+    sha256: Sha256Hex
+    """The removed file the hold follows. An un-suppress of it lifts the hold."""
+    after_snapshot: date
+    """The earliest snapshot that held the removed file at the path. Later snapshots are held."""
+    recorded_at: UtcDatetime
+    reason: ReasonCode
+    request_id: RequestId
+    """The request the removal honoured, which an upload the hold stops is counted under."""
+
+    @model_validator(mode="after")
+    def _a_removals(self) -> Self:
+        if self.reason not in REMOVAL_REASONS:
+            raise ValueError(f"{self.reason} is not a reason to hold a path")
+        return self
+
+    def to_line(self) -> str:
+        return canonical_line(self)
+
+    @classmethod
+    def from_line(cls, line: str) -> PathHoldEntry:
+        return cls.model_validate_json(line)
+
+
 @dataclass(frozen=True, slots=True)
 class SuppressionState:
     """What the list currently suppresses, after every entry has been applied in time order.
@@ -213,21 +280,61 @@ class SuppressionState:
     latest: dict[Sha256Hex, SuppressionEntry] = field(default_factory=lambda: {})
     """The most recent entry for every digest the list mentions, suppressed or not."""
 
+    held_paths: dict[Sha256Hex, tuple[PathHoldEntry, ...]] = field(default_factory=lambda: {})
+    """The path holds in force, by the disclosure digest of the path, earliest first (`v1-e30-t13`)."""
+
     @classmethod
-    def from_entries(cls, entries: Iterable[SuppressionEntry]) -> SuppressionState:
+    def from_entries(
+        cls, entries: Iterable[SuppressionEntry], path_holds: Iterable[PathHoldEntry] = ()
+    ) -> SuppressionState:
+        """The list's state, and with `path_holds` the holds of them still in force.
+
+        A hold is lifted by an un-suppress of the file it follows recorded at or after it: the rule
+        an un-suppress applies to every suppression of that file, with a tie going to the
+        un-suppress as the order below gives it one.
+        """
         sources: set[str] = set()
         disclosures: set[tuple[str, str]] = set()
         latest: dict[str, SuppressionEntry] = {}
+        lifted: dict[str, datetime] = {}
         for entry in sorted(entries, key=lambda one: (one.recorded_at, one.to_line())):
             latest[entry.sha256] = entry
             if entry.action is SuppressionAction.UNSUPPRESS:
                 sources.discard(entry.sha256)
                 disclosures = {pair for pair in disclosures if pair[0] != entry.sha256}
+                lifted[entry.sha256] = entry.recorded_at
             elif entry.disclosure is None:
                 sources.add(entry.sha256)
             else:
                 disclosures.add((entry.sha256, entry.disclosure))
-        return cls(sources=frozenset(sources), disclosures=frozenset(disclosures), latest=latest)
+        held: dict[str, list[PathHoldEntry]] = {}
+        for hold in sorted(path_holds, key=lambda one: (one.recorded_at, one.to_line())):
+            if hold.sha256 in lifted and lifted[hold.sha256] >= hold.recorded_at:
+                continue
+            held.setdefault(hold.disclosure, []).append(hold)
+        return cls(
+            sources=frozenset(sources),
+            disclosures=frozenset(disclosures),
+            latest=latest,
+            held_paths={disclosure: tuple(holds) for disclosure, holds in held.items()},
+        )
+
+    @property
+    def path_holds(self) -> tuple[PathHoldEntry, ...]:
+        """Every path hold in force."""
+        return tuple(hold for holds in self.held_paths.values() for hold in holds)
+
+    def path_hold(self, *, caselist: str, path: str, snapshot: date) -> PathHoldEntry | None:
+        """The hold that stops an upload at `path` of `caselist` in the snapshot dated `snapshot`.
+
+        `None` when no removal holds the path, or the snapshot is not dated after the removed file
+        first appeared there. Which bytes the upload is plays no part: that is what a hold is for.
+        Where two removals hold one path, the earlier request's hold is the one returned.
+        """
+        for hold in self.held_paths.get(disclosure_digest(caselist, path), ()):
+            if snapshot > hold.after_snapshot:
+                return hold
+        return None
 
     def suppresses_source(self, sha256: str) -> bool:
         """Whether these bytes may not be stored at all."""
@@ -374,6 +481,20 @@ class AppendOnlyRecord(Protocol):
 
 
 @runtime_checkable
+class KeepsRecordsBesideIt(Protocol):
+    """A copy of an append-only record that can name another record kept in the same place.
+
+    The local file's directory, or the bucket's prefix, reached with the same credentials. It is how
+    a suppression list finds its path-hold record (:data:`PATH_HOLDS_FILENAME`) in every place the
+    list itself is kept, so that no command can hold the list without the holds beside it.
+    """
+
+    def beside(self, filename: str, *, called: str) -> AppendOnlyRecord:
+        """The record named `filename` beside this one. `called` is what a message calls it."""
+        ...
+
+
+@runtime_checkable
 class SuppressionList(Protocol):
     """The removal suppression list, read and appended to as entries.
 
@@ -385,6 +506,20 @@ class SuppressionList(Protocol):
     async def entries(self) -> tuple[SuppressionEntry, ...]: ...
 
     async def append(self, entries: Sequence[SuppressionEntry]) -> None: ...
+
+
+@runtime_checkable
+class PathHoldList(Protocol):
+    """The paths removals hold, read and appended to as entries (`v1-e30-t13`).
+
+    What a suppression list is as well, when its copies keep a path-hold record beside them.
+    :meth:`path_holds` is every entry on every copy, lifted or not;
+    :meth:`SuppressionState.from_entries` says which are in force.
+    """
+
+    async def path_holds(self) -> tuple[PathHoldEntry, ...]: ...
+
+    async def append_path_holds(self, entries: Sequence[PathHoldEntry]) -> None: ...
 
 
 @runtime_checkable

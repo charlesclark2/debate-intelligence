@@ -17,6 +17,17 @@ may do. This module is the part that is the same whichever copies a command hold
 
 The local copy is :class:`~debate_core.integrations.local.suppression_list.LocalAppendOnlyFile`.
 
+## The path-hold record travels with the list
+
+The paths removals hold (`v1-e30-t13`) are a second append-only record, `path-holds.jsonl`, kept
+beside the list in every place the list is kept
+(:class:`~debate_core.application.ports.suppression.PathHoldEntry` says why it is not a line of the
+list). :class:`RecordedSuppressionList` finds it from its own copies, by asking each for the record
+beside it, and reads and appends it by the same set-union rule. So a command that holds the list
+holds the holds: nothing has to be passed in for them, and nothing can be left out.
+:func:`load_suppression_state` reads both, and that is the one function every reader of the list
+calls.
+
 ## Which copies a command holds
 
 The composition root decides, by one rule: a command reads every copy it can reach without being
@@ -40,8 +51,12 @@ from pydantic import ValidationError
 from debate_core.application.errors import NotFound, StoreCredentialsExpired
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey, validate_object_key
 from debate_core.application.ports.suppression import (
+    PATH_HOLDS_FILENAME,
     AppendOnlyRecord,
     AppendOnlyViolation,
+    KeepsRecordsBesideIt,
+    PathHoldEntry,
+    PathHoldList,
     RemovalLogEntry,
     SuppressionEntry,
     SuppressionList,
@@ -50,6 +65,7 @@ from debate_core.application.ports.suppression import (
 )
 
 __all__ = [
+    "PATH_HOLDS_KEY",
     "REMOVAL_LOG_KEY",
     "SUPPRESSION_LIST_KEY",
     "SUPPRESSION_PREFIX",
@@ -59,6 +75,7 @@ __all__ = [
     "RecordedSuppressionList",
     "is_suppression_key",
     "load_suppression_state",
+    "read_path_holds",
 ]
 
 logger = logging.getLogger(__name__)
@@ -68,6 +85,10 @@ SUPPRESSION_PREFIX: Final = "manifests/_suppression/"
 
 SUPPRESSION_LIST_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}suppression-list.jsonl")
 REMOVAL_LOG_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}removal-log.jsonl")
+PATH_HOLDS_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}{PATH_HOLDS_FILENAME}")
+"""The bucket's copy of the path-hold record: beside the list, under the takedown's one prefix."""
+
+_PATH_HOLDS_CALLED: Final = "path-hold list"
 
 
 def is_suppression_key(key: str) -> bool:
@@ -76,8 +97,13 @@ def is_suppression_key(key: str) -> bool:
 
 
 async def load_suppression_state(suppression: SuppressionList) -> SuppressionState:
-    """What `suppression` currently suppresses."""
-    return SuppressionState.from_entries(await suppression.entries())
+    """What `suppression` currently suppresses, and the paths it holds."""
+    return SuppressionState.from_entries(await suppression.entries(), await read_path_holds(suppression))
+
+
+async def read_path_holds(suppression: SuppressionList) -> tuple[PathHoldEntry, ...]:
+    """Every path-hold entry `suppression` keeps, lifted or not. None for a list that keeps none."""
+    return await suppression.path_holds() if isinstance(suppression, PathHoldList) else ()
 
 
 class _MergedLines:
@@ -130,10 +156,23 @@ class RecordedSuppressionList:
 
     def __init__(self, *records: AppendOnlyRecord) -> None:
         self._lines = _MergedLines(records)
+        # The path-hold record of each copy that can name a record beside it: the local file and
+        # the bucket's object can, and a copy that cannot (a test's in-memory one) keeps no holds.
+        beside = [
+            record.beside(PATH_HOLDS_FILENAME, called=_PATH_HOLDS_CALLED)
+            for record in records
+            if isinstance(record, KeepsRecordsBesideIt)
+        ]
+        self._path_hold_lines = _MergedLines(beside) if beside else None
 
     @property
     def records(self) -> tuple[AppendOnlyRecord, ...]:
         return self._lines.records
+
+    @property
+    def path_hold_records(self) -> tuple[AppendOnlyRecord, ...]:
+        """The path-hold record beside each copy of the list that keeps one."""
+        return self._path_hold_lines.records if self._path_hold_lines is not None else ()
 
     async def entries(self) -> tuple[SuppressionEntry, ...]:
         return tuple(_parse(SuppressionEntry, *read) for read in await self._lines.read())
@@ -141,9 +180,31 @@ class RecordedSuppressionList:
     async def append(self, entries: Sequence[SuppressionEntry]) -> None:
         await self._lines.append([entry.to_line() for entry in entries])
 
+    async def path_holds(self) -> tuple[PathHoldEntry, ...]:
+        """Every path-hold entry on every copy, deduplicated. A record that does not exist has none."""
+        if self._path_hold_lines is None:
+            return ()
+        return tuple(_parse(PathHoldEntry, *read) for read in await self._path_hold_lines.read())
+
+    async def append_path_holds(self, entries: Sequence[PathHoldEntry]) -> None:
+        """Append to every copy's path-hold record, by the rule :meth:`append` follows.
+
+        With nothing to append and no copy holding anything, no record is created: an environment
+        that has never held a path has no `path-holds.jsonl`.
+        """
+        if not entries:
+            return
+        if self._path_hold_lines is None:
+            raise AppendOnlyViolation(
+                self._lines.records[0].location, "no copy of this list keeps a path-hold record beside it"
+            )
+        await self._path_hold_lines.append([entry.to_line() for entry in entries])
+
     async def reconcile(self) -> None:
         """Write every copy the entries another copy has and it lacks. Appends nothing new."""
         await self._lines.append([])
+        if self._path_hold_lines is not None:
+            await self._path_hold_lines.append([])
 
 
 class LocalFallbackSuppressionList:
@@ -197,6 +258,29 @@ class LocalFallbackSuppressionList:
     async def append(self, entries: Sequence[SuppressionEntry]) -> None:
         await self._union.append(entries)
 
+    async def path_holds(self) -> tuple[PathHoldEntry, ...]:
+        """The path holds, by the rule :meth:`entries` follows: this machine's alone without a login.
+
+        An import that read the list from this machine and then failed on the path-hold record
+        beside it would be the failure the fallback exists to prevent.
+        """
+        try:
+            return await read_path_holds(self._union)
+        except StoreCredentialsExpired as expired:
+            holds = await read_path_holds(self._local)
+            self.fallbacks += 1
+            self.local_only_reason = f"the bucket's copy could not be read without a login ({expired})"
+            logger.warning(
+                "suppression list: the bucket's path-hold record needs a login, so this machine's "
+                "copy alone was read"
+            )
+            return holds
+
+    async def append_path_holds(self, entries: Sequence[PathHoldEntry]) -> None:
+        if not isinstance(self._union, PathHoldList):
+            raise AppendOnlyViolation("the suppression list", "it keeps no path-hold record")
+        await self._union.append_path_holds(entries)
+
 
 class RecordedRemovalLog:
     """A :class:`~debate_core.application.ports.suppression.RemovalLog` over one or more copies."""
@@ -215,7 +299,7 @@ class RecordedRemovalLog:
         await self._lines.append([entry.to_line() for entry in entries])
 
 
-def _parse[EntryT: (SuppressionEntry, RemovalLogEntry)](
+def _parse[EntryT: (SuppressionEntry, RemovalLogEntry, PathHoldEntry)](
     kind: type[EntryT], line: str, location: str, number: int
 ) -> EntryT:
     try:
@@ -269,6 +353,20 @@ class ObjectStoreAppendOnlyRecord:
     @property
     def key(self) -> ObjectKey:
         return self._key
+
+    def beside(self, filename: str, *, called: str) -> ObjectStoreAppendOnlyRecord:
+        """The object named `filename` under this one's prefix, written and read as this one is.
+
+        Its location is this one's with the key's last segment changed, so a copy named by its
+        `s3://` address names its neighbour by one too. `called` is for copies named by a role.
+        """
+        del called
+        key = validate_object_key(f"{self._key.rpartition('/')[0]}/{filename}")
+        location = (
+            f"{self._location.removesuffix(self._key)}{key}" if self._location.endswith(self._key) else key
+        )
+        reader = self._reader if self._reader is not self._store else None
+        return ObjectStoreAppendOnlyRecord(self._store, key, location=location, reader=reader)
 
     async def read_lines(self) -> tuple[str, ...]:
         return _lines_of(await self._read_bytes(), self._location)

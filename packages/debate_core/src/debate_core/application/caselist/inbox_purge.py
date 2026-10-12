@@ -26,6 +26,11 @@ holder's copy of a withdrawn file, a camp file the list does not stop. An earlie
 leftovers are taken out too, because the list stops them; that is how running a removal again
 clears what a removal made before this step existed left behind.
 
+A revision of a removed file that is waiting in an archive here, at the removed file's path, is
+stopped by the list like any other: the removal plan reads these archives as snapshots
+(:func:`read_inbox`), finds it as a later upload, and appends its entry before this step runs
+(`v1-e30-t13`).
+
 ## Imported or waiting: what happens to each file
 
 A file holding nothing the list stops is not touched. One that does is deleted or rewritten
@@ -141,6 +146,7 @@ from debate_core.application.ports.suppression import SuppressionState, disclosu
 __all__ = [
     "CaselistInbox",
     "InboxAction",
+    "InboxFile",
     "InboxFileChanged",
     "InboxFileKind",
     "InboxFilePlan",
@@ -153,6 +159,7 @@ __all__ = [
     "InboxTeamFilesLeft",
     "plan_inbox",
     "purge_inbox",
+    "read_inbox",
 ]
 
 _REWRITE_SUFFIX: Final = ".removal-rewrite"
@@ -226,6 +233,29 @@ class InboxReason(StrEnum):
     WAITING_TO_BE_IMPORTED = "waiting to be imported: the next pull imports what is kept"
     NOT_A_SYNC_DOWNLOAD = "not a download the pull named, so nothing else in it is thrown away"
     CANNOT_BE_READ = "cannot be read as a zip, so it could not be checked"
+
+
+@dataclass(frozen=True, slots=True)
+class InboxFile:
+    """One file in the inbox, read once: its digest, what its name says it is, and a zip's entries.
+
+    A plan reads the inbox once and uses it twice: for which revisions are waiting at a removed
+    path, and for what to delete or rewrite. Hashing a complete archive's members is the expensive
+    part of both, so neither does it again.
+    """
+
+    path: Path
+    name: str
+    """Its path relative to the inbox: the download's own name, for everything the pull wrote."""
+    sha256: str
+    kind: InboxFileKind
+    caselist: str | None = None
+    snapshot: date | None = None
+    openev_id: int | None = None
+    entries: tuple[InventoriedEntry, ...] | None = None
+    """A zip's entries, or `None` for a file that is not a zip or cannot be read as one."""
+    unreadable: str | None = None
+    """For a zip that cannot be read: why, without a member's path."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +375,37 @@ class InboxRewriteFailed(DomainError):
 # ------------------------------------------------------------------------------------------------
 
 
+def read_inbox(inbox: CaselistInbox) -> tuple[InboxFile, ...]:
+    """Every file in the inbox, hashed, and every zip among them inventoried. Reads only."""
+    files: list[InboxFile] = []
+    for path in inbox_files(inbox.directory):
+        name = path.relative_to(inbox.directory).as_posix()
+        kind, caselist, snapshot, openev_id = _kind_of(name)
+        entries: tuple[InventoriedEntry, ...] | None = None
+        unreadable: str | None = None
+        if path.suffix.lower() == ".zip":
+            try:
+                entries = inbox.archives_for(kind).inventory(path)
+            except UnreadableArchive as refused:
+                unreadable = refused.reason
+            except ArchiveTooLarge:
+                unreadable = "over the size ceilings"
+        files.append(
+            InboxFile(
+                path=path,
+                name=name,
+                sha256=_digest_of(path),
+                kind=kind,
+                caselist=caselist,
+                snapshot=snapshot,
+                openev_id=openev_id,
+                entries=entries,
+                unreadable=unreadable,
+            )
+        )
+    return tuple(files)
+
+
 def plan_inbox(
     inbox: CaselistInbox,
     *,
@@ -353,6 +414,7 @@ def plan_inbox(
     imported_full_archives: Collection[tuple[str, date]],
     imported_openev_downloads: Collection[str],
     team: tuple[str, str, str] | None = None,
+    files: Sequence[InboxFile] | None = None,
 ) -> tuple[tuple[InboxFilePlan, ...], tuple[InboxTeamFilesLeft, ...]]:
     """Every inbox file holding something `suppression` stops, and what to do with it. Reads only.
 
@@ -364,34 +426,31 @@ def plan_inbox(
         imported_openev_downloads: The download digests this machine's OpenEv manifest rows name.
         team: `(caselist, school, team code)` for a `--team` removal, to report the team's files
             in a waiting archive that the list does not stop; `None` otherwise.
+        files: The inbox as :func:`read_inbox` read it, when the caller already has; read here
+            otherwise.
     """
-    remembered = inbox.deliveries.read()
+    remembered = {key: value.download_sha256 for key, value in inbox.deliveries.read().items()}
     planned: list[InboxFilePlan] = []
     left: list[InboxTeamFilesLeft] = []
-    for path in inbox_files(inbox.directory):
-        name = path.relative_to(inbox.directory).as_posix()
+    for file in read_inbox(inbox) if files is None else files:
         one, team_files = _plan_file(
-            inbox,
-            path,
-            name,
+            file,
             suppression=suppression,
             imported_weeks=imported_weeks,
             imported_full_archives=imported_full_archives,
             imported_openev_downloads=imported_openev_downloads,
-            remembered={key: value.download_sha256 for key, value in remembered.items()},
+            remembered=remembered,
             team=team,
         )
         if one is not None:
             planned.append(one)
         if team_files:
-            left.append(InboxTeamFilesLeft(name=name, files=team_files))
+            left.append(InboxTeamFilesLeft(name=file.name, files=team_files))
     return tuple(planned), tuple(left)
 
 
 def _plan_file(
-    inbox: CaselistInbox,
-    path: Path,
-    name: str,
+    file: InboxFile,
     *,
     suppression: SuppressionState,
     imported_weeks: Collection[tuple[str, date]],
@@ -400,10 +459,10 @@ def _plan_file(
     remembered: dict[int, str],
     team: tuple[str, str, str] | None,
 ) -> tuple[InboxFilePlan | None, int]:
-    digest = _digest_of(path)
-    kind, caselist, snapshot, openev_id = _kind_of(name)
+    name, digest, kind = file.name, file.sha256, file.kind
+    caselist, snapshot, openev_id = file.caselist, file.snapshot, file.openev_id
     whole = suppression.suppresses_source(digest)
-    if path.suffix.lower() != ".zip":
+    if file.path.suffix.lower() != ".zip":
         if not whole:
             return None, 0
         return (
@@ -420,10 +479,8 @@ def _plan_file(
             0,
         )
 
-    try:
-        entries = inbox.archives_for(kind).inventory(path)
-    except (UnreadableArchive, ArchiveTooLarge) as unreadable:
-        reason = unreadable.reason if isinstance(unreadable, UnreadableArchive) else "over the size ceilings"
+    entries = file.entries
+    if entries is None:
         return (
             InboxFilePlan(
                 name=name,
@@ -434,7 +491,7 @@ def _plan_file(
                 removed_sha256=(digest,) if whole else (),
                 openev_id=openev_id,
                 delivered=frozenset({digest}) if whole else frozenset(),
-                detail=None if whole else reason,
+                detail=None if whole else file.unreadable,
             ),
             0,
         )

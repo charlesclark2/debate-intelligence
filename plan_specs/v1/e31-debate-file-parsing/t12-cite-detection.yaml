@@ -60,7 +60,7 @@ spec:
         and completeness counts before and after, recorded in
         docs/data/caselist-parse-report.md.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

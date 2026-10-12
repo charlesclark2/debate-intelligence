@@ -117,7 +117,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [A partial merge's open items are read from the current session's sections](plan_specs/v1/e01-repo-foundation/t24-partial-open-items-current-session.yaml) `v1-e01-t24-partial-open-items-current-session` | Pending | 1 | 1.5 |
 | [An unexpected error never prints its message on the command line](plan_specs/v1/e01-repo-foundation/t25-unmodelled-errors-print-no-text.yaml) `v1-e01-t25-unmodelled-errors-print-no-text` | Pending | 1 | 1.0 |
 | [The manual sweep also opens the back-merge pull request](plan_specs/v1/e01-repo-foundation/t26-dispatch-opens-back-merge.yaml) `v1-e01-t26-dispatch-opens-back-merge` | Pending | 1 | 1.5 |
-| [The CI test job finishes well inside the five-minute budget](plan_specs/v1/e01-repo-foundation/t27-ci-test-job-within-budget.yaml) `v1-e01-t27-ci-test-job-within-budget` | Pending | 1 | 3.0 |
+| [The CI test job finishes well inside the five-minute budget](plan_specs/v1/e01-repo-foundation/t27-ci-test-job-within-budget.yaml) `v1-e01-t27-ci-test-job-within-budget` | InProgress | 1 | 3.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 

@@ -60,7 +60,10 @@ from debate_core.application.errors import StoreCredentialsExpired
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.suppression import ReasonCode
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
-from debate_core.integrations.local.suppression_list import local_suppression_list_file
+from debate_core.integrations.local.suppression_list import (
+    local_path_holds_file,
+    local_suppression_list_file,
+)
 from debate_core.testing.fakes import InMemoryAppendOnlyRecord
 
 from .conftest import REQUEST, RemovalWorld
@@ -245,6 +248,21 @@ async def test_running_the_removal_again_appends_no_second_entry(world: RemovalW
 
     assert local_path_entries(world) == [THE_PATH_ENTRY]
     assert bucket_path_entries(world) == [THE_PATH_ENTRY]
+
+
+async def test_a_path_a_stopped_run_already_recorded_is_not_recorded_again(world: RemovalWorld) -> None:
+    """A run that stopped after the suppress step left the path entry, and the file's rows too. The
+    run that finishes it is a day later, so an entry it wrote would be a second line for one path."""
+    recorded = {**THE_PATH_ENTRY, "recorded_at": "2026-09-29T09:00:00Z"}
+    line = json.dumps(recorded, sort_keys=True, separators=(",", ":"))
+    await local_path_holds_file(world.data_dir).append_lines([line])
+
+    plan = await planned(world)
+
+    assert plan.path_holds == ()
+    assert [json.loads(hold.to_line()) for hold in plan.suppression_after.path_holds] == [recorded]
+    assert (await world.service().execute(plan)).completed
+    assert local_path_entries(world) == [recorded] and bucket_path_entries(world) == [recorded]
 
 
 async def test_status_is_clean_with_the_path_entries_in_the_bucket(world: RemovalWorld) -> None:

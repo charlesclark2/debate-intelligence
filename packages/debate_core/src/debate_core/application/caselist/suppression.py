@@ -189,15 +189,17 @@ class RecordedSuppressionList:
     async def append_path_holds(self, entries: Sequence[PathHoldEntry]) -> None:
         """Append to every copy's path-hold record, by the rule :meth:`append` follows.
 
-        With nothing to append and no copy holding anything, no record is created: an environment
-        that has never held a path has no `path-holds.jsonl`.
+        Each copy is also given what another copy holds and it lacks, with or without anything new:
+        a run that stopped between the two copies is finished by the next one. Where no copy holds
+        anything and there is nothing to append, no record is created: an environment that has
+        never held a path has no `path-holds.jsonl`.
         """
-        if not entries:
-            return
         if self._path_hold_lines is None:
-            raise AppendOnlyViolation(
-                self._lines.records[0].location, "no copy of this list keeps a path-hold record beside it"
-            )
+            if entries:
+                raise AppendOnlyViolation(
+                    self._lines.records[0].location, "no copy of this list keeps a path-hold record beside it"
+                )
+            return
         await self._path_hold_lines.append([entry.to_line() for entry in entries])
 
     async def reconcile(self) -> None:

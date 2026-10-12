@@ -51,7 +51,8 @@ same version the skip key below would pass that file over for good.
 | Parser version | What it read | Differs from the one before |
 |---|---|---|
 | `2026.09.20-docx-1` | The first full corpus, 2026-10-10 ([caselist-parse-report.md](caselist-parse-report.md)) | |
-| `2026.10.10-docx-2` | Written by the next `caselist parse` | Reads 23 files refused for the words `system "` and `public '` in card text. Keeps a body paragraph guessed to be a cite in its card. Does not take a blank line in a heading style for a heading. Calls a card `ABBREVIATED` for the shape of a first-and-last-words disclosure, not for an ellipsis. Writes "no tag" as `null`, under record `schema_version` 2 (`v1-e31-t09`) |
+| `2026.10.10-docx-2` | The re-parse of 2026-10-11 | Reads 23 files refused for the words `system "` and `public '` in card text. Keeps a body paragraph guessed to be a cite in its card. Does not take a blank line in a heading style for a heading. Calls a card `ABBREVIATED` for the shape of a first-and-last-words disclosure, not for an ellipsis. Writes "no tag" as `null`, under record `schema_version` 2 (`v1-e31-t09`) |
+| `2026.10.12-docx-3` | Written by the next `caselist parse` | Reads cites the two before it missed or misread ([caselist-parse-report.md](caselist-parse-report.md#cites-the-parser-missed-or-misread-v1-e31-t12)): a cite in the cite character style past 1,000 characters, a cite line longer than 400 characters that opens in bold or holds everything after its name and year in one bracket, and a cite written wholly inside a bracket. Does not take a line that opens with a word such as *In* and a year for a cite. Reads a guessed cite entry longer than 2,000 characters as body whatever its formatting. No field moved (`v1-e31-t12`) |
 
 ## The skip key
 
@@ -217,6 +218,38 @@ re-read, at any length.
 more than 100 words after the change. Most are a card written as one paragraph behind a bold name,
 which the parser leaves as the file has it. A short wiki entry of a name, a year and a card's first
 and last words is also still one cite paragraph, and its card is `CITE_ONLY`.
+
+**From `2026.10.12-docx-3`**, a guessed cite entry over 2,000 characters with no cite style and no
+name and year in its first 300 characters is body wherever a card is open, whatever its
+formatting, under the same three rule ids. 220 more cards go from `CITE_ONLY` to `FULL`, and
+`CITE_ONLY` is 2,025 over the same sources. A card whose only paragraph is a cite is `CITE_ONLY`
+whatever shape the cite has: 14 such cards were stored `FULL` in `2026.10.10-docx-2`, with the
+cite as their evidence text.
+
+#### A card with no cite
+
+A card may have a tag and a body and no cite: `full_cite` is `""` and `short_cite` is `null`. In
+`2026.10.10-docx-2` that is 33,624 cards, 17% of the store, and for most of them the file does hold
+a cite: a line under the tag that the parser read as nothing, or as the first paragraph of the
+body. **In that directory, do not read an empty `full_cite` as "the file gives no source", and
+expect the first paragraph of some `evidence_text` to be the card's cite.**
+
+From `2026.10.12-docx-3` the parser reads 9,193 of those cites, and 24,431 tagged cards have none.
+A rule id on a card says how its cite was read:
+
+| A rule id on the card | Says |
+|---|---|
+| `verbatim-cite-run-style` | A paragraph of 1,000 characters or fewer with a run in the cite character style |
+| `verbatim-cite-run-style-past-the-profile-bound` | A longer paragraph, to 4,000 characters, with the style on a name and a year at its head and no highlighting |
+| `heuristic-cite-line-author-year` | A line of 400 characters or fewer that opens with a name and a year |
+| `heuristic-cite-line-bold-author-year` | A line of 401 to 2,000 characters that opens in bold with a name and a year, with no highlighting |
+| `heuristic-cite-line-bracketed` | A line of 401 to 2,000 characters: a name and a year, then one bracket to the end but for the cutter's signature |
+| `assembly-bracketed-cite-before-the-body:…` | A paragraph wholly inside one bracket with a name and a year at its head, under a tag or under the card's cite and before any body. The part after the colon is what the classifier had called it |
+| `heuristic-wiki-cite-entry` | A paragraph holding an ellipsis and a name with a year. A guess, and the least sure |
+
+A card still has no cite when the file gives it none, when its cite is on the tag line, or when
+the line under its tag is a cite in a shape no rule takes: 7,200 have a name and a year a few
+words into that line, behind a first name or a title.
 
 ### `occurrence`: a line of `occurrences.jsonl`
 

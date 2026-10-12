@@ -639,6 +639,129 @@ read-only on the dev data directory on 2026-10-11.
   corpus `card-fingerprint-v2` gains a few groupings and loses about as many, all small.
   `v1-e31-t11` diagnoses the 81 divided pairs and the largest clusters.
 
+### The divided pairs and the largest clusters, diagnosed (`v1-e31-t11`)
+
+`scripts/compare_card_clusters.py diagnose`, run by the `v1-e31-t11` session on 2026-10-12,
+read-only on the dev data directory, over the `card-fingerprint-v2` occurrence table of
+`2026.10.10-docx-2` as stored. Counts only. It reads the table's cluster ids and places nothing, so
+it took 8 to 59 s a caselist for the cuts and under 30 s for the largest clusters alone.
+
+**What the diagnosis counts.** A body is a *cut* of another when the other is at least as large,
+holds its first and last five-word runs, and holds nine-tenths of its five-word runs (or, for a
+body under 64 words, holds it but for one word). The diagnosis lists every body with such a
+container *outside its own cluster*, and names the limit that kept it out. Short is under 64 words.
+
+| Bodies with a container outside their cluster | hsld26 | hspf26 | hspolicy26 | openev | All |
+|---|---|---|---|---|---|
+| Distinct full texts read | 15,203 | 13,504 | 22,527 | 6,372 | 57,606 |
+| ... of which short | 593 | 505 | 555 | 117 | 1,770 |
+| **Long** cut, containers in one cluster: the banding never paired them | 789 | 712 | 1,370 | 209 | 3,080 |
+| **Long** cut, containers in more than one cluster | 115 | 162 | 180 | 26 | 483 |
+| **Short** cut, witnesses in more than one cluster | 25 | 31 | 12 | 3 | 71 |
+| **Short** cut, under a quarter of the smallest body that holds it (`MIN_CUT_SHARE`) | 77 | 74 | 113 | 8 | 272 |
+| **Short** cut, one witness cluster, within the share, and still apart | 16 | 10 | 14 | 0 | 40 |
+| ... because its containers are nested copies in several clusters | 12 | 9 | 9 | 0 | 30 |
+| ... because the container first by fingerprint is over the share | 2 | 1 | 5 | 0 | 8 |
+| ... because another short body of its cluster points elsewhere | 2 | 0 | 0 | 0 | 2 |
+| **Short** body nine-tenths inside a body that lacks one of its ends | 9 | 7 | 9 | 1 | 26 |
+| **Short** cut whose ends more than eight clusters hold (`MAX_CONTAINER_CLUSTERS`) | 1 | 1 | 0 | 0 | 2 |
+| Total | 1,032 | 997 | 1,698 | 247 | 3,974 |
+| Set aside: bodies in a cluster with a copy that every outside container also holds | 478 | 601 | 565 | 34 | 1,678 |
+
+*Witnesses* are containers counted once when they hold one another: a cut inside a copy and
+inside the card that copy was cut from has one witness, the copy.
+
+**The 81 divided pairs.** The rules before `v1-e31-t08` merged a short body with a container
+whenever the banding paired the two. The diagnosis finds exactly 81 short cuts that the banding
+pairs with a container outside their cluster: 45, 23, 12 and 1. That is the count of divided pairs
+above, and for openev, the one caselist where the session could compute the earlier placement, the
+one divided pair is the one such cut. Why each is still apart under `v2`:
+
+| Short cuts the banding pairs with an outside container | hsld26 | hspf26 | hspolicy26 | openev | All |
+|---|---|---|---|---|---|
+| Witnesses in more than one cluster | 17 | 12 | 5 | 0 | 34 |
+| One witness cluster, within the share, and still apart | 19 | 6 | 5 | 0 | 30 |
+| Under a quarter of the smallest body that holds it | 3 | 2 | 2 | 0 | 7 |
+| Ends held by more than eight clusters | 4 | 1 | 0 | 0 | 5 |
+| Nine-tenths inside a body that lacks one of its ends | 2 | 2 | 0 | 1 | 5 |
+| Total | 45 | 23 | 12 | 1 | 81 |
+
+24 of the 81 (19 in hsld26, 5 in hspf26) are in a cluster with a copy that the outside body also
+holds, and are counted here by what would keep them out were that copy not there.
+
+* **The hypothesis holds for about seven in ten.** Of the 57 not set aside, 44 have containers in
+  more than one cluster, and in all 44 those clusters read as one card that was split: some
+  container of each shares at least half of the smaller body's text with one of the other. None
+  reads as two different cards. 21 of the 44 are nested, 23 are not.
+* **What split the longer copies**, for those 44 (a cut can count under more than one): the two
+  copies pass the Jaccard or containment threshold and the banding never paired them, 19; they
+  share at least half and are under both thresholds, 25; the smaller copy is itself a short body
+  the short-body step left out, 13.
+* **`MIN_CUT_SHARE` is not what divided most pairs:** 7 of 81.
+* **Long copies split far more often than short ones.** 3,563 long texts are a cut of a body in
+  another cluster, against 411 short ones. The banding pairs a cut with its container about nine
+  times in ten when the cut is half of it, and about one time in eight when it is a quarter. Of
+  the 3,080 with one container cluster, 41 are half or more of their smallest container, 1,065
+  a quarter to a half, 1,332 a tenth to a quarter and 642 under a tenth.
+
+**The largest clusters, from the inside.** Three per caselist, largest first.
+
+| | hsld26 1 | hsld26 2 | hsld26 3 | hspf26 1 | hspf26 2 | hspf26 3 | hspolicy26 1 | hspolicy26 2 | hspolicy26 3 | openev 1 | openev 2 | openev 3 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Cards | 620 | 365 | 354 | 543 | 296 | 281 | 1,172 | 581 | 560 | 22 | 21 | 18 |
+| Distinct texts | 48 | 40 | 15 | 74 | 40 | 75 | 166 | 50 | 20 | 14 | 14 | 14 |
+| Words, smallest text | 66 | 343 | 81 | 1,441 | 132 | 193 | 72 | 70 | 302 | 1,251 | 146 | 93 |
+| Words, median | 560 | 1,126 | 102 | 6,147 | 477 | 1,032 | 650 | 561 | 790 | 2,114 | 329 | 666 |
+| Words, largest | 1,467 | 5,294 | 254 | 7,697 | 2,846 | 2,484 | 3,843 | 1,161 | 2,964 | 4,016 | 1,448 | 1,161 |
+| Pairs of texts | 1,128 | 780 | 105 | 2,701 | 780 | 2,775 | 13,695 | 1,225 | 190 | 91 | 91 | 91 |
+| ... sharing nothing | 169 | 177 | 0 | 0 | 38 | 288 | 6,409 | 91 | 0 | 0 | 37 | 0 |
+| ... sharing under half of the smaller | 234 | 161 | 0 | 27 | 55 | 170 | 448 | 66 | 6 | 18 | 2 | 3 |
+| ... sharing half or more | 725 | 442 | 105 | 2,674 | 687 | 2,317 | 6,838 | 1,068 | 184 | 73 | 52 | 88 |
+| Texts sharing nothing with the most-read text | 11 | 26 | 0 | 0 | 1 | 1 | 127 | 0 | 0 | 0 | 5 | 0 |
+| Cards those texts carry | 54 | 214 | 0 | 0 | 1 | 2 | 755 | 0 | 0 | 0 | 9 | 0 |
+| Texts holding two smaller texts that share nothing | 31 | 1 | 0 | 0 | 1 | 51 | 92 | 38 | 0 | 0 | 7 | 0 |
+| Texts inside two larger texts that share under half | 20 | 0 | 0 | 0 | 10 | 5 | 41 | 8 | 0 | 0 | 0 | 1 |
+
+* **hspolicy26's largest cluster is not one passage.** 6,409 of its 13,695 pairs of texts have no
+  five-word run in common, and 127 of its 166 texts, carrying 755 of its 1,172 cards, share
+  nothing with its most-read text. Yet it is one connected group when only texts sharing half or
+  more are joined. It is a chain: 92 texts each hold two smaller texts that share nothing with
+  each other, and 41 are inside two larger texts that share under half.
+* **The merges run through bodies that hold several parts more than through shared fragments.**
+  Whether such a cluster is one long source cut at many extents, which a person might call one
+  card, or several cards merged, counts cannot say. `sample --largest` and `--least-alike` are for
+  that (`v1-e31-t11`, criterion ac2, the operator's).
+* **Five of the twelve have no pair of texts that shares nothing**, among them hspf26's largest,
+  whose texts are 1,441 to 7,697 words: bodies the length of a whole file, parsed as one card and
+  near-identical to each other.
+
+**What `v1-e31-t11` changed: `card-fingerprint-v3`.** Two corrections to the short-body step. A
+short cut inside nested copies joins the smallest of them, and its size is compared with the
+smallest body that holds it, not the one first by fingerprint. The session's estimate of the
+effect, made by applying the corrected step to the stored `v2` clusters without recomputing the
+banding (5 to 33 s a caselist), and its one full preview, openev (66 s):
+
+| | hsld26 | hspf26 | hspolicy26 | openev |
+|---|---|---|---|---|
+| Clusters that merge into another, estimated | 18 | 10 | 17 | 0 |
+| New clusters made of several, estimated | 17 | 10 | 13 | 0 |
+| Most earlier clusters in one new cluster, estimated | 3 | 2 | 3 | 1 |
+| Earlier clusters divided, estimated | 0 | 0 | 0 | 0 |
+| Largest cluster, cards, before and estimated after | 620, 620 | 543, 543 | 1,172, 1,179 | 22, 22 |
+| Full preview: merged, divided, exact fingerprints changed | not run | not run | not run | 0, 0, 0 |
+
+* **It joins the cut to a copy of its card, not to the body the earlier rules joined it to.** The
+  two longer copies are still two clusters, so a comparison against the rules before `v1-e31-t08`
+  will still count most of these earlier clusters as divided, into one part fewer.
+* **Long bodies are matched as before.** Joining long cuts the way short ones are joined would
+  take 1,232 of the long cuts above, those with one witness and within the share. 944 of them
+  share text with every text of the cluster they would join, and for 481 that cluster is a single
+  text; 288 would be put in a cluster with at least one text they share nothing with. That feeds
+  the same chains as the largest clusters, so it waits for the by-eye sample.
+
+**After the rebuild under `card-fingerprint-v3`:** not run. The counts and both by-eye samples
+(`v1-e31-t11`, criterion ac4) are the operator's, recorded here at close-out.
+
 ## Cites the parser missed or misread (`v1-e31-t12`)
 
 `v1-e31-t09` and the operator's sample of the 2026-10-11 re-parse left five questions about cites.
@@ -979,4 +1102,3 @@ The one cite line still missed is the second line of a cite in small print, unde
   leaves them as cite text: 14 before this task and the five above. A style that marks no name and
   year at the head is emphasis, by the measure under 2, and that is a change to the earlier rule
   and to one of its fixtures.
-

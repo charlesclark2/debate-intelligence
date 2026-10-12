@@ -92,6 +92,7 @@ __all__ = [
     "cluster_pairs",
     "common_cards",
     "compare",
+    "describe_largest_clusters",
     "diagnose",
     "divided_parts",
     "joined_pairs",
@@ -99,6 +100,7 @@ __all__ = [
     "main",
     "placements_now",
     "placements_under_rules",
+    "read_bodies",
     "read_placements",
     "run_sample",
     "write_placements",
@@ -246,6 +248,33 @@ def read_cards(
                     update={"formatting_spans": (), "font_size_spans": ()}
                 )
     return cards
+
+
+def read_bodies(
+    store: LocalParsedStore, caselist: str, version: str, keys: Iterable[CardKey]
+) -> dict[CardKey, str]:
+    """The stored body text at `keys`, read from each source's record as JSON and nothing more.
+
+    `read_cards` builds every card of every document, formatting included, which is most of what a
+    rebuild's reading costs. The diagnosis compares bodies and needs none of the rest.
+    """
+    wanted: defaultdict[str, set[int]] = defaultdict(set)
+    for sha256, element in keys:
+        wanted[sha256].add(element)
+    texts: dict[CardKey, str] = {}
+    for sha256 in sorted(wanted):
+        path = store.root / source_object_key(caselist, version, sha256)
+        with path.open(encoding="utf-8") as stream:
+            stream.readline()
+            document = json.loads(stream.readline())["document"]
+        for card in document["cards"]:
+            element = card["provenance"]["first_element_index"]
+            if element in wanted[sha256]:
+                texts[(sha256, element)] = card["evidence_text"]
+    missing = sum(len(elements) for elements in wanted.values()) - len(texts)
+    if missing:
+        raise SystemExit(f"{caselist}: {missing} card positions of the table are in no stored document")
+    return texts
 
 
 def placements_now(cards: Mapping[CardKey, ParsedCard], fingerprint_version: str) -> dict[CardKey, Placement]:
@@ -458,15 +487,15 @@ def joined_pairs(before: Mapping[CardKey, Placement], after: Mapping[CardKey, Pl
 
 
 def full_bodies(
-    cards: Mapping[CardKey, ParsedCard], placed: Mapping[CardKey, Placement]
+    texts: Mapping[CardKey, str], placed: Mapping[CardKey, Placement]
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """The distinct FULL bodies of `cards`, and the cluster each was placed in, by exact fingerprint."""
+    """The distinct FULL bodies among `texts`, and the cluster each was placed in, by exact fingerprint."""
     bodies: dict[str, str] = {}
     clusters: dict[str, str] = {}
-    for key in sorted(cards):
+    for key in sorted(texts):
         placement = placed[key]
         if placement.completeness == "FULL" and placement.exact_fingerprint not in bodies:
-            bodies[placement.exact_fingerprint] = cards[key].evidence_text
+            bodies[placement.exact_fingerprint] = texts[key]
             clusters[placement.exact_fingerprint] = placement.cluster_id
     return bodies, clusters
 
@@ -509,40 +538,52 @@ def divided_parts(
 
 
 def diagnose(
-    cards: Mapping[CardKey, ParsedCard],
+    texts: Mapping[CardKey, str],
     placed: Mapping[CardKey, Placement],
     *,
     before: Mapping[CardKey, Placement] | None = None,
-    largest: int = 3,
-    show_cluster_ids: bool = False,
 ) -> dict[str, object]:
-    """Why `placed` put the stored cards where it did. Counts only, and digests when asked for."""
+    """Why `placed` put the stored cards where it did: every cut left outside a cluster that holds
+    it, and with `before` each divided pair. Counts only."""
     # Imported here, not at the top: `--before-rules` runs this file against the matching modules
     # of an earlier commit, which the diagnosis may not import from.
-    from debate_core.evidence.cluster_diagnosis import cluster_shape, diagnose_cuts, tally_cuts
+    from debate_core.evidence.cluster_diagnosis import diagnose_cuts, tally_cuts
 
-    bodies, clusters = full_bodies(cards, placed)
+    bodies, clusters = full_bodies(texts, placed)
     census = diagnose_cuts(bodies, clusters)
-    findings = census.findings
     result: dict[str, object] = {
-        "cards": len(placed),
         "full_texts": census.texts,
         "short_full_texts": census.short_texts,
-        "clusters": len({placement.cluster_id for placement in placed.values()}),
-        "cuts": tally_cuts(findings),
+        "cuts": tally_cuts(census.findings),
     }
     if before is not None:
-        result["divided_pairs"] = _divided_tally(divided_parts(before, placed), findings)
+        result["divided_pairs"] = _divided_tally(divided_parts(before, placed), census.findings)
+    return result
+
+
+def describe_largest_clusters(
+    read: Callable[[Sequence[CardKey]], Mapping[CardKey, str]],
+    placed: Mapping[CardKey, Placement],
+    *,
+    count: int,
+    show_cluster_ids: bool = False,
+) -> list[dict[str, object]]:
+    """The `count` largest clusters of `placed`, each from the inside. Counts, and ids when asked.
+
+    `read` returns the stored bodies at the keys it is given, so only these clusters' are read.
+    """
+    from debate_core.evidence.cluster_diagnosis import cluster_shape
+
     shapes: list[dict[str, object]] = []
-    for rank, (cluster_id, keys) in enumerate(largest_clusters(placed, largest), start=1):
+    for rank, (cluster_id, keys) in enumerate(largest_clusters(placed, count), start=1):
         full = [key for key in keys if placed[key].completeness == "FULL"]
+        bodies, _ = full_bodies(read(full), placed)
         copies = Counter(placed[key].exact_fingerprint for key in full)
-        shape = cluster_shape(cluster_id, {text: bodies[text] for text in copies}, copies).as_json()
+        shape = cluster_shape(cluster_id, bodies, copies).as_json()
         if not show_cluster_ids:
             del shape["cluster_id"]
         shapes.append({"rank": rank, "cards_not_full": len(keys) - len(full), **shape})
-    result["largest_clusters"] = shapes
-    return result
+    return shapes
 
 
 def _divided_tally(
@@ -696,29 +737,33 @@ def _diagnose(arguments: argparse.Namespace) -> int:
         started = time.monotonic()
         version = current_version(store, caselist)
         held = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
-        cards = read_cards(store, caselist, version, held)
         before: dict[CardKey, Placement] | None = None
         if arguments.before is not None:
             saved: Path = arguments.before
             before = read_placements(saved / f"{caselist}.jsonl" if saved.is_dir() else saved)
         elif arguments.before_rules is not None:
             before = placements_under_rules(_module_at(arguments.before_rules), arguments.data_dir, caselist)
-        placed = placements_now(cards, FINGERPRINT_VERSION) if arguments.preview else held
-        if arguments.preview and before is None:
-            before = held
-        results[caselist] = {
-            "version_directory": version,
-            "fingerprint_version": ", ".join(sorted({p.fingerprint_version for p in placed.values()})),
-            "placement": "the checked-out rules, in memory" if arguments.preview else "the store's table",
-            **diagnose(
-                cards,
+        result: dict[str, object] = {"version_directory": version}
+        placed = held
+        if arguments.preview:
+            placed = placements_now(read_cards(store, caselist, version, held), FINGERPRINT_VERSION)
+            before = held if before is None else before
+        if not arguments.only_largest_clusters:
+            result.update(diagnose(read_bodies(store, caselist, version, held), placed, before=before))
+        result.update(
+            placement="the checked-out rules, in memory" if arguments.preview else "the store's table",
+            fingerprint_version=", ".join(sorted({p.fingerprint_version for p in placed.values()})),
+            cards=len(placed),
+            clusters=len({placement.cluster_id for placement in placed.values()}),
+            largest_clusters=describe_largest_clusters(
+                lambda keys: read_bodies(store, caselist, version, keys),  # noqa: B023 - called in this pass
                 placed,
-                before=before,
-                largest=arguments.largest_clusters,
+                count=arguments.largest_clusters,
                 show_cluster_ids=arguments.show_cluster_ids,
             ),
-            "seconds": round(time.monotonic() - started, 1),
-        }
+            seconds=round(time.monotonic() - started, 1),
+        )
+        results[caselist] = result
     print(json.dumps(results, indent=2, sort_keys=True))
     return 0
 
@@ -887,6 +932,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 default=3,
                 metavar="COUNT",
                 help="How many of the largest clusters to describe from the inside. Default 3.",
+            )
+            command.add_argument(
+                "--only-largest-clusters",
+                action="store_true",
+                help="Skip the cuts: read and describe the largest clusters alone, which takes seconds.",
             )
             command.add_argument(
                 "--show-cluster-ids",

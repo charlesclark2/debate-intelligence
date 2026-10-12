@@ -77,6 +77,7 @@ from debate_core.evidence.near_duplicates import (
 
 __all__ = [
     "MAX_CONTAINERS_COMPARED",
+    "SHARE_BANDS",
     "ClusterShape",
     "CopiesRead",
     "CutCensus",
@@ -138,6 +139,8 @@ class CutFinding:
     """For a cut inside several clusters: how those clusters read."""
     kept_apart_by: tuple[KeptApartBy, ...] = ()
     """For container clusters that read as one card: the limit between each connected pair."""
+    share_of_smallest_container: float = 0.0
+    """Its shingles over those of the smallest confirmed container: 0.0 when none was confirmed."""
     banded_with_a_container: bool = False
     """Whether the banding pairs it with one of the containers compared: for a short cut, the pair
     the rules before the short-body step would have merged."""
@@ -205,6 +208,10 @@ class ClusterShape:
     """Texts whose removal leaves matching texts in more than one piece."""
     bridges_between_unrelated_parts: int
     """Bridging texts whose pieces, once it is removed, have a pair sharing nothing."""
+    texts_holding_parts_that_share_nothing: int
+    """Texts with two smaller texts nine-tenths inside them that have no shingle in common."""
+    texts_inside_texts_that_share_under_half: int
+    """Texts nine-tenths inside two larger texts that share under half of the smaller of the two."""
     unrelated_bridges_that_are_fragments: int
     """Of those, the ones smaller than every text they match: a passage several texts contain."""
     unrelated_bridges_that_hold_the_parts: int
@@ -260,9 +267,10 @@ def diagnose_cuts(
 
     end_shingles = {shingle for pair in ends.values() for shingle in pair}
     short_shingles = {shingle for fingerprint in short for shingle in held.sets[fingerprint]}
+    indexed = end_shingles | short_shingles
     holders: defaultdict[str, set[str]] = defaultdict(set)
     for fingerprint in held.fingerprints:
-        for shingle in held.sets[fingerprint] & (end_shingles | short_shingles):
+        for shingle in held.sets[fingerprint] & indexed:
             holders[shingle].add(fingerprint)
 
     signatures: dict[str, tuple[int, ...]] = {}
@@ -349,6 +357,9 @@ def _finding(
             container_clusters=tuple(sorted(confirmed)),
             containers=frozenset(holder for members in confirmed.values() for holder in members)
             | frozenset(lacking_an_end),
+            share_of_smallest_container=max(
+                (size / held.size(members[0]) for members in confirmed.values()), default=0.0
+            ),
             copies_read=copies_read,
             kept_apart_by=kept_apart_by,
             first_container_over_the_share=first_container_over_the_share,
@@ -450,7 +461,15 @@ def tally_cuts(findings: Sequence[CutFinding]) -> dict[str, object]:
             ),
         }
 
-    short_findings = [finding for finding in findings if finding.is_short]
+    def shares(outcome: CutOutcome) -> dict[str, int]:
+        counted = Counter(
+            _share_band(finding.share_of_smallest_container)
+            for finding in findings
+            if finding.outcome is outcome
+        )
+        return {band: counted.get(band, 0) for _, band in SHARE_BANDS}
+
+    banded = [finding for finding in findings if finding.is_short and finding.banded_with_a_container]
     within = [finding for finding in findings if finding.outcome is CutOutcome.WITHIN_THE_RULE]
     return {
         "bodies_with_a_container_outside_their_cluster": len(findings),
@@ -460,14 +479,30 @@ def tally_cuts(findings: Sequence[CutFinding]) -> dict[str, object]:
         "short_within_the_rule_first_container_over_the_share": sum(
             finding.first_container_over_the_share for finding in within
         ),
-        "short_banded_with_a_container": dict(
-            sorted(
-                Counter(
-                    finding.outcome.value for finding in short_findings if finding.banded_with_a_container
-                ).items()
-            )
-        ),
+        "short_under_the_minimum_share_by_share": shares(CutOutcome.UNDER_MIN_CUT_SHARE),
+        "long_never_paired_by_share": shares(CutOutcome.LONG_NEVER_PAIRED),
+        "short_banded_with_a_container": {
+            "by_outcome": dict(sorted(Counter(finding.outcome.value for finding in banded).items())),
+            "in_several_clusters_read": dict(
+                sorted(
+                    Counter(finding.copies_read.value for finding in banded if finding.copies_read).items()
+                )
+            ),
+        },
     }
+
+
+SHARE_BANDS: Final = (
+    (0.1, "under a tenth"),
+    (MIN_CUT_SHARE, "a tenth to a quarter"),
+    (0.5, "a quarter to a half"),
+    (float("inf"), "half or more"),
+)
+"""A cut's share of its smallest container, in bands; the second ends at :data:`MIN_CUT_SHARE`."""
+
+
+def _share_band(share: float) -> str:
+    return next(name for limit, name in SHARE_BANDS if share < limit)
 
 
 def explain_divided_part(part: Set[str], rest: Set[str], findings: Mapping[str, CutFinding]) -> DividedPart:
@@ -549,6 +584,27 @@ def cluster_shape(
             unrelated += 1
             fragments += all(held.size(other) > held.size(text) for other in matches[text])
             holding += all(held.size(other) < held.size(text) for other in matches[text])
+    inside: dict[str, list[str]] = {text: [] for text in texts}
+    holds: dict[str, list[str]] = {text: [] for text in texts}
+    for small in texts:
+        for large in texts:
+            if held.size(small) < held.size(large) and len(
+                held.sets[small] & held.sets[large]
+            ) >= limits.containment * held.size(small):
+                inside[small].append(large)
+                holds[large].append(small)
+    holding_unrelated = sum(
+        any(right in disjoint[left] for position, left in enumerate(parts) for right in parts[position + 1 :])
+        for parts in holds.values()
+    )
+    inside_unrelated = sum(
+        any(
+            right not in alike[left]
+            for position, left in enumerate(wholes)
+            for right in wholes[position + 1 :]
+        )
+        for wholes in inside.values()
+    )
     words = sorted(len(held.words[text]) for text in texts)
     return ClusterShape(
         cluster_id=cluster_id,
@@ -570,6 +626,8 @@ def cluster_shape(
         cards_sharing_nothing_with_most_read=sum(copies[text] for text in apart),
         bridging_texts=bridging,
         bridges_between_unrelated_parts=unrelated,
+        texts_holding_parts_that_share_nothing=holding_unrelated,
+        texts_inside_texts_that_share_under_half=inside_unrelated,
         unrelated_bridges_that_are_fragments=fragments,
         unrelated_bridges_that_hold_the_parts=holding,
     )

@@ -63,7 +63,7 @@ spec:
         caselist revision with what the path entry does, and the data-use policy's `What
         removal does` names the hold.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

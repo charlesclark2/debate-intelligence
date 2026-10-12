@@ -514,9 +514,53 @@ No GitHub setting changes: `ci` is still the only required check and was not ren
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-12
 
 **Notes:**
+
+Accepted as a partial merge. ac5, the after-measurement, is NOT RUN, and the Goal stays
+`InProgress` until three pull requests show `ci` under 3 minutes.
+
+**The measurement came before the change.** That is why the change is the right one. Nine real
+runs, with setup separated from test time, show it is the test step and nothing else. The local
+figure puts coverage at a third of the test time.
+
+**The split is better than either option I named.** Dealing each file's tests round the parts
+needs no durations file and no directory list. It cannot drop a new test, and it is level to within
+4%. The union proof is the guarantee I asked for, and it runs on every pull request. Using a
+matrix, so that `ci`'s needs could not change, is the right call.
+
+**Rulings:**
+
+* **Decision 1, coverage out of `addopts`:** accepted. Pull requests and local runs now do the
+  same thing, and a third of every session's suite time goes.
+  * Session prompts that want a coverage figure will add `--cov`.
+  * A push running the suite twice, and the dev chain staying as slow as today, are accepted for
+    now. Combining the parts' coverage is filed below.
+  * `coverage` outside `ci`'s needs is right, and now held by a test.
+* **Decision 2, `--part K/N`, four parts:** accepted, including the plugin loading from
+  `pyproject.toml` and `--durations=25` per part.
+* **Decision 3, the libyaml loader:** accepted. It is a change to how the spec tree is parsed, not
+  to what is parsed, and it was checked once by script across all 348 files.
+* **Deviations 1 to 6:** accepted. The README would have been wrong without Deviation 1.
+* **Your follow-up 3, the help-rendering tests:** keep both widths for now. The tests exist to
+  show that the output holds at any width, and two widths is the least that claim needs. They go
+  into the trim task, measured from a runner's durations.
+* **Your follow-up 4:** adopted. From now on sessions run the suite as `--part 1/4` to `4/4`, not
+  in halves.
+
+**The mutation run:** 19 of 19 caught. Adding the check that neither command names a path, after a
+mutant ran for 100 s, is the right lesson to take from it.
+
+**Follow-up work, filed by the PM:**
+
+* **E01, p3: combine the parts' coverage on a push** (your 1). It removes the second suite run
+  and the one job that grows with the suite.
+* **E01, p3: trim the slowest tests from a runner's durations** (your 2, 3 and 5), after
+  `v1-e34-t22` merges.
+
+**Operator follow-ups:** your 2 (this PR's own run, then the first push to `dev`) and your 1 (ac5,
+over three pull requests). I record the result and set the phase in the next close-out.

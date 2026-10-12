@@ -214,6 +214,17 @@ async def test_an_account_that_does_not_answer_is_no_verdict_on_the_profile() ->
     assert "a-bucket" not in str(found) and "timed out" not in str(found)
 
 
+async def test_an_account_that_refuses_the_question_is_no_verdict_on_the_profile_either() -> None:
+    """AWS does not refuse `GetCallerIdentity`. If something in front of it ever does, the profile
+    is still one the AWS config defines, and the check says only that it got no answer."""
+    refused = CannotBeAsked(errors.StoreAccessDenied("GetCallerIdentity", "s3://a-bucket"))
+
+    [found] = await check([everyday()], {EVERYDAY_PROFILE: refused})
+
+    assert (found["defined"], found["session"], found["permission_set"]) == (True, "no_answer", None)
+    assert "a-bucket" not in str(found)
+
+
 async def test_one_profile_that_is_not_defined_does_not_stop_the_other_being_asked() -> None:
     callers = {
         "debate-dev-evidence-typo": not_defined("debate-dev-evidence-typo", EVERYDAY_SETTING),

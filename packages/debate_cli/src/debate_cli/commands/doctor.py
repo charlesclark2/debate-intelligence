@@ -352,13 +352,15 @@ def _failed_integrations(report: Mapping[str, JsonValue]) -> dict[str, str]:
 
 
 def _failed_facts(report: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
-    """For a person's panel: the two databases if they differ, each integration that failed, and
-    each setting whose profile is not defined."""
+    """For a person's panel: the two databases if they differ, and each integration that failed.
+
+    A profile that is not defined adds nothing here: the failure's own sentence names the profile
+    and its setting, and the row above it says the same.
+    """
     facts: dict[str, JsonValue] = {}
     if unicode_database_failure(report) is not None:
         facts.update({key: report[key] for key in _MISMATCH_FACTS})
     facts.update(_failed_integrations(report))
-    facts.update({str(one["setting"]): one["profile"] for one in _profiles_not_defined(report)})
     return facts
 
 

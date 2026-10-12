@@ -574,6 +574,51 @@ def _cite_line_match(paragraph: ParagraphDescription, profile: StyleProfile) -> 
     )
 
 
+def _long_cite_line_match(
+    paragraph: ParagraphDescription, profile: StyleProfile
+) -> ParagraphStyleMatch | None:
+    """A cite line longer than :data:`MAXIMUM_CITE_LINE_CHARACTERS`, told by more than its opening.
+
+    A name and a year at the front is all the short rule asks, and past 400 characters that is
+    also how a paragraph of evidence can begin. Two shapes say more, and each is how the corpus
+    writes a cite with its author's credentials in it (`v1-e31-t12`):
+
+    * **the name and year open the line in bold**, the way a file with no cite style writes a
+      cite. 8,023 such lines under a tag were read as nothing or as the body's first paragraph;
+    * **everything after the name and year sits in one bracket**, but for what the cutter signs
+      after it closes: `Okonkwo 26 [credentials, title, link] KR`.
+
+    Neither is taken when a run is highlighted, because nobody highlights a citation and a card
+    written as one paragraph behind its cite is highlighted; when the "name" is a word that opens
+    a sentence; or past :data:`MAXIMUM_LONG_CITE_LINE_CHARACTERS`.
+    """
+    text = paragraph.text.strip()
+    if not MAXIMUM_CITE_LINE_CHARACTERS < len(text) <= MAXIMUM_LONG_CITE_LINE_CHARACTERS:
+        return None
+    if paragraph.has_highlighted_run:
+        return None
+    short_cite = _compiled(profile.cite.short_cite_pattern).match(text)
+    if short_cite is None or _is_a_sentence_opener(short_cite.group("author")):
+        return None
+    if _opens_in_bold(paragraph):
+        return ParagraphStyleMatch(
+            unit=StructuralUnit.CITE,
+            rule_id="heuristic-cite-line-bold-author-year",
+            match_source=StyleMatchSource.HEURISTIC,
+            confidence=0.6,
+        )
+    rest = text[short_cite.end() :]
+    bracket_opens_at = short_cite.end() + len(rest) - len(rest.lstrip(_BETWEEN_YEAR_AND_BRACKET))
+    if _one_bracket_runs_to_the_end(text, bracket_opens_at):
+        return ParagraphStyleMatch(
+            unit=StructuralUnit.CITE,
+            rule_id="heuristic-cite-line-bracketed",
+            match_source=StyleMatchSource.HEURISTIC,
+            confidence=0.6,
+        )
+    return None
+
+
 def _direct_formatted_heading_match(
     paragraph: ParagraphDescription, profile: StyleProfile
 ) -> ParagraphStyleMatch | None:
@@ -664,9 +709,10 @@ def classify_paragraph(paragraph: ParagraphDescription, profile: StyleProfile) -
     4. outline level plus the formatting that must accompany it,
     5. a wiki-converted cite entry,
     6. a line that opens with a short cite,
-    7. a heading expressed only as bold text at a heading size,
-    8. card body: marked up, shrunk, or prose,
-    9. `OTHER`, which is what a paragraph is when nothing else fits.
+    7. a longer line that opens with one in bold, or holds everything after it in one bracket,
+    8. a heading expressed only as bold text at a heading size,
+    9. card body: marked up, shrunk, or prose,
+    10. `OTHER`, which is what a paragraph is when nothing else fits.
 
     There is always an answer. A caller that wants to know how much to trust it reads
     `confidence` and `match_source`, which is what the parser records on every card.
@@ -700,6 +746,7 @@ def classify_paragraph(paragraph: ParagraphDescription, profile: StyleProfile) -
         _outline_level_match,
         _wiki_cite_entry_match,
         _cite_line_match,
+        _long_cite_line_match,
         _direct_formatted_heading_match,
         _evidence_match,
     ):

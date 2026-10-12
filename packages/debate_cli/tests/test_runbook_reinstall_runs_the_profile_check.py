@@ -50,8 +50,11 @@ def commands_in(text: str) -> list[str]:
 
 
 def on_one_line(text: str) -> str:
-    """Prose as it reads, with the line breaks and block-quote marks of the Markdown taken out."""
-    return " ".join(text.replace("\n> ", " ").replace("\n", " ").split())
+    """Prose as it reads, with the line breaks and block-quote marks of the Markdown taken out.
+
+    A quotation inside a list item is indented, so its marks are too.
+    """
+    return " ".join(re.sub(r"\n[ ]*> ", " ", text).split())
 
 
 def test_the_reinstall_steps_check_the_profile_before_the_agent_is_replaced_and_under_launchd_after() -> None:

@@ -201,7 +201,9 @@ class EvidenceProfileCheck:
             summary=self._signed_in(profile, role_name, permission_set),
         )
 
-    def _signed_in(self, profile: ConfiguredProfile, role_name: str | None, permission_set: str | None) -> str:
+    def _signed_in(
+        self, profile: ConfiguredProfile, role_name: str | None, permission_set: str | None
+    ) -> str:
         """The sentence for a profile AWS answered for, with what its permission set means here."""
         if permission_set is not None:
             who = f"defined, and signed in as {permission_set}"

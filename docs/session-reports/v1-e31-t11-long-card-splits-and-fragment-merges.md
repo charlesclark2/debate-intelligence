@@ -403,7 +403,7 @@ one could hold. I could not build a case that told it from its absence, so it is
 
 **What the session read from the real store.** Counts and seconds from the runs above, printed to
 my own tool output, and one file of digests and cluster ids saved to the session's scratch
-directory for openev's earlier placement. No card text, tag or cite was printed, and `sample` was
+directory for openev's earlier placement, deleted at the end. No card text, tag or cite was printed, and `sample` was
 never run: it shows text and refuses anything but a terminal. Nothing from the store is in a
 commit, a fixture or this report.
 

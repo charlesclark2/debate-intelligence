@@ -51,7 +51,11 @@ def pytest_arguments(job: str) -> list[str]:
     [run] = [step["run"] for step in jobs()[job]["steps"] if " pytest " in step.get("run", "")]
     words = shlex.split(run)
     assert words[: len(UV_RUN_PYTEST)] == UV_RUN_PYTEST, run
-    return words[len(UV_RUN_PYTEST) :]
+    arguments = words[len(UV_RUN_PYTEST) :]
+    # Neither job names a path: each runs everything `testpaths` lists. (It also keeps the commands
+    # run below to the one small file they are given.)
+    assert [word for word in arguments if (REPO_ROOT / word).exists()] == [], run
+    return arguments
 
 
 def part_arguments(part: int, parts: int) -> list[str]:

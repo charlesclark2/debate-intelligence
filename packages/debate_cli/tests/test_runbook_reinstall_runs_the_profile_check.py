@@ -71,7 +71,11 @@ def test_the_reinstall_steps_check_the_profile_before_the_agent_is_replaced_and_
     launchd_check = first(LAUNCHD_CHECK)
     assert profile_check < install < bootout < bootstrap < launchd_check, commands
     assert "env -i" in commands[profile_check], "the profile is checked as the agent will run"
-    assert "DEBATE_ENV=prod" in commands[profile_check]
+    # In the agent's own environment, read from the plist it is installed with and never typed: a
+    # check of prod's profile says nothing about an agent that runs as dev.
+    assert 'DEBATE_ENV="${AGENT_ENV}"' in commands[profile_check]
+    assert first("AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw") < profile_check
+    assert first("AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw") < profile_check
 
 
 def test_the_reinstall_steps_say_what_each_check_shows_and_what_fails_it() -> None:

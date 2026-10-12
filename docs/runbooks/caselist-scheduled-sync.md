@@ -163,11 +163,12 @@ network, because the installer runs it on every install, on machines that have n
 `doctor --evidence-profiles` adds one check (`v1-e34-t22`): each AWS profile this environment is
 configured to reach the evidence bucket with. That is the everyday profile, `storage.s3.aws_profile`,
 and the takedown profile when `DEBATE_REMOVAL_PROFILE` is set in the shell it runs in. As the agent
-runs it, with the agent's `PATH` and nothing else of this shell's:
+runs it, with the `PATH` and the environment its plist gives it and nothing of this shell's:
 
 ```bash
 AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
-env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV=prod sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
 ```
 
 It adds one row for each profile to the report, `Evidence profile`, and reads this Mac's AWS
@@ -337,12 +338,14 @@ does not define before the agent is replaced, and the second finds it as launchd
    ([Checking an installed build](#checking-an-installed-build)).
 
 2. **Check the evidence profile, as the agent will run.** Sign in first, so that the check can
-   say which permission set the profile is:
+   say which permission set the profile is (`debate-dev-evidence` for an agent installed with
+   `--env dev`). The environment is read from the installed plist, not typed:
 
    ```bash
    aws sso login --profile debate-prod-evidence
    AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
-   env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV=prod sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
+   AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+   env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
    ```
 
    Success is `doctor exit=0` and the row `Evidence profile` reading `debate-prod-evidence
@@ -603,7 +606,8 @@ override misspells it. Then confirm it, as the agent runs:
 
 ```bash
 AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
-env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV=prod sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
 ```
 
 `doctor exit=0` and the profile's row reading `defined`

@@ -12,7 +12,7 @@ cards, starting from a part chosen by a checksum of the file's path. So
   part the way CI does and comparing the node ids with an unsplit collection;
 * every file's cost is spread evenly, including the few files that hold most of the suite's time,
   so the parts stay level without a recorded-durations file that would go stale. Measured on
-  5,812 tests, the heaviest of four parts held 1.05 times the mean test time;
+  5,812 tests, the heaviest of four parts held 1.04 times the mean test time;
 * there is no state. The split cannot drift towards one part; what grows is every part together,
   and the answer to that is one more part in ci.yml's matrix.
 

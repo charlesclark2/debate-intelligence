@@ -58,8 +58,16 @@ spec:
         The comment in operator_access.tf and docs/runbooks/evidence-store.md name both uses
         of the listing grant. The comment change is docs-only, and `terraform plan` shows no
         change (operator-run).
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-11, from v1-e29-t07's Follow-up work 2. A takedown whose
+        profile is missing from the AWS config (`StoreProfileNotConfigured`, since v1-e29-t07)
+        is wrapped in `TakedownPreflightFailed`, as an expired session is, so the message says
+        nothing was deleted and the exit stays 1. Shown failing first with
+        `caselist remove --execute` and DEBATE_REMOVAL_PROFILE naming a profile the config
+        lacks.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -72,8 +72,14 @@ through a factory the service calls itself — the `EvidenceRemoval` profile nam
 run therefore never builds a takedown client, and an execution with the variable unset stops with
 :class:`~debate_core.application.caselist.removal_service.TakedownNotConfigured` before anything is
 read with it, let alone deleted. So does one whose variable names a profile the AWS config does not
-define, with :class:`~debate_core.application.errors.StoreProfileNotConfigured` naming the variable
-(`v1-e29-t07`).
+define: the adapter raises :class:`~debate_core.application.errors.StoreProfileNotConfigured` naming
+the variable (`v1-e29-t07`), and the service reports it as its own preflight failure
+(`v1-e29-t08`).
+
+The takedown access also carries a
+:class:`~debate_core.application.ports.caller_identity.CallerIdentity`, built from the same
+profile, which the preflight asks first: a profile that is not signed in as this environment's
+takedown role is refused before it lists or writes (`v1-e29-t08`).
 
 ## Why the AWS adapters are imported inside the factory
 
@@ -733,7 +739,12 @@ class ServiceContainer:
         return self.singleton("takedown_access", self._build_takedown_access)
 
     def _build_takedown_access(self) -> TakedownAccess:
-        from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore, build_s3_client
+        from debate_core.integrations.s3 import (
+            S3EvidenceObjectStore,
+            S3EvidenceVersionStore,
+            StsCallerIdentity,
+            build_s3_client,
+        )
 
         settings = self.settings
         storage = settings.storage
@@ -758,6 +769,14 @@ class ServiceContainer:
                 profile=profile,
                 profile_setting=_REMOVAL_PROFILE_SETTING,
                 multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
+            ),
+            # Asked first, before the profile lists or writes anything (v1-e29-t08): built from the
+            # same profile name as the client above, so it answers for the role that would delete.
+            caller=StsCallerIdentity(
+                bucket=str(storage.s3.bucket),
+                profile=profile,
+                profile_setting=_REMOVAL_PROFILE_SETTING,
+                region=storage.s3.region,
             ),
             profile=profile,
             bucket=str(storage.s3.bucket),

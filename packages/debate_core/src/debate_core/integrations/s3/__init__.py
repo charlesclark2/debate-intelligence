@@ -6,7 +6,7 @@ root enforces it, and every failure botocore raises is translated at this packag
 (:mod:`debate_core.integrations.s3.errors`) so that no `ClientError` reaches a use case
 (architecture proposal §6, ADR-0003).
 
-Two adapters, matching the two shapes evidence comes in:
+Three adapters, matching the shapes evidence comes in:
 
 * :class:`~debate_core.integrations.s3.snapshot_store.S3SnapshotStore` —
   :class:`~debate_core.application.ports.persistence.SnapshotStore` over content-addressed,
@@ -18,6 +18,10 @@ Two adapters, matching the two shapes evidence comes in:
 * :class:`~debate_core.integrations.s3.version_store.S3EvidenceVersionStore` —
   :class:`~debate_core.application.ports.evidence_versions.EvidenceVersionStore`: every version of an
   object, and deleting them. Takedowns only (`v1-e30-t07`).
+
+And one that is not a store: :class:`~debate_core.integrations.s3.caller_identity.StsCallerIdentity`
+— :class:`~debate_core.application.ports.caller_identity.CallerIdentity`, which role a profile is
+signed in as, asked of STS before a takedown does anything (`v1-e29-t08`).
 
 ## Wiring
 
@@ -53,11 +57,13 @@ if importlib.util.find_spec("boto3") is None:  # pragma: no cover - depends on h
         "(or `pip install 'debate-core[aws]'`)."
     )
 
+from debate_core.integrations.s3.caller_identity import StsCallerIdentity
 from debate_core.integrations.s3.client import (
     DEFAULT_MULTIPART_PART_SIZE_BYTES,
     DEFAULT_MULTIPART_THRESHOLD_BYTES,
     MINIMUM_PART_SIZE_BYTES,
     build_s3_client,
+    build_sts_client,
     build_transfer_config,
 )
 from debate_core.integrations.s3.errors import (
@@ -85,7 +91,9 @@ __all__ = [
     "S3EvidenceObjectStore",
     "S3EvidenceVersionStore",
     "S3SnapshotStore",
+    "StsCallerIdentity",
     "build_s3_client",
+    "build_sts_client",
     "build_transfer_config",
     "mapped_s3_errors",
     "translate_s3_error",

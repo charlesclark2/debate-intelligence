@@ -41,6 +41,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_zips,
 )
 from tests.fixtures.caselist.publish_expectations import digest_of_body, expected_publish
+from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
 from tests.fixtures.permissions import needs_permissions, refused
 from typer.testing import CliRunner, Result
@@ -146,6 +147,11 @@ def bucket(installation: Path) -> Iterator[S3Client]:
         client: S3Client = boto3.client("s3", region_name="us-east-1")  # pyright: ignore[reportUnknownMemberType]
         client.create_bucket(Bucket=BUCKET)
         client.put_bucket_versioning(Bucket=BUCKET, VersioningConfiguration={"Status": "Enabled"})
+        # Each profile is the role its name says: a takedown asks before it does anything (v1-e29-t08).
+        sign_in(
+            installation / "aws-credentials",
+            {AWS_PROFILE_NAME: EVERYDAY_ROLE, REMOVAL_PROFILE: TAKEDOWN_ROLE},
+        )
         yield client
 
 

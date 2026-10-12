@@ -2,6 +2,9 @@
 
 Two things live here because both adapters need them and neither should own them: how a client is
 built from a region and a profile, and how big a file has to be before it is uploaded in parts.
+:func:`build_sts_client` is here for the first of those reasons: the takedown asks STS which role
+its profile is signed in as (:mod:`debate_core.integrations.s3.caller_identity`), and that client
+is built from a profile exactly as the S3 one is.
 
 ## Credentials
 
@@ -33,7 +36,8 @@ a constructor, and never inside a request.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from contextlib import AbstractContextManager
+from typing import TYPE_CHECKING, Any
 
 import boto3
 from boto3.s3.transfer import TransferConfig
@@ -48,6 +52,7 @@ __all__ = [
     "DEFAULT_MULTIPART_THRESHOLD_BYTES",
     "MINIMUM_PART_SIZE_BYTES",
     "build_s3_client",
+    "build_sts_client",
     "build_transfer_config",
 ]
 
@@ -97,7 +102,37 @@ def build_s3_client(
     exception leaves this package — the promise :mod:`debate_core.integrations.s3.errors` exists to
     keep, which a constructor outside the translation would have quietly excepted itself from.
     """
-    with mapped_s3_errors(
+    with _session_errors(profile, profile_setting):
+        session = boto3.session.Session(profile_name=profile, region_name=region)
+        # `Session.client` is overloaded once per AWS service, and boto3-stubs only types the services
+        # whose stub package is installed — `s3` here. The overloads for every other service therefore
+        # return Unknown, which strict mode reports on the symbol as a whole even though the call this
+        # module makes resolves to `S3Client`. Narrowed to this one line rather than turned off.
+        return session.client("s3")  # pyright: ignore[reportUnknownMemberType]
+
+
+def build_sts_client(
+    *, region: str | None = None, profile: str | None = None, profile_setting: str | None = None
+) -> Any:
+    """Return an STS client for `region`, using `profile` exactly as :func:`build_s3_client` does.
+
+    For :class:`~debate_core.integrations.s3.caller_identity.StsCallerIdentity`, which asks which
+    role `profile` is signed in as. A session of its own, like every client here, built from the
+    same profile name as the S3 client it is asked about: the two read one entry of one AWS config,
+    so they are one role. A profile the config lacks is the same
+    :class:`~debate_core.application.errors.StoreProfileNotConfigured`, naming `profile_setting`.
+
+    Typed `Any` because boto3-stubs is installed for `s3` only; the adapter narrows it to the one
+    operation it calls.
+    """
+    with _session_errors(profile, profile_setting):
+        session = boto3.session.Session(profile_name=profile, region_name=region)
+        return session.client("sts")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+
+
+def _session_errors(profile: str | None, profile_setting: str | None) -> AbstractContextManager[None]:
+    """Translate what building a session for `profile` raises: no botocore exception leaves here."""
+    return mapped_s3_errors(
         S3Call(
             operation="CreateSession",
             bucket="",
@@ -106,13 +141,7 @@ def build_s3_client(
             profile=profile,
             profile_setting=profile_setting,
         )
-    ):
-        session = boto3.session.Session(profile_name=profile, region_name=region)
-        # `Session.client` is overloaded once per AWS service, and boto3-stubs only types the services
-        # whose stub package is installed — `s3` here. The overloads for every other service therefore
-        # return Unknown, which strict mode reports on the symbol as a whole even though the call this
-        # module makes resolves to `S3Client`. Narrowed to this one line rather than turned off.
-        return session.client("s3")  # pyright: ignore[reportUnknownMemberType]
+    )
 
 
 def build_transfer_config(

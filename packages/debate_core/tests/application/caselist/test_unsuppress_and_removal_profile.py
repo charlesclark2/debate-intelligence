@@ -6,9 +6,9 @@ import of an archive that holds the file stores it again; data the removal purge
 when it is unset, signed out or not the takedown profile at all, the run stops before the first
 change: nothing deleted, nothing appended (spec ac6).
 
-Moto does not enforce IAM, so the refusals are made by the stores themselves: a version store that
-answers the way AWS answers the everyday profile, or a takedown factory that raises the way an unset
-profile does.
+Moto does not enforce IAM, so the refusals are made by the test: a credential that says it is
+signed in as the everyday role, a version store that answers a delete the way AWS answers a profile
+with no delete grant, or a takedown factory that raises the way an unset profile does.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ from debate_core.integrations.local.suppression_list import (
 )
 from debate_core.integrations.s3 import S3EvidenceVersionStore
 
-from .conftest import RemovalWorld
+from .conftest import EVERYDAY_ROLE, TAKEDOWN_ROLE, RemovalWorld, SignedInAs
 
 pytestmark = pytest.mark.anyio
 
@@ -161,32 +161,22 @@ class TestUnsuppress:
 # ------------------------------------------------------------------------------------------------
 
 
-class EverydayProfileVersions:
-    """What AWS answers the EvidenceOperator profile where the `v1-e29-t06` grant is not applied:
-    no ListBucketVersions, no DeleteObjectVersion."""
+class ListsButCannotDelete:
+    """What the bucket lets the everyday profile do since `v1-e29-t06`: list versions and read them,
+    and delete nothing. The same answers a takedown role would get were its delete grant broken."""
 
-    def __init__(self, bucket: str) -> None:
-        self.location = f"s3://{bucket}"
-
-    async def list_versions(self, prefix: str) -> tuple[ObjectVersion, ...]:
-        raise StoreAccessDenied("ListObjectVersions", f"{self.location}/{prefix}")
-
-    async def get_version_file(self, version: ObjectVersion, destination: Path) -> None:
-        raise StoreAccessDenied("GetObject", version.key)
-
-    async def delete_versions(self, versions: Sequence[ObjectVersion]) -> int:
-        raise StoreAccessDenied("DeleteObject", self.location)
-
-
-class ListsButCannotDelete(EverydayProfileVersions):
-    """A profile that may list versions and may not delete them: EvidenceOperator since `v1-e29-t06`."""
-
-    def __init__(self, inner: S3EvidenceVersionStore, bucket: str) -> None:
-        super().__init__(bucket)
+    def __init__(self, inner: S3EvidenceVersionStore) -> None:
         self._inner = inner
+        self.location = inner.location
 
     async def list_versions(self, prefix: str) -> tuple[ObjectVersion, ...]:
         return await self._inner.list_versions(prefix)
+
+    async def get_version_file(self, version: ObjectVersion, destination: Path) -> None:
+        await self._inner.get_version_file(version, destination)
+
+    async def delete_versions(self, versions: Sequence[ObjectVersion]) -> int:
+        raise StoreAccessDenied("DeleteObject", self.location)
 
 
 def unchanged(world: RemovalWorld) -> tuple[Any, ...]:
@@ -214,24 +204,30 @@ class TestTheRemovalProfile:
     async def test_removal_profile_without_delete_rights_fails_preflight_with_nothing_deleted(
         self, removal_world: RemovalWorld, profile: str
     ) -> None:
-        tree, _, records = unchanged(removal_world)
-        evidence_before = [
-            key for key in removal_world.versions() if not key[0].startswith("manifests/_suppression/")
-        ]
+        """Two credentials that cannot delete, and the bucket answers both alike: it lists for them,
+        takes their writes and refuses their deletes.
+
+        `everyday` is the everyday profile named for a takedown by mistake. It is stopped by who it
+        is, before it lists or writes, so nothing at all is written (`v1-e29-t08`). From
+        `v1-e29-t06` until then it got as far as the delete and left its probe.
+
+        `cannot_delete` is the takedown role itself with its delete grant gone. Nothing but a
+        delete can show that, so it does leave a probe, and the error names it.
+        """
+        tree, bucket_before, records = unchanged(removal_world)
         real = removal_world.takedown()
-        versions = (
-            EverydayProfileVersions(removal_world.bucket_name)
-            if profile == "everyday"
-            else ListsButCannotDelete(
-                S3EvidenceVersionStore(bucket=removal_world.bucket_name, client=removal_world.client),
-                removal_world.bucket_name,
-            )
-        )
+        everyday = profile == "everyday"
 
         def refusing() -> TakedownAccess:
             return TakedownAccess(
-                versions=versions, objects=real.objects, profile="debate-dev-evidence", bucket=real.bucket
-            )  # type: ignore[arg-type]
+                versions=ListsButCannotDelete(  # type: ignore[arg-type]
+                    S3EvidenceVersionStore(bucket=removal_world.bucket_name, client=removal_world.client)
+                ),
+                objects=real.objects,
+                caller=SignedInAs(EVERYDAY_ROLE if everyday else TAKEDOWN_ROLE),
+                profile="debate-dev-evidence" if everyday else "debate-dev-evidence-removal",
+                bucket=real.bucket,
+            )
 
         service = removal_world.service(takedown=refusing)
         plan = await service.plan(SourceSelector(BAYVIEW), request_id="RM-2026-03", reason=ReasonCode.POLICY)
@@ -239,15 +235,18 @@ class TestTheRemovalProfile:
             await service.execute(plan)
 
         message = str(refused.value)
-        assert "debate-dev-evidence" in message and "nothing was deleted" in message
-        if profile == "everyday":
-            assert "could not list object versions" in message
+        assert "nothing was deleted" in message
+        bucket_after = removal_world.versions()
+        if everyday:
+            assert "debate-dev-evidence could not" in message
             assert "probe" not in message, "the everyday profile is stopped before anything is written"
+            assert bucket_after == bucket_before, "nothing written: not a probe, not a version of anything"
         else:
+            assert "debate-dev-evidence-removal could not delete an object version" in message
             assert "probe object was left at manifests/_suppression/preflight/" in message
-        assert [
-            key for key in removal_world.versions() if not key[0].startswith("manifests/_suppression/")
-        ] == evidence_before
+            written = [key for key in bucket_after if key not in bucket_before]
+            assert [key.startswith("manifests/_suppression/preflight/") for key, _ in written] == [True]
+            assert [key for key in bucket_before if key not in bucket_after] == [], "nothing deleted"
         assert removal_world.tree() == tree and removal_world.records() == records
         assert not (removal_world.data_dir / "suppression").exists()
 

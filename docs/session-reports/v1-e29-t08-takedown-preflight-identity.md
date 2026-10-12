@@ -512,9 +512,60 @@ Follow-ups 1 and 4 can be run now, from anywhere. 3 and 5 come after this task m
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-11
 
 **Notes:**
+
+Accepted as a partial merge, with the Goal `InProgress`. ac3's probe counts and ac4's
+`terraform plan` are operator-run and NOT RUN.
+
+**One condition on the merge.** Your Operator follow-up 4, the role-name shape, is run before the
+PR merges. The check fails closed, so a shape it does not expect would refuse every real takedown,
+and a removal request runs on a 7-day clock. If the four masked lines are as you expect, this
+verdict stands. If not, I append a review asking for the pattern to be corrected, and the PR
+waits.
+
+**The work itself:**
+
+* **The grant table in "The check, and why this one" settles the design.** It shows that no read
+  tells the two permission sets apart, and that the only difference is the two deletes. Given that,
+  the caller's identity is the right check: it needs no grant, it writes nothing, and it also
+  refuses an administrator's role, which a capability probe would let through.
+* **The table of what is proven and what is not** is what I asked for. The load-bearing assumption
+  is named, and its failure mode is stated: fail closed, with nothing written.
+* **The test reads `operator_access.tf`,** so the name written in two languages cannot drift
+  (Decision 2).
+* **The mutation run:** 25 of 25 caught. The `[everyday]` column is an honest reading of what
+  that one test does and does not hold. The journal tests hold the order.
+
+**Rulings:**
+
+* **Deviation 1, `tests/smoke` and `tests/fixtures`:** accepted. Working agreement 5 asks for the
+  smoke check.
+* **Deviation 2, the identifier-shaped strings with `ACCOUNT` in place of an account:** accepted.
+  The forbidden item means real identifiers.
+* **Deviation 3:** accepted, since both calls were read-only and the STS calls failed before
+  learning anything. But the brief said not to touch the AWS config, and an STS call reads it.
+  Next time, hand such calls to the operator as a command, as your follow-up 4 does.
+* **Deviation 4, the envelope for a missing takedown profile:** accepted. It is what ac5 asks.
+* **Decision 5, exit 1 for the wrong profile rather than 3:** accepted, by `v1-e29-t07`'s
+  reasoning. No retry cures it.
+* **Decisions 1 to 4 and 6 to 13:** accepted. Decision 4's limit (this guards against a mistake,
+  not an administrator) is the right scope for the spec's concern.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **Your 3, `doctor` naming each profile's role:** folded into the E34 p2 task for
+  `v1-e29-t07`'s silent failure. `doctor` and `install.sh --check-launchd` will confirm the profile
+  is defined and name its role.
+* **Your 1, 4, 5 and 7:** folded into the E29 p3 task already planned for `v1-e29-t07`'s
+  follow-ups 4 and 5. Your 1 is sized by the probe counts.
+* **Your 2:** noted on `v2-e35-t05`.
+* **Your 6:** already filed.
+
+**After the merge:** the dev `terraform plan` (your follow-up 3), the probe counts (1, and 2 if a
+count is not zero), and optionally the refusal seen in dev (5). The prod plan follows the next
+promotion. I record the results at close-out.

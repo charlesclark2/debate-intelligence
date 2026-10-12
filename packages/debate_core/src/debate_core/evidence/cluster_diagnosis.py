@@ -35,6 +35,8 @@ count once. When every confirmed container outside the cluster of the smallest o
 container inside that cluster, the cut has one witness (:attr:`CutFinding.containers_nested`). And a container
 outside the cut's cluster that holds a container *inside* it is accounted for: a cut that has
 joined its smallest container is not reported for the larger bodies that container is a cut of.
+Such cuts are kept apart from the findings (:attr:`CutCensus.with_a_copy`) and counted on their
+own, because one of them may be the cut through which earlier rules joined two clusters.
 
 ## Containers in more than one cluster: one card, or two?
 
@@ -191,7 +193,12 @@ class CutCensus:
     short_texts: int
     """Of those, the bodies under :data:`SHORT_BODY_SHINGLES` shingles."""
     findings: tuple[CutFinding, ...]
-    """Every body with a container outside its cluster, sorted by fingerprint."""
+    """Every body with a container outside its cluster that nothing inside it accounts for, sorted
+    by fingerprint."""
+    with_a_copy: tuple[CutFinding, ...] = ()
+    """The bodies left out of `findings`: every container outside their cluster holds a container
+    inside it. Each is described as it would be were that copy not there, so that a pair the
+    earlier rules joined through such a cut can still be explained."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,6 +211,9 @@ class DividedPart:
     first_container_over_the_share: bool = False
     copies_read: CopiesRead | None = None
     kept_apart_by: tuple[KeptApartBy, ...] = ()
+    with_a_copy: bool = False
+    """The cut is in a cluster with a copy that the bodies it left also hold: `outcome` is what
+    kept the cut out were that copy not there, and the copy is apart for its own reason."""
 
     LEFT_OUT = "a short cut in this part was left out"
     THROUGH_A_CUT = "this part was joined only through a short cut elsewhere"
@@ -323,6 +333,7 @@ def diagnose_cuts(
         members[clusters[fingerprint]].append(fingerprint)
 
     findings: list[CutFinding] = []
+    set_aside: list[CutFinding] = []
     for cut in sorted(ends):
         first, last = ends[cut]
         cut_set, cluster = held.sets[cut], clusters[cut]
@@ -342,16 +353,20 @@ def diagnose_cuts(
             return any(holds(holder, inside) for inside in with_it)
 
         confirmed: defaultdict[str, list[str]] = defaultdict(list)
+        every_confirmed: defaultdict[str, list[str]] = defaultdict(list)
         for holder in held.by_size(outside_holders):
-            if holds(holder, cut) and not accounted_for(holder):
-                confirmed[clusters[holder]].append(holder)
+            if holds(holder, cut):
+                every_confirmed[clusters[holder]].append(holder)
+                if not accounted_for(holder):
+                    confirmed[clusters[holder]].append(holder)
 
         lacking_an_end: set[str] = set()
+        every_lacking_an_end: set[str] = set()
         if cut in short:
             sharing: Counter[str] = Counter()
             for shingle in cut_set:
                 sharing.update(holders[shingle])
-            lacking_an_end = {
+            every_lacking_an_end = {
                 other
                 for other, shared in sharing.items()
                 if other != cut
@@ -359,8 +374,11 @@ def diagnose_cuts(
                 and clusters[other] != cluster
                 and held.size(other) >= len(cut_set)
                 and shared >= limits.containment * len(cut_set)
-                and not accounted_for(other)
             }
+            lacking_an_end = {other for other in every_lacking_an_end if not accounted_for(other)}
+        with_a_copy = not confirmed and not lacking_an_end
+        if with_a_copy:
+            confirmed, lacking_an_end = every_confirmed, every_lacking_an_end
         if not confirmed and not lacking_an_end:
             continue
 
@@ -384,8 +402,13 @@ def diagnose_cuts(
                     if len(cut_set & held.sets[holder]) >= limits.containment * len(cut_set)
                 ),
             )
-        findings.append(finding)
-    return CutCensus(texts=len(held.fingerprints), short_texts=len(short), findings=tuple(findings))
+        (set_aside if with_a_copy else findings).append(finding)
+    return CutCensus(
+        texts=len(held.fingerprints),
+        short_texts=len(short),
+        findings=tuple(findings),
+        with_a_copy=tuple(set_aside),
+    )
 
 
 def _finding(
@@ -517,8 +540,11 @@ def _share_a_band(left: Sequence[int], right: Sequence[int]) -> bool:
     )
 
 
-def tally_cuts(findings: Sequence[CutFinding]) -> dict[str, object]:
-    """The findings as counts, in the shape the diagnosis prints."""
+def tally_cuts(findings: Sequence[CutFinding], with_a_copy: Sequence[CutFinding] = ()) -> dict[str, object]:
+    """The findings as counts, in the shape the diagnosis prints.
+
+    `with_a_copy` is :attr:`CutCensus.with_a_copy`: counted on their own, never among the findings.
+    """
     by_outcome: Counter[str] = Counter(finding.outcome.value for finding in findings)
 
     def several(chosen: Sequence[CutFinding]) -> dict[str, object]:
@@ -571,6 +597,8 @@ def tally_cuts(findings: Sequence[CutFinding]) -> dict[str, object]:
 
     short = [finding for finding in findings if finding.is_short]
     banded = [finding for finding in short if finding.banded_with_a_container]
+    short_with_a_copy = [finding for finding in with_a_copy if finding.is_short]
+    banded_with_a_copy = [f for f in short_with_a_copy if f.banded_with_a_container]
     return {
         "bodies_with_a_container_outside_their_cluster": len(findings),
         "by_outcome": {outcome.value: by_outcome.get(outcome.value, 0) for outcome in CutOutcome},
@@ -590,6 +618,16 @@ def tally_cuts(findings: Sequence[CutFinding]) -> dict[str, object]:
             "with_containers_in_several_clusters": several(banded),
             "within_the_rule_and_apart": within_the_rule(banded),
         },
+        "with_a_copy_in_their_cluster_that_every_outside_container_holds": {
+            "bodies": len(with_a_copy),
+            "short": len(short_with_a_copy),
+            "short_the_banding_pairs_with_an_outside_container": {
+                "cuts": len(banded_with_a_copy),
+                "by_outcome_were_the_copy_not_there": dict(
+                    sorted(Counter(finding.outcome.value for finding in banded_with_a_copy).items())
+                ),
+            },
+        },
     }
 
 
@@ -606,30 +644,39 @@ def _share_band(share: float) -> str:
     return next(name for limit, name in SHARE_BANDS if share < limit)
 
 
-def explain_divided_part(part: Set[str], rest: Set[str], findings: Mapping[str, CutFinding]) -> DividedPart:
+def explain_divided_part(
+    part: Set[str],
+    rest: Set[str],
+    findings: Mapping[str, CutFinding],
+    with_a_copy: Mapping[str, CutFinding] | None = None,
+) -> DividedPart:
     """Why `part` and `rest`, once one cluster, are apart: the short cut that used to join them.
 
-    `part` and `rest` are the exact fingerprints of two sides of an earlier cluster, and `findings`
-    is :func:`diagnose_cuts` over the later placement, by fingerprint. Under the rules before the
-    short-body step the only join that step removed was a short body merged with a body the banding
-    paired it with, on containment. So the part either holds such a cut, whose containers are in
-    the rest, or was joined to the rest only through such a cut on the other side.
+    `part` and `rest` are the exact fingerprints of two sides of an earlier cluster. `findings` and
+    `with_a_copy` are the two lists of :func:`diagnose_cuts` over the later placement, by
+    fingerprint. Under the rules before the short-body step the only join that step removed was a
+    short body merged with a body the banding paired it with, on containment. So the part either
+    holds such a cut, whose containers are in the rest, or was joined to the rest only through such
+    a cut on the other side. The findings are looked through first, then the cuts set aside
+    because a copy in their own cluster accounts for the bodies outside it.
     """
-    for kind, cuts, others in (
-        (DividedPart.LEFT_OUT, part, rest),
-        (DividedPart.THROUGH_A_CUT, rest, part),
-    ):
-        for cut in sorted(cuts):
-            finding = findings.get(cut)
-            if finding is not None and finding.is_short and finding.containers & others:
-                return DividedPart(
-                    kind,
-                    finding.outcome,
-                    finding.containers_nested,
-                    finding.first_container_over_the_share,
-                    finding.copies_read,
-                    finding.kept_apart_by,
-                )
+    for known, set_aside in ((findings, False), (with_a_copy or {}, True)):
+        for kind, cuts, others in (
+            (DividedPart.LEFT_OUT, part, rest),
+            (DividedPart.THROUGH_A_CUT, rest, part),
+        ):
+            for cut in sorted(cuts):
+                finding = known.get(cut)
+                if finding is not None and finding.is_short and finding.containers & others:
+                    return DividedPart(
+                        kind,
+                        finding.outcome,
+                        finding.containers_nested,
+                        finding.first_container_over_the_share,
+                        finding.copies_read,
+                        finding.kept_apart_by,
+                        with_a_copy=set_aside,
+                    )
     return DividedPart(DividedPart.UNEXPLAINED)
 
 

@@ -572,10 +572,12 @@ def diagnose(
     result: dict[str, object] = {
         "full_texts": census.texts,
         "short_full_texts": census.short_texts,
-        "cuts": tally_cuts(census.findings),
+        "cuts": tally_cuts(census.findings, census.with_a_copy),
     }
     if before is not None:
-        result["divided_pairs"] = _divided_tally(divided_parts(before, placed), census.findings)
+        result["divided_pairs"] = _divided_tally(
+            divided_parts(before, placed), census.findings, census.with_a_copy
+        )
     return result
 
 
@@ -605,24 +607,28 @@ def describe_largest_clusters(
 
 
 def _divided_tally(
-    parts: Sequence[tuple[set[str], set[str], bool]], findings: Sequence[CutFinding]
+    parts: Sequence[tuple[set[str], set[str], bool]],
+    findings: Sequence[CutFinding],
+    with_a_copy: Sequence[CutFinding] = (),
 ) -> dict[str, object]:
     from debate_core.evidence.cluster_diagnosis import explain_divided_part
 
     by_fingerprint = {finding.fingerprint: finding for finding in findings}
+    set_aside = {finding.fingerprint: finding for finding in with_a_copy}
     reasons: Counter[tuple[str, str, str, str, tuple[str, ...]]] = Counter()
     for part, rest, has_full_card in parts:
         if not has_full_card:
             reasons[("the part holds no full card", "", "", "", ())] += 1
             continue
-        why = explain_divided_part(part, rest, by_fingerprint)
-        detail = (
-            "its containers are nested copies in several clusters"
-            if why.containers_nested
-            else "the container first by fingerprint is over the share"
+        why = explain_divided_part(part, rest, by_fingerprint, set_aside)
+        details = [
+            "its containers are nested copies in several clusters" if why.containers_nested else "",
+            "the container first by fingerprint is over the share"
             if why.first_container_over_the_share
-            else ""
-        )
+            else "",
+            "it is with a copy that the bodies it left also hold" if why.with_a_copy else "",
+        ]
+        detail = "; ".join(text for text in details if text)
         reasons[
             (
                 why.kind,

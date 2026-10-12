@@ -192,6 +192,41 @@ def test_once_the_cut_has_joined_the_smallest_copy_only_the_long_split_is_left()
     assert set(diagnosed(NESTED, clusters)) == {"copy"}
 
 
+def test_a_cut_with_a_copy_that_the_outside_body_holds_is_set_aside_not_lost() -> None:
+    """The same placement. The cut is kept, apart from the findings, described as it would be were
+    the copy not there: its one container outside is the whole card, of which it is 26 of 326
+    shingles. The earlier rules may have joined the card to this cluster through it."""
+    clusters = cluster_near_duplicates(joined(NESTED))
+    census = diagnose_cuts(joined(NESTED), clusters)
+    assert [finding.fingerprint for finding in census.findings] == ["copy"]
+    (cut,) = census.with_a_copy
+    assert (cut.fingerprint, cut.outcome) == ("cut", CutOutcome.UNDER_MIN_CUT_SHARE)
+    assert (cut.containers, cut.smallest_container) == (frozenset({"whole"}), "whole")
+
+    counted = tally_cuts(census.findings, [replace(cut, banded_with_a_container=True)])
+    assert counted["bodies_with_a_container_outside_their_cluster"] == 1
+    assert counted["with_a_copy_in_their_cluster_that_every_outside_container_holds"] == {
+        "bodies": 1,
+        "short": 1,
+        "short_the_banding_pairs_with_an_outside_container": {
+            "cuts": 1,
+            "by_outcome_were_the_copy_not_there": {CutOutcome.UNDER_MIN_CUT_SHARE.value: 1},
+        },
+    }
+
+    # An earlier cluster of all three, now the card on one side and the copy and cut on the other.
+    findings = {finding.fingerprint: finding for finding in census.findings}
+    assert explain_divided_part({"copy", "cut"}, {"whole"}, findings) == DividedPart(DividedPart.UNEXPLAINED)
+    explained = explain_divided_part({"copy", "cut"}, {"whole"}, findings, {"cut": cut})
+    assert (explained.kind, explained.outcome, explained.with_a_copy) == (
+        DividedPart.LEFT_OUT,
+        CutOutcome.UNDER_MIN_CUT_SHARE,
+        True,
+    )
+    through = explain_divided_part({"whole"}, {"copy", "cut"}, findings, {"cut": cut})
+    assert (through.kind, through.with_a_copy) == (DividedPart.THROUGH_A_CUT, True)
+
+
 def test_a_short_copy_under_a_quarter_of_its_card_and_the_cut_inside_it() -> None:
     """The longer copies are split by the short-body step itself here: the 41-shingle copy is
     under a quarter of the 196-shingle card."""
@@ -326,6 +361,14 @@ def test_the_tally_of_the_nested_copies_left_alone() -> None:
             "by_outcome": {CutOutcome.WITHIN_THE_RULE.value: 1},
             "with_containers_in_several_clusters": several,
             "within_the_rule_and_apart": within,
+        },
+        "with_a_copy_in_their_cluster_that_every_outside_container_holds": {
+            "bodies": 0,
+            "short": 0,
+            "short_the_banding_pairs_with_an_outside_container": {
+                "cuts": 0,
+                "by_outcome_were_the_copy_not_there": {},
+            },
         },
     }
 

@@ -40,6 +40,7 @@ from tests.fixtures.caselist.build_revised_path_archives import (
 
 from debate_core.application.caselist import pipeline
 from debate_core.application.caselist.import_service import CaselistImportService, Classification
+from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxAction, read_inbox
 from debate_core.application.caselist.manifest import manifest_key
 from debate_core.application.caselist.pipeline import SourceImportPipeline, SuppressedWriteRefused
 from debate_core.application.caselist.removal_plan import (
@@ -60,6 +61,7 @@ from debate_core.application.errors import StoreCredentialsExpired
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.suppression import ReasonCode
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
+from debate_core.integrations.local.archive_reader import ZipArchiveRewriter
 from debate_core.integrations.local.suppression_list import (
     local_path_holds_file,
     local_suppression_list_file,
@@ -512,6 +514,33 @@ async def test_a_waiting_archive_of_another_caselist_holds_no_later_upload(
         version.sha256 for version in plan.later_uploads
     }
     assert other.name not in {one.name for one in plan.inbox}
+
+
+async def test_an_archive_the_inbox_cannot_read_holds_no_later_upload_and_is_still_reported(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """One over the reader's ceilings and one that is not a zip: neither can be asked what is at the
+    path, so neither adds a later upload, and the inbox section names both as it did before."""
+    put_the_arriving_archives_in_the_inbox(world, tmp_path)
+    (world.data_dir / "inbox" / f"{CASELIST}-weekly-2026-10-11.zip").write_bytes(b"not a zip")
+    small = CaselistInbox(
+        directory=world.data_dir / "inbox",
+        state_dir=world.data_dir,
+        archives=ZipArchiveRewriter(max_archive_bytes=64 * 1024 * 1024, max_unpacked_bytes=64 * 1024 * 1024),
+        full_archives=ZipArchiveRewriter(max_archive_bytes=16, max_unpacked_bytes=16),
+    )
+
+    files = {file.name: file for file in read_inbox(small)}
+    too_large, broken = files[f"{CASELIST}-all-2026-10-09.zip"], files[f"{CASELIST}-weekly-2026-10-11.zip"]
+    assert (too_large.entries, too_large.unreadable) == (None, "over the size ceilings")
+    assert broken.entries is None and broken.unreadable is not None
+    assert files[f"{CASELIST}-weekly-2026-10-08.zip"].entries is not None
+
+    plan = await planned(world)
+
+    assert UPLOADED_AFTER in {version.sha256 for version in plan.later_uploads}
+    unreadable = [one.name for one in plan.inbox if one.action is InboxAction.UNREADABLE]
+    assert unreadable == [f"{CASELIST}-weekly-2026-10-11.zip"]
 
 
 # ------------------------------------------------------------------------------------------------

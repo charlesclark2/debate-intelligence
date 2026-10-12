@@ -345,14 +345,27 @@ async def test_the_bucket_copy_is_read_and_written_with_the_credentials_the_list
     assert everyday.writes == 0 and everyday.reads >= 2
 
 
+class _ListWithNoHolds:
+    """A suppression list as the port alone describes one: entries, and nothing beside them."""
+
+    async def entries(self) -> tuple[SuppressionEntry, ...]:
+        return ()
+
+    async def append(self, entries: object) -> None:
+        raise AssertionError("nothing here appends to the list")
+
+
 async def test_a_list_whose_copies_keep_no_record_beside_them_holds_no_path() -> None:
     """A test's in-memory list, and what a build from before this task reads: the list alone."""
     listed = RecordedSuppressionList(InMemoryAppendOnlyRecord("an in-memory list"))
 
     assert await listed.path_holds() == ()
     assert (await load_suppression_state(listed)).path_holds == ()
+    await listed.append_path_holds([])
     with pytest.raises(AppendOnlyViolation):
         await listed.append_path_holds([hold()])
+    with pytest.raises(AppendOnlyViolation):
+        await LocalFallbackSuppressionList(_ListWithNoHolds(), local=listed).append_path_holds([hold()])
 
 
 def test_every_suppression_list_the_platform_builds_keeps_the_path_holds() -> None:

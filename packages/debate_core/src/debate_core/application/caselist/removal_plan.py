@@ -1536,13 +1536,9 @@ def _inbox_holdings(files: Sequence[InboxFile]) -> tuple[PathHolding, ...]:
     held: set[PathHolding] = set()
     for file in files:
         if file.entries is None or file.caselist is None or file.snapshot is None:
-            continue
-        if file.kind is InboxFileKind.WEEKLY_ARCHIVE:
-            snapshot = file.snapshot.isoformat()
-        elif file.kind is InboxFileKind.FULL_ARCHIVE:
-            snapshot = full_archive_snapshot(file.snapshot)
-        else:
-            continue
+            continue  # unreadable, or not a caselist's archive: only those are named for a caselist
+        complete = file.kind is InboxFileKind.FULL_ARCHIVE
+        snapshot = full_archive_snapshot(file.snapshot) if complete else file.snapshot.isoformat()
         for entry in file.entries:
             if entry.skip_reason is None and entry.sha256 is not None:
                 held.add(

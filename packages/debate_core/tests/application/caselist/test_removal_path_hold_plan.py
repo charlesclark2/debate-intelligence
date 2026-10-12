@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import stat
 import zipfile
 from datetime import date
 from pathlib import Path
@@ -514,6 +515,26 @@ async def test_a_waiting_archive_of_another_caselist_holds_no_later_upload(
         version.sha256 for version in plan.later_uploads
     }
     assert other.name not in {one.name for one in plan.inbox}
+
+
+async def test_a_member_the_importer_would_skip_is_not_a_later_upload(world: RemovalWorld) -> None:
+    """A symbolic link named as the removed file is. The importer never stores one, so there is
+    nothing of it to cover, and its target's name is not put on the list as a file's sha256."""
+    target = b"Alder Point-KR-Aff-Lakeshore Open-Round 1.docx"
+    waiting = world.data_dir / "inbox" / f"{CASELIST}-weekly-2026-10-11.zip"
+    with zipfile.ZipFile(waiting, "w") as archive:
+        link = zipfile.ZipInfo(REVISED_PATH)
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        archive.writestr(link, target)
+    (skipped,) = [
+        entry for file in read_inbox(world.inbox) if file.name == waiting.name for entry in file.entries or ()
+    ]
+    assert skipped.skip_reason is not None and skipped.path == REVISED_PATH
+
+    plan = await planned(world)
+
+    assert hashlib.sha256(target).hexdigest() not in {version.sha256 for version in plan.later_uploads}
+    assert hashlib.sha256(target).hexdigest() not in {entry.sha256 for entry in plan.suppression_entries}
 
 
 async def test_an_archive_the_inbox_cannot_read_holds_no_later_upload_and_is_still_reported(

@@ -361,7 +361,9 @@ def _join_short_bodies_to_their_one_container(
             containers[cluster] = None
             continue
         for members in others.values():
-            for holder in members:
+            # Smallest first, so the container the share is measured against is the smallest that
+            # holds the short body, whatever its fingerprint happens to be.
+            for holder in sorted(members, key=lambda member: (len(shingle_sets[member]), member)):
                 holder_set = shingle_sets[holder]
                 if confirms_a_cut(short_set, holder_set, words_of(short), words_of(holder), limits):
                     found.add(holder)

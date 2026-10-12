@@ -609,7 +609,6 @@ def keyed_partition(bodies: dict[str, list[str]]) -> list[list[str]]:
     return sorted(sorted(group) for group in groups.values())
 
 
-@BEFORE_T11
 def test_a_short_cut_is_measured_against_the_smallest_body_that_holds_it() -> None:
     """One cluster holds the cut in two copies: one four times its size, and that copy with twenty
     words more. The cut is a quarter of the smaller, so it joins. Before `v1-e31-t11` the share was

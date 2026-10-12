@@ -408,8 +408,7 @@ def _finding(
     ]
     nested = len(confirmed) > 1 and all(
         any(
-            held.size(inside) <= held.size(holder)
-            and confirms_a_cut(
+            confirms_a_cut(
                 held.sets[inside], held.sets[holder], held.words[inside], held.words[holder], limits
             )
             for inside in home

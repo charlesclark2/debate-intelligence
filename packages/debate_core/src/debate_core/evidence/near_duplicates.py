@@ -388,11 +388,7 @@ def _join_short_bodies_to_their_one_container(
             return smallest_in_each
         home = next(held for held in confirmed.values() if held[0] == smallest_in_each[0])
         nested = all(
-            any(
-                holds(holder, inside)
-                for inside in home
-                if len(shingle_sets[inside]) <= len(shingle_sets[holder])
-            )
+            any(holds(holder, inside) for inside in home)
             for held in confirmed.values()
             if held is not home
             for holder in held

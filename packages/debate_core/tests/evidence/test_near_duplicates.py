@@ -751,3 +751,25 @@ def test_nested_copies_cluster_the_same_under_any_fingerprints(ordering: tuple[i
     whole, copy, cut = (clusters[key] for key in keys)
     assert whole != copy
     assert cut == copy
+
+
+def test_a_cut_with_two_witnesses_is_measured_against_the_smallest_once_they_are_one_cluster() -> None:
+    """A 150-word card, a near-copy of it that rewords ten words, a 50-word copy of the passage
+    holding those ten words, and a 16-word cut from the part both versions keep.
+
+    The cut has two witnesses at first: the short copy, and the card's cluster, because the
+    near-copy holds the cut and not the short copy. Then the short copy joins the card (46 of its
+    146 shingles), and every witness is one cluster. The cut is 12 shingles: over a quarter of the
+    short copy's 46 and a twelfth of the card's 146. It is the smallest body holding it that the
+    share is of, so it joins.
+    """
+    card = numbered("word", 150)
+    near_copy = replaced(card, 20, *numbered("reworded", 10), count=10)
+    short_copy = card[20:70]
+    cut = card[30:46]
+    assert jaccard(frozenset(word_shingles(card)), frozenset(word_shingles(near_copy))) >= 0.8
+    assert not contained_but_for_one_word(short_copy, near_copy)
+    assert len(word_shingles(cut)) >= MIN_CUT_SHARE * len(word_shingles(short_copy))
+    assert len(word_shingles(cut)) < MIN_CUT_SHARE * len(word_shingles(card))
+    assert partition(card, near_copy, short_copy) == [[0, 1, 2]]
+    assert partition(card, near_copy, short_copy, cut) == [[0, 1, 2, 3]]

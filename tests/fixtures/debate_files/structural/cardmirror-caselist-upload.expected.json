@@ -4,7 +4,7 @@
   "corpus": "caselist",
   "summary": "A disclosure that has been through CardMirror: `pmd-heading-` bookmarks on the headings, and both underline encodings written on every body run. This is the most common shape in the whole corpus, not an edge case, and it is the one a reader that counts the two encodings separately doubles.",
   "profile_version": "2026.09.20-verbatim-1",
-  "parser_version": "2026.09.20-docx-1",
+  "parser_version": "2026.10.10-docx-2",
   "warnings_contain": [],
   "paragraphs": [
     {

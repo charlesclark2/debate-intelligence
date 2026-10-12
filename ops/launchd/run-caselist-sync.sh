@@ -56,9 +56,19 @@ fi
 
 # --json so that stdout is one object per run, which is what the plist's StandardOutPath collects
 # and what v1-e34-t03's run log will read. The exit code is the command's, unchanged, and this file
-# never reads it: 0 for a run that captured what there was (including one that found nothing new,
-# and one whose publish is pending), 1 for a download, import or publish that did not complete, 3
-# when the bucket did not answer before any stage could record the failure (v1-e01-t20), 70 for a
-# bug. launchd only records it as the agent's last exit code: the plist has no KeepAlive, so no
-# exit code, 3 included, makes launchd run the agent again before next week's slot.
+# never reads it:
+#
+#   0   the run captured what there was, including one that found nothing new and one whose
+#       publish is pending on an expired AWS session.
+#   3   transient: every download, import or publish that failed did so on something a later run
+#       may not meet, such as the bucket or OpenCaselist not answering (v1-e01-t20, v1-e34-t13).
+#       What was captured is kept and what was not published stays owed. Next week's run retries
+#       it, and so does running the command by hand.
+#   1   a verdict: at least one failure will be the same next time, such as an archive that cannot
+#       be read, or the run was refused before it started. Someone has to look.
+#   70  a bug.
+#
+# This file posts no notification; the command does, from the run's record. launchd only records
+# the number as the agent's last exit code: the plist has no KeepAlive, so no exit code, 3 included,
+# makes launchd run the agent again before next week's slot.
 exec "${DEBATE_RESEARCH_BIN}" --json caselist pull "$@"

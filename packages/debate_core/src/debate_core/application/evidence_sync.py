@@ -108,6 +108,7 @@ from debate_core.application.errors import (
     NotFound,
     StoreAccessDenied,
     StoreCredentialsExpired,
+    error_code_of,
 )
 from debate_core.application.ports.evidence_store import (
     EvidenceObjectStore,
@@ -857,7 +858,7 @@ class EvidenceSyncService:
             return TransferOutcome(
                 planned=planned,
                 transferred=False,
-                error_code=_error_code(failure),
+                error_code=error_code_of(failure),
                 error_message=str(failure),
             )
         self._journal.record(
@@ -1077,14 +1078,6 @@ def _stated_digest(landed: ObjectInfo, key: ObjectKey) -> Sha256Hex:
     if landed.sha256 is None:  # pragma: no cover - both adapters hash what they wrote
         raise BlobIntegrityError(key)
     return landed.sha256
-
-
-def _error_code(failure: BaseException) -> str:
-    """`BlobIntegrityError` -> `BLOB_INTEGRITY_ERROR`, matching the CLI's `--json` error codes."""
-    name = type(failure).__name__
-    return "".join(
-        f"_{letter}" if letter.isupper() and index else letter for index, letter in enumerate(name)
-    ).upper()
 
 
 class _readable_source:

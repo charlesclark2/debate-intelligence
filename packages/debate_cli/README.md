@@ -117,7 +117,7 @@ rather than writing an integer.
 | Code | Name | Means |
 |---|---|---|
 | 0 | `OK` | The command did what it was asked to do. |
-| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, or a wired integration does not import). Running it again gives the same answer. |
+| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, or a wired integration does not import). Running it again gives the same answer. |
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`. |
@@ -130,16 +130,64 @@ of those three is what stopped them (`v1-e01-t20`); any other `DomainError` → 
 exception — `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
 `raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`.
 
-Three commands report per-item failures rather than raising:
+**A profile the AWS config does not define is a `1`, not a `3`** (`v1-e29-t07`). When the
+environment's profile setting (`storage.s3.aws_profile`), `DEBATE_REMOVAL_PROFILE` for a takedown,
+or `AWS_PROFILE` names a profile that this machine's AWS config does not define, every command that
+reaches the bucket ends with `STORE_PROFILE_NOT_CONFIGURED` (`StoreProfileNotConfigured`) and exit
+1. It means a setting has to be corrected, or the profile added on this machine: no login and no
+retry defines a profile, so it is on neither retryable list. The message and the hint name the
+setting the profile's name came from, and `error.details` carries `profile` and `setting`; they
+never name the AWS config's path, and the hint points at
+[`docs/runbooks/evidence-store.md`](../../docs/runbooks/evidence-store.md), which lists the
+evidence profiles and how they are added. Until this task it was reported as
+`STORE_CREDENTIALS_EXPIRED`, exit 3, with a command to run. An expired, unavailable or refused store
+is unchanged: exit 3.
 
-* `store sync --apply` and `caselist publish` carry on past one object's failure. They exit 3 when
-  every failure was one of the three store failures, and 1 as soon as one was not (a checksum
-  mismatch, a file missing locally): running the command again cannot fix that one
-  (`exit_code_for_failure_codes`).
-* `caselist pull` records each stage's outcome as a sentence, and a failed required stage exits 1
-  whatever caused it, a store failure included. A store failure that ends the run before a stage
-  records it exits 3. An expired or refused AWS session during publish is still a *pending* publish
-  and exits 0, because what was captured is safe and the next run finishes it.
+**A bucket's refusal carries its fix in every command** (`v1-e29-t07`). `STORE_ACCESS_DENIED` from
+the bucket keeps its exit 3, and its `hint` is written by the S3 adapter: the profile is signed in
+and lacks a grant, with the profile's name and a pointer to the same runbook, and never
+`aws sso login`. `store`, `caselist publish`, `caselist status` and `caselist remove` show it, where
+only `caselist pull` did; `caselist remove --execute` used to offer the takedown profile's login for
+it.
+
+A failure's **error code**, the `error.code` of the `--json` envelope, is its class name in upper
+snake case: `StoreUnavailable` → `STORE_UNAVAILABLE`. The word is defined once, in
+`debate_core.application.errors.error_code_of`, and `error_code_for` reads it from there
+(`v1-e34-t13`), because the services below record failures by the same code the CLI reports them
+under. `LocalStoreAccessDenied`, which the filesystem stores raise when the operating system refuses
+a directory, is reported as `STORE_ACCESS_DENIED` like its parent.
+
+Three commands record failures by error code rather than raising them, and all three decide their
+exit code with `exit_code_for_failure_codes`: 3 only when **every** recorded code is one a retry
+may cure, 1 as soon as one is not. A code on neither list, and a failure with no code, count as not
+retryable, so nothing exits 3 because nobody classified it. The retryable codes are those of
+`RETRYABLE_STORE_FAILURES` and of `RETRYABLE_PROVIDER_FAILURES` (`PROVIDER_UNAVAILABLE`,
+`PROVIDER_RATE_LIMITED`).
+
+* `store sync --apply` and `caselist publish` carry on past one object's failure and record each
+  object's code. A checksum mismatch or a file missing locally makes the run a 1: running the
+  command again cannot fix that one. `caselist publish` takes a failed manifest's code from the
+  publish result's `manifest_error_code`, which `--json` prints beside `manifest_error`; the
+  sentence in `manifest_error` is never read for it.
+* `caselist pull` records, on each failed stage, the code of every failure behind it
+  (`stages[].error_codes`), and the codes of the stages that had to finish (select, download,
+  import, publish) decide: 3 when the bucket or this machine's store did not answer or refused, or
+  an OpenCaselist download got a 5xx, a timeout or a rate limit that is not the daily cap; 1 for a
+  refused or unreadable archive, a size ceiling, an expired OpenCaselist token, a checksum mismatch,
+  the daily cap on a camp file, or a profile the AWS config does not define
+  (`STORE_PROFILE_NOT_CONFIGURED`). `error.code` is `CASELIST_PULL_INCOMPLETE` either way. An
+  *expired* AWS session during publish is still a *pending* publish and exits 0, because what was
+  captured is safe and the next run finishes it. A session that is signed in and *refused* is not
+  pending: the stage fails, exits 3, and its `hint` names the fix, a permission under
+  `storage.data_dir` or a grant the profile lacks, never `aws sso login`. The grant's sentence is
+  the S3 adapter's, read from the error (`v1-e29-t07`).
+  A profile setting that names no profile in the AWS config stops the bucket's adapter being built,
+  so on a real installation it ends the pull before any stage, with `STORE_PROFILE_NOT_CONFIGURED`
+  as `error.code` and exit 1; nothing is fetched, and no run is recorded or announced.
+  Whatever ended the publish stage, the pending-work file under `storage.data_dir` then holds every
+  snapshot the bucket did not confirm complete, and `--publish-pending` takes one off only when the
+  bucket has (`v1-e34-t18`). A pending-work file that cannot be read fails the stage with
+  `PENDING_WORK_UNREADABLE`, exit 1, and is never written over.
 
 ## `debate-research doctor`
 

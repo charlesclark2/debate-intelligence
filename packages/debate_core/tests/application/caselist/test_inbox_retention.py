@@ -49,6 +49,7 @@ from debate_core.application.caselist.status_service import CaselistStatusServic
 from debate_core.application.caselist_sync import (
     LOCK_FILENAME,
     OPENEV_DELIVERIES_FILENAME,
+    CaselistParseStage,
     CaselistSyncService,
     RunLock,
     RunSummary,
@@ -279,6 +280,7 @@ class Installation:
         compare_with: EvidenceObjectStore | None = None,
         unreadable: Sequence[str] = (),
         openev_fails: bool = False,
+        parse: CaselistParseStage | None = None,
     ) -> CaselistSyncService:
         """The pull.
 
@@ -288,6 +290,8 @@ class Installation:
             compare_with: The bucket the status comparison reads, when not :attr:`bucket`.
             unreadable: Inbox file names the archive reader refuses, as it refuses a corrupt zip.
             openev_fails: Every OpenEv import is refused.
+            parse: The parse stage (`v1-e34-t17`), or `None` for it turned off, as in every test
+                written before it existed.
         """
         listed = self.suppression or empty_suppression_list()
         repository = SqliteCaselistRepository(SqliteDatabase.open(self.data_dir))
@@ -320,6 +324,7 @@ class Installation:
                 if bucket
                 else None
             ),
+            parse=parse,
             clock=lambda: RUN_CLOCK,
         )
 

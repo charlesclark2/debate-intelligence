@@ -1,0 +1,85 @@
+# TASK v1-e31-t13-one-paragraph-cards-and-wiki-entries - Split a cite from its words when a card or wiki entry is one paragraph
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t13-one-paragraph-cards-and-wiki-entries
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "Split a cite from its words when a card or wiki entry is one paragraph"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e31-t09's Follow-up work (second revision) and the PM's ruling on its short wiki entries.
+  description: >-
+    Two shapes v1-e31-t09 left as `CITE_ONLY`, because formatting cannot separate the cite from
+    the evidence. 460 `CITE_ONLY` cards still hold a cite paragraph over 100 words, and 295 wiki
+    cite paragraphs are over 1,000 words; most open with a bold name, with the evidence run on
+    after the cite in one paragraph. And at most 84 short wiki entries are really abbreviated
+    disclosures: a cite followed by first words, a marker and last words. Since v1-e31-t09 no
+    card in the corpus is `ABBREVIATED`, so these may be where the real abbreviations are.
+    Decide whether a deterministic split is good enough on labelled examples, or whether this
+    needs a model call routed through the model router under the data-use policy's model rules.
+    Build whichever the labels support. Out of scope: any other card shape.
+  priority: 3
+  constraints:
+    packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, tests/fixtures, tests/evals, docs/data]
+    forbidden:
+      - A model call on disclosed text outside the model router and the data-use policy's model provider rules
+      - Real disclosed text in any fixture, log, commit or report
+  context:
+    - kind: TaskRef
+      name: v1-e31-t09-first-corpus-parse-findings
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        At least 40 labelled examples across both shapes, and the report's decision between
+        a deterministic split and a model call, with each one's accuracy on them.
+    - id: ac2
+      description: >-
+        Whichever is built splits the cite from the words, and marks a
+        first-words-marker-last-words entry `ABBREVIATED`, at the accuracy the decision
+        reported, by test on synthetic fixtures.
+    - id: ac3
+      description: >-
+        If the parser changes, `parser_version` is bumped, and the operator's re-parse
+        counts the cards that change completeness, recorded in
+        docs/data/caselist-parse-report.md.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t13-one-paragraph-cards-and-wiki-entries-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Label the two shapes, choose deterministic or model, build it.
+  goalRef:
+    name: v1-e31-t13-one-paragraph-cards-and-wiki-entries
+  graph:
+    nodes:
+      - id: one-paragraph-split
+        kind: Task
+        name: One-paragraph cards split
+        description: >-
+          Labels, the decision, the split and the re-parse.
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parser tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations]
+status:
+  phase: Pending

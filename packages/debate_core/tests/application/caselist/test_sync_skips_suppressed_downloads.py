@@ -51,7 +51,11 @@ from debate_core.application.caselist_sync import (
     SelectionDecision,
     SyncStage,
 )
-from debate_core.application.errors import StoreAccessDenied, StoreCredentialsExpired
+from debate_core.application.errors import (
+    StoreAccessDenied,
+    StoreCredentialsExpired,
+    StoreProfileNotConfigured,
+)
 from debate_core.application.ports.caselist_source import (
     ArchiveListing,
     CaselistInfo,
@@ -391,7 +395,7 @@ async def test_a_removal_recorded_only_in_the_buckets_copy_is_honoured(world: Re
     await pull(world, source)
     await remove_source(world, ESTUARY_SHA256)
     local_copy = local_suppression_list_file(world.data_dir)
-    Path(local_copy.location).unlink()
+    local_copy.path.unlink()
     assert await local_copy.read_lines() == ()
     inbox_copy(world, ESTUARY).unlink()
 
@@ -703,12 +707,18 @@ async def test_missing_or_expired_credentials_read_this_machines_copy_and_say_wh
     [
         pytest.param(RefusingStore(StoreAccessDenied("GetObject", SUPPRESSION_LIST_KEY)), id="access-denied"),
         pytest.param(RefusingStore(body=b'{"schema_version":1,"act'), id="torn-line"),
+        # Reported as an expired session until `v1-e29-t07`, when it fell back. It is a
+        # configuration error: no login is coming, so nothing is imported past the bucket's copy.
+        pytest.param(
+            RefusingStore(StoreProfileNotConfigured("debate-dev-evidence", setting="storage.s3.aws_profile")),
+            id="profile-not-configured",
+        ),
     ],
 )
 async def test_any_other_failure_to_read_the_buckets_copy_still_fails_closed(bucket: RefusingStore) -> None:
     pull_list = pull_list_over(InMemoryAppendOnlyRecord(), bucket)
 
-    with pytest.raises((StoreAccessDenied, UnreadableAppendOnlyRecord)):
+    with pytest.raises((StoreAccessDenied, StoreProfileNotConfigured, UnreadableAppendOnlyRecord)):
         await pull_list.entries()
 
     assert pull_list.fallbacks == 0 and pull_list.local_only_reason is None

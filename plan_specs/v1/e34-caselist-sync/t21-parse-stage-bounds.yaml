@@ -1,0 +1,83 @@
+# TASK v1-e34-t21-parse-stage-bounds - The parse stage holds the run lock and has a time budget
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t21-parse-stage-bounds
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "The parse stage holds the run lock and has a time budget"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e34-t17's Follow-up work 3.
+  description: >-
+    Since v1-e34-t17 the weekly run parses, and nothing bounds it. The agent has no time limit,
+    so a rebuild that runs for hours holds the run lock and the next run is refused while it
+    does. And `caselist parse` by hand does not take the run lock, so it can write a version
+    directory while a scheduled pull's parse stage writes the same one. The runbooks now tell
+    the operator to run it by hand after a login or a parser bump, which makes the collision
+    likely on a Wednesday morning. Make `caselist parse` take the run lock, and give the parse
+    stage a time budget after which it stops cleanly, records what it finished, and is `failed`
+    with its own code. Out of scope: the rebuild's speed (v1-e31-t10).
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - A parse stopped by the budget leaving a version directory a later run cannot resume
+      - A path in a lock message or stage reason
+  context:
+    - kind: TaskRef
+      name: v1-e34-t17-pull-parses-new-sources
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `caselist parse` refuses to start while a pull holds the run lock, and a pull
+        refuses while a by-hand parse holds it, each shown failing first, with the message
+        naming the other command by name.
+    - id: ac2
+      description: >-
+        The parse stage stops at its budget, records what it finished, and is `failed` with
+        a code of its own. The next run resumes from the skip key, by test.
+    - id: ac3
+      description: >-
+        The budget's setting and default are in docs/runbooks/caselist-scheduled-sync.md,
+        argued from the recorded timings.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t21-parse-stage-bounds-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Share the run lock with caselist parse, and stop the parse stage cleanly at a budget.
+  goalRef:
+    name: v1-e34-t21-parse-stage-bounds
+  graph:
+    nodes:
+      - id: stage-bounds
+        kind: Task
+        name: Parse stage bounded
+        description: >-
+          The shared lock, the budget and the runbook.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pull tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, pull or lock or parse]
+status:
+  phase: Pending

@@ -16,6 +16,13 @@ bucket uses and therefore the key the local evidence object store uses — so
 `objects/` to keep them out of the content-addressed `blobs/` tree. The session report records
 the difference from ac4's literal path.
 
+A complete archive (`<slug>-all-<date>.zip`, `v1-e34-t04`) is filed one level down, under
+`manifests/<caselist>/full/<date>.jsonl` (:func:`full_archive_manifest_key`). It is dated with the
+week's weekly, so a sibling key would collide with that weekly's manifest, and every reader of the
+weekly series (`manifests/<caselist>/<date>.jsonl`, exactly one `/` after the caselist) skips a
+nested key without being told to. A reader that wants the complete archives too asks for them; see
+:func:`~debate_core.application.caselist.publish_plan.snapshot_of_manifest_key`.
+
 ## It describes the archive, never the run
 
 Every field in a manifest is a fact about the archive and the week before it, so two imports of
@@ -46,6 +53,17 @@ so `schema_version` stays `1`: a reader that does not know it ignores it. Manife
 it have no `first_seen` key and are not rewritten to add one; a later removal's rewrite keeps the
 count as the import recorded it, as it keeps `members`.
 
+A complete archive's summary (`manifests/<slug>/full/<date>.jsonl`, `v1-e34-t04`) differs in three
+keys and nothing else. Its `snapshot` and `previous_snapshot` are snapshot names, `full/<date>`,
+because it is classified against the complete archive before it, so its `NEW` means "not present
+in the preceding complete archive". It has no `first_seen`: that count is new evidence over time,
+measured against the weekly series alone, and a complete archive is not a point in that series.
+It carries `withdrawn`, `superseded` and `earlier_snapshots` instead: of the digests the caselist's
+earlier snapshots held, weekly and complete, those absent from this archive whose every path is gone
+too, those one of whose paths now holds other bytes, and how many snapshots were compared
+(:mod:`~debate_core.application.caselist.withdrawals`). Counts only. A weekly's summary is
+unchanged by this, byte for byte. These are additive keys, so `schema_version` stays `1`.
+
 A member row is flat — `school`, `side`, `round`, `round_normalized` rather than nested objects —
 because the thing that reads it is usually `jq` or a dataframe, and a flat row is one column each.
 Fields that do not apply to a row are `null` rather than absent, so every row has the same keys
@@ -60,6 +78,18 @@ out. It is counted, as `SUPPRESSED` in the summary row's `classifications`, and 
 list as a required argument, and it refuses to render a row the list stops
 (:class:`SuppressedRowRefused`), whichever writer built the row.
 
+## A manifest file this machine refuses
+
+A manifest is read and written by the path the local evidence store names for its key, not through
+the store, so the store's own translation of a refusal (`v1-e34-t13`) never sees these reads. Every
+one of them goes through :func:`read_manifest_file`, :func:`read_manifest_lines` or
+:func:`write_manifest_text`, and a `PermissionError` in any of the three is
+:class:`~debate_core.application.errors.LocalStoreAccessDenied` naming "the manifest directory",
+the role the filesystem store gives the same directory, and never the path (`v1-e34-t19`). That
+covers a manifest file the operating system will not open in a directory it will list, a directory
+it will not let this user look into, and a directory it will not let this user write to. Refused is
+never read as absent: a manifest that could not be looked at is not a manifest that is not there.
+
 ## What is in it that is not in a log
 
 School, team code, tournament, round and the archive path. That is deliberate and it is the
@@ -72,28 +102,37 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import tempfile
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Generator, Iterable, Mapping, Sequence
+from contextlib import contextmanager
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final
 
 from debate_core.application.caselist.import_service import Classification, ImportedEntry, ImportReport
-from debate_core.application.errors import DomainError
+from debate_core.application.errors import (
+    LOCAL_STORE_ACCESS_DENIED_HINT,
+    DomainError,
+    LocalStoreAccessDenied,
+)
 from debate_core.application.ports.evidence_store import ObjectKey, validate_object_key
 from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
 
 __all__ = [
     "DISCLOSURE_FIELDS",
+    "FULL_ARCHIVE_DIRECTORY",
     "MANIFEST_DIRECTORY",
     "MANIFEST_SCHEMA_VERSION",
     "SuppressedRowRefused",
     "common_member_fields",
     "counted",
+    "full_archive_manifest_key",
     "manifest_key",
     "manifest_lines",
     "name_of",
+    "read_manifest_file",
     "read_manifest_lines",
     "render_manifest",
     "render_rows",
@@ -113,11 +152,36 @@ would not reach any of them.
 MANIFEST_DIRECTORY: Final = "manifests"
 """The object-key prefix manifests live under, in the bucket and in the local store alike."""
 
+FULL_ARCHIVE_DIRECTORY: Final = "full"
+"""Where a caselist's complete-archive manifests sit, under its own manifest directory (`v1-e34-t04`)."""
+
 #: Fixed separators, so two renderings of one report are byte-identical.
 _COMPACT_SEPARATORS: Final = (",", ":")
 
 #: Prefix of the temp file a manifest is written to before it is renamed into place.
 _TEMPORARY_FILE_PREFIX: Final = ".incoming-manifest-"
+
+MANIFEST_DIRECTORY_ROLE: Final = "the manifest directory"
+"""How a refusal names where manifests are kept: what the directory is for, never where it is.
+
+The same words :func:`debate_core.integrations.local.refusals.role_of` gives a key under
+`manifests/`, so a manifest refused through the store and one refused by its path read alike.
+"""
+
+
+@contextmanager
+def _refused_as_access_denied(operation: str) -> Generator[None]:
+    """Raise :class:`LocalStoreAccessDenied` naming the manifest directory for a `PermissionError`.
+
+    Only a refusal is translated, as in the filesystem stores: any other `OSError` (a full disk, an
+    I/O error) is not one, and is left as it is. The `PermissionError` stays on `__cause__`.
+    """
+    try:
+        yield
+    except PermissionError as refused:
+        raise LocalStoreAccessDenied(
+            operation, MANIFEST_DIRECTORY_ROLE, hint=LOCAL_STORE_ACCESS_DENIED_HINT
+        ) from refused
 
 
 class SuppressedRowRefused(DomainError):
@@ -142,6 +206,18 @@ def manifest_key(caselist: str, snapshot: date) -> ObjectKey:
     outside the evidence directory.
     """
     return validate_object_key(f"{MANIFEST_DIRECTORY}/{caselist}/{snapshot.isoformat()}.jsonl")
+
+
+def full_archive_manifest_key(caselist: str, archive_date: date) -> ObjectKey:
+    """The object key a complete archive's manifest is filed under (`v1-e34-t04`).
+
+    `manifests/hsld26/full/2026-10-06.jsonl`: beside the caselist's weekly series rather than in
+    it, so the complete archive and the weekly of the same date are two keys. See the module
+    docstring for why it is nested.
+    """
+    return validate_object_key(
+        f"{MANIFEST_DIRECTORY}/{caselist}/{FULL_ARCHIVE_DIRECTORY}/{archive_date.isoformat()}.jsonl"
+    )
 
 
 def manifest_lines(report: ImportReport) -> list[str]:
@@ -198,11 +274,39 @@ def render_manifest(report: ImportReport) -> str:
 
 
 def read_manifest_lines(path: Path) -> list[str]:
-    """The lines of the manifest already at `path`, or none when nothing has been written there."""
+    """The lines of the manifest already at `path`, or none when nothing has been written there.
+
+    Raises :class:`~debate_core.application.errors.LocalStoreAccessDenied` when the operating
+    system will not say whether it is there, or will not open it: see "A manifest file this machine
+    refuses" in the module docstring.
+    """
     location = Path(path)
-    if not location.is_file():
-        return []
-    return location.read_text(encoding="utf-8").splitlines()
+    with _refused_as_access_denied("read"):
+        if not _is_regular_file(location):
+            return []
+    return read_manifest_file(location)
+
+
+def read_manifest_file(path: Path) -> list[str]:
+    """The lines of the manifest file at `path`, which a listing of the store has already found.
+
+    What every reader of a local manifest by its path calls, so that a file this user may not open
+    is :class:`~debate_core.application.errors.LocalStoreAccessDenied` whoever is reading it.
+    """
+    with _refused_as_access_denied("read"):
+        return Path(path).read_text(encoding="utf-8").splitlines()
+
+
+def _is_regular_file(path: Path) -> bool:
+    """Whether `path` names a regular file; false when nothing is there.
+
+    `os.stat` rather than `Path.is_file`: what the latter does with a refusal has changed between
+    Python versions, and a refusal must reach the caller rather than read as "not there".
+    """
+    try:
+        return stat.S_ISREG(os.stat(path).st_mode)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
 
 
 def write_manifest(report: ImportReport, destination: Path) -> Path:
@@ -226,20 +330,28 @@ def write_manifest_lines(lines: Iterable[str], destination: Path) -> Path:
 
 
 def write_manifest_text(text: str, destination: Path) -> Path:
-    """Write already-rendered manifest text to `destination`, atomically, and return the path."""
+    """Write already-rendered manifest text to `destination`, atomically, and return the path.
+
+    Raises :class:`~debate_core.application.errors.LocalStoreAccessDenied` when the operating
+    system will not let the manifest directory be written to, leaving any manifest already there
+    as it was.
+    """
     path = Path(destination)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=_TEMPORARY_FILE_PREFIX, suffix=".tmp")
-    temporary_path = Path(temporary_name)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary_path, path)
-    except BaseException:
-        temporary_path.unlink(missing_ok=True)
-        raise
+    with _refused_as_access_denied("write"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle, temporary_name = tempfile.mkstemp(
+            dir=path.parent, prefix=_TEMPORARY_FILE_PREFIX, suffix=".tmp"
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary_path, path)
+        except BaseException:
+            temporary_path.unlink(missing_ok=True)
+            raise
     return path
 
 
@@ -298,23 +410,31 @@ def _summary_row(report: ImportReport) -> dict[str, object]:
     Nothing here is a property of the run — see this module's docstring for why `applied` and
     `newly_stored_blobs` are deliberately absent.
     """
-    return {
+    named = f"{FULL_ARCHIVE_DIRECTORY}/" if report.full_archive else ""
+    row: dict[str, object] = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "kind": "summary",
         "caselist": report.caselist,
-        "snapshot": report.snapshot.isoformat(),
+        "snapshot": f"{named}{report.snapshot.isoformat()}",
         "event": str(report.event),
         "archive_sha256": report.archive_sha256,
         "previous_snapshot": (
-            report.previous_snapshot.isoformat() if report.previous_snapshot is not None else None
+            f"{named}{report.previous_snapshot.isoformat()}" if report.previous_snapshot is not None else None
         ),
         "members": report.member_count,
         "distinct_sha256": report.distinct_digests,
         "warnings": report.warning_count,
         "classifications": counted(report.counts),
         "skipped": counted(report.skipped),
-        "first_seen": report.first_seen,
     }
+    if report.withdrawals is None:
+        row["first_seen"] = report.first_seen
+        return row
+    # A complete archive's own measure in place of first-seen (`v1-e34-t04`): see the module docstring.
+    row["withdrawn"] = report.withdrawals.withdrawn
+    row["superseded"] = report.withdrawals.superseded
+    row["earlier_snapshots"] = report.withdrawals.earlier_snapshots
+    return row
 
 
 def counted[KeyT: StrEnum](counts: Mapping[KeyT, int]) -> dict[str, int]:

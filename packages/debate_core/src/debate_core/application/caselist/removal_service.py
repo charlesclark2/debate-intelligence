@@ -16,10 +16,18 @@ one also reads the bucket's copies of the list and the log before each append: `
 has no `s3:ListBucket`, so S3 answers its read of a copy that does not exist yet with 403 rather
 than 404, which is how the first real-dev `--execute` stopped (2026-10-01).
 
-Before the first change, :func:`preflight` proves the takedown credential can do what the removal
-needs: it writes a probe object under `manifests/_suppression/preflight/`, lists its versions,
-deletes them, and checks they are gone. An unset profile, an expired session, or the everyday profile
-named by mistake all fail there, with nothing deleted and nothing appended (spec ac6).
+Before the first change, :func:`preflight` proves the takedown credential is the takedown's and
+can do what the removal needs. It first asks which role the credential is signed in as and stops
+unless that is this environment's `EvidenceRemoval` role (`v1-e29-t08`). Then it writes a probe
+object under `manifests/_suppression/preflight/`, lists its versions, deletes them, and checks they
+are gone. An unset profile, a profile the AWS config lacks, an expired session, or the everyday
+profile named by mistake all fail there, with nothing deleted and nothing appended (spec ac6), and
+all but a takedown role whose own grants are broken fail before anything is written.
+
+The question comes first because nothing the bucket allows tells the two profiles apart short of a
+delete. From `v1-e29-t06`, which let the everyday profile list versions, until `v1-e29-t08`, that
+profile named by mistake listed, wrote the probe and was refused only at the delete, leaving the
+probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left from then.
 
 ## The order is the safety
 
@@ -87,7 +95,9 @@ from debate_core.application.errors import (
     StoreAccessDenied,
     StoreCredentialsExpired,
     StoreError,
+    StoreProfileNotConfigured,
 )
+from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
@@ -113,6 +123,7 @@ __all__ = [
     "PREFLIGHT_PREFIX",
     "CaselistRemovalService",
     "NotSuppressed",
+    "NotTheTakedownRole",
     "RemovalIncomplete",
     "RemovalReport",
     "TakedownAccess",
@@ -120,8 +131,10 @@ __all__ = [
     "TakedownPreflightFailed",
     "UnsuppressPlan",
     "UnsuppressReport",
+    "permission_set_of",
     "preflight",
     "refuse_protected_versions",
+    "takedown_permission_set",
 ]
 
 PREFLIGHT_PREFIX: Final = f"{SUPPRESSION_PREFIX}preflight/"
@@ -139,8 +152,69 @@ class TakedownNotConfigured(DomainError):
         )
 
 
+#: The role the account creates for an Identity Center permission set: a fixed prefix, the set's
+#: name, and a suffix of letters and digits the account chooses. The suffix is not ours to predict,
+#: so it is matched by shape and never by value.
+_IDENTITY_CENTER_ROLE: Final = re.compile(r"AWSReservedSSO_(?P<permission_set>.+)_[A-Za-z0-9]+")
+
+
+def takedown_permission_set(environment: str) -> str:
+    """The permission set a takedown runs as in `environment`: `DebateDevEvidenceRemoval` in dev.
+
+    The name `infrastructure/modules/evidence_bucket/operator_access.tf` gives the set
+    (`removal_permission_set_name`), which is where it is defined; a test reads that file and fails
+    if this function and it part ways. Not a setting: a name an operator could change is a check
+    an operator could point at the everyday role.
+    """
+    return f"Debate{environment.title()}EvidenceRemoval"
+
+
+def permission_set_of(role_name: str | None) -> str | None:
+    """The permission set `role_name` is the role of, or `None` when it is no permission set's role.
+
+    `AWSReservedSSO_DebateDevEvidenceRemoval_0123456789abcdef` is `DebateDevEvidenceRemoval`. A role
+    someone made by hand is nobody's, whatever it is called, and so is no role at all.
+    """
+    named = _IDENTITY_CENTER_ROLE.fullmatch(role_name or "")
+    return named.group("permission_set") if named is not None else None
+
+
+class NotTheTakedownRole(DomainError):
+    """The credential named for a takedown is signed in, as some role other than the takedown's.
+
+    The everyday profile named in `DEBATE_REMOVAL_PROFILE` by mistake, most likely: the two
+    profiles' names differ by a suffix. Found by asking, before anything is listed or written
+    (`v1-e29-t08`). It carries the names of two roles and nothing else of the account.
+    """
+
+    def __init__(
+        self, profile: str | None, *, role_name: str | None, required: str, environment: str
+    ) -> None:
+        self.profile = profile
+        self.signed_in_as = permission_set_of(role_name) or role_name
+        """The permission set the credential holds; the role's own name when it is no set's role;
+        `None` when it is not a role."""
+        self.required = required
+        """The permission set a takedown runs as in this environment."""
+        self.hint = (
+            f"set DEBATE_REMOVAL_PROFILE to debate-{environment}-evidence-removal, the profile for "
+            f"{required}; the one it names is signed in, so logging in again changes nothing. "
+            "docs/runbooks/evidence-store.md lists the evidence profiles"
+        )
+        super().__init__(
+            f"{profile or 'the profile DEBATE_REMOVAL_PROFILE names'} is signed in as "
+            f"{self.signed_in_as or 'no role at all'}, and a takedown runs only as {required}"
+        )
+
+
 class TakedownPreflightFailed(DomainError):
-    """The takedown profile could not write, list or delete its probe. Nothing was deleted or appended."""
+    """The takedown profile is not the takedown's, or could not write, list or delete its probe.
+
+    Nothing was deleted or appended. `failure`, kept as `__cause__` by the `raise … from`, is what
+    the command's exit status is read from: an expired session or a store that did not answer may
+    be cured by running the command again, and a profile that is not defined or not the takedown
+    role is a setting to correct.
+    """
 
     def __init__(
         self, profile: str | None, step: str, failure: BaseException, *, left: ObjectKey | None = None
@@ -154,9 +228,27 @@ class TakedownPreflightFailed(DomainError):
         super().__init__(
             f"the takedown profile {profile or 'named by DEBATE_REMOVAL_PROFILE'} could not {step} "
             f"({error_code_of(failure)}), so it "
-            f"cannot carry out a removal: check DEBATE_REMOVAL_PROFILE names this environment's "
-            f"EvidenceRemoval profile and that its session is signed in; nothing was deleted{leftover}"
+            f"cannot carry out a removal: {_what_to_correct(failure)}; nothing was deleted{leftover}"
         )
+
+
+def _what_to_correct(failure: BaseException) -> str:
+    """The clause of :class:`TakedownPreflightFailed`'s message that says what to look at.
+
+    Two failures are settings to correct and say so, because the general advice ends by asking
+    whether the session is signed in, which sends an operator to a login that cures neither.
+    """
+    if isinstance(failure, StoreProfileNotConfigured):
+        return "DEBATE_REMOVAL_PROFILE must name a profile this machine's AWS config defines"
+    if isinstance(failure, NotTheTakedownRole):
+        return (
+            f"it is signed in as {failure.signed_in_as or 'no role at all'}, so DEBATE_REMOVAL_PROFILE "
+            "does not name this environment's EvidenceRemoval profile"
+        )
+    return (
+        "check DEBATE_REMOVAL_PROFILE names this environment's EvidenceRemoval profile and that its "
+        "session is signed in"
+    )
 
 
 class RemovalIncomplete(DomainError):
@@ -260,6 +352,8 @@ class TakedownAccess:
     """Every version, listed and deleted."""
     objects: EvidenceObjectStore
     """The same bucket by name, for appending under `manifests/_suppression/`."""
+    caller: CallerIdentity
+    """Which role the credential is signed in as: what :func:`preflight` asks before anything else."""
     profile: str | None
     bucket: str
 
@@ -273,18 +367,35 @@ def refuse_protected_versions(versions: Sequence[ObjectVersion]) -> None:
             )
 
 
-async def preflight(access: TakedownAccess) -> None:
-    """Prove the takedown credential can write, list and delete versions, before any real change.
+async def preflight(access: TakedownAccess, *, environment: str) -> None:
+    """Prove the credential is the takedown's and can write, list and delete, before any real change.
 
-    Lists versions first — the one grant the everyday profile lacks, so the commonest mistake, naming
-    that profile, fails before anything is written — then writes a few bytes under
-    :data:`PREFLIGHT_PREFIX`, lists their versions, deletes every one and checks none is left. Raises
-    :class:`TakedownPreflightFailed` naming the step that failed.
+    First asks which role the credential is signed in as, and stops unless it is the role of
+    `environment`'s takedown permission set (:func:`takedown_permission_set`). Then lists versions,
+    writes a few bytes under :data:`PREFLIGHT_PREFIX`, lists their versions, deletes every one and
+    checks none is left. Raises :class:`TakedownPreflightFailed` naming the step that failed.
+
+    The question is the one step only the takedown role passes that writes nothing (`v1-e29-t08`).
+    Until `v1-e29-t06` the first listing was that step: it was the one grant the everyday profile
+    lacked. With that grant (dev and prod, 2026-10-08) the everyday profile lists and writes like
+    the takedown's and is refused only at the delete, so naming it by mistake left the probe in the
+    bucket. Asking needs no grant and is answered for any signed-in credential, so the everyday
+    profile is refused by what it is, with nothing listed and nothing written.
+
+    A takedown role whose own delete grant is missing still gets as far as the delete, since nothing
+    short of a delete shows that. It leaves its probe, and the error names the key.
     """
+    required = takedown_permission_set(environment)
     key = f"{PREFLIGHT_PREFIX}{uuid.uuid4().hex}.txt"
-    step = "list object versions"
+    step = f"show it is signed in as {required}"
     written = False
     try:
+        role_name = await access.caller.assumed_role_name()
+        if permission_set_of(role_name) != required:
+            raise NotTheTakedownRole(
+                access.profile, role_name=role_name, required=required, environment=environment
+            )
+        step = "list object versions"
         await access.versions.list_versions(PREFLIGHT_PREFIX)
         step = "write a probe under manifests/_suppression/"
         with tempfile.TemporaryDirectory(prefix="debate-preflight-") as directory:
@@ -393,11 +504,25 @@ class CaselistRemovalService:
     # --------------------------------------------------------------------------------------
 
     async def plan(
-        self, selector: RemovalSelector, *, request_id: str, reason: ReasonCode, include_shared: bool = False
+        self,
+        selector: RemovalSelector,
+        *,
+        request_id: str,
+        reason: ReasonCode,
+        include_shared: bool = False,
+        only_named: bool = False,
     ) -> RemovalPlan:
-        """The dry run. Reads only, with the everyday profile only."""
+        """The dry run. Reads only, with the everyday profile only.
+
+        The plan includes the later uploads the store holds at each removed path unless
+        `only_named` (`v1-e30-t11`); :meth:`execute` carries out whichever plan it is given.
+        """
         return await self.planner.plan(
-            selector, request_id=request_id, reason=reason, include_shared=include_shared
+            selector,
+            request_id=request_id,
+            reason=reason,
+            include_shared=include_shared,
+            only_named=only_named,
         )
 
     async def execute(self, plan: RemovalPlan) -> RemovalReport:
@@ -650,9 +775,12 @@ class CaselistRemovalService:
         if self._access is None:
             try:
                 access = self.takedown()
-            except StoreCredentialsExpired as expired:
-                raise TakedownPreflightFailed(None, "start an AWS session", expired) from expired
-            await preflight(access)
+            except (StoreCredentialsExpired, StoreProfileNotConfigured) as refused:
+                # A profile the AWS config lacks is the takedown's own refusal too (`v1-e29-t08`):
+                # what an operator who typed `--execute` reads first is that nothing was deleted.
+                named = refused.profile if isinstance(refused, StoreProfileNotConfigured) else None
+                raise TakedownPreflightFailed(named, "start an AWS session", refused) from refused
+            await preflight(access, environment=self.environment)
             self._access = access
         return self._access
 

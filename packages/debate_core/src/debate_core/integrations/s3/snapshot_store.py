@@ -133,6 +133,8 @@ class S3SnapshotStore:
         region: AWS region, or `None` to take it from the profile or the environment.
         profile: A profile in the shared AWS config — the SSO profile for this environment's evidence.
             `None` uses botocore's standard chain, which is what a role on an instance or a task is.
+        profile_setting: The setting `profile`'s name came from, e.g. `"storage.s3.aws_profile"`. It is
+            what a profile the AWS config does not define is reported by (`v1-e29-t07`).
         client: An already-built S3 client to use instead of building one. Two adapters over one
             bucket share a client this way, and the tests pass moto's. `region` is then unused, while
             `profile` is still worth passing: it is what the `aws sso login` hint names.
@@ -154,6 +156,7 @@ class S3SnapshotStore:
         prefix: str,
         region: str | None = None,
         profile: str | None = None,
+        profile_setting: str | None = None,
         client: S3Client | None = None,
         kms_key_id: str | None = None,
         multipart_threshold_bytes: int = DEFAULT_MULTIPART_THRESHOLD_BYTES,
@@ -162,12 +165,17 @@ class S3SnapshotStore:
         self._bucket = bucket
         self._prefix = validate_object_key(prefix)
         self._profile = profile
+        self._profile_setting = profile_setting
         self._kms_key_id = kms_key_id
         self._transfer_config = build_transfer_config(
             multipart_threshold_bytes=multipart_threshold_bytes,
             multipart_part_size_bytes=multipart_part_size_bytes,
         )
-        self._client = client if client is not None else build_s3_client(region=region, profile=profile)
+        self._client = (
+            client
+            if client is not None
+            else build_s3_client(region=region, profile=profile, profile_setting=profile_setting)
+        )
 
     @property
     def bucket(self) -> str:
@@ -404,4 +412,5 @@ class S3SnapshotStore:
             key=key,
             s3_key=s3_key,
             profile=self._profile,
+            profile_setting=self._profile_setting,
         )

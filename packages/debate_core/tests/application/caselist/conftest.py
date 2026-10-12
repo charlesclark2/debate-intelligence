@@ -123,6 +123,31 @@ REMOVAL_TIME = datetime(2026, 9, 30, 18, 0, tzinfo=UTC)
 TEAM = "testcl26/Maple Grove/QX"
 REQUEST = "RM-2026-01"
 
+#: The two roles a dev profile can be signed in as, named the way the account names the role of an
+#: Identity Center permission set: a fixed prefix, the set's name, and a suffix the account chose.
+#: The suffixes are made up. The set names are the ones `operator_access.tf` defines.
+TAKEDOWN_ROLE = "AWSReservedSSO_DebateDevEvidenceRemoval_0123456789abcdef"
+EVERYDAY_ROLE = "AWSReservedSSO_DebateDevEvidenceOperator_fedcba9876543210"
+
+
+@dataclass
+class SignedInAs:
+    """A credential's identity, stubbed at the port: the role it is signed in as, or a failure to ask.
+
+    Moto does not enforce IAM and no test here reaches STS, so which role a takedown credential
+    holds is whatever the test says it is. `asked` counts the questions, for the tests that are
+    about when the preflight asks and how often.
+    """
+
+    role_name: str | None | BaseException
+    asked: int = 0
+
+    async def assumed_role_name(self) -> str | None:
+        self.asked += 1
+        if isinstance(self.role_name, BaseException):
+            raise self.role_name
+        return self.role_name
+
 
 @dataclass
 class RemovalWorld:
@@ -189,10 +214,11 @@ class RemovalWorld:
 
     def takedown(self) -> TakedownAccess:
         """The takedown credential's reach, on moto (which does not enforce IAM: the tests that need a
-        refusal build one that refuses)."""
+        refusal build one that refuses), signed in as the takedown role."""
         return TakedownAccess(
             versions=S3EvidenceVersionStore(bucket=self.bucket_name, client=self.client),
             objects=self.bucket,
+            caller=SignedInAs(TAKEDOWN_ROLE),
             profile="debate-dev-evidence-removal",
             bucket=self.bucket_name,
         )

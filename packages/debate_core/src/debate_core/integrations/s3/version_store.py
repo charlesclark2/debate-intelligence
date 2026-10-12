@@ -7,10 +7,13 @@ composition root twice, for two different credentials, and the difference matter
 * With the **`EvidenceRemoval`** profile (`DEBATE_REMOVAL_PROFILE`): `ListObjectVersions`,
   `GetObject` by version and `DeleteObject` by version are all granted under the five removable
   prefixes. This is what `caselist remove --execute` deletes with.
-* With the everyday **`EvidenceOperator`** profile: none of them is granted, and :meth:`list_versions`
-  raises :class:`~debate_core.application.errors.StoreAccessDenied`. A dry run builds one anyway,
-  so that it counts versions the moment the operator profile is granted `s3:ListBucketVersions`
-  and says "not counted" until then (the session report's proposal for `v1-e29-t03`).
+* With the everyday **`EvidenceOperator`** profile: `ListObjectVersions` is granted, read-only, under
+  the same five prefixes (`v1-e29-t06`, applied in dev and prod on 2026-10-08), and `DeleteObject`
+  is not granted at all. A removal's dry run lists with it to count the versions it would delete,
+  and `caselist status` lists with it to report what a removal left (`v1-e30-t10`). In an
+  environment where that grant is not applied, :meth:`list_versions` raises
+  :class:`~debate_core.application.errors.StoreAccessDenied`: the dry run then says "versions not
+  counted" and the status report says "not checked". Neither reads a refusal as an empty listing.
 
 Deletes are one `DeleteObject` per version, with the version id, which is the only form of delete
 that removes a version rather than hiding it behind a delete marker. A takedown deletes tens of
@@ -43,6 +46,8 @@ class S3EvidenceVersionStore:
     Args:
         bucket: The environment's evidence bucket, from Terraform's `evidence_bucket_name`.
         profile: The profile the client was built with, for the `aws sso login` hint.
+        profile_setting: The setting `profile`'s name came from, e.g. `"storage.s3.aws_profile"`. It is
+            what a profile the AWS config does not define is reported by (`v1-e29-t07`).
         client: An already-built client. The tests pass moto's.
         region: Used only when `client` is not given.
     """
@@ -52,12 +57,18 @@ class S3EvidenceVersionStore:
         *,
         bucket: str,
         profile: str | None = None,
+        profile_setting: str | None = None,
         client: S3Client | None = None,
         region: str | None = None,
     ) -> None:
         self._bucket = bucket
         self._profile = profile
-        self._client = client if client is not None else build_s3_client(region=region, profile=profile)
+        self._profile_setting = profile_setting
+        self._client = (
+            client
+            if client is not None
+            else build_s3_client(region=region, profile=profile, profile_setting=profile_setting)
+        )
 
     @property
     def location(self) -> str:
@@ -147,4 +158,5 @@ class S3EvidenceVersionStore:
             key=key,
             s3_key=key or None,
             profile=self._profile,
+            profile_setting=self._profile_setting,
         )

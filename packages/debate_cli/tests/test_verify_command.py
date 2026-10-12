@@ -368,7 +368,10 @@ def test_an_unreadable_blob_directory_exits_three_and_names_its_role(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The real filesystem store, refused by the operating system: a store that could not be read,
-    not a bug (v1-e01-t20 ac2). Before that task the `PermissionError` escaped as exit 70."""
+    not a bug (v1-e01-t20 ac2). Before that task the `PermissionError` escaped as exit 70.
+
+    The cause is named by its class, and since v1-e34-t13 the filesystem stores raise the subclass
+    that says the refusal was this machine's and not a bucket's."""
     data_dir = tmp_path / "data"
     build_fixture_data_dir(data_dir)
     monkeypatch.setenv("DEBATE_STORAGE__DATA_DIR", str(data_dir))
@@ -378,6 +381,9 @@ def test_an_unreadable_blob_directory_exits_three_and_names_its_role(
 
     assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
     error = envelope(result)["error"]
-    assert (error["code"], error["details"]["cause"]) == ("VERIFICATION_COULD_NOT_RUN", "StoreAccessDenied")
+    assert (error["code"], error["details"]["cause"]) == (
+        "VERIFICATION_COULD_NOT_RUN",
+        "LocalStoreAccessDenied",
+    )
     assert "the blob directory" in error["message"]
     assert str(data_dir) not in result.stdout + result.stderr

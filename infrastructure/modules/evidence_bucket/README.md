@@ -56,7 +56,7 @@ one that is left signed in.
 | SSO profile | `debate-dev-evidence`, `debate-prod-evidence` | `debate-dev-evidence-removal`, `debate-prod-evidence-removal` |
 | Session | 8 hours | 1 hour |
 | Who | Adult maintainers | One accountable person |
-| S3 | `ListBucket` (scoped to the documented prefixes), `ListBucketVersions` (read-only, scoped to the takedown's prefixes, so a removal's dry run can count versions), `GetObject`, `GetObjectVersion`, `PutObject` | `ListBucketVersions`, `GetObjectVersion`, `DeleteObject`, `DeleteObjectVersion` under `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`; `GetObject`/`PutObject` under `manifests/_suppression/` only |
+| S3 | `ListBucket` (scoped to the documented prefixes), `ListBucketVersions` (read-only, scoped to the takedown's prefixes, so a removal's dry run can count versions and `caselist status` can report what a removal left), `GetObject`, `GetObjectVersion`, `PutObject` | `ListBucketVersions`, `GetObjectVersion`, `DeleteObject`, `DeleteObjectVersion` under `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`; `GetObject`/`PutObject` under `manifests/_suppression/` only |
 | KMS | `Encrypt`, `Decrypt`, `GenerateDataKey` on this key | `Decrypt`, `GenerateDataKey` on this key |
 | Cannot | Delete anything. Change a bucket policy, a lifecycle rule or a key policy | Delete under `reports/`. Delete the bucket. Change a bucket policy, a lifecycle rule or a key policy |
 

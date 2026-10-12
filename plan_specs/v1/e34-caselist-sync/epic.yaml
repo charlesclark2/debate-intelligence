@@ -156,6 +156,14 @@ spec:
       inputs:
         goalRef: v1-e01-t20-retryable-failures-exit-3
         specRef: plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml
+    - id: ext-v1-e29-t07-missing-profile-not-retryable
+      kind: External
+      name: 'Prerequisite from E29: A profile missing from the AWS config is a configuration error, not an expired session'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t07-missing-profile-not-retryable
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml
     - id: t01
       kind: Task
       name: OpenCaselist API client
@@ -492,5 +500,148 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t16-dry-run-names-no-home-path
+    - id: t17
+      kind: Task
+      name: 'The weekly pull parses the sources it imported'
+      description: >-
+        caselist pull parses the sources each run imports and publishes the parsed store
+        with the raw one, so the weekly agent keeps the parsed store current.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t17-pull-parses-new-sources.yaml
+        goalRef: v1-e34-t17-pull-parses-new-sources
+      dependsOn:
+      - t13
+      - ext-v1-e31-t06-parse-pipeline
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t17-pull-parses-new-sources reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t17-pull-parses-new-sources
+    - id: t18
+      kind: Task
+      name: 'A publish stopped by an expired session still owes every snapshot it did not finish'
+      description: >-
+        A publish stage stopped by an expired session leaves every snapshot it did not
+        confirm complete in the pending-work file, so --publish-pending finishes the job.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t18-publish-owes-every-unpublished-snapshot.yaml
+        goalRef: v1-e34-t18-publish-owes-every-unpublished-snapshot
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t18-publish-owes-every-unpublished-snapshot reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t18-publish-owes-every-unpublished-snapshot
+    - id: t19
+      kind: Task
+      name: 'Unreadable local files fail a stage, and a notification says whether a failure is transient'
+      description: >-
+        An unreadable manifest or archive fails only its own stage or import, and the weekly
+        agent's notification says whether a failure is transient.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t19-unreadable-local-files-and-notification-codes.yaml
+        goalRef: v1-e34-t19-unreadable-local-files-and-notification-codes
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t19-unreadable-local-files-and-notification-codes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t19-unreadable-local-files-and-notification-codes
+    - id: t20
+      kind: Task
+      name: 'After a login, the parsed store publishes without a second rebuild when nothing was removed'
+      description: >-
+        A login finishes the parsed store's publish, without a second rebuild unless the
+        bucket's suppression list changed.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t20-parsed-store-publish-after-login.yaml
+        goalRef: v1-e34-t20-parsed-store-publish-after-login
+      dependsOn:
+      - t17
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t20-parsed-store-publish-after-login reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t20-parsed-store-publish-after-login
+    - id: t21
+      kind: Task
+      name: 'The parse stage holds the run lock and has a time budget'
+      description: >-
+        A by-hand parse and a scheduled pull cannot write at once, and the parse stage stops
+        at a budget.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t21-parse-stage-bounds.yaml
+        goalRef: v1-e34-t21-parse-stage-bounds
+      dependsOn:
+      - t17
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t21-parse-stage-bounds reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t21-parse-stage-bounds
+    - id: t22
+      kind: Task
+      name: 'A weekly run that cannot reach its bucket is recorded and announced, and the profile is checked before install'
+      description: >-
+        A misconfigured profile never makes the weekly run fail silently, and is caught
+        before install.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t22-refusal-to-start-is-recorded.yaml
+        goalRef: v1-e34-t22-refusal-to-start-is-recorded
+      dependsOn:
+      - t19
+      - ext-v1-e29-t07-missing-profile-not-retryable
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t22-refusal-to-start-is-recorded reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t22-refusal-to-start-is-recorded
+    - id: t23
+      kind: Task
+      name: 'Loose ends in the weekly sync''s findings, records and notifications'
+      description: >-
+        The weekly sync keeps every finding, writes durably, and words each banner for what
+        the operator must do.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t23-sync-loose-ends.yaml
+        goalRef: v1-e34-t23-sync-loose-ends
+      dependsOn:
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t23-sync-loose-ends reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t23-sync-loose-ends
 status:
   phase: Pending

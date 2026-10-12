@@ -1,0 +1,100 @@
+# TASK v1-e34-t22-refusal-to-start-is-recorded - A weekly run that cannot reach its bucket is recorded and announced, and the profile is checked before install
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t22-refusal-to-start-is-recorded
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A weekly run that cannot reach its bucket is recorded and announced, and the profile is checked before install"
+spec:
+  # Filed by the PM, 2026-10-12, from v1-e29-t07's Follow-up work 1 and v1-e29-t08's Follow-up work 3.
+  description: >-
+    v1-e29-t07 found that a profile the AWS config does not define makes `caselist pull` end
+    before any stage: the bucket's adapter cannot be built, and neither can the run's monitor,
+    which publishes run records through the same profile. So the weekly agent records no run and
+    sends no notification. Only launchd's exit code (now 1) and the agent's log show it. Make a
+    run that cannot build its bucket record itself on this machine and announce itself like the
+    other refusals to start, with the code and the setting to fix, and publish its record when a
+    later run can. Use the run record as it is and the run's details beside it (v1-e34-t19),
+    never a new record field. And catch the mistake before it reaches a scheduled run:
+    `debate-research doctor` and `ops/launchd/install.sh --check-launchd` confirm that each
+    configured evidence profile is defined and name the permission set it is signed in as,
+    through the caller-identity port v1-e29-t08 added. Out of scope: the exit-code rule, and
+    expired sessions, which stay pending.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.s3, debate_core.integrations.local, debate_cli, ops/launchd, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, tests/integration, docs/runbooks]
+    forbidden:
+      - A new field on the run record, or a record or details file an earlier build cannot read
+      - An account id, role ARN, SSO start URL or AWS config path in a record, notification, check output, log or the report
+  context:
+    - kind: TaskRef
+      name: v1-e34-t19-unreadable-local-files-and-notification-codes
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e29-t07-missing-profile-not-retryable
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A pull whose profile the AWS config lacks writes a local run record with status
+        failed, details naming `STORE_PROFILE_NOT_CONFIGURED` and the setting, and one
+        notification that a person should look. Shown failing first; today there is no
+        record and no notification.
+    - id: ac2
+      description: >-
+        The next run that can reach the bucket publishes that record and its details, and
+        the older builds' readers still read every record, by the compatibility tests
+        v1-e34-t19 set up.
+    - id: ac3
+      description: >-
+        `doctor` and `install.sh --check-launchd` report, for each configured evidence
+        profile, whether it is defined and which permission set it is signed in as, and fail
+        on a profile that is not defined. An expired session is reported as such and does
+        not fail the check. By test with the identity stubbed at the port.
+    - id: ac4
+      description: >-
+        docs/runbooks/caselist-scheduled-sync.md's reinstall steps run the check, and its
+        troubleshooting section replaces the `caselist runs --remote` workaround v1-e29-t07
+        described.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t22-refusal-to-start-is-recorded-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Record and announce a refusal to start, and check the profiles before the agent meets them.
+  goalRef:
+    name: v1-e34-t22-refusal-to-start-is-recorded
+  graph:
+    nodes:
+      - id: refusal-recorded
+        kind: Task
+        name: Refusal to start recorded; profiles checked
+        description: >-
+          The local record and notification, the later publish, the profile check and the
+          runbook.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pull and doctor tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, packages/debate_cli/tests, -k, pull or doctor or profile]
+status:
+  phase: Pending

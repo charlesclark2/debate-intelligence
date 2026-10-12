@@ -1,0 +1,471 @@
+"""`debate-research caselist parse`, through the real application, composition root and process pool.
+
+The fictional caselist of `tests/fixtures/parse_pipeline/build_parse_world.py` is imported through
+`caselist import`, as an operator imports a week, and parsed with one worker so each run starts one
+process. Expected counts are the fixture's hand-written :data:`EXPECTED`. The bucket is moto's.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from collections.abc import Iterator
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Final
+
+import boto3
+import pytest
+from moto import mock_aws
+from tests.fixtures.caselist.publish_expectations import FICTIONAL_IDENTIFIERS
+from tests.fixtures.parse_pipeline.build_parse_world import (
+    CASELIST,
+    EXPECTED,
+    WEEKS,
+    build_week_zips,
+    digest_of,
+)
+from tests.fixtures.permissions import needs_permissions
+from tests.fixtures.permissions import refused as refused_directory
+from typer.testing import CliRunner, Result
+
+from debate_cli.app import create_app
+from debate_cli.container import ServiceContainer
+from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist.suppression import LocalFallbackSuppressionList
+from debate_core.application.caselist_pull_parse import PullParseStage
+from debate_core.application.errors import StoreUnavailable
+from debate_core.application.ports.evidence_store import ObjectInfo
+from debate_core.application.settings import load_settings
+from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
+from debate_core.integrations.s3 import S3EvidenceObjectStore
+
+if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
+    from mypy_boto3_s3.client import S3Client
+
+runner = CliRunner()
+
+DEV_BUCKET: Final = "debate-dev-evidence-moto"
+PROD_BUCKET: Final = "debate-prod-evidence-moto"
+PROFILES: Final = {"dev": "debate-dev-evidence", "prod": "debate-prod-evidence"}
+
+
+@pytest.fixture(autouse=True)
+def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
+    """Dev and prod profiles naming different buckets and one data directory, fake AWS, one worker."""
+    for name in list(os.environ):
+        if name.startswith("DEBATE_"):
+            monkeypatch.delenv(name, raising=False)
+    config = tmp_path / "aws-config"
+    config.write_text(
+        "".join(f"[profile {p}]\nregion = us-east-1\n" for p in PROFILES.values()), encoding="utf-8"
+    )
+    credentials = tmp_path / "aws-credentials"
+    credentials.write_text(
+        "".join(
+            f"[{p}]\naws_access_key_id = testing\naws_secret_access_key = testing\n"
+            for p in PROFILES.values()
+        ),
+        encoding="utf-8",
+    )
+    for name, value in {
+        "AWS_ACCESS_KEY_ID": "testing",
+        "AWS_SECRET_ACCESS_KEY": "testing",
+        "AWS_SESSION_TOKEN": "testing",
+        "AWS_DEFAULT_REGION": "us-east-1",
+        "AWS_EC2_METADATA_DISABLED": "true",
+        "AWS_CONFIG_FILE": str(config),
+        "AWS_SHARED_CREDENTIALS_FILE": str(credentials),
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    data_dir = tmp_path / "data"
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    for environment, bucket in (("dev", DEV_BUCKET), ("prod", PROD_BUCKET)):
+        (profiles / f"{environment}.toml").write_text(
+            f'[storage]\ndata_dir = "{data_dir}"\n'
+            f'[storage.s3]\nbucket = "{bucket}"\nregion = "us-east-1"\n'
+            f'aws_profile = "{PROFILES[environment]}"\n'
+            f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+            encoding="utf-8",
+        )
+    (profiles / "test.toml").write_text(
+        f'allow_network = false\n[providers]\nenabled = []\n[storage]\ndata_dir = "{data_dir}"\n'
+        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 0.0\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
+    monkeypatch.setenv("DEBATE_ENV", "dev")
+    monkeypatch.setenv("DEBATE_PARSE__WORKERS", "1")
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_THRESHOLD", "0.3")
+    yield data_dir
+
+
+@pytest.fixture
+def buckets() -> Iterator[S3Client]:
+    with mock_aws():
+        client: S3Client = boto3.client("s3", region_name="us-east-1")  # pyright: ignore[reportUnknownMemberType]
+        for bucket in (DEV_BUCKET, PROD_BUCKET):
+            client.create_bucket(Bucket=bucket)
+            client.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
+        yield client
+
+
+@pytest.fixture
+def imported(tmp_path: Path, installation: Path) -> Path:
+    """09-01 and 09-08, imported through the command an operator runs."""
+    zips = build_week_zips(tmp_path / "downloads")
+    for week in WEEKS[:2]:
+        result = invoke(
+            "--json", "caselist", "import", str(zips[week.snapshot]),
+            "--caselist", CASELIST, "--snapshot", week.snapshot.isoformat(),
+        )  # fmt: skip
+        assert result.exit_code == ExitCode.OK, result.stdout
+    return installation
+
+
+def invoke(*arguments: str) -> Result:
+    return runner.invoke(create_app(), list(arguments))
+
+
+def envelope_of(result: Result) -> dict[str, Any]:
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    assert len(lines) == 1, f"expected one line of JSON on stdout, got {lines!r}"
+    parsed = json.loads(lines[0])
+    assert isinstance(parsed, dict)
+    return parsed
+
+
+def test_a_run_reports_the_hand_derived_counts_and_exits_zero_under_the_threshold(imported: Path) -> None:
+    result = invoke("caselist", "parse", "--caselist", CASELIST, "--json")
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    data = envelope_of(result)["data"]
+    expected = EXPECTED["after_0908"]
+    assert (data["sources"], data["parsed"], data["cards"]) == (
+        expected["sources"],
+        expected["parsed"],
+        expected["cards"],
+    )
+    assert (data["unsupported"], data["failed"], data["failure_rate"]) == (
+        expected["unsupported"],
+        expected["failed"],
+        expected["failure_rate"],
+    )
+    assert data["store"]["occurrences"] == expected["occurrences"]
+    assert data["version"] == DOCX_PARSER_VERSION
+    assert data["workers"] == 1
+    assert data["publish"] is None
+
+
+def test_a_second_run_parses_nothing_and_reports_every_source_skipped(imported: Path) -> None:
+    invoke("caselist", "parse", "--caselist", CASELIST)
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    data = envelope_of(result)["data"]
+    assert (data["attempted"], data["parsed"], data["skipped"]) == (0, 0, EXPECTED["after_0908"]["sources"])
+
+
+def test_a_failure_rate_above_the_threshold_exits_non_zero_with_the_counts(
+    imported: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One failure in the four sources tried, in a run just large enough for its rate to be judged."""
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_THRESHOLD", "0.2")
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_MINIMUM_SOURCES", "4")
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    error = envelope_of(result)["error"]
+    assert error["code"] == "PARSE_FAILURE_RATE_EXCEEDED"
+    assert error["details"]["failure_rate"] == 0.25
+    assert error["details"]["failure_rate_judged"] is True
+    assert error["details"]["parsed"] == EXPECTED["after_0908"]["parsed"]
+
+
+def test_a_run_too_small_for_its_rate_to_be_judged_reports_its_failure_and_exits_zero(
+    imported: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`v1-e34-t17` ac6: four sources tried is far under the default minimum, so one bad file is an
+    outcome and not a failed run, however far over the threshold 25% is. It is still reported."""
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_THRESHOLD", "0.2")
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    data = envelope_of(result)["data"]
+    assert data["failed"] == EXPECTED["after_0908"]["failed"]
+    assert data["failure_rate"] == 0.25
+    assert data["failure_rate_minimum_sources"] == 100
+    assert (data["failure_rate_judged"], data["threshold_exceeded"]) == (False, False)
+
+
+@pytest.mark.parametrize(
+    ("minimum", "judged", "exit_code"),
+    [
+        (5, False, ExitCode.OK),  # four tried, one short of the minimum: reported, not judged
+        (4, True, ExitCode.DOMAIN_FAILURE),  # exactly the minimum: judged, and 25% is over 20%
+        (3, True, ExitCode.DOMAIN_FAILURE),  # a small run over the minimum still fails on the rate
+    ],
+)
+def test_the_rate_is_judged_from_the_minimum_number_of_sources_tried_and_not_below_it(
+    imported: Path, monkeypatch: pytest.MonkeyPatch, minimum: int, judged: bool, exit_code: ExitCode
+) -> None:
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_THRESHOLD", "0.2")
+    monkeypatch.setenv("DEBATE_PARSE__FAILURE_RATE_MINIMUM_SOURCES", str(minimum))
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST)
+
+    assert result.exit_code == exit_code, result.stdout
+    envelope = envelope_of(result)
+    data = envelope["data"] if exit_code is ExitCode.OK else envelope["error"]["details"]
+    assert data["failure_rate_judged"] is judged
+    assert data["failed"] == EXPECTED["after_0908"]["failed"]
+
+
+def test_a_dry_run_counts_and_writes_nothing(imported: Path) -> None:
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--dry-run")
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    data = envelope_of(result)["data"]
+    assert (data["applied"], data["to_parse"], data["attempted"]) == (
+        False,
+        EXPECTED["after_0908"]["sources"],
+        0,
+    )
+    # A dry run reports the setting it would be judged by, and judges nothing: it tried nothing.
+    assert data["failure_rate_minimum_sources"] == 100
+    assert (data["failure_rate_judged"], data["threshold_exceeded"]) == (False, False)
+    assert not (imported / "parsed").exists()
+
+
+def test_reparse_writes_a_new_version_directory(imported: Path) -> None:
+    invoke("caselist", "parse", "--caselist", CASELIST)
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--reparse")
+
+    data = envelope_of(result)["data"]
+    assert (data["version"], data["new_version"], data["superseded"]) == (
+        f"{DOCX_PARSER_VERSION}_reparse-2",
+        True,
+        DOCX_PARSER_VERSION,
+    )
+    assert data["parsed"] == EXPECTED["after_0908"]["parsed"]
+
+
+def test_failures_lists_each_source_by_digest_prefix_and_path_and_says_it_holds_paths(imported: Path) -> None:
+    invoke("caselist", "parse", "--caselist", CASELIST)
+
+    shown = invoke("caselist", "parse", "--caselist", CASELIST, "--failures")
+    listed = envelope_of(invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--failures"))["data"]
+
+    assert shown.exit_code == ExitCode.OK
+    paths = {body: path for week in WEEKS[:2] for path, body in week.members}
+    for body in ("broken", "pdf", "doc"):
+        assert digest_of(body)[:12] in shown.stdout
+    assert {(row["sha256"], row["path"], row["reason"]) for row in listed["failures"]} == {
+        (digest_of("broken"), paths["broken"], "NOT_A_ZIP"),
+        (digest_of("pdf"), paths["pdf"], "UNSUPPORTED_FORMAT"),
+        (digest_of("doc"), paths["doc"], "UNSUPPORTED_FORMAT"),
+    }
+    assert listed["contains_disclosure_paths"] is True
+    assert "school" in listed["notice"]
+
+
+def test_nothing_but_failures_prints_a_school_a_team_or_a_path(imported: Path) -> None:
+    outputs = [
+        invoke("caselist", "parse", "--caselist", CASELIST).stdout,
+        invoke("--verbose", "caselist", "parse", "--caselist", CASELIST).stdout,
+        invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--reparse").stdout,
+        invoke("caselist", "parse", "--caselist", CASELIST, "--dry-run").stdout,
+    ]
+    for output in outputs:
+        for identifier in FICTIONAL_IDENTIFIERS:
+            assert identifier not in output
+
+
+def test_publish_uploads_the_store_and_a_rerun_uploads_nothing(imported: Path, buckets: S3Client) -> None:
+    first = envelope_of(invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish"))["data"][
+        "publish"
+    ]
+    second = envelope_of(invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish"))["data"][
+        "publish"
+    ]
+
+    files = sorted(path for path in (imported / "parsed").rglob("*") if path.is_file())
+    keys = {str(item.get("Key")) for item in buckets.list_objects_v2(Bucket=DEV_BUCKET).get("Contents", [])}
+    assert keys == {f"parsed/{path.relative_to(imported / 'parsed').as_posix()}" for path in files}
+    assert first["counts"]["uploaded"] == len(files)
+    assert (second["counts"]["uploaded"], second["counts"]["skipped"]) == (0, len(files))
+    assert first["prefix"] == f"parsed/{CASELIST}/{DOCX_PARSER_VERSION}/"
+    assert "Contents" not in buckets.list_objects_v2(Bucket=PROD_BUCKET)
+
+
+def test_a_publish_the_bucket_did_not_take_exits_three_and_names_the_code(
+    imported: Path, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`v1-e34-t17` ac7: every upload answers 503. Each failure is one a retry may cure, so the run
+    exits 3 as `caselist publish` does, where it used to exit 1 for any incomplete publish."""
+
+    async def unavailable(self: S3EvidenceObjectStore, key: str, source: Path) -> ObjectInfo:
+        raise StoreUnavailable("PutObject", key, "simulated 503 SlowDown")
+
+    monkeypatch.setattr(S3EvidenceObjectStore, "put_file", unavailable)
+
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish")
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "PARSED_PUBLISH_INCOMPLETE"
+    publish = error["details"]["publish"]
+    assert publish["failure_codes"] == ["STORE_UNAVAILABLE"]
+    assert publish["aggregates"] == "withheld"
+    assert len(publish["failed_keys"]) == EXPECTED["after_0908"]["sources"]
+    assert "Contents" not in buckets.list_objects_v2(Bucket=DEV_BUCKET)
+
+
+def test_a_publish_with_a_mismatch_among_its_failures_stays_exit_one(
+    imported: Path, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One source file already in the bucket with other bytes is a verdict, and one verdict among any
+    number of transient failures keeps the run a 1 (`exit_code_for_failure_codes`)."""
+    assert invoke("--json", "caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+    [stored] = (imported / "parsed" / CASELIST / DOCX_PARSER_VERSION).rglob(f"{digest_of('verbatim')}.*")
+    buckets.put_object(
+        Bucket=DEV_BUCKET,
+        Key=stored.relative_to(imported).as_posix(),
+        Body=b'{"not": "what this machine parsed"}',
+        ChecksumAlgorithm="SHA256",
+    )
+    real_put = S3EvidenceObjectStore.put_file
+
+    async def unavailable_for_the_wiki_file(
+        self: S3EvidenceObjectStore, key: str, source: Path
+    ) -> ObjectInfo:
+        if digest_of("wiki") in key:
+            raise StoreUnavailable("PutObject", key, "simulated 503 SlowDown")
+        return await real_put(self, key, source)
+
+    monkeypatch.setattr(S3EvidenceObjectStore, "put_file", unavailable_for_the_wiki_file)
+
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "PARSED_PUBLISH_INCOMPLETE"
+    assert sorted(error["details"]["publish"]["failure_codes"]) == ["CHECKSUM_MISMATCH", "STORE_UNAVAILABLE"]
+
+
+def test_with_a_bucket_the_pulls_parse_stage_shares_its_fallback_list_and_has_a_publisher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`v1-e34-t17`: in an environment that publishes, the composition root gives the pull's parse
+    stage the pull's own suppression list, the one that falls back to this machine's copy when the
+    bucket's needs a login, and the parsed store's publisher. The run reads that object's fallback
+    count to know whether aggregates were rebuilt from every copy of the list before publishing."""
+    monkeypatch.setenv("DEBATE_ALLOW_NETWORK", "true")
+    monkeypatch.setenv("DEBATE_CASELIST__API_ENABLED", "true")
+    monkeypatch.setenv("DEBATE_PROVIDERS__CASELIST_TOKEN", "fixture-token-for-wiring")
+    container = ServiceContainer(settings_loader=load_settings)
+
+    sync = container.caselist_sync(event_for_caselist=lambda _: None)
+
+    stage = sync._parse  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(stage, PullParseStage)
+    assert isinstance(sync._suppression, LocalFallbackSuppressionList)  # pyright: ignore[reportPrivateUsage]
+    assert stage._parse._suppression is sync._suppression  # pyright: ignore[reportPrivateUsage]
+    assert stage._publisher is container.parsed_publisher()  # pyright: ignore[reportPrivateUsage]
+
+
+def test_publishing_to_prod_needs_confirm_prod_and_writes_nothing_without_it(
+    imported: Path, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_ENV", "prod")
+    refused = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish")
+
+    assert refused.exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope_of(refused)["error"]["code"] == "CONFIRMATION_REQUIRED"
+    assert "Contents" not in buckets.list_objects_v2(Bucket=PROD_BUCKET)
+    assert not (imported / "parsed").exists()
+
+    confirmed = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish", "--confirm-prod")
+    assert confirmed.exit_code == ExitCode.OK, confirmed.stdout
+    assert buckets.list_objects_v2(Bucket=PROD_BUCKET)["KeyCount"] > 0
+
+
+def test_publishing_from_test_is_refused(imported: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEBATE_ENV", "test")
+    result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope_of(result)["error"]["code"] == "ENVIRONMENT_NOT_SYNCABLE"
+
+
+def test_a_caselist_that_is_not_a_slug_is_refused(imported: Path) -> None:
+    result = invoke("--json", "caselist", "parse", "--caselist", "Maple Grove")
+    assert result.exit_code != ExitCode.OK
+
+
+# ------------------------------------------------------------------------------------------------
+# A parsed card store this machine refuses (`v1-e31-t09` ac5)
+# ------------------------------------------------------------------------------------------------
+
+
+def assert_the_store_was_refused(result: Result, data_dir: Path) -> None:
+    """Exit 3, the store's own code, the role and the setting, and no path of this machine."""
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "STORE_ACCESS_DENIED"
+    assert "the parsed card store" in error["message"]
+    assert "storage.data_dir" in error["hint"]
+    assert "aws sso login" not in json.dumps(error)
+    assert str(data_dir) not in result.stdout
+    assert str(data_dir.parent) not in result.stdout
+
+
+@needs_permissions
+@pytest.mark.parametrize("arguments", [(), ("--dry-run",), ("--failures",), ("--reparse",)])
+def test_a_parsed_store_this_machine_refuses_exits_three_and_names_the_setting(
+    imported: Path, arguments: tuple[str, ...]
+) -> None:
+    """It used to end as exit 70, "a bug", with the data directory's path in the message."""
+    assert invoke("caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+
+    with refused_directory(imported / "parsed"):
+        result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, *arguments)
+
+    assert_the_store_was_refused(result, imported)
+
+
+@needs_permissions
+def test_a_dry_run_over_a_partly_refused_store_does_not_count_what_it_could_not_see_as_unparsed(
+    imported: Path,
+) -> None:
+    """The listing used to skip a directory it could not read: the dry run then exited 0 and
+    reported the sources filed there as still to parse."""
+    assert invoke("caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+    sources = imported / "parsed" / CASELIST / DOCX_PARSER_VERSION / "sha256"
+    fan_out = sorted(path for path in sources.iterdir() if path.is_dir())[0]
+
+    with refused_directory(fan_out):
+        result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--dry-run")
+
+    assert_the_store_was_refused(result, imported)
+
+
+@needs_permissions
+def test_a_refused_store_is_left_exactly_as_it_was(imported: Path) -> None:
+    assert invoke("caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+    before = {
+        path.relative_to(imported).as_posix(): path.read_bytes()
+        for path in (imported / "parsed").rglob("*")
+        if path.is_file()
+    }
+
+    with refused_directory(imported / "parsed" / CASELIST / DOCX_PARSER_VERSION):
+        result = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--reparse")
+
+    assert_the_store_was_refused(result, imported)
+    after = {
+        path.relative_to(imported).as_posix(): path.read_bytes()
+        for path in (imported / "parsed").rglob("*")
+        if path.is_file()
+    }
+    assert after == before

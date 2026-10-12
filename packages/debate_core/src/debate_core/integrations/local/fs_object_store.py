@@ -42,6 +42,15 @@ before it becomes a path, so no key can contain `..` or a leading `/`, and the r
 against the root as well — belt and braces, because the cost of being wrong here is writing outside the
 evidence directory. Symlinks are not followed out of the store: a resolved path that leaves the root is
 refused.
+
+## The operating system refusing the store
+
+A directory this user cannot read or write is
+:class:`~debate_core.application.errors.LocalStoreAccessDenied` naming the directory's role — "the
+manifest directory", "the blob directory" — and never its path
+(:mod:`debate_core.integrations.local.refusals`, `v1-e34-t13`). That includes
+:meth:`FsEvidenceObjectStore.list_objects`: a tree it may not read is a refusal, never an empty
+listing, because every caller of a listing acts on what is *not* in it.
 """
 
 from __future__ import annotations
@@ -60,6 +69,7 @@ from debate_core.integrations.file_streaming import (
     atomic_replacement,
     sha256_of_file,
 )
+from debate_core.integrations.local.refusals import files_under, refused_as_access_denied, role_of
 
 __all__ = ["OBJECT_DIRECTORY", "FsEvidenceObjectStore"]
 
@@ -136,25 +146,33 @@ class FsEvidenceObjectStore:
         not objects, and a sync that treated one as an object would try to upload half a file.
 
         Directories are not entries — only files are — and a store whose root does not exist yet lists
-        nothing rather than failing.
+        nothing rather than failing. A directory this user may not read is
+        :class:`~debate_core.application.errors.LocalStoreAccessDenied` when a key under it could
+        start with `prefix`, the root included; one that could not is never opened, so an unreadable
+        `reports/` does not stop a listing of `manifests/hsld26/`.
         """
-        if not self._root.is_dir():
-            return ()
+
+        def could_hold_a_match(directory: Path) -> bool:
+            inside = directory.relative_to(self._root).as_posix() + "/"
+            return inside.startswith(prefix) or prefix.startswith(inside)
+
         found: list[ObjectInfo] = []
-        for path in self._root.rglob("*"):
-            if not path.is_file() or path.name.startswith(INCOMING_FILE_PREFIX):
-                continue
-            key = path.relative_to(self._root).as_posix()
-            if key.startswith(prefix):
-                found.append(ObjectInfo(key=key, size=path.stat().st_size))
+        with refused_as_access_denied("list", self._role(prefix)):
+            for path in files_under(self._root, descend=could_hold_a_match):
+                if path.name.startswith(INCOMING_FILE_PREFIX):
+                    continue
+                key = path.relative_to(self._root).as_posix()
+                if key.startswith(prefix):
+                    found.append(ObjectInfo(key=key, size=path.stat().st_size))
         return tuple(sorted(found, key=lambda info: info.key))
 
     async def head(self, key: ObjectKey) -> ObjectInfo:
         """The object's size and the digest of its current contents, which this store computes."""
-        path = self.path_for(key)
-        if not path.is_file():
-            raise NotFound(_ENTITY, key)
-        return ObjectInfo(key=key, size=path.stat().st_size, sha256=sha256_of_file(path))
+        with refused_as_access_denied("read", self._role(key)):
+            path = self.path_for(key)
+            if not path.is_file():
+                raise NotFound(_ENTITY, key)
+            return ObjectInfo(key=key, size=path.stat().st_size, sha256=sha256_of_file(path))
 
     async def put_file(self, key: ObjectKey, source: Path) -> ObjectInfo:
         """Copy `source` to `key`, atomically, and return the stored object.
@@ -164,10 +182,11 @@ class FsEvidenceObjectStore:
         one. Raises :class:`FileNotFoundError` when `source` does not exist.
         """
         digest = sha256_of_file(source)
-        destination = self.path_for(key)
-        with atomic_replacement(destination) as incoming:
-            shutil.copyfile(source, incoming)
-        return ObjectInfo(key=key, size=destination.stat().st_size, sha256=digest)
+        with refused_as_access_denied("write", self._role(key)):
+            destination = self.path_for(key)
+            with atomic_replacement(destination) as incoming:
+                shutil.copyfile(source, incoming)
+            return ObjectInfo(key=key, size=destination.stat().st_size, sha256=digest)
 
     async def get_file(self, key: ObjectKey, destination: Path) -> ObjectInfo:
         """Copy the object at `key` to `destination`, atomically, and return what landed there.
@@ -177,10 +196,13 @@ class FsEvidenceObjectStore:
         hash to what the source file hashed to a moment earlier — which on one disk means the file
         changed underneath the copy. Nothing is renamed into place when that happens.
         """
-        source = self.path_for(key)
-        if not source.is_file():
-            raise NotFound(_ENTITY, key)
-        expected = sha256_of_file(source)
+        with refused_as_access_denied("read", self._role(key)):
+            source = self.path_for(key)
+            if not source.is_file():
+                raise NotFound(_ENTITY, key)
+            expected = sha256_of_file(source)
+        # Outside the translation: `destination` is the caller's, not this store's, and a refusal
+        # there says nothing about the data directory.
         with atomic_replacement(destination) as incoming:
             shutil.copyfile(source, incoming)
             landed = sha256_of_file(incoming)
@@ -188,3 +210,7 @@ class FsEvidenceObjectStore:
                 raise BlobIntegrityError(key, landed)
             size = incoming.stat().st_size
         return ObjectInfo(key=key, size=size, sha256=landed)
+
+    def _role(self, key: str) -> str:
+        """What a refusal names instead of a path: the role of the directory `key` is under."""
+        return role_of(self._root.name, key)

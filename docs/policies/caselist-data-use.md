@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.4 |
-| Status | **Approved**, version 1.4, 2026-10-01. See [Approval](#approval). |
+| Policy version | 1.7 |
+| Status | **Approved**, version 1.7, 2026-10-11. See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1) and 2026-10-01 (versions 1.3 and 1.4) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6) and 2026-10-11 (version 1.7) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -84,7 +84,7 @@ Clauses are paraphrased; phrases in quotation marks are the site's own wording.
 | 9 | Acceptable Use — others' rights | No violating others' privacy or rights | The written backing for [Personal data](#personal-data). Team codes are treated as personal data about people who may be minors |
 | 10 | Termination | Access may be suspended at the site's discretion | Access is a privilege, not an entitlement. A `401`/`403` stops the run and is escalated to Charlie, never worked around ([E34 gate](#e34--automated-caselist-download-v12) 5) |
 | 11 | Modifications | The terms may change, and continued use means acceptance | The terms are re-read at the start of each season and whenever the site announces a change — see [Review and change control](#review-and-change-control) |
-| 12 | Maintainer confirmation (not part of the published terms) | Asked by Charlie through the site's Contact channel; the maintainer replied on 2026-09-19 that scheduled downloads of the weekly archives through the API are acceptable, with a rate limit of **10 file downloads per minute** | Resolves [open question 2](#open-questions) and satisfies [E34 gate](#e34--automated-caselist-download-v12) item 2. The client's default stays below the limit (8 per minute) and cannot be configured above 10. Charlie keeps the maintainer's reply on file; it is not committed |
+| 12 | Maintainer confirmation (not part of the published terms) | Asked by Charlie through the site's Contact channel; the maintainer replied on 2026-09-19 that scheduled downloads of the archives through the API are acceptable, with a rate limit of **10 file downloads per minute** as the only limit. Charlie re-read the reply on 2026-10-10 against the complete archive (`<caselist>-all-<date>.zip`, `v1-e34-t04`): it is about programmatic retrieval of the archives through the API, not one kind of archive, so it covers the weekly and the complete archives alike | Resolves [open question 2](#open-questions) and satisfies [E34 gate](#e34--automated-caselist-download-v12) item 2. The client's default stays below the limit (8 per minute) and cannot be configured above 10. Charlie keeps the maintainer's reply on file; it is not committed |
 
 **Assessment.** No term read on 2026-09-19 is stricter than a rule in this policy; the
 [Prohibited uses](#prohibited-uses) already cover every relevant Acceptable Use item. The two
@@ -130,6 +130,11 @@ than quoted rules, and Charlie confirmed them at approval on 2026-09-19:
   [Attribution](#attribution) rules exist to make that automatic.
 - **Withdrawal is respected.** When a team asks for something to come down, it comes down, without
   the requester having to argue for it. See [Removal](#removal).
+- **A file deleted or replaced upstream stays part of its round's record.** Teams routinely replace
+  or tidy their files on the caselist, and a complete archive that no longer holds a file
+  (`v1-e34-t04`'s *withdrawn* and *superseded* counts) is not a request to us. A file that was
+  disclosed in a round is kept, under the same retention and attribution rules as everything else,
+  and comes down only through [Removal](#removal). Decided by Charlie, 2026-10-10.
 - **Camp files are gifts with expectations.** OpenEv files are released to the community for use
   in files and rounds, not for resale or re-publication under someone else's name.
 
@@ -352,11 +357,17 @@ weighed.
 - Deletes the source blob and its `Disclosure`, `CampFile` and manifest records locally.
 - Deletes `raw/` and `parsed/` objects **and every noncurrent version** from the environment's
   evidence bucket, and rewrites manifests with superseded versions purged.
+- **Covers later uploads at the removed path.** A request to take a file down is not a request to
+  keep its revisions, so every later upload at the same path that the store holds is removed with
+  it, in every step listed here. Only when the requester asks for the revisions to stay are they
+  left in place. A camp's later upload at a removed camp path is also held when the sync next meets
+  it. A caselist revision that is not yet imported when the removal runs is not yet held by the
+  tooling: the runbook's check after a removal covers it by hand until `v1-e30-t13` ships.
 - Deletes the parsed cards derived from it.
 - Deletes or rewrites the downloaded archives and camp files in the sync's download inbox that
   hold it, so no downloaded copy keeps the removed bytes.
 - **Appends the sha256 to the suppression list**, which the importers and the publisher consult, so
-  the next cumulative weekly archive cannot bring the file back.
+  no later archive, weekly or complete, can bring the file back.
 - Flags every built file whose provenance sidecar cites that source, for rebuild or withdrawal.
 - Records the removal with request id, date, reason code, environment and sha256 values — and no
   school, team code or name.
@@ -444,8 +455,8 @@ first automated pull:
 
 1. This policy is **approved** (the [Approval](#approval) section is filled in).
 2. **The maintainer has confirmed scheduled downloads.** Satisfied 2026-09-19 (clause 12 of the
-   [clause register](#clause-register)): scheduled weekly archive downloads through the API are
-   acceptable at **no more than 10 file downloads per minute**. The client defaults to 8 per minute,
+   [clause register](#clause-register)): scheduled archive downloads through the API, weekly and
+   complete, are acceptable at **no more than 10 file downloads per minute**. The client defaults to 8 per minute,
    refuses a configuration above 10, and counts every file download (archives and OpenEv files)
    against the same limit. If the maintainer later withdraws or changes this, E34 stops until the
    policy is revised.
@@ -525,7 +536,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.4 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.7 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -547,16 +558,39 @@ Version 1.4 adds the download inbox to [What removal does](#removal), now that v
 it, and drops the inbox from the list of manual steps. It tightens the policy, so under
 [Review and change control](#review-and-change-control) it takes effect on merge.
 
+Version 1.5 adds one [community disclosure norm](#community-disclosure-norms): a file that a team
+later deletes or replaces on the caselist stays part of its round's record and is kept, coming
+down only through [Removal](#removal). `v1-e34-t04`'s complete-archive refresh made the question
+concrete: hsld26's first complete archive no longer held 229 of the files its weekly series had
+captured. It settles what the platform does with a file the source no longer carries, so it is
+recorded as approved by the coach rather than taking effect on merge alone. Charlie decided it on
+2026-10-10.
+
+Version 1.6 corrects what [clause 12](#clause-register) records of the maintainer's reply. It said
+"scheduled downloads of the weekly archives". Charlie re-read the reply on 2026-10-10, when
+`v1-e34-t04`'s complete-archive rotation raised the question: it covers programmatic retrieval of
+the archives through the API, with 10 file downloads per minute as the only limit, so it covers
+the complete archive too. [E34 gate](#e34--automated-caselist-download-v12) item 2 says the same.
+Version 1.6 also corrects a sentence in [Removal](#removal) that called the weekly archive
+cumulative; a weekly archive holds about a week's changes, and the complete archive is the
+cumulative one. The first change widens what the platform may do on a schedule, so it is recorded
+as approved by the coach.
+
+Version 1.7 adds later uploads to [What removal does](#removal), now that `v1-e30-t11` removes the
+later uploads at a removed path with the file a request named, and says which revisions are not yet
+held by the tooling. It tightens the policy, so under
+[Review and change control](#review-and-change-control) it takes effect on merge.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.4; 1.3 included version 1.2's correction to rule 3 (1.0 and 1.1 approved 2026-09-19) |
+| Policy version | 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-01 (versions 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.4, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-11 (version 1.7; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.7, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — school or district review, before V2 student accounts |

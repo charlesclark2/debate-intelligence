@@ -85,6 +85,20 @@ spec:
       description: >-
         docs/runbooks/tub-takedown.md walks the operator through intake, removal, the S3 version purge and
         the reply to the requesting team, and Charlie confirms it matches the data-use policy.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-11, from v1-e30-t10's Follow-up work 9. The removal-residue
+        check in `caselist status` (v1-e30-t10, `removal_residue.py`) lists the prefixes the tub
+        writes under (`files/` and `quarantine/` today), so residue a tub removal leaves there is
+        reported, by test against moto.
+    - id: ac7
+      description: >-
+        Added by the PM, 2026-10-12, from v1-e29-t08's Follow-up work 2. The takedown preflight
+        accepts only an IAM Identity Center role of the environment's EvidenceRemoval permission
+        set (`takedown_permission_set` in `removal_service.py`). The tub's takedown, run by the
+        API rather than a person, either passes that check by a stated second rule for the
+        service's own role, or calls a removal path that does not use it. Which one is decided
+        in this task's design and tested.
 status:
   phase: Pending
 ---

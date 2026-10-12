@@ -228,7 +228,7 @@ async def test_a_pull_that_fetches_and_imports_a_camp_file_names_it_by_id_and_di
     ]
     assert run.pulled.summary_path is not None
     written = json.loads(run.pulled.summary_path.read_text(encoding="utf-8"))
-    assert written["schema_version"] == 3
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION
     assert written["openev_selections"] == openev_selections(run)
 
 
@@ -285,7 +285,7 @@ async def test_a_camp_download_whose_import_is_refused_is_named_by_id_and_digest
     import_stage = first.pulled.summary.stage(SyncStage.IMPORT)
     assert import_stage is not None and import_stage.outcome is StageOutcome.FAILED
     assert import_stage.reason == refused
-    assert [one.title for one in first.notifier.sent] == ["caselist pull failed"]
+    assert [one.title for one in first.notifier.sent] == ["caselist pull failed: needs a person"]
 
     again = await pull(installation, source)
 
@@ -297,9 +297,12 @@ async def test_a_camp_download_whose_import_is_refused_is_named_by_id_and_digest
     assert reason(again, SyncStage.IMPORT) == refused
 
 
-def test_the_summary_schema_is_version_3_because_a_key_was_removed() -> None:
-    """`inbox_name` left the summary: not an additive change under `v1-e34-t07`'s rule."""
-    assert RUN_SUMMARY_SCHEMA_VERSION == 3
+def test_the_summary_schema_moved_past_version_2_because_a_key_was_removed() -> None:
+    """`inbox_name` left the summary: not an additive change under `v1-e34-t07`'s rule.
+
+    It became 3 here; `v1-e34-t13` made it 4, and pins that in its own tests.
+    """
+    assert RUN_SUMMARY_SCHEMA_VERSION >= 3
 
 
 # ------------------------------------------------------------------------------------------------

@@ -1,9 +1,19 @@
 """Turning one weekly archive into records, and saying exactly what changed since last week.
 
-OpenCaselist republishes **everything** every week. The 15 September archive contains almost all
-of the 8 September archive, which contains almost all of the 1 September archive, and a naive
-importer would therefore store the same file three times and report three times as much evidence
-as the circuit actually disclosed. Deduplication is not a refinement here; it is the job.
+A weekly archive is **not** a copy of the whole caselist. It is a window of about a week's
+editing: the files teams added or changed that week, and little else. Adjacent windows overlap
+only a little, so the 15 September archive holds mostly what the 8 September one did not
+(`docs/data/caselist-backfill-2026-09.md`, "Weekly archives are adjacent windows, not cumulative
+copies": three adjacent HS LD weeks held 2,374 members and 2,107 distinct files). The cumulative
+copy is the **complete** archive, `<slug>-all-<date>.zip`, which holds everything on the caselist
+that day and is filed as its own snapshot beside the weekly series (`v1-e34-t04`; "A complete
+archive", below).
+
+The same bytes still arrive more than once: carried from one window into the next, uploaded again
+under a browser's `(1)` name, disclosed by a second team, or held by the complete archive as well as
+the week that first brought them. A file is stored once by its digest however many archives hold
+it. What an import reports is how this window differs from the one before, which is not what is new
+to the caselist ("First seen", below).
 
 So every member of an archive is classified against the archive imported for the week before, and
 the answer is one of six things:
@@ -24,13 +34,15 @@ the answer is one of six things:
     These bytes are already stored, but this path is new: a re-upload under a browser's `(1)`
     name, or another team disclosing the same file. One source document, a second disclosure.
 `REMOVED`
-    The previous archive had this path and this one does not. The team took it down. Reported so
-    an operator can see it; the bytes are not deleted, because the file was disclosed and a card
-    may already be cut from it. Deleting is :mod:`v1-e30-t07`'s deliberate act.
+    The previous archive had this path and this one does not. That is not a takedown: a window
+    leaves out every file nobody touched that week, and a file uploaded again changes path. What
+    a team withdrew is read from the complete archive (below). Reported so an operator can see
+    it; the bytes are not deleted, because the file was disclosed and a card may already be cut
+    from it. Deleting is :mod:`v1-e30-t07`'s deliberate act.
 `SUPPRESSED`
     The file's SHA-256 is on the removal suppression list — or this one disclosure of it is — so it
-    is not stored, not disclosed and given no manifest row, however many more times the cumulative
-    archives republish it. Only the count survives. The list is a required constructor argument,
+    is not stored, not disclosed and given no manifest row, however many later archives, weekly
+    or complete, hold it. Only the count survives. The list is a required constructor argument,
     not a per-call option: an import cannot be run without it (`v1-e30-t07`).
 
 ## What the previous archive is
@@ -56,6 +68,16 @@ not "a blob the store lacks" — that is :attr:`ImportReport.newly_stored_blobs`
 caselist or a camp file can hold the same bytes. "Earlier" is strictly before, as the previous
 snapshot is, so re-importing an archive reports the same count. It is `None` when the service was
 built without a way to read the manifests, which the composition root always provides.
+
+## A complete archive
+
+`<slug>-all-<date>.zip` goes through :meth:`CaselistImportService.import_full_archive`: the same
+pipeline, classified against the complete archive before it rather than against a week, and filed
+as its own snapshot beside the weekly series (`v1-e34-t04`). Its `NEW` therefore means "not present
+in the preceding complete archive". It reports no first-seen count, because first-seen measures new
+evidence over time, which the weeklies record; it reports **withdrawals** instead, what earlier
+snapshots held and it does not. The two divide the work: first-seen reads the weekly series alone,
+withdrawals read every earlier snapshot, weekly and complete.
 
 ## Ordering
 
@@ -109,6 +131,7 @@ from debate_core.application.caselist.pipeline import (
     SourceImportPipeline,
     file_source,
 )
+from debate_core.application.caselist.withdrawals import EarlierSnapshots, WithdrawalCount, count_withdrawals
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
 from debate_core.application.ports.caselist import CaselistRepository
@@ -131,6 +154,7 @@ __all__ = [
     "CaselistImportService",
     "Classification",
     "EarlierManifestDigests",
+    "FullArchiveBaseline",
     "ImportReport",
     "ImportedEntry",
     "SnapshotOutOfOrder",
@@ -204,8 +228,16 @@ class ImportReport:
     """Distinct digests this archive stores that no earlier snapshot of this caselist held.
 
     New to the caselist, where `NEW` is only new against the week before (see the module
-    docstring). `None` when the service was built without :data:`EarlierManifestDigests`.
+    docstring). `None` when the service was built without :data:`EarlierManifestDigests`, and
+    always `None` for a complete archive, which reports :attr:`withdrawals` instead.
     """
+
+    full_archive: bool = False
+    """True for a complete archive (`<slug>-all-<date>.zip`), imported by
+    :meth:`CaselistImportService.import_full_archive`."""
+
+    withdrawals: WithdrawalCount | None = None
+    """For a complete archive: what earlier snapshots held and it does not. `None` for a weekly."""
 
     suppression: SuppressionState = field(default_factory=SuppressionState)
     """The suppression list this import read, which the manifest writer checks every row against."""
@@ -222,6 +254,15 @@ class ImportReport:
 
     def count(self, classification: Classification) -> int:
         return self.counts.get(classification, 0)
+
+
+@dataclass(frozen=True, slots=True)
+class FullArchiveBaseline:
+    """The complete archive a new one is classified against: its date, and what it held where."""
+
+    snapshot: SnapshotDate
+    paths: Mapping[str, str]
+    """`{path: sha256}` of its stored rows, as its manifest records them."""
 
 
 class CaselistImportService:
@@ -325,6 +366,99 @@ class CaselistImportService:
         _log_counts(report)
         return report
 
+    async def import_full_archive(
+        self,
+        entries: Iterable[ArchiveEntry],
+        *,
+        caselist: CaselistSlug,
+        archive_date: SnapshotDate,
+        event: Event,
+        archive_sha256: str,
+        previous: FullArchiveBaseline | None,
+        earlier: EarlierSnapshots,
+        dry_run: bool = False,
+    ) -> ImportReport:
+        """Import a complete archive as its own snapshot, beside the weekly series (`v1-e34-t04`).
+
+        The same pipeline as a weekly: every member hashed, checked against the suppression list
+        (whole sources and this caselist's disclosures alike), stored by digest, classified. Three
+        things differ, and each is what keeps the weekly series as it was:
+
+        * **The baseline is the complete archive before it**, `previous`, which the caller reads
+          from that archive's manifest; `None` for the first. Never a weekly, so this archive's
+          `REMOVED` rows are paths the previous complete archive had, and never this method's
+          business to compute against the week.
+        * **No snapshot or disclosure record.** The repository keys both by `(caselist, date)`, the
+          weekly series' own key, and a complete archive shares its date with that week's weekly.
+          A row there is what :meth:`_previous_snapshot` and :meth:`_disclosures_in` read, so
+          writing one would change every later weekly's baseline. The manifest the caller files at
+          `manifests/<slug>/full/<date>.jsonl` is this snapshot's record.
+        * **Withdrawals, not first-seen.** `earlier` is every snapshot of the caselist dated before
+          this one, weekly and complete; the report counts what they held and this archive does not
+          (:func:`~debate_core.application.caselist.withdrawals.count_withdrawals`). First-seen is
+          left `None`: it measures new evidence over time, which is the weeklies' question.
+
+        Each stored member's source document is still filed, by digest, through
+        :func:`~debate_core.application.caselist.pipeline.file_source`: a digest names the same
+        bytes in every series, and a file only the complete archive holds needs its record for the
+        corpus and for a removal to delete. Its seen range widens to this date, which is true: the
+        site served it then.
+        """
+        baseline = dict(previous.paths) if previous is not None else {}
+
+        async def write(
+            member: ArchiveMember,
+            parsed: ParsedDisclosurePath,
+            _classification: Classification,
+            _existing: SourceDocument | None,
+        ) -> None:
+            await file_source(
+                self._caselists,
+                SourceDocument(
+                    sha256=member.sha256,
+                    byte_size=member.byte_size,
+                    source_format=parsed.source_format,
+                    origin=SourceOrigin.CASELIST_ARCHIVE,
+                    caselist=caselist,
+                    first_seen_snapshot=archive_date,
+                    last_seen_snapshot=archive_date,
+                ),
+            )
+
+        run = await self._pipeline.run(
+            entries,
+            extract=lambda path: parse_disclosure_path(path, event=event),
+            write=write,
+            baseline=baseline,
+            disclosure_scope=caselist,
+            dry_run=dry_run,
+        )
+        report = ImportReport(
+            caselist=caselist,
+            snapshot=archive_date,
+            event=event,
+            archive_sha256=archive_sha256,
+            applied=not dry_run,
+            entries=run.entries,
+            counts=run.counts,
+            skipped=run.skipped,
+            distinct_digests=run.distinct_digests,
+            newly_stored_blobs=run.newly_stored_blobs,
+            previous_snapshot=previous.snapshot if previous is not None else None,
+            suppression=run.suppression,
+            full_archive=True,
+            withdrawals=count_withdrawals(
+                earlier,
+                (
+                    (entry.sha256, entry.path)
+                    for entry in run.entries
+                    if entry.sha256 is not None and entry.classification is not Classification.REMOVED
+                ),
+            ),
+        )
+        _log_counts(report)
+        return report
+
     # ------------------------------------------------------------------------------------
     # The baseline
     # ------------------------------------------------------------------------------------
@@ -333,6 +467,9 @@ class CaselistImportService:
         self, caselist: CaselistSlug, snapshot: SnapshotDate, *, allow_out_of_order: bool
     ) -> SnapshotDate | None:
         """The latest archive *strictly before* this one, refusing an out-of-order import.
+
+        Of the weekly series only, by construction: :meth:`import_full_archive` writes no snapshot
+        record, so a complete archive is never a row this reads (`v1-e34-t04` ac0).
 
         Strictly before is the whole of ac3's idempotence: re-importing an archive compares it
         against the same earlier week it was compared against the first time, so it classifies
@@ -453,6 +590,9 @@ def _log_counts(report: ImportReport) -> None:
             "distinct_digests": report.distinct_digests,
             "newly_stored_blobs": report.newly_stored_blobs,
             "first_seen": report.first_seen,
+            "full_archive": report.full_archive,
+            "withdrawn": report.withdrawals.withdrawn if report.withdrawals is not None else None,
+            "superseded": report.withdrawals.superseded if report.withdrawals is not None else None,
             "counts": {str(name): count for name, count in report.counts.items()},
             "skipped": {str(reason): count for reason, count in report.skipped.items()},
             "warnings": report.warning_count,

@@ -49,8 +49,36 @@ spec:
     - id: ac3
       description: >-
         docs/runbooks/caselist-removal.md says what to do when the report shows residue.
+    - id: ac4
+      description: >-
+        Added by the PM, 2026-10-10, from v1-e31-t06's revision (Follow-up work 9). The
+        opening paragraph of `debate_core/application/caselist/import_service.py`'s module
+        docstring says OpenCaselist "republishes everything every week" and that each weekly
+        archive contains almost all of the one before. That is wrong, and it misled a PM
+        review: a weekly archive is a window of about a week's editing (the backfill report,
+        "Weekly archives are adjacent windows, not cumulative copies", and the same
+        docstring's own "First seen" section). The complete archive (`v1-e34-t04`) is the
+        cumulative copy. The paragraph is rewritten to say so, consistent with the rest of
+        the docstring, with no change to code.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-10, from v1-e34-t13's Follow-up work.
+        `UnreadableAppendOnlyRecord` (`application/ports/suppression.py`) carries the local
+        copy's absolute path, and `caselist import`'s error shows it. Name the copy by its
+        role, the local suppression list under `storage.data_dir`, never by path. A test
+        with a probe data directory shows the path gone from the message and the JSON
+        envelope, failing first. The exit code is unchanged.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-11, from v1-e30-t11's Follow-up work 5. For a `--source`
+        removal the planner counts every holding team, including the one being removed, and
+        the plan text says the file is "also held by N other team(s)". So a file one team
+        holds reads "1 other team(s)". The count and wording name only teams other than the
+        one removed, and a file no other team holds says nothing about other teams. Shown
+        failing first, for a one-holder file and a two-holder file, in the plan text and the
+        JSON. The JSON keys v1-e30-t11 settled are unchanged.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

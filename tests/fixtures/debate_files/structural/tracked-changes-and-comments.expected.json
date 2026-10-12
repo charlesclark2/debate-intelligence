@@ -4,7 +4,7 @@
   "corpus": "team",
   "summary": "A card edited with track changes on, in a package that also carries comments and `docProps` authorship. The insertion is in the card and the deletion is not — a card is what the file would read as, not what it used to read as — and nothing from the comment or the authorship parts reaches the output, because neither part is opened.",
   "profile_version": "2026.09.20-verbatim-1",
-  "parser_version": "2026.09.20-docx-1",
+  "parser_version": "2026.10.10-docx-2",
   "warnings_contain": [
     "tracked deletion"
   ],

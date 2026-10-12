@@ -10,9 +10,10 @@ root:
   filesystem store meets a real `PermissionError` and has to say `StoreAccessDenied` itself.
 
 A family whose commands cannot meet one of the two has no test for it: `caselist import` never
-reads the bucket, and the blob directory that `store`, `caselist publish` and `caselist remove`
-read goes through stores this task leaves alone (the session report's Deviations). `caselist pull`
-is in `tests/smoke/test_caselist_pull.py`, beside the site it needs; `verify` is in
+reads the bucket. `v1-e01-t20` left the directories that `store`, `caselist publish`,
+`caselist status` and `caselist remove` read to stores it did not translate; `v1-e34-t13` translated
+them, and each of those families has its refused-directory test here now. `caselist pull` is in
+`tests/smoke/test_caselist_pull.py`, beside the site it needs; `verify` is in
 `test_verify_command.py`.
 
 Nothing reaches AWS: moto answers botocore in-process, or nothing answers at all, and sockets are
@@ -41,6 +42,13 @@ from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist.publish_plan import PublishPlan
+from debate_core.application.caselist.publish_service import (
+    CaselistPublishService,
+    ManifestOutcome,
+    PublishReport,
+    SnapshotOutcome,
+)
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.ports.evidence_store import ObjectInfo
 from debate_core.integrations.local import BLOB_DIRECTORY
@@ -167,6 +175,19 @@ def assert_expired_session(exit_code: int, envelope: dict[str, Any]) -> None:
     assert envelope["error"]["hint"] == EXPIRED_HINT
 
 
+def assert_refused_directory(
+    exit_code: int, envelope: dict[str, Any], *, role: str, installation: Path
+) -> None:
+    """3, as a store that refused, naming the directory's role and the setting, never a path or a
+    login (`v1-e34-t13`)."""
+    assert exit_code == ExitCode.RETRIEVAL_FAILURE, envelope
+    assert envelope["error"]["code"] == "STORE_ACCESS_DENIED"
+    assert envelope["error"]["details"]["resource"] == role
+    assert "storage.data_dir" in envelope["error"]["hint"]
+    assert "aws sso login" not in json.dumps(envelope)
+    assert str(installation) not in json.dumps(envelope)
+
+
 # ------------------------------------------------------------------------------------------------
 # store sync | ls | get
 # ------------------------------------------------------------------------------------------------
@@ -214,6 +235,21 @@ class TestStoreFamily:
         assert envelope["error"]["details"]["mismatched"] == [f"{BLOB_PREFIX}/{blob_key}"]
         assert [failed["code"] for failed in envelope["error"]["details"]["failed"]] == ["STORE_UNAVAILABLE"]
 
+    @needs_permissions
+    def test_a_refused_object_directory_exits_three_instead_of_planning_nothing(
+        self, installation: Path, bucket: S3Client
+    ) -> None:
+        """`store sync` lists this machine's objects first. Unreadable, the listing used to be
+        empty and the plan a clean "nothing to push": exit 0, with a manifest waiting."""
+        write_local_object(installation, "manifests/testcl26/2026-09-01.jsonl", b"week one\n")
+
+        with refused(installation / "objects"):
+            exit_code, envelope = run("store", "sync")
+
+        assert_refused_directory(
+            exit_code, envelope, role="the evidence object directory", installation=installation
+        )
+
 
 # ------------------------------------------------------------------------------------------------
 # caselist import | import-openev
@@ -235,6 +271,25 @@ class TestImportFamily:
         assert envelope["error"]["code"] == "STORE_ACCESS_DENIED"
         assert envelope["error"]["details"]["resource"] == "the blob directory"
         assert str(installation) not in json.dumps(envelope)
+
+    @needs_permissions
+    def test_an_unreadable_suppression_directory_exits_three_naming_its_role(
+        self, installation: Path, tmp_path: Path
+    ) -> None:
+        """`caselist import` reads this machine's suppression list before it stores anything. A
+        list it may not read is not an empty one, and it used to end the import as exit 70, "a
+        bug", with the file's path in the message (`v1-e34-t13`)."""
+        suppression = installation / "suppression"
+        suppression.mkdir(parents=True)
+        (suppression / "suppression-list.jsonl").write_bytes(b"")
+
+        with refused(suppression):
+            exit_code, envelope = import_the_first_week(tmp_path)
+
+        assert_refused_directory(
+            exit_code, envelope, role="the suppression directory", installation=installation
+        )
+        assert not (installation / BLOB_DIRECTORY).exists(), "nothing was stored"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -271,7 +326,91 @@ class TestPublishFamily:
         assert exit_code == ExitCode.RETRIEVAL_FAILURE, envelope
         assert envelope["error"]["code"] == "PUBLISH_INCOMPLETE"
         assert envelope["error"]["details"]["failed_sha256"] == []
-        assert {entry["manifest"] for entry in envelope["error"]["details"]["snapshots"]} == {"failed"}
+        snapshots = envelope["error"]["details"]["snapshots"]
+        assert {entry["manifest"] for entry in snapshots} == {"failed"}
+        # The code is a field of its own (v1-e34-t13), and the sentence is only a sentence.
+        assert {entry["manifest_error_code"] for entry in snapshots} == {"STORE_UNAVAILABLE"}
+        assert all(not entry["manifest_error"].startswith("STORE_UNAVAILABLE") for entry in snapshots)
+        assert all("simulated 503 SlowDown" in entry["manifest_error"] for entry in snapshots)
+
+    @pytest.mark.parametrize(
+        ("sentence", "code", "expected"),
+        [
+            pytest.param(
+                "STORE_UNAVAILABLE: a sentence that begins like a retryable code",
+                "BLOB_INTEGRITY_ERROR",
+                ExitCode.DOMAIN_FAILURE,
+                id="the sentence looks retryable and the code is not",
+            ),
+            pytest.param(
+                "the bucket did not take the manifest",
+                "STORE_UNAVAILABLE",
+                ExitCode.RETRIEVAL_FAILURE,
+                id="the code is retryable and the sentence says nothing of it",
+            ),
+        ],
+    )
+    def test_a_failed_manifests_code_is_read_from_its_field_never_from_its_sentence(
+        self,
+        tmp_path: Path,
+        bucket: S3Client,
+        monkeypatch: pytest.MonkeyPatch,
+        sentence: str,
+        code: str,
+        expected: ExitCode,
+    ) -> None:
+        """`v1-e01-t20` read the code off the front of `manifest_error`. Here the publish result
+        says one thing in its field and another in its sentence, and the field decides."""
+        assert import_the_first_week(tmp_path)[0] == ExitCode.OK
+
+        async def execute(self: CaselistPublishService, plan: PublishPlan) -> PublishReport:
+            [snapshot] = plan.snapshots
+            outcome = SnapshotOutcome(
+                caselist=snapshot.caselist,
+                snapshot=snapshot.snapshot,
+                manifest_key=snapshot.manifest_key,
+                sources=(),
+                manifest=ManifestOutcome.FAILED,
+                manifest_error=sentence,
+                manifest_error_code=code,
+            )
+            return PublishReport(plan=plan, applied=True, snapshots=(outcome,))
+
+        monkeypatch.setattr(CaselistPublishService, "execute", execute)
+
+        exit_code, envelope = run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)
+
+        assert exit_code == expected, envelope
+        [entry] = envelope["error"]["details"]["snapshots"]
+        assert (entry["manifest_error"], entry["manifest_error_code"]) == (sentence, code)
+
+    @needs_permissions
+    def test_publish_with_a_refused_blob_directory_exits_three_naming_its_role(
+        self, installation: Path, tmp_path: Path, bucket: S3Client
+    ) -> None:
+        """It used to plan every source as missing from this machine: `PUBLISH_BLOCKED`, exit 1."""
+        assert import_the_first_week(tmp_path)[0] == ExitCode.OK
+
+        with refused(installation / "blobs"):
+            exit_code, envelope = run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)
+
+        assert_refused_directory(exit_code, envelope, role="the blob directory", installation=installation)
+        assert not bucket.list_objects_v2(Bucket=BUCKET).get("Contents"), "nothing was published"
+
+    @needs_permissions
+    def test_status_with_a_refused_manifest_directory_exits_three_naming_its_role(
+        self, installation: Path, tmp_path: Path, bucket: S3Client
+    ) -> None:
+        """It used to find no manifest on this machine and report whatever the bucket held as drift."""
+        assert import_the_first_week(tmp_path)[0] == ExitCode.OK
+        assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)[0] == ExitCode.OK
+
+        with refused(installation / "objects" / "manifests"):
+            exit_code, envelope = run("caselist", "status", "--caselist", SYNTHETIC_CASELIST)
+
+        assert_refused_directory(
+            exit_code, envelope, role="the manifest directory", installation=installation
+        )
 
     def test_status_with_an_expired_session_exits_three(self, monkeypatch: pytest.MonkeyPatch) -> None:
         expire_the_session(monkeypatch)
@@ -324,4 +463,28 @@ class TestRemovalFamily:
 
         assert_expired_session(
             *run("caselist", "unsuppress", "--sha256", "0" * 64, "--reason", "REMOVED_IN_ERROR")
+        )
+
+    @needs_permissions
+    def test_planning_a_removal_with_a_refused_manifest_directory_exits_three_naming_its_role(
+        self, installation: Path, tmp_path: Path, bucket: S3Client
+    ) -> None:
+        """The plan reads this machine's manifests to find the file. Unreadable, it used to find
+        none here and plan a removal that left this machine's copy in place."""
+        assert import_the_first_week(tmp_path)[0] == ExitCode.OK
+
+        with refused(installation / "objects" / "manifests"):
+            exit_code, envelope = run(
+                "caselist",
+                "remove",
+                "--source",
+                "0" * 64,
+                "--request",
+                "RM-2026-01",
+                "--reason",
+                "REQUESTED_BY_TEAM",
+            )  # fmt: skip
+
+        assert_refused_directory(
+            exit_code, envelope, role="the manifest directory", installation=installation
         )

@@ -26,6 +26,7 @@ from debate_core.application.caselist.suppression import (
 )
 from debate_core.application.ports.suppression import (
     AppendOnlyRecord,
+    AppendOnlyViolation,
     ReasonCode,
     RemovalLog,
     RemovalLogEntry,
@@ -42,6 +43,7 @@ from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.suppression_list import (
     SUPPRESSION_FILE_MODE,
     LocalAppendOnlyFile,
+    local_removal_log_file,
     local_suppression_list_file,
 )
 from debate_core.integrations.s3 import S3EvidenceObjectStore
@@ -267,6 +269,43 @@ class TestTheLocalCopyIsOnlyEverAppendedTo:
         with pytest.raises(UnreadableAppendOnlyRecord, match="line 2") as refused:
             await RecordedSuppressionList(record).entries()
         assert "Maple Grove" not in str(refused.value)
+
+
+class TestTheLocalCopiesAreNamedByRoleNeverByPath:
+    """`v1-e30-t10`: a data directory is under the operator's home, and an error is copied into logs."""
+
+    PROBE = "Zqxprobe"
+
+    def test_each_local_copy_says_what_it_is_and_not_where(self, tmp_path: Path) -> None:
+        data_dir = tmp_path / f"home-of-{self.PROBE}" / "data"
+
+        assert local_suppression_list_file(data_dir).location == (
+            "the local suppression list under storage.data_dir"
+        )
+        assert local_removal_log_file(data_dir).location == "the local removal log under storage.data_dir"
+
+    async def test_a_torn_local_list_is_refused_without_its_path(self, tmp_path: Path) -> None:
+        record = local_suppression_list_file(tmp_path / f"home-of-{self.PROBE}" / "data")
+        record.path.parent.mkdir(parents=True)
+        record.path.write_text(suppress(FILE_A).to_line() + "\n" + '{"action":"SUPP', encoding="utf-8")
+
+        with pytest.raises(UnreadableAppendOnlyRecord) as refused:
+            await record.read_lines()
+
+        assert self.PROBE not in str(refused.value) and self.PROBE not in refused.value.location
+        assert str(refused.value) == (
+            "the local suppression list under storage.data_dir line 2 is not readable: "
+            "the last line has no newline (a write was interrupted); nothing was changed"
+        )
+
+    async def test_a_refused_append_to_the_local_log_names_it_without_its_path(self, tmp_path: Path) -> None:
+        record = local_removal_log_file(tmp_path / f"home-of-{self.PROBE}" / "data")
+
+        with pytest.raises(AppendOnlyViolation) as refused:
+            await record.append_lines(["one line\nand another"])
+
+        assert self.PROBE not in str(refused.value)
+        assert str(refused.value).startswith("refusing to write the local removal log under storage.data_dir")
 
 
 # ------------------------------------------------------------------------------------------------

@@ -99,15 +99,19 @@ class ClusterMembership(StrEnum):
     """How a card came to be in the cluster its occurrence names."""
 
     NEAR_DUPLICATE = "NEAR_DUPLICATE"
-    """A full card, placed by MinHash candidates confirmed by Jaccard or containment."""
+    """A full card, placed by MinHash candidates confirmed by Jaccard or containment, or, for a
+    short body, as a cut of the one card that contains it (`v1-e31-t08`)."""
 
     ABBREVIATED_LINK = "ABBREVIATED_LINK"
-    """An ABBREVIATED or CITE_ONLY card linked to exactly one full card's cluster by short cite plus
-    first and last words."""
+    """An ABBREVIATED or CITE_ONLY card placed by its link key, short cite plus first and last
+    words, rather than by its text. Linked to one full card's cluster; or, when no full card
+    matches it, grouped with other abbreviated cards of the same card, in a cluster whose id is the
+    smallest exact fingerprint among them (`v1-e31-t08`)."""
 
     UNLINKED = "UNLINKED"
-    """An ABBREVIATED or CITE_ONLY card that matched no full card, or more than one. Its cluster is
-    its own exact fingerprint: a link is never guessed."""
+    """An ABBREVIATED or CITE_ONLY card that matched no full card and no other abbreviated card, or
+    matched two different cards. Its cluster is its own exact fingerprint: a link is never
+    guessed."""
 
 
 class CardFingerprint(DomainModel):
@@ -117,7 +121,10 @@ class CardFingerprint(DomainModel):
         description="SHA-256 of the normalized body (or cite line, for a CITE_ONLY card)."
     )
     fingerprint_version: NonEmptyText = Field(
-        description="Version of the normalization rules the digest was computed under."
+        description=(
+            "Version of the matching rules the digest was computed under. The normalization, and so "
+            "the digest, is the same in card-fingerprint-v1 and card-fingerprint-v2."
+        )
     )
     basis: FingerprintBasis = Field(description="Whether the digest covers the body or the cite line.")
 
@@ -135,10 +142,15 @@ class CardOccurrence(DomainModel):
     """
 
     cluster_id: Sha256Hex = Field(
-        description="The smallest exact fingerprint among the cluster's full cards; stable across runs."
+        description=(
+            "The smallest exact fingerprint among the cluster's full cards, or among its abbreviated "
+            "cards when it has no full card; stable across runs, not across fingerprint versions."
+        )
     )
     exact_fingerprint: Sha256Hex = Field(description="This card's own exact fingerprint.")
-    fingerprint_version: NonEmptyText = Field(description="Version of the fingerprint normalization.")
+    fingerprint_version: NonEmptyText = Field(
+        description="Version of the matching rules the fingerprint and the cluster id were computed under."
+    )
     completeness: CardCompleteness = Field(description="FULL, ABBREVIATED or CITE_ONLY, as parsed.")
     membership: ClusterMembership = Field(description="How the card joined its cluster.")
     caselist: CaselistSlug | None = Field(default=None, description="Caselist; None for a camp file.")

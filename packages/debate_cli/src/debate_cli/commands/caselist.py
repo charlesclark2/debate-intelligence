@@ -105,7 +105,9 @@ with the failed sha256 values in the message and every count in `error.details` 
 refused to start; `3` when the store did not answer: an expired SSO session or a refused request,
 which end the run at once, before any further manifest, or an applied run whose every failure was
 the store being unavailable (`v1-e01-t20`). An expired session is reported with the
-`aws sso login --profile …` line the adapter built.
+`aws sso login --profile …` line the adapter built, and a refused request with the adapter's hint
+that the profile lacks a grant. A profile the AWS config does not define is neither: it exits `1`
+as `STORE_PROFILE_NOT_CONFIGURED`, naming the setting to correct (`v1-e29-t07`).
 
 ## `caselist status`
 
@@ -114,6 +116,16 @@ Compares this machine's snapshots with the bucket's
 nothing. `0` only when every snapshot agrees; `1` on any drift, with the per-snapshot report in
 `error.details`; `3` when the bucket could not be read. With no `--caselist` it compares every
 caselist either side holds a manifest for.
+
+It also reports what a removal left in the bucket (`v1-e30-t10`): per caselist, the current objects,
+noncurrent versions and delete markers still held under `raw/` and `parsed/` of files the
+suppression list says were removed, later uploads taken down with them included. It lists object
+versions with the everyday profile and nothing else: no delete, no download, and never the takedown
+profile. Anything found is `1`, as `REMOVAL_RESIDUE` when every snapshot agrees, and the runbook says
+what to run (`docs/runbooks/caselist-removal.md`). A file is named by the first twelve characters of
+its sha256 and by counts, in the text and in `removal_residue` of the JSON alike. Where the profile
+may not list versions the caselist is reported as *not checked*, with `null` counts: that is not a
+finding of none, and it does not change the exit code.
 """
 
 from __future__ import annotations
@@ -142,13 +154,15 @@ from debate_core.application.caselist.openev_import_service import OpenEvImportR
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimport
 from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
-from debate_core.application.caselist.publish_service import (
-    ManifestOutcome,
-    PublishReport,
-    SnapshotOutcome,
-    SourceResult,
+from debate_core.application.caselist.publish_service import PublishReport, SourceResult
+from debate_core.application.caselist.removal_residue import CaselistResidue
+from debate_core.application.caselist.status_service import (
+    CASELIST_DRIFT,
+    REMOVAL_RESIDUE,
+    CaselistStatusReport,
+    SnapshotStatus,
 )
-from debate_core.application.caselist.status_service import CaselistStatusReport, SnapshotStatus
+from debate_core.application.caselist_sync import full_archive_of_inbox_name
 from debate_core.application.settings import ConfigurationError, Environment, Settings
 from debate_core.domain.caselist import Event
 
@@ -231,6 +245,8 @@ def import_archive(
     """Import one weekly caselist archive, deduplicated against the ones already imported."""
     cli = cli_context(ctx)
     cli.services.settings  # noqa: B018 - loaded first, so a broken profile is reported before a bad flag
+    if full_archive_of_inbox_name(source.name) is not None:
+        raise CompleteArchiveNotImportedByHand(source.name)
     published = _snapshot_date(snapshot)
     resolved_event = event or event_for_caselist(caselist)
     if resolved_event is None:
@@ -457,7 +473,7 @@ def status(
         validate_publish_target(caselist, snapshot)
     _refuse(cli, ctx, _no_bucket(settings, writing=False))
 
-    report = _run(cli.services.caselist_status().status(caselist, snapshot))
+    report = _run(cli.services.caselist_status().status(caselist, snapshot, residue=True))
     payload = status_summary(report, settings)
     display = _status_table(report, settings)
     if report.in_sync:
@@ -465,21 +481,43 @@ def status(
         return
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
+    cli.output.failure(_status_failure(report, payload), command=command_name(ctx))
+    raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)
+
+
+def _status_failure(report: CaselistStatusReport, payload: dict[str, JsonValue]) -> CommandFailure:
+    """What a status that is not clean reports: the snapshots that differ, or what a removal left.
+
+    Snapshots that differ are `CASELIST_DRIFT`, with any residue in the details beside them. When
+    every snapshot agrees and a version listing still shows a removed file, the code is
+    `REMOVAL_RESIDUE` and the message says what is left, by digest prefix and count.
+    """
     drifted = report.drifted
-    cli.output.failure(
-        CommandFailure(
-            code="CASELIST_DRIFT",
+    if report.residue_found and not drifted:
+        files = sum(len(one.files) for one in report.residue)
+        return CommandFailure(
+            code=REMOVAL_RESIDUE,
             message=(
-                f"{len(drifted)} snapshot(s) differ between this machine and the bucket: "
-                + ", ".join(f"{entry.caselist} {entry.snapshot}" for entry in drifted)
+                f"the bucket still holds versions of {files} removed file(s): "
+                + "; ".join(_residue_found(one) for one in report.residue if one.found)
             ),
             exit_code=ExitCode.DOMAIN_FAILURE,
             details=payload,
-            hint="`caselist publish` completes what is missing here; a checksum mismatch needs a person.",
+            hint=(
+                "A removal left them. Run that removal again, dry run first, then --execute: "
+                'docs/runbooks/caselist-removal.md, "When caselist status reports removal residue".'
+            ),
+        )
+    return CommandFailure(
+        code=CASELIST_DRIFT,
+        message=(
+            f"{len(drifted)} snapshot(s) differ between this machine and the bucket: "
+            + ", ".join(f"{entry.caselist} {entry.snapshot}" for entry in drifted)
         ),
-        command=command_name(ctx),
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details=payload,
+        hint="`caselist publish` completes what is missing here; a checksum mismatch needs a person.",
     )
-    raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)
 
 
 class InvalidStatusRequest(ConfigurationError):
@@ -556,6 +594,10 @@ def publish_summary(report: PublishReport, settings: Settings) -> dict[str, Json
     anything was uploaded; per snapshot, a dry run carries its `planned` action counts and an
     applied run its `results`; `failed_sha256` is the list a retry would be about. Digests and keys
     only: nothing from inside a manifest.
+
+    `manifest_error` is the sentence for a person; `manifest_error_code` is the code of a manifest
+    that failed on its own (`v1-e34-t13`). Until then the code was written at the front of the
+    sentence, `"STORE_UNAVAILABLE: …"`, and read back out of it.
     """
     outcomes = report.snapshots if report.applied else (None,) * len(report.plan.snapshots)
     snapshots: list[JsonValue] = []
@@ -575,6 +617,7 @@ def publish_summary(report: PublishReport, settings: Settings) -> dict[str, Json
                 for failure in outcome.failed
             ]
             entry["manifest_error"] = outcome.manifest_error
+            entry["manifest_error_code"] = outcome.manifest_error_code
         snapshots.append(entry)
     return {
         "environment": settings.environment.value,
@@ -590,13 +633,71 @@ def publish_summary(report: PublishReport, settings: Settings) -> dict[str, Json
 
 
 def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str, JsonValue]:
-    """The `--json` envelope's `data` for `caselist status`: one object per snapshot."""
+    """The `--json` envelope's `data` for `caselist status`: one object per snapshot.
+
+    `removal_residue` is one object per caselist compared (`v1-e30-t10`): what a version listing
+    shows of its removed files, by digest prefix and count, or `checked: false` with `null` counts
+    where the listing was refused. No whole digest and nothing from a manifest row.
+    """
     return {
         "environment": settings.environment.value,
         "bucket": settings.storage.s3.bucket,
         "in_sync": report.in_sync,
         "snapshots": [_status_entry(entry) for entry in report.snapshots],
+        "removal_residue": [_residue_entry(one) for one in report.residue],
     }
+
+
+def _residue_entry(residue: CaselistResidue) -> dict[str, JsonValue]:
+    """One caselist's residue. Unchecked, every count is `null`: a zero would say nothing is left."""
+    files: list[JsonValue] = [
+        {
+            "sha256_prefix": one.sha256_prefix,
+            "current_objects": one.current_objects,
+            "noncurrent_versions": one.noncurrent_versions,
+            "delete_markers": one.delete_markers,
+        }
+        for one in residue.files
+    ]
+    return {
+        "caselist": residue.caselist,
+        "checked": residue.checked,
+        "not_checked_reason": residue.not_checked_reason,
+        "current_objects": residue.current_objects,
+        "noncurrent_versions": residue.noncurrent_versions,
+        "delete_markers": residue.delete_markers,
+        "files": files if residue.checked else None,
+    }
+
+
+def _residue_found(residue: CaselistResidue) -> str:
+    """`<caselist>: counts of N file(s) (sha256 <prefix>, …)`, for a caselist with something left."""
+    named = ", ".join(f"sha256 {one.sha256_prefix}" for one in residue.files)
+    return (
+        f"{residue.caselist}: {residue.current_objects} current object(s), "
+        f"{residue.noncurrent_versions} noncurrent version(s) and {residue.delete_markers} delete marker(s) "
+        f"of {len(residue.files)} file(s) ({named})"
+    )
+
+
+def _residue_lines(report: CaselistStatusReport) -> list[str]:
+    """What the status table says under it about removal residue: found, not checked, or none."""
+    lines = [f"REMOVAL RESIDUE in {_residue_found(one)}." for one in report.residue if one.found]
+    if lines:
+        lines.append("A removal left them; docs/runbooks/caselist-removal.md says what to run.")
+    unchecked = report.residue_not_checked
+    if unchecked:
+        lines.append(
+            f"Removal residue NOT CHECKED for {', '.join(unchecked)}: this profile may not list object "
+            "versions there. That is not a finding of none."
+        )
+    checked = [one for one in report.residue if one.checked]
+    if checked and not report.residue_found:
+        lines.append(
+            f"No version of a removed file is left under raw/ or parsed/ ({len(checked)} caselist(s) "
+            "checked; noncurrent manifest versions are not read)."
+        )
+    return lines
 
 
 def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
@@ -689,10 +790,13 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
         ),
         rows=rows,
         title=f"{settings.storage.s3.bucket} ({settings.environment.value}) against this machine",
-        caption=(
-            "Every snapshot agrees."
-            if not drifted
-            else f"{drifted} snapshot(s) differ; see --json for digests."
+        caption="\n".join(
+            [
+                "Every snapshot agrees."
+                if not drifted
+                else f"{drifted} snapshot(s) differ; see --json for digests.",
+                *_residue_lines(report),
+            ]
         ),
     )
 
@@ -702,7 +806,10 @@ def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> Co
 
     A plan that cannot be carried out (`PUBLISH_BLOCKED`) is `1`. An applied run that left a
     snapshot incomplete is `3` when every failure behind it is the store not answering, and `1` as
-    soon as one is not (:func:`_failure_codes`, `v1-e01-t20`).
+    soon as one is not (`v1-e01-t20`). The codes are the publish result's own
+    (:attr:`~debate_core.application.caselist.publish_service.PublishReport.failure_codes`): each
+    failed source's, and a failed manifest's from its structured `manifest_error_code`, never from
+    the text of its message (`v1-e34-t13`).
     """
     failed = report.failed_sha256
     if not report.applied:
@@ -725,28 +832,10 @@ def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> Co
     return CommandFailure(
         code="PUBLISH_INCOMPLETE",
         message=f"{len(incomplete)} snapshot(s) not complete in the bucket, manifest {withheld}{named}",
-        exit_code=exit_code_for_failure_codes(_failure_codes(incomplete)),
+        exit_code=exit_code_for_failure_codes(report.failure_codes),
         details=payload,
         hint="Re-run the same command: every confirmed source is skipped and the manifests follow.",
     )
-
-
-def _failure_codes(incomplete: list[SnapshotOutcome]) -> list[str | None]:
-    """The error code behind every failure that left these snapshots incomplete.
-
-    A withheld manifest is the consequence of its failed sources, whose codes are counted. A manifest
-    that failed on its own carries its code at the front of `manifest_error`, as
-    `"STORE_UNAVAILABLE: …"`. A snapshot that is incomplete for neither reason contributes `None`,
-    which is never a retryable code, so a case nobody anticipated is reported as `1`, not `3`.
-    """
-    codes: list[str | None] = []
-    for outcome in incomplete:
-        codes.extend(source.error_code for source in outcome.failed)
-        if outcome.manifest is ManifestOutcome.FAILED:
-            codes.append((outcome.manifest_error or "").partition(": ")[0] or None)
-        elif not outcome.failed:
-            codes.append(None)
-    return codes
 
 
 def _snapshot_date(value: str) -> date:
@@ -760,6 +849,24 @@ def _snapshot_date(value: str) -> date:
         return date.fromisoformat(value.strip())
     except ValueError as malformed:
         raise InvalidSnapshotDate(value) from malformed
+
+
+class CompleteArchiveNotImportedByHand(ConfigurationError):
+    """`caselist import` was given a complete archive (`<slug>-all-<date>.zip`, `v1-e34-t04`).
+
+    This command files into the weekly series, where a complete archive collides with the weekly of
+    its date and strands every older one (ADR-0017, revision of 2026-09-26). It is imported as its
+    own snapshot by `caselist pull --full-archive <slug>` instead. Recognised by its name, as the
+    site and the pull name it; a renamed copy is not recognised.
+    """
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            f"{name} is a complete archive, which `caselist import` would file into the weekly series; "
+            "import it with `caselist pull --full-archive <slug>`, which files it as its own snapshot",
+            field="source",
+            source="cli",
+        )
 
 
 class InvalidSnapshotDate(ConfigurationError):

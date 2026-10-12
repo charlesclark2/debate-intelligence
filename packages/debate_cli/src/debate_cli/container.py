@@ -17,7 +17,9 @@ and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` run
 (`v1-e03-t06-verify-command`); and :meth:`ServiceContainer.caselist_sync`, which
 `debate-research caselist pull` and the weekly launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
 :meth:`ServiceContainer.caselist_sync_monitor` and read back by
-:meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`). The import
+:meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`); and
+:meth:`ServiceContainer.caselist_parse` and :meth:`ServiceContainer.parsed_publisher`, which
+`debate-research caselist parse` runs (`v1-e31-t06-parse-pipeline`). The import
 commands also read archives and place manifests through it (:meth:`ServiceContainer.read_archive`,
 :meth:`ServiceContainer.archive_digest`, :meth:`ServiceContainer.evidence_object_path`), so no
 command imports an adapter (`v1-e01-t13-composition-root-cleanup`). The rest of V1's services and
@@ -69,7 +71,15 @@ through a factory the service calls itself — the `EvidenceRemoval` profile nam
 `DEBATE_REMOVAL_PROFILE` (:attr:`~debate_core.application.settings.Settings.removal_profile`). A dry
 run therefore never builds a takedown client, and an execution with the variable unset stops with
 :class:`~debate_core.application.caselist.removal_service.TakedownNotConfigured` before anything is
-read with it, let alone deleted.
+read with it, let alone deleted. So does one whose variable names a profile the AWS config does not
+define: the adapter raises :class:`~debate_core.application.errors.StoreProfileNotConfigured` naming
+the variable (`v1-e29-t07`), and the service reports it as its own preflight failure
+(`v1-e29-t08`).
+
+The takedown access also carries a
+:class:`~debate_core.application.ports.caller_identity.CallerIdentity`, built from the same
+profile, which the preflight asks first: a profile that is not signed in as this environment's
+takedown role is refused before it lists or writes (`v1-e29-t08`).
 
 ## Why the AWS adapters are imported inside the factory
 
@@ -94,16 +104,20 @@ integration's module name in a string, makes the check refuse rather than skip i
 from __future__ import annotations
 
 import functools
+import os
 import sys
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
+from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.caselist.evidence_listing import LocalEvidence, digests_in_earlier_manifests
 from debate_core.application.caselist.import_service import CaselistImportService, EarlierManifestDigests
 from debate_core.application.caselist.inbox_purge import CaselistInbox
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
+from debate_core.application.caselist.parse_workers import ProcessPoolParseRunner
+from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import RemovalPlanner
 from debate_core.application.caselist.removal_service import (
@@ -119,7 +133,9 @@ from debate_core.application.caselist.suppression import (
     RecordedSuppressionList,
 )
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
-from debate_core.application.caselist_sync import CaselistSyncService
+from debate_core.application.caselist_parse import CaselistParseService
+from debate_core.application.caselist_pull_parse import PullParseStage
+from debate_core.application.caselist_sync import CaselistSyncService, FullArchiveRotation
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
     SyncJournal,
@@ -150,6 +166,7 @@ from debate_core.integrations.local import (
     archive_reader,
 )
 from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
+from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.suppression_list import (
     local_removal_log_file,
@@ -170,6 +187,7 @@ __all__ = [
 
 SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_import",
+    "caselist_parse",
     "caselist_publish",
     "caselist_removal",
     "caselist_status",
@@ -244,6 +262,15 @@ class _PortIdGenerator:
 
 PARSED_DIRECTORY: Final = Path("parsed")
 """Where E31's parse pipeline keeps parsed cards in the data directory (`v1-e31-t06`)."""
+
+_EVERYDAY_PROFILE_SETTING: Final = "storage.s3.aws_profile"
+_REMOVAL_PROFILE_SETTING: Final = "DEBATE_REMOVAL_PROFILE"
+"""The two settings an AWS profile's name comes from, as an operator would look for them.
+
+Passed to the S3 adapters beside the profile itself, because a profile the AWS config does not
+define is reported by the setting to correct, never by the config's path, and only this module
+knows which setting a name came from (`v1-e29-t07`).
+"""
 
 
 class ServiceContainer:
@@ -323,6 +350,19 @@ class ServiceContainer:
             max_unpacked_bytes=caselist.max_unpacked_bytes,
         )
 
+    def read_full_archive(self, source: Path) -> Iterator[ArchiveEntry]:
+        """Read a complete archive (`<slug>-all-<date>.zip`) within its own, larger ceilings (`v1-e34-t04`).
+
+        `caselist.max_full_archive_bytes` and `caselist.max_full_archive_unpacked_bytes`; a weekly
+        is still read by :meth:`read_archive`, under the weekly ceilings.
+        """
+        caselist = self.settings.caselist
+        return archive_reader.read_archive(
+            source,
+            max_archive_bytes=caselist.max_full_archive_bytes,
+            max_unpacked_bytes=caselist.max_full_archive_unpacked_bytes,
+        )
+
     def caselist_inbox(self) -> CaselistInbox:
         """The directory `caselist pull` downloads into, as a removal purges it (`v1-e30-t09`).
 
@@ -337,6 +377,10 @@ class ServiceContainer:
             archives=archive_reader.ZipArchiveRewriter(
                 max_archive_bytes=caselist.max_archive_bytes,
                 max_unpacked_bytes=caselist.max_unpacked_bytes,
+            ),
+            full_archives=archive_reader.ZipArchiveRewriter(
+                max_archive_bytes=caselist.max_full_archive_bytes,
+                max_unpacked_bytes=caselist.max_full_archive_unpacked_bytes,
             ),
         )
 
@@ -363,6 +407,58 @@ class ServiceContainer:
             lambda: CaselistCardStatsService(
                 SqliteCaselistRepository(self.database), self.settings.fingerprints.thresholds()
             ),
+        )
+
+    def caselist_parse(self, *, with_bucket: bool) -> CaselistParseService:
+        """Build the incremental parse pipeline over this machine's store (`v1-e31-t06`).
+
+        `with_bucket` is whether this run publishes. A run that does reads the suppression list's
+        local and bucket copies as one, as every bucket-holding command does; a run that does not is
+        offline, like `caselist import`, and reads this machine's copy. The pool is sized by the
+        `parse` settings group, for a laptop that is doing other things.
+        """
+        name = "caselist_parse_publishing" if with_bucket else "caselist_parse"
+        return self.singleton(
+            name,
+            lambda: self._build_caselist_parse(
+                self.suppression_list() if with_bucket else self.local_suppression_list()
+            ),
+        )
+
+    def _build_caselist_parse(self, suppression: SuppressionList) -> CaselistParseService:
+        # Imported here, not at module scope: lxml is loaded only by a command that parses.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        settings = self.settings
+        parse = settings.parse
+        return CaselistParseService(
+            local=self._local_evidence(),
+            store=LocalParsedStore(settings.storage.data_dir),
+            parser=DebateDocxParser(),
+            runner=ProcessPoolParseRunner(
+                workers=parse.worker_count(os.cpu_count()),
+                timeout_seconds=parse.per_file_timeout_seconds,
+            ),
+            suppression=suppression,
+            place_cards=self.caselist_card_stats().place,
+            failure_rate_threshold=parse.failure_rate_threshold,
+            failure_rate_minimum_sources=parse.failure_rate_minimum_sources,
+        )
+
+    def parsed_publisher(self) -> ParsedStorePublisher:
+        """Build the copy of the parsed card store to this environment's bucket (`v1-e31-t06`).
+
+        Raises :class:`EvidenceStoreNotConfigured` when this environment names no bucket.
+        """
+        return self.singleton("parsed_publisher", self._build_parsed_publisher)
+
+    def _build_parsed_publisher(self) -> ParsedStorePublisher:
+        local = FsEvidenceObjectStore(self.settings.storage.data_dir, subdirectory=PARSED_DIRECTORY)
+        return ParsedStorePublisher(
+            local=local,
+            local_path_for=local.path_for,
+            remote=self._evidence_bucket(),
+            suppression=self.suppression_list(),
         )
 
     def verify_manifest(self) -> VerifyManifest:
@@ -479,13 +575,18 @@ class ServiceContainer:
 
         # One client for both keyspaces: one set of credentials, one connection pool, and one
         # profile name in any `aws sso login` hint the adapters raise.
-        client = build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile)
+        client = build_s3_client(
+            region=storage.s3.region,
+            profile=storage.s3.aws_profile,
+            profile_setting=_EVERYDAY_PROFILE_SETTING,
+        )
 
         def bucket_store() -> S3EvidenceObjectStore:
             return S3EvidenceObjectStore(
                 bucket=str(storage.s3.bucket),
                 client=client,
                 profile=storage.s3.aws_profile,
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
                 multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
             )
 
@@ -541,13 +642,33 @@ class ServiceContainer:
         )
 
     def caselist_status(self) -> CaselistStatusService:
-        """Build the comparison between this machine's caselist snapshots and the bucket's."""
-        return self.singleton(
-            "caselist_status",
-            lambda: CaselistStatusService(
-                local=self._local_evidence(),
-                remote=self._evidence_bucket(),
-                suppression=self.suppression_list(),
+        """Build the comparison between this machine's caselist snapshots and the bucket's.
+
+        It can also list object versions, for the removal-residue check `caselist status` asks for
+        (`v1-e30-t10`). That client is built with the everyday evidence profile, like the bucket's:
+        the takedown profile is never read here.
+        """
+        return self.singleton("caselist_status", self._build_caselist_status)
+
+    def _build_caselist_status(self) -> CaselistStatusService:
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.s3 import S3EvidenceVersionStore, build_s3_client
+
+        storage = self.settings.storage
+        bucket = self._evidence_bucket()
+        return CaselistStatusService(
+            local=self._local_evidence(),
+            remote=bucket,
+            suppression=self.suppression_list(),
+            versions=S3EvidenceVersionStore(
+                bucket=str(storage.s3.bucket),
+                profile=storage.s3.aws_profile,
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
+                client=build_s3_client(
+                    region=storage.s3.region,
+                    profile=storage.s3.aws_profile,
+                    profile_setting=_EVERYDAY_PROFILE_SETTING,
+                ),
             ),
         )
 
@@ -575,11 +696,17 @@ class ServiceContainer:
             local_blobs=FsEvidenceVersionStore(data_dir / BLOB_DIRECTORY.parent),
             local_parsed=FsEvidenceVersionStore(data_dir / PARSED_DIRECTORY),
             remote=bucket,
-            # The everyday profile, which may not list versions today: the plan then says so.
+            # The everyday profile, which may list versions under the removable prefixes
+            # (v1-e29-t06). Where that grant is not applied, the plan says they were not counted.
             remote_versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
-                client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
+                client=build_s3_client(
+                    region=storage.s3.region,
+                    profile=storage.s3.aws_profile,
+                    profile_setting=_EVERYDAY_PROFILE_SETTING,
+                ),
             ),
             inbox=self.caselist_inbox(),
             suppression=suppression,
@@ -612,7 +739,12 @@ class ServiceContainer:
         return self.singleton("takedown_access", self._build_takedown_access)
 
     def _build_takedown_access(self) -> TakedownAccess:
-        from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore, build_s3_client
+        from debate_core.integrations.s3 import (
+            S3EvidenceObjectStore,
+            S3EvidenceVersionStore,
+            StsCallerIdentity,
+            build_s3_client,
+        )
 
         settings = self.settings
         storage = settings.storage
@@ -621,14 +753,30 @@ class ServiceContainer:
             raise TakedownNotConfigured
         if not storage.s3.bucket:
             raise EvidenceStoreNotConfigured(settings.environment)
-        client = build_s3_client(region=storage.s3.region, profile=profile)
+        client = build_s3_client(
+            region=storage.s3.region, profile=profile, profile_setting=_REMOVAL_PROFILE_SETTING
+        )
         return TakedownAccess(
-            versions=S3EvidenceVersionStore(bucket=str(storage.s3.bucket), profile=profile, client=client),
+            versions=S3EvidenceVersionStore(
+                bucket=str(storage.s3.bucket),
+                profile=profile,
+                profile_setting=_REMOVAL_PROFILE_SETTING,
+                client=client,
+            ),
             objects=S3EvidenceObjectStore(
                 bucket=str(storage.s3.bucket),
                 client=client,
                 profile=profile,
+                profile_setting=_REMOVAL_PROFILE_SETTING,
                 multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
+            ),
+            # Asked first, before the profile lists or writes anything (v1-e29-t08): built from the
+            # same profile name as the client above, so it answers for the role that would delete.
+            caller=StsCallerIdentity(
+                bucket=str(storage.s3.bucket),
+                profile=profile,
+                profile_setting=_REMOVAL_PROFILE_SETTING,
+                region=storage.s3.region,
             ),
             profile=profile,
             bucket=str(storage.s3.bucket),
@@ -659,8 +807,13 @@ class ServiceContainer:
             raise EvidenceStoreNotConfigured(settings.environment)
         return S3EvidenceObjectStore(
             bucket=str(storage.s3.bucket),
-            client=build_s3_client(region=storage.s3.region, profile=storage.s3.aws_profile),
+            client=build_s3_client(
+                region=storage.s3.region,
+                profile=storage.s3.aws_profile,
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
+            ),
             profile=storage.s3.aws_profile,
+            profile_setting=_EVERYDAY_PROFILE_SETTING,
             multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
         )
 
@@ -674,8 +827,12 @@ class ServiceContainer:
         The publisher and the status check are `None` when this environment names no bucket, which
         is what `test` is and what a half-configured installation is. The run then records its
         publish stage as skipped, with the reason, instead of failing: the archives are already on
-        this machine and `caselist publish` completes them later. Parse (`v1-e31-t06`) and
-        landscape (`v1-e32-t05`) are `None` because neither service exists yet.
+        this machine and `caselist publish` completes them later.
+
+        The parse stage (`v1-e34-t17`) is the pipeline `caselist parse` runs, built over the pull's
+        own suppression list and, with a bucket, the parsed store's publisher. It is `None` when
+        `caselist.parse_imported_sources` is off, and the run then records the stage as skipped
+        with that setting's name. Landscape (`v1-e32-t05`) is `None` because it does not exist yet.
 
         Raises :class:`~debate_core.application.ports.caselist_source.CaselistApiDisabled` unless
         the operator has turned the API on, which is the data-use policy's E34 gate.
@@ -722,10 +879,26 @@ class ServiceContainer:
             suppression=suppression,
             publisher=publisher,
             status=status,
+            # The pipeline over the very list above, so that a read of it that fell back to this
+            # machine's copy is one the run sees, and the parsed store's publisher only where the
+            # run publishes at all.
+            parse=PullParseStage(
+                parse=self._build_caselist_parse(suppression),
+                publisher=self.parsed_publisher() if settings.storage.s3.bucket else None,
+            )
+            if caselist.parse_imported_sources
+            else None,
             openev_event=caselist.openev_event,
             openev_year=caselist.openev_year,
             bulk_downloads_per_day=caselist.bulk_downloads_per_day,
             clock=self.clock(),
+            # The complete-archive rotation (`v1-e34-t04`): on unless the profile turns it off.
+            full_archive_rotation=FullArchiveRotation(
+                interval=timedelta(days=caselist.full_archive_interval_days)
+            )
+            if caselist.full_archive_rotation
+            else None,
+            read_full_archive=self.read_full_archive,
         )
 
     def caselist_sync_monitor(self) -> SyncRunMonitor:
@@ -734,6 +907,11 @@ class ServiceContainer:
         The run log lives in this environment's data directory, and the record goes to its bucket
         when it names one. The caselist_token, when it is in the settings, is registered as a
         secret to scrub from every message, as a backstop to messages that never carry it.
+
+        The monitor is handed the command's own rule for which failures a retry may cure
+        (:func:`~debate_cli.exit_codes.codes_exit_as_a_retrieval_failure`), so that a failed run's
+        notification says "the next run retries it" exactly when the command exits `3`
+        (`v1-e34-t19`). `debate_core` never decides that for itself.
         """
         return self.singleton("caselist_sync_monitor", self._build_caselist_sync_monitor)
 
@@ -748,6 +926,7 @@ class ServiceContainer:
             aws_login_command=self._aws_login_command(),
             secrets=lambda: [token.get_secret_value()] if token is not None else [],
             clock=self.clock(),
+            may_succeed_on_retry=codes_exit_as_a_retrieval_failure,
         )
 
     def caselist_sync_history(self) -> SyncRunHistory:

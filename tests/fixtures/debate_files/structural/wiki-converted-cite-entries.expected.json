@@ -4,7 +4,7 @@
   "corpus": "caselist",
   "summary": "An opencaselist wiki-to-docx conversion: the Verbatim styles are all defined and not one paragraph references them, so every unit comes from a heuristic. A disclosure records a card's first and last words with an ellipsis between, which makes the card ABBREVIATED, and sometimes records no body at all, which makes it CITE_ONLY. Neither is padded out and neither is dropped.",
   "profile_version": "2026.09.20-verbatim-1",
-  "parser_version": "2026.09.20-docx-1",
+  "parser_version": "2026.10.10-docx-2",
   "warnings_contain": [],
   "paragraphs": [
     {

@@ -59,6 +59,8 @@ class ArchivesResource:
 
     async def download(self, archive: ArchiveListing, inbox: Path) -> DownloadedFile:
         name = safe_inbox_name(archive.name, source_name=archive.name)
+        # A complete archive has its own, larger ceiling; a weekly keeps the archive one (`v1-e34-t04`).
+        full = archive.kind is ArchiveKind.FULL
         downloaded = await self._transport.download(
             archive.url,
             operation=f"download {name}",
@@ -66,6 +68,7 @@ class ArchivesResource:
             inbox=inbox,
             inbox_name=name,
             expected_size=archive.size_bytes,
+            max_bytes=self._transport.full_archive_download_bytes if full else None,
         )
         logger.info(
             "OpenCaselist: %s %s, %d bytes, sha256 %s",

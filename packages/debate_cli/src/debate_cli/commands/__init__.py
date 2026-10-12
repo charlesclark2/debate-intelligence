@@ -43,6 +43,7 @@ from debate_cli.commands import (
     caselist,
     caselist_auth,
     caselist_cards,
+    caselist_parse,
     caselist_pull,
     caselist_remove,
     caselist_runs,
@@ -68,6 +69,7 @@ def register_commands(app: typer.Typer) -> None:
     disclosed_evidence.command("cards")(caselist_cards.cards)
     disclosed_evidence.command("import")(caselist.import_archive)
     disclosed_evidence.command("import-openev")(caselist.import_openev)
+    disclosed_evidence.command("parse")(caselist_parse.parse)
     disclosed_evidence.command("publish")(caselist.publish)
     disclosed_evidence.command("pull")(caselist_pull.pull)
     disclosed_evidence.command("reimport-openev-metadata")(caselist.reimport_openev_metadata)

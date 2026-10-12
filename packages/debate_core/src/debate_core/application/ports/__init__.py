@@ -18,6 +18,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `CaselistArchiveSource` | `caselist_source` | OpenCaselist archive and OpenEv listings and downloads (E34) |
 | `CaselistLoginSession` | `caselist_session` | The operator's OpenCaselist login and stored token (E34) |
 | `DebateFileParser` | `debate_files` | Reading a debate `.docx` into sections and cards (E31) |
+| `ParsedStore` | `parsed_store` | The parsed card store `caselist parse` writes (E31) |
 | `Notifier` | `notifier` | Telling the operator an unattended run needs attention (E34) |
 | `SearchProvider` | `providers` | One discovery source |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
@@ -63,6 +64,7 @@ from debate_core.application.ports.evidence_store import (
     validate_object_key,
 )
 from debate_core.application.ports.notifier import Notification, Notifier
+from debate_core.application.ports.parsed_store import ParsedStore
 from debate_core.application.ports.persistence import (
     DEFAULT_PAGE_SIZE,
     ArticleRepository,
@@ -128,6 +130,7 @@ __all__ = [
     "ObjectKey",
     "OpenEvFile",
     "Page",
+    "ParsedStore",
     "ProviderQuery",
     "ProviderResponse",
     "SearchProvider",

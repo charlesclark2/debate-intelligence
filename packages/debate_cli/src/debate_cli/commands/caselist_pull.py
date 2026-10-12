@@ -5,6 +5,7 @@ One command, three shapes::
     debate-research caselist pull --caselist hsld26 --caselist hspolicy26
     debate-research caselist pull --caselist hsld26 --dry-run     # list only, write nothing
     debate-research caselist pull --publish-pending               # after `aws sso login`
+    debate-research caselist pull --full-archive hsld26           # one complete archive, on demand
 
 Every decision in it belongs to
 :class:`~debate_core.application.caselist_sync.CaselistSyncService`, and which of the three a run
@@ -20,6 +21,16 @@ rendered for a person and for a program.
 is not given. There is no default list: which caselists this installation follows is the
 operator's decision, and a slug hardcoded in a committed file would make it ours.
 
+## The complete archive
+
+The weekly run refreshes at most one caselist's complete archive (`<slug>-all-<date>.zip`) on a
+rotation, after its weeklies and only from the bulk downloads they leave (`v1-e34-t04`; see
+:mod:`debate_core.application.caselist_sync`, "The complete archive"). `--full-archive <slug>`
+takes that one slot for the named caselist whatever the rotation says, still after the weeklies,
+and the run refuses — exit `1`, nothing fetched — when the day's allowance cannot cover it. With
+`--dry-run` it reports what would happen, refusal included, and fetches nothing. The caption says
+what the rotation decided, every run.
+
 ## The schedule is weekly
 
 `docs/policies/caselist-data-use.md` E34 gate 4 permits weekly cadence at most, agreed with the
@@ -31,16 +42,62 @@ step (`docs/runbooks/caselist-scheduled-sync.md`).
 
 From :mod:`debate_cli.exit_codes`. `0` when every stage that puts bytes somewhere durable
 finished — including a run that found nothing new, and a run whose publish is pending because the
-SSO session expired, because in both cases nothing was lost and the next run continues. `1` when
-a download, an import or a publish failed, or when a guard refused to start: an expired
-OpenCaselist token, an API this installation has not turned on, no caselist to pull, or another
-run already holding the lock. A parse or landscape stage that failed is reported in the table and
-does not change the exit code — the captured bytes are safe and the derivation can be recomputed.
+SSO session expired, because in both cases nothing was lost and the next run continues. A parse,
+landscape, report or retention stage that failed is reported in the table and does not change the
+exit code — the captured bytes are safe and the rest can be recomputed.
 
-A stage records its failure as a sentence, so a stage that failed because the bucket did not
-answer is a `1` like any other failed stage. A store failure that ends the run before a stage can
-record it — the bucket refusing the publish stage's listing, say — is a `3`, as in every other
-command (`v1-e01-t20`).
+## The parse stage
+
+Unless `caselist.parse_imported_sources` is off, the run parses the sources it imported, rebuilds
+the aggregates of the caselists they belong to, and publishes the parsed store where it publishes
+at all (`v1-e34-t17`). The summary's `parse` holds the stage's counts and nothing else, and the
+stage's row says the same in a sentence. A failed parse stage records the code of each failure
+(`PARSE_FAILURE_RATE_EXCEEDED`, `STORE_UNAVAILABLE`, …) and, by the rule above, leaves the exit code
+alone; `caselist parse --caselist <slug> --publish` is what finishes it.
+
+When a download, an import or a publish failed, the exit code comes from **what they failed on**
+(`v1-e34-t13`). Each failed stage records the error code of every failure behind it, and
+:func:`~debate_cli.exit_codes.exit_code_for_failure_codes` reads those of the stages that had to
+finish:
+
+* `3` when every one is a failure a retry may cure: the bucket or this machine's store did not
+  answer or refused (`STORE_UNAVAILABLE`, `STORE_ACCESS_DENIED`), or an OpenCaselist download got a
+  5xx, a timeout, or a rate limit that is not the daily cap (`PROVIDER_UNAVAILABLE`,
+  `PROVIDER_RATE_LIMITED`). Nothing captured is lost and the snapshots not yet published stay owed,
+  so the next run, or the same command, finishes the job.
+* `1` as soon as one is a verdict: an archive that cannot be read or is over the size ceiling, one
+  the file host no longer serves, an expired OpenCaselist token (never retried, by policy), the
+  site's daily download cap on a camp file, a checksum mismatch, a profile the AWS config does not
+  define (`STORE_PROFILE_NOT_CONFIGURED`, `v1-e29-t07`). So is any failure with a code nobody put on
+  the retryable list.
+
+`1` also when a guard refused to start: an expired OpenCaselist token, an API this installation has
+not turned on, no caselist to pull, another run already holding the lock, or a `--full-archive` the
+day's allowance cannot cover. A failure that ends the run before any stage records it exits as that
+exception does in every other command: `3` for a store or provider failure (`v1-e01-t20`), and `1`
+for a profile setting that names no profile in the AWS config, which stops the bucket's adapter
+being built and so ends the run before it starts (`v1-e29-t07`).
+
+The envelope's `error.code` for a failed stage is `CASELIST_PULL_INCOMPLETE` whichever it is; the
+exit status and each stage's `error_codes` say which.
+
+## The notification says the same thing
+
+A failed run notifies the operator that the next scheduled run should retry it, or that a person
+should look (`v1-e34-t19`). That is this command's exit status again, `3` or anything else, decided
+by the same function: the composition root hands the run monitor
+:func:`~debate_cli.exit_codes.codes_exit_as_a_retrieval_failure`. The notification also carries a
+failed stage's `hint`. A publish left `pending` by an expired session exits `0` as before; what it
+had found first is on its stage as `earlier_findings`, which this command's exit status never
+reads.
+
+## What an unreadable file on this machine does
+
+A manifest file the operating system will not open or let be written fails the stage that needed
+it, as `STORE_ACCESS_DENIED` with the data-directory `hint`, and exits `3`; at the selection, which
+has no stage to fail, the run stops on the same error and exits `3` (`v1-e34-t19`). A weekly or
+complete archive in the inbox that cannot be read fails its own import as `UNREADABLE_ARCHIVE`,
+exit `1`, and the run's other archives are imported. Neither is exit `70` any longer.
 """
 
 from __future__ import annotations
@@ -53,16 +110,17 @@ import typer
 
 from debate_cli.commands.caselist import event_for_caselist
 from debate_cli.context import cli_context, command_name
-from debate_cli.exit_codes import ExitCode
+from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist_sync import (
     RunSummary,
     StageOutcome,
+    StageRecord,
     SyncStage,
     run_pull,
 )
 from debate_core.application.settings import Settings
-from debate_core.application.sync_runs import SyncRunRecord
+from debate_core.application.sync_runs import SyncRunDetails, SyncRunRecord
 
 __all__ = ["pull", "pull_summary"]
 
@@ -87,12 +145,29 @@ def pull(
             help="Only complete the publishes an earlier run deferred, and exit.",
         ),
     ] = False,
+    full_archive: Annotated[
+        str | None,
+        typer.Option(
+            "--full-archive",
+            metavar="SLUG",
+            help=(
+                "Also fetch this caselist's complete archive (<slug>-all-<date>.zip) now, outside the "
+                "rotation, after the run's weeklies and from the same daily allowance; refused, "
+                "fetching nothing, when the allowance cannot cover it."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Download, import and publish this week's caselist archives and OpenEv files."""
     cli = cli_context(ctx)
     settings = cli.services.settings
     if publish_pending and dry_run:
         raise ConflictingPullMode
+    if publish_pending and full_archive is not None:
+        raise typer.BadParameter(
+            "--publish-pending fetches nothing, so it cannot fetch a complete archive; pass one or the other",
+            param_hint="--full-archive",
+        )
     slugs = [] if publish_pending else list(caselist) if caselist else list(settings.caselist.sync_caselists)
 
     pulled = _run(
@@ -103,18 +178,20 @@ def pull(
             publish_pending=publish_pending,
             monitor=cli.services.caselist_sync_monitor,
             progress=cli.output.detail,
+            full_archive=full_archive,
         )
     )
     summary = pulled.summary
-    payload = pull_summary(summary, settings, pulled.summary_path, pulled.record)
+    payload = pull_summary(summary, settings, pulled.summary_path, pulled.record, pulled.details)
     display = _pull_table(summary, settings, pulled.record)
     if summary.succeeded:
         cli.output.success(command_name(ctx), payload, display=display)
         return
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
-    cli.output.failure(_pull_failure(summary, payload), command=command_name(ctx))
-    raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)
+    failure = _pull_failure(summary, payload)
+    cli.output.failure(failure, command=command_name(ctx))
+    raise typer.Exit(code=failure.exit_code)
 
 
 class ConflictingPullMode(typer.BadParameter):
@@ -133,7 +210,11 @@ class ConflictingPullMode(typer.BadParameter):
 
 
 def pull_summary(
-    summary: RunSummary, settings: Settings, written_to: Any = None, record: SyncRunRecord | None = None
+    summary: RunSummary,
+    settings: Settings,
+    written_to: Any = None,
+    record: SyncRunRecord | None = None,
+    details: SyncRunDetails | None = None,
 ) -> dict[str, JsonValue]:
     """The `--json` envelope's `data`: the run summary, plus where it was written.
 
@@ -150,6 +231,9 @@ def pull_summary(
     body["summary_written_to"] = str(written_to) if written_to is not None else None
     # The run log's record of this run (v1-e34-t03), or `None` for a dry run, which records nothing.
     body["run_record"] = cast("JsonValue", record.model_dump(mode="json")) if record is not None else None
+    # What is kept beside the record, because the record's shape is frozen (v1-e34-t19): each
+    # failed stage's codes and hint, and the parse stage's counts. `None` for a dry run too.
+    body["run_details"] = cast("JsonValue", details.model_dump(mode="json")) if details is not None else None
     return body
 
 
@@ -176,7 +260,7 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
     """
     deferred = summary.archives_deferred
     backlog = _backlog_sentence(record)
-    inbox = _inbox_sentence(summary)
+    inbox = _full_archive_sentence(summary) + _inbox_sentence(summary)
     if summary.dry_run:
         wanted = sum(1 for one in summary.archives if one.wanted)
         camp = sum(1 for one in summary.openev if one.wanted)
@@ -213,6 +297,31 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
         f"{summary.objects_published} object(s) published{pending}.{waiting}{backlog}{inbox} "
         f"{summary.duration_seconds:.1f}s."
     )
+
+
+def _full_archive_sentence(summary: RunSummary) -> str:
+    """What the complete-archive rotation decided, as a leading-space sentence (`v1-e34-t04`).
+
+    The select row of the table carries the whole reason, each caselist's state included; this is
+    the headline, and the allowance the weeklies left, which a dry run before `--full-archive` is
+    run to read.
+    """
+    plan = summary.full_archive
+    if plan is None:
+        return ""
+    left = f"{plan.allowance_after_weeklies} bulk download(s) left after the weeklies"
+    withdrawn = "".join(
+        f" {one.caselist} {one.snapshot}: {one.withdrawn} withdrawn, {one.superseded} superseded."
+        for one in summary.full_archive_imports
+    )
+    verb = "would be fetched" if summary.dry_run else "fetched"
+    if plan.fetch is not None:
+        return f" Complete archive: {plan.fetch}'s {verb}; {left}.{withdrawn}"
+    if plan.first_in_turn is not None:
+        return f" Complete archive: none {verb}; {plan.first_in_turn} is first in turn but {left}.{withdrawn}"
+    if not plan.rotation and plan.requested is None:
+        return f" Complete archive: the rotation is off; {left}.{withdrawn}"
+    return f" Complete archive: none due; {left}.{withdrawn}"
 
 
 def _inbox_sentence(summary: RunSummary) -> str:
@@ -254,28 +363,49 @@ def _backlog_sentence(record: SyncRunRecord | None) -> str:
 
 
 def _pull_failure(summary: RunSummary, payload: dict[str, JsonValue]) -> CommandFailure:
-    """What an incomplete run exits `1` with: the stages that failed, and the whole summary."""
+    """What an incomplete run reports: the stages that failed, and the whole summary.
+
+    Its exit code is `3` when every failure behind a stage that had to finish is one a retry may
+    cure, and `1` as soon as one is not (:attr:`RunSummary.failure_codes`,
+    :func:`~debate_cli.exit_codes.exit_code_for_failure_codes`, `v1-e34-t13`).
+    """
     failed = [record for record in summary.stages if record.outcome is StageOutcome.FAILED]
     named = "; ".join(f"{record.stage}: {record.reason}" for record in failed)
+    exit_code = exit_code_for_failure_codes(summary.failure_codes)
     return CommandFailure(
         code="CASELIST_PULL_INCOMPLETE",
         message=f"{len(failed)} stage(s) of the caselist pull did not complete — {named}",
-        exit_code=ExitCode.DOMAIN_FAILURE,
+        exit_code=exit_code,
         details=payload,
-        hint=_hint_for(failed),
+        hint=_hint_for(failed, retryable=exit_code is ExitCode.RETRIEVAL_FAILURE),
     )
 
 
-def _hint_for(failed: list[Any]) -> str:
+def _hint_for(failed: list[StageRecord], *, retryable: bool) -> str:
+    """What to do about the failed stages: the fix a stage names, or else how to run it again.
+
+    A stage a store refused carries its own fix, a permission on this machine or a grant the AWS
+    profile lacks, and that comes first: running the command again before it is made changes
+    nothing.
+    """
+    fixes = list(dict.fromkeys(record.hint for record in failed if record.hint))
+    if fixes:
+        return " ".join(fixes) + " Then run the same command again: what was captured is kept."
     stages = {record.stage for record in failed}
+    again = (
+        "Transient: every failure here is one a later run may not meet, and the next scheduled run "
+        "retries it. "
+        if retryable
+        else ""
+    )
     if SyncStage.DOWNLOAD in stages:
         return (
-            "Nothing that did download was lost: it is in the inbox and imported. Run the same "
+            f"{again}Nothing that did download was lost: it is in the inbox and imported. Run the same "
             "command again — an archive already held is not fetched twice."
         )
     if SyncStage.PUBLISH in stages:
-        return "Re-run `caselist pull --publish-pending`: every confirmed source is skipped."
-    return "Run the same command again; every stage is idempotent."
+        return f"{again}Re-run `caselist pull --publish-pending`: every confirmed source is skipped."
+    return f"{again}Run the same command again; every stage is idempotent."
 
 
 def _run[T](awaitable: Coroutine[Any, Any, T]) -> T:

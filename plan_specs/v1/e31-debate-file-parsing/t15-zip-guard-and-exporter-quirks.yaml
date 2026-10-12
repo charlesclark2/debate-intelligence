@@ -1,0 +1,87 @@
+# TASK v1-e31-t15-zip-guard-and-exporter-quirks - The zip guard judges only the parts it reads, and exporter quirks are decided
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t15-zip-guard-and-exporter-quirks
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "The zip guard judges only the parts it reads, and exporter quirks are decided"
+spec:
+  # Filed by the PM, 2026-10-11, from v1-e31-t09's Follow-up work.
+  description: >-
+    Three refusals v1-e31-t09 left for a decision. (1) The compression-ratio guard refuses a
+    file for a part the parser never opens (one file today, openev's
+    `COMPRESSION_RATIO_EXCEEDED`). Judging the ratio only on parts the reader opens, with the
+    total uncompressed limit still over everything, would read it. (2) CardMirror writes
+    characters XML forbids (five files today, more each week if the exporter does not change).
+    Reading them means dropping a character from evidence text, which is a data-use and fidelity
+    question before it is a parser one: the PM decides it with Charlie, and this task implements
+    the decision. (3) A `.cmir` upload counts as failed; a `SourceFormat` of its own would count
+    it as unsupported. Out of scope: other refusals.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations.docx_parser, debate_core.domain, packages/debate_core/tests, tests/fixtures, docs/data]
+    forbidden:
+      - Weakening the total uncompressed-size limit or any XML protection v1-e31-t09 kept
+      - Altering evidence text without the decision recorded in the spec
+  context:
+    - kind: TaskRef
+      name: v1-e31-t09-first-corpus-parse-findings
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A synthetic zip with an over-ratio part the reader never opens parses, and one whose
+        over-ratio part is read is still refused, each shown failing first. The total limit
+        is unchanged, by test.
+    - id: ac2
+      description: >-
+        The CardMirror decision is recorded in this spec by the PM before the code changes,
+        and implemented with fixtures either way.
+    - id: ac3
+      description: >-
+        A `.cmir` source is counted as unsupported with its own format, by test.
+    - id: ac4
+      description: >-
+        Operator-run: the next parse's refusal counts, recorded in
+        docs/data/caselist-parse-report.md.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t15-zip-guard-and-exporter-quirks-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Scope the ratio guard to read parts, implement the CardMirror decision, and type .cmir.
+  goalRef:
+    name: v1-e31-t15-zip-guard-and-exporter-quirks
+  graph:
+    nodes:
+      - id: zip-guard
+        kind: Task
+        name: Refusals decided
+        description: >-
+          The ratio guard, the CardMirror decision and the .cmir format.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parser tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations]
+status:
+  phase: Pending

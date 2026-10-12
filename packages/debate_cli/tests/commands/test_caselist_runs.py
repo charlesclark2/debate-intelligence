@@ -64,6 +64,9 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         "DEBATE_CASELIST__API_BASE_URL": API,
         "DEBATE_CASELIST__MIN_REQUEST_INTERVAL_SECONDS": "0.5",
         "DEBATE_PROVIDERS__CASELIST_TOKEN": f"fixture-token-{secrets.token_hex(8)}",
+        # The parse stage is on, as it is for the agent (`v1-e34-t17`). One worker, so that a pull
+        # here starts one process and not the machine's cores less one.
+        "DEBATE_PARSE__WORKERS": "1",
     }.items():
         monkeypatch.setenv(name, value)
     yield data
@@ -170,6 +173,42 @@ def test_runs_last_5_shows_the_five_newest_with_every_column(installation: Path)
     assert "1 of 2" in table, "a deferred run shows downloaded against wanted"
 
 
+STORED_RUN_LOG = (
+    Path(__file__).resolve().parents[3]
+    / "debate_core/tests/application/caselist/stored_run_records/run_log_written_by_a_schema_3_build.jsonl"
+)
+"""One run-log line as a build before `v1-e34-t13` wrote it, kept as written: a pull against the
+synthetic caselist whose download of week three failed on a burst rate limit. The installed weekly
+agent runs such a build, in the data directory a newer build reads, until it is reinstalled."""
+
+
+def test_runs_still_reads_the_run_log_a_schema_3_build_wrote(installation: Path) -> None:
+    """`v1-e34-t13` moved the run *summary* to schema 4 and left the run log's record alone, so the
+    log the installed agent writes reads as it did. Every expected value is read off the stored
+    line by hand: 2 of 3 wanted weeks downloaded, none deferred, the download stage failed."""
+    installation.mkdir(parents=True)
+    (installation / SYNC_RUN_LOG_FILENAME).write_bytes(STORED_RUN_LOG.read_bytes())
+
+    envelope = as_json("caselist", "runs", "--last", "5")
+
+    assert envelope["exit_code"] == ExitCode.OK, envelope
+    [run] = envelope["data"]["runs"]
+    assert (run["run_id"], run["outcome"], run["environment"]) == ("20260916T060000Z", "failed", "dev")
+    assert (run["archives_wanted"], run["archives_downloaded"], run["archives_deferred"]) == (3, 2, 0)
+    assert [(one["stage"], one["outcome"]) for one in run["stages"]][:3] == [
+        ("select", "completed"),
+        ("download", "failed"),
+        ("import", "completed"),
+    ]
+    assert all(sorted(one) == ["outcome", "reason", "stage"] for one in run["stages"])
+    assert run["details"] is None, "a build before v1-e34-t19 wrote nothing beside its record"
+
+    table = " ".join(invoke("caselist", "runs", "--last", "5").stdout.split())
+    # Nothing was deferred by the cap, so the table shows the downloads as a plain count. The parse
+    # stage's column says the run has no counts on record, which is not the same as none parsed.
+    assert "20260916T060000Z │ 2026-09-16 06:00 │ failed │ 2 │ 0 │ 0 │ not recorded" in table
+
+
 def test_runs_with_nothing_recorded_says_so_and_is_overdue(installation: Path) -> None:
     envelope = as_json("caselist", "runs")
 
@@ -207,6 +246,134 @@ def test_a_pull_leaves_one_record_that_runs_then_shows(installation: Path, site:
     [record] = SyncRunLog(installation / SYNC_RUN_LOG_FILENAME).read()
     assert record.run_id == pulled["data"]["run_id"]
     assert [one["run_id"] for one in as_json("caselist", "runs")["data"]["runs"]] == [record.run_id]
+
+
+def test_runs_shows_what_the_newest_runs_parse_stage_did(installation: Path, site: respx.MockRouter) -> None:
+    """`v1-e34-t17` ac5's reading: the stage's counts, in `caselist runs --last 1`.
+
+    By hand from the fixture: one caselist, whose three weeklies hold fourteen distinct bodies, of
+    which one is a PDF and one a legacy `.doc`; plain paragraphs, so no cards; nothing parsed
+    before, so a full parse; and no bucket in `test`, so the sentence says nothing of one.
+    """
+    assert invoke("--json", "caselist", "pull", "--caselist", SYNTHETIC_CASELIST).exit_code == ExitCode.OK
+
+    shown = " ".join(invoke("caselist", "runs", "--last", "1").stdout.split())
+
+    assert (
+        "Parse stage of the newest run" in shown
+        and "completed. 1 caselist(s) parsed: 14 source(s) attempted, 0 skipped as parsed already, "
+        "2 unsupported, 0 failed, 0 card(s); 1 of them parsed in full, into a version directory that "
+        "held nothing."
+        in shown
+    ), shown
+    [record] = as_json("caselist", "runs", "--last", "1")["data"]["runs"]
+    assert {one["stage"]: one["outcome"] for one in record["stages"]}["parse"] == "completed"
+
+    # The next run imports nothing, so its parse stage is skipped and the caption is silent on it.
+    # (The table has a "Parse stage" column since `v1-e34-t19`; it is the caption's sentence that
+    # is absent.)
+    assert invoke("--json", "caselist", "pull", "--caselist", SYNTHETIC_CASELIST).exit_code == ExitCode.OK
+    assert "Parse stage of the newest run" not in " ".join(
+        invoke("caselist", "runs", "--last", "1").stdout.split()
+    )
+
+
+# ------------------------------------------------------------------------------------------------
+# The parse stage's counts, in the table (`v1-e34-t19` ac9)
+# ------------------------------------------------------------------------------------------------
+
+DETAILS_FILE = "caselist-sync-run-details.jsonl"
+"""The file beside the run log that holds what the record cannot, by its name in the runbook."""
+
+
+def test_runs_shows_the_nine_parse_counts_kept_beside_a_record_each_under_its_own_name(
+    installation: Path,
+) -> None:
+    """A record, and beside it details written here by hand, with nine different numbers so that no
+    two counts can change places unnoticed. All nine are in the run's row, each named."""
+    started = datetime.now(UTC).replace(microsecond=0) - timedelta(days=1)
+    record = a_record(started)
+    SyncRunLog(installation / SYNC_RUN_LOG_FILENAME).append(record)
+    (installation / DETAILS_FILE).write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "run_id": record.run_id,
+                "stages": [],
+                "failure_codes": [],
+                "hint": None,
+                "parse": {
+                    "caselists": 3,
+                    "full_parses": 1,
+                    "attempted": 120,
+                    "skipped": 45,
+                    "unsupported": 7,
+                    "failed": 2,
+                    "cards": 310,
+                    "uploaded": 58,
+                    "not_published": 4,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    table = " ".join(invoke("caselist", "runs").stdout.split())
+
+    assert "Parse stage" in table
+    assert f"{record.run_id} │" in table
+    for counts in (
+        "3 caselist(s), 1 in full",
+        "120 attempted, 45 skipped, 7 unsupported, 2 failed",
+        "310 card(s)",
+        "58 uploaded, 4 caselist(s) not published",
+    ):
+        assert counts in table, table
+    [run] = as_json("caselist", "runs")["data"]["runs"]
+    assert run["run_id"] == record.run_id, "the record's own fields are where they always were"
+    assert run["details"]["parse"]["cards"] == 310
+
+
+def test_runs_shows_what_a_real_pulls_parse_stage_counted_and_that_the_next_one_did_not_run(
+    installation: Path, site: respx.MockRouter
+) -> None:
+    """Through the command, both ways. The counts are the ones the caption test above derives by
+    hand from the fixture: one caselist parsed in full, fourteen bodies of which a PDF and a legacy
+    `.doc` are unsupported, no cards, and no bucket in `test` so nothing uploaded. The second pull
+    imports nothing, so its parse stage did not run, and its row says that and not a row of zeros."""
+    first = as_json("caselist", "pull", "--caselist", SYNTHETIC_CASELIST)
+    assert first["exit_code"] == ExitCode.OK, first
+    by_hand = {
+        "caselists": 1,
+        "full_parses": 1,
+        "attempted": 14,
+        "skipped": 0,
+        "unsupported": 2,
+        "failed": 0,
+        "cards": 0,
+        "uploaded": 0,
+        "not_published": 0,
+    }
+    assert first["data"]["run_details"]["parse"] == by_hand
+
+    [run] = as_json("caselist", "runs", "--last", "1")["data"]["runs"]
+    assert run["details"]["parse"] == by_hand
+    table = " ".join(invoke("caselist", "runs", "--last", "1").stdout.split())
+    for counts in (
+        "1 caselist(s), 1 in full",
+        "14 attempted, 0 skipped, 2 unsupported, 0 failed",
+        "0 card(s)",
+        "0 uploaded, 0 caselist(s) not published",
+    ):
+        assert counts in table, table
+
+    assert as_json("caselist", "pull", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+    newest, older = as_json("caselist", "runs")["data"]["runs"]
+    assert newest["details"]["parse"] is None
+    assert older["details"]["parse"] == by_hand
+    rows = " ".join(invoke("caselist", "runs").stdout.split())
+    assert f"{newest['run_id']} │" in rows and "│ did not run" in rows
 
 
 def test_a_dry_run_leaves_no_record(installation: Path, site: respx.MockRouter) -> None:

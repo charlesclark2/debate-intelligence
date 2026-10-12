@@ -208,6 +208,25 @@ expired session); a `1` will not until you deal with what it names. An `--apply`
 on past failed objects is a `3` only when every one of them failed because the bucket did not
 answer.
 
+A `3` is also this computer refusing one of its own evidence folders: the error is
+`STORE_ACCESS_DENIED`, it names the folder by what it is for ("the manifest directory", "the blob
+directory"), and its hint names the setting `storage.data_dir`. Logging in to AWS does not help
+there. Check that your user can read and write the data directory, then run the command again.
+Until `v1-e34-t13` a folder that could not be read looked empty, so `store sync` reported nothing
+to push and `caselist status` reported everything as missing.
+
+A `3` with `STORE_ACCESS_DENIED` that names the bucket is the bucket refusing your profile: you are
+signed in, and the profile's permission set does not grant what the command asked for. The hint
+says so and points at [runbooks/evidence-store.md](../runbooks/evidence-store.md), which lists what
+each profile is granted. Logging in again does not change a grant.
+
+A `1` with `STORE_PROFILE_NOT_CONFIGURED` is a profile name this computer's AWS config does not
+define. The message names the setting the name came from: `storage.s3.aws_profile` in the
+environment's profile, `DEBATE_REMOVAL_PROFILE` for a takedown, or `AWS_PROFILE`. Correct the
+setting, or add the profile as
+[runbooks/evidence-store.md](../runbooks/evidence-store.md#step-4--add-the-dev-sso-profiles)
+describes. Logging in does not help, and neither does running the command again.
+
 ## The first sync of a whole corpus
 
 A first push of the hsld26 caselist snapshots is roughly 2,300 files and about 300 MB. That is one

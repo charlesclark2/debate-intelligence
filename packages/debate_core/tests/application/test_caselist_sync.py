@@ -22,7 +22,7 @@ is imported before the run, so it is the baseline the run has already. The fake 
 | `testcl26-weekly-2026-09-01.zip` | WEEKLY | already imported — not newer than the latest manifest |
 | `testcl26-weekly-2026-09-08.zip` | WEEKLY | download, first |
 | `testcl26-weekly-2026-09-15.zip` | WEEKLY | download, second |
-| `testcl26-all-2026-09-15.zip` | FULL | a weekly run does not pull the full archive |
+| `testcl26-all-2026-09-15.zip` | FULL | not fetched: this suite's service has the rotation off |
 | `testcl26-archive-notes.txt` | UNRECOGNISED | no date, so never downloaded |
 
 and one OpenEv camp file that is new (`openev-512-…`), tagged `policy`.
@@ -79,8 +79,9 @@ from debate_core.application.caselist_sync import (
     DownloadLedger,
     LandscapeStageResult,
     NoCaselistsConfigured,
-    ParseStageResult,
-    PendingWork,
+    ParsedCaselist,
+    ParseStageCounts,
+    PublishedParsedStore,
     RunLock,
     SelectionDecision,
     StageOutcome,
@@ -92,6 +93,7 @@ from debate_core.application.caselist_sync import (
 from debate_core.application.errors import (
     ProviderRateLimited,
     StoreCredentialsExpired,
+    StoreUnavailable,
     UnreadableArchive,
 )
 from debate_core.application.ports.archive import ArchiveEntry
@@ -120,6 +122,8 @@ from debate_core.integrations.local.macos_notifier import MacOsNotifier
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.testing.fakes import empty_suppression_list
+
+from .caselist.retry_rule import the_commands_retry_rule
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -243,18 +247,29 @@ class ExpiredBucket:
 
 
 class RecordingParseStage:
-    """A parse pipeline that is there, so the skip path is not the only one exercised."""
+    """A parse stage that says what it was asked for, with counts written here by hand.
 
-    def __init__(self, result: ParseStageResult | None = None, failure: Exception | None = None) -> None:
-        self.result = result or ParseStageResult(files_parsed=3, cards_parsed=17, failures=1)
+    The real one, over the real pipeline, is exercised in
+    `caselist/test_pull_parses_new_sources.py`; this is for what the run does around it.
+    """
+
+    def __init__(self, result: ParsedCaselist | None = None, failure: Exception | None = None) -> None:
+        self.result = result or ParsedCaselist(
+            version="2026.10.10-docx-2", attempted=5, skipped=9, unsupported=1, failed=1, cards=17, tried=4
+        )
         self.failure = failure
-        self.calls: list[tuple[str, ...]] = []
+        self.calls: list[str] = []
+        self.published: list[tuple[str, str]] = []
 
-    async def parse_new_sources(self, *, caselists: object) -> ParseStageResult:
-        self.calls.append(tuple(caselists))  # type: ignore[arg-type]
+    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+        self.calls.append(caselist)
         if self.failure is not None:
             raise self.failure
         return self.result
+
+    async def publish(self, caselist: str, version: str) -> PublishedParsedStore:
+        self.published.append((caselist, version))
+        return PublishedParsedStore(uploaded=8)
 
 
 class RecordingLandscapeStage:
@@ -511,8 +526,10 @@ async def test_the_full_archive_and_an_undated_name_are_listed_and_never_downloa
 ) -> None:
     """Every row of the scenario table, decided.
 
-    The full archive is not a weekly run's business, and an UNRECOGNISED name has no date to file
-    a snapshot under. Both are counted and named so a change upstream is a number somebody sees.
+    This suite builds the service with the complete-archive rotation off, so the complete archive
+    is decided `full_archive_rotation_off` (`v1-e34-t04`, whose own tests cover the rotation). An
+    UNRECOGNISED name has no date to file a snapshot under. Both are counted and named so a change
+    upstream is a number somebody sees.
     """
     await import_first_week(data_dir, archives)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
@@ -523,7 +540,7 @@ async def test_the_full_archive_and_an_undated_name_are_listed_and_never_downloa
         weekly_name(date(2026, 9, 1)): str(SelectionDecision.ALREADY_IMPORTED),
         weekly_name(date(2026, 9, 8)): str(SelectionDecision.DOWNLOAD),
         weekly_name(date(2026, 9, 15)): str(SelectionDecision.DOWNLOAD),
-        full_name(date(2026, 9, 15)): str(SelectionDecision.FULL_ARCHIVE_NOT_PULLED_WEEKLY),
+        full_name(date(2026, 9, 15)): str(SelectionDecision.FULL_ARCHIVE_ROTATION_OFF),
         f"{SYNTHETIC_CASELIST}-archive-notes.txt": str(SelectionDecision.UNRECOGNISED_NAME),
     }
     assert full_name(date(2026, 9, 15)) not in source.archive_fetches
@@ -1244,14 +1261,16 @@ async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it
     summary = await service.run([SYNTHETIC_CASELIST])
     written = json.loads(service.summary_path(summary).read_text(encoding="utf-8"))
 
-    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 3
+    assert written["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION == 5
     assert written["bulk_download_window_start"] == "2026-09-15T06:00:00+00:00"
     assert written["bulk_downloads_spent_in_window"] == 2
     assert written["bulk_downloads_allowed"] == 3
     assert "bulk_downloads_spent_today" not in written
     reason = summary.stage(SyncStage.SELECT).reason or ""  # type: ignore[union-attr]
-    assert reason.endswith(
-        "3 to fetch; 2 of 5 bulk download(s) spent in the 24 hours from 2026-09-15 06:00 UTC, 3 left"
+    # The complete-archive rotation's sentence follows the window's (`v1-e34-t04`).
+    assert (
+        "3 to fetch; 2 of 5 bulk download(s) spent in the 24 hours from 2026-09-15 06:00 UTC, 3 left; "
+        "complete archive: " in reason
     )
 
 
@@ -1669,12 +1688,31 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
     assert body["archives_downloaded"] == 2
     assert body["files_imported"] == 28
     assert body["files_duplicate"] == 2
-    assert body["cards_parsed"] == 17
-    assert body["parse_failures"] == 1
+    # Two caselists parsed, the weekly archives' and `openev` for the camp file, each with the
+    # counts the recording stage gives one: 5 attempted, 9 skipped, 1 unsupported, 1 failed and
+    # 17 cards, twice. No bucket here, so nothing was uploaded and nothing is owed to one.
+    assert body["parse"] == {
+        "caselists": 2,
+        "full_parses": 0,
+        "attempted": 10,
+        "skipped": 18,
+        "unsupported": 2,
+        "failed": 2,
+        "cards": 34,
+        "uploaded": 0,
+        "not_published": 0,
+    }
     assert body["objects_published"] == 0
     assert body["reports_written"] == 2
     assert body["duration_seconds"] == 0.0
-    assert set(body["stages"][0]) == {"stage", "outcome", "reason"}
+    assert set(body["stages"][0]) == {
+        "stage",
+        "outcome",
+        "reason",
+        "error_codes",
+        "hint",
+        "earlier_findings",
+    }
 
     text = written.read_text(encoding="utf-8")
     for forbidden in ("Maple Grove", "Cedar Hollow", "Northgate Prep", "Riverbend Academy", "ZaLu"):
@@ -1690,7 +1728,7 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
 async def test_the_optional_stages_are_skipped_with_a_reason_when_they_are_not_installed(
     source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
 ) -> None:
-    """Today's normal path: neither v1-e31-t06 nor v1-e32-t05 exists, and the run is a success."""
+    """Parse turned off by its setting, and no landscape service yet: the run is a success."""
     await import_first_week(data_dir, archives)
     service = build_service(source=source, data_dir=data_dir, inbox=inbox)
 
@@ -1699,7 +1737,8 @@ async def test_the_optional_stages_are_skipped_with_a_reason_when_they_are_not_i
     parse = summary.stage(SyncStage.PARSE)
     landscape = summary.stage(SyncStage.LANDSCAPE)
     assert parse is not None and parse.outcome is StageOutcome.SKIPPED
-    assert "v1-e31-t06" in (parse.reason or "")
+    assert "caselist.parse_imported_sources" in (parse.reason or "")
+    assert summary.parse is None
     assert landscape is not None and landscape.outcome is StageOutcome.SKIPPED
     assert "v1-e32-t05" in (landscape.reason or "")
     assert summary.succeeded
@@ -1719,9 +1758,42 @@ async def test_an_optional_stage_that_fails_does_not_fail_a_run_whose_bytes_are_
 
     summary = await service.run([SYNTHETIC_CASELIST])
 
-    assert summary.stage(SyncStage.PARSE).outcome is StageOutcome.FAILED  # type: ignore[union-attr]
+    parsed = summary.stage(SyncStage.PARSE)
+    assert parsed is not None and parsed.outcome is StageOutcome.FAILED
+    # An error this project did not write is given by its class alone and recorded as unmodelled
+    # (`v1-e34-t13`); an optional stage's codes decide nothing about the exit. The counts come
+    # first, then each caselist the stage failed in: the second is still tried after the first.
+    assert parsed.reason == (
+        "0 caselist(s) parsed: 0 source(s) attempted, 0 skipped as parsed already, 0 unsupported, "
+        f"0 failed, 0 card(s); {SYNTHETIC_CASELIST}: OSError; openev: OSError"
+    )
+    assert parsed.error_codes == ("INTERNAL_ERROR",)
     assert summary.succeeded
+    assert summary.failure_codes == ()
     assert summary.files_imported == 28
+
+
+class LandscapeThatFails:
+    """A landscape stage whose store does not answer."""
+
+    async def regenerate(self, *, caselists: object) -> LandscapeStageResult:
+        raise StoreUnavailable("PutObject", "s3://bucket/reports/landscape", "503")
+
+
+async def test_a_landscape_stage_that_fails_records_its_code_and_does_not_fail_the_run(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    await import_first_week(data_dir, archives)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, landscape=LandscapeThatFails())
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    landscape = summary.stage(SyncStage.LANDSCAPE)
+    assert landscape is not None and landscape.outcome is StageOutcome.FAILED
+    assert landscape.error_codes == ("STORE_UNAVAILABLE",)
+    assert landscape.reason == "PutObject on s3://bucket/reports/landscape failed: 503"
+    assert summary.succeeded
+    assert summary.failure_codes == ()
 
 
 async def test_the_optional_stages_run_when_they_are_installed(
@@ -1734,10 +1806,13 @@ async def test_the_optional_stages_run_when_they_are_installed(
 
     summary = await service.run([SYNTHETIC_CASELIST])
 
-    assert parse.calls == [(SYNTHETIC_CASELIST,)]
+    # The caselist once, though two of its weeks were imported, then the camp file's `openev`.
+    assert parse.calls == [SYNTHETIC_CASELIST, "openev"]
+    assert parse.published == [], "this environment names no bucket"
     assert landscape.calls == 1
-    assert summary.cards_parsed == 17
-    assert summary.parse_failures == 1
+    assert summary.parse == ParseStageCounts(
+        caselists=2, attempted=10, skipped=18, unsupported=2, failed=2, cards=34
+    )
     assert summary.reports_written == 3
 
 
@@ -1860,14 +1935,6 @@ async def test_a_caselist_whose_event_this_build_does_not_know_is_not_imported_u
     assert not any(one.startswith(SYNTHETIC_CASELIST) for one in summary.snapshots_imported)
     assert not summary.succeeded
     assert summary.archives_downloaded == 2, "the bytes are in the inbox either way"
-
-
-def test_an_unreadable_pending_work_file_reads_as_nothing_owed(tmp_path: Path) -> None:
-    """A state file this module wrote and something else corrupted must not stop a run."""
-    path = tmp_path / PENDING_WORK_FILENAME
-    path.write_text("{not json at all", encoding="utf-8")
-
-    assert PendingWork(path).read() == ()
 
 
 # ------------------------------------------------------------------------------------------------
@@ -2010,6 +2077,7 @@ def sync_monitor(data_dir: Path, notifier: RecordingNotifier, remote: object | N
         aws_login_command=DEV_LOGIN,
         secrets=lambda: [FIXTURE_TOKEN],
         clock=lambda: RUN_CLOCK,
+        **the_commands_retry_rule(),
     )
 
 
@@ -2053,7 +2121,8 @@ async def test_a_failed_download_stage_leaves_a_run_record_and_one_notify_naming
     [record] = run_log(data_dir)
     assert record.outcome is SyncRunOutcome.FAILED
     [notification] = notifier.sent
-    assert notification.title == "caselist pull failed"
+    # A burst rate limit that outlasted the client's retries: one the next run may not meet.
+    assert notification.title == "caselist pull failed: will be retried"
     assert "download" in notification.message
     assert notification.fix_command == "debate-research caselist pull"
 

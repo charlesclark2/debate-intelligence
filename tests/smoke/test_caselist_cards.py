@@ -94,7 +94,7 @@ def test_caselist_cards_counts_the_synthetic_caselist(installed_cli: InstalledCl
 
     assert result.exit_code == ExitCode.OK, result.output
     data = json.loads(result.stdout)["data"]
-    assert data["fingerprint_version"] == "card-fingerprint-v1"
+    assert data["fingerprint_version"] == "card-fingerprint-v2"
     assert data["totals"] == {
         "parsed_cards": 4,
         "cards": 4,

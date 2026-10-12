@@ -78,7 +78,7 @@ cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/
 
 | Module | Contents |
 |---|---|
-| `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `StoreError` (`StoreAccessDenied`, `StoreCredentialsExpired`, `StoreUnavailable`), `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable`, `ProviderRateLimited`) |
+| `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `StoreError` (`StoreAccessDenied`, `StoreCredentialsExpired`, `StoreProfileNotConfigured`, `StoreUnavailable`), `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable`, `ProviderRateLimited`) |
 | `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository`, and the `Page` returned by every listing |
 | `ports/providers.py` | `SearchProvider`, `ArticleFetcher`, `ContentExtractor`, `ModelRouter`, `Clock`, `IdGenerator`, and the value objects they exchange |
 | `ports/caselist.py` | `CaselistRepository`, the boundary the E30 importers, publisher and removal command store through (v1-e30-t02) |
@@ -167,7 +167,7 @@ Run it from the workspace root; outside the workspace, `pip install 'debate-core
 | `client.py` | `build_s3_client(region=…, profile=…)` on botocore's standard credential chain, and the multipart thresholds |
 | `snapshot_store.py` | `S3SnapshotStore`: keys `<prefix>/sha256/<ab>/<cd>/<digest>`, head-before-put idempotency, SHA-256 additional checksums, the full-object digest in object metadata, verification on read, `put_file`/`get_file` for objects too big to hold in memory |
 | `object_store.py` | `S3EvidenceObjectStore`: paginated listing, head, and atomic file transfers for `manifests/` and `reports/` |
-| `errors.py` | Where every `ClientError` stops: `NotFound`, `StoreAccessDenied`, `StoreCredentialsExpired` with the `aws sso login` command, `StoreUnavailable` |
+| `errors.py` | Where every `ClientError` stops: `NotFound`, `StoreAccessDenied` with the grant to look for, `StoreCredentialsExpired` with the `aws sso login` command, `StoreProfileNotConfigured` naming the setting to correct, `StoreUnavailable` |
 
 ```python
 client = build_s3_client(region=region, profile=profile)  # profile: the environment's SSO profile

@@ -2,8 +2,9 @@
 #
 #   EvidenceOperator - everyday work: list the documented prefixes, read, write, use the key,
 #                      and list (never delete) the versions a takedown would remove, so a
-#                      removal's dry run can count them. No DeleteObject at all. This is what the
-#                      operator and `debate-research store sync|ls|get` (v1-e29-t05) run as.
+#                      removal's dry run can count them and `caselist status` can report what a
+#                      removal left. No DeleteObject at all. This is what the operator and
+#                      `debate-research store sync|ls|get` (v1-e29-t05) run as.
 #   EvidenceRemoval  - takedowns only: delete objects and their noncurrent versions under the five
 #                      prefixes that hold disclosed material, and append to the suppression list.
 #                      Assigned to one accountable person.
@@ -27,6 +28,9 @@ locals {
   create_permission_sets = var.identity_center_instance_arn != null
 
   # DebateDevEvidenceOperator / DebateProdEvidenceOperator, and the matching removal sets.
+  # `caselist remove --execute` runs only as the role of the removal set, which it recognises by
+  # this name (takedown_permission_set in debate_core's removal_service.py, v1-e29-t08). A test
+  # there reads this file, so a rename here fails in CI rather than at the next takedown.
   operator_permission_set_name = "Debate${title(var.environment)}EvidenceOperator"
   removal_permission_set_name  = "Debate${title(var.environment)}EvidenceRemoval"
 
@@ -80,11 +84,16 @@ locals {
         }
       },
       {
-        # Read-only: lets a removal's dry run count the noncurrent versions it would delete
-        # (v1-e30-t07, v1-e29-t06). Listing versions deletes nothing. On the bucket ARN, because
-        # ListBucketVersions is a bucket-level action, and under the same removable prefixes as
-        # the takedown's own listing, so it shows the everyday profile no more than a takedown
-        # would remove.
+        # Read-only, and used for two things. A removal's dry run counts the versions it would
+        # delete (v1-e30-t07, v1-e29-t06), and `caselist status` lists versions to report what
+        # a removal left behind (v1-e30-t10). Listing versions deletes nothing. On the bucket
+        # ARN, because ListBucketVersions is a bucket-level action, and under the same removable
+        # prefixes as the takedown's own listing, so it shows the everyday profile no more than
+        # a takedown would remove.
+        #
+        # It also means listing no longer tells this set from EvidenceRemoval, which is why a
+        # takedown asks which role its profile is signed in as before it does anything
+        # (v1-e29-t08). The Sid names the first use only; renaming it would change the policy.
         Sid      = "ListEvidenceObjectVersionsForRemovalPlans"
         Effect   = "Allow"
         Action   = "s3:ListBucketVersions"

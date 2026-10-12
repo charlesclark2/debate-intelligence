@@ -18,9 +18,11 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [data/2026-27-tournament-schedule.md](data/2026-27-tournament-schedule.md) | The 2026-27 season's tournaments as given on 2026-09-30: the seed for `site/content/tournaments.yaml`, which is now the source of record |
 | [data/academic-case-sources.md](data/academic-case-sources.md) | Candidate claims and sources for the website home page's academic case, and why some kinds of finding are not used |
 | [data/caselist-backfill-2026-09.md](data/caselist-backfill-2026-09.md) | Counts from the one-off caselist and camp-file backfill (`v1-e30-t06`), recorded by the operator; aggregates only |
+| [data/caselist-parse-report.md](data/caselist-parse-report.md) | Counts from the operator-run full-corpus caselist parse, per caselist and environment |
 | [data/caselist-removal-requests.md](data/caselist-removal-requests.md) | The register of caselist and OpenEv removal requests, one row per request id; no school, team code, filename or name |
 | [data/caselist-sync-runs.md](data/caselist-sync-runs.md) | Counts from each weekly `caselist pull`, recorded by the operator; aggregates only |
 | [data/debate-file-style-survey.md](data/debate-file-style-survey.md) | Which Word styles real team, caselist and camp `.docx` files use, and the share of files per template family |
+| [data/parsed-card-store.md](data/parsed-card-store.md) | Layout and record shapes of the parsed card store that caselist parse writes |
 | [evidence/normalization.md](evidence/normalization.md) | Evidence text normalization policy: the frozen, versioned rules every snapshot offset, hash and verification depends on |
 | [evidence/snapshot-text-format.md](evidence/snapshot-text-format.md) | `debate-snapshot-text/1`: how a snapshot's normalized text and paragraph map are stored, the canonical encoding, the key check every read makes, and what `SnapshotService.load` verifies |
 | [guides/coach-website-editing.md](guides/coach-website-editing.md) | For coaches: adding, changing and removing events and announcements on the team website, with no code |

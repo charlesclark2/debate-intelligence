@@ -47,6 +47,7 @@ from tests.evals.parser.metrics import render_markdown
 from tests.evals.parser.synthetic import TEST_DIGEST_KEY, build_synthetic_file
 
 from debate_core.domain.style_profile import StructuralUnit
+from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 
 BASELINE_PATH = REPOSITORY_ROOT / "tests" / "evals" / "baselines" / "parser.json"
 REPORT_DIRECTORY = REPOSITORY_ROOT / "build" / "eval-reports"
@@ -110,8 +111,10 @@ def _synthetic_setup(  # type: ignore[no-untyped-def]
     )
 
 
+#: Recorded for the running parser, whichever version that is: a baseline for another version
+#: adds a note to the gate, and that note has a test of its own in `test_metrics.py`.
 PERFECT_BASELINE: dict[str, Any] = {
-    "parser_version": "2026.09.20-docx-1",
+    "parser_version": DOCX_PARSER_VERSION,
     "sampling_plan_id": SYNTHETIC_PLAN_ID,
     "tiers": {
         "full": {

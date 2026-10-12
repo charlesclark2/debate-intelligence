@@ -458,6 +458,7 @@ class TestRerunning:
                     S3EvidenceVersionStore(bucket=removal_world.bucket_name, client=removal_world.client), 2
                 ),  # type: ignore[arg-type]
                 objects=access.objects,
+                caller=access.caller,
                 profile=access.profile,
                 bucket=access.bucket,
             )
@@ -566,6 +567,7 @@ def without_list_bucket(world: RemovalWorld, *, refuse_writes: bool = False) -> 
         return type(real)(
             versions=real.versions,
             objects=ObjectsWithoutListBucket(real.objects, bucket=real.bucket, refuse_writes=refuse_writes),  # type: ignore[arg-type]
+            caller=real.caller,
             profile=real.profile,
             bucket=real.bucket,
         )
@@ -659,6 +661,7 @@ class TestARemovalThatCompletesButCannotBeLogged:
             return type(real)(
                 versions=real.versions,
                 objects=BucketLogThatRefuses(real.objects, bucket=real.bucket),  # type: ignore[arg-type]
+                caller=real.caller,
                 profile=real.profile,
                 bucket=real.bucket,
             )
@@ -773,6 +776,7 @@ class TestSupersededManifestVersions:
             return type(access)(
                 versions=StopsBeforeReadingVersions(bucket=machine.bucket_name, client=machine.client),
                 objects=access.objects,
+                caller=access.caller,
                 profile=access.profile,
                 bucket=access.bucket,
             )

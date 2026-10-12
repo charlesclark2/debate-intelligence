@@ -38,6 +38,7 @@ HTTP_CLIENT = "The HTTP client and the keychain library stay inside debate_core.
 CLI_HTTP_CLIENT = "The CLI reaches httpx and keyring only through debate_core.integrations.opencaselist"
 CLI_AWS_SDK = "The CLI reaches the AWS SDK only through debate_core.integrations.s3"
 DOCUMENT_LIBRARIES = "Document libraries stay inside debate_core.integrations.docx_parser"
+CLI_DOCUMENT_LIBRARIES = "The CLI reaches lxml only through debate_core.integrations.docx_parser"
 CORE_LAYERS = "debate_core layers: integrations and testing above application above evidence above domain"
 DELIVERY_FRAMEWORKS = "The domain and application layers never import a delivery framework"
 CORE_NEVER_IMPORTS_DELIVERY = "debate_core never imports a delivery package"
@@ -69,6 +70,7 @@ VIOLATIONS = [
     Violation("debate_cli.commands.boundary_probe", "import httpx", CLI_HTTP_CLIENT),
     Violation("debate_cli.commands.boundary_probe", "import boto3", CLI_AWS_SDK),
     Violation("debate_core.application.boundary_probe", "import lxml", DOCUMENT_LIBRARIES),
+    Violation("debate_cli.commands.boundary_probe", "import lxml", CLI_DOCUMENT_LIBRARIES),
     # The layers inside debate_core, in each direction a dependency can point the wrong way.
     Violation("debate_core.domain.boundary_probe", "import debate_core.application", CORE_LAYERS),
     Violation("debate_core.domain.boundary_probe", "import debate_core.evidence", CORE_LAYERS),

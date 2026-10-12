@@ -648,5 +648,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t26-dispatch-opens-back-merge
+    - id: t27
+      kind: Task
+      name: 'The CI test job finishes well inside the five-minute budget'
+      description: >-
+        The required CI check finishes well inside its five-minute budget with every test
+        still on the pull-request path.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t27-ci-test-job-within-budget.yaml
+        goalRef: v1-e01-t27-ci-test-job-within-budget
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t27-ci-test-job-within-budget reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t27-ci-test-job-within-budget
 status:
   phase: Pending

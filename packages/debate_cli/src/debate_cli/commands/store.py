@@ -44,7 +44,10 @@ exits `3` only when every one of them failed that way and nothing mismatched; on
 would not verify makes the run a `1`, because running it again cannot fix that one. An expired SSO
 session arrives as :class:`~debate_core.application.errors.StoreCredentialsExpired`, which carries
 the `aws sso login --profile …` line the adapter built, and the root group renders that as the hint
-on a one-line failure rather than a traceback.
+on a one-line failure rather than a traceback. A profile the AWS config does not define is not an
+expired session and exits `1` (`STORE_PROFILE_NOT_CONFIGURED`, `v1-e29-t07`): its message names the
+setting to correct. A bucket that refuses the profile still exits `3`, with a hint that says a grant
+is missing.
 """
 
 from __future__ import annotations

@@ -10,9 +10,12 @@ as totals and a ranking of clusters by the number of distinct teams that read th
 
 1. Every card is fingerprinted (:mod:`debate_core.evidence.fingerprints`).
 2. FULL cards are clustered by near-duplicate text (:mod:`debate_core.evidence.near_duplicates`),
-   with the thresholds from `settings.fingerprints`.
-3. ABBREVIATED and CITE_ONLY cards are linked to exactly one full card's cluster, or left in a
-   cluster of their own (:mod:`debate_core.evidence.abbreviated_links`).
+   with the thresholds from `settings.fingerprints`. Short bodies are matched as cuts of the one
+   card that contains them (`v1-e31-t08`).
+3. ABBREVIATED and CITE_ONLY cards are linked to one full card's cluster, which may be one of
+   several that card was split across; failing that they are grouped with the other abbreviated
+   cards that matched no full card; failing that they are left in a cluster of their own
+   (:mod:`debate_core.evidence.abbreviated_links`, `v1-e31-t08`).
 4. Each card is joined to every disclosure of the file it came from. One file disclosed by two
    teams is two occurrences; the same disclosure in three cumulative weekly archives is one, whose
    first and last seen snapshots span the three (:attr:`CardOccurrence.occurrence_key`).
@@ -58,9 +61,12 @@ from debate_core.domain.card_occurrence import CardOccurrence, ClusterMembership
 from debate_core.domain.caselist import Disclosure
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
 from debate_core.evidence.abbreviated_links import (
+    AbbreviationAnchor,
     FullCardWords,
     abbreviation_anchor,
+    group_unmatched_abbreviations,
     link_abbreviated,
+    matching_full_cards,
     short_cite_key,
 )
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint, extract_cutter_mark
@@ -71,6 +77,7 @@ from debate_core.evidence.near_duplicates import (
 )
 
 __all__ = [
+    "CardPlacement",
     "CaselistCardReport",
     "CaselistCardStatsService",
     "CardTotals",
@@ -99,8 +106,10 @@ class UnreadableParsedCards(DomainError):
 def read_parsed_cards(directory: Path) -> list[ParsedCard]:
     """Every card in the `*.jsonl` files under `directory`, files in sorted path order.
 
-    A line may be one `ParsedCard` or one `ParsedDocument` (the per-source record `v1-e31-t06`
-    writes), whose cards are taken in document order. Blank lines are skipped.
+    A line may be one `ParsedCard` or one `ParsedDocument`, whose cards are taken in document
+    order. Blank lines are skipped. The parsed card store `caselist parse` writes (`v1-e31-t06`) is
+    not read this way: its records leave out disclosure paths, and are read through
+    :class:`~debate_core.application.ports.parsed_store.ParsedStore`.
     """
     root = Path(directory)
     cards: list[ParsedCard] = []
@@ -172,7 +181,8 @@ class CaselistCardReport:
     top_clusters: tuple[ClusterSummary, ...]
     occurrences: tuple[CardOccurrence, ...]
     """Every occurrence, ordered by cluster, source and element. Carries team codes and cutter
-    marks: for the parsed store (`v1-e31-t06`), never for printing."""
+    marks, so it is never printed. The parsed store (`v1-e31-t06`) does not persist it either: it
+    writes one row per card per disclosure, keyed by the disclosure's digest, from :meth:`place`."""
 
 
 # ------------------------------------------------------------------------------------------------
@@ -181,8 +191,12 @@ class CaselistCardReport:
 
 
 @dataclass(frozen=True, slots=True)
-class _Placed:
-    """One card with its fingerprint and the cluster it was placed in."""
+class CardPlacement:
+    """One card with its fingerprint and the cluster it was placed in.
+
+    What :meth:`CaselistCardStatsService.place` returns, and what the parse pipeline
+    (`v1-e31-t06`) writes its occurrence table from.
+    """
 
     card: ParsedCard
     fingerprint: str
@@ -227,7 +241,7 @@ class CaselistCardStatsService:
             ),
             key=_card_order,
         )
-        placed = self._place(chosen)
+        placed = self.place(chosen)
         disclosures = await self._disclosures(caselist, snapshot)
         occurrences = _occurrences(placed, disclosures)
         return CaselistCardReport(
@@ -239,7 +253,13 @@ class CaselistCardStatsService:
             occurrences=occurrences,
         )
 
-    def _place(self, cards: Sequence[ParsedCard]) -> list[_Placed]:
+    def place(self, cards: Sequence[ParsedCard]) -> list[CardPlacement]:
+        """Fingerprint `cards`, cluster the full ones and link the abbreviated ones, in input order.
+
+        Steps 1 to 3 of this module's docstring, without the join to disclosures: one placement per
+        card, each in exactly one cluster. Cluster ids do not depend on the order of `cards`, and a
+        full card's cluster does not depend on which abbreviated cards are present.
+        """
         fingerprints = [card_fingerprint(card).exact_fingerprint for card in cards]
         bodies: dict[str, str] = {}
         for card, fingerprint in zip(cards, fingerprints, strict=True):
@@ -247,32 +267,67 @@ class CaselistCardStatsService:
                 bodies.setdefault(fingerprint, card.evidence_text)
         clusters = cluster_near_duplicates(bodies, self._thresholds)
 
-        full_by_cite: defaultdict[str | None, dict[tuple[str, str], FullCardWords]] = defaultdict(dict)
+        copies: Counter[tuple[str, str | None]] = Counter()
+        full_by_cite: defaultdict[str | None, dict[str, FullCardWords]] = defaultdict(dict)
+        for card, fingerprint in zip(cards, fingerprints, strict=True):
+            if card.completeness is CardCompleteness.FULL:
+                copies[(fingerprint, short_cite_key(card.short_cite))] += 1
         for card, fingerprint in zip(cards, fingerprints, strict=True):
             if card.completeness is CardCompleteness.FULL:
                 key = short_cite_key(card.short_cite)
-                full_by_cite[key].setdefault(
-                    (fingerprint, key or ""),
-                    FullCardWords(clusters[fingerprint], key, tuple(matching_words(card.evidence_text))),
-                )
+                if fingerprint not in full_by_cite[key]:
+                    full_by_cite[key][fingerprint] = FullCardWords(
+                        clusters[fingerprint],
+                        key,
+                        tuple(matching_words(card.evidence_text)),
+                        copies[(fingerprint, key)],
+                    )
 
-        placed: list[_Placed] = []
-        for card, fingerprint in zip(cards, fingerprints, strict=True):
+        # An abbreviated card links to a full card's cluster, or failing that is grouped with the
+        # other abbreviated cards that matched no full card, or failing that is its own cluster.
+        linked: dict[int, str] = {}
+        keys: defaultdict[str, set[AbbreviationAnchor]] = defaultdict(set)
+        not_grouped: set[str] = set()
+        for position, (card, fingerprint) in enumerate(zip(cards, fingerprints, strict=True)):
             if card.completeness is CardCompleteness.FULL:
-                placed.append(
-                    _Placed(card, fingerprint, clusters[fingerprint], ClusterMembership.NEAR_DUPLICATE)
-                )
                 continue
             anchor = abbreviation_anchor(card, self._markers)
-            linked = (
-                link_abbreviated(anchor, full_by_cite[anchor.short_cite_key].values())
-                if anchor is not None
-                else None
-            )
-            if linked is None:
-                placed.append(_Placed(card, fingerprint, fingerprint, ClusterMembership.UNLINKED))
+            if anchor is None:
+                continue
+            matches = matching_full_cards(anchor, full_by_cite[anchor.short_cite_key].values())
+            cluster = link_abbreviated(anchor, matches)
+            if cluster is not None:
+                linked[position] = cluster
+                continue
+            keys[fingerprint].add(anchor)
+            if matches:
+                not_grouped.add(fingerprint)  # it matched full cards, of two different cards
+        groups = group_unmatched_abbreviations(
+            {
+                fingerprint: next(iter(anchors))
+                for fingerprint, anchors in keys.items()
+                # One text under two short cites could join two authors' groups: it joins neither.
+                if len(anchors) == 1 and fingerprint not in not_grouped
+            }
+        )
+
+        placed: list[CardPlacement] = []
+        for position, (card, fingerprint) in enumerate(zip(cards, fingerprints, strict=True)):
+            if card.completeness is CardCompleteness.FULL:
+                placed.append(
+                    CardPlacement(card, fingerprint, clusters[fingerprint], ClusterMembership.NEAR_DUPLICATE)
+                )
+            elif position in linked:
+                placed.append(
+                    CardPlacement(card, fingerprint, linked[position], ClusterMembership.ABBREVIATED_LINK)
+                )
+            elif fingerprint in groups:
+                # Every unlinked card with this text goes with it, so identical text never splits.
+                placed.append(
+                    CardPlacement(card, fingerprint, groups[fingerprint], ClusterMembership.ABBREVIATED_LINK)
+                )
             else:
-                placed.append(_Placed(card, fingerprint, linked, ClusterMembership.ABBREVIATED_LINK))
+                placed.append(CardPlacement(card, fingerprint, fingerprint, ClusterMembership.UNLINKED))
         return placed
 
     async def _disclosures(self, caselist: str, snapshot: date | None) -> dict[str, list[Disclosure]]:
@@ -301,7 +356,7 @@ def _card_order(card: ParsedCard) -> tuple[str, int, date, str]:
 
 
 def _occurrences(
-    placed: Sequence[_Placed], disclosures: dict[str, list[Disclosure]]
+    placed: Sequence[CardPlacement], disclosures: dict[str, list[Disclosure]]
 ) -> tuple[CardOccurrence, ...]:
     """One occurrence per occurrence key; later sightings only widen its snapshot range."""
     table: dict[OccurrenceKey, CardOccurrence] = {}
@@ -363,7 +418,7 @@ def _occurrences(
 
 
 def _totals(
-    chosen: Sequence[ParsedCard], placed: Sequence[_Placed], occurrences: Sequence[CardOccurrence]
+    chosen: Sequence[ParsedCard], placed: Sequence[CardPlacement], occurrences: Sequence[CardOccurrence]
 ) -> CardTotals:
     abbreviated = [item for item in placed if item.card.completeness is not CardCompleteness.FULL]
     positions = {
@@ -385,12 +440,12 @@ def _totals(
     )
 
 
-def _position(item: _Placed) -> tuple[str, int]:
+def _position(item: CardPlacement) -> tuple[str, int]:
     return (item.card.provenance.source_sha256, item.card.provenance.first_element_index)
 
 
 def _top_clusters(
-    placed: Sequence[_Placed], occurrences: Sequence[CardOccurrence], *, top: int, include_teams: bool
+    placed: Sequence[CardPlacement], occurrences: Sequence[CardOccurrence], *, top: int, include_teams: bool
 ) -> tuple[ClusterSummary, ...]:
     members: defaultdict[str, list[CardOccurrence]] = defaultdict(list)
     for occurrence in occurrences:

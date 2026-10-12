@@ -24,6 +24,22 @@ Nothing in this module can remove a line, and nothing else in the platform write
 Reading a list that does not exist yet is an empty list, and creates nothing: `caselist import`
 reads it on every run and must leave no new directory behind in an environment that has never had
 a removal.
+
+A suppression directory the operating system refuses is
+:class:`~debate_core.application.errors.LocalStoreAccessDenied` naming "the suppression directory",
+never a raw `PermissionError` and never the file's path
+(:mod:`debate_core.integrations.local.refusals`, `v1-e34-t13`). A list that cannot be read is not an
+empty one: nothing may be imported or published against it.
+
+## A copy is named by its role
+
+:attr:`LocalAppendOnlyFile.location` is what an error calls this copy, and it is "the local
+suppression list under storage.data_dir", not the file's path (`v1-e30-t10`). A data directory is
+under the operator's home, and
+:class:`~debate_core.application.ports.suppression.UnreadableAppendOnlyRecord` puts the location in
+its message and in the `--json` envelope's details. The setting names where to look; the two file
+names are at the top of this docstring. :attr:`LocalAppendOnlyFile.path` is still the path, for the
+code that opens the file.
 """
 
 from __future__ import annotations
@@ -34,6 +50,7 @@ from pathlib import Path
 from typing import Final
 
 from debate_core.application.ports.suppression import AppendOnlyViolation, UnreadableAppendOnlyRecord
+from debate_core.integrations.local.refusals import refused_as_access_denied, role_of
 
 __all__ = [
     "REMOVAL_LOG_FILENAME",
@@ -54,22 +71,40 @@ SUPPRESSION_FILE_MODE: Final = 0o600
 
 _APPEND_FLAGS: Final = os.O_WRONLY | os.O_APPEND | os.O_CREAT
 
+#: What a refusal names instead of the file's path.
+_ROLE: Final = role_of(SUPPRESSION_DIRECTORY.name)
+
+#: What an error calls each copy: what it is and the setting it is under, never its path.
+_SUPPRESSION_LIST_ROLE: Final = "the local suppression list under storage.data_dir"
+_REMOVAL_LOG_ROLE: Final = "the local removal log under storage.data_dir"
+
 
 def local_suppression_list_file(data_dir: Path) -> LocalAppendOnlyFile:
     """This environment's copy of the suppression list."""
-    return LocalAppendOnlyFile(Path(data_dir) / SUPPRESSION_DIRECTORY / SUPPRESSION_LIST_FILENAME)
+    return LocalAppendOnlyFile(
+        Path(data_dir) / SUPPRESSION_DIRECTORY / SUPPRESSION_LIST_FILENAME, role=_SUPPRESSION_LIST_ROLE
+    )
 
 
 def local_removal_log_file(data_dir: Path) -> LocalAppendOnlyFile:
     """This environment's copy of the removal log."""
-    return LocalAppendOnlyFile(Path(data_dir) / SUPPRESSION_DIRECTORY / REMOVAL_LOG_FILENAME)
+    return LocalAppendOnlyFile(
+        Path(data_dir) / SUPPRESSION_DIRECTORY / REMOVAL_LOG_FILENAME, role=_REMOVAL_LOG_ROLE
+    )
 
 
 class LocalAppendOnlyFile:
-    """An :class:`~debate_core.application.ports.suppression.AppendOnlyRecord` on a local file."""
+    """An :class:`~debate_core.application.ports.suppression.AppendOnlyRecord` on a local file.
 
-    def __init__(self, path: Path) -> None:
+    Args:
+        path: The file.
+        role: What an error calls this copy. Without one it is called by its file name alone, which
+            carries no directory.
+    """
+
+    def __init__(self, path: Path, *, role: str | None = None) -> None:
         self._path = Path(path)
+        self._role = role or f"the local record {self._path.name}"
 
     @property
     def path(self) -> Path:
@@ -77,12 +112,14 @@ class LocalAppendOnlyFile:
 
     @property
     def location(self) -> str:
-        return str(self._path)
+        """This copy's role, for messages. Never :attr:`path`: see the module docstring."""
+        return self._role
 
     async def read_lines(self) -> tuple[str, ...]:
-        if not self._path.is_file():
-            return ()
-        data = self._path.read_bytes()
+        with refused_as_access_denied("read", _ROLE):
+            if not self._path.is_file():
+                return ()
+            data = self._path.read_bytes()
         if not data:
             return ()
         if not data.endswith(b"\n"):
@@ -103,18 +140,19 @@ class LocalAppendOnlyFile:
                 raise AppendOnlyViolation(self.location, "a line to append contains a line break")
         await self.read_lines()  # refuses a torn last line before anything is added after it
         payload = "".join(f"{line}\n" for line in lines).encode("utf-8")
-        created = not self._path.exists()
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor = os.open(self._path, _APPEND_FLAGS, SUPPRESSION_FILE_MODE)
-        try:
-            written = 0
-            while written < len(payload):
-                written += os.write(descriptor, payload[written:])
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        if created:
-            _sync_directory(self._path.parent)
+        with refused_as_access_denied("write", _ROLE):
+            created = not self._path.exists()
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor = os.open(self._path, _APPEND_FLAGS, SUPPRESSION_FILE_MODE)
+            try:
+                written = 0
+                while written < len(payload):
+                    written += os.write(descriptor, payload[written:])
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            if created:
+                _sync_directory(self._path.parent)
 
 
 def _sync_directory(directory: Path) -> None:

@@ -1,0 +1,138 @@
+{
+  "archives_deferred": 0,
+  "archives_downloaded": 2,
+  "archives_seen": 3,
+  "archives_wanted": 3,
+  "blobs_stored": 12,
+  "bulk_download_window_start": "2026-09-15T06:00:00+00:00",
+  "bulk_downloads_allowed": 5,
+  "bulk_downloads_spent_in_window": 0,
+  "cards_parsed": 0,
+  "caselists": [
+    "testcl26"
+  ],
+  "dry_run": false,
+  "duration_seconds": 0.0,
+  "files_duplicate": 2,
+  "files_imported": 17,
+  "files_skipped": 6,
+  "finished_at": "2026-09-16T06:00:00+00:00",
+  "full_archive": {
+    "allowance_after_weeklies": 2,
+    "fetch": null,
+    "first_in_turn": null,
+    "imported": [],
+    "interval_days": null,
+    "last_refreshed": {
+      "testcl26": null
+    },
+    "reason": "complete archive: none fetched; the rotation is off (caselist.full_archive_rotation); 2 bulk download(s) left after the weeklies; testcl26: none listed (never refreshed)",
+    "requested": null,
+    "rotation": false
+  },
+  "inbox_retention": {
+    "bytes_freed": 18148,
+    "bytes_would_free": 0,
+    "camp_downloads_would_remove_once_imported": 0,
+    "dry_run": false,
+    "kept": [],
+    "not_removed_after_an_error": [],
+    "removed": [
+      {
+        "bytes": 4958,
+        "kind": "weekly_archive",
+        "name": "testcl26 2026-09-01"
+      },
+      {
+        "bytes": 13190,
+        "kind": "weekly_archive",
+        "name": "testcl26 2026-09-08"
+      }
+    ],
+    "would_remove": [],
+    "would_remove_once_imported": []
+  },
+  "nothing_new": false,
+  "objects_published": 12,
+  "openev_downloaded": 0,
+  "openev_seen": 0,
+  "openev_selections": [],
+  "openev_skipped_as_removed": 0,
+  "parse_failures": 0,
+  "pending_publish": [],
+  "reports_written": 0,
+  "run_id": "20260916T060000Z",
+  "schema_version": 3,
+  "selections": [
+    {
+      "archive": "testcl26-weekly-2026-09-01.zip",
+      "archive_date": "2026-09-01",
+      "caselist": "testcl26",
+      "decision": "download",
+      "kind": "WEEKLY"
+    },
+    {
+      "archive": "testcl26-weekly-2026-09-08.zip",
+      "archive_date": "2026-09-08",
+      "caselist": "testcl26",
+      "decision": "download",
+      "kind": "WEEKLY"
+    },
+    {
+      "archive": "testcl26-weekly-2026-09-15.zip",
+      "archive_date": "2026-09-15",
+      "caselist": "testcl26",
+      "decision": "download",
+      "kind": "WEEKLY"
+    }
+  ],
+  "snapshots_imported": [
+    "testcl26 2026-09-01",
+    "testcl26 2026-09-08"
+  ],
+  "stages": [
+    {
+      "outcome": "completed",
+      "reason": "3 archive(s) and 0 OpenEv file(s) listed; 3 to fetch; 0 of 5 bulk download(s) spent in the 24 hours from 2026-09-15 06:00 UTC, 5 left; complete archive: none fetched; the rotation is off (caselist.full_archive_rotation); 2 bulk download(s) left after the weeklies; testcl26: none listed (never refreshed)",
+      "stage": "select"
+    },
+    {
+      "outcome": "failed",
+      "reason": "2 fetched, then: opencaselist: download testcl26-weekly-2026-09-15.zip was rate limited (after 4 attempts) (retry after 30.0s)",
+      "stage": "download"
+    },
+    {
+      "outcome": "completed",
+      "reason": "2 snapshot(s) imported, 12 new file(s) stored",
+      "stage": "import"
+    },
+    {
+      "outcome": "completed",
+      "reason": "12 object(s) uploaded across 2 snapshot(s)",
+      "stage": "publish"
+    },
+    {
+      "outcome": "skipped",
+      "reason": "no parse pipeline is installed (v1-e31-t06 has not shipped)",
+      "stage": "parse"
+    },
+    {
+      "outcome": "skipped",
+      "reason": "no landscape service is installed (v1-e32-t05 has not shipped)",
+      "stage": "landscape"
+    },
+    {
+      "outcome": "completed",
+      "reason": "2 snapshot(s) confirmed in the bucket",
+      "stage": "report"
+    },
+    {
+      "outcome": "completed",
+      "reason": "2 file(s) removed, 18148 bytes freed: testcl26 2026-09-01, testcl26 2026-09-08",
+      "stage": "retention"
+    }
+  ],
+  "started_at": "2026-09-16T06:00:00+00:00",
+  "succeeded": false,
+  "suppression_list_local_copy_only": null
+}

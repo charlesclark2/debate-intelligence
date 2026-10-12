@@ -48,6 +48,12 @@ spec:
     - kind: TaskRef
       name: v1-e31-t04-card-fingerprints
       relation: dependsOn
+    # Added by the PM, 2026-10-10: teams_reading and rounds count by cluster, and v1-e31-t06 measured
+    # short-card recall at 0.333 and abbreviated-to-full at 0.250, which would undercount the format
+    # wiki-converted caselists are mostly made of.
+    - kind: TaskRef
+      name: v1-e31-t08-short-card-recall
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

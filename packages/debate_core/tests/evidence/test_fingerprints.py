@@ -26,8 +26,11 @@ from debate_core.domain.debate_files import (
 )
 from debate_core.domain.style_profile import RunEmphasis, StyleMatchSource
 from debate_core.evidence.abbreviated_links import (
+    SPLIT_COPY_OVERLAP,
+    AbbreviationAnchor,
     FullCardWords,
     abbreviation_anchor,
+    group_unmatched_abbreviations,
     link_abbreviated,
     short_cite_key,
 )
@@ -38,7 +41,7 @@ from debate_core.evidence.fingerprints import (
     fingerprint_text,
     normalize_for_matching,
 )
-from debate_core.evidence.near_duplicates import matching_words
+from debate_core.evidence.near_duplicates import containment, matching_words, word_shingles
 
 SOURCE_SHA256 = "a" * 64
 
@@ -127,7 +130,7 @@ def test_exact_fingerprint_is_sha256_of_the_hand_normalized_body() -> None:
 
     assert fingerprint.exact_fingerprint == expected
     assert fingerprint.basis is FingerprintBasis.EVIDENCE_BODY
-    assert fingerprint.fingerprint_version == FINGERPRINT_VERSION == "card-fingerprint-v1"
+    assert fingerprint.fingerprint_version == FINGERPRINT_VERSION == "card-fingerprint-v2"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -384,6 +387,144 @@ def test_abbreviated_card_is_not_guessed_between_two_clusters() -> None:
     assert link_abbreviated(anchor, [evening]) == EVENING_CLUSTER
     assert link_abbreviated(anchor, [lookalike]) == LOOKALIKE_CLUSTER
     assert link_abbreviated(anchor, [evening, lookalike]) is None
+
+
+#: The full card with two words misspelled far apart: what near-duplicate clustering splits off.
+TWO_TYPO_BODY = FULL_BODY.replace("green space", "gren space").replace("regional", "regonal")
+TWO_TYPO_CLUSTER = "4" * 64
+
+
+def test_abbreviated_card_joins_the_cluster_with_most_copies_when_one_card_is_split() -> None:
+    """Matches in two clusters that are one card, split: the link survives, to one of them."""
+    anchor = abbreviation_anchor(
+        abbreviated_card("Cities that pave over … an aesthetic one."), markers=("…",)
+    )
+    assert anchor is not None
+    assert TWO_TYPO_BODY != FULL_BODY
+
+    def matches(evening_copies: int, typo_copies: int) -> list[FullCardWords]:
+        key, body = short_cite_key("Pellam 26"), tuple(matching_words(FULL_BODY))
+        return [
+            FullCardWords(EVENING_CLUSTER, key, body, evening_copies),
+            FullCardWords(TWO_TYPO_CLUSTER, key, tuple(matching_words(TWO_TYPO_BODY)), typo_copies),
+        ]
+
+    assert link_abbreviated(anchor, matches(2, 1)) == EVENING_CLUSTER
+    assert link_abbreviated(anchor, matches(1, 3)) == TWO_TYPO_CLUSTER
+    # A tie goes to the smaller cluster id, whichever order the cards arrive in.
+    assert link_abbreviated(anchor, matches(1, 1)) == EVENING_CLUSTER
+    assert link_abbreviated(anchor, list(reversed(matches(1, 1)))) == EVENING_CLUSTER
+
+
+def test_abbreviated_card_is_not_linked_when_any_match_is_a_different_card() -> None:
+    """A split is tolerated among copies of one card. One lookalike among the matches, and no link:
+    however many copies the other clusters hold."""
+    anchor = abbreviation_anchor(abbreviated_card("Cities that pave … an aesthetic one."), markers=("…",))
+    assert anchor is not None
+    key = short_cite_key("Pellam 26")
+    evening = FullCardWords(EVENING_CLUSTER, key, tuple(matching_words(FULL_BODY)), 5)
+    typo = FullCardWords(TWO_TYPO_CLUSTER, key, tuple(matching_words(TWO_TYPO_BODY)), 1)
+    lookalike = FullCardWords(LOOKALIKE_CLUSTER, key, tuple(matching_words(LOOKALIKE_BODY)), 1)
+
+    assert link_abbreviated(anchor, [evening, typo]) == EVENING_CLUSTER
+    assert link_abbreviated(anchor, [evening, lookalike]) is None
+    assert link_abbreviated(anchor, [evening, typo, lookalike]) is None
+
+
+def test_abbreviated_split_overlap_is_more_of_the_text_shared_than_not() -> None:
+    assert SPLIT_COPY_OVERLAP == 0.5
+    evening, typo, lookalike = (
+        frozenset(word_shingles(matching_words(body))) for body in (FULL_BODY, TWO_TYPO_BODY, LOOKALIKE_BODY)
+    )
+    assert containment(evening, typo) >= SPLIT_COPY_OVERLAP
+    assert containment(evening, lookalike) < SPLIT_COPY_OVERLAP
+
+
+# -- abbreviated cards with no full copy: grouped by link key alone (`v1-e31-t08`) ---------------
+
+
+def unmatched(body: str, short_cite: str = "Tamsin 26") -> AbbreviationAnchor:
+    anchor = abbreviation_anchor(abbreviated_card(body, short_cite=short_cite), markers=("…",))
+    assert anchor is not None
+    return anchor
+
+
+ORCHARD_FOUR_FIVE = unmatched("Shaded orchards on the … two degrees on August nights.")
+ORCHARD_THREE_SIX = unmatched("Shaded orchards on … by two degrees on August nights.")
+ORCHARD_THREE_THREE = unmatched("Shaded orchards on … on August nights.")
+A, B, C, D = ("a" * 64, "b" * 64, "c" * 64, "d" * 64)
+
+
+def test_abbreviated_cuts_of_one_card_with_no_full_copy_are_grouped() -> None:
+    """Same cite, three opening words and five closing words in common: one card, cut twice."""
+    assert group_unmatched_abbreviations({B: ORCHARD_FOUR_FIVE, A: ORCHARD_THREE_SIX}) == {A: A, B: A}
+    assert group_unmatched_abbreviations({A: ORCHARD_THREE_SIX, B: ORCHARD_FOUR_FIVE}) == {A: A, B: A}
+    assert group_unmatched_abbreviations({A: ORCHARD_FOUR_FIVE}) == {}
+    assert group_unmatched_abbreviations({}) == {}
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        # The same author and year and nothing else in common: a cite alone links nothing.
+        unmatched("Hedgerows along the lanes … fewer lambs lost to exposure in March."),
+        # The same author, year and opening phrase, closing differently.
+        unmatched("Shaded orchards on the … fruit that ripened a fortnight late."),
+        # The same author, year and closing phrase, opening differently.
+        unmatched("Whitewashed roofs in the … two degrees on August nights."),
+        # The same words under another author, and under the same author a year off.
+        unmatched("Shaded orchards on … by two degrees on August nights.", short_cite="Quenby 26"),
+        unmatched("Shaded orchards on … by two degrees on August nights.", short_cite="Tamsin 25"),
+        # The same opening words and the same last four, closing differently before that.
+        unmatched("Shaded orchards on … by three degrees on August nights."),
+        # Consistent at both ends, but only three words shared at each: no whole shingle.
+        ORCHARD_THREE_THREE,
+        # The same three opening and three closing words, then different ones: another card.
+        unmatched("Shaded orchards on every south slope … the valley on August nights."),
+    ],
+)
+def test_abbreviated_cards_with_no_full_copy_are_not_grouped_on_less_than_the_key(
+    other: AbbreviationAnchor,
+) -> None:
+    assert group_unmatched_abbreviations({A: ORCHARD_FOUR_FIVE, B: other}) == {}
+
+
+def test_abbreviated_group_that_disagrees_with_itself_is_no_group() -> None:
+    """A cut two different cards both open and close with would join them. All three stay apart,
+    and the cuts that do agree are still grouped once the cut between them is gone."""
+    week = unmatched("Schools that moved to a four day week … and attendance did not fall at all.")
+    terms = unmatched(
+        "Schools that moved to shorter terms instead found … and attendance did not fall at all."
+    )
+    between = unmatched("Schools that moved to … attendance did not fall at all.")
+    week_again = unmatched("Schools that moved to a four … attendance did not fall at all.")
+
+    assert group_unmatched_abbreviations({A: week, B: between, C: terms}) == {}
+    assert group_unmatched_abbreviations({A: week, B: between}) == {A: A, B: A}
+    assert group_unmatched_abbreviations({A: week, C: terms, D: week_again}) == {A: A, D: A}
+
+
+def test_abbreviated_key_read_from_the_cite_line_is_never_grouped() -> None:
+    """Its opening words start with cite text of unknown length, and may be nothing else.
+
+    Two cite-only entries under one cite: the first gives no opening words of its card at all, the
+    second opens with a card's. Read as keys, the first's "opening" is the start of the second's
+    and they close alike, so they would be grouped on a cite and a closing phrase alone.
+    """
+    cite = "Tamsin 26 (Invented Author)"
+    no_opening = cite_only_card(f"{cite} … two degrees on August nights.", short_cite="Tamsin 26")
+    another_card = cite_only_card(
+        f"{cite} Whitewashed roofs in the … two degrees on August nights.", short_cite="Tamsin 26"
+    )
+    anchors = [abbreviation_anchor(card, markers=("…",)) for card in (no_opening, another_card)]
+    assert anchors[0] is not None
+    assert anchors[1] is not None
+    assert anchors[0].from_cite_line
+    assert anchors[1].from_cite_line
+    assert anchors[0].opening_words == ("tamsin", "26", "invented", "author")
+    assert anchors[1].opening_words[:4] == anchors[0].opening_words
+
+    assert group_unmatched_abbreviations({A: anchors[0], B: anchors[1]}) == {}
 
 
 @pytest.mark.parametrize(

@@ -16,7 +16,14 @@ from typing import Any, cast
 import pytest
 import typer
 
-from debate_cli.exit_codes import ExitCode, error_code_for, exit_code_for, exit_code_for_failure_codes
+from debate_cli.exit_codes import RETRYABLE_STORE_FAILURES as RETRYABLE_STORE_FAILURES_OF_THE_CLI
+from debate_cli.exit_codes import (
+    ExitCode,
+    error_code_for,
+    exit_code_for,
+    exit_code_for_failure_codes,
+    is_retryable_store_failure,
+)
 from debate_cli.output import SCHEMA_VERSION, CliOutput, CommandFailure, OutputMode, TableSpec
 from debate_core.application.caselist.removal_service import (
     RemovalCompletedUnlogged,
@@ -37,6 +44,7 @@ from debate_core.application.errors import (
     SnapshotIntegrityError,
     StoreAccessDenied,
     StoreCredentialsExpired,
+    StoreProfileNotConfigured,
     StoreUnavailable,
 )
 
@@ -350,6 +358,8 @@ DETERMINISTIC_FAILURES = [
     BlobIntegrityError("sha256/ab/cd/ef", "0" * 64),
     SnapshotIntegrityError("01J", SnapshotIntegrityCheck.RAW_BYTES_HASH),
     ArchiveTooLarge(measured="archive", actual_bytes=2, limit_bytes=1, source="hsld26.zip"),
+    # A profile the AWS config does not define: no login and no retry defines it (v1-e29-t07).
+    StoreProfileNotConfigured("debate-dev-evidence-typo", setting="storage.s3.aws_profile"),
 ]
 
 
@@ -416,6 +426,9 @@ def test_a_removal_stopped_by_anything_else_stays_a_domain_failure(
         exit_code_for(raised_from(wrapper, BlobIntegrityError("sha256/ab/cd/ef"))) is ExitCode.DOMAIN_FAILURE
     )
     assert exit_code_for(raised_from(wrapper, NotFound("snapshot blob", "0" * 64))) is ExitCode.DOMAIN_FAILURE
+    # A takedown profile that is not defined is not a store that may answer next time (v1-e29-t07).
+    unconfigured = StoreProfileNotConfigured("debate-dev-evidence-removal", setting="DEBATE_REMOVAL_PROFILE")
+    assert exit_code_for(raised_from(wrapper, unconfigured)) is ExitCode.DOMAIN_FAILURE
 
 
 def test_a_removal_that_completed_unlogged_is_not_retried_whatever_refused_the_log() -> None:
@@ -437,12 +450,51 @@ def test_a_removal_that_completed_unlogged_is_not_retried_whatever_refused_the_l
         (["BLOB_INTEGRITY_ERROR"], ExitCode.DOMAIN_FAILURE),
         (["NOT_FOUND"], ExitCode.DOMAIN_FAILURE),
         (["STORE_UNAVAILABLE", None], ExitCode.DOMAIN_FAILURE),
+        # What a stage of `caselist pull` records (v1-e34-t13): a provider that did not answer is
+        # retryable beside a store that did not, and one verdict among them decides.
+        (["PROVIDER_UNAVAILABLE"], ExitCode.RETRIEVAL_FAILURE),
+        (["PROVIDER_RATE_LIMITED", "STORE_UNAVAILABLE"], ExitCode.RETRIEVAL_FAILURE),
+        (["PROVIDER_UNAVAILABLE", "UNREADABLE_ARCHIVE"], ExitCode.DOMAIN_FAILURE),
+        (["ARCHIVE_UNAVAILABLE"], ExitCode.DOMAIN_FAILURE),
+        (["ARCHIVE_TOO_LARGE"], ExitCode.DOMAIN_FAILURE),
+        (["CASELIST_AUTH_EXPIRED"], ExitCode.DOMAIN_FAILURE),
+        (["DAILY_DOWNLOAD_LIMIT_REACHED"], ExitCode.DOMAIN_FAILURE),
+        (["FULL_ARCHIVE_REFUSED"], ExitCode.DOMAIN_FAILURE),
+        # A pending-work file nobody can read is the same file next week (v1-e34-t18): a person has
+        # to look, and an outage beside it does not make the run one a retry cures.
+        (["PENDING_WORK_UNREADABLE"], ExitCode.DOMAIN_FAILURE),
+        (["STORE_UNAVAILABLE", "PENDING_WORK_UNREADABLE"], ExitCode.DOMAIN_FAILURE),
+        # A profile the AWS config does not define is a setting to correct (v1-e29-t07): the same
+        # answer next week, alone or beside an outage or the expired session it used to be called.
+        (["STORE_PROFILE_NOT_CONFIGURED"], ExitCode.DOMAIN_FAILURE),
+        (["STORE_UNAVAILABLE", "STORE_PROFILE_NOT_CONFIGURED"], ExitCode.DOMAIN_FAILURE),
+        (["STORE_CREDENTIALS_EXPIRED", "STORE_PROFILE_NOT_CONFIGURED"], ExitCode.DOMAIN_FAILURE),
+        # Nothing reaches 3 because nobody classified it.
+        (["INTERNAL_ERROR"], ExitCode.DOMAIN_FAILURE),
+        (["A_CODE_NOBODY_MAPPED"], ExitCode.DOMAIN_FAILURE),
+        (["PROVIDER_ERROR"], ExitCode.DOMAIN_FAILURE),
+        (["STORE_ERROR"], ExitCode.DOMAIN_FAILURE),
     ],
 )
 def test_a_run_of_item_failures_is_a_three_only_when_every_one_is_a_store_failure(
     codes: list[str | None], expected: ExitCode
 ) -> None:
     assert exit_code_for_failure_codes(codes) is expected
+
+
+def test_a_profile_that_is_not_configured_is_reported_under_its_own_code_with_exit_one() -> None:
+    """The code a script branches on, the exit status, and the facts kept as fields (v1-e29-t07)."""
+    unconfigured = StoreProfileNotConfigured(
+        "debate-dev-evidence-typo", setting="storage.s3.aws_profile", hint="set storage.s3.aws_profile"
+    )
+
+    failure = CommandFailure.from_exception(unconfigured)
+
+    assert (failure.code, failure.exit_code) == ("STORE_PROFILE_NOT_CONFIGURED", ExitCode.DOMAIN_FAILURE)
+    assert failure.details == {"profile": "debate-dev-evidence-typo", "setting": "storage.s3.aws_profile"}
+    assert failure.hint == "set storage.s3.aws_profile"
+    assert not is_retryable_store_failure(unconfigured)
+    assert StoreProfileNotConfigured not in RETRYABLE_STORE_FAILURES_OF_THE_CLI
 
 
 def test_a_run_with_no_failures_has_no_failure_exit_code() -> None:

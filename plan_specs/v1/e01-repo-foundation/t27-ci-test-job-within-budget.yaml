@@ -1,0 +1,107 @@
+# TASK v1-e01-t27-ci-test-job-within-budget - The CI test job finishes well inside the five-minute budget
+# Epic: E01 Repo Foundation | Release: v1.0 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t27-ci-test-job-within-budget
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The CI test job finishes well inside the five-minute budget"
+spec:
+  # Filed by the PM, 2026-10-12, from the operator's report on 2026-10-12 that the `ci` check on a pull request takes five minutes or more.
+  description: >-
+    Working agreement 1 gives the required `ci` check on a pull request into `dev` a budget of
+    under 5 minutes, and the `test` job now takes about that much or more. It runs the whole
+    default selection (about 5,750 tests) on one runner with `-n auto`, so it grows with every
+    task. It also measures branch coverage on every pull request through `addopts` and the job's
+    own command, though nothing is gated on coverage: `pyproject.toml` sets no `fail_under`. And
+    a few tests set a long floor: the help-rendering tests start pytest in a subprocess (22 s
+    and 13 s locally), the roadmap's determinism check (11 s), the pull smoke tests (8 to 11 s
+    each), and the install-channel tests, which build wheels. Measure where a pull request's CI
+    time goes, then bring `ci` well inside the budget without moving any test off the
+    pull-request path: no coverage on pull-request runs (kept on pushes to `dev` and `main`),
+    the test job split into parallel jobs that each run part of the same selection, and the
+    slowest tests made cheaper where that is easy. Out of scope: what the tests check, and other
+    workflows.
+  priority: 2
+  constraints:
+    packages: [.github/workflows, pyproject.toml, uv.lock, tests, scripts, docs/process]
+    forbidden:
+      - Moving a test out of the pull-request path, marking a test slow or live to save time, or skipping a test on pull requests
+      - Changing what any test asserts
+      - Renaming the `ci` job, or a job branch protection requires
+  context:
+    - kind: TaskRef
+      name: v1-e01-t04-ci-pipeline
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The report gives a pull request's CI time before the change, from real runs: each
+        job's wall-clock, setup against test time, and the 30 slowest tests with
+        `--durations`.
+    - id: ac2
+      description: >-
+        Pull-request runs measure no coverage. Pushes to `dev` and `main` still do, with the
+        same report. The workflow's own tests (tests/scripts) cover both, shown failing
+        first.
+    - id: ac3
+      description: >-
+        The test job is split into parallel jobs whose union is exactly the default
+        selection, by a test that compares the collected node ids of the split with an
+        unsplit collection. The `ci` aggregate needs every part, so branch protection is
+        unchanged.
+    - id: ac4
+      description: >-
+        The slowest tests are made cheaper where that is easy, each with its before and
+        after time, and with no change to what it asserts.
+    - id: ac5
+      description: >-
+        Measured on at least three pull requests after the change, the `ci` check takes
+        under 3 minutes wall-clock on a typical pull request into `dev`. The report gives
+        the runner minutes before and after as well, since each extra job repeats setup.
+    - id: ac6
+      description: >-
+        Working agreement 1 and the comment at the top of `ci.yml` state the new target and
+        how the test job is split, and say how to rebalance the split when it drifts.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t27-ci-test-job-within-budget-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Measure, drop coverage from pull-request runs, split the test job, trim the slowest tests,
+    and record the new target.
+  goalRef:
+    name: v1-e01-t27-ci-test-job-within-budget
+  graph:
+    nodes:
+      - id: ci-budget
+        kind: Task
+        name: CI test job inside its budget
+        description: >-
+          The measurement, the coverage change, the split, the slow tests and the
+          documented target.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Workflow tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, workflow]
+status:
+  phase: Pending

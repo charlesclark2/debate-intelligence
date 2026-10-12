@@ -156,6 +156,14 @@ spec:
       inputs:
         goalRef: v1-e01-t20-retryable-failures-exit-3
         specRef: plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml
+    - id: ext-v1-e29-t07-missing-profile-not-retryable
+      kind: External
+      name: 'Prerequisite from E29: A profile missing from the AWS config is a configuration error, not an expired session'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t07-missing-profile-not-retryable
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml
     - id: t01
       kind: Task
       name: OpenCaselist API client
@@ -594,5 +602,46 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t21-parse-stage-bounds
+    - id: t22
+      kind: Task
+      name: 'A weekly run that cannot reach its bucket is recorded and announced, and the profile is checked before install'
+      description: >-
+        A misconfigured profile never makes the weekly run fail silently, and is caught
+        before install.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t22-refusal-to-start-is-recorded.yaml
+        goalRef: v1-e34-t22-refusal-to-start-is-recorded
+      dependsOn:
+      - t19
+      - ext-v1-e29-t07-missing-profile-not-retryable
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t22-refusal-to-start-is-recorded reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t22-refusal-to-start-is-recorded
+    - id: t23
+      kind: Task
+      name: 'Loose ends in the weekly sync''s findings, records and notifications'
+      description: >-
+        The weekly sync keeps every finding, writes durably, and words each banner for what
+        the operator must do.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t23-sync-loose-ends.yaml
+        goalRef: v1-e34-t23-sync-loose-ends
+      dependsOn:
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t23-sync-loose-ends reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t23-sync-loose-ends
 status:
   phase: Pending

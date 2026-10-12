@@ -1,0 +1,96 @@
+# TASK v1-e29-t09-store-error-loose-ends - Loose ends in how store errors are classified, worded and wrapped
+# Epic: E29 Cloud Evidence Store | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t09-store-error-loose-ends
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: "Loose ends in how store errors are classified, worded and wrapped"
+spec:
+  # Filed by the PM, 2026-10-12, from v1-e29-t07's Follow-up work 4 and 5, and v1-e29-t08's Follow-up work 1, 4, 5 and 7.
+  description: >-
+    Small gaps v1-e29-t07 and v1-e29-t08 left. (1) `evidence_sync`, `publish_service` and
+    `parsed_publish` re-raise `StoreCredentialsExpired` and `StoreAccessDenied` so that one
+    failure is not reported once per object; `StoreProfileNotConfigured` is not among them, so
+    it would be recorded per object and the pull's parse stage would try every caselist. (2)
+    `InvalidAccessKeyId` and `SignatureDoesNotMatch` are told the profile "lacks a grant",
+    though they are credential faults. (3) `_denial_hint` gives the "listing is granted per
+    prefix" hint to any `AccessDenied` with no key, which since v1-e29-t08 includes the
+    caller-identity call. (4) `TakedownPreflightFailed` drops the cause's details, so for a
+    wrapped missing profile the setting is in the message and the hint but no longer a field.
+    (5) The removal runbook's step 5 describes the preflight without saying `unsuppress` has the
+    same one. (6) A takedown that passes its preflight could delete any probe an earlier
+    preflight left; on 2026-10-11 dev and prod held none. Out of scope: the grants, and the
+    exit-code rule.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.s3, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - A change to any IAM grant or policy statement
+      - An account id, role ARN, SSO name or AWS config path in code, tests, docs or the report
+  context:
+    - kind: TaskRef
+      name: v1-e29-t07-missing-profile-not-retryable
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): the three services re-raise `StoreProfileNotConfigured` as they do an expired
+        session, and a pull's parse stage stops at the first caselist that meets it, each
+        shown failing first.
+    - id: ac2
+      description: >-
+        (2) and (3): a credential fault gets a sentence of its own, and a keyless
+        `AccessDenied` from a call that is not a listing does not get the listing hint, by
+        test.
+    - id: ac3
+      description: >-
+        (4): `TakedownPreflightFailed` carries its cause's code and details in the JSON
+        envelope, by test, with the exit unchanged.
+    - id: ac4
+      description: >-
+        (5) and (6): the runbook says `unsuppress` runs the same preflight. A passing
+        preflight deletes any version under `manifests/_suppression/preflight/` older than
+        its own probe, with the takedown profile, by test against moto. The runbook's
+        by-hand section says when it is still needed.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t09-store-error-loose-ends-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Classify, word and wrap the remaining store errors, and let a takedown sweep stale probes.
+  goalRef:
+    name: v1-e29-t09-store-error-loose-ends
+  graph:
+    nodes:
+      - id: store-error-loose-ends
+        kind: Task
+        name: Store error loose ends fixed
+        description: >-
+          The re-raises, the credential sentence, the hint scope, the wrapped details, the
+          runbook and the probe sweep.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Store and removal tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, s3 or removal or preflight or publish]
+status:
+  phase: Pending

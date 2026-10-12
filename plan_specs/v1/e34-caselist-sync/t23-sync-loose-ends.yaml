@@ -1,0 +1,97 @@
+# TASK v1-e34-t23-sync-loose-ends - Loose ends in the weekly sync's findings, records and notifications
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t23-sync-loose-ends
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "Loose ends in the weekly sync's findings, records and notifications"
+spec:
+  # Filed by the PM, 2026-10-12, from v1-e34-t19's Follow-up work 1, 3, 4, 5, 6, 7 and 9, and the PM's review of it.
+  description: >-
+    Small defects v1-e34-t19 found and left. (1) The report stage loses the drift it found when
+    the session expires part-way, as the publish stage did before ac8; `--publish-pending`
+    re-checks only what it publishes. (2) `_PendingRecords.write` and the two log appends are
+    not fsynced; v1-e34-t19's ac6 covered `_write_json` only. (3) `caselist runs` could show
+    each run's codes and verdict, which the run's details now hold. (4) A camp download that
+    cannot be read is still recorded as `INTERNAL_ERROR` by class, while a weekly archive is
+    `UNREADABLE_ARCHIVE`. (5) A weekly manifest with a torn line stops the run at the selection,
+    exit 1, with no stage to fail. (6) A run refused because another holds the run lock notifies
+    as "needs a person", which is true by the rule and wants words of its own. (7) A refused
+    publish's reason in the run record reads "[redacted] lists what each profile is granted":
+    the record's redaction takes `docs/runbooks/evidence-store.md` for a path. And (8), from the
+    PM's review: a refusal such as `STORE_ACCESS_DENIED` exits 3 and its banner says it "will be
+    retried", though the retry cannot succeed until the fix in its hint is made. Say so. Out of
+    scope: the exit-code rule, and the run record's shape.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - A change to v1-e34-t13's exit-code rule
+      - A new field on the run record, or a record or details file an earlier build cannot read
+      - A path from the operator's machine in a record, notification or log
+  context:
+    - kind: TaskRef
+      name: v1-e34-t19-unreadable-local-files-and-notification-codes
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each of (1), (4), (5) and (7) has a test shown failing first, and is fixed: drift
+        found before an expiry is kept as an earlier finding; an unreadable camp download is
+        `UNREADABLE_ARCHIVE`; a torn weekly manifest fails a stage, not the selection; the
+        runbook pointer survives the record's redaction.
+    - id: ac2
+      description: >-
+        (2): every state-file write and log append the sync makes is fsynced as v1-e34-t19's
+        ac6 does, by a test that records the order of calls.
+    - id: ac3
+      description: >-
+        (3): `caselist runs` shows each run's codes and its verdict, retry or person, from
+        the details, and says `not recorded` for a run with none.
+    - id: ac4
+      description: >-
+        (6) and (8): a lock refusal and a refusal that needs its fix first each have a
+        banner wording of their own, shown in the runbook's section on what a notification
+        says, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t23-sync-loose-ends-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Fix the seven loose ends and give two banners their own words.
+  goalRef:
+    name: v1-e34-t23-sync-loose-ends
+  graph:
+    nodes:
+      - id: sync-loose-ends
+        kind: Task
+        name: Sync loose ends fixed
+        description: >-
+          The findings, the fsyncs, the runs table, the archive code, the torn manifest,
+          the banners and the redaction.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pull tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, pull or sync or runs]
+status:
+  phase: Pending
